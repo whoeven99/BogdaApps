@@ -1,9 +1,9 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "1acd057a678a39189e29265d542a92ac"
-name = "generatorImage"
+name = "GeneratorImage"
 handle = "generatorimage"
-application_url = "https://f68070b68a10.ngrok.app"
+application_url = "https://87c745b5ea81.ngrok.app"
 embedded = true
 
 [build]
@@ -27,7 +27,7 @@ scopes = "read_products,read_metaobjects,read_online_store_pages"
 optional_scopes = ["read_orders"]
   
 [auth]
-redirect_urls = ["https://f68070b68a10.ngrok.app/auth/callback", "https://f68070b68a10.ngrok.app/auth/shopify/callback", "https://f68070b68a10.ngrok.app/api/auth/callback"]
+redirect_urls = ["https://87c745b5ea81.ngrok.app/auth/callback", "https://87c745b5ea81.ngrok.app/auth/shopify/callback", "https://87c745b5ea81.ngrok.app/api/auth/callback"]
 
 [pos]
 embedded = false

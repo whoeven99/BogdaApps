@@ -27,7 +27,7 @@ import styles from "./style.module.css";
 export default function AdLibrary() {
 
   return (
-    <div className={styles.container}>
+    <Page title="Ad Library" fullWidth>
       <TitleBar title="Ad Library" />
       <Layout>
         <Layout.Section>
@@ -48,6 +48,6 @@ export default function AdLibrary() {
           </Card>
         </Layout.Section>
       </Layout>
-    </div>
+    </Page>
   );
 }

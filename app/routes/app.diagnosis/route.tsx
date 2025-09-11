@@ -11,7 +11,7 @@ import { TitleBar } from "@shopify/app-bridge-react";
 import { useTranslation } from "react-i18next";
 export const loader = async ({ request }: any) => {
   try {
-    await shopify.scopes.revoke(["read_orders"]);
+    // await shopify.scopes.revoke(["read_orders"]);
     const { session } = await authenticate.admin(request);
     const apiKey = process.env.SHOPIFY_API_KEY!;
     const appUrl = process.env.SHOPIFY_APP_URL!;
@@ -60,37 +60,38 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         // 构建 REST 客户端
         try {
           const { admin } = await authenticate.admin(request);
-          const response = await admin.graphql(
-            `#graphql
-            query suggestedRefund {
-              order(id: "gid://shopify/Order/469306983") {
-                suggestedRefund(refundDuties: [{dutyId: "gid://shopify/Duty/1064114503", refundType: FULL}]) {
-                  refundDuties {
-                    amountSet {
-                      shopMoney {
-                        amount
-                        currencyCode
-                      }
-                    }
-                    originalDuty {
-                      id
-                    }
-                  }
-                  totalDutiesSet {
-                    shopMoney {
-                      amount
-                      currencyCode
-                    }
-                  }
-                }
-              }
-            }`,
-          );
+          // const response = await admin.graphql(
+          //   `#graphql
+          //   query suggestedRefund {
+          //     order(id: "gid://shopify/Order/469306983") {
+          //       suggestedRefund(refundDuties: [{dutyId: "gid://shopify/Duty/1064114503", refundType: FULL}]) {
+          //         refundDuties {
+          //           amountSet {
+          //             shopMoney {
+          //               amount
+          //               currencyCode
+          //             }
+          //           }
+          //           originalDuty {
+          //             id
+          //           }
+          //         }
+          //         totalDutiesSet {
+          //           shopMoney {
+          //             amount
+          //             currencyCode
+          //           }
+          //         }
+          //       }
+          //     }
+          //   }`,
+          // );
 
-          const data = await response.json();
-          console.log("datassss", data);
+          // const data = await response.json();
+          // console.log("datassss", data);
 
-          return json({ orders: data });
+          // return json({ orders: data });
+          return {success:true}
         } catch (error) {
           return json({ error: "没有获取到数据" });
         }

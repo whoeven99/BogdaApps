@@ -12,7 +12,9 @@ import {
   InlineStack,
   Select,
   Thumbnail,
+  Icon,
 } from "@shopify/polaris";
+import { ViewIcon } from "@shopify/polaris-icons";
 import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../../shopify.server";
 import { Upload, Skeleton } from "antd";
@@ -24,11 +26,19 @@ import RecentProjectsSection from "./components/RecentProjectsSection";
 import { getAdTemplates, getRecentProjects } from "app/api/javaServer";
 import { json } from "@remix-run/node";
 import styles from "./style.module.css";
-type ActionResponse = {
+
+export type ActionResponse = {
   imageUrl?: string;
   error?: string;
 };
-
+export interface AdTemplates {
+  success: boolean;
+  data: any[];
+}
+export interface RecentProjects {
+  success: boolean;
+  data: any[];
+}
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
   const adminAuthResult = await authenticate.admin(request);
@@ -44,10 +54,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     switch (true) {
       case !!loading:
         let [recentProjects, adTemplates] = await Promise.all([
-          getRecentProjects(),
+          getRecentProjects({ shop }),
           getAdTemplates(),
         ]);
-        return { result: { recentProjects, adTemplates } };
+        return { result: { adTemplates, recentProjects } };
       default:
         console.log("Default case reached");
         break;
@@ -90,10 +100,10 @@ export default function ImageGenerator() {
   const [searchQuery, setSearchQuery] = useState("");
   const loadingFetcher = useFetcher<any>();
   const navigate = useNavigate(); // 模拟广告模板数据
-  const [adTemplates, setAdTemplates] = useState<any[]>([]);
-
+  const [adTemplates, setAdTemplates] = useState<AdTemplates>();
+  const [isFetching, setIsFetching] = useState(true);
   // 模拟最近项目数据
-  const [recentProjects, setRecentProjects] = useState<any[]>([]);
+  const [recentProjects, setRecentProjects] = useState<RecentProjects>();
   useEffect(() => {
     if (generatedImageUrl) {
       shopify.toast.show("Image generated successfully!");
@@ -103,7 +113,7 @@ export default function ImageGenerator() {
   }, [generatedImageUrl, error, shopify]);
   useEffect(() => {
     console.log("Loading effect triggered");
-
+    setIsFetching(true);
     loadingFetcher.submit(
       {
         loading: JSON.stringify({
@@ -118,29 +128,28 @@ export default function ImageGenerator() {
   }, []);
   useEffect(() => {
     if (loadingFetcher.state === "submitting") {
-      console.log("Fetcher submitting...");
+      console.log("Fetcher 正在提交...");
     }
     if (loadingFetcher.state === "idle" && loadingFetcher.data) {
-      console.log("Loading fetcher data:", loadingFetcher.data);
-      setAdTemplates(loadingFetcher.data.result?.adTemplates || []);
-      setRecentProjects(loadingFetcher.data.result?.recentProjects || []);
-      console.log(
-        "Ad Templates set:",
-        loadingFetcher.data.result?.adTemplates || [],
-      );
-      console.log(
-        "Recent Projects set:",
-        loadingFetcher.data.result?.recentProjects || [],
-      );
+      if (loadingFetcher.data.result.adTemplates?.success) {
+        setAdTemplates(loadingFetcher.data.result.adTemplates);
+      }
+      if (loadingFetcher.data.result?.recentProjects?.success) {
+        setRecentProjects(loadingFetcher.data.result?.recentProjects);
+      }
+      setIsFetching(false);
     }
     if (loadingFetcher.data?.error) {
-      console.error("Fetcher error:", loadingFetcher.data.error);
+      shopify.toast.show(loadingFetcher.data.error, { isError: true });
+      setAdTemplates({ success: false, data: [] });
+      setRecentProjects({ success: false, data: [] });
+      setIsFetching(false);
     }
-  }, [loadingFetcher]);
+  }, [loadingFetcher, shopify]);
   const handleStartFree = () => {};
 
   return (
-    <div className={styles.container}>
+    <Page title="Image Fusion Generator" fullWidth>
       <TitleBar title="Image Fusion Generator" />
       <Layout>
         <Layout.Section>
@@ -167,66 +176,89 @@ export default function ImageGenerator() {
             </BlockStack>
           </Card>
         </Layout.Section>
+
         <Layout.Section>
-          {recentProjects?.length > 0 ? (
-            <RecentProjectsSection projects={recentProjects} />
-          ) : (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(2, 1fr)",
-                gap: 16,
-              }}
-            >
-              {recentProjects ? (
-                <Card>
-                  <Text as="p">No recent projects available.</Text>
-                </Card>
+          <Card>
+            <BlockStack gap="500">
+              <InlineStack align="space-between">
+                <Text as="h2" variant="headingMd">
+                  Top ad ideas for you
+                </Text>
+                <Button
+                  variant="secondary"
+                  icon={ViewIcon}
+                  onClick={() => {
+                    navigate("/app/ad-library");
+                  }}
+                >
+                  View all
+                </Button>
+              </InlineStack>
+              {isFetching ? (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(4, 1fr)",
+                    gap: 16,
+                  }}
+                >
+                  {[1, 2, 3, 4].map((i) => (
+                    <Card key={i}>
+                      <Skeleton.Image
+                        style={{ width: 120, height: 120, margin: "0 auto" }}
+                        active
+                      />
+                      <Skeleton paragraph={{ rows: 1, width: "80%" }} active />
+                    </Card>
+                  ))}
+                </div>
+              ) : adTemplates?.success && adTemplates.data.length > 0 ? (
+                <AdTemplateSection templates={adTemplates} />
               ) : (
-                [1, 2, 3, 4].map((i) => (
-                  <Card key={i}>
-                    <Skeleton.Image
-                      style={{ width: 120, height: 120, margin: "0 auto" }}
-                      active
-                    />
-                    <Skeleton paragraph={{ rows: 1, width: "80%" }} active />
-                  </Card>
-                ))
+                <div>No ad templates found.</div>
               )}
-            </div>
-          )}
+            </BlockStack>
+          </Card>
         </Layout.Section>
 
         <Layout.Section>
-          {adTemplates?.length > 0 ? (
-            <AdTemplateSection templates={adTemplates} />
-          ) : (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(4, 1fr)",
-                gap: 16,
-              }}
-            >
-              {adTemplates ? (
-                <Card>
-                  <Text as="p">No ad templates available.</Text>
-                </Card>
+          <Card>
+            <BlockStack gap="500">
+              <InlineStack align="space-between">
+                <Text as="h2" variant="headingMd">
+                  Recent projects
+                </Text>
+                <Button variant="secondary" icon={ViewIcon}>
+                  View all
+                </Button>
+              </InlineStack>
+              {isFetching ? (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(4, 1fr)",
+                    gap: 16,
+                  }}
+                >
+                  {[1, 2, 3, 4].map((i) => (
+                    <Card key={i}>
+                      <Skeleton.Image
+                        style={{ width: 120, height: 120, margin: "0 auto" }}
+                        active
+                      />
+                      <Skeleton paragraph={{ rows: 1, width: "80%" }} active />
+                    </Card>
+                  ))}
+                </div>
+              ) : (recentProjects?.success && recentProjects.data.length > 0 ? (
+                <RecentProjectsSection projects={recentProjects} />
               ) : (
-                [1, 2, 3, 4].map((i) => (
-                  <Card key={i}>
-                    <Skeleton.Image
-                      style={{ width: 120, height: 120, margin: "0 auto" }}
-                      active
-                    />
-                    <Skeleton paragraph={{ rows: 1, width: "80%" }} active />
-                  </Card>
-                ))
-              )}
-            </div>
-          )}
+                <div>No recent projects found.</div>
+              ))}
+            </BlockStack>
+          </Card>
         </Layout.Section>
       </Layout>
-    </div>
+    </Page>
   );
 }

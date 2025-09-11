@@ -7,62 +7,48 @@ import {
   Button,
 } from "@shopify/polaris";
 
-interface AdTemplate {
-  id: number;
-  url: string;
-  title: string;
-}
-
-interface AdTemplateSectionProps {
-  templates: AdTemplate[];
-}
+import { AdTemplates } from "../route";
 
 export default function AdTemplateSection({
   templates,
-}: AdTemplateSectionProps) {
-  return (
-    <Card>
-      <BlockStack gap="500">
-        <InlineStack align="space-between">
-          <Text as="h2" variant="headingMd">
-            Top ad ideas for you
-          </Text>
-          <Button variant="plain">View all</Button>
-        </InlineStack>
+}: {
+  templates: AdTemplates;
+}) {
+  return templates.success ? (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+        gap: "10px",
+      }}
+    >
+      {templates.data.map((template: any) => (
         <div
+          key={template.id}
           style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-            gap: "10px",
+            border: "1px solid #d9d9d9",
+            padding: "5px",
+            background: "#fff",
+            textAlign: "center",
           }}
         >
-          {templates.map((template) => (
-            <div
-              key={template.id}
-              style={{
-                border: "1px solid #d9d9d9",
-                padding: "5px",
-                background: "#fff",
-                textAlign: "center",
-              }}
-            >
-              <img
-                src={template.url}
-                alt={template.title}
-                style={{
-                  width: 160,
-                  height: 160,
-                  objectFit: "cover",
-                  borderRadius: 8,
-                }}
-              />
-              <Text variant="bodyMd" as="p">
-                {template.title}
-              </Text>
-            </div>
-          ))}
+          <img
+            src={template.url}
+            alt={template.title}
+            style={{
+              width: 160,
+              height: 160,
+              objectFit: "cover",
+              borderRadius: 8,
+            }}
+          />
+          <Text variant="bodyMd" as="p">
+            {template.title}
+          </Text>
         </div>
-      </BlockStack>
-    </Card>
+      ))}
+    </div>
+  ) : (
+    <div>No ad templates found.</div>
   );
 }

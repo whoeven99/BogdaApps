@@ -5,9 +5,15 @@ export const getAdTemplates = async () => {
   try {
     // const response = await axios.get("http://localhost:8080/api/data");
     // return response.data;
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    const p = new Promise((resolve, reject) => {
+      setTimeout(() => {
+        reject("get ad templates failed");
+      }, 500);
+    });
+    await p;
     return {
-      adTemplates: [
+      success: true,
+      data: [
         {
           id: 1,
           url: "https://static-photo-studio.promer.ai/ads-assets/Whitelist-limit/Books/Feature%20&%20Benefit/1_1/medium/1748.png",
@@ -32,17 +38,25 @@ export const getAdTemplates = async () => {
     };
   } catch (error) {
     console.error("Error fetching Java server data:", error);
-    return [];
+    return {
+      success: false,
+      data:[],
+    };
   }
 };
 
-export const getRecentProjects = async () => {
+export const getRecentProjects = async (data:{
+  shop: string,
+}) => {
   try {
     // const response = await axios.get("http://localhost:8080/api/data");
     // return response.data;
+    console.log("Fetching recent projects for shop:", data.shop);
+
     await new Promise((resolve) => setTimeout(resolve, 2000));
     return {
-      recentProjects: [
+      success: true,
+      data: [
         {
           id: 1,
           url: "https://static-photo-studio.promer.ai/ads-assets/crawler/Books/Us%20and%20Them/1_1/medium/2896.png",
@@ -57,6 +71,9 @@ export const getRecentProjects = async () => {
     };
   } catch (error) {
     console.error("Error fetching Java server data:", error);
-    return [];
+    return {
+      success: false,
+      data: [],
+    };
   }
 };

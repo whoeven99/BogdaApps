@@ -25,6 +25,7 @@ export default function App() {
           Home
         </Link>
         <Link to="/app/ad-library">Ad Library</Link>
+        <Link to="/app/my-projects">My Projects</Link>
         <Link to="/app/additional">Additional page</Link>
         <Link to="/app/diagnosis">SEO page</Link>
       </NavMenu>
