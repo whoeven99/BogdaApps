@@ -1,0 +1,23 @@
+{% assign avg_rating = block.settings.product.metafields.demo.avg_rating.value | round %}
+{% comment %} <span style="color:{{ block.settings.colour }}">
+  {% render 'stars', rating: avg_rating %}
+</span> {% endcomment %}
+{% if avg_rating >= 4 %}
+  <br>
+  <img src="{{ "thumbs-up.png" | asset_img_url: '15x' }}" height="15" width="15" loading="lazy">
+  {{ 'ratings.home.recommendationText' | t }}
+{% endif %}
+<div>
+  {% comment %} <script type="module" src="{{ 'ciwi-main.js' | asset_url }}"></script> {% endcomment %}
+</div>
+
+{% schema %}
+{
+  "name": "Star Rating",
+  "target": "section",
+  "settings": [
+    { "type": "product", "id": "product", "label": "product", "autofill": true },
+    { "type": "color", "id": "colour", "label": "Star Colour", "default": "#ff0000" }
+  ]
+}
+{% endschema %}

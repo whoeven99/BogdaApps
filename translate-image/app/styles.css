@@ -1,0 +1,17 @@
+/* .ant-modal-title {
+    font-size: 24px !important; 
+} */
+
+@media (min-width: 48em) {
+  .Polaris-Page__Content {
+    padding-top: 0px !important;
+  }
+}
+
+.Polaris-Page {
+  padding: 0 var(--p-space-600) !important;
+}
+
+body {
+  margin: 0;
+}

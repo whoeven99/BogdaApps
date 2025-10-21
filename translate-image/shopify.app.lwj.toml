@@ -1,0 +1,19 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "e7fe2398f1feb814e87fb51ac1364bb9"
+name = "Translate-Image"
+application_url = "https://example.com"
+embedded = true
+
+[webhooks]
+api_version = "2025-10"
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_content,read_legal_policies,read_markets,read_online_store_navigation,read_themes,read_translations,write_locales,write_products,write_translations,read_metaobjects,write_metaobjects,unauthenticated_read_metaobjects,read_markets,write_markets"
+optional_scopes = ["read_customer_events","write_pixels"]
+[auth]
+redirect_urls = [ "https://example.com/api/auth" ]
+
+[build]
+automatically_update_urls_on_dev = true
