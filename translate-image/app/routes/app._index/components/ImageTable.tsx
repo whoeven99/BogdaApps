@@ -18,7 +18,7 @@ import {
   ImageIcon,
 } from "@shopify/polaris-icons";
 import { UploadOutlined, SearchOutlined } from "@ant-design/icons";
-import { authenticate } from "../../shopify.server";
+import { authenticate } from "~/shopify.server";
 import {
   Table,
   Checkbox,
@@ -48,7 +48,7 @@ import {
   GetProductImageData,
   TranslateImage,
 } from "~/api/JavaServer";
-import SortPopover from "./conponents/SortPopover";
+import SortPopover from "~/routes/app.management/conponents/SortPopover";
 const { Text, Title } = Typography;
 const { TabPane } = Tabs;
 const { Search } = Input;
@@ -58,564 +58,9 @@ interface ImageItem {
   section: string;
 }
 
-export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const url = new URL(request.url);
-  const searchTerm = url.searchParams.get("language");
-
-  return {
-    searchTerm,
-  };
-};
-
-export const action = async ({ request }: ActionFunctionArgs) => {
-  const adminAuthResult = await authenticate.admin(request);
-  const { admin } = adminAuthResult;
-
-  const { shop, accessToken } = adminAuthResult.session;
-  const formData = await request.formData();
-  const loading = JSON.parse(formData.get("loading") as string);
-  const languageLoading = JSON.parse(formData.get("languageLoading") as string);
-  const productStartCursor: any = JSON.parse(
-    formData.get("productStartCursor") as string,
-  );
-  const productEndCursor: any = JSON.parse(
-    formData.get("productEndCursor") as string,
-  );
-  const imageStartCursor: any = JSON.parse(
-    formData.get("imageStartCursor") as string,
-  );
-  const imageEndCursor: any = JSON.parse(
-    formData.get("imageEndCursor") as string,
-  );
-  
-  try {
-    const queryString = (productCursor: any) => {
-      const { query, status } = productCursor || { query: "", status: "" };
-      let str = "";
-
-      if (status && status !== "ALL") {
-        str += `status:${status.toUpperCase()} `;
-      }
-
-      if (query && query.trim()) {
-        str += `${query.trim()}`;
-      }
-
-      return str.trim();
-    };
-    switch (true) {
-      case !!loading:
-        try {
-          const loadData = await admin.graphql(
-            `query products( $sortKey: ProductSortKeys, $reverse: Boolean){
-            products(first: 20,sortKey: $sortKey, reverse: $reverse) {
-              edges {
-                node {
-                  id
-                  title
-                  status
-                  images(first: 20) {
-                    edges {
-                      node {
-                        id
-                        url 
-                        altText
-                      }
-                    }
-                    pageInfo {
-                      hasNextPage
-                      hasPreviousPage
-                      startCursor
-                      endCursor
-                    }
-                  }
-                }
-              }
-              pageInfo {
-                hasNextPage
-                hasPreviousPage
-                startCursor
-                endCursor
-              }
-            } 
-          }`,
-            {
-              variables: {
-                sortKey: loading?.sortKey || "TITLE",
-                reverse: loading?.reverse ?? false,
-              },
-            },
-          );
-
-          const response = await loadData.json();
-
-          console.log("loadData", response?.data?.products?.edges);
-          if (response?.data?.products?.edges.length > 0) {
-            const menuData = response?.data?.products?.edges.map(
-              (item: any) => {
-                return {
-                  key: item?.node?.id,
-                  label: item?.node?.title,
-                  imageData: item?.node?.images,
-                  status: item?.node?.status,
-                };
-              },
-            );
-            const imageData = response?.data?.products?.edges.map(
-              (item: any) => {
-                return item?.node?.images?.edges.map((image: any) => {
-                  return {
-                    key: image?.node?.id,
-                    altText: image?.node?.altText,
-                    productId: item?.node?.id,
-                    productTitle: item?.node?.title,
-                    imageId: image?.node?.id,
-                    imageUrl: image?.node?.url,
-                    targetImageUrl: "",
-                    imageStartCursor: item?.node?.images?.pageInfo?.startCursor,
-                    imageEndCursor: item?.node?.images?.pageInfo?.endCursor,
-                    imageHasNextPage: item?.node?.images?.pageInfo?.hasNextPage,
-                    imageHasPreviousPage:
-                      item?.node?.images?.pageInfo?.hasPreviousPage,
-                  };
-                });
-              },
-            );
-            return json({
-              menuData,
-              imageData,
-              productStartCursor:
-                response?.data?.products?.pageInfo?.startCursor,
-              productEndCursor: response?.data?.products?.pageInfo?.endCursor,
-              productHasNextPage:
-                response?.data?.products?.pageInfo?.hasNextPage,
-              productHasPreviousPage:
-                response?.data?.products?.pageInfo?.hasPreviousPage,
-            });
-          } else {
-            return json({
-              menuData: [],
-              imageData: [],
-              productStartCursor: "",
-              productEndCursor: "",
-              productHasNextPage: "",
-              productHasPreviousPage: "",
-            });
-          }
-        } catch (error) {
-          console.error("Error action loadData productImage:", error);
-          return json({
-            menuData: [],
-            imageData: [],
-            productStartCursor: "",
-            productEndCursor: "",
-            productHasNextPage: "",
-            productHasPreviousPage: "",
-          });
-        }
-      case !!languageLoading:
-        try {
-          const mutationResponse = await admin.graphql(
-            `query MyQuery {
-              shopLocales(published: true) {
-                locale
-                name
-                primary
-                published
-              }
-            }`,
-          );
-          const data = await mutationResponse.json();
-          return {
-            success: true,
-            response: data.data.shopLocales,
-          };
-        } catch (error) {
-          console.log("GraphQL Error: ", error);
-          return {
-            success: false,
-            response: null,
-          };
-        }
-      
-      case !!productStartCursor:
-        try {
-          console.log(productStartCursor);
-
-          const loadData = await admin.graphql(
-            `#graphql
-              query products($startCursor: String, $query: String, $sortKey: ProductSortKeys, $reverse: Boolean) {
-                products(last: 20 ,before: $startCursor, query: $query, sortKey: $sortKey, reverse: $reverse) {
-                  edges {
-                  node {
-                    id
-                    title
-                    status
-                    images(first: 20) {
-                      edges {
-                        node {
-                          id
-                          url
-                          altText
-                        }
-                      }
-                      pageInfo {
-                        hasNextPage
-                        hasPreviousPage
-                        startCursor
-                        endCursor
-                      }
-                    }
-                  }
-                }
-                pageInfo {
-                  hasNextPage
-                  hasPreviousPage
-                  startCursor
-                  endCursor
-                }
-                }
-            }`,
-            {
-              variables: {
-                startCursor: productStartCursor?.cursor
-                  ? productStartCursor?.cursor
-                  : undefined,
-                query: queryString(productStartCursor),
-                sortKey: productStartCursor?.sortKey || "TITLE",
-                reverse: productStartCursor?.reverse ?? false,
-              },
-            },
-          );
-
-          const response = await loadData.json();
-
-          console.log("productStartCursor", response?.data?.products?.edges);
-          if (response?.data?.products?.edges.length > 0) {
-            const menuData = response?.data?.products?.edges.map(
-              (item: any) => {
-                return {
-                  key: item?.node?.id,
-                  label: item?.node?.title,
-                  imageData: item?.node?.images,
-                  status: item?.node?.status,
-                };
-              },
-            );
-            const imageData = response?.data?.products?.edges.map(
-              (item: any) => {
-                return item?.node?.images?.edges.map((image: any) => {
-                  return {
-                    key: image?.node?.id,
-                    altText: image?.node?.altText,
-                    productId: item?.node?.id,
-                    productTitle: item?.node?.title,
-                    imageId: image?.node?.id,
-                    imageUrl: image?.node?.url,
-                    targetImageUrl: "",
-                    imageStartCursor: item?.node?.images?.pageInfo?.startCursor,
-                    imageEndCursor: item?.node?.images?.pageInfo?.endCursor,
-                    imageHasNextPage: item?.node?.images?.pageInfo?.hasNextPage,
-                    imageHasPreviousPage:
-                      item?.node?.images?.pageInfo?.hasPreviousPage,
-                  };
-                });
-              },
-            );
-            return json({
-              menuData,
-              imageData,
-              productStartCursor:
-                response?.data?.products?.pageInfo?.startCursor,
-              productEndCursor: response?.data?.products?.pageInfo?.endCursor,
-              productHasNextPage:
-                response?.data?.products?.pageInfo?.hasNextPage,
-              productHasPreviousPage:
-                response?.data?.products?.pageInfo?.hasPreviousPage,
-            });
-          } else {
-            return json({
-              menuData: [],
-              imageData: [],
-              productStartCursor: "",
-              productEndCursor: "",
-              productHasNextPage: "",
-              productHasPreviousPage: "",
-            });
-          }
-        } catch (error) {
-          console.error("Error action productStartCursor productImage:", error);
-          return json({
-            menuData: [],
-            imageData: [],
-            productStartCursor: "",
-            productEndCursor: "",
-            productHasNextPage: "",
-            productHasPreviousPage: "",
-          });
-        }
-      case !!productEndCursor:
-        try {
-          const loadData = await admin.graphql(
-            `#graphql
-              query products($endCursor: String, $query: String, $sortKey: ProductSortKeys, $reverse: Boolean) {
-                products(first: 20, after: $endCursor, query: $query, sortKey: $sortKey, reverse: $reverse) {
-                  edges {
-                  node {
-                    id
-                    title
-                    status
-                    images(first: 20) {
-                      edges {
-                        node {
-                          id
-                          url
-                          altText
-                        }
-                      }
-                      pageInfo {
-                        hasNextPage
-                        hasPreviousPage
-                        startCursor
-                        endCursor
-                      }
-                    }
-                  }
-                }
-                pageInfo {
-                  hasNextPage
-                  hasPreviousPage
-                  startCursor
-                  endCursor
-                }
-                }
-            }`,
-            {
-              variables: {
-                endCursor: productEndCursor?.cursor
-                  ? productEndCursor?.cursor
-                  : undefined,
-                query: queryString(productEndCursor),
-                sortKey: productEndCursor?.sortKey || "TITLE",
-                reverse: productEndCursor?.reverse ?? false,
-              },
-            },
-          );
-
-          const response = await loadData.json();
-          console.log("sdasdasda: ", response);
-
-          console.log("productEndCursor11", response?.data?.products?.edges);
-          if (response?.data?.products?.edges.length > 0) {
-            const menuData = response?.data?.products?.edges.map(
-              (item: any) => {
-                return {
-                  key: item?.node?.id,
-                  label: item?.node?.title,
-                  imageData: item?.node?.images,
-                  status: item?.node?.status,
-                };
-              },
-            );
-            const imageData = response?.data?.products?.edges.map(
-              (item: any) => {
-                return item?.node?.images?.edges.map((image: any) => {
-                  return {
-                    key: image?.node?.id,
-                    altText: image?.node?.altText,
-                    productId: item?.node?.id,
-                    productTitle: item?.node?.title,
-                    imageId: image?.node?.id,
-                    imageUrl: image?.node?.url,
-                    targetImageUrl: "",
-                    imageStartCursor: item?.node?.images?.pageInfo?.startCursor,
-                    imageEndCursor: item?.node?.images?.pageInfo?.endCursor,
-                    imageHasNextPage: item?.node?.images?.pageInfo?.hasNextPage,
-                    imageHasPreviousPage:
-                      item?.node?.images?.pageInfo?.hasPreviousPage,
-                  };
-                });
-              },
-            );
-
-            return json({
-              menuData,
-              imageData,
-              productStartCursor:
-                response?.data?.products?.pageInfo?.startCursor,
-              productEndCursor: response?.data?.products?.pageInfo?.endCursor,
-              productHasNextPage:
-                response?.data?.products?.pageInfo?.hasNextPage,
-              productHasPreviousPage:
-                response?.data?.products?.pageInfo?.hasPreviousPage,
-            });
-          } else {
-            return json({
-              menuData: [],
-              imageData: [],
-              productStartCursor: "",
-              productEndCursor: "",
-              productHasNextPage: "",
-              productHasPreviousPage: "",
-            });
-          }
-        } catch (error) {
-          console.error("Error action productEndCursor productImage:", error);
-          return json({
-            menuData: [],
-            imageData: [],
-            productStartCursor: "",
-            productEndCursor: "",
-            productHasNextPage: "",
-            productHasPreviousPage: "",
-          });
-        }
-      case !!imageStartCursor:
-        try {
-          const loadData = await admin.graphql(
-            `query {
-            product(id: "${imageStartCursor?.productId}") {
-              id
-              title
-              images(last: 20, before: "${imageStartCursor?.imageStartCursor}") {
-                edges {
-                  node {
-                    id
-                    url
-                    altText
-                  }
-                }
-                pageInfo {
-                  hasNextPage
-                  hasPreviousPage
-                  startCursor
-                  endCursor
-                }
-              }
-            }
-          }`,
-          );
-
-          const response = await loadData.json();
-
-          console.log(
-            "imageStartCursor",
-            response?.data?.product?.images?.edges,
-          );
-          if (response?.data?.product?.images?.edges.length > 0) {
-            const imageData = response?.data?.product?.images?.edges.map(
-              (item: any) => {
-                return {
-                  key: item?.node?.id,
-                  productId: item?.node?.id,
-                  productTitle: item?.node?.title,
-                  imageId: item?.node?.id,
-                  imageUrl: item?.node?.url,
-                  targetImageUrl: "",
-                  imageStartCursor:
-                    response?.data?.product?.images?.pageInfo?.startCursor,
-                  imageEndCursor:
-                    response?.data?.product?.images?.pageInfo?.endCursor,
-                  imageHasNextPage:
-                    response?.data?.product?.images?.pageInfo?.hasNextPage,
-                  imageHasPreviousPage:
-                    response?.data?.product?.images?.pageInfo?.hasPreviousPage,
-                };
-              },
-            );
-            return json({
-              imageData,
-            });
-          } else {
-            return json({
-              imageData: [],
-            });
-          }
-        } catch (error) {
-          console.error("Error action imageStartCursor productImage:", error);
-          return json({
-            imageData: [],
-          });
-        }
-      case !!imageEndCursor:
-        try {
-          const loadData = await admin.graphql(
-            `query {
-            product(id: "${imageEndCursor?.productId}") {
-              id
-              title
-              images(first: 20, after: "${imageEndCursor?.imageEndCursor}") {
-                edges {
-                  node {
-                    id
-                    url
-                    altText
-                  }
-                }
-                pageInfo {
-                  hasNextPage
-                  hasPreviousPage
-                  startCursor
-                  endCursor
-                }
-              }
-            }
-          }`,
-          );
-
-          const response = await loadData.json();
-
-          console.log("imageEndCursor", response?.data?.product?.images);
-          if (response?.data?.product?.images?.edges.length > 0) {
-            const imageData = response?.data?.product?.images?.edges.map(
-              (item: any) => {
-                return {
-                  key: item?.node?.id,
-                  productId: item?.node?.id,
-                  productTitle: item?.node?.title,
-                  imageId: item?.node?.id,
-                  imageUrl: item?.node?.url,
-                  targetImageUrl: "",
-                  imageStartCursor:
-                    response?.data?.product?.images?.pageInfo?.startCursor,
-                  imageEndCursor:
-                    response?.data?.product?.images?.pageInfo?.endCursor,
-                  imageHasNextPage:
-                    response?.data?.product?.images?.pageInfo?.hasNextPage,
-                  imageHasPreviousPage:
-                    response?.data?.product?.images?.pageInfo?.hasPreviousPage,
-                };
-              },
-            );
-            return json({
-              imageData,
-            });
-          } else {
-            return json({
-              imageData: [],
-            });
-          }
-        } catch (error) {
-          console.error("Error action imageEndCursor productImage:", error);
-          return json({
-            imageData: [],
-          });
-        }
-    }
-
-    return {
-      success: false,
-      message: "Invalid data",
-    };
-  } catch (error) {
-    console.log("Error management action: ", error);
-    return { error: "Error management action", status: 500, errorMsg: error };
-  }
-};
-
 export default function Index() {
-  const { searchTerm } = useLoaderData<typeof loader>();
-  console.log("searchTerm: ", searchTerm);
+  //   const { searchTerm } = useLoaderData<typeof loader>();
+  //   console.log("searchTerm: ", searchTerm);
 
   // const fetcher = useFetcher<typeof action>();
   const initStoreDataFetcher = useFetcher<any>();
@@ -638,7 +83,7 @@ export default function Index() {
   const [productImageData, setProductImageData] = useState<any>([]);
 
   const [currentProduct, setCurrentProduct] = useState<any>(null);
-  const [selectedLocale, setSelectedLocale] = useState<any>(searchTerm || "");
+  const [selectedLocale, setSelectedLocale] = useState<any>("");
   const [tableDataLoading, setTableDataLoading] = useState(true);
   const [tableImageDataLoading, setTableImageDataLoading] = useState(true);
   const [menuData, setMenuData] = useState<any>([]);
@@ -653,9 +98,7 @@ export default function Index() {
   const translateImageFetcher = useFetcher<any>();
   const replaceTranslateImageFetcher = useFetcher<any>();
   const [translatrImageactive, setTranslatrImageactive] = useState(false);
-  const [selectedLanguage, setSelectedLanguage] = useState<string>(
-    searchTerm || "",
-  );
+  const [selectedLanguage, setSelectedLanguage] = useState<string>("");
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -780,7 +223,7 @@ export default function Index() {
         <span
           style={{
             display: "inline-block",
-            maxWidth: 220, // 给内部留点空隙
+            maxWidth: 320, // 给内部留点空隙
             overflow: "hidden",
             whiteSpace: "nowrap",
             textOverflow: "ellipsis",
@@ -830,14 +273,10 @@ export default function Index() {
     //   },
     // },
     {
-      title: "语言",
-      render: () => <span>{selectedLanguage}</span>, // 或从 record 取语言字段
-    },
-    {
       title: "操作",
       render: (_: any, record: any) => (
         <Space>
-          <Button
+          {/* <Button
             type="primary"
             onClick={() => {
               console.log(record);
@@ -850,8 +289,8 @@ export default function Index() {
             }}
           >
             翻译
-          </Button>
-          <Button>查看</Button>
+          </Button> */}
+          <Button onClick={() => handleView(record)}>查看</Button>
         </Space>
       ),
     },
@@ -1056,10 +495,10 @@ export default function Index() {
     setTargetLanguages(filteredOptions);
   }, [sourceLanguage]);
   useEffect(() => {
-    loadFetcher.submit(
-      { loading: true, sortKey, reverse: sortOrder === "asc" ? false : true },
-      { method: "POST" },
-    );
+    // loadFetcher.submit(
+    //   { loading: true, sortKey, reverse: sortOrder === "asc" ? false : true },
+    //   { method: "POST", action: "/app/management" },
+    // );
     const languageFormData = new FormData();
     languageFormData.append("languageLoading", JSON.stringify({}));
     languageFetcher.submit(languageFormData, {
@@ -1094,6 +533,8 @@ export default function Index() {
       setProductsHasPreviousPage(productsFetcher.data.productHasPreviousPage);
       setProductsStartCursor(productsFetcher.data.productStartCursor);
       setProductsEndCursor(productsFetcher.data.productEndCursor);
+      setTableDataLoading(false);
+      setIsLoading(false);
     }
   }, [productsFetcher.data]);
   useEffect(() => {
@@ -1113,9 +554,9 @@ export default function Index() {
       console.log(languageFetcher.data);
       // setSelectedLocale(languageFetcher.data.response[0].locale);
 
-      if (!searchTerm) {
-        setSelectedLanguage(languageFetcher.data.response[0].locale);
-      }
+      //   if (!searchTerm) {
+      //     setSelectedLanguage(languageFetcher.data.response[0].locale);
+      //   }
     }
   }, [languageFetcher.data]);
   useEffect(() => {
@@ -1188,6 +629,7 @@ export default function Index() {
         },
         {
           method: "post",
+          action: "/app/management",
         },
       );
     }, 500);
@@ -1310,6 +752,7 @@ export default function Index() {
       },
       {
         method: "post",
+        action: "/app/management",
       },
     ); // 提交表单请求
   };
@@ -1328,6 +771,7 @@ export default function Index() {
       },
       {
         method: "post",
+        action: "/app/management",
       },
     ); // 提交表单请求
   };
@@ -1341,6 +785,7 @@ export default function Index() {
       },
       {
         method: "post",
+        action: "/app/management",
       },
     );
   };
@@ -1355,6 +800,7 @@ export default function Index() {
       },
       {
         method: "post",
+        action: "/app/management",
       },
     );
   };
@@ -1413,6 +859,14 @@ export default function Index() {
     setIsDeleteLoading(false);
   };
 
+  function handleView(record: any): void {
+    console.log("Viewing record:", record);
+    const productId = record.key.split('/').pop();
+    console.log('productId:', productId);
+    
+    navigate(`/app/products/${productId}`);
+  }
+
   const handleNavigate = () => {
     navigate("/app");
   };
@@ -1437,6 +891,7 @@ export default function Index() {
         },
         {
           method: "post",
+          action: "/app/management",
         },
       );
     }, 500);
@@ -1462,155 +917,106 @@ export default function Index() {
         },
         {
           method: "post",
+          action: "/app/management",
         },
       );
     }, 500);
   };
   return (
-    <Page>
-      <TitleBar title="Image Manage" />
-      {/* 头部卡片 - 翻译质量得分 */}
-      <Affix offsetTop={0}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            zIndex: 10,
-            backgroundColor: "rgb(241, 241, 241)",
-            padding: "16px 0",
-          }}
-        >
-          <Flex
-            align="center"
-            justify="space-between"
-            style={{ width: "100%" }}
-          >
-            <Flex align="center" gap={8}>
-              <Button
-                type="text"
-                variant="outlined"
-                onClick={handleNavigate}
-                style={{ padding: "4px" }}
-              >
-                <Icon source={ArrowLeftIcon} tone="base" />
-              </Button>
-              <Title
-                style={{
-                  margin: "0",
-                  fontSize: "1.25rem",
-                  fontWeight: 700,
-                }}
-              >
-                {t("Image Translation")}
-              </Title>
-            </Flex>
-            <div style={{ maxWidth: "200px" }}>
-              <Select
-                label={""}
-                value={selectedLocale}
-                // style={{ width: 120 }}
-                onChange={handleChange}
-                options={languageList}
+    <Layout>
+      <Layout.Section>
+        <div>
+          {/* 顶部 Tabs */}
+          <Card styles={{ body: { padding: "12px 24px" } }}>
+            <Flex align="center" justify="space-between">
+              <Tabs
+                activeKey={activeKey}
+                onChange={(key) => handleChangeStatusTab(key)}
+                defaultActiveKey="all"
+                type="line"
+                style={{ width: "30%" }}
+                items={[
+                  { label: "All", key: "ALL" },
+                  {
+                    label: "Active",
+                    key: "ACTIVE",
+                  },
+                  {
+                    label: "Draft",
+                    key: "DRAFT",
+                  },
+                  {
+                    label: "Archived",
+                    key: "ARCHIVED",
+                  },
+                ]}
               />
-            </div>
-          </Flex>
-        </div>
-      </Affix>
-      <Layout>
-        <Layout.Section>
-          <div>
-            {/* 顶部 Tabs */}
-            <Card styles={{ body: { padding: "12px 24px" } }}>
-              <Flex align="center" justify="space-between">
-                <Tabs
-                  activeKey={activeKey}
-                  onChange={(key) => handleChangeStatusTab(key)}
-                  defaultActiveKey="all"
-                  type="line"
-                  style={{ width: "30%" }}
-                  items={[
-                    { label: "All", key: "ALL" },
-                    {
-                      label: "Active",
-                      key: "ACTIVE",
-                    },
-                    {
-                      label: "Draft",
-                      key: "DRAFT",
-                    },
-                    {
-                      label: "Archived",
-                      key: "ARCHIVED",
-                    },
-                  ]}
-                />
 
-                <Flex align="center" justify="center" gap={20}>
-                  <Input
-                    placeholder="搜索..."
-                    value={searchText}
-                    onChange={(e) => handleSearch(e.target.value)}
-                    prefix={<SearchOutlined />}
-                  />
-                  {/* <Button>
+              <Flex align="center" justify="center" gap={20}>
+                <Input
+                  placeholder="搜索..."
+                  value={searchText}
+                  onChange={(e) => handleSearch(e.target.value)}
+                  prefix={<SearchOutlined />}
+                />
+                {/* <Button>
                     <Icon source={SortIcon} tone="base" />
                   </Button> */}
-                  <SortPopover
-                    onChange={(key, order) => {
-                      console.log(key, order);
+                <SortPopover
+                  onChange={(key, order) => {
+                    console.log(key, order);
 
-                      setSortKey(key);
-                      setSortOrder(order);
-                    }}
-                  />
-                </Flex>
+                    setSortKey(key);
+                    setSortOrder(order);
+                  }}
+                />
               </Flex>
-              {/* 搜索和排序行 */}
-            </Card>
+            </Flex>
+            {/* 搜索和排序行 */}
+          </Card>
 
-            {/* 产品表格 */}
+          {/* 产品表格 */}
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              // height: "calc(100vh)", // 根据页面结构调整
+              background: "#fff",
+            }}
+          >
+            {/* 表格主体区域（可滚动） */}
+            <div style={{ flex: 1, overflow: "auto" }}>
+              <Table
+                dataSource={menuData}
+                columns={panelColumns}
+                pagination={false}
+                rowKey={(record) => record.key} // ✅ 建议加上 key，避免警告
+                loading={tableDataLoading}
+              />
+            </div>
+
+            {/* 分页条固定在底部 */}
             <div
               style={{
-                display: "flex",
-                flexDirection: "column",
-                // height: "calc(100vh)", // 根据页面结构调整
+                borderTop: "1px solid #f0f0f0",
+                padding: "8px 0",
                 background: "#fff",
+                position: "sticky",
+                bottom: 0,
+                zIndex: 10,
+                display: "flex",
+                justifyContent: "center",
               }}
             >
-              {/* 表格主体区域（可滚动） */}
-              <div style={{ flex: 1, overflow: "auto" }}>
-                <Table
-                  dataSource={menuData}
-                  columns={panelColumns}
-                  pagination={false}
-                  rowKey={(record) => record.key} // ✅ 建议加上 key，避免警告
-                  loading={tableDataLoading}
-                />
-              </div>
-
-              {/* 分页条固定在底部 */}
-              <div
-                style={{
-                  borderTop: "1px solid #f0f0f0",
-                  padding: "8px 0",
-                  background: "#fff",
-                  position: "sticky",
-                  bottom: 0,
-                  zIndex: 10,
-                  display: "flex",
-                  justifyContent: "center",
-                }}
-              >
-                <Pagination
-                  hasPrevious={productsHasPreviousPage}
-                  onPrevious={handlePreProductPage}
-                  hasNext={productsHasNextPage}
-                  onNext={handleNextProductPage}
-                />
-              </div>
+              <Pagination
+                hasPrevious={productsHasPreviousPage}
+                onPrevious={handlePreProductPage}
+                hasNext={productsHasNextPage}
+                onNext={handleNextProductPage}
+              />
             </div>
-            {/* <Table
+          </div>
+          {/* <Table
               dataSource={menuData}
               columns={panelColumns}
               pagination={false}
@@ -1625,73 +1031,72 @@ export default function Index() {
               />
             </div> */}
 
-            {/* 翻译弹窗 */}
-            <Modal
-              title={currentProduct?.title || "图片翻译"}
-              open={open}
-              onCancel={() => {
-                setOpen(false);
-                setSelectedKey("");
-                setProductImageData([]);
-                setTableImageDataLoading(false);
-              }}
-              footer={null}
-              width={1000}
-            >
-              <Table
-                columns={columns}
-                dataSource={productImageData}
-                pagination={false}
-                rowKey={(record) => record.key} // ✅ 建议加上 key，避免警告
-                loading={tableImageDataLoading}
+          {/* 翻译弹窗 */}
+          <Modal
+            title={currentProduct?.title || "图片翻译"}
+            open={open}
+            onCancel={() => {
+              setOpen(false);
+              setSelectedKey("");
+              setProductImageData([]);
+              setTableImageDataLoading(false);
+            }}
+            footer={null}
+            width={1000}
+          >
+            <Table
+              columns={columns}
+              dataSource={productImageData}
+              pagination={false}
+              rowKey={(record) => record.key} // ✅ 建议加上 key，避免警告
+              loading={tableImageDataLoading}
+            />
+            <div style={{ display: "flex", justifyContent: "center" }}>
+              <Pagination
+                hasPrevious={imageHasPreviousPage}
+                onPrevious={handleImagePrevious}
+                hasNext={imageHasNextPage}
+                onNext={handleImageNext}
               />
-              <div style={{ display: "flex", justifyContent: "center" }}>
-                <Pagination
-                  hasPrevious={imageHasPreviousPage}
-                  onPrevious={handleImagePrevious}
-                  hasNext={imageHasNextPage}
-                  onNext={handleImageNext}
-                />
-              </div>
-            </Modal>
-          </div>
-        </Layout.Section>
-        <Modal
-          title={t("Image Translation")}
-          open={translatrImageactive}
-          onCancel={onClose}
-          footer={[
-            <Space
-              key="manage-translation-product-image-footer"
-              direction="vertical"
-              style={{ textAlign: "center" }}
-            >
-              <Button key="translate" type="primary" onClick={handleTranslate}>
-                {t("Image Translation")}
-              </Button>
-              <span>{t("1000 credits")}</span>
-            </Space>,
-          ]}
-          centered
-        >
-          <div style={{ padding: "15px 0" }}>
-            <p style={{ marginBottom: "10px" }}>{t("Source Language")}</p>
-            <SelectAnt
-              style={{ width: "100%", marginBottom: "20px" }}
-              value={sourceLanguage}
-              onChange={setSourceLanguage}
-              options={sourceLanguages}
-            />
-            <span>{t("Target Language")}</span>
-            <SelectAnt
-              style={{ width: "100%", marginTop: "10px" }}
-              value={targetLanguage}
-              onChange={setTargetLanguage}
-              options={targetLanguages}
-            />
-          </div>
-        </Modal>
-      </Layout>
-    </Page>
+            </div>
+          </Modal>
+        </div>
+      </Layout.Section>
+      <Modal
+        title={t("Image Translation")}
+        open={translatrImageactive}
+        onCancel={onClose}
+        footer={[
+          <Space
+            key="manage-translation-product-image-footer"
+            direction="vertical"
+            style={{ textAlign: "center" }}
+          >
+            <Button key="translate" type="primary" onClick={handleTranslate}>
+              {t("Image Translation")}
+            </Button>
+            <span>{t("1000 credits")}</span>
+          </Space>
+        ]}
+        centered
+      >
+        <div style={{ padding: "15px 0" }}>
+          <p style={{ marginBottom: "10px" }}>{t("Source Language")}</p>
+          <SelectAnt
+            style={{ width: "100%", marginBottom: "20px" }}
+            value={sourceLanguage}
+            onChange={setSourceLanguage}
+            options={sourceLanguages}
+          />
+          <span>{t("Target Language")}</span>
+          <SelectAnt
+            style={{ width: "100%", marginTop: "10px" }}
+            value={targetLanguage}
+            onChange={setTargetLanguage}
+            options={targetLanguages}
+          />
+        </div>
+      </Modal>
+    </Layout>
   );
 }

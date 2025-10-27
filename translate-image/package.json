@@ -26,6 +26,7 @@
   "dependencies": {
     "@google-cloud/translate": "^9.2.0",
     "@prisma/client": "^6.2.1",
+    "@reduxjs/toolkit": "^2.9.1",
     "@remix-run/dev": "^2.16.1",
     "@remix-run/fs-routes": "^2.16.1",
     "@remix-run/node": "^2.16.1",

@@ -7,8 +7,8 @@ export default function SortPopover({
 }: {
   onChange?: (sortKey: string, sortOrder: "asc" | "desc") => void;
 }) {
-  const [sortKey, setSortKey] = useState("TITLE");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [sortKey, setSortKey] = useState("CREATED_AT");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [open, setOpen] = useState(false);
 
   const sortOptions = [
@@ -17,7 +17,7 @@ export default function SortPopover({
     { label: "更新时间", value: "UPDATED_AT" },
     { label: "库存", value: "INVENTORY" },
     { label: "产品类型", value: "PRODUCT_TYPE" },
-    { label: "发布时间", value: "PUBLISHED_AT" },
+    // { label: "发布时间", value: "PUBLISHED_AT" },
     { label: "厂商", value: "VENDOR" },
   ];
 

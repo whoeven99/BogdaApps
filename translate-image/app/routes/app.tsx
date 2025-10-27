@@ -4,14 +4,38 @@ import type {
   LoaderFunctionArgs,
 } from "@remix-run/node";
 import { useEffect } from "react";
-import { Link, Outlet, useLoaderData, useRouteError } from "@remix-run/react";
+import {
+  json,
+  Link,
+  Outlet,
+  useLoaderData,
+  useLocation,
+  useRouteError,
+} from "@remix-run/react";
 import { boundary } from "@shopify/shopify-app-remix/server";
 import { AppProvider } from "@shopify/shopify-app-remix/react";
 import { NavMenu } from "@shopify/app-bridge-react";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 import { authenticate } from "../shopify.server";
-import { GetUnTranslatedWords, storageTranslateImage } from "~/api/JavaServer";
+import {
+  GetUnTranslatedWords,
+  GetUserSubscriptionPlan,
+  GetUserWords,
+  storageTranslateImage,
+} from "~/api/JavaServer";
 import { globalStore } from "~/globalStore";
+import { useDispatch, useSelector } from "react-redux";
+import { useTranslation } from "react-i18next";
+import {
+  setChars,
+  setIsNew,
+  setPlan,
+  setShop,
+  setTotalChars,
+  setUpdateTime,
+  setUserConfigIsLoading,
+} from "~/store/modules/userConfig";
+import { mutationAppPurchaseOneTimeCreate } from "~/api/admin";
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -39,9 +63,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
     const findWebPixelId = JSON.parse(formData.get("findWebPixelId") as string);
     const unTranslated = JSON.parse(formData.get("unTranslated") as string);
-    const replaceTranslateImage = JSON.parse(
-      formData.get("replaceTranslateImage") as string,
-    );
+
+    const theme = JSON.parse(formData.get("theme") as string);
+    const payInfo = JSON.parse(formData.get("payInfo") as string);
     // `#graphql
     //             query getFiles($first: Int, $after: String, $last: Int, $before: String) {
     //               files(first: $first, after: $after, last: $last, before: $before) {
@@ -292,27 +316,66 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         };
       }
     }
-    if (replaceTranslateImage) {
+
+    if (theme) {
       try {
-        const { url, userPicturesDoJson } = replaceTranslateImage;
-        userPicturesDoJson.shopName = shop;
-        const response = await storageTranslateImage({
-          shop,
-          imageUrl: url,
-          userPicturesDoJson,
-        });
-        return response;
+        const response = await admin.graphql(
+          `#graphql
+            query {
+              themes(roles: MAIN, first: 1) {
+                nodes {
+                  files(filenames: "config/settings_data.json") { 
+                    nodes {
+                      body {
+                        ... on OnlineStoreThemeFileBodyText {
+                          __typename
+                          content
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }`,
+        );
+        const data = await response.json();
+        return json({ data: data.data.themes });
       } catch (error) {
-        console.log("error storageImage", error);
+        console.error("Error theme currency:", error);
+      }
+    }
+    if (payInfo) {
+      try {
+        const returnUrl = new URL(
+          `https://admin.shopify.com/store/${shop.split(".")[0]}/apps/${process.env.HANDLE}/app/pricing`,
+        );
+        const res = await mutationAppPurchaseOneTimeCreate({
+          shop,
+          accessToken: accessToken as string,
+          name: payInfo.name,
+          price: payInfo.price,
+          returnUrl,
+          test:
+            process.env.NODE_ENV === "development" ||
+            process.env.NODE_ENV === "test",
+        });
+        return {
+          success: true,
+          errorCode: 0,
+          errorMsg: "",
+          response: res?.data,
+        };
+      } catch (error) {
+        console.error("Error payInfo app:", error);
         return {
           success: false,
           errorCode: 10001,
           errorMsg: "SERVER_ERROR",
-          response: [],
+          response: undefined,
         };
       }
     }
-    
+
     return {
       success: false,
       message: "Invalid data",
@@ -324,10 +387,69 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 export default function App() {
   const { apiKey, shop, server } = useLoaderData<typeof loader>();
+  const { t } = useTranslation();
+  const dispatch = useDispatch();
+  const location = useLocation();
+
+  const { plan, chars, totalChars, isNew } = useSelector(
+    (state: any) => state.userConfig,
+  );
   useEffect(() => {
     globalStore.shop = shop as string;
     globalStore.server = server as string;
   }, []);
+  useEffect(() => {
+    // 当 URL 改变时调用这两个函数
+    if (!plan?.id) {
+      getPlan();
+    }
+    if (!chars || !totalChars) {
+      getWords();
+    }
+  }, [location]); // 监听 URL 的变化
+  const getPlan = async () => {
+    const data = await GetUserSubscriptionPlan({
+      shop: shop,
+      server: server as string,
+    });
+    if (data?.success) {
+      dispatch(
+        setPlan({
+          plan: {
+            id: data?.response?.userSubscriptionPlan || 2,
+            feeType: data?.response?.feeType || 0,
+          },
+        }),
+      );
+      if (data?.response?.currentPeriodEnd) {
+        const date = new Date(data?.response?.currentPeriodEnd)
+          .toLocaleDateString("zh-CN", {
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+          })
+          .replace(/\//g, "-");
+        dispatch(setUpdateTime({ updateTime: date }));
+      }
+    }
+  };
+  const getWords = async () => {
+    const data = await GetUserWords({
+      shop,
+      server: server as string,
+    });
+    if (data?.success) {
+      console.log("chat data", data?.response);
+
+      dispatch(setChars({ chars: data?.response?.chars }));
+      dispatch(
+        setTotalChars({
+          totalChars: data?.response?.totalChars,
+        }),
+      );
+      dispatch(setUserConfigIsLoading({ isLoading: false }));
+    }
+  };
   return (
     <AppProvider isEmbeddedApp apiKey={apiKey}>
       <NavMenu>
@@ -335,7 +457,6 @@ export default function App() {
           Home
         </Link>
         <Link to="/app/management">Image Manage</Link>
-        <Link to="/app/alt_management">Alt Manage</Link>
         <Link to="/app/pricing">Pricing</Link>
       </NavMenu>
       <Outlet />

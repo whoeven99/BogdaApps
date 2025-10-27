@@ -155,9 +155,9 @@ export const GetProductImageData = async ({
 }) => {
   try {
     console.log("edwqeq: ", server, shopName, productId, languageCode);
-    console.log('server: ',server);
-      console.log('languageCode: ',languageCode);
-      
+    console.log("server: ", server);
+    console.log("languageCode: ", languageCode);
+
     const response = await axios({
       url: `${server}/picture/getPictureDataByShopNameAndResourceIdAndPictureId?shopName=${shopName}`,
       method: "POST",
@@ -250,16 +250,16 @@ export const TranslateImage = async ({
   sourceCode,
   targetCode,
   accessToken,
-  imageId,
 }: {
   shop: string;
   imageUrl: string;
   sourceCode: string;
   targetCode: string;
   accessToken: string;
-  imageId: string;
 }) => {
   try {
+    console.log("dqws: ", shop, imageUrl, sourceCode, targetCode, accessToken);
+
     const response = await axios({
       url: `${process.env.SERVER_URL}/translate/imageTranslate?shopName=${shop}`,
       method: "PUT",
@@ -268,11 +268,10 @@ export const TranslateImage = async ({
         sourceCode,
         targetCode,
         accessToken,
-        imageId,
       },
     });
     // console.log();
-    
+
     console.log("imageTranslate Response", response.data);
     if (response.data.success) {
       return response.data;
@@ -352,6 +351,15 @@ export const DeleteProductImageData = async ({
   languageCode: string;
 }) => {
   try {
+    console.log(
+      "delete img: ",
+      server,
+      shopName,
+      productId,
+      imageUrl,
+      languageCode,
+    );
+
     const response = await axios({
       url: `${server}/picture/deletePictureData?shopName=${shopName}`,
       method: "POST",
@@ -368,6 +376,244 @@ export const DeleteProductImageData = async ({
     return response.data;
   } catch (error) {
     console.error("Error DeleteProductImageData:", error);
+    return {
+      success: false,
+      errorCode: 10001,
+      errorMsg: "SERVER_ERROR",
+      response: undefined,
+    };
+  }
+};
+
+export const GetLatestActiveSubscribeId = async ({
+  shop,
+  server,
+}: {
+  shop: string;
+  server: string;
+}) => {
+  try {
+    const response = await axios({
+      url: `${server}/orders/getLatestActiveSubscribeId?shopName=${shop}`,
+      method: "POST",
+    });
+
+    console.log(`${shop} GetLatestActiveSubscribeId: `, response.data);
+
+    return response.data;
+  } catch (error) {
+    console.error(`${shop} GetLatestActiveSubscribeId error:`, error);
+    return {
+      success: false,
+      errorCode: 10001,
+      errorMsg: "SERVER_ERROR",
+      response: "",
+    };
+  }
+};
+
+export const IsShowFreePlan = async ({
+  shop,
+  server,
+}: {
+  shop: string;
+  server: string;
+}) => {
+  try {
+    const response = await axios({
+      url: `${server}/userTrials/isShowFreePlan?shopName=${shop}`,
+      method: "POST",
+    });
+
+    console.log(`${shop} IsShowFreePlan: `, response.data);
+
+    return response.data;
+  } catch (error) {
+    console.error(`${shop} IsShowFreePlan error:`, error);
+    return {
+      success: false,
+      errorCode: 10001,
+      errorMsg: "SERVER_ERROR",
+      response: "",
+    };
+  }
+};
+
+//获取用户计划
+export const GetUserSubscriptionPlan = async ({
+  shop,
+  server,
+}: {
+  shop: string;
+  server: string;
+}) => {
+  try {
+    const response = await axios({
+      url: `${server}/shopify/getUserSubscriptionPlan?shopName=${shop}`,
+      method: "GET",
+    });
+
+    console.log("GetUserSubscriptionPlan: ", response.data);
+
+    return response.data;
+  } catch (error) {
+    console.error("Error GetUserSubscriptionPlan:", error);
+    return {
+      success: false,
+      errorCode: 10001,
+      errorMsg: "SERVER_ERROR",
+      response: undefined,
+    };
+  }
+};
+
+//获取用户的额度字符数 和 已使用的字符
+export const GetUserWords = async ({
+  shop,
+  server,
+}: {
+  shop: string;
+  server?: string;
+}) => {
+  try {
+    const response = await axios({
+      url: `${server || process.env.SERVER_URL}/shopify/getUserLimitChars?shopName=${shop}`,
+      method: "GET",
+    });
+    console.log("GetUserWords: ", response.data);
+    return response.data;
+  } catch (error) {
+    console.error("Error GetUserWords:", error);
+    return {
+      success: false,
+      errorCode: 10001,
+      errorMsg: "SERVER_ERROR",
+      response: undefined,
+    };
+  }
+};
+
+// 获取商店配置语言的图片的翻译信息
+export const getProductAllLanguageImagesData = async ({
+  shop,
+  productId,
+  imageId,
+  accessToken,
+  sourceCode,
+}: {
+  shop: string;
+  productId: string;
+  imageId: string;
+  accessToken: string;
+  sourceCode: string;
+}) => {
+  try {
+    console.log("data22: ", shop, productId, imageId, accessToken, sourceCode);
+
+    // const response = await axios({
+    //   url: `${process.env.SERVER_URL}/shopify/getProductAllLanguageImagesData/${shop}`,
+    //   method: "POST",
+    //   data: {
+    //     shop,
+    //     productId,
+    //     imageId,
+    //     sourceCode,
+    //   },
+    // });
+
+    // console.log("getProductAllLanguageImagesData: ", response.data);
+    // return response.data;
+    return {
+      success: true,
+      errorCode: 0,
+      errorMsg: "OK",
+      response: [
+        {
+          id: 103,
+          shopName: "ciwishop.myshopify.com",
+          productId: "gid://shopify/Product/7434315202583",
+          imageId: "gid://shopify/ProductImage/34565775065111",
+          imageBeforeUrl:
+            "https://cdn.shopify.com/s/files/1/0728/0948/0215/files/Snipaste_2025-05-26_15-46-37.png?v=1750991411",
+          imageAfterUrl:
+            "https://ciwi-us-1327177217.cos.na-ashburn.myqcloud.com/image-Translation/ciwishop.myshopify.com/gid://shopify/Product/7434315202583/16264210.png",
+          altBeforeTranslation:
+            "'Casual Pink Mountain Landscape Printed White Pullover With Round Neckline And Long Sleeves' - ciwishop",
+          altAfterTranslation:
+            "'بلوفر أبيض كاجوال بطبعة مناظر طبيعية جبلية وردية، بياقة دائرية وأكمام طويلة' - ciwishop",
+          languageCode: "ar",
+          language: "Arabic",
+          isDelete: false,
+        },
+        {
+          id: 13,
+          shopName: "ciwishop.myshopify.com",
+          productId: "gid://shopify/Product/7434315202583",
+          imageId: "gid://shopify/ProductImage/34565775065111",
+          imageBeforeUrl:
+            "https://cdn.shopify.com/s/files/1/0728/0948/0215/files/Snipaste_2025-05-26_15-46-37.png?v=1750991411",
+          imageAfterUrl:
+            "https://cdn.translate.alibaba.com/r/9342e75e0c6143e1a05e5055f030e81f.jpg",
+          altBeforeTranslation:
+            "'Casual Pink Mountain Landscape Printed White Pullover With Round Neckline And Long Sleeves' - ciwishop",
+          altAfterTranslation:
+            "「カジュアルなピンクの山の風景プリントの白いプルオーバー（ラウンドネックと長袖）」 - ciwishop",
+          languageCode: "ja",
+          language: "Japanese",
+          isDelete: false,
+        },
+        {
+          id: 173,
+          shopName: "ciwishop.myshopify.com",
+          productId: "gid://shopify/Product/7434315202583",
+          imageId: "gid://shopify/ProductImage/34565775065111",
+          imageBeforeUrl:
+            "https://cdn.shopify.com/s/files/1/0728/0948/0215/files/Snipaste_2025-05-26_15-46-37.png?v=1750991411",
+          imageAfterUrl: "",
+          altBeforeTranslation:
+            "'Casual Pink Mountain Landscape Printed White Pullover With Round Neckline And Long Sleeves' - ciwishop",
+          altAfterTranslation:
+            "'Иаабац ашьхатә ландшафт ԥшьаала икьыԥхьу апуловер шкәакәа, абӷьы круглый, анапы еиҵыхқәа' - ciwishop",
+          languageCode: "ko",
+          language: "Korean",
+          isDelete: false,
+        },
+        {
+          id: 183,
+          shopName: "ciwishop.myshopify.com",
+          productId: "gid://shopify/Product/7434315202583",
+          imageId: "gid://shopify/ProductImage/34565775065111",
+          imageBeforeUrl:
+            "https://cdn.shopify.com/s/files/1/0728/0948/0215/files/Snipaste_2025-05-26_15-46-37.png?v=1750991411",
+          imageAfterUrl:
+            "	https://cdn.shopify.com/s/files/1/0728/0948/0215/files/71isjALguFL._AC_SY695.jpg?v=1757055470",
+          altBeforeTranslation:
+            "'Casual Pink Mountain Landscape Printed White Pullover With Round Neckline And Long Sleeves' - ciwishop",
+          altAfterTranslation: "",
+          languageCode: "zh-CN",
+          language: "Chinese (Simplified)",
+          isDelete: false,
+        },
+        {
+          id: 193,
+          shopName: "ciwishop.myshopify.com",
+          productId: "gid://shopify/Product/7434315202583",
+          imageId: "gid://shopify/ProductImage/34565775065111",
+          imageBeforeUrl:
+            "https://cdn.shopify.com/s/files/1/0728/0948/0215/files/20250904-175349.png?v=1756979649",
+          imageAfterUrl:
+            "",
+          altBeforeTranslation:
+            "'Casual Pink Mountain Landscape Printed White Pullover With Round Neckline And Long Sleeves' - ciwishop",
+          altAfterTranslation: "",
+          languageCode: "zh-TW",
+          language: "Chinese (Traditional)",
+          isDelete: false,
+        },
+      ],
+    };
+  } catch (error) {
+    console.error("Error getProductAllLanguageImagesData:", error);
     return {
       success: false,
       errorCode: 10001,
