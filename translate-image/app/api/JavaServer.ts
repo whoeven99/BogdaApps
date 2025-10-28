@@ -3,6 +3,7 @@ import { authenticate } from "~/shopify.server";
 // import { queryShop, queryShopLanguages } from "./admin";
 // import { ShopLocalesType } from "~/routes/app.language/route";
 import pLimit from "p-limit";
+import { queryShop } from "./admin";
 // import { withRetry } from "~/utils/retry";
 
 // 查询未翻译的字符数
@@ -477,8 +478,8 @@ export const GetUserWords = async ({
 }) => {
   try {
     const response = await axios({
-      url: `${server || process.env.SERVER_URL}/shopify/getUserLimitChars?shopName=${shop}`,
-      method: "GET",
+      url: `${server || process.env.SERVER_URL}/pcUsers/getPurchasePoints?shopName=${shop}`,
+      method: "POST",
     });
     console.log("GetUserWords: ", response.data);
     return response.data;
@@ -565,7 +566,6 @@ export const getProductAllLanguageImagesData = async ({
         {
           id: 173,
           shopName: "ciwishop.myshopify.com",
-          productId: "gid://shopify/Product/7434315202583",
           imageId: "gid://shopify/ProductImage/34565775065111",
           imageBeforeUrl:
             "https://cdn.shopify.com/s/files/1/0728/0948/0215/files/Snipaste_2025-05-26_15-46-37.png?v=1750991411",
@@ -601,8 +601,7 @@ export const getProductAllLanguageImagesData = async ({
           imageId: "gid://shopify/ProductImage/34565775065111",
           imageBeforeUrl:
             "https://cdn.shopify.com/s/files/1/0728/0948/0215/files/20250904-175349.png?v=1756979649",
-          imageAfterUrl:
-            "",
+          imageAfterUrl: "",
           altBeforeTranslation:
             "'Casual Pink Mountain Landscape Printed White Pullover With Round Neckline And Long Sleeves' - ciwishop",
           altAfterTranslation: "",
@@ -614,6 +613,114 @@ export const getProductAllLanguageImagesData = async ({
     };
   } catch (error) {
     console.error("Error getProductAllLanguageImagesData:", error);
+    return {
+      success: false,
+      errorCode: 10001,
+      errorMsg: "SERVER_ERROR",
+      response: undefined,
+    };
+  }
+};
+
+//用户数据初始化
+//添加用户
+export const UserAdd = async ({
+  shop,
+  accessToken,
+}: {
+  shop: string;
+  accessToken: string;
+}) => {
+  try {
+    const shopData = await queryShop({ shop, accessToken });
+    const shopOwnerName = shopData?.shopOwnerName;
+    const lastSpaceIndex = shopOwnerName.lastIndexOf(" ");
+    const firstName = shopOwnerName.substring(0, lastSpaceIndex);
+    const lastName = shopOwnerName.substring(lastSpaceIndex + 1);
+    const addUserInfoResponse = await axios({
+      url: `${process.env.SERVER_URL}/pcUsers/initUser?shopName=${shop}`,
+      method: "POST",
+      data: {
+        accessToken: accessToken,
+        email: shopData.email || "",
+        phone: "",
+        realAddress: "",
+        ipAddress: "",
+        firstName: firstName || "",
+        lastName: lastName || "",
+        userTag: shopOwnerName || "",
+      },
+    });
+    console.log("addUserInfoResponse: ", addUserInfoResponse.data);
+  } catch (error) {
+    console.error("Error UserAdd:", error);
+  }
+};
+
+//更新订单数据
+export const InsertOrUpdateOrder = async ({
+  shop,
+  id,
+  amount,
+  name,
+  createdAt,
+  status,
+  confirmationUrl,
+}: {
+  shop?: string;
+  id: string;
+  amount?: number;
+  name?: string;
+  createdAt?: string;
+  status: string;
+  confirmationUrl?: URL;
+}) => {
+  try {
+    await axios({
+      url: `${process.env.SERVER_URL}/orders/insertOrUpdateOrder?shopName=${shop}`,
+      method: "POST",
+      data: {
+        shopName: shop,
+        id: id,
+        amount: amount,
+        name: name,
+        createdAt: createdAt,
+        status: status,
+        confirmationUrl: confirmationUrl,
+      },
+    });
+  } catch (error) {
+    console.error("Error InsertOrUpdateOrder:", error);
+  }
+};
+
+//增加用户字符数
+export const AddCharsByShopName = async ({
+  shop,
+  amount,
+  gid,
+  accessToken,
+}: {
+  shop: string;
+  amount: number;
+  gid: string;
+  accessToken:string
+}) => {
+  try {
+    const response = await axios({
+      url: `${process.env.SERVER_URL}/pcUsers/addPurchasePoints?shopName=${shop}`,
+      method: "PUT",
+      data: {
+        chars: amount,
+        gid: gid,
+        accessToken
+      },
+    });
+    console.log(`${shop} AddCharsByShopName:`, response.data);
+
+    return response.data;
+  } catch (error) {
+    console.error("Error AddCharsByShopName:", error);
     return {
       success: false,
       errorCode: 10001,

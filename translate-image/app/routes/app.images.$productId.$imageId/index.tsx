@@ -444,55 +444,61 @@ const ImageAltTextPage = () => {
     imageUrl: string,
     languageCode: string,
   ) => {
-    console.log(productId, imageUrl, languageCode);
-    setDeleteLoadingImages((pre) => ({
-      ...pre,
-      [`${imageId}_${languageCode}`]: true,
-    }));
-    setIsDeleteLoading(true);
-    const res = await DeleteProductImageData({
-      server: globalStore?.server || "",
-      shopName: globalStore?.shop || "",
-      productId: productId,
-      imageUrl: imageUrl,
-      languageCode: languageCode,
-    });
+    try {
+      console.log(productId, imageUrl, languageCode);
+      setDeleteLoadingImages((pre) => ({
+        ...pre,
+        [`${imageId}_${languageCode}`]: true,
+      }));
+      setIsDeleteLoading(true);
+      const res = await DeleteProductImageData({
+        server: globalStore?.server || "",
+        shopName: globalStore?.shop || "",
+        productId: productId,
+        imageUrl: imageUrl,
+        languageCode: languageCode,
+      });
 
-    console.log("res", res);
+      console.log("res", res);
 
-    if (res.success) {
-      // setDataResource(
-      //   dataResource.map((item: any) => {
-      //     return item.map((image: any) => {
-      //       if (image.imageId === productId) {
-      //         image.targetImageUrl = "";
-      //       }
-      //       return image;
-      //     });
-      //   }),
-      // );
-      console.log(imageDatas);
-      console.log(currentTranslatingImage);
+      if (res.success) {
+        // setDataResource(
+        //   dataResource.map((item: any) => {
+        //     return item.map((image: any) => {
+        //       if (image.imageId === productId) {
+        //         image.targetImageUrl = "";
+        //       }
+        //       return image;
+        //     });
+        //   }),
+        // );
+        console.log(imageDatas);
+        console.log(currentTranslatingImage);
 
-      setImageDatas(
-        imageDatas.map((item: any) => {
-          if (item.languageCode === languageCode) {
-            item.imageAfterUrl = "";
-          }
-          return item;
-        }),
-      );
-      shopify.toast.show(t("Delete Success"));
-    } else {
-      shopify.toast.show(t("Delete Failed"));
+        setImageDatas(
+          imageDatas.map((item: any) => {
+            if (item.languageCode === languageCode) {
+              item.imageAfterUrl = "";
+            }
+            return item;
+          }),
+        );
+        shopify.toast.show(t("Delete Success"));
+      } else {
+        shopify.toast.show(t("Delete Failed"));
+      }
+      setDeleteLoadingImages((pre) => ({
+        ...pre,
+        [`${imageId}_${languageCode}`]: false,
+      }));
+    } catch (error) {
+      console.log("delete image error", error);
     }
-    setDeleteLoadingImages((pre) => ({
-      ...pre,
-      [`${imageId}_${languageCode}`]: false,
-    }));
   };
   const handleTranslateAlt = async (img: any) => {
-    console.log(`从当前语言${defaultLanguageData.locale}翻译成${img.languageCode}`);
+    console.log(
+      `从当前语言${defaultLanguageData.locale}翻译成${img.languageCode}`,
+    );
     setConfirmData((prev: any) => {
       const exists = prev.find((i: any) => i.languageCode === img.languageCode);
       if (exists) {
@@ -1085,8 +1091,31 @@ const ImageAltTextPage = () => {
                               }),
                             })}
                             onChange={(info) => {
+                              console.log("info", info);
+
                               if (info.file.status === "done") {
-                                if (info.file.response?.success) {
+                                const response = info.file.response; // 后端返回的数据
+                                const newUrl =
+                                  typeof response?.response?.imageAfterUrl ===
+                                  "string"
+                                    ? response.response?.imageAfterUrl
+                                    : "";
+                                if (response?.success) {
+                                  setImageDatas((prev: any[]) => {
+                                    return prev.map((item) =>
+                                      item.languageCode === img.languageCode
+                                        ? {
+                                            ...item,
+                                            imageAfterUrl:
+                                              typeof newUrl === "string"
+                                                ? newUrl
+                                                : item.imageAfterUrl,
+                                          }
+                                        : item,
+                                    );
+                                  });
+                                  console.log(imageDatas);
+
                                   shopify.toast.show(
                                     `${info.file.name} ${t("Upload Success")}`,
                                   );

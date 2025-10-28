@@ -185,7 +185,9 @@ export const QuotaCard = () => {
   );
 
   const handlePay = () => {
-    setBuyButtonLoading(true);
+    // setBuyButtonLoading(true);
+    console.log(selectedOptionKey);
+
     const selectedOption = creditOptions.find(
       (item) => item.key === selectedOptionKey,
     );
@@ -193,19 +195,26 @@ export const QuotaCard = () => {
     const payInfo = {
       name: selectedOption?.name,
       price: {
-        amount: selectedOption?.price.currentPrice,
+        amount: selectedOption?.price.comparedPrice,
         currencyCode: selectedOption?.price.currencyCode,
       },
     };
+    console.log(payInfo);
+
     const formData = new FormData();
     formData.append("payInfo", JSON.stringify(payInfo));
     payFetcher.submit(formData, {
       method: "POST",
+      action: "/app",
     });
   };
   useEffect(() => {
     if (payFetcher.data) {
+      console.log(payFetcher.data);
+      
       if (payFetcher.data?.success) {
+        console.log(payFetcher.data);
+
         const order =
           payFetcher.data?.response?.appPurchaseOneTimeCreate
             ?.appPurchaseOneTime;
@@ -232,6 +241,11 @@ export const QuotaCard = () => {
     }
   }, [payFetcher.data]);
   useEffect(() => {
+    if (orderFetcher.data) {
+      console.log(orderFetcher.data);
+    }
+  }, [orderFetcher.data]);
+  useEffect(() => {
     setIsLoading(false);
   }, []);
   return (
@@ -244,7 +258,12 @@ export const QuotaCard = () => {
             justifyContent: "space-between",
           }}
         >
-          <Flex gap={8} align="center" justify="space-between" style={{ width: "100%" }}>
+          <Flex
+            gap={8}
+            align="center"
+            justify="space-between"
+            style={{ width: "100%" }}
+          >
             <Flex align="center" gap={8}>
               <Title level={4} style={{ marginBottom: 0 }}>
                 {t("Your translation quota")}
@@ -388,7 +407,7 @@ export const QuotaCard = () => {
                   >
                     {option.Credits.toLocaleString()} {t("Credits")}
                   </Text>
-                  {plan.id === 6 || plan.id === 5 || plan.id === 4 ? (
+                  {/* {plan.id === 6 || plan.id === 5 || plan.id === 4 ? (
                     <>
                       <Title
                         level={3}
@@ -409,13 +428,14 @@ export const QuotaCard = () => {
                       </Text>
                     </>
                   ) : (
-                    <Title
-                      level={3}
-                      style={{ margin: 0, color: "#007F61", fontWeight: 700 }}
-                    >
-                      ${option.price.currentPrice.toFixed(2)}
-                    </Title>
-                  )}
+                    
+                  )} */}
+                  <Title
+                    level={3}
+                    style={{ margin: 0, color: "#007F61", fontWeight: 700 }}
+                  >
+                    ${option.price.comparedPrice.toFixed(2)}
+                  </Title>
                 </Card>
               </Col>
             ))}

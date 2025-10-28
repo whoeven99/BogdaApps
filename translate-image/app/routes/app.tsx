@@ -8,6 +8,7 @@ import {
   json,
   Link,
   Outlet,
+  useFetcher,
   useLoaderData,
   useLocation,
   useRouteError,
@@ -21,7 +22,9 @@ import {
   GetUnTranslatedWords,
   GetUserSubscriptionPlan,
   GetUserWords,
+  InsertOrUpdateOrder,
   storageTranslateImage,
+  UserAdd,
 } from "~/api/JavaServer";
 import { globalStore } from "~/globalStore";
 import { useDispatch, useSelector } from "react-redux";
@@ -55,268 +58,25 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const { shop, accessToken } = adminAuthResult.session;
     const { admin } = adminAuthResult;
     const formData = await request.formData();
-    const initDataFetcher = JSON.parse(
-      formData.get("initDataFetcher") as string,
-    );
-    const qualityEvaluation = JSON.parse(
-      formData.get("qualityEvaluation") as string,
-    );
-    const findWebPixelId = JSON.parse(formData.get("findWebPixelId") as string);
-    const unTranslated = JSON.parse(formData.get("unTranslated") as string);
-
+    const init = JSON.parse(formData.get("init") as string);
     const theme = JSON.parse(formData.get("theme") as string);
     const payInfo = JSON.parse(formData.get("payInfo") as string);
-    // `#graphql
-    //             query getFiles($first: Int, $after: String, $last: Int, $before: String) {
-    //               files(first: $first, after: $after, last: $last, before: $before) {
-    //                 edges {
-    //                   node {
-    //                     __typename
-    //                     ... on MediaImage {
-    //                       id
-    //                       image {
-    //                         url
-    //                         altText
-    //                       }
-    //                     }
-    //                   }
-    //                 }
-    //                 pageInfo {
-    //                   hasNextPage
-    //                   hasPreviousPage
-    //                   startCursor
-    //                   endCursor
-    //                 }
-    //               }
-    //             }
-    //           `,
-    if (initDataFetcher) {
+    const orderInfo = JSON.parse(formData.get("orderInfo") as string);
+    if (init) {
       try {
-        const { type, num, cursor } = initDataFetcher;
-        const mutationResponse = await admin.graphql(
-          `query {
-            products(first: 20) {
-              edges {
-                node {
-                  id
-                  title
-                  images(first: 20) {
-                    edges {
-                      node {
-                        id
-                        url 
-                      }
-                    }
-                    pageInfo {
-                      hasNextPage
-                      hasPreviousPage
-                      startCursor
-                      endCursor
-                    }
-                  }
-                }
-              }
-              pageInfo {
-                hasNextPage
-                hasPreviousPage
-                startCursor
-                endCursor
-              }
-            } 
-          }`,
-          // {
-          //   variables:
-          //     type === "next"
-          //       ? { first: num, after: cursor }
-          //       : { last: num, before: cursor },
-          // },
-        );
-        const data = await mutationResponse.json();
-        console.log("dasdasdsa: ", data.data.files);
-        return {
-          success: true,
-          response: data,
-        };
-      } catch (error) {
-        console.log("GraphQL Error: ", error);
-      }
-    }
-
-    if (qualityEvaluation) {
-      try {
-        console.log("quailtyEvaluation1");
-
-        const mutationResponse = await admin.graphql(
-          `
-        #graphql
-          mutation webPixelCreate($webPixel: WebPixelInput!){
-            webPixelCreate(webPixel: $webPixel) {
-              userErrors {
-                code
-                field
-                message
-              }
-              webPixel {
-                id
-                settings
-              }
-            }
-          }
-        `,
-          {
-            variables: {
-              webPixel: {
-                settings: JSON.stringify({
-                  shopName: shop,
-                  server: process.env.SERVER_URL,
-                }),
-              },
-            },
-          },
-        );
-        if (!mutationResponse.ok) {
-          console.error("Request failed", mutationResponse);
-          return;
-        }
-        const data = (await mutationResponse.json()) as any;
-        if (data.errors) {
-          console.error("GraphQL 错误: ", data.errors);
-          return {
-            success: false,
-            response: {
-              errorCode: 2,
-            },
-          };
-        }
-
-        if (data.data.webPixelCreate.userErrors.length > 0) {
-          console.error("业务错误: ", data.data.webPixelCreate.userErrors);
-          return {
-            success: false,
-            response: {
-              errorCode: 3,
-            },
-          };
-        }
-        return {
-          success: true,
-          response: data,
-        };
-      } catch (error) {
-        console.log(`${shop} getOrderData failed`, error);
-        return {
-          success: false,
-          response: {
-            errorCode: 1,
-          },
-        };
-      }
-    }
-
-    if (findWebPixelId) {
-      try {
-        const query = `
-          query {
-            webPixel {
-              id
-              settings
-            }
-          }
-        `;
-        const response = await admin.graphql(query);
-        if (!response.ok) {
-          return {
-            success: false,
-            errorCode: response.status,
-            errorMsg: response.statusText,
-            response: null,
-          };
-        }
-
-        const data = (await response.json()) as any;
-        console.log("findWebPixelId data", data);
-
-        // 再看 GraphQL 层面是否有错误
-        if (data.errors) {
-          return {
-            success: false,
-            errorCode: 10002,
-            errorMsg: data.errors.map((e: any) => e.message).join(", "),
-            response: data,
-          };
-        }
-
-        return {
-          success: true,
-          response: data,
-        };
-      } catch (error) {
-        console.log(`${shop} findWebPixel failed`, error);
-        return {
-          success: false,
-          errorCode: 10001,
-          errorMsg: "SERVER_ERROR",
-          response: null,
-        };
-      }
-    }
-
-    if (unTranslated) {
-      try {
-        const mutationResponse = await admin.graphql(
-          `query MyQuery {
-            shopLocales(published: true) {
-              locale
-              name
-              primary
-              published
-            }
-          }`,
-        );
-        const data = (await mutationResponse.json()) as any;
-        let source = "en";
-        if (data.data.shopLocales.length > 0) {
-          data.data.shopLocales.forEach((item: any) => {
-            if (item.primary === true) {
-              source = item.locale;
-            }
-          });
-        }
-        const { resourceModules } = unTranslated;
-        let totalWords = 0;
-        const results = await Promise.all(
-          resourceModules.map((module: string) =>
-            GetUnTranslatedWords({
-              shop,
-              module,
-              accessToken: accessToken as string,
-              source,
-            }),
-          ),
-        );
-
-        results.forEach((res) => {
-          if (res.success && res.response) {
-            totalWords += res.response;
-          }
+        const response = await UserAdd({
+          shop,
+          accessToken: accessToken as string,
         });
-        return {
-          success: true,
-          response: {
-            totalWords,
-          },
-        };
+        return json({ success: true, response });
       } catch (error) {
-        console.log("get unTranslated words failed", error);
-        return {
+        console.error("Error loading app:", error);
+        return json({
           success: false,
-          errorCode: 10001,
-          errorMsg: "SERVER_ERROR",
           response: null,
-        };
+        });
       }
     }
-
     if (theme) {
       try {
         const response = await admin.graphql(
@@ -341,13 +101,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         const data = await response.json();
         return json({ data: data.data.themes });
       } catch (error) {
+        return json({
+          success: false,
+          response: null,
+        });
         console.error("Error theme currency:", error);
       }
     }
     if (payInfo) {
       try {
         const returnUrl = new URL(
-          `https://admin.shopify.com/store/${shop.split(".")[0]}/apps/${process.env.HANDLE}/app/pricing`,
+          `https://admin.shopify.com/store/${shop.split(".")[0]}/apps/${process.env.HANDLE}/app`,
         );
         const res = await mutationAppPurchaseOneTimeCreate({
           shop,
@@ -359,27 +123,45 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             process.env.NODE_ENV === "development" ||
             process.env.NODE_ENV === "test",
         });
-        return {
+        return json({
           success: true,
           errorCode: 0,
           errorMsg: "",
           response: res?.data,
-        };
+        });
       } catch (error) {
         console.error("Error payInfo app:", error);
-        return {
+        return json({
           success: false,
           errorCode: 10001,
           errorMsg: "SERVER_ERROR",
           response: undefined,
-        };
+        });
       }
     }
 
-    return {
+    if (orderInfo) {
+      try {
+        const orderData = await InsertOrUpdateOrder({
+          shop,
+          id: orderInfo.id,
+          amount: orderInfo.amount,
+          name: orderInfo.name,
+          createdAt: orderInfo.createdAt,
+          status: orderInfo.status,
+          confirmationUrl: orderInfo.confirmationUrl,
+        });
+        return json({ data: orderData });
+      } catch (error) {
+        console.error("Error orderInfo app:", error);
+        return json({ error: "Error orderInfo app" }, { status: 500 });
+      }
+    }
+
+    return json({
       success: false,
       message: "Invalid data",
-    };
+    });
   } catch (error) {
     console.log("Error app action: ", error);
     return { error: "Error app action", status: 500, errorMsg: error };
@@ -390,14 +172,26 @@ export default function App() {
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const location = useLocation();
-
+  const initFetcher = useFetcher<any>();
   const { plan, chars, totalChars, isNew } = useSelector(
     (state: any) => state.userConfig,
   );
   useEffect(() => {
+    initFetcher.submit(
+      { init: JSON.stringify(true) },
+      {
+        method: "post",
+        action: "/app",
+      },
+    );
     globalStore.shop = shop as string;
     globalStore.server = server as string;
   }, []);
+  useEffect(() => {
+    if (initFetcher.data) {
+      console.log(initFetcher.data);
+    }
+  }, [initFetcher.data]);
   useEffect(() => {
     // 当 URL 改变时调用这两个函数
     if (!plan?.id) {

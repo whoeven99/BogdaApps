@@ -157,3 +157,52 @@ export const mutationAppSubscriptionCreate = async ({
     return undefined;
   }
 };
+
+export const queryShop = async ({
+  shop,
+  accessToken,
+}: {
+  shop: string;
+  accessToken: string;
+}) => {
+  try {
+    const query = `{
+      shop {
+        name
+        shopOwnerName
+        email
+        currencyCode
+        currencySettings(first: 100) {
+          nodes {
+            currencyCode
+            currencyName
+            enabled
+          }
+        }
+        myshopifyDomain
+        currencyFormats {
+          moneyFormat
+          moneyWithCurrencyFormat
+        }      
+      }
+    }`;
+
+    const response = await axios({
+      url: `https://${shop}/admin/api/2025-04/graphql.json`,
+      method: "POST",
+      headers: {
+        "X-Shopify-Access-Token": accessToken, // 确保使用正确的 Token 名称
+        "Content-Type": "application/json",
+      },
+      data: JSON.stringify({ query }),
+    });
+    const res = response.data.data.shop;
+    console.log("queryShop main currencyCode: ", res?.currencyCode);
+    console.log("queryShop currencyCodes: ", res?.currencySettings?.nodes);
+    console.log("queryShop currencyFormats: ", res?.currencyFormats);
+    return res;
+  } catch (error) {
+    console.error("Error fetching shop:", error);
+    return null;
+  }
+};

@@ -2,6 +2,7 @@
 
 client_id = "e7fe2398f1feb814e87fb51ac1364bb9"
 name = "Ciwi.ai: Image & Alt Translate"
+handle = "translate-image-local"
 application_url = "https://boulevard-column-concepts-selections.trycloudflare.com"
 embedded = true
 
