@@ -61,5 +61,6 @@
   "Disable App":"Disable App",
   "Setup App":"Setup App",
   "The switcher is currently enabled.":"The switcher is currently enabled.",
-  "Enable language and currency switcher":"Enable language and currency switcher"
+  "Enable language and currency switcher":"Enable language and currency switcher",
+  "{{currentCredits}} has been used, total credits: {{maxCredits}}.":"{{currentCredits}} has been used, total credits: {{maxCredits}}."
 }

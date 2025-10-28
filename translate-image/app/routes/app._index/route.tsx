@@ -15,21 +15,11 @@ import {
 import { Link, useFetcher, useLoaderData, useNavigate } from "@remix-run/react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-// import UserGuideCard from "./components/userGuideCard";
-// import ContactCard from "./components/contactCard";
-// import PreviewCard from "./components/previewCard";
-import ScrollNotice from "~/components/ScrollNotice";
 import { LoaderFunctionArgs } from "@remix-run/node";
-// import ProgressingCard from "~/components/progressingCard";
-import AnalyticsCard from "./components/AnalyticsCard";
-import ImageTranslation from "./components/ImageTranslation";
 import { authenticate } from "~/shopify.server";
 import WelcomeCard from "./components/welcomeCard";
-// import useReport from "scripts/eventReport";
-// import { useSelector } from "react-redux";
-// import CorrectIcon from "~/components/icon/correctIcon";
-// import GiftIcon from "~/components/icon/giftIcon";
-// import TranslationPanel from "./components/TranslationPanel";
+import { QuotaCard } from "./components/quotaCard";
+import ImageTable from "./components/ImageTable";
 const { Title, Text } = Typography;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -78,9 +68,10 @@ const Index = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [switcherOpen, setSwitcherOpen] = useState(true);
   const [switcherLoading, setSwitcherLoading] = useState(true);
+  const [isMobile, setIsMobile] = useState<boolean>(false);
   const blockUrl = useMemo(
     () =>
-      `https://${shop}/admin/themes/current/editor?context=apps&activateAppId=${ciwiSwitcherId}/ciwi_I18n_Switcher`,
+      `https://${shop}/admin/themes/current/editor?context=apps&appEmbed=${ciwiSwitcherId}/star_rating`,
     [shop, ciwiSwitcherBlocksId],
   );
 
@@ -90,20 +81,46 @@ const Index = () => {
     setIsLoading(false);
   },[])
   useEffect(() => {
+    setIsLoading(false);
+    themeFetcher.submit(
+      {
+        theme: JSON.stringify(true),
+      },
+      {
+        method: "post",
+        action: "/app",
+      },
+    );
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+  useEffect(() => {
     if (themeFetcher.data) {
+      console.log(themeFetcher.data);
+      
       const switcherData =
         themeFetcher.data.data.nodes[0].files.nodes[0]?.body?.content;
       const jsonString = switcherData.replace(/\/\*[\s\S]*?\*\//g, "").trim();
       const blocks = JSON.parse(jsonString).current?.blocks;
       if (blocks) {
+        console.log("blociwiSwitcherBlocksIdcks: ", ciwiSwitcherBlocksId);
+        
         const switcherJson: any = Object.values(blocks).find(
           (block: any) => block.type === ciwiSwitcherBlocksId,
         );
+        console.log("switcherJson: ", switcherJson);
+
         if (switcherJson) {
-          if (!switcherJson.disabled) {
+          if (switcherJson.disabled) {
+            console.log("未开启");
+            
             setSwitcherOpen(false);
             localStorage.setItem("switcherEnableCardOpen", "false");
           } else {
+            console.log("已开启");
+
             setSwitcherOpen(true);
             localStorage.setItem("switcherEnableCardOpen", "true");
           }
@@ -218,7 +235,7 @@ const Index = () => {
 
   return (
     <Page>
-      <TitleBar title={t("Dashboard")} />
+      <TitleBar title={t("Image & Alt Text Translation")} />
       {/* <FreePlanCountdownCard /> */}
       {/* <ScrollNotice
         text={t(
@@ -237,13 +254,15 @@ const Index = () => {
           {/* <AnalyticsCard
             isLoading={isLoading}
           ></AnalyticsCard> */}
+          <QuotaCard />
           <WelcomeCard
             switcherOpen={switcherOpen}
             blockUrl={blockUrl}
             shop={shop}
             // handleReload={handleReload}
           />
-          <ImageTranslation />
+          {/* <ImageTranslation /> */}
+          <ImageTable />
         </Space>
       </Space>
       <Text

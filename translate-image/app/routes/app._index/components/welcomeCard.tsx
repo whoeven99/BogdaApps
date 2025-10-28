@@ -23,34 +23,35 @@ const WelcomeCard: React.FC<WelcomeCardProps> = ({
   const [isMobile, setIsMobile] = useState<boolean>(false);
 //   const { report, trackExposure, fetcherState } = useReport();
   const handleSetting = () => {
-    if (!switcherOpen) {
-      // TODO: Disable App
-      window.open(blockUrl, "_blank");
-      fetcher.submit(
-        {
-          log: `${shop} 前往开启switcher, 从主页面点击`,
-        },
-        {
-          method: "POST",
-          action: "/log",
-        },
-      );
-    } else {
-      // TODO: Setup App
-      localStorage.setItem("switcherCard", "true");
-      fetcher.submit(
-        {
-          log: `${shop} 前往配置switcher, 从主页面点击`,
-        },
-        {
-          method: "POST",
-          action: "/log",
-        },
-      );
-      setTimeout(() => {
-        navigate("/app/switcher");
-      }, 500);
-    }
+    window.open(blockUrl, "_blank");
+    // if (!switcherOpen) {
+    //   // TODO: Disable App
+    //   window.open(blockUrl, "_blank");
+    //   // fetcher.submit(
+    //   //   {
+    //   //     log: `${shop} 前往开启switcher, 从主页面点击`,
+    //   //   },
+    //   //   {
+    //   //     method: "POST",
+    //   //     action: "/log",
+    //   //   },
+    //   // );
+    // } else {
+    //   // TODO: Setup App
+    //   localStorage.setItem("switcherCard", "true");
+    //   // fetcher.submit(
+    //   //   {
+    //   //     log: `${shop} 前往配置switcher, 从主页面点击`,
+    //   //   },
+    //   //   {
+    //   //     method: "POST",
+    //   //     action: "/log",
+    //   //   },
+    //   // );
+    //   // setTimeout(() => {
+    //   //   navigate("/app/switcher");
+    //   // }, 500);
+    // }
     // report(
     //   { status: !switcherOpen ? 0 : 1 },
     //   { method: "post", action: "/app", eventType: "click" },
@@ -78,9 +79,9 @@ const WelcomeCard: React.FC<WelcomeCardProps> = ({
   return (
     <Card
       title={
-        !switcherOpen
-          ? t("The switcher is currently enabled.")
-          : t("Enable language and currency switcher")
+        switcherOpen
+          ? t("Image Translation Plugin active")
+          : t("Image Translation Plugin not enabled")
       }
       styles={{
         header: { borderBottom: "none" },
@@ -102,34 +103,14 @@ const WelcomeCard: React.FC<WelcomeCardProps> = ({
           style={{ width: "100%", justifyContent: "space-between" }}
         >
           <Text style={{ width: "75%" }}>
-            {!switcherOpen
+            {switcherOpen
               ? t(
-                  "Customers can switch languages and currencies when visiting the site. ",
+                  "Your image translation plugin is currently active. Product images and alt text are automatically synced and translated for all enabled languages. ",
                 )
               : t(
-                  "The switcher is currently disabled. If you need IP-based automatic language and currency switching, please click “ Setup”. ",
+                  "Enable the plugin to automatically translate product images and alt text across languages. This allows your store visuals to stay consistent with translated content.",
                 )}
           </Text>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              objectFit: "cover",
-              objectPosition: "center",
-              width: isMobile ? "70px" : "120px",
-              height: isMobile ? "25px" : "auto",
-            }}
-          >
-            <img
-              src="https://ciwi-1327177217.cos.ap-singapore.myqcloud.com/switcher-view.png"
-              alt="safe"
-              style={{
-                width: "100%",
-                height: "100%",
-              }}
-            />
-          </div>
         </Flex>
         <Button
           onClick={() => {
@@ -138,7 +119,7 @@ const WelcomeCard: React.FC<WelcomeCardProps> = ({
           type="default"
           style={{ width: "auto", alignSelf: "flex-start" }}
         >
-          {!switcherOpen ? t("Disable App") : t("Setup App")}
+          {switcherOpen ? t("Manage") : t("Enable")}
         </Button>
       </Flex>
     </Card>

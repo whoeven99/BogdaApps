@@ -10,7 +10,7 @@ import {
   useRouteError,
 } from "@remix-run/react";
 import { Provider } from "react-redux";
-// import store from "./store";
+import store from "./store";
 import { useEffect } from "react";
 import { createHead } from "remix-island";
 
@@ -139,25 +139,24 @@ export default function App() {
   return (
     // 使用 Redux Provider 包装整个应用（用于状态管理，必须）,删除后很多功能无法使用
     <>
-      {/* <Provider store={store}>
-        
-      </Provider> */}
-      <Head />
-      <noscript>
-        <iframe
-          src="https://www.googletagmanager.com/ns.html?id=GTM-NVPT5XDV"
-          height="0"
-          width="0"
-          style={{ display: "none", visibility: "hidden" }}
-        ></iframe>
-      </noscript>
-      <Outlet />
-      <ScrollRestoration />
-      <Scripts />
-      <script
-        src="//code.tidio.co/inl4rrmds8vvbldv1k6gyc2nzxongl3p.js"
-        async
-      ></script>
+      <Provider store={store}>
+        <Head />
+        <noscript>
+          <iframe
+            src="https://www.googletagmanager.com/ns.html?id=GTM-NVPT5XDV"
+            height="0"
+            width="0"
+            style={{ display: "none", visibility: "hidden" }}
+          ></iframe>
+        </noscript>
+        <Outlet />
+        <ScrollRestoration />
+        <Scripts />
+        <script
+          src="//code.tidio.co/inl4rrmds8vvbldv1k6gyc2nzxongl3p.js"
+          async
+        ></script>
+      </Provider>
     </>
   );
 }
