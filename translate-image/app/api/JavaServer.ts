@@ -318,6 +318,7 @@ export const storageTranslateImage = async ({
       url: `${process.env.SERVER_URL}/pcUserPic/updateUserPic?shopName=${shop}`,
       method: "POST",
       data: {
+        productId: replaceTranslateImage.productId,
         imageId: replaceTranslateImage.imageId,
         imageBeforeUrl: replaceTranslateImage.imageBeforeUrl,
         imageAfterUrl: replaceTranslateImage.imageAfterUrl,
