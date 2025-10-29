@@ -3,7 +3,7 @@
 client_id = "e7fe2398f1feb814e87fb51ac1364bb9"
 name = "Ciwi.ai: Image & Alt Translate"
 handle = "translate-image-local"
-application_url = "https://dev.bogdatech.com"
+application_url = "https://legends-proceeding-guitar-argue.trycloudflare.com"
 embedded = true
 
 [build]
@@ -16,9 +16,9 @@ scopes = "read_content,read_legal_policies,read_metaobjects,read_online_store_na
 optional_scopes = ["read_customer_events","write_pixels"]
 [auth]
 redirect_urls = [
-  "https://dev.bogdatech.com/auth/callback",
-  "https://dev.bogdatech.com/auth/shopify/callback",
-  "https://dev.bogdatech.com/api/auth/callback"
+  "https://legends-proceeding-guitar-argue.trycloudflare.com/auth/callback",
+  "https://legends-proceeding-guitar-argue.trycloudflare.com/auth/shopify/callback",
+  "https://legends-proceeding-guitar-argue.trycloudflare.com/api/auth/callback"
 ]
 
 [webhooks]
