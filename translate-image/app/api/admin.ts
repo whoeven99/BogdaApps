@@ -59,6 +59,8 @@ export const mutationAppPurchaseOneTimeCreate = async ({
         },
       },
     });
+    console.log(`${shop} 创建一次性订单`, response.data);
+
     const res = response.data;
     return res;
   } catch (error) {
