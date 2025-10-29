@@ -173,13 +173,13 @@ export const QuotaCard = () => {
           status: order?.status,
           confirmationUrl: confirmationUrl,
         };
-        const formData = new FormData();
-        formData.append("orderInfo", JSON.stringify(orderInfo));
-        orderFetcher.submit(formData, {
-          method: "post",
-          action: "/app",
-        });
-        open(confirmationUrl, "_top");
+        // const formData = new FormData();
+        // formData.append("orderInfo", JSON.stringify(orderInfo));
+        // orderFetcher.submit(formData, {
+        //   method: "post",
+        //   action: "/app",
+        // });
+        // open(confirmationUrl, "_top");
       } else {
         setBuyButtonLoading(false);
       }
