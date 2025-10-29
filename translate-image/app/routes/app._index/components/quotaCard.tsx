@@ -37,6 +37,8 @@ export const QuotaCard = () => {
   const { plan, updateTime, chars, totalChars, isNew } = useSelector(
     (state: any) => state.userConfig,
   );
+  console.log(chars,totalChars);
+  
   const [isLoading, setIsLoading] = useState(true);
   const [addCreditsModalOpen, setAddCreditsModalOpen] = useState(false);
   const [selectedOptionKey, setSelectedOption] = useState<string>("option-1");
@@ -350,7 +352,7 @@ export const QuotaCard = () => {
         footer={null}
       >
         <Space direction="vertical" size="small" style={{ width: "100%" }}>
-          <div
+          {/* <div
             style={{
               textAlign: "left",
               display: "flex",
@@ -358,9 +360,9 @@ export const QuotaCard = () => {
               marginBottom: 10,
             }}
           >
-            {/* <Title level={4} style={{ marginBottom: 0, marginRight: 10 }}>
+            <Title level={4} style={{ marginBottom: 0, marginRight: 10 }}>
               {t("Buy Credits")}
-            </Title> */}
+            </Title>
             <Text style={{ fontWeight: "bold" }}>
               {plan.id === 6
                 ? t("discountText.premium")
@@ -370,7 +372,7 @@ export const QuotaCard = () => {
                     ? t("discountText.basic")
                     : t("discountText.free")}
             </Text>
-          </div>
+          </div> */}
           <Row gutter={[16, 16]}>
             {creditOptions.map((option) => (
               <Col key={option.key} xs={12} sm={12} md={6} lg={6} xl={6}>

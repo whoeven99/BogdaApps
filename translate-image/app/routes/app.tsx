@@ -235,10 +235,10 @@ export default function App() {
     if (data?.success) {
       console.log("chat data", data?.response);
 
-      dispatch(setChars({ chars: data?.response?.chars }));
+      dispatch(setChars({ chars: data?.response?.usedPoints }));
       dispatch(
         setTotalChars({
-          totalChars: data?.response?.totalChars,
+          totalChars: data?.response?.purchasePoints,
         }),
       );
       dispatch(setUserConfigIsLoading({ isLoading: false }));

@@ -35,6 +35,7 @@ import { ActionFunctionArgs, json } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
 import { globalStore } from "~/globalStore";
 import {
+  AltTranslate,
   DeleteProductImageData,
   getProductAllLanguageImagesData,
   storageTranslateImage,
@@ -42,6 +43,7 @@ import {
   UpdateProductImageAltData,
 } from "~/api/JavaServer";
 import ScrollNotice from "~/components/ScrollNotice";
+import axios from "axios";
 const { Text, Title } = Typography;
 export const action = async ({ request }: ActionFunctionArgs) => {
   const adminAuthResult = await authenticate.admin(request);
@@ -54,6 +56,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const translateImage = JSON.parse(formData.get("translateImage") as string);
   const replaceTranslateImage = JSON.parse(
     formData.get("replaceTranslateImage") as string,
+  );
+  const altTranslateFetcher = JSON.parse(
+    formData.get("altTranslateFetcher") as string,
   );
   try {
     switch (true) {
@@ -121,29 +126,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       case !!imagesFetcher:
         try {
           console.log("imagesFetcher: ", imagesFetcher);
-          const mutationResponse = await admin.graphql(
-            `query MyQuery {
-              shopLocales(published: true) {
-                locale
-                name
-                primary
-                published
-              }
-            }`,
-          );
-          const data = await mutationResponse.json();
-          let source = "en";
-          data.data.shopLocales.forEach((lan: any) => {
-            if (lan.primary) {
-              source = lan.value;
-            }
-          });
+          const imageId = `gid://shopify/ProductImage/${imagesFetcher.imageId}`;
           const response = await getProductAllLanguageImagesData({
             shop,
-            productId: imagesFetcher?.productId,
-            imageId: imagesFetcher?.imageId,
-            accessToken: accessToken as string,
-            sourceCode: source,
+            imageId,
           });
           console.log("productImage11: ", response);
           return response;
@@ -180,12 +166,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
       case !!replaceTranslateImage: {
         try {
-          const { url, userPicturesDoJson } = replaceTranslateImage;
-          userPicturesDoJson.shopName = shop;
           const response = await storageTranslateImage({
             shop,
-            imageUrl: url,
-            userPicturesDoJson,
+            replaceTranslateImage,
           });
           return response;
         } catch (error) {
@@ -198,6 +181,24 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           };
         }
       }
+      case !!altTranslateFetcher:
+        try {
+          const { img } = altTranslateFetcher;
+          const response = await AltTranslate({
+            shop: shop as string,
+            accessToken: accessToken as string,
+            img,
+          });
+          return json({ success: true, response });
+        } catch (error) {
+          console.log("alt translate error action", error);
+          return {
+            success: false,
+            errorCode: 10001,
+            errorMsg: "SERVER_ERROR",
+            response: [],
+          };
+        }
     }
 
     return {
@@ -242,6 +243,7 @@ const ImageAltTextPage = () => {
   const [deleteLoadingImages, setDeleteLoadingImages] = useState<
     Record<string, boolean>
   >({});
+  const altTranslateFetcher = useFetcher<any>();
   const [productAltTextData, setProductAltTextData] = useState<
     {
       key: string;
@@ -322,17 +324,43 @@ const ImageAltTextPage = () => {
   };
   useEffect(() => {
     imageFetcher.submit(
-      { imagesFetcher: JSON.stringify({ productId, imageId }) },
+      { imagesFetcher: JSON.stringify({ imageId }) },
       { method: "POST" },
     );
   }, []);
   useEffect(() => {
     if (imageFetcher.data) {
       console.log("imageFetcher.data: ", imageFetcher.data);
-      setImageDatas(imageFetcher.data?.response);
-      // TODO: 获取初始的图片数据
-      // console.log("dsdqeqsa: ", imageFetcher.data);
-      // setProductImageData(imageFetcher.data.imageData);
+      console.log(
+        "languageList: ",
+        languageList,
+        "productImageData: ",
+        productImageData,
+      );
+      // 后端返回的数据数组
+      const fetchedList = imageFetcher.data.response || [];
+      const mergedList = languageList.map((lang) => {
+        // 看后端有没有返回
+        const existing = fetchedList.find(
+          (item: any) => item.languageCode === lang.value,
+        );
+
+        if (existing) {
+          return { ...existing, language: lang.label };
+        } else {
+          return {
+            imageId: productImageData.imageId,
+            imageBeforeUrl: productImageData.imageUrl,
+            imageAfterUrl: "",
+            altBeforeTranslation: productImageData.altText,
+            altAfterTranslation: "",
+            languageCode: lang.value,
+            language: lang.label, // 使用语言名
+            isDelete: false,
+          };
+        }
+      });
+      setImageDatas(mergedList);
     }
   }, [imageFetcher.data]);
   // const handleImageTranslate = (record: any) => {
@@ -416,14 +444,10 @@ const ImageAltTextPage = () => {
         //   }),
         // );
         const replaceTranslateImage = {
-          url: translateImageFetcher.data.response,
-          userPicturesDoJson: {
-            imageId: currentTranslatingImage?.productId,
-            imageBeforeUrl: currentTranslatingImage?.imageUrl,
-            altBeforeTranslation: "",
-            altAfterTranslation: "",
-            languageCode: currentTranslatingImage.languageCode,
-          },
+          imageAfterUrl: translateImageFetcher.data.response,
+          imageId: currentTranslatingImage?.imageId,
+          imageBeforeUrl: currentTranslatingImage.imageBeforeUrl,
+          languageCode: currentTranslatingImage.languageCode,
         };
         const formData = new FormData();
         formData.append(
@@ -499,27 +523,40 @@ const ImageAltTextPage = () => {
     console.log(
       `从当前语言${defaultLanguageData.locale}翻译成${img.languageCode}`,
     );
-    setConfirmData((prev: any) => {
-      const exists = prev.find((i: any) => i.languageCode === img.languageCode);
-      if (exists) {
-        // 更新现有项
-        return prev.map((i: any) =>
-          i.languageCode === img.languageCode
-            ? { ...i, value: "Fake translated text" }
-            : i,
-        );
-      } else {
-        // 添加新的
-        return [
-          ...prev,
-          {
-            languageCode: img.languageCode,
-            value: "Fake translated text",
-          },
-        ];
-      }
-    });
+    console.log(img);
+    const formData = new FormData();
+    formData.append("altTranslateFetcher", JSON.stringify({ img }));
+    altTranslateFetcher.submit(formData, { method: "post" });
   };
+  useEffect(() => {
+    if (altTranslateFetcher.data) {
+      console.log(altTranslateFetcher.data);
+      if (altTranslateFetcher.data.success) {
+        // setConfirmData((prev: any) => {
+        //   const exists = prev.find(
+        //     (i: any) => i.languageCode === img.languageCode,
+        //   );
+        //   if (exists) {
+        //     // 更新现有项
+        //     return prev.map((i: any) =>
+        //       i.languageCode === img.languageCode
+        //         ? { ...i, value: "Fake translated text" }
+        //         : i,
+        //     );
+        //   } else {
+        //     // 添加新的
+        //     return [
+        //       ...prev,
+        //       {
+        //         languageCode: img.languageCode,
+        //         value: "Fake translated text",
+        //       },
+        //     ];
+        //   }
+        // });
+      }
+    }
+  }, [altTranslateFetcher.data]);
   const handleInputChange = (
     key: string,
     productId: string,
@@ -885,7 +922,7 @@ const ImageAltTextPage = () => {
 
             {imageDatas?.length > 0 &&
               imageDatas.map((img: any) => (
-                <Flex key={img.id} vertical gap={8}>
+                <Flex key={img.languageCode} vertical gap={8}>
                   <Title level={4}>{img.language}</Title>
                   <Card
                     style={{
@@ -1043,7 +1080,7 @@ const ImageAltTextPage = () => {
                             maxCount={1}
                             accept="image/*"
                             name="file"
-                            action={`${globalStore?.server}/picture/insertPictureToDbAndCloud`}
+                            action={`${globalStore?.server}/pcUserPic/insertPicToDbAndCloud`}
                             beforeUpload={(file) => {
                               const isImage = file.type.startsWith("image/");
                               const isLt20M = file.size / 1024 / 1024 < 20;
