@@ -179,7 +179,7 @@ export const QuotaCard = () => {
         //   method: "post",
         //   action: "/app",
         // });
-        open(confirmationUrl, "_top");
+        // open(confirmationUrl, "_top");
       } else {
         setBuyButtonLoading(false);
       }
