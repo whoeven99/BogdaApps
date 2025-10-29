@@ -636,6 +636,7 @@ const ImageAltTextPage = () => {
       UpdateProductImageAltData({
         server: globalStore?.server || "",
         shopName: globalStore?.shop || "",
+        productId:`gid://shopify/Product${productId}`,
         imageId: item.imageId,
         imageUrl: item.imageUrl,
         altText: item.altText,
@@ -1144,6 +1145,7 @@ const ImageAltTextPage = () => {
                               userPicturesDoJson: JSON.stringify({
                                 shopName: globalStore?.shop,
                                 imageId: img.imageId,
+                                productId:`gid://shopify/Product${productId}`,
                                 imageBeforeUrl: img.imageBeforeUrl,
                                 altBeforeTranslation: img.altBeforeTranslation,
                                 altAfterTranslation: img.altAfterTranslation,

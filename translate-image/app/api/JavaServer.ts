@@ -187,6 +187,7 @@ export const GetProductImageData = async ({
 export const UpdateProductImageAltData = async ({
   server,
   shopName,
+  productId,
   imageId,
   imageUrl,
   altText,
@@ -195,6 +196,7 @@ export const UpdateProductImageAltData = async ({
 }: {
   server: string;
   shopName: string;
+  productId: string;
   imageId: string;
   imageUrl: string;
   altText: string;
@@ -227,6 +229,7 @@ export const UpdateProductImageAltData = async ({
       url: `${server}/pcUserPic/updateUserPic?shopName=${shopName}`,
       method: "POST",
       data: {
+        productId: productId,
         imageId: imageId,
         imageBeforeUrl: imageUrl,
         altBeforeTranslation: altText,
@@ -309,8 +312,8 @@ export const storageTranslateImage = async ({
   replaceTranslateImage: any;
 }) => {
   try {
-    console.log("repalce image",process.env.SERVER_URL,replaceTranslateImage);
-    
+    console.log("repalce image", process.env.SERVER_URL, replaceTranslateImage);
+
     const response = await axios({
       url: `${process.env.SERVER_URL}/pcUserPic/updateUserPic?shopName=${shop}`,
       method: "POST",
