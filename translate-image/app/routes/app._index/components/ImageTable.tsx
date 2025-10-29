@@ -524,7 +524,7 @@ export default function Index() {
   }, [loadFetcher.data]);
   useEffect(() => {
     if (productsFetcher.data) {
-      console.log(productsFetcher.data);
+      // console.log(productsFetcher.data);
 
       setMenuData(productsFetcher.data.menuData);
       setDataResource(productsFetcher.data.imageData);
@@ -564,7 +564,7 @@ export default function Index() {
   }, [targetLanguage]);
   useEffect(() => {
     if (selectedKey && dataResource.length > 0) {
-      console.log("dataResource: ", dataResource);
+      // console.log("dataResource: ", dataResource);
 
       const data =
         dataResource.filter(
@@ -596,13 +596,13 @@ export default function Index() {
               return item;
             }),
           );
-          console.log("productImageData: ", productImageData);
+          // console.log("productImageData: ", productImageData);
         } else {
           setProductImageData(data);
         }
       };
       getTargetData();
-      console.log("productImageData: ", productImageData);
+      // console.log("productImageData: ", productImageData);
       setIsLoading(false);
       setTableImageDataLoading(false);
     }
@@ -613,8 +613,8 @@ export default function Index() {
     if (timeoutIdRef.current) {
       clearTimeout(timeoutIdRef.current);
     }
-    console.log("dasdasdsa发送请求");
-    console.log(sortKey, sortOrder);
+    // console.log("dasdasdsa发送请求");
+    // console.log(sortKey, sortOrder);
 
     // 延迟 1s 再执行请求
     timeoutIdRef.current = setTimeout(() => {

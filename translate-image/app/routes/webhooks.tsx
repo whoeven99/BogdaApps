@@ -22,6 +22,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   switch (topic) {
     case "APP_PURCHASES_ONE_TIME_UPDATE":
       try {
+        console.log('购买积分：',payload);
+        
         if (payload) {
           new Response(null, { status: 200 });
           let credits = 0;

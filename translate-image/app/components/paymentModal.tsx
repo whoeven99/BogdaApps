@@ -29,16 +29,12 @@ export interface OptionType {
   name: string;
   Credits: number;
   price: {
-    currentPrice: number;
     comparedPrice: number;
     currencyCode: string;
   };
 }
 
-const PaymentModal: React.FC<PaymentModalProps> = ({
-  visible,
-  setVisible,
-}) => {
+const PaymentModal: React.FC<PaymentModalProps> = ({ visible, setVisible }) => {
   const [selectedKey, setSelectedKey] = useState<string>("option-1");
   const [buyButtonLoading, setBuyButtonLoading] = useState<boolean>(false);
   const [credits, setCredits] = useState<number | undefined>(undefined);
@@ -228,7 +224,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
     const payInfo = {
       name: selectedOption?.name,
       price: {
-        amount: selectedOption?.price.currentPrice,
+        amount: selectedOption?.price.comparedPrice,
         currencyCode: selectedOption?.price.currencyCode,
       },
     };
@@ -293,9 +289,9 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
                 alignItems: "center",
               }}
             >
-              <Text key="price" strong style={{ color: "inherit" }}>
+              {/* <Text key="price" strong style={{ color: "inherit" }}>
                 ${selectedOption?.price.currentPrice ?? 0}
-              </Text>
+              </Text> */}
               <Text key="buy-text" style={{ color: "inherit" }}>
                 {t("Buy now")}
               </Text>
@@ -380,8 +376,8 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
         <Text style={{ marginRight: "5px" }}>{t("Total Payment:")}</Text>
         <Text strong>
           $
-          {selectedOption?.price.currentPrice
-            ? selectedOption?.price.currentPrice
+          {selectedOption?.price.comparedPrice
+            ? selectedOption?.price.comparedPrice
             : 0}
         </Text>
       </div>

@@ -233,8 +233,6 @@ export default function App() {
       server: server as string,
     });
     if (data?.success) {
-      console.log("chat data", data?.response);
-
       dispatch(setChars({ chars: data?.response?.usedPoints }));
       dispatch(
         setTotalChars({
@@ -250,8 +248,8 @@ export default function App() {
         <Link to="/app" rel="home">
           Home
         </Link>
-        <Link to="/app/management">Image Manage</Link>
-        <Link to="/app/pricing">Pricing</Link>
+        {/* <Link to="/app/management">Image Manage</Link> */}
+        {/* <Link to="/app/pricing">Pricing</Link> */}
       </NavMenu>
       <Outlet />
     </AppProvider>
