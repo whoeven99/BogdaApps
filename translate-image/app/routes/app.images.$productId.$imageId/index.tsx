@@ -243,7 +243,11 @@ const ImageAltTextPage = () => {
   const [deleteLoadingImages, setDeleteLoadingImages] = useState<
     Record<string, boolean>
   >({});
+  const [altTranslateLoadingImages, setAltTranslateLoadingImages] = useState<
+    Record<string, boolean>
+  >({});
   const altTranslateFetcher = useFetcher<any>();
+  const [currentAltImage, setCurrentAltImage] = useState<any>();
   const [productAltTextData, setProductAltTextData] = useState<
     {
       key: string;
@@ -307,7 +311,7 @@ const ImageAltTextPage = () => {
       "ko",
     ],
   } as any;
-  console.log(productId, imageId);
+  // console.log(productId, imageId);
 
   const handleNavigate = () => {
     if (confirmData.length > 0) {
@@ -449,6 +453,8 @@ const ImageAltTextPage = () => {
           imageBeforeUrl: currentTranslatingImage.imageBeforeUrl,
           languageCode: currentTranslatingImage.languageCode,
         };
+        console.log("替换图片参数：", replaceTranslateImage);
+
         const formData = new FormData();
         formData.append(
           "replaceTranslateImage",
@@ -462,9 +468,13 @@ const ImageAltTextPage = () => {
       }
     }
   }, [translateImageFetcher.data]);
+  useEffect(() => {
+    if (replaceTranslateImageFetcher.data) {
+      console.log(replaceTranslateImageFetcher.data);
+    }
+  }, [replaceTranslateImageFetcher.data]);
   const handleDelete = async (
     imageId: string,
-    productId: string,
     imageUrl: string,
     languageCode: string,
   ) => {
@@ -474,11 +484,12 @@ const ImageAltTextPage = () => {
         ...pre,
         [`${imageId}_${languageCode}`]: true,
       }));
+
       setIsDeleteLoading(true);
       const res = await DeleteProductImageData({
         server: globalStore?.server || "",
         shopName: globalStore?.shop || "",
-        productId: productId,
+        imageId: imageId,
         imageUrl: imageUrl,
         languageCode: languageCode,
       });
@@ -520,9 +531,16 @@ const ImageAltTextPage = () => {
     }
   };
   const handleTranslateAlt = async (img: any) => {
+    setCurrentAltImage(img);
+    console.log(img);
+
     console.log(
       `从当前语言${defaultLanguageData.locale}翻译成${img.languageCode}`,
     );
+    setAltTranslateLoadingImages((pre) => ({
+      ...pre,
+      [`${img.imageId}_${img.languageCode}`]: true,
+    }));
     console.log(img);
     const formData = new FormData();
     formData.append("altTranslateFetcher", JSON.stringify({ img }));
@@ -531,35 +549,43 @@ const ImageAltTextPage = () => {
   useEffect(() => {
     if (altTranslateFetcher.data) {
       console.log(altTranslateFetcher.data);
+      setAltTranslateLoadingImages((pre) => ({
+        ...pre,
+        [`${currentAltImage.imageId}_${currentAltImage.languageCode}`]: false,
+      }));
       if (altTranslateFetcher.data.success) {
-        // setConfirmData((prev: any) => {
-        //   const exists = prev.find(
-        //     (i: any) => i.languageCode === img.languageCode,
-        //   );
-        //   if (exists) {
-        //     // 更新现有项
-        //     return prev.map((i: any) =>
-        //       i.languageCode === img.languageCode
-        //         ? { ...i, value: "Fake translated text" }
-        //         : i,
-        //     );
-        //   } else {
-        //     // 添加新的
-        //     return [
-        //       ...prev,
-        //       {
-        //         languageCode: img.languageCode,
-        //         value: "Fake translated text",
-        //       },
-        //     ];
-        //   }
-        // });
+        setConfirmData((prev: any) => {
+          const exists = prev.find(
+            (i: any) => i.languageCode === currentAltImage.languageCode,
+          );
+          if (exists) {
+            // 更新现有项
+            return prev.map((i: any) =>
+              i.languageCode === currentAltImage.languageCode
+                ? { ...i, value: altTranslateFetcher.data.response.response }
+                : i,
+            );
+          } else {
+            // 添加新的
+            return [
+              ...prev,
+              {
+                key: currentAltImage.imageId,
+                imageId: currentAltImage.imageId,
+                languageCode: currentAltImage.languageCode,
+                value: altTranslateFetcher.data.response.response,
+                imageUrl: currentAltImage.imageBeforeUrl,
+                altText: currentAltImage.altBeforeTranslation,
+              },
+            ];
+          }
+        });
       }
     }
   }, [altTranslateFetcher.data]);
   const handleInputChange = (
     key: string,
-    productId: string,
+    imageId: string,
     imageUrl: string,
     altText: string,
     languageCode: string,
@@ -579,7 +605,7 @@ const ImageAltTextPage = () => {
       } else {
         return [
           ...prevData,
-          { key, productId, imageUrl, altText, languageCode, value },
+          { key, imageId, imageUrl, altText, languageCode, value },
         ];
       }
     });
@@ -610,7 +636,7 @@ const ImageAltTextPage = () => {
       UpdateProductImageAltData({
         server: globalStore?.server || "",
         shopName: globalStore?.shop || "",
-        productId: item.productId,
+        imageId: item.imageId,
         imageUrl: item.imageUrl,
         altText: item.altText,
         targetAltText: item.value,
@@ -636,6 +662,8 @@ const ImageAltTextPage = () => {
         shopify.toast.show(t("Some items saved failed"));
       }
     } catch (error) {
+      console.log(error);
+
       shopify.saveBar.hide("save-bar");
       shopify.toast.show(t("Some items saved failed"));
     } finally {
@@ -697,12 +725,7 @@ const ImageAltTextPage = () => {
       return;
     }
     // console.log(file);
-    handleDelete(
-      img.imageId,
-      img.productId,
-      img.imageAfterUrl,
-      img.languageCode,
-    );
+    handleDelete(img.imageId, img.imageAfterUrl, img.languageCode);
   };
   useEffect(() => {
     imageLoadingFetcher.submit(
@@ -1183,7 +1206,6 @@ const ImageAltTextPage = () => {
                             onClick={() =>
                               handleDelete(
                                 img.imageId,
-                                img.productId,
                                 img.imageBeforeUrl,
                                 img.languageCode,
                               )
@@ -1191,7 +1213,14 @@ const ImageAltTextPage = () => {
                           >
                             {t("Delete")}
                           </Button>
-                          <Button onClick={() => handleTranslateAlt(img)}>
+                          <Button
+                            loading={
+                              altTranslateLoadingImages[
+                                `${img.imageId}_${img.languageCode}`
+                              ]
+                            }
+                            onClick={() => handleTranslateAlt(img)}
+                          >
                             翻译ALt文本
                           </Button>
                         </Flex>

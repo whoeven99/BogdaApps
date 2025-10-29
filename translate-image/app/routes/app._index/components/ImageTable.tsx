@@ -830,33 +830,32 @@ export default function Index() {
   };
 
   const handleDelete = async (productId: string, imageUrl: string) => {
-    setIsDeleteLoading(true);
-    const res = await DeleteProductImageData({
-      server: globalStore?.server || "",
-      shopName: globalStore?.shop || "",
-      productId: productId,
-      imageUrl: imageUrl,
-      languageCode: selectedLanguage,
-    });
+    // setIsDeleteLoading(true);
+    // const res = await DeleteProductImageData({
+    //   server: globalStore?.server || "",
+    //   shopName: globalStore?.shop || "",
+    //   imageUrl: imageUrl,
+    //   languageCode: selectedLanguage,
+    // });
 
-    console.log("res", res);
+    // console.log("res", res);
 
-    if (res.success) {
-      setDataResource(
-        dataResource.map((item: any) => {
-          return item.map((image: any) => {
-            if (image.imageId === productId) {
-              image.targetImageUrl = "";
-            }
-            return image;
-          });
-        }),
-      );
-      shopify.toast.show(t("Delete Success"));
-    } else {
-      shopify.toast.show(t("Delete Failed"));
-    }
-    setIsDeleteLoading(false);
+    // if (res.success) {
+    //   setDataResource(
+    //     dataResource.map((item: any) => {
+    //       return item.map((image: any) => {
+    //         if (image.imageId === productId) {
+    //           image.targetImageUrl = "";
+    //         }
+    //         return image;
+    //       });
+    //     }),
+    //   );
+    //   shopify.toast.show(t("Delete Success"));
+    // } else {
+    //   shopify.toast.show(t("Delete Failed"));
+    // }
+    // setIsDeleteLoading(false);
   };
 
   function handleView(record: any): void {

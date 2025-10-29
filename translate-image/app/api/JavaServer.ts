@@ -4,6 +4,7 @@ import { authenticate } from "~/shopify.server";
 // import { ShopLocalesType } from "~/routes/app.language/route";
 import pLimit from "p-limit";
 import { queryShop } from "./admin";
+import { Progress } from "antd";
 // import { withRetry } from "~/utils/retry";
 
 // 查询未翻译的字符数
@@ -186,7 +187,7 @@ export const GetProductImageData = async ({
 export const UpdateProductImageAltData = async ({
   server,
   shopName,
-  productId,
+  imageId,
   imageUrl,
   altText,
   targetAltText,
@@ -194,39 +195,43 @@ export const UpdateProductImageAltData = async ({
 }: {
   server: string;
   shopName: string;
-  productId: string;
+  imageId: string;
   imageUrl: string;
   altText: string;
   targetAltText: string;
   languageCode: string;
 }) => {
   try {
-    console.log(`${shopName} UpdateProductImageAltData: `, {
+    console.log(
+      `${shopName} UpdateProductImageAltData: `,
+      server,
       shopName,
-      productId,
+      imageId,
       imageUrl,
       altText,
       targetAltText,
       languageCode,
-    });
+    );
+    console.log(
+      "samoidjasfiosn",
+      server,
+      shopName,
+      imageId,
+      imageUrl,
+      altText,
+      targetAltText,
+      languageCode,
+    );
 
     const response = await axios({
-      url: `${server}/picture/insertPictureToDbAndCloud`,
+      url: `${server}/pcUserPic/updateUserPic?shopName=${shopName}`,
       method: "POST",
-      headers: {
-        "Content-Type": "multipart/form-data",
-      },
       data: {
-        file: new File([], "file.png"),
-        shopName,
-        userPicturesDoJson: JSON.stringify({
-          shopName,
-          imageId: productId,
-          imageBeforeUrl: imageUrl,
-          altBeforeTranslation: altText,
-          altAfterTranslation: targetAltText,
-          languageCode: languageCode,
-        }),
+        imageId: imageId,
+        imageBeforeUrl: imageUrl,
+        altBeforeTranslation: altText,
+        altAfterTranslation: targetAltText,
+        languageCode: languageCode,
       },
     });
 
@@ -340,32 +345,25 @@ export const storageTranslateImage = async ({
 export const DeleteProductImageData = async ({
   server,
   shopName,
-  productId,
+  imageId,
   imageUrl,
   languageCode,
 }: {
   server: string;
   shopName: string;
-  productId: string;
+  imageId: string;
   imageUrl: string;
   languageCode: string;
 }) => {
   try {
-    console.log(
-      "delete img: ",
-      server,
-      shopName,
-      productId,
-      imageUrl,
-      languageCode,
-    );
+    console.log("delete img: ", server, shopName, imageUrl, languageCode);
+    // console.log('dele ',process.env.SERVER_URL);
 
     const response = await axios({
-      url: `${server}/picture/deletePictureData?shopName=${shopName}`,
+      url: `${server}/pcUserPic/deletePicByShopNameAndPCUserPictures?shopName=${shopName}`,
       method: "POST",
       data: {
-        shopName: shopName,
-        imageId: productId,
+        imageId: imageId,
         imageBeforeUrl: imageUrl,
         languageCode: languageCode,
       },
@@ -730,18 +728,18 @@ export const AltTranslate = async ({
   img: any;
 }) => {
   try {
-    console.log("alt ",process.env.server,shop);
-    
+    console.log("alt aaaa", process.env.server, shop);
+
     const response = await axios({
-      url: `${process.env.server}/pcUserPic/altTranslate?shopName=${shop}`,
-      method: "Post",
+      url: `${process.env.SERVER_URL}/pcUserPic/altTranslate?shopName=${shop}`,
+      method: "POST",
       data: {
         alt: img.altBeforeTranslation,
         targetCode: img.languageCode,
         accessToken: accessToken,
       },
     });
-    return response;
+    return response.data;
   } catch (error) {
     console.log("alt translate error", error);
     return {
