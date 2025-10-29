@@ -309,14 +309,16 @@ export const storageTranslateImage = async ({
   replaceTranslateImage: any;
 }) => {
   try {
+    console.log("repalce image",process.env.SERVER_URL,replaceTranslateImage);
+    
     const response = await axios({
       url: `${process.env.SERVER_URL}/pcUserPic/updateUserPic?shopName=${shop}`,
-      method: "post",
+      method: "POST",
       data: {
         imageId: replaceTranslateImage.imageId,
         imageBeforeUrl: replaceTranslateImage.imageBeforeUrl,
         imageAfterUrl: replaceTranslateImage.imageAfterUrl,
-        languageCode: replaceTranslateImage.language,
+        languageCode: replaceTranslateImage.languageCode,
       },
     });
     console.log("storageImage response", response.data);

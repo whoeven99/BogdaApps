@@ -485,7 +485,7 @@ const ImageAltTextPage = () => {
         [`${imageId}_${languageCode}`]: true,
       }));
 
-      setIsDeleteLoading(true);
+      // setIsDeleteLoading(true);
       const res = await DeleteProductImageData({
         server: globalStore?.server || "",
         shopName: globalStore?.shop || "",
@@ -725,7 +725,7 @@ const ImageAltTextPage = () => {
       return;
     }
     // console.log(file);
-    handleDelete(img.imageId, img.imageAfterUrl, img.languageCode);
+    handleDelete(img.imageId, img.imageBeforeUrl, img.languageCode);
   };
   useEffect(() => {
     imageLoadingFetcher.submit(

@@ -25,10 +25,18 @@ import { useEffect, useMemo, useState } from "react";
 import useReport from "scripts/eventReport";
 import { useTranslation } from "react-i18next";
 import { useDispatch, useSelector } from "react-redux";
-import { OptionType } from "~/components/paymentModal";
+// import { OptionType } from "~/components/paymentModal";
 import { useFetcher } from "@remix-run/react/dist/components";
 const { Title, Text, Paragraph } = Typography;
-
+export interface OptionType {
+  key: string;
+  name: string;
+  Credits: number;
+  price: {
+    comparedPrice: number;
+    currencyCode: string;
+  };
+}
 export const QuotaCard = () => {
   const payFetcher = useFetcher<any>();
   const orderFetcher = useFetcher<any>();
@@ -158,11 +166,11 @@ export const QuotaCard = () => {
         const confirmationUrl =
           payFetcher.data?.response?.appPurchaseOneTimeCreate?.confirmationUrl;
         const orderInfo = {
-          id: order.id,
-          amount: order.price.amount,
-          name: order.name,
-          createdAt: order.createdAt,
-          status: order.status,
+          id: order?.id,
+          amount: order?.price.amount,
+          name: order?.name,
+          createdAt: order?.createdAt,
+          status: order?.status,
           confirmationUrl: confirmationUrl,
         };
         const formData = new FormData();

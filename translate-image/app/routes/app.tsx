@@ -56,6 +56,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const adminAuthResult = await authenticate.admin(request);
     console.log("Auth result:", adminAuthResult);
     const { shop, accessToken } = adminAuthResult.session;
+    // console.log("accessToken: ",accessToken);
+    
     const { admin } = adminAuthResult;
     const formData = await request.formData();
     const init = JSON.parse(formData.get("init") as string);
