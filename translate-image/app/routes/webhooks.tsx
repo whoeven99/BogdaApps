@@ -10,7 +10,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     console.log("✅ Webhook received:", topic, shop);
 
     switch (topic) {
-      case "app_purchases_one_time/update": {
+      case "APP_PURCHASES_ONE_TIME_UPDATE": {
         console.log("购买积分：", payload);
 
         if (payload?.app_purchase_one_time) {
