@@ -20,7 +20,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   // The topics handled here should be declared in the shopify.app.toml.
   // More info: https://shopify.dev/docs/apps/build/cli-for-apps/app-configuration
   switch (topic) {
-    case "APP_PURCHASES_ONE_TIME_UPDATE":
+    case "app_purchases_one_time/update":
       try {
         console.log('购买积分：',payload);
         
