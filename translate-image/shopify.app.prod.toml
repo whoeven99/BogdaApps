@@ -1,14 +1,12 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "e7fe2398f1feb814e87fb51ac1364bb9"
-name = "Ciwi.ai: Image & Alt (local)"
-handle = "translate-image-local"
-application_url = "https://legends-proceeding-guitar-argue.trycloudflare.com"
+client_id = "df4ae6edd683114494f9fefef25752af"
+name = "Ciwi.ai: Image & Alt Translate"
+handle = "ciwi-image-translation"
+application_url = "https://bogdaapps.onrender.com"
 embedded = true
 
 [build]
-automatically_update_urls_on_dev = true
-dev_store_url = "ciwishop.myshopify.com"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
@@ -16,13 +14,13 @@ scopes = "read_content,read_legal_policies,read_metaobjects,read_online_store_na
 optional_scopes = ["read_customer_events","write_pixels"]
 [auth]
 redirect_urls = [
-  "https://legends-proceeding-guitar-argue.trycloudflare.com/auth/callback",
-  "https://legends-proceeding-guitar-argue.trycloudflare.com/auth/shopify/callback",
-  "https://legends-proceeding-guitar-argue.trycloudflare.com/api/auth/callback"
+  "https://bogdaapps.onrender.com/auth/callback",
+  "https://bogdaapps.onrender.com/auth/shopify/callback",
+  "https://bogdaapps.onrender.com/api/auth/callback"
 ]
-
+  
 [webhooks]
-api_version = "2025-10"
+api_version = "2025-04"
 
   [[webhooks.subscriptions]]
   topics = [
@@ -35,4 +33,3 @@ api_version = "2025-10"
 
 [pos]
 embedded = false
-

@@ -291,7 +291,7 @@ export default function ProductDetailPage() {
   useEffect(() => {
     if (productLoadingFetcher.data) {
       setProductLoading(false);
-      console.log(productLoadingFetcher.data.imageData);
+      // console.log(productLoadingFetcher.data.imageData);
       setProductImageData(productLoadingFetcher.data.imageData);
       setImageHasNextPage(
         productLoadingFetcher.data.imageData[0]?.imageHasNextPage,
@@ -334,7 +334,7 @@ export default function ProductDetailPage() {
   useEffect(() => {
     if (imageFetcher.data) {
       setProductLoading(false);
-      console.log("dsdqeqsa: ", imageFetcher.data);
+      // console.log("dsdqeqsa: ", imageFetcher.data);
 
       setProductImageData(imageFetcher.data.imageData);
       setImageHasNextPage(imageFetcher.data.imageData[0]?.imageHasNextPage);

@@ -91,10 +91,11 @@ function observeVisibleImages(map, language) {
 async function ProductImgTranslate(blockId, shop, ciwiBlock) {
   const productId = ciwiBlock.querySelector('input[name="product_id"]').value;
   if (!productId) return;
-
+  
   const language = ciwiBlock.querySelector('input[name="language_code"]').value;
   const cachePrefix = `ciwi_product_img_`;
-
+  console.log("查询产品详情数据");
+  
   // 先检查缓存中是否存在该产品的图片信息
   const cacheKeys = Object.keys(localStorage).filter((k) =>
     k.startsWith(`${cachePrefix}${shop.value}_${productId}_${language}_`),
@@ -112,6 +113,8 @@ async function ProductImgTranslate(blockId, shop, ciwiBlock) {
     productId,
     languageCode: language,
   });
+  console.log("GetProductImageData",data);
+  
   const response = data?.response || [];
 
   const map = new Map();
@@ -154,6 +157,8 @@ async function HomeImageTranslate(blockId) {
     blockId,
     languageCode: language,
   });
+  console.log("GetShopImageData: ",data);
+  
   const response = data?.response || [];
 
   const map = new Map();

@@ -25,10 +25,18 @@ import { useEffect, useMemo, useState } from "react";
 import useReport from "scripts/eventReport";
 import { useTranslation } from "react-i18next";
 import { useDispatch, useSelector } from "react-redux";
-import { OptionType } from "~/components/paymentModal";
+// import { OptionType } from "~/components/paymentModal";
 import { useFetcher } from "@remix-run/react/dist/components";
 const { Title, Text, Paragraph } = Typography;
-
+export interface OptionType {
+  key: string;
+  name: string;
+  Credits: number;
+  price: {
+    comparedPrice: number;
+    currencyCode: string;
+  };
+}
 export const QuotaCard = () => {
   const payFetcher = useFetcher<any>();
   const orderFetcher = useFetcher<any>();
@@ -37,6 +45,7 @@ export const QuotaCard = () => {
   const { plan, updateTime, chars, totalChars, isNew } = useSelector(
     (state: any) => state.userConfig,
   );
+
   const [isLoading, setIsLoading] = useState(true);
   const [addCreditsModalOpen, setAddCreditsModalOpen] = useState(false);
   const [selectedOptionKey, setSelectedOption] = useState<string>("option-1");
@@ -49,14 +58,6 @@ export const QuotaCard = () => {
         name: "500K",
         Credits: 500000,
         price: {
-          currentPrice:
-            plan.id === 6
-              ? 1.99
-              : plan.id === 5
-                ? 2.99
-                : plan.id === 4
-                  ? 3.59
-                  : 3.99,
           comparedPrice: 3.99,
           currencyCode: "USD",
         },
@@ -66,14 +67,6 @@ export const QuotaCard = () => {
         name: "1M",
         Credits: 1000000,
         price: {
-          currentPrice:
-            plan.id === 6
-              ? 3.99
-              : plan.id === 5
-                ? 5.99
-                : plan.id === 4
-                  ? 7.19
-                  : 7.99,
           comparedPrice: 7.99,
           currencyCode: "USD",
         },
@@ -83,14 +76,6 @@ export const QuotaCard = () => {
         name: "2M",
         Credits: 2000000,
         price: {
-          currentPrice:
-            plan.id === 6
-              ? 7.99
-              : plan.id === 5
-                ? 11.99
-                : plan.id === 4
-                  ? 14.39
-                  : 15.99,
           comparedPrice: 15.99,
           currencyCode: "USD",
         },
@@ -100,14 +85,6 @@ export const QuotaCard = () => {
         name: "3M",
         Credits: 3000000,
         price: {
-          currentPrice:
-            plan.id === 6
-              ? 11.99
-              : plan.id === 5
-                ? 17.99
-                : plan.id === 4
-                  ? 21.79
-                  : 23.99,
           comparedPrice: 23.99,
           currencyCode: "USD",
         },
@@ -117,14 +94,6 @@ export const QuotaCard = () => {
         name: "5M",
         Credits: 5000000,
         price: {
-          currentPrice:
-            plan.id === 6
-              ? 19.99
-              : plan.id === 5
-                ? 29.99
-                : plan.id === 4
-                  ? 35.99
-                  : 39.99,
           comparedPrice: 39.99,
           currencyCode: "USD",
         },
@@ -134,14 +103,6 @@ export const QuotaCard = () => {
         name: "10M",
         Credits: 10000000,
         price: {
-          currentPrice:
-            plan.id === 6
-              ? 39.99
-              : plan.id === 5
-                ? 59.99
-                : plan.id === 4
-                  ? 71.99
-                  : 79.99,
           comparedPrice: 79.99,
           currencyCode: "USD",
         },
@@ -151,14 +112,6 @@ export const QuotaCard = () => {
         name: "20M",
         Credits: 20000000,
         price: {
-          currentPrice:
-            plan.id === 6
-              ? 79.99
-              : plan.id === 5
-                ? 119.99
-                : plan.id === 4
-                  ? 143.99
-                  : 159.99,
           comparedPrice: 159.99,
           currencyCode: "USD",
         },
@@ -168,14 +121,6 @@ export const QuotaCard = () => {
         name: "30M",
         Credits: 30000000,
         price: {
-          currentPrice:
-            plan.id === 6
-              ? 119.99
-              : plan.id === 5
-                ? 179.99
-                : plan.id === 4
-                  ? 215.99
-                  : 239.99,
           comparedPrice: 239.99,
           currencyCode: "USD",
         },
@@ -211,7 +156,7 @@ export const QuotaCard = () => {
   useEffect(() => {
     if (payFetcher.data) {
       console.log(payFetcher.data);
-      
+
       if (payFetcher.data?.success) {
         console.log(payFetcher.data);
 
@@ -221,19 +166,19 @@ export const QuotaCard = () => {
         const confirmationUrl =
           payFetcher.data?.response?.appPurchaseOneTimeCreate?.confirmationUrl;
         const orderInfo = {
-          id: order.id,
-          amount: order.price.amount,
-          name: order.name,
-          createdAt: order.createdAt,
-          status: order.status,
+          id: order?.id,
+          amount: order?.price.amount,
+          name: order?.name,
+          createdAt: order?.createdAt,
+          status: order?.status,
           confirmationUrl: confirmationUrl,
         };
-        const formData = new FormData();
-        formData.append("orderInfo", JSON.stringify(orderInfo));
-        orderFetcher.submit(formData, {
-          method: "post",
-          action: "/app",
-        });
+        // const formData = new FormData();
+        // formData.append("orderInfo", JSON.stringify(orderInfo));
+        // orderFetcher.submit(formData, {
+        //   method: "post",
+        //   action: "/app",
+        // });
         open(confirmationUrl, "_top");
       } else {
         setBuyButtonLoading(false);
@@ -284,25 +229,6 @@ export const QuotaCard = () => {
               {t("Add credits")}
             </Button>
           </Flex>
-          {/* {plan && (
-            <div>
-              <Text>{t("Current plan: ")}</Text>
-              <Text style={{ color: "#007F61", fontWeight: "bold" }}>
-                {plan.id === 3
-                  ? "Starter"
-                  : plan.id === 4
-                    ? "Basic"
-                    : plan.id === 5
-                      ? "Pro"
-                      : plan.id === 6
-                        ? "Premium"
-                        : plan.id === 7
-                          ? "Free Trial"
-                          : "Free"}{" "}
-                {t("plan")}
-              </Text>
-            </div>
-          )} */}
         </div>
         <div
           style={{
@@ -324,13 +250,6 @@ export const QuotaCard = () => {
               }}
             />
           )}
-          {/* <Text
-            style={{
-              display: updateTime && totalChars ? "block" : "none",
-            }}
-          >
-            {t("This bill was issued on {{date}}", { date: updateTime })}
-          </Text> */}
         </div>
         <Progress
           percent={
@@ -350,27 +269,6 @@ export const QuotaCard = () => {
         footer={null}
       >
         <Space direction="vertical" size="small" style={{ width: "100%" }}>
-          <div
-            style={{
-              textAlign: "left",
-              display: "flex",
-              alignItems: "flex-end",
-              marginBottom: 10,
-            }}
-          >
-            {/* <Title level={4} style={{ marginBottom: 0, marginRight: 10 }}>
-              {t("Buy Credits")}
-            </Title> */}
-            <Text style={{ fontWeight: "bold" }}>
-              {plan.id === 6
-                ? t("discountText.premium")
-                : plan.id === 5
-                  ? t("discountText.pro")
-                  : plan.id === 4
-                    ? t("discountText.basic")
-                    : t("discountText.free")}
-            </Text>
-          </div>
           <Row gutter={[16, 16]}>
             {creditOptions.map((option) => (
               <Col key={option.key} xs={12} sm={12} md={6} lg={6} xl={6}>
@@ -407,29 +305,6 @@ export const QuotaCard = () => {
                   >
                     {option.Credits.toLocaleString()} {t("Credits")}
                   </Text>
-                  {/* {plan.id === 6 || plan.id === 5 || plan.id === 4 ? (
-                    <>
-                      <Title
-                        level={3}
-                        style={{
-                          margin: 0,
-                          color: "#007F61",
-                          fontWeight: 700,
-                        }}
-                      >
-                        ${option.price.currentPrice.toFixed(2)}
-                      </Title>
-                      <Text
-                        delete
-                        type="secondary"
-                        style={{ fontSize: "14px" }}
-                      >
-                        ${option.price.comparedPrice.toFixed(2)}
-                      </Text>
-                    </>
-                  ) : (
-                    
-                  )} */}
                   <Title
                     level={3}
                     style={{ margin: 0, color: "#007F61", fontWeight: 700 }}
@@ -447,7 +322,7 @@ export const QuotaCard = () => {
                 {selectedOptionKey
                   ? creditOptions
                       .find((item) => item.key === selectedOptionKey)
-                      ?.price.currentPrice.toFixed(2)
+                      ?.price.comparedPrice.toFixed(2)
                   : "0.00"}
               </Text>
               <Button

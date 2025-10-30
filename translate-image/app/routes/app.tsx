@@ -56,6 +56,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const adminAuthResult = await authenticate.admin(request);
     console.log("Auth result:", adminAuthResult);
     const { shop, accessToken } = adminAuthResult.session;
+    // console.log("accessToken: ",accessToken);
+
     const { admin } = adminAuthResult;
     const formData = await request.formData();
     const init = JSON.parse(formData.get("init") as string);
@@ -194,51 +196,50 @@ export default function App() {
   }, [initFetcher.data]);
   useEffect(() => {
     // 当 URL 改变时调用这两个函数
-    if (!plan?.id) {
-      getPlan();
-    }
-    if (!chars || !totalChars) {
-      getWords();
-    }
+    // if (!plan?.id) {
+    //   getPlan();
+    // }
+    // if (!chars || !totalChars) {
+
+    // }
+    getWords();
   }, [location]); // 监听 URL 的变化
-  const getPlan = async () => {
-    const data = await GetUserSubscriptionPlan({
-      shop: shop,
-      server: server as string,
-    });
-    if (data?.success) {
-      dispatch(
-        setPlan({
-          plan: {
-            id: data?.response?.userSubscriptionPlan || 2,
-            feeType: data?.response?.feeType || 0,
-          },
-        }),
-      );
-      if (data?.response?.currentPeriodEnd) {
-        const date = new Date(data?.response?.currentPeriodEnd)
-          .toLocaleDateString("zh-CN", {
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit",
-          })
-          .replace(/\//g, "-");
-        dispatch(setUpdateTime({ updateTime: date }));
-      }
-    }
-  };
+  // const getPlan = async () => {
+  //   const data = await GetUserSubscriptionPlan({
+  //     shop: shop,
+  //     server: server as string,
+  //   });
+  //   if (data?.success) {
+  //     dispatch(
+  //       setPlan({
+  //         plan: {
+  //           id: data?.response?.userSubscriptionPlan || 2,
+  //           feeType: data?.response?.feeType || 0,
+  //         },
+  //       }),
+  //     );
+  //     if (data?.response?.currentPeriodEnd) {
+  //       const date = new Date(data?.response?.currentPeriodEnd)
+  //         .toLocaleDateString("zh-CN", {
+  //           year: "numeric",
+  //           month: "2-digit",
+  //           day: "2-digit",
+  //         })
+  //         .replace(/\//g, "-");
+  //       dispatch(setUpdateTime({ updateTime: date }));
+  //     }
+  //   }
+  // };
   const getWords = async () => {
     const data = await GetUserWords({
       shop,
       server: server as string,
     });
     if (data?.success) {
-      console.log("chat data", data?.response);
-
-      dispatch(setChars({ chars: data?.response?.chars }));
+      dispatch(setChars({ chars: data?.response?.usedPoints }));
       dispatch(
         setTotalChars({
-          totalChars: data?.response?.totalChars,
+          totalChars: data?.response?.purchasePoints,
         }),
       );
       dispatch(setUserConfigIsLoading({ isLoading: false }));
@@ -250,8 +251,8 @@ export default function App() {
         <Link to="/app" rel="home">
           Home
         </Link>
-        <Link to="/app/management">Image Manage</Link>
-        <Link to="/app/pricing">Pricing</Link>
+        {/* <Link to="/app/management">Image Manage</Link> */}
+        {/* <Link to="/app/pricing">Pricing</Link> */}
       </NavMenu>
       <Outlet />
     </AppProvider>
