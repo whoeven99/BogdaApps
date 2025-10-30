@@ -105,8 +105,6 @@ const Index = () => {
       const jsonString = switcherData.replace(/\/\*[\s\S]*?\*\//g, "").trim();
       const blocks = JSON.parse(jsonString).current?.blocks;
       if (blocks) {
-        console.log("blociwiSwitcherBlocksIdcks: ", ciwiSwitcherBlocksId);
-        
         const switcherJson: any = Object.values(blocks).find(
           (block: any) => block.type === ciwiSwitcherBlocksId,
         );
@@ -130,107 +128,8 @@ const Index = () => {
     }
   }, [themeFetcher.data]);
 
-  const columns = [
-    {
-      title: t("planCardTableList1.title"),
-      dataIndex: "need",
-      key: "need",
-    },
-    {
-      title: t("planCardTableList2.title"),
-      dataIndex: "votes",
-      key: "votes",
-    },
-    {
-      title: t("planCardTableList3.title"),
-      dataIndex: "devStatus",
-      key: "devStatus",
-    },
-  ];
-
-  const data: {
-    key: number;
-    need: string;
-    votes: number;
-    devStatus: string;
-  }[] = [
-    {
-      key: 1,
-      need: t("devplanCard1.title"),
-      votes: 65,
-      devStatus: t("Launched"),
-    },
-    {
-      key: 2,
-      need: t("devplanCard2.title"),
-      votes: 33,
-      devStatus: t("In development"),
-    },
-    {
-      key: 3,
-      need: t("devplanCard3.title"),
-      votes: 41,
-      devStatus: t("Launched"),
-    },
-    {
-      key: 4,
-      need: t("devplanCard4.title"),
-      votes: 18,
-      devStatus: t("Launched"),
-    },
-    {
-      key: 5,
-      need: t("devplanCard5.title"),
-      votes: 29,
-      devStatus: t("In development"),
-    },
-  ];
-  const handleCommitRequest = () => {
-    handleContactSupport();
-    // reportClick("dashboard_devprogress_request");
-  };
   const handleReportCiwiHelpCenter = () => {
     // reportClick("dashboard_footer_help_center");
-  };
-  const navigateToLanguage = () => {
-    navigate("/app/language");
-    fetcher.submit(
-      {
-        log: `${shop} 前往语言页面, 从主页面点击`,
-      },
-      {
-        method: "POST",
-        action: "/log",
-      },
-    );
-    // reportClick("dashboard_language_manage");
-  };
-
-  const navigateToCurrency = () => {
-    navigate("/app/currency");
-    fetcher.submit(
-      {
-        log: `${shop} 前往货币页面, 从主页面点击`,
-      },
-      {
-        method: "POST",
-        action: "/log",
-      },
-    );
-    // reportClick("dashboard_currency_manage");
-  };
-
-  const handleReceive = () => {
-    navigate("/app/pricing");
-    fetcher.submit(
-      {
-        log: `${shop} 前往付费页面, 从新人链接点击`,
-      },
-      {
-        method: "POST",
-        action: "/log",
-      },
-    );
   };
 
   return (

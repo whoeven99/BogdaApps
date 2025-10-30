@@ -350,6 +350,8 @@ const ImageAltTextPage = () => {
         );
 
         if (existing) {
+          console.log("existing: ", existing);
+
           return { ...existing, language: lang.label };
         } else {
           return {
@@ -364,6 +366,8 @@ const ImageAltTextPage = () => {
           };
         }
       });
+      console.log("mergedList: ", mergedList);
+
       setImageDatas(mergedList);
     }
   }, [imageFetcher.data]);
@@ -1043,7 +1047,7 @@ const ImageAltTextPage = () => {
                         }}
                       >
                         <Text>Alt Text</Text>
-                        <Flex vertical align="stretch" justify="stretch">
+                        <Flex vertical align="stretch" justify="stretch" gap={40}>
                           <Input
                             disabled
                             value={img.altBeforeTranslation || "—"}
@@ -1094,7 +1098,7 @@ const ImageAltTextPage = () => {
                               handleTranslate(img, img.languageCode)
                             }
                           >
-                            {t("Translate")}
+                            {t("Image Translate")}
                           </Button>
 
                           <Upload
