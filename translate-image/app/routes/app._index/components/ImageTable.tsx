@@ -163,7 +163,11 @@ export default function Index() {
 
     const formData = new FormData();
     formData.append(
-      direction === "next" ? "productEndCursor" : "productStartCursor",
+      direction === "next"
+        ? "productEndCursor"
+        : direction === "prev"
+          ? "productStartCursor"
+          : "productEndCursor",
       JSON.stringify({
         cursor: lastRequestCursor,
         query: searchText,
