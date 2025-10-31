@@ -71,7 +71,7 @@ const Index = () => {
   const [isMobile, setIsMobile] = useState<boolean>(false);
   const blockUrl = useMemo(
     () =>
-      `https://${shop}/admin/themes/current/editor?context=apps&appEmbed=${ciwiSwitcherId}/star_rating`,
+      `https://${shop}/admin/themes/current/editor?context=apps&activateAppId=${ciwiSwitcherId}/star_rating`,
     [shop, ciwiSwitcherBlocksId],
   );
 

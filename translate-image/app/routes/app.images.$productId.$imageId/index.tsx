@@ -796,32 +796,54 @@ const ImageAltTextPage = () => {
                 <Title level={4} style={{ fontSize: "16px" }}>
                   {`${defaultLanguageData?.name}(${t("Default")})`}
                 </Title>
-                <Card
+                <div
                   style={{
-                    // width: "100%",
-                    borderRadius: 12,
-                    boxShadow: "0 2px 6px rgba(0,0,0,0.05)",
+                    width: "300px",
+                    textAlign: "center",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    border: "1px solid #f0f0f0",
+                    borderRadius: "8px",
+                    padding: 0,
+                    backgroundColor: "#fff",
                   }}
                 >
                   <Flex justify="space-between" align="center" vertical gap={8}>
-                    <Image
-                      src={productImageData?.imageUrl}
-                      preview={false}
-                      width={100}
-                      height={100}
+                    <div
                       style={{
-                        borderRadius: 8,
-                        objectFit: "cover",
-                        background: "#fafafa",
+                        width: "100%",
+                        aspectRatio: "1/1",
+                        borderRadius: "8px 8px 0 0",
+                        overflow: "hidden",
+                        marginBottom: "30px",
+                        padding: 0,
                       }}
-                    />
-                    <Input
-                      style={{ width: "400px" }}
+                    >
+                      <img
+                        src={productImageData?.imageUrl}
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "cover",
+                        }}
+                      />
+                    </div>
+                    <TextArea
+                      placeholder="textarea with clear icon"
+                      style={{
+                        margin: "16px 0",
+                        fontSize: "12px",
+                        resize: "none", // ✅ 禁止手动拖拽
+                        overflow: "hidden", // ✅ 去掉滚动条
+                        backgroundColor: "#fafafa",
+                      }}
                       disabled
                       value={productImageData?.altText || "—"}
+                      autoSize={{ minRows: 2, maxRows: 6 }}
                     />
                   </Flex>
-                </Card>
+                </div>
               </Flex>
             )}
           </Space>
@@ -1000,7 +1022,7 @@ const ImageAltTextPage = () => {
                           }
                           onClick={() => handleTranslate(img, img.languageCode)}
                         >
-                          {t("Image & Alt Translate")}
+                          {t("Translate")}
                         </Button>
 
                         <Upload

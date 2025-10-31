@@ -79,7 +79,7 @@ const WelcomeCard: React.FC<WelcomeCardProps> = ({
   return (
     <Card
       title={
-        <h2 style={{ margin: 0, fontSize: "20px" }}>
+        <h2 style={{ margin: 0, fontSize: "20px",fontWeight:600 }}>
           {switcherOpen
             ? t("Image Translation Plugin active")
             : t("Image Translation Plugin not enabled")}
