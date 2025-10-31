@@ -28,6 +28,7 @@ import {
   UploadOutlined,
   SearchOutlined,
   PlusOutlined,
+  LoadingOutlined,
 } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { ArrowLeftIcon, ImageIcon } from "@shopify/polaris-icons";
@@ -558,20 +559,60 @@ const ImageAltTextPage = () => {
   };
   // 上传或删除图片时更新 fileList
   const handleChangeImage = (info: any, languageCode: string) => {
-    // 只关心上传成功的情况
+    // console.log("上传中...");
+    // console.log(info);
+
+    // // 只关心上传成功的情况
+    // if (info.file.status === "done") {
+    //   const response = info.file.response; // 后端返回的数据
+    //   const newUrl = response?.url || response; // 根据后端结构调整
+    //   setImageDatas((prev: any[]) =>
+    //     prev.map((item) =>
+    //       item.languageCode === languageCode
+    //         ? { ...item, imageAfterUrl: newUrl }
+    //         : item,
+    //     ),
+    //   );
+    //   setImageDatas((prev: any[]) => {
+    //     return prev.map((item) =>
+    //       item.languageCode === languageCode
+    //         ? {
+    //             ...item,
+    //             imageAfterUrl:
+    //               typeof newUrl === "string" ? newUrl : item.imageAfterUrl,
+    //           }
+    //         : item,
+    //     );
+    //   });
+
+    //   shopify.toast.show("Upload success!");
+    // }
     if (info.file.status === "done") {
       const response = info.file.response; // 后端返回的数据
-      const newUrl = response?.url || response; // 根据后端结构调整
+      const newUrl =
+        typeof response?.response?.imageAfterUrl === "string"
+          ? response.response?.imageAfterUrl
+          : "";
+      if (response?.success) {
+        setImageDatas((prev: any[]) => {
+          return prev.map((item) =>
+            item.languageCode === languageCode
+              ? {
+                  ...item,
+                  imageAfterUrl:
+                    typeof newUrl === "string" ? newUrl : item.imageAfterUrl,
+                }
+              : item,
+          );
+        });
+        console.log(imageDatas);
 
-      setImageDatas((prev: any[]) =>
-        prev.map((item) =>
-          item.languageCode === languageCode
-            ? { ...item, imageAfterUrl: newUrl }
-            : item,
-        ),
-      );
-
-      shopify.toast.show("Upload success!");
+        shopify.toast.show(`${info.file.name} ${t("Upload Success")}`);
+      } else {
+        shopify.toast.show(`${info.file.name} ${t("Upload Failed")}`);
+      }
+    } else if (info.file.status === "error") {
+      shopify.toast.show(`${info.file.name} ${t("Upload Failed")}`);
     }
   };
   const handleConfirm = async () => {
@@ -675,14 +716,14 @@ const ImageAltTextPage = () => {
     if (imageLoadingFetcher.data) {
       console.log("imageLoadingFetcher.data: ", imageLoadingFetcher.data);
       setProductImageData(imageLoadingFetcher.data.imageData);
-      setFileList([
-        {
-          uid: "-1", // 唯一 id
-          name: "image.png",
-          status: "done", // 已上传状态
-          url: imageLoadingFetcher.data.imageData.imageUrl, // 直接展示已有图片
-        },
-      ]);
+      // setFileList([
+      //   {
+      //     uid: "-1", // 唯一 id
+      //     name: "image.png",
+      //     status: "done", // 已上传状态
+      //     url: imageLoadingFetcher.data.imageData.imageUrl, // 直接展示已有图片
+      //   },
+      // ]);
       setPageLoading(false);
     }
   }, [imageLoadingFetcher.data]);
@@ -822,6 +863,7 @@ const ImageAltTextPage = () => {
                     >
                       <img
                         src={productImageData?.imageUrl}
+                        alt={productImageData?.altText}
                         style={{
                           width: "100%",
                           height: "100%",
@@ -830,17 +872,16 @@ const ImageAltTextPage = () => {
                       />
                     </div>
                     <TextArea
-                      placeholder="textarea with clear icon"
+                      placeholder=""
                       style={{
-                        margin: "16px 0",
-                        fontSize: "12px",
+                        margin: "0 0 24px 0",
                         resize: "none", // ✅ 禁止手动拖拽
-                        overflow: "hidden", // ✅ 去掉滚动条
-                        backgroundColor: "#fafafa",
+                        backgroundColor: "#fff",
+                        color: "#000",
                       }}
                       disabled
                       value={productImageData?.altText || "—"}
-                      autoSize={{ minRows: 2, maxRows: 6 }}
+                      autoSize={{ minRows: 2, maxRows: 10 }}
                     />
                   </Flex>
                 </div>
@@ -935,6 +976,8 @@ const ImageAltTextPage = () => {
                         </Upload> */}
 
                         <Upload
+                          name="file"
+                          accept="image/*"
                           action={`${globalStore?.server}/pcUserPic/insertPicToDbAndCloud`}
                           listType="picture-card"
                           fileList={
@@ -949,9 +992,46 @@ const ImageAltTextPage = () => {
                                 ]
                               : []
                           }
-                          onChange={(info) =>
-                            handleChangeImage(info, img.languageCode)
-                          }
+                          onChange={(info) => {
+                            // handleChangeImage(info, img.languageCode);
+                            // console.log("info: dsdsad", info);
+                            if (info.file.status === "done") {
+                              const response = info.file.response; // 后端返回的数据
+                              const newUrl =
+                                typeof response?.response?.imageAfterUrl ===
+                                "string"
+                                  ? response.response?.imageAfterUrl
+                                  : "";
+                              if (response?.success) {
+                                setImageDatas((prev: any[]) => {
+                                  return prev.map((item) =>
+                                    item.languageCode === img.languageCode
+                                      ? {
+                                          ...item,
+                                          imageAfterUrl:
+                                            typeof newUrl === "string"
+                                              ? newUrl
+                                              : item.imageAfterUrl,
+                                        }
+                                      : item,
+                                  );
+                                });
+                                console.log(imageDatas);
+
+                                shopify.toast.show(
+                                  `${info.file.name} ${t("Upload Success")}`,
+                                );
+                              } else {
+                                shopify.toast.show(
+                                  `${info.file.name} ${t("Upload Failed")}`,
+                                );
+                              }
+                            } else if (info.file.status === "error") {
+                              shopify.toast.show(
+                                `${info.file.name} ${t("Upload Failed")}`,
+                              );
+                            }
+                          }}
                           onPreview={handlePreview}
                           onRemove={(info) => handleRemove(info, img)}
                           maxCount={1}
@@ -980,7 +1060,6 @@ const ImageAltTextPage = () => {
                             showRemoveIcon: true,
                           }}
                         >
-                          {/* 如果没有上传后的图片，则显示上传按钮 */}
                           {!img.imageAfterUrl && (
                             <div>
                               <PlusOutlined />
@@ -988,14 +1067,113 @@ const ImageAltTextPage = () => {
                             </div>
                           )}
                         </Upload>
-                        {/* <Input
-                          disabled
-                          value={img.altBeforeTranslation || "—"}
-                          style={{ width: "100%" }}
-                        /> */}
+                        {/* <Upload
+                          name="file" // ✅ 一定要加上
+                          accept="image/*"
+                          action={`${globalStore?.server}/pcUserPic/insertPicToDbAndCloud`}
+                          listType="picture-card"
+                          fileList={
+                            img.imageAfterUrl
+                              ? [
+                                  {
+                                    uid: String(img.id),
+                                    name: `${img.language}.png`,
+                                    status: "done",
+                                    url: img.imageAfterUrl,
+                                  },
+                                ]
+                              : []
+                          }
+                          onChange={(info) => {
+                            console.log(
+                              "上传状态变化:",
+                              info.file.status,
+                              info,
+                            );
 
-                        {/* 译文 alt（优先显示 altAfterTranslation） */}
-                        <Input
+                            // ✅ 上传完成
+                            if (info.file.status === "done") {
+                              const res = info.file.response; // 后端返回的整个 JSON 对象
+                              const newUrl = res?.response?.imageAfterUrl; // ✅ 按你的后端结构取值
+
+                              if (res?.success && newUrl) {
+                                setImageDatas((prev: any) =>
+                                  prev.map((item: any) =>
+                                    item.languageCode === img.languageCode
+                                      ? { ...item, imageAfterUrl: newUrl }
+                                      : item,
+                                  ),
+                                );
+                                shopify.toast.show("Upload success!");
+                              } else {
+                                shopify.toast.show(
+                                  `Upload failed: ${res?.errorMsg || "Unknown error"}`,
+                                );
+                              }
+                            }
+
+                            // ❌ 上传失败
+                            if (info.file.status === "error") {
+                              shopify.toast.show(
+                                "Upload failed (network or server error)",
+                              );
+                            }
+                          }}
+                          itemRender={(originNode, file) => {
+                            if (file.status === "uploading") {
+                              return (
+                                <div
+                                  style={{
+                                    position: "relative",
+                                    width: 100,
+                                    height: 100,
+                                  }}
+                                >
+                                  {originNode}
+                                  <div
+                                    style={{
+                                      position: "absolute",
+                                      inset: 0,
+                                      background: "rgba(255,255,255,0.6)",
+                                      display: "flex",
+                                      justifyContent: "center",
+                                      alignItems: "center",
+                                    }}
+                                  >
+                                    <LoadingOutlined />
+                                  </div>
+                                </div>
+                              );
+                            }
+                            return originNode;
+                          }}
+                          data={(file) => ({
+                            shopName: globalStore?.shop,
+                            file,
+                            userPicturesDoJson: JSON.stringify({
+                              shopName: globalStore?.shop,
+                              imageId: img.imageId,
+                              productId: `gid://shopify/Product/${productId}`,
+                              imageBeforeUrl: img.imageBeforeUrl,
+                              altBeforeTranslation: img.altBeforeTranslation,
+                              altAfterTranslation: img.altAfterTranslation,
+                              languageCode: img.languageCode,
+                            }),
+                          })}
+                          showUploadList={{
+                            showPreviewIcon: true,
+                            showRemoveIcon: true,
+                          }}
+                        >
+                          {!img.imageAfterUrl && (
+                            <div>
+                              <PlusOutlined />
+                              <div style={{ marginTop: 8 }}>Upload</div>
+                            </div>
+                          )}
+                        </Upload> */}
+
+                        <TextArea
                           value={
                             confirmData.find(
                               (i: any) => i.languageCode === img.languageCode,
