@@ -8,7 +8,7 @@ export default function SortPopover({
   onChange?: (sortKey: string, sortOrder: "asc" | "desc") => void;
 }) {
   const [sortKey, setSortKey] = useState("CREATED_AT");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [open, setOpen] = useState(false);
 
   const sortOptions = [

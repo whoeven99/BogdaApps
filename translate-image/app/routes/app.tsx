@@ -39,6 +39,7 @@ import {
   setUserConfigIsLoading,
 } from "~/store/modules/userConfig";
 import { mutationAppPurchaseOneTimeCreate } from "~/api/admin";
+import { ConfigProvider } from "antd";
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -101,8 +102,28 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             }`,
         );
         const data = await response.json();
-        return json({ data: data.data.themes });
+        const response1 = await admin.graphql(`#graphql
+          query {
+            appInstallation {
+              id
+              launchUrl
+              uninstallUrl
+              activeSubscriptions {
+                id
+              }
+              accessScopes {
+                handle
+              }
+            }
+          }
+        `);
+        const result = await response1.json();
+        console.log("11111 result : ", result);
+
+        return json({ data: data.data.themes, result });
       } catch (error) {
+        console.log("graphql error theme", error);
+
         return json({
           success: false,
           response: null,
@@ -247,14 +268,40 @@ export default function App() {
   };
   return (
     <AppProvider isEmbeddedApp apiKey={apiKey}>
-      <NavMenu>
-        <Link to="/app" rel="home">
-          Home
-        </Link>
-        {/* <Link to="/app/management">Image Manage</Link> */}
-        {/* <Link to="/app/pricing">Pricing</Link> */}
-      </NavMenu>
-      <Outlet />
+      <ConfigProvider
+        theme={{
+          token: {
+            colorPrimary: "var(--p-color-bg-fill-brand)",
+          },
+          components: {
+            Table: {
+              rowSelectedBg: "rgba(217, 217, 217, 0.7)",
+              rowSelectedHoverBg: "rgba(217, 217, 217, 0.7)",
+            },
+            Button: {
+              primaryShadow: "none",
+            },
+            Select: {
+              optionSelectedBg: "rgba(217, 217, 217, 0.7)",
+            },
+            Menu: {
+              itemSelectedBg: "rgba(217, 217, 217, 0.7)",
+            },
+            Card: {
+              headerHeight: 42,
+            },
+          },
+        }}
+      >
+        <NavMenu>
+          <Link to="/app" rel="home">
+            Home
+          </Link>
+          {/* <Link to="/app/management">Image Manage</Link> */}
+          {/* <Link to="/app/pricing">Pricing</Link> */}
+        </NavMenu>
+        <Outlet />
+      </ConfigProvider>
     </AppProvider>
   );
 }

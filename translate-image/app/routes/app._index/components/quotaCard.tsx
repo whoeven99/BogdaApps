@@ -210,7 +210,7 @@ export const QuotaCard = () => {
             style={{ width: "100%" }}
           >
             <Flex align="center" gap={8}>
-              <Title level={4} style={{ marginBottom: 0 }}>
+              <Title level={2} style={{ marginBottom: 0, fontSize: "20px" }}>
                 {t("Your translation quota")}
               </Title>
               <Popover

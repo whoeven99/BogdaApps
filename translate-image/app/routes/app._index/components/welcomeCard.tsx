@@ -21,7 +21,7 @@ const WelcomeCard: React.FC<WelcomeCardProps> = ({
   const fetcher = useFetcher<any>();
   const graphqlFetcher = useFetcher<any>();
   const [isMobile, setIsMobile] = useState<boolean>(false);
-//   const { report, trackExposure, fetcherState } = useReport();
+  //   const { report, trackExposure, fetcherState } = useReport();
   const handleSetting = () => {
     window.open(blockUrl, "_blank");
     // if (!switcherOpen) {
@@ -79,9 +79,11 @@ const WelcomeCard: React.FC<WelcomeCardProps> = ({
   return (
     <Card
       title={
-        switcherOpen
-          ? t("Image Translation Plugin active")
-          : t("Image Translation Plugin not enabled")
+        <h2 style={{ margin: 0, fontSize: "20px" }}>
+          {switcherOpen
+            ? t("Image Translation Plugin active")
+            : t("Image Translation Plugin not enabled")}
+        </h2>
       }
       styles={{
         header: { borderBottom: "none" },
@@ -102,7 +104,7 @@ const WelcomeCard: React.FC<WelcomeCardProps> = ({
           gap={8}
           style={{ width: "100%", justifyContent: "space-between" }}
         >
-          <Text style={{ width: "75%" }}>
+          <Text style={{ fontSize: "14px" }}>
             {switcherOpen
               ? t(
                   "Your image translation plugin is currently active. Product images and alt text are automatically synced and translated for all enabled languages. ",
@@ -117,7 +119,7 @@ const WelcomeCard: React.FC<WelcomeCardProps> = ({
             handleSetting();
           }}
           type="default"
-          style={{ width: "auto", alignSelf: "flex-start" }}
+          style={{ width: "auto", alignSelf: "flex-end" }}
         >
           {switcherOpen ? t("Manage") : t("Enable")}
         </Button>
