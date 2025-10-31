@@ -71,15 +71,15 @@ const Index = () => {
   const [isMobile, setIsMobile] = useState<boolean>(false);
   const blockUrl = useMemo(
     () =>
-      `https://${shop}/admin/themes/current/editor?context=apps&appEmbed=${ciwiSwitcherId}/star_rating`,
+      `https://${shop}/admin/themes/current/editor?context=apps&activateAppId=${ciwiSwitcherId}/star_rating`,
     [shop, ciwiSwitcherBlocksId],
   );
 
   const fetcher = useFetcher<any>();
   const themeFetcher = useFetcher<any>();
-  useEffect(()=>{
+  useEffect(() => {
     setIsLoading(false);
-  },[])
+  }, []);
   useEffect(() => {
     setIsLoading(false);
     themeFetcher.submit(
@@ -99,32 +99,32 @@ const Index = () => {
   useEffect(() => {
     if (themeFetcher.data) {
       console.log(themeFetcher.data);
-      
-      const switcherData =
-        themeFetcher.data.data.nodes[0].files.nodes[0]?.body?.content;
-      const jsonString = switcherData.replace(/\/\*[\s\S]*?\*\//g, "").trim();
-      const blocks = JSON.parse(jsonString).current?.blocks;
-      if (blocks) {
-        const switcherJson: any = Object.values(blocks).find(
-          (block: any) => block.type === ciwiSwitcherBlocksId,
-        );
-        console.log("switcherJson: ", switcherJson);
 
-        if (switcherJson) {
-          if (switcherJson.disabled) {
-            console.log("未开启");
-            
-            setSwitcherOpen(false);
-            localStorage.setItem("switcherEnableCardOpen", "false");
-          } else {
-            console.log("已开启");
+      // const switcherData =
+      //   themeFetcher.data.data.nodes[0].files.nodes[0]?.body?.content;
+      // const jsonString = switcherData.replace(/\/\*[\s\S]*?\*\//g, "").trim();
+      // const blocks = JSON.parse(jsonString).current?.blocks;
+      // if (blocks) {
+      //   const switcherJson: any = Object.values(blocks).find(
+      //     (block: any) => block.type === ciwiSwitcherBlocksId,
+      //   );
+      //   console.log("switcherJson: ", switcherJson);
 
-            setSwitcherOpen(true);
-            localStorage.setItem("switcherEnableCardOpen", "true");
-          }
-        }
-      }
-      setSwitcherLoading(false);
+      //   if (switcherJson) {
+      //     if (switcherJson.disabled) {
+      //       console.log("未开启");
+
+      //       setSwitcherOpen(false);
+      //       localStorage.setItem("switcherEnableCardOpen", "false");
+      //     } else {
+      //       console.log("已开启");
+
+      //       setSwitcherOpen(true);
+      //       localStorage.setItem("switcherEnableCardOpen", "true");
+      //     }
+      //   }
+      // }
+      // setSwitcherLoading(false);
     }
   }, [themeFetcher.data]);
 
@@ -168,6 +168,7 @@ const Index = () => {
         style={{
           display: "flex", // 使用 flexbox 来布局
           justifyContent: "center", // 水平居中
+          margin:"16px 0"
         }}
       >
         {t("Learn more in")}

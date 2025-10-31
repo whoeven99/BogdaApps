@@ -18,7 +18,7 @@ redirect_urls = [
   "https://bogdaapps.onrender.com/auth/shopify/callback",
   "https://bogdaapps.onrender.com/api/auth/callback"
 ]
-
+  
 [webhooks]
 api_version = "2025-04"
 

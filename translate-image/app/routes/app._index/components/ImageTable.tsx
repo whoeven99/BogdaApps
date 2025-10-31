@@ -8,13 +8,15 @@ import {
   ImageIcon,
 } from "@shopify/polaris-icons";
 import { UploadOutlined, SearchOutlined } from "@ant-design/icons";
-import { Table, Button, Tabs, Tag, Input, Flex, Card } from "antd";
+import { Table, Button, Tabs, Tag, Input, Flex, Card, Typography } from "antd";
 
 import { useTranslation } from "react-i18next";
 import { useNavigate, useFetcher, useLoaderData } from "@remix-run/react";
 
 import SortPopover from "~/routes/app.management/conponents/SortPopover";
-
+import { useDispatch, useSelector } from "react-redux";
+import { AppDispatch, RootState } from "~/store";
+import { setLastPageCursorInfo } from "~/store/modules/productSlice";
 export default function Index() {
   const loadFetcher = useFetcher<any>();
   const languageFetcher = useFetcher<any>();
@@ -23,7 +25,7 @@ export default function Index() {
 
   const [productsStartCursor, setProductsStartCursor] = useState("");
   const [productsEndCursor, setProductsEndCursor] = useState("");
-
+  const [lastRequestCursor, setLastRequestCursor] = useState<any>(null);
   const [productImageData, setProductImageData] = useState<any>([]);
   const [tableDataLoading, setTableDataLoading] = useState(true);
 
@@ -34,6 +36,7 @@ export default function Index() {
   const [productsHasPreviousPage, setProductsHasPreviousPage] = useState(false);
 
   const { t } = useTranslation();
+  const { Text } = Typography;
   const navigate = useNavigate();
 
   const [activeKey, setActiveKey] = useState("ALL");
@@ -41,7 +44,15 @@ export default function Index() {
   const timeoutIdRef = useRef<any>(true);
 
   const [sortKey, setSortKey] = useState("CREATED_AT");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const didMountRef = useRef(false);
+  const [initialized, setInitialized] = useState(false);
+  // const [lastPageCursorInfo, setLastPageCursorInfo] = useState<any>();
+  const dispatch = useDispatch<AppDispatch>();
+  const lastPageCursorInfo = useSelector(
+    (state: RootState) => state.product.lastPageCursorInfo,
+  );
+
   const panelColumns = [
     {
       // 不需要 dataIndex，用 render 直接取 item.node.title
@@ -50,32 +61,43 @@ export default function Index() {
         return imageData.length > 0 ? (
           <Thumbnail
             source={imageData[0].node.url}
-            size="small"
+            size="large"
             alt={imageData[0].node.altText}
           />
         ) : (
-          <Thumbnail source={ImageIcon} size="small" alt="Small document" />
+          <Thumbnail source={ImageIcon} size="large" alt="Small document" />
         );
       },
+      onCell: () => ({
+        style: {
+          padding: "4px 8px", // ✅ 控制上下、左右 padding
+        },
+      }),
     },
     {
       title: "产品",
       // 不需要 dataIndex，用 render 直接取 item.node.title
       maxWidth: 250, // ✅ 指定列宽（单位是像素）
       render: (_: any, record: any) => (
-        <span
+        <Text
           style={{
             display: "inline-block",
-            maxWidth: 320, // 给内部留点空隙
-            overflow: "hidden",
-            whiteSpace: "nowrap",
-            textOverflow: "ellipsis",
+            maxWidth: 550, // 给内部留点空隙
+            whiteSpace: "normal", // ✅ 自动换行
+            wordBreak: "break-word", // ✅ 超长单词也能换行
+            lineHeight: 1.5,
+            fontSize: "14px",
+            // cursor:"pointer"
           }}
-          title={record?.label}
         >
           {record?.label || "未命名产品"}
-        </span>
+        </Text>
       ),
+      onCell: () => ({
+        style: {
+          padding: "4px 8px", // ✅ 控制上下、左右 padding
+        },
+      }),
     },
     {
       title: "状态",
@@ -110,15 +132,51 @@ export default function Index() {
     {
       title: "操作",
       render: (_: any, record: any) => (
-        <Button onClick={() => handleView(record)}>查看</Button>
+        <Button onClick={() => handleView(record)}>{t("Manage")}</Button>
       ),
     },
   ];
   useEffect(() => {
-    // loadFetcher.submit(
-    //   { loading: true, sortKey, reverse: sortOrder === "asc" ? false : true },
-    //   { method: "POST", action: "/app/management" },
-    // );
+    // console.log(lastPageCursorInfo);
+    const {
+      lastRequestCursor,
+      direction,
+      searchText,
+      activeKey,
+      sortOrder,
+      sortKey,
+      productsHasNextPage,
+      productsHasPreviousPage,
+      productsStartCursor,
+      productsEndCursor,
+    } = lastPageCursorInfo;
+    // console.log("执行数据初始化操作", lastPageCursorInfo);
+
+    setProductsHasNextPage(productsHasNextPage);
+    setProductsHasPreviousPage(productsHasPreviousPage);
+    setProductsStartCursor(productsStartCursor);
+    setProductsEndCursor(productsEndCursor);
+    setActiveKey(activeKey);
+    setSortOrder(sortOrder);
+    setSortKey(sortKey);
+    setSearchText(searchText);
+
+    const formData = new FormData();
+    formData.append(
+      direction === "next"
+        ? "productEndCursor"
+        : direction === "prev"
+          ? "productStartCursor"
+          : "productEndCursor",
+      JSON.stringify({
+        cursor: lastRequestCursor,
+        query: searchText,
+        status: activeKey,
+        sortKey,
+        reverse: sortOrder === "asc" ? false : true,
+      }),
+    );
+    loadFetcher.submit(formData, { method: "POST", action: "/app/management" });
     const languageFormData = new FormData();
     languageFormData.append("languageLoading", JSON.stringify({}));
     languageFetcher.submit(languageFormData, {
@@ -127,9 +185,22 @@ export default function Index() {
     });
   }, []);
   useEffect(() => {
+    // 页面加载完后再允许触发请求
+    setInitialized(true);
+  }, []);
+  useEffect(() => {
     if (loadFetcher.data) {
-      setMenuData(loadFetcher.data.menuData);
+      // console.log(loadFetcher.data);
 
+      setMenuData(loadFetcher.data.menuData);
+      // dispatch(
+      //   setLastPageCursorInfo({
+      //     productsHasNextPage: loadFetcher.data.productHasNextPage,
+      //     productsHasPreviousPage: loadFetcher.data.productHasPreviousPage,
+      //     productsStartCursor: loadFetcher.data.productStartCursor,
+      //     productsEndCursor: loadFetcher.data.productEndCursor,
+      //   }),
+      // );
       setSelectedKey(loadFetcher.data.menuData[0]?.key || "");
       setProductsHasNextPage(loadFetcher.data.productHasNextPage);
       setProductsHasPreviousPage(loadFetcher.data.productHasPreviousPage);
@@ -140,8 +211,16 @@ export default function Index() {
   }, [loadFetcher.data]);
   useEffect(() => {
     if (productsFetcher.data) {
+      // console.log(productsFetcher.data);
+      dispatch(
+        setLastPageCursorInfo({
+          productsHasNextPage: productsFetcher.data.productHasNextPage,
+          productsHasPreviousPage: productsFetcher.data.productHasPreviousPage,
+          productsStartCursor: productsFetcher.data.productStartCursor,
+          productsEndCursor: productsFetcher.data.productEndCursor,
+        }),
+      );
       setMenuData(productsFetcher.data.menuData);
-
       setSelectedKey(productsFetcher.data.menuData[0]?.key || "");
       setProductsHasNextPage(productsFetcher.data.productHasNextPage);
       setProductsHasPreviousPage(productsFetcher.data.productHasPreviousPage);
@@ -151,6 +230,33 @@ export default function Index() {
     }
   }, [productsFetcher.data]);
   useEffect(() => {
+    // setLastPageCursorInfo((pre: any) => ({
+    //   ...pre,
+    //   searchText: searchText,
+    //   activeKey: activeKey,
+    //   sortOrder: sortOrder,
+    //   sortKey: sortKey,
+    // }));
+    dispatch(
+      setLastPageCursorInfo({
+        searchText,
+        activeKey,
+        sortOrder,
+        sortKey,
+      }),
+    );
+  }, [searchText, activeKey, sortOrder, sortKey]);
+  // useEffect(() => {
+  //   if (lastPageCursorInfo) {
+  //     console.log("变化：", lastPageCursorInfo);
+
+  //     localStorage.setItem(
+  //       "pagination-cursor-store",
+  //       JSON.stringify(lastPageCursorInfo),
+  //     );
+  //   }
+  // }, [lastPageCursorInfo]);
+  useEffect(() => {
     if (imageFetcher.data) {
       console.log("dsdqeqsa: ", imageFetcher.data);
 
@@ -158,14 +264,10 @@ export default function Index() {
     }
   }, [imageFetcher.data]);
 
-  // 对产品进行排序
-  useEffect(() => {
-    if (timeoutIdRef.current) {
-      clearTimeout(timeoutIdRef.current);
-    }
-    // console.log("dasdasdsa发送请求");
-    // console.log(sortKey, sortOrder);
-
+  const handleSortProduct = (key: string, order: "asc" | "desc") => {
+    console.log(key, order);
+    setSortKey(key);
+    setSortOrder(order);
     // 延迟 1s 再执行请求
     timeoutIdRef.current = setTimeout(() => {
       productsFetcher.submit(
@@ -173,8 +275,9 @@ export default function Index() {
           productEndCursor: JSON.stringify({
             cursor: "",
             query: searchText,
-            sortKey,
-            reverse: sortOrder === "asc" ? false : true,
+            sortKey: key,
+            status: activeKey,
+            reverse: order === "asc" ? false : true,
           }),
         },
         {
@@ -182,9 +285,16 @@ export default function Index() {
           action: "/app/management",
         },
       );
-    }, 500);
-  }, [sortKey, sortOrder]);
+    }, 100);
+  };
   const handlePreProductPage = () => {
+    dispatch(
+      setLastPageCursorInfo({
+        lastRequestCursor: productsStartCursor,
+        direction: "prev",
+      }),
+    );
+
     productsFetcher.submit(
       {
         productStartCursor: JSON.stringify({
@@ -202,6 +312,12 @@ export default function Index() {
     ); // 提交表单请求
   };
   const handleNextProductPage = () => {
+    dispatch(
+      setLastPageCursorInfo({
+        lastRequestCursor: productsEndCursor,
+        direction: "next",
+      }),
+    );
     console.log("下一页产品");
 
     productsFetcher.submit(
@@ -244,6 +360,7 @@ export default function Index() {
           productEndCursor: JSON.stringify({
             cursor: "",
             query: value,
+            status: activeKey,
             sortKey,
             reverse: sortOrder === "asc" ? false : true,
           }),
@@ -253,8 +370,9 @@ export default function Index() {
           action: "/app/management",
         },
       );
-    }, 500);
+    }, 100);
   };
+
   const handleChangeStatusTab = (key: string) => {
     setActiveKey(key);
     console.log(key);
@@ -268,7 +386,7 @@ export default function Index() {
         {
           productEndCursor: JSON.stringify({
             cursor: "",
-            query: "",
+            query: searchText,
             status: key,
             sortKey,
             reverse: sortOrder === "asc" ? false : true,
@@ -322,13 +440,15 @@ export default function Index() {
                     <Icon source={SortIcon} tone="base" />
                   </Button> */}
                 <SortPopover
-                  onChange={(key, order) => {
-                    console.log(key, order);
-
-                    setSortKey(key);
-                    setSortOrder(order);
-                  }}
+                  onChange={(key, order) => handleSortProduct(key, order)}
                 />
+                {/* <Button
+                  onClick={() => {
+                    console.log(lastPageCursorInfo);
+                  }}
+                >
+                  输出信息
+                </Button> */}
               </Flex>
             </Flex>
             {/* 搜索和排序行 */}
@@ -341,6 +461,7 @@ export default function Index() {
               flexDirection: "column",
               // height: "calc(100vh)", // 根据页面结构调整
               background: "#fff",
+              flex: "1",
             }}
           >
             {/* 表格主体区域（可滚动） */}
@@ -351,6 +472,15 @@ export default function Index() {
                 pagination={false}
                 rowKey={(record) => record.key} // ✅ 建议加上 key，避免警告
                 loading={tableDataLoading}
+                onRow={(record) => ({
+                  onClick: (e) => {
+                    // 排除点击按钮等交互元素
+                    if ((e.target as HTMLElement).closest("button")) return;
+                    const productId = record.key.split("/").pop();
+                    navigate(`/app/products/${productId}`);
+                  },
+                  style: { cursor: "pointer" },
+                })}
               />
             </div>
 

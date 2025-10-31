@@ -87,7 +87,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const imageEndCursor: any = JSON.parse(
     formData.get("imageEndCursor") as string,
   );
-  
+
   try {
     const queryString = (productCursor: any) => {
       const { query, status } = productCursor || { query: "", status: "" };
@@ -106,9 +106,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     switch (true) {
       case !!loading:
         try {
+          console.log("loading: ", loading);
+          const {
+            lastRequestCursor,
+            direction,
+          } = loading;
           const loadData = await admin.graphql(
             `query products( $sortKey: ProductSortKeys, $reverse: Boolean){
-            products(first: 20,sortKey: $sortKey, reverse: $reverse) {
+            products(first: 10,sortKey: $sortKey, reverse: $reverse) {
               edges {
                 node {
                   id
@@ -217,7 +222,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         try {
           const mutationResponse = await admin.graphql(
             `query MyQuery {
-              shopLocales(published: true) {
+              shopLocales{
                 locale
                 name
                 primary
@@ -237,7 +242,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             response: null,
           };
         }
-      
+
       case !!productStartCursor:
         try {
           console.log(productStartCursor);
@@ -245,7 +250,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           const loadData = await admin.graphql(
             `#graphql
               query products($startCursor: String, $query: String, $sortKey: ProductSortKeys, $reverse: Boolean) {
-                products(last: 20 ,before: $startCursor, query: $query, sortKey: $sortKey, reverse: $reverse) {
+                products(last: 10 ,before: $startCursor, query: $query, sortKey: $sortKey, reverse: $reverse) {
                   edges {
                   node {
                     id
@@ -359,7 +364,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           const loadData = await admin.graphql(
             `#graphql
               query products($endCursor: String, $query: String, $sortKey: ProductSortKeys, $reverse: Boolean) {
-                products(first: 20, after: $endCursor, query: $query, sortKey: $sortKey, reverse: $reverse) {
+                products(first: 10, after: $endCursor, query: $query, sortKey: $sortKey, reverse: $reverse) {
                   edges {
                   node {
                     id
@@ -477,7 +482,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             product(id: "${imageStartCursor?.productId}") {
               id
               title
-              images(last: 20, before: "${imageStartCursor?.imageStartCursor}") {
+              images(last: 8, before: "${imageStartCursor?.imageStartCursor}") {
                 edges {
                   node {
                     id
@@ -544,7 +549,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             product(id: "${imageEndCursor?.productId}") {
               id
               title
-              images(first: 20, after: "${imageEndCursor?.imageEndCursor}") {
+              images(first: 8, after: "${imageEndCursor?.imageEndCursor}") {
                 edges {
                   node {
                     id
@@ -1391,9 +1396,7 @@ export default function Index() {
     //   imageUrl: imageUrl,
     //   languageCode: selectedLanguage,
     // });
-
     // console.log("res", res);
-
     // if (res.success) {
     //   setDataResource(
     //     dataResource.map((item: any) => {

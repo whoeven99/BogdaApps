@@ -55,7 +55,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               product(id: "${productLoading?.productId}") { 
                 id
                 title
-                images(first: 20) {
+                images(first: 8) {
                   edges {
                     node {
                       id
@@ -126,7 +126,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               product(id: "${imageStartCursor?.productId}") {
                 id
                 title
-                images(last: 20, before: "${imageStartCursor?.imageStartCursor}") {
+                images(last: 8, before: "${imageStartCursor?.imageStartCursor}") {
                   edges {
                     node {
                       id
@@ -193,7 +193,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               product(id: "${imageEndCursor?.productId}") {
                 id
                 title
-                images(first: 20, after: "${imageEndCursor?.imageEndCursor}") {
+                images(first: 8, after: "${imageEndCursor?.imageEndCursor}") {
                   edges {
                     node {
                       id
@@ -354,7 +354,7 @@ export default function ProductDetailPage() {
       {/* <TitleBar title="产品详情" /> */}
       <ScrollNotice
         text={t(
-          "Welcome to our app! If you have any questions, feel free to email us at, and we will respond as soon as possible."
+          "Welcome to our app! If you have any questions, feel free to email us at, and we will respond as soon as possible.",
         )}
       />
       <Affix offsetTop={0}>
@@ -383,30 +383,22 @@ export default function ProductDetailPage() {
                 <Icon source={ArrowLeftIcon} tone="base" />
               </Button>
               <Title
+                level={2}
                 style={{
                   margin: "0",
-                  fontSize: "1.25rem",
+                  fontSize: "20px",
                   fontWeight: 700,
                 }}
               >
-                {t("Image List")}
+                {t("Translate product images")}
               </Title>
             </Flex>
-            {/* <div style={{ maxWidth: "200px" }}>
-              <Select
-                label={""}
-                value={selectedLocale}
-                // style={{ width: 120 }}
-                onChange={handleChange}
-                options={languageList}
-              />
-            </div> */}
           </Flex>
         </div>
       </Affix>
       <Layout>
         <Layout.Section>
-          <Title level={2}>
+          <Title level={4} style={{ fontSize: "16px",marginBottom:"16px" }}>
             {productImageData.length > 0 && productImageData[0].title}
           </Title>
           <div
@@ -414,7 +406,7 @@ export default function ProductDetailPage() {
               display: "grid",
               gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
               gap: "20px",
-              padding: "10px",
+              // padding: "10px",
             }}
           >
             {productLoading ? (
@@ -434,23 +426,42 @@ export default function ProductDetailPage() {
               </div>
             ) : productImageData.length > 0 ? (
               productImageData.map((item: any) => (
-                <Card
+                <div
                   key={item.key}
                   style={{
                     textAlign: "center",
                     display: "flex",
                     flexDirection: "column",
                     alignItems: "center",
+                    cursor: "pointer",
+                    transition: "all 0.3s ease",
+                    border: "1px solid #f0f0f0",
+                    borderRadius: "8px",
+                    padding: 0,
+                    backgroundColor: "#fff",
+                  }}
+                  onClick={() => handleSelect(item.imageId)}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = "translateY(-4px)";
+                    e.currentTarget.style.boxShadow =
+                      "0 6px 12px rgba(0,0,0,0.1)";
+                    // e.currentTarget.style.borderColor = "#1677ff";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = "translateY(0)";
+                    e.currentTarget.style.boxShadow = "none";
+                    e.currentTarget.style.borderColor = "#f0f0f0";
                   }}
                 >
                   <div
                     style={{
                       width: "100%",
                       aspectRatio: "1/1",
-                      borderRadius: "8px",
+                      borderRadius: "8px 8px 0 0",
                       overflow: "hidden",
                       backgroundColor: "#f7f7f7",
-                      marginBottom: "8px",
+                      marginBottom: "30px",
+                      padding: 0,
                     }}
                   >
                     <img
@@ -463,13 +474,15 @@ export default function ProductDetailPage() {
                       }}
                     />
                   </div>
-                  <Button
-                    type="default"
-                    onClick={() => handleSelect(item.imageId)}
-                  >
-                    Select
-                  </Button>
-                </Card>
+                  <div style={{ padding: "12px" }}>
+                    <Button
+                      type="default"
+                      onClick={() => handleSelect(item.imageId)}
+                    >
+                      {t("View translation")}
+                    </Button>
+                  </div>
+                </div>
               ))
             ) : (
               <div
@@ -489,7 +502,7 @@ export default function ProductDetailPage() {
 
           <div
             style={{
-              display: "flex",
+              display: `${imageHasNextPage ? "flex" : "none"}`,
               justifyContent: "center",
               marginTop: "16px",
             }}

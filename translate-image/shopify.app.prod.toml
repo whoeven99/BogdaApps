@@ -1,9 +1,9 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "df4ae6edd683114494f9fefef25752af"
+client_id = "b896c10abe3ca220b1efbc333ef41ad1"
 name = "Ciwi.ai: Image & Alt Translate"
 handle = "ciwi-image-translation"
-application_url = "https://bogdaapps.onrender.com"
+application_url = "https://translateimageprod.onrender.com"
 embedded = true
 
 [build]
@@ -14,9 +14,9 @@ scopes = "read_content,read_legal_policies,read_metaobjects,read_online_store_na
 optional_scopes = ["read_customer_events","write_pixels"]
 [auth]
 redirect_urls = [
-  "https://bogdaapps.onrender.com/auth/callback",
-  "https://bogdaapps.onrender.com/auth/shopify/callback",
-  "https://bogdaapps.onrender.com/api/auth/callback"
+  "https://translateimageprod.onrender.com/auth/callback",
+  "https://translateimageprod.onrender.com/auth/shopify/callback",
+  "https://translateimageprod.onrender.com/api/auth/callback"
 ]
   
 [webhooks]
