@@ -25,7 +25,7 @@ export default function Index() {
 
   const [productsStartCursor, setProductsStartCursor] = useState("");
   const [productsEndCursor, setProductsEndCursor] = useState("");
-
+  const [lastRequestCursor, setLastRequestCursor] = useState<any>(null);
   const [productImageData, setProductImageData] = useState<any>([]);
   const [tableDataLoading, setTableDataLoading] = useState(true);
 
@@ -46,6 +46,7 @@ export default function Index() {
   const [sortKey, setSortKey] = useState("CREATED_AT");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const didMountRef = useRef(false);
+  const [initialized, setInitialized] = useState(false);
   // const [lastPageCursorInfo, setLastPageCursorInfo] = useState<any>();
   const dispatch = useDispatch<AppDispatch>();
   const lastPageCursorInfo = useSelector(
@@ -136,10 +137,42 @@ export default function Index() {
     },
   ];
   useEffect(() => {
-    // loadFetcher.submit(
-    //   { loading: true, sortKey, reverse: sortOrder === "asc" ? false : true },
-    //   { method: "POST", action: "/app/management" },
-    // );
+    // console.log(lastPageCursorInfo);
+    const {
+      lastRequestCursor,
+      direction,
+      searchText,
+      activeKey,
+      sortOrder,
+      sortKey,
+      productsHasNextPage,
+      productsHasPreviousPage,
+      productsStartCursor,
+      productsEndCursor,
+    } = lastPageCursorInfo;
+    // console.log("执行数据初始化操作", lastPageCursorInfo);
+
+    setProductsHasNextPage(productsHasNextPage);
+    setProductsHasPreviousPage(productsHasPreviousPage);
+    setProductsStartCursor(productsStartCursor);
+    setProductsEndCursor(productsEndCursor);
+    setActiveKey(activeKey);
+    setSortOrder(sortOrder);
+    setSortKey(sortKey);
+    setSearchText(searchText);
+
+    const formData = new FormData();
+    formData.append(
+      direction === "next" ? "productEndCursor" : "productStartCursor",
+      JSON.stringify({
+        cursor: lastRequestCursor,
+        query: searchText,
+        status: activeKey,
+        sortKey,
+        reverse: sortOrder === "asc" ? false : true,
+      }),
+    );
+    loadFetcher.submit(formData, { method: "POST", action: "/app/management" });
     const languageFormData = new FormData();
     languageFormData.append("languageLoading", JSON.stringify({}));
     languageFetcher.submit(languageFormData, {
@@ -148,9 +181,22 @@ export default function Index() {
     });
   }, []);
   useEffect(() => {
+    // 页面加载完后再允许触发请求
+    setInitialized(true);
+  }, []);
+  useEffect(() => {
     if (loadFetcher.data) {
-      setMenuData(loadFetcher.data.menuData);
+      // console.log(loadFetcher.data);
 
+      setMenuData(loadFetcher.data.menuData);
+      // dispatch(
+      //   setLastPageCursorInfo({
+      //     productsHasNextPage: loadFetcher.data.productHasNextPage,
+      //     productsHasPreviousPage: loadFetcher.data.productHasPreviousPage,
+      //     productsStartCursor: loadFetcher.data.productStartCursor,
+      //     productsEndCursor: loadFetcher.data.productEndCursor,
+      //   }),
+      // );
       setSelectedKey(loadFetcher.data.menuData[0]?.key || "");
       setProductsHasNextPage(loadFetcher.data.productHasNextPage);
       setProductsHasPreviousPage(loadFetcher.data.productHasPreviousPage);
@@ -161,16 +207,7 @@ export default function Index() {
   }, [loadFetcher.data]);
   useEffect(() => {
     if (productsFetcher.data) {
-      console.log(productsFetcher.data);
-
-      // const { productEndCursor } = productsFetcher.data;
-      // setLastPageCursorInfo((pre: any) => ({
-      //   ...pre,
-      //   productsHasNextPage: productsFetcher.data.productHasNextPage,
-      //   productsHasPreviousPage: productsFetcher.data.productHasPreviousPage,
-      //   productsStartCursor: productsFetcher.data.productStartCursor,
-      //   productsEndCursor: productsFetcher.data.productEndCursor,
-      // }));
+      // console.log(productsFetcher.data);
       dispatch(
         setLastPageCursorInfo({
           productsHasNextPage: productsFetcher.data.productHasNextPage,
@@ -205,16 +242,16 @@ export default function Index() {
       }),
     );
   }, [searchText, activeKey, sortOrder, sortKey]);
-  useEffect(() => {
-    if (lastPageCursorInfo) {
-      console.log("变化：", lastPageCursorInfo);
+  // useEffect(() => {
+  //   if (lastPageCursorInfo) {
+  //     console.log("变化：", lastPageCursorInfo);
 
-      localStorage.setItem(
-        "pagination-cursor-store",
-        JSON.stringify(lastPageCursorInfo),
-      );
-    }
-  }, [lastPageCursorInfo]);
+  //     localStorage.setItem(
+  //       "pagination-cursor-store",
+  //       JSON.stringify(lastPageCursorInfo),
+  //     );
+  //   }
+  // }, [lastPageCursorInfo]);
   useEffect(() => {
     if (imageFetcher.data) {
       console.log("dsdqeqsa: ", imageFetcher.data);
@@ -223,18 +260,10 @@ export default function Index() {
     }
   }, [imageFetcher.data]);
 
-  // 对产品进行排序
-  useEffect(() => {
-    if (!didMountRef.current) {
-      // 第一次渲染，标记已挂载，然后直接返回
-      didMountRef.current = true;
-      return;
-    }
-    if (timeoutIdRef.current) {
-      clearTimeout(timeoutIdRef.current);
-    }
-    console.log("获取初始数据");
-
+  const handleSortProduct = (key: string, order: "asc" | "desc") => {
+    console.log(key, order);
+    setSortKey(key);
+    setSortOrder(order);
     // 延迟 1s 再执行请求
     timeoutIdRef.current = setTimeout(() => {
       productsFetcher.submit(
@@ -242,8 +271,9 @@ export default function Index() {
           productEndCursor: JSON.stringify({
             cursor: "",
             query: searchText,
-            sortKey: sortKey,
-            reverse: sortOrder === "asc" ? false : true,
+            sortKey: key,
+            status: activeKey,
+            reverse: order === "asc" ? false : true,
           }),
         },
         {
@@ -251,9 +281,16 @@ export default function Index() {
           action: "/app/management",
         },
       );
-    }, 500);
-  }, [sortKey, sortOrder]);
+    }, 100);
+  };
   const handlePreProductPage = () => {
+    dispatch(
+      setLastPageCursorInfo({
+        lastRequestCursor: productsStartCursor,
+        direction: "prev",
+      }),
+    );
+
     productsFetcher.submit(
       {
         productStartCursor: JSON.stringify({
@@ -271,6 +308,12 @@ export default function Index() {
     ); // 提交表单请求
   };
   const handleNextProductPage = () => {
+    dispatch(
+      setLastPageCursorInfo({
+        lastRequestCursor: productsEndCursor,
+        direction: "next",
+      }),
+    );
     console.log("下一页产品");
 
     productsFetcher.submit(
@@ -313,6 +356,7 @@ export default function Index() {
           productEndCursor: JSON.stringify({
             cursor: "",
             query: value,
+            status: activeKey,
             sortKey,
             reverse: sortOrder === "asc" ? false : true,
           }),
@@ -322,8 +366,9 @@ export default function Index() {
           action: "/app/management",
         },
       );
-    }, 500);
+    }, 100);
   };
+
   const handleChangeStatusTab = (key: string) => {
     setActiveKey(key);
     console.log(key);
@@ -391,19 +436,15 @@ export default function Index() {
                     <Icon source={SortIcon} tone="base" />
                   </Button> */}
                 <SortPopover
-                  onChange={(key, order) => {
-                    console.log(key, order);
-                    setSortKey(key);
-                    setSortOrder(order);
-                  }}
+                  onChange={(key, order) => handleSortProduct(key, order)}
                 />
-                <Button
+                {/* <Button
                   onClick={() => {
                     console.log(lastPageCursorInfo);
                   }}
                 >
                   输出信息
-                </Button>
+                </Button> */}
               </Flex>
             </Flex>
             {/* 搜索和排序行 */}

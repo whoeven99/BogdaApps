@@ -5,6 +5,8 @@ interface ProductPageCursorInfo {
   productsHasPreviousPage: boolean;
   productsStartCursor: string;
   productsEndCursor: string;
+  lastRequestCursor: string;
+  direction:string;
   searchText: string;
   activeKey: string;
   sortOrder: "asc" | "desc";
@@ -21,10 +23,12 @@ const initialState: ProductState = {
     productsHasPreviousPage: false,
     productsStartCursor: "",
     productsEndCursor: "",
+    lastRequestCursor: "",
+    direction:"",
     searchText: "",
-    activeKey: "",
+    activeKey: "ALL",
     sortOrder: "desc",
-    sortKey: "TITLE",
+    sortKey: "CREATED_AT",
   },
 };
 
@@ -32,7 +36,10 @@ const productSlice = createSlice({
   name: "product",
   initialState,
   reducers: {
-    setLastPageCursorInfo(state, action: PayloadAction<Partial<ProductPageCursorInfo>>) {
+    setLastPageCursorInfo(
+      state,
+      action: PayloadAction<Partial<ProductPageCursorInfo>>,
+    ) {
       state.lastPageCursorInfo = {
         ...state.lastPageCursorInfo,
         ...action.payload,
@@ -44,5 +51,6 @@ const productSlice = createSlice({
   },
 });
 
-export const { setLastPageCursorInfo, resetProductState } = productSlice.actions;
+export const { setLastPageCursorInfo, resetProductState } =
+  productSlice.actions;
 export default productSlice.reducer;

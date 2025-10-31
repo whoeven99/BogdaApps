@@ -87,7 +87,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const imageEndCursor: any = JSON.parse(
     formData.get("imageEndCursor") as string,
   );
-  
+
   try {
     const queryString = (productCursor: any) => {
       const { query, status } = productCursor || { query: "", status: "" };
@@ -106,6 +106,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     switch (true) {
       case !!loading:
         try {
+          console.log("loading: ", loading);
+          const {
+            lastRequestCursor,
+            direction,
+          } = loading;
           const loadData = await admin.graphql(
             `query products( $sortKey: ProductSortKeys, $reverse: Boolean){
             products(first: 10,sortKey: $sortKey, reverse: $reverse) {
@@ -237,7 +242,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             response: null,
           };
         }
-      
+
       case !!productStartCursor:
         try {
           console.log(productStartCursor);
@@ -1391,9 +1396,7 @@ export default function Index() {
     //   imageUrl: imageUrl,
     //   languageCode: selectedLanguage,
     // });
-
     // console.log("res", res);
-
     // if (res.success) {
     //   setDataResource(
     //     dataResource.map((item: any) => {
