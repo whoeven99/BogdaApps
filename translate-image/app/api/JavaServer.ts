@@ -475,7 +475,7 @@ export const GetUserWords = async ({
       url: `${server || process.env.SERVER_URL}/pcUsers/getPurchasePoints?shopName=${shop}`,
       method: "POST",
     });
-    console.log("GetUserWords: ", response.data);
+    // console.log("GetUserWords: ", response.data);
     return response.data;
   } catch (error) {
     console.error("Error GetUserWords:", error);

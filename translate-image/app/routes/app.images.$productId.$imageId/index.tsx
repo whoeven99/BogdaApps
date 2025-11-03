@@ -967,38 +967,40 @@ const ImageAltTextPage = () => {
                         </div>
                         <Flex
                           gap={10}
-                          align="center"
+                          align="flex-start"
                           style={{
                             width: "fit-content",
                             marginBottom: "8px",
                           }}
                         >
-                          <DeleteOutlined
-                            style={{
-                              display: `${img.imageAfterUrl || img.altAfterTranslation ? "block" : "none"}`,
-                            }}
-                            className="deleteIcon"
-                            onClick={() =>
-                              handleDelete(
-                                img.imageId,
-                                img.imageBeforeUrl,
-                                img.languageCode,
-                              )
-                            }
-                          />
-                          <Button
-                            block
-                            loading={
-                              translateLoadingImages[
-                                `${img.imageId}_${img.languageCode}`
-                              ] || false
-                            }
-                            onClick={() =>
-                              handleTranslate(img, img.languageCode)
-                            }
-                          >
-                            {t("Translate")}
-                          </Button>
+                          <Flex align="center" gap={10}>
+                            <DeleteOutlined
+                              style={{
+                                display: `${img.imageAfterUrl || img.altAfterTranslation ? "block" : "none"}`,
+                              }}
+                              className="deleteIcon"
+                              onClick={() =>
+                                handleDelete(
+                                  img.imageId,
+                                  img.imageBeforeUrl,
+                                  img.languageCode,
+                                )
+                              }
+                            />
+                            <Button
+                              block
+                              loading={
+                                translateLoadingImages[
+                                  `${img.imageId}_${img.languageCode}`
+                                ] || false
+                              }
+                              onClick={() =>
+                                handleTranslate(img, img.languageCode)
+                              }
+                            >
+                              {t("Translate")}
+                            </Button>
+                          </Flex>
 
                           <Upload
                             style={{ flex: "1" }}
