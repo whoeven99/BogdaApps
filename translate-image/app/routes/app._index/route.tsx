@@ -20,6 +20,7 @@ import { authenticate } from "~/shopify.server";
 import WelcomeCard from "./components/welcomeCard";
 import { QuotaCard } from "./components/quotaCard";
 import ImageTable from "./components/ImageTable";
+import ScrollNotice from "~/components/ScrollNotice";
 const { Title, Text } = Typography;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -62,9 +63,6 @@ const Index = () => {
   } = useLoaderData<typeof loader>();
   const { t } = useTranslation();
   const navigate = useNavigate();
-  // const { userConfigIsLoading, isNew } = useSelector(
-  //   (state: any) => state.userConfig,
-  // );
   const [isLoading, setIsLoading] = useState(true);
   const [switcherOpen, setSwitcherOpen] = useState(true);
   const [switcherLoading, setSwitcherLoading] = useState(true);
@@ -98,30 +96,19 @@ const Index = () => {
   }, []);
   useEffect(() => {
     if (themeFetcher.data) {
-      console.log(themeFetcher.data);
-
       const switcherData =
         themeFetcher.data.data.nodes[0].files.nodes[0]?.body?.content;
       const jsonString = switcherData.replace(/\/\*[\s\S]*?\*\//g, "").trim();
       const blocks = JSON.parse(jsonString).current?.blocks;
-      console.log(blocks);
-      console.log(ciwiSwitcherBlocksId);
-      
       if (blocks) {
         const switcherJson: any = Object.values(blocks).find(
           (block: any) => block.type === ciwiSwitcherBlocksId,
         );
-        console.log("switcherJson: ", switcherJson);
-
         if (switcherJson) {
           if (switcherJson.disabled) {
-            console.log("未开启");
-
             setSwitcherOpen(false);
             localStorage.setItem("switcherEnableCardOpen", "false");
           } else {
-            console.log("已开启");
-
             setSwitcherOpen(true);
             localStorage.setItem("switcherEnableCardOpen", "true");
           }
@@ -138,12 +125,11 @@ const Index = () => {
   return (
     <Page>
       <TitleBar title={t("Image & Alt Text Translation")} />
-      {/* <FreePlanCountdownCard /> */}
-      {/* <ScrollNotice
+      <ScrollNotice
         text={t(
-          "Welcome to our app! If you have any questions, feel free to email us at support@ciwi.ai, and we will respond as soon as possible."
+          "Welcome to our app! If you have any questions, feel free to email us at support@ciwi.ai, and we will respond as soon as possible.",
         )}
-      /> */}
+      />
       <Space
         direction="vertical"
         size="large"
@@ -153,17 +139,12 @@ const Index = () => {
         }}
       >
         <Space direction="vertical" size="middle" style={{ display: "flex" }}>
-          {/* <AnalyticsCard
-            isLoading={isLoading}
-          ></AnalyticsCard> */}
           <QuotaCard />
           <WelcomeCard
             switcherOpen={switcherOpen}
             blockUrl={blockUrl}
             shop={shop}
-            // handleReload={handleReload}
           />
-          {/* <ImageTranslation /> */}
           <ImageTable />
         </Space>
       </Space>

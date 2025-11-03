@@ -282,16 +282,7 @@ export const TranslateImage = async ({
     // console.log();
 
     console.log("imageTranslate Response", response.data);
-    if (response.data.success) {
-      return response.data;
-    } else {
-      return {
-        success: false,
-        errorCode: 10001,
-        errorMsg: "SERVER_ERROR",
-        response: [],
-      };
-    }
+    return response;
   } catch (error) {
     console.log("Error GetImageTranslate", error);
     return {

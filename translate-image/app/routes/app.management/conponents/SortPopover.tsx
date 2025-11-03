@@ -1,24 +1,25 @@
 import { useState, useEffect } from "react";
 import { Button, Popover, Radio, Divider, Space } from "antd";
 import { SortAscendingOutlined } from "@ant-design/icons";
-
+import { useTranslation } from "react-i18next";
 export default function SortPopover({
   onChange,
 }: {
   onChange?: (sortKey: string, sortOrder: "asc" | "desc") => void;
 }) {
+  const { t } = useTranslation();
   const [sortKey, setSortKey] = useState("CREATED_AT");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [open, setOpen] = useState(false);
 
   const sortOptions = [
-    { label: "产品标题", value: "TITLE" },
-    { label: "创建时间", value: "CREATED_AT" },
-    { label: "更新时间", value: "UPDATED_AT" },
-    { label: "库存", value: "INVENTORY" },
-    { label: "产品类型", value: "PRODUCT_TYPE" },
+    { label: "Product Title", value: "TITLE" },
+    { label: "Creation time", value: "CREATED_AT" },
+    { label: "Update time", value: "UPDATED_AT" },
+    { label: "Inventory", value: "INVENTORY" },
+    { label: "Product Type", value: "PRODUCT_TYPE" },
     // { label: "发布时间", value: "PUBLISHED_AT" },
-    { label: "厂商", value: "VENDOR" },
+    { label: "Manufacturers", value: "VENDOR" },
   ];
 
   const handleSortChange = (value: string) => {
@@ -35,7 +36,9 @@ export default function SortPopover({
 
   const content = (
     <div style={{ width: 200 }}>
-      <div style={{ fontWeight: 500, marginBottom: 8 }}>排序依据</div>
+      <div style={{ fontWeight: 500, marginBottom: 8 }}>
+        {t("Sorting criteria")}
+      </div>
       <Radio.Group
         onChange={(e) => handleSortChange(e.target.value)}
         value={sortKey}
@@ -43,7 +46,7 @@ export default function SortPopover({
       >
         {sortOptions.map((opt) => (
           <Radio key={opt.value} value={opt.value}>
-            {opt.label}
+            {t(opt.label)}
           </Radio>
         ))}
       </Radio.Group>
@@ -57,7 +60,7 @@ export default function SortPopover({
           onClick={() => handleOrderChange("asc")}
           block
         >
-          从旧到新
+          {t("From old to new")}
         </Button>
         <Button
           type={sortOrder === "desc" ? "primary" : "text"}
@@ -65,7 +68,7 @@ export default function SortPopover({
           onClick={() => handleOrderChange("desc")}
           block
         >
-          从新到旧
+          {t("From new to old")}
         </Button>
       </Space>
     </div>
