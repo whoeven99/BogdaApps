@@ -211,7 +211,7 @@ export const QuotaCard = () => {
           >
             <Flex align="center" gap={8}>
               <Title level={2} style={{ marginBottom: 0, fontSize: "20px" }}>
-                {t("Your translation quota")}
+                {t("Translation Quota")}
               </Title>
               <Popover
                 content={t("Permanent quotas · Never expire · Top up anytime.")}

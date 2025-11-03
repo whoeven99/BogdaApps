@@ -710,7 +710,7 @@ export const AddCharsByShopName = async ({
         accessToken,
       },
     });
-    console.log(`${shop} AddCharsByShopName:`, response.data);
+    console.log(`${shop} AddCharsByShopName ${amount}:`, response.data);
 
     return response.data;
   } catch (error) {
