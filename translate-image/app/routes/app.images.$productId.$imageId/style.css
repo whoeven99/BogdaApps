@@ -1,27 +1,32 @@
 .custom-upload .ant-upload-list {
-  display: block; /* 让列表占据块级区域 */
+  display: block; 
 }
 
-/* 使上传卡片占满宽度并保持固定高度 / 比例 */
 .custom-upload .ant-upload-select,
 .custom-upload .ant-upload-list-item,
 .custom-upload .ant-upload-list-item-container {
   width: 100% !important;
-  height: 300px !important; /* 或使用 aspect-ratio:1/1 */
+  height: 300px !important;
   overflow: hidden;
   border-radius: 8px;
 }
 
-/* 确保图片填满父容器 */
 .custom-upload .ant-upload-list-item img {
   width: 100% !important;
   height: 100% !important;
   object-fit: cover !important;
 }
 
-/* 防止 info/caption 覆盖图片（如果存在） */
 .custom-upload .ant-upload-list-item-info,
 .custom-upload .ant-upload-list-item-meta {
   position: static !important;
   background: transparent !important;
 }
+/* 
+.custom-upload .ant-upload-list-item-progress {
+  height: 6px !important; 
+  bottom: 8px !important; 
+} */
+ .deleteIcon:hover{
+    color: red;
+ }

@@ -42,92 +42,87 @@ export const QuotaCard = () => {
   const orderFetcher = useFetcher<any>();
   const { reportClick, report } = useReport();
   const { t } = useTranslation();
-  const { plan, updateTime, chars, totalChars, isNew } = useSelector(
-    (state: any) => state.userConfig,
-  );
+  const { chars, totalChars } = useSelector((state: any) => state.userConfig);
 
   const [isLoading, setIsLoading] = useState(true);
   const [addCreditsModalOpen, setAddCreditsModalOpen] = useState(false);
   const [selectedOptionKey, setSelectedOption] = useState<string>("option-1");
 
   const [buyButtonLoading, setBuyButtonLoading] = useState<boolean>(false);
-  const creditOptions: OptionType[] = useMemo(
-    () => [
-      {
-        key: "option-1",
-        name: "500K",
-        Credits: 500000,
-        price: {
-          comparedPrice: 3.99,
-          currencyCode: "USD",
-        },
+  const creditOptions: OptionType[] = [
+    {
+      key: "option-1",
+      name: "500K",
+      Credits: 500000,
+      price: {
+        comparedPrice: 3.99,
+        currencyCode: "USD",
       },
-      {
-        key: "option-2",
-        name: "1M",
-        Credits: 1000000,
-        price: {
-          comparedPrice: 7.99,
-          currencyCode: "USD",
-        },
+    },
+    {
+      key: "option-2",
+      name: "1M",
+      Credits: 1000000,
+      price: {
+        comparedPrice: 7.99,
+        currencyCode: "USD",
       },
-      {
-        key: "option-3",
-        name: "2M",
-        Credits: 2000000,
-        price: {
-          comparedPrice: 15.99,
-          currencyCode: "USD",
-        },
+    },
+    {
+      key: "option-3",
+      name: "2M",
+      Credits: 2000000,
+      price: {
+        comparedPrice: 15.99,
+        currencyCode: "USD",
       },
-      {
-        key: "option-4",
-        name: "3M",
-        Credits: 3000000,
-        price: {
-          comparedPrice: 23.99,
-          currencyCode: "USD",
-        },
+    },
+    {
+      key: "option-4",
+      name: "3M",
+      Credits: 3000000,
+      price: {
+        comparedPrice: 23.99,
+        currencyCode: "USD",
       },
-      {
-        key: "option-5",
-        name: "5M",
-        Credits: 5000000,
-        price: {
-          comparedPrice: 39.99,
-          currencyCode: "USD",
-        },
+    },
+    {
+      key: "option-5",
+      name: "5M",
+      Credits: 5000000,
+      price: {
+        comparedPrice: 39.99,
+        currencyCode: "USD",
       },
-      {
-        key: "option-6",
-        name: "10M",
-        Credits: 10000000,
-        price: {
-          comparedPrice: 79.99,
-          currencyCode: "USD",
-        },
+    },
+    {
+      key: "option-6",
+      name: "10M",
+      Credits: 10000000,
+      price: {
+        comparedPrice: 79.99,
+        currencyCode: "USD",
       },
-      {
-        key: "option-7",
-        name: "20M",
-        Credits: 20000000,
-        price: {
-          comparedPrice: 159.99,
-          currencyCode: "USD",
-        },
+    },
+    {
+      key: "option-7",
+      name: "20M",
+      Credits: 20000000,
+      price: {
+        comparedPrice: 159.99,
+        currencyCode: "USD",
       },
-      {
-        key: "option-8",
-        name: "30M",
-        Credits: 30000000,
-        price: {
-          comparedPrice: 239.99,
-          currencyCode: "USD",
-        },
+    },
+    {
+      key: "option-8",
+      name: "30M",
+      Credits: 30000000,
+      price: {
+        comparedPrice: 239.99,
+        currencyCode: "USD",
       },
-    ],
-    [plan],
-  );
+    },
+  ];
 
   const handlePay = () => {
     // setBuyButtonLoading(true);

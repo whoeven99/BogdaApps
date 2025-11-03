@@ -54,7 +54,7 @@ const WelcomeCard: React.FC<WelcomeCardProps> = ({
   return (
     <Card
       title={
-        <Flex align="center" gap={8}>
+        <Flex align="center" gap={10}>
           <h2 style={{ margin: 0, fontSize: "20px", fontWeight: 600 }}>
             {t("Image Translation Plugin")}
           </h2>
@@ -71,13 +71,6 @@ const WelcomeCard: React.FC<WelcomeCardProps> = ({
           padding: "0 24px 12px 24px",
         },
       }}
-      // extra={
-      //   <Button
-      //     icon={<RedoOutlined spin={loading} />}
-      //     type="link"
-      //     onClick={handleReload}
-      //   />
-      // }
     >
       <Flex vertical align="center" gap={8}>
         <Flex

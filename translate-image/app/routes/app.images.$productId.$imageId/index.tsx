@@ -30,6 +30,8 @@ import {
   SearchOutlined,
   PlusOutlined,
   LoadingOutlined,
+  DeleteOutlined,
+  ExclamationCircleOutlined,
 } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { ArrowLeftIcon, ImageIcon } from "@shopify/polaris-icons";
@@ -48,7 +50,8 @@ import {
 import ScrollNotice from "~/components/ScrollNotice";
 import axios from "axios";
 import "./style.css";
-const { Text, Title } = Typography;
+import { useSelector } from "react-redux";
+const { Text, Title, Paragraph } = Typography;
 const { TextArea } = Input;
 export const action = async ({ request }: ActionFunctionArgs) => {
   const adminAuthResult = await authenticate.admin(request);
@@ -194,7 +197,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             accessToken: accessToken as string,
             record,
           });
-          return json({ success: true, response });
+          return json({ response });
         } catch (error) {
           console.log("alt translate error action", error);
           return {
@@ -231,7 +234,7 @@ const ImageAltTextPage = () => {
   const imageLoadingFetcher = useFetcher<any>();
   const [pageLoading, setPageLoading] = useState<boolean>(true);
   const [confirmData, setConfirmData] = useState<any>([]);
-  const [fileList, setFileList] = useState<any[]>([]);
+  const [fileLists, setFileLists] = useState<Record<string, any[]>>({});
   const [saveLoading, setSaveLoading] = useState<boolean>(false);
   const [translatrImageactive, setTranslatrImageactive] = useState(false);
   const imageFetcher = useFetcher<any>();
@@ -250,6 +253,9 @@ const ImageAltTextPage = () => {
   const [currentAltImage, setCurrentAltImage] = useState<any>();
   const [previewVisible, setPreviewVisible] = useState(false);
   const [previewImage, setPreviewImage] = useState("");
+  const { chars, totalChars } = useSelector((state: any) => state.userConfig);
+  const [open, setOpen] = useState<boolean>(false);
+
   const languageMapping = {
     zh: [
       "en",
@@ -349,11 +355,52 @@ const ImageAltTextPage = () => {
           };
         }
       });
+      // const initLists = mergedList.reduce(
+      //   (acc, img) => {
+      //     acc[img.languageCode] = img.imageAfterUrl
+      //       ? [
+      //           {
+      //             uid: String(img.id),
+      //             name: `${img.language}.png`,
+      //             status: "done",
+      //             url: img.imageAfterUrl,
+      //           },
+      //         ]
+      //       : [];
+      //     return acc;
+      //   },
+      //   {} as Record<string, any[]>,
+      // );
+      // console.log("initLists: ", initLists);
+
+      // setFileLists(initLists);
       console.log("mergedList: ", mergedList);
 
       setImageDatas(mergedList);
     }
   }, [imageFetcher.data]);
+  useEffect(() => {
+    if (imageDatas?.length > 0) {
+      const initLists = imageDatas.reduce(
+        (acc: any, img: any) => {
+          acc[img.languageCode] = img.imageAfterUrl
+            ? [
+                {
+                  uid: String(img.id),
+                  name: `${img.language}.png`,
+                  status: "done",
+                  url: img.imageAfterUrl,
+                },
+              ]
+            : [];
+          return acc;
+        },
+        {} as Record<string, any[]>,
+      );
+
+      setFileLists(initLists);
+    }
+  }, [imageDatas]);
   // const handleImageTranslate = (record: any) => {
   //   console.log(record);
 
@@ -391,7 +438,6 @@ const ImageAltTextPage = () => {
     // }
     if (!languageMapping[languageCode]?.includes(languageCode)) {
       shopify.toast.show("当前语言不支持图片翻译");
-      return;
     } else {
       setTranslateLoadingImages((pre) => ({
         ...pre,
@@ -439,17 +485,6 @@ const ImageAltTextPage = () => {
             return item;
           }),
         );
-        // setProductImageData(
-        //   productImageData.map((item: any) => {
-        //     if (item.imageUrl === currentTranslatingImage.imageUrl) {
-        //       return {
-        //         ...item,
-        //         targetImageUrl: translateImageFetcher.data.response,
-        //       };
-        //     }
-        //     return item;
-        //   }),
-        // );
         const replaceTranslateImage = {
           productId: `gid://shopify/Product/${productId}`,
           imageAfterUrl: translateImageFetcher.data.response,
@@ -467,8 +502,9 @@ const ImageAltTextPage = () => {
         replaceTranslateImageFetcher.submit(formData, {
           method: "post",
         });
-      } else {
+      } else if (translateImageFetcher.data.success) {
         shopify.toast.show(t("Image translation failed"));
+        setOpen(true);
       }
     }
   }, [translateImageFetcher.data]);
@@ -488,8 +524,6 @@ const ImageAltTextPage = () => {
         ...pre,
         [`${imageId}_${languageCode}`]: true,
       }));
-
-      // setIsDeleteLoading(true);
       const res = await DeleteProductImageData({
         server: globalStore?.server || "",
         shopName: globalStore?.shop || "",
@@ -501,19 +535,6 @@ const ImageAltTextPage = () => {
       console.log("res", res);
 
       if (res.success) {
-        // setDataResource(
-        //   dataResource.map((item: any) => {
-        //     return item.map((image: any) => {
-        //       if (image.imageId === productId) {
-        //         image.targetImageUrl = "";
-        //       }
-        //       return image;
-        //     });
-        //   }),
-        // );
-        console.log(imageDatas);
-        console.log(currentTranslatingImage);
-
         setImageDatas(
           imageDatas.map((item: any) => {
             if (item.languageCode === languageCode) {
@@ -558,7 +579,7 @@ const ImageAltTextPage = () => {
         ...pre,
         [`${currentTranslatingImage.imageId}_${currentTranslatingImage.languageCode}`]: false,
       }));
-      if (altTranslateFetcher.data.success) {
+      if (altTranslateFetcher.data.response.success) {
         setConfirmData((prev: any) => {
           const exists = prev.find(
             (i: any) => i.languageCode === currentTranslatingImage.languageCode,
@@ -585,6 +606,13 @@ const ImageAltTextPage = () => {
             ];
           }
         });
+      } else if (
+        !altTranslateFetcher.data.response.success &&
+        altTranslateFetcher.data.response.errorMsg === "额度不够"
+      ) {
+        console.log("额度不足");
+
+        setOpen(true);
       }
     }
   }, [altTranslateFetcher.data]);
@@ -619,35 +647,15 @@ const ImageAltTextPage = () => {
   };
   // 上传或删除图片时更新 fileList
   const handleChangeImage = (info: any, languageCode: string) => {
-    // console.log("上传中...");
-    // console.log(info);
-
-    // // 只关心上传成功的情况
-    // if (info.file.status === "done") {
-    //   const response = info.file.response; // 后端返回的数据
-    //   const newUrl = response?.url || response; // 根据后端结构调整
-    //   setImageDatas((prev: any[]) =>
-    //     prev.map((item) =>
-    //       item.languageCode === languageCode
-    //         ? { ...item, imageAfterUrl: newUrl }
-    //         : item,
-    //     ),
-    //   );
-    //   setImageDatas((prev: any[]) => {
-    //     return prev.map((item) =>
-    //       item.languageCode === languageCode
-    //         ? {
-    //             ...item,
-    //             imageAfterUrl:
-    //               typeof newUrl === "string" ? newUrl : item.imageAfterUrl,
-    //           }
-    //         : item,
-    //     );
-    //   });
-
-    //   shopify.toast.show("Upload success!");
-    // }
-    if (info.file.status === "done") {
+    setFileLists((prev) => ({
+      ...prev,
+      [languageCode]: info.fileList, // ✅ 更新对应语言
+    }));
+    console.log("上传中...");
+    console.log(info);
+    if (info.file.status === "uploading") {
+      console.log("上传中....");
+    } else if (info.file.status === "done") {
       const response = info.file.response; // 后端返回的数据
       const newUrl =
         typeof response?.response?.imageAfterUrl === "string"
@@ -760,6 +768,10 @@ const ImageAltTextPage = () => {
       return;
     }
     // console.log(file);
+    setFileLists((prev) => ({
+      ...prev,
+      [img.languageCode]: [],
+    }));
     handleDelete(img.imageId, img.imageBeforeUrl, img.languageCode);
   };
   useEffect(() => {
@@ -824,6 +836,12 @@ const ImageAltTextPage = () => {
       console.log("312", languageList);
     }
   }, [languageFetcher.data]);
+  const onBuy = () => {
+    navigate("/app");
+  };
+  const onCancel = () => {
+    setOpen(false);
+  };
   return (
     <Page>
       {/* <TitleBar title="Image & Alt Text Translation" /> */}
@@ -909,7 +927,7 @@ const ImageAltTextPage = () => {
                     alignItems: "center",
                     border: "1px solid #f0f0f0",
                     borderRadius: "8px",
-                    padding: 0,
+                    padding: "10px",
                     backgroundColor: "#fff",
                   }}
                 >
@@ -991,7 +1009,7 @@ const ImageAltTextPage = () => {
                         align="center"
                         vertical
                         gap={10}
-                        style={{ width: "100%" }} // ✅ 占满宽度
+                        style={{ width: "100%", padding: "10px" }} // ✅ 占满宽度
                       >
                         <div
                           style={{
@@ -1011,57 +1029,21 @@ const ImageAltTextPage = () => {
                             action={`${globalStore?.server}/pcUserPic/insertPicToDbAndCloud`}
                             listType="picture-card"
                             className="custom-upload"
-                            fileList={
-                              img.imageAfterUrl
-                                ? [
-                                    {
-                                      uid: String(img.id),
-                                      name: `${img.language}.png`,
-                                      status: "done",
-                                      url: img.imageAfterUrl,
-                                    },
-                                  ]
-                                : []
-                            }
+                            // fileList={
+                            //   img.imageAfterUrl
+                            //     ? [
+                            //         {
+                            //           uid: String(img.id),
+                            //           name: `${img.language}.png`,
+                            //           status: "done",
+                            //           url: img.imageAfterUrl,
+                            //         },
+                            //       ]
+                            //     : []
+                            // }
+                            fileList={fileLists[img.languageCode] || []}
                             onChange={(info) => {
-                              // handleChangeImage(info, img.languageCode);
-                              // console.log("info: dsdsad", info);
-                              if (info.file.status === "done") {
-                                const response = info.file.response; // 后端返回的数据
-                                const newUrl =
-                                  typeof response?.response?.imageAfterUrl ===
-                                  "string"
-                                    ? response.response?.imageAfterUrl
-                                    : "";
-                                if (response?.success) {
-                                  setImageDatas((prev: any[]) => {
-                                    return prev.map((item) =>
-                                      item.languageCode === img.languageCode
-                                        ? {
-                                            ...item,
-                                            imageAfterUrl:
-                                              typeof newUrl === "string"
-                                                ? newUrl
-                                                : item.imageAfterUrl,
-                                          }
-                                        : item,
-                                    );
-                                  });
-                                  console.log(imageDatas);
-
-                                  shopify.toast.show(
-                                    `${info.file.name} ${t("Upload Success")}`,
-                                  );
-                                } else {
-                                  shopify.toast.show(
-                                    `${info.file.name} ${t("Upload Failed")}`,
-                                  );
-                                }
-                              } else if (info.file.status === "error") {
-                                shopify.toast.show(
-                                  `${info.file.name} ${t("Upload Failed")}`,
-                                );
-                              }
+                              handleChangeImage(info, img.languageCode);
                             }}
                             onPreview={() => handlePreview(img)}
                             onRemove={(info) => handleRemove(info, img)}
@@ -1126,15 +1108,26 @@ const ImageAltTextPage = () => {
                           />
                         </div>
                         <Flex
-                          vertical
-                          gap={8}
+                          gap={10}
                           align="center"
                           style={{
                             width: "fit-content",
-                            marginBottom: "16px",
-                            minHeight: "100px",
+                            marginBottom: "8px",
                           }}
                         >
+                          <DeleteOutlined
+                            style={{
+                              display: `${img.imageAfterUrl || img.altAfterTranslation ? "block" : "none"}`,
+                            }}
+                            className="deleteIcon"
+                            onClick={() =>
+                              handleDelete(
+                                img.imageId,
+                                img.imageBeforeUrl,
+                                img.languageCode,
+                              )
+                            }
+                          />
                           <Button
                             block
                             loading={
@@ -1208,7 +1201,10 @@ const ImageAltTextPage = () => {
                             })}
                             onChange={(info) => {
                               console.log("info", info);
-
+                              setFileLists((prev) => ({
+                                ...prev,
+                                [img.languageCode]: info.fileList, // ✅ 更新对应语言
+                              }));
                               if (info.file.status === "done") {
                                 const response = info.file.response; // 后端返回的数据
                                 const newUrl =
@@ -1252,7 +1248,7 @@ const ImageAltTextPage = () => {
                             </Button>
                           </Upload>
 
-                          <Button
+                          {/* <Button
                             block
                             style={{
                               display: `${img.imageAfterUrl ? "block" : "none"}`,
@@ -1272,7 +1268,7 @@ const ImageAltTextPage = () => {
                             }
                           >
                             {t("Delete")}
-                          </Button>
+                          </Button> */}
                         </Flex>
                       </Flex>
                     </div>
@@ -1297,6 +1293,45 @@ const ImageAltTextPage = () => {
               }}
               src={previewImage}
             />
+          </Modal>
+          <Modal
+            open={open}
+            title={null}
+            footer={null}
+            onCancel={onCancel}
+            centered
+            // bodyStyle={{ textAlign: "center", padding: "32px 24px" }}
+          >
+            <Space
+              direction="vertical"
+              size="middle"
+              style={{ width: "100%", textAlign: "center" }}
+            >
+              <ExclamationCircleOutlined
+                style={{ fontSize: 48, color: "#faad14" }}
+              />
+
+              <Typography.Title level={4} style={{ marginBottom: 0 }}>
+                翻译额度不足
+              </Typography.Title>
+
+              <Paragraph type="secondary" style={{ margin: 0 }}>
+                您当前的翻译额度已用完，请购买更多额度以继续使用翻译功能。
+              </Paragraph>
+
+              <Space
+                style={{
+                  marginTop: 24,
+                  display: "flex",
+                  justifyContent: "center",
+                }}
+              >
+                <Button onClick={onCancel}>取消</Button>
+                <Button type="primary" onClick={onBuy}>
+                  购买额度
+                </Button>
+              </Space>
+            </Space>
           </Modal>
         </Layout.Section>
       </Layout>
