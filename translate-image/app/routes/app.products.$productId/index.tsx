@@ -344,9 +344,7 @@ export default function ProductDetailPage() {
     }
   }, [imageFetcher.data]);
   const handleSelect = (id: string) => {
-    console.log(id);
     const imageId = id.split("/").pop();
-    // setSelectedKey(imageId);
     navigate(`/app/images/${productId}/${imageId}`);
   };
   return (
