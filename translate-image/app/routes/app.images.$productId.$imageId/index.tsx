@@ -22,6 +22,7 @@ import {
   Space,
   Upload,
   Col,
+  Modal,
 } from "antd";
 import { TitleBar, useAppBridge, SaveBar } from "@shopify/app-bridge-react";
 import {
@@ -29,6 +30,8 @@ import {
   SearchOutlined,
   PlusOutlined,
   LoadingOutlined,
+  DeleteOutlined,
+  ExclamationCircleOutlined,
 } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { ArrowLeftIcon, ImageIcon } from "@shopify/polaris-icons";
@@ -46,7 +49,9 @@ import {
 } from "~/api/JavaServer";
 import ScrollNotice from "~/components/ScrollNotice";
 import axios from "axios";
-const { Text, Title } = Typography;
+import "./style.css";
+import { useSelector } from "react-redux";
+const { Text, Title, Paragraph } = Typography;
 const { TextArea } = Input;
 export const action = async ({ request }: ActionFunctionArgs) => {
   const adminAuthResult = await authenticate.admin(request);
@@ -67,7 +72,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     switch (true) {
       case !!imageLoading:
         try {
-          console.log("sddwew: ", imageLoading.imageId);
           const loadData = await admin.graphql(
             `query {
               product(id: "${imageLoading?.productId}") { 
@@ -92,10 +96,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             }`,
           );
           const response = await loadData.json();
-          console.log(
-            "productLoading: ",
-            response?.data?.product?.images?.edges,
-          );
           let imageData = {};
           if (response?.data?.product?.images?.edges.length > 0) {
             response?.data?.product?.images?.edges.forEach((item: any) => {
@@ -128,13 +128,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
       case !!imagesFetcher:
         try {
-          console.log("imagesFetcher: ", imagesFetcher);
           const imageId = `gid://shopify/ProductImage/${imagesFetcher.imageId}`;
           const response = await getProductAllLanguageImagesData({
             shop,
             imageId,
           });
-          console.log("productImage11: ", response);
           return response;
         } catch (error) {
           console.error("Error action imagesFetcher productImage:", error);
@@ -146,17 +144,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         try {
           const { sourceLanguage, targetLanguage, imageUrl, imageId } =
             translateImage;
-          console.log("translateImage: ", translateImage);
-          console.log("accessToken: ", accessToken);
-
-          const response = await TranslateImage({
+          const response = (await TranslateImage({
             shop,
             imageUrl,
             sourceCode: sourceLanguage,
             targetCode: targetLanguage,
             accessToken: accessToken as string,
-          });
-          return response;
+          })) as any;
+          return response.data;
         } catch (error) {
           console.log("Error getImageTranslate", error);
           return {
@@ -192,7 +187,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             accessToken: accessToken as string,
             record,
           });
-          return json({ success: true, response });
+          return json({ response });
         } catch (error) {
           console.log("alt translate error action", error);
           return {
@@ -229,7 +224,7 @@ const ImageAltTextPage = () => {
   const imageLoadingFetcher = useFetcher<any>();
   const [pageLoading, setPageLoading] = useState<boolean>(true);
   const [confirmData, setConfirmData] = useState<any>([]);
-  const [fileList, setFileList] = useState<any[]>([]);
+  const [fileLists, setFileLists] = useState<Record<string, any[]>>({});
   const [saveLoading, setSaveLoading] = useState<boolean>(false);
   const [translatrImageactive, setTranslatrImageactive] = useState(false);
   const imageFetcher = useFetcher<any>();
@@ -246,7 +241,49 @@ const ImageAltTextPage = () => {
   >({});
   const altTranslateFetcher = useFetcher<any>();
   const [currentAltImage, setCurrentAltImage] = useState<any>();
+  const [previewVisible, setPreviewVisible] = useState(false);
+  const [previewImage, setPreviewImage] = useState("");
+  const { chars, totalChars } = useSelector((state: any) => state.userConfig);
+  const [open, setOpen] = useState<boolean>(false);
 
+  const languageMapping = {
+    zh: [
+      "en",
+      "ru",
+      "es",
+      "fr",
+      "de",
+      "it",
+      "nl",
+      "pt",
+      "vi",
+      "tr",
+      "ms",
+      "zh-tw",
+      "th",
+      "pl",
+      "id",
+      "ja",
+      "ko",
+    ],
+    en: [
+      "zh",
+      "ru",
+      "es",
+      "fr",
+      "de",
+      "it",
+      "pt",
+      "vi",
+      "tr",
+      "ms",
+      "th",
+      "pl",
+      "id",
+      "ja",
+      "ko",
+    ],
+  } as any;
   const handleNavigate = () => {
     if (confirmData.length > 0) {
       shopify.saveBar.leaveConfirmation();
@@ -255,10 +292,10 @@ const ImageAltTextPage = () => {
       navigate(`/app/products/${productId}`);
     }
   };
-  const handleChange = (value: string) => {
-    setSelectedLocale(value);
-    console.log(`selected ${value}`);
-    // navigate(`/app/management?language=${value}`);
+  // 关闭弹窗
+  const handleCancel = () => {
+    setPreviewVisible(false);
+    setPreviewImage("");
   };
   useEffect(() => {
     imageFetcher.submit(
@@ -268,13 +305,6 @@ const ImageAltTextPage = () => {
   }, []);
   useEffect(() => {
     if (imageFetcher.data) {
-      console.log("imageFetcher.data: ", imageFetcher.data);
-      console.log(
-        "languageList: ",
-        languageList,
-        "productImageData: ",
-        productImageData,
-      );
       // 后端返回的数据数组
       const fetchedList = imageFetcher.data.response || [];
       const mergedList = languageList.map((lang) => {
@@ -303,56 +333,55 @@ const ImageAltTextPage = () => {
           };
         }
       });
-      console.log("mergedList: ", mergedList);
-
       setImageDatas(mergedList);
     }
   }, [imageFetcher.data]);
-  // const handleImageTranslate = (record: any) => {
-  //   console.log(record);
-
-  //   let mappedLanguage =
-  //     selectedLanguage === "zh-CN"
-  //       ? "zh"
-  //       : selectedLanguage === "zh-TW"
-  //         ? "zh-tw"
-  //         : selectedLanguage;
-  //   if (selectedLanguage === "pt-BR" || selectedLanguage === "pt-PT") {
-  //     mappedLanguage = "pt";
-  //   }
-  //   if (
-  //     !languageMapping["en"].includes(mappedLanguage) &&
-  //     !languageMapping["zh"].includes(mappedLanguage)
-  //   ) {
-  //     shopify.toast.show(
-  //       t("The current language does not support image translation"),
-  //     );
-  //     return;
-  //   }
-  //   setTranslateImageactive(true);
-  //   setCurrentTranslatingImage(record);
-  // };
+  useEffect(() => {
+    if (imageDatas?.length > 0) {
+      const initLists = imageDatas.reduce(
+        (acc: any, img: any) => {
+          acc[img.languageCode] = img.imageAfterUrl
+            ? [
+                {
+                  uid: String(img.id),
+                  name: `${img.language}.png`,
+                  status: "done",
+                  url: img.imageAfterUrl,
+                },
+              ]
+            : [];
+          return acc;
+        },
+        {} as Record<string, any[]>,
+      );
+      setFileLists(initLists);
+    }
+  }, [imageDatas]);
   // 图片翻译
   const handleTranslate = async (record: any, languageCode: string) => {
-    console.log(record);
     setCurrentTranslatingImage(record);
-    setTranslateLoadingImages((pre) => ({
-      ...pre,
-      [`${record.imageId}_${record.languageCode}`]: true,
-    }));
-    console.log(defaultLanguageData?.locale, languageCode);
+    if (!languageMapping[languageCode]?.includes(languageCode)) {
+      shopify.toast.show(
+        t("Image translation is not supported in the current language."),
+      );
+    } else {
+      setTranslateLoadingImages((pre) => ({
+        ...pre,
+        [`${record.imageId}_${record.languageCode}`]: true,
+      }));
+      translateImageFetcher.submit(
+        {
+          translateImage: JSON.stringify({
+            sourceLanguage: defaultLanguageData?.locale,
+            targetLanguage: languageCode,
+            imageUrl: record?.imageBeforeUrl,
+            imageId: record?.productId,
+          }),
+        },
+        { method: "post" },
+      );
+    }
 
-    translateImageFetcher.submit(
-      {
-        translateImage: JSON.stringify({
-          sourceLanguage: defaultLanguageData?.locale,
-          targetLanguage: languageCode,
-          imageUrl: record?.imageBeforeUrl,
-          imageId: record?.productId,
-        }),
-      },
-      { method: "post" },
-    );
     const formData = new FormData();
     formData.append("altTranslateFetcher", JSON.stringify({ record }));
     altTranslateFetcher.submit(formData, { method: "post" });
@@ -360,9 +389,6 @@ const ImageAltTextPage = () => {
   };
   useEffect(() => {
     if (translateImageFetcher.data) {
-      console.log("sdasdada: ", translateImageFetcher.data);
-      console.log(currentTranslatingImage);
-
       setTranslateLoadingImages((pre) => ({
         ...pre,
         [`${currentTranslatingImage.imageId}_${currentTranslatingImage.languageCode}`]: false,
@@ -380,17 +406,6 @@ const ImageAltTextPage = () => {
             return item;
           }),
         );
-        // setProductImageData(
-        //   productImageData.map((item: any) => {
-        //     if (item.imageUrl === currentTranslatingImage.imageUrl) {
-        //       return {
-        //         ...item,
-        //         targetImageUrl: translateImageFetcher.data.response,
-        //       };
-        //     }
-        //     return item;
-        //   }),
-        // );
         const replaceTranslateImage = {
           productId: `gid://shopify/Product/${productId}`,
           imageAfterUrl: translateImageFetcher.data.response,
@@ -398,8 +413,6 @@ const ImageAltTextPage = () => {
           imageBeforeUrl: currentTranslatingImage.imageBeforeUrl,
           languageCode: currentTranslatingImage.languageCode,
         };
-        console.log("替换图片参数：", replaceTranslateImage);
-
         const formData = new FormData();
         formData.append(
           "replaceTranslateImage",
@@ -408,29 +421,25 @@ const ImageAltTextPage = () => {
         replaceTranslateImageFetcher.submit(formData, {
           method: "post",
         });
-      } else {
+      } else if (
+        !translateImageFetcher.data.success &&
+        translateImageFetcher.data.errorMsg === "额度不够"
+      ) {
         shopify.toast.show(t("Image translation failed"));
+        setOpen(true);
       }
     }
   }, [translateImageFetcher.data]);
-  useEffect(() => {
-    if (replaceTranslateImageFetcher.data) {
-      console.log(replaceTranslateImageFetcher.data);
-    }
-  }, [replaceTranslateImageFetcher.data]);
   const handleDelete = async (
     imageId: string,
     imageUrl: string,
     languageCode: string,
   ) => {
     try {
-      console.log(productId, imageUrl, languageCode);
       setDeleteLoadingImages((pre) => ({
         ...pre,
         [`${imageId}_${languageCode}`]: true,
       }));
-
-      // setIsDeleteLoading(true);
       const res = await DeleteProductImageData({
         server: globalStore?.server || "",
         shopName: globalStore?.shop || "",
@@ -439,26 +448,12 @@ const ImageAltTextPage = () => {
         languageCode: languageCode,
       });
 
-      console.log("res", res);
-
       if (res.success) {
-        // setDataResource(
-        //   dataResource.map((item: any) => {
-        //     return item.map((image: any) => {
-        //       if (image.imageId === productId) {
-        //         image.targetImageUrl = "";
-        //       }
-        //       return image;
-        //     });
-        //   }),
-        // );
-        console.log(imageDatas);
-        console.log(currentTranslatingImage);
-
         setImageDatas(
           imageDatas.map((item: any) => {
             if (item.languageCode === languageCode) {
               item.imageAfterUrl = "";
+              item.altAfterTranslation = "";
             }
             return item;
           }),
@@ -475,30 +470,13 @@ const ImageAltTextPage = () => {
       console.log("delete image error", error);
     }
   };
-  const handleTranslateAlt = async (img: any) => {
-    setCurrentAltImage(img);
-    console.log(img);
-
-    console.log(
-      `从当前语言${defaultLanguageData.locale}翻译成${img.languageCode}`,
-    );
-    setAltTranslateLoadingImages((pre) => ({
-      ...pre,
-      [`${img.imageId}_${img.languageCode}`]: true,
-    }));
-    console.log(img);
-    const formData = new FormData();
-    formData.append("altTranslateFetcher", JSON.stringify({ img }));
-    altTranslateFetcher.submit(formData, { method: "post" });
-  };
   useEffect(() => {
     if (altTranslateFetcher.data) {
-      console.log(altTranslateFetcher.data);
       setAltTranslateLoadingImages((pre) => ({
         ...pre,
         [`${currentTranslatingImage.imageId}_${currentTranslatingImage.languageCode}`]: false,
       }));
-      if (altTranslateFetcher.data.success) {
+      if (altTranslateFetcher.data.response.success) {
         setConfirmData((prev: any) => {
           const exists = prev.find(
             (i: any) => i.languageCode === currentTranslatingImage.languageCode,
@@ -525,6 +503,11 @@ const ImageAltTextPage = () => {
             ];
           }
         });
+      } else if (
+        !altTranslateFetcher.data.response.success &&
+        altTranslateFetcher.data.response.errorMsg === "额度不够"
+      ) {
+        setOpen(true);
       }
     }
   }, [altTranslateFetcher.data]);
@@ -536,8 +519,6 @@ const ImageAltTextPage = () => {
     languageCode: string,
     value: string,
   ) => {
-    console.log("value 修改的值： ", value);
-
     setConfirmData((prevData: any) => {
       const existingItemIndex = prevData.findIndex(
         (item: any) => item.languageCode === languageCode,
@@ -559,34 +540,10 @@ const ImageAltTextPage = () => {
   };
   // 上传或删除图片时更新 fileList
   const handleChangeImage = (info: any, languageCode: string) => {
-    // console.log("上传中...");
-    // console.log(info);
-
-    // // 只关心上传成功的情况
-    // if (info.file.status === "done") {
-    //   const response = info.file.response; // 后端返回的数据
-    //   const newUrl = response?.url || response; // 根据后端结构调整
-    //   setImageDatas((prev: any[]) =>
-    //     prev.map((item) =>
-    //       item.languageCode === languageCode
-    //         ? { ...item, imageAfterUrl: newUrl }
-    //         : item,
-    //     ),
-    //   );
-    //   setImageDatas((prev: any[]) => {
-    //     return prev.map((item) =>
-    //       item.languageCode === languageCode
-    //         ? {
-    //             ...item,
-    //             imageAfterUrl:
-    //               typeof newUrl === "string" ? newUrl : item.imageAfterUrl,
-    //           }
-    //         : item,
-    //     );
-    //   });
-
-    //   shopify.toast.show("Upload success!");
-    // }
+    setFileLists((prev) => ({
+      ...prev,
+      [languageCode]: info.fileList, // ✅ 更新对应语言
+    }));
     if (info.file.status === "done") {
       const response = info.file.response; // 后端返回的数据
       const newUrl =
@@ -605,8 +562,6 @@ const ImageAltTextPage = () => {
               : item,
           );
         });
-        console.log(imageDatas);
-
         shopify.toast.show(`${info.file.name} ${t("Upload Success")}`);
       } else {
         shopify.toast.show(`${info.file.name} ${t("Upload Failed")}`);
@@ -646,8 +601,6 @@ const ImageAltTextPage = () => {
         shopify.toast.show(t("Some items saved failed"));
       }
     } catch (error) {
-      console.log(error);
-
       shopify.saveBar.hide("save-bar");
       shopify.toast.show(t("Some items saved failed"));
     } finally {
@@ -667,7 +620,6 @@ const ImageAltTextPage = () => {
       );
 
       setConfirmData([]);
-      // setTimeout(() => setConfirmData([]), 0);
       shopify.saveBar.hide("save-bar");
       setSaveLoading(false);
     }
@@ -677,8 +629,6 @@ const ImageAltTextPage = () => {
     shopify.saveBar.hide("save-bar");
   };
   useEffect(() => {
-    console.log("confirmData: ", confirmData);
-
     if (confirmData.length > 0) {
       shopify.saveBar.show("save-bar");
     } else {
@@ -686,17 +636,16 @@ const ImageAltTextPage = () => {
     }
   }, [confirmData]);
   // 图片预览
-  const handlePreview = async (file: any) => {
-    window.open(file.url || file.thumbUrl, "_blank");
+  const handlePreview = async (img: any) => {
+    setPreviewImage(img.imageAfterUrl);
+    setPreviewVisible(true);
   };
   // 删除图片
   const handleRemove = async (info: any, img: any) => {
-    console.log(img);
-    if (!img.imageAfterUrl) {
-      shopify.toast.show("错误操作");
-      return;
-    }
-    // console.log(file);
+    setFileLists((prev) => ({
+      ...prev,
+      [img.languageCode]: [],
+    }));
     handleDelete(img.imageId, img.imageBeforeUrl, img.languageCode);
   };
   useEffect(() => {
@@ -714,16 +663,7 @@ const ImageAltTextPage = () => {
   }, []);
   useEffect(() => {
     if (imageLoadingFetcher.data) {
-      console.log("imageLoadingFetcher.data: ", imageLoadingFetcher.data);
       setProductImageData(imageLoadingFetcher.data.imageData);
-      // setFileList([
-      //   {
-      //     uid: "-1", // 唯一 id
-      //     name: "image.png",
-      //     status: "done", // 已上传状态
-      //     url: imageLoadingFetcher.data.imageData.imageUrl, // 直接展示已有图片
-      //   },
-      // ]);
       setPageLoading(false);
     }
   }, [imageLoadingFetcher.data]);
@@ -737,11 +677,8 @@ const ImageAltTextPage = () => {
   }, []);
   useEffect(() => {
     if (languageFetcher.data) {
-      console.log(languageFetcher.data);
       languageFetcher.data.response.forEach((lan: any) => {
         if (lan.primary) {
-          console.log("lan: ", lan);
-
           setDefaultLanguageData(lan);
         }
       });
@@ -758,12 +695,16 @@ const ImageAltTextPage = () => {
           })
           .filter(Boolean),
       );
-      console.log("312", languageList);
     }
   }, [languageFetcher.data]);
+  const onBuy = () => {
+    navigate("/app");
+  };
+  const onCancel = () => {
+    setOpen(false);
+  };
   return (
     <Page>
-      {/* <TitleBar title="Image & Alt Text Translation" /> */}
       <ScrollNotice
         text={t(
           "Welcome to our app! If you have any questions, feel free to email us at, and we will respond as soon as possible.",
@@ -846,7 +787,7 @@ const ImageAltTextPage = () => {
                     alignItems: "center",
                     border: "1px solid #f0f0f0",
                     borderRadius: "8px",
-                    padding: 0,
+                    padding: "10px",
                     backgroundColor: "#fff",
                   }}
                 >
@@ -909,14 +850,17 @@ const ImageAltTextPage = () => {
                   >
                     <Text style={{ fontSize: "14px" }}>
                       {img.language}
-                      {img.published ? "（已发布）" : "（未发布）"}
+                      {img.published ? t("(Published)") : t("(Not released)")}
                     </Text>
-                    <Card
+                    <div
                       style={{
                         width: "100%",
                         borderRadius: 12,
                         boxShadow: "0 2px 6px rgba(0,0,0,0.05)",
                         flex: "1",
+                        // borderRadius: "8px",
+                        padding: 0,
+                        backgroundColor: "#fff",
                       }}
                     >
                       {/* 表头 */}
@@ -925,421 +869,327 @@ const ImageAltTextPage = () => {
                         align="center"
                         vertical
                         gap={10}
+                        style={{ width: "100%", padding: "10px" }} // ✅ 占满宽度
                       >
-                        {/* <Upload
-                          action={`${globalStore?.server}/picture/insertPictureToDbAndCloud`}
-                          listType="picture-card"
-                          fileList={
-                            img.imageAfterUrl
-                              ? [
-                                  {
-                                    uid: String(img.id),
-                                    name: `${img.language}.png`,
-                                    status: "done",
-                                    url: img.imageAfterUrl,
-                                  },
-                                ]
-                              :  []
-                          }
-                          onChange={(info) =>
-                            handleChangeImage(info, img.languageCode)
-                          }
-                          onPreview={handlePreview}
-                          onRemove={(info) => handleRemove(info, img)}
-                          maxCount={1}
-                          beforeUpload={(file) => {
-                            const isImage = file.type.startsWith("image/");
-                            if (!isImage) {
-                              shopify.toast.show("Only images can be uploaded");
-                            }
-                            return isImage;
+                        <div
+                          style={{
+                            width: "100%",
+                            aspectRatio: "1/1",
+                            borderRadius: "8px 8px 0 0",
+
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "8x",
+                            justifyContent: "center",
                           }}
-                          data={(file) => ({
-                            shopName: globalStore?.shop,
-                            file,
-                            userPicturesDoJson: JSON.stringify({
-                              shopName: globalStore?.shop,
-                              imageId: img.imageId,
-                              imageBeforeUrl: img.imageBeforeUrl,
-                              altBeforeTranslation: img.altBeforeTranslation,
-                              altAfterTranslation: img.altAfterTranslation,
-                              languageCode: img.languageCode,
-                            }),
-                          })}
                         >
-                          {!img.imageAfterUrl && !img.imageBeforeUrl && (
-                            <div>
-                              <PlusOutlined />
-                              <div style={{ marginTop: 8 }}>Upload</div>
-                            </div>
-                          )}
-                        </Upload> */}
-
-                        <Upload
-                          name="file"
-                          accept="image/*"
-                          action={`${globalStore?.server}/pcUserPic/insertPicToDbAndCloud`}
-                          listType="picture-card"
-                          fileList={
-                            img.imageAfterUrl
-                              ? [
-                                  {
-                                    uid: String(img.id),
-                                    name: `${img.language}.png`,
-                                    status: "done",
-                                    url: img.imageAfterUrl,
-                                  },
-                                ]
-                              : []
-                          }
-                          onChange={(info) => {
-                            // handleChangeImage(info, img.languageCode);
-                            // console.log("info: dsdsad", info);
-                            if (info.file.status === "done") {
-                              const response = info.file.response; // 后端返回的数据
-                              const newUrl =
-                                typeof response?.response?.imageAfterUrl ===
-                                "string"
-                                  ? response.response?.imageAfterUrl
-                                  : "";
-                              if (response?.success) {
-                                setImageDatas((prev: any[]) => {
-                                  return prev.map((item) =>
-                                    item.languageCode === img.languageCode
-                                      ? {
-                                          ...item,
-                                          imageAfterUrl:
-                                            typeof newUrl === "string"
-                                              ? newUrl
-                                              : item.imageAfterUrl,
-                                        }
-                                      : item,
-                                  );
-                                });
-                                console.log(imageDatas);
-
+                          <Upload
+                            name="file"
+                            accept="image/*"
+                            style={{ margin: "auto" }}
+                            action={`${globalStore?.server}/pcUserPic/insertPicToDbAndCloud`}
+                            listType="picture-card"
+                            // className="custom-upload"
+                            className={`upload-box ${
+                              fileLists[img.languageCode]?.some(
+                                (f) => f.status === "done",
+                              )
+                                ? "custom-upload"
+                                : ""
+                            }`}
+                            fileList={fileLists[img.languageCode] || []}
+                            onChange={(info) => {
+                              handleChangeImage(info, img.languageCode);
+                            }}
+                            onPreview={() => handlePreview(img)}
+                            onRemove={(info) => handleRemove(info, img)}
+                            maxCount={1}
+                            beforeUpload={(file) => {
+                              const isImage = file.type.startsWith("image/");
+                              if (!isImage) {
                                 shopify.toast.show(
-                                  `${info.file.name} ${t("Upload Success")}`,
-                                );
-                              } else {
-                                shopify.toast.show(
-                                  `${info.file.name} ${t("Upload Failed")}`,
+                                  "Only images can be uploaded",
                                 );
                               }
-                            } else if (info.file.status === "error") {
-                              shopify.toast.show(
-                                `${info.file.name} ${t("Upload Failed")}`,
-                              );
-                            }
-                          }}
-                          onPreview={handlePreview}
-                          onRemove={(info) => handleRemove(info, img)}
-                          maxCount={1}
-                          beforeUpload={(file) => {
-                            const isImage = file.type.startsWith("image/");
-                            if (!isImage) {
-                              shopify.toast.show("Only images can be uploaded");
-                            }
-                            return isImage;
-                          }}
-                          data={(file) => ({
-                            shopName: globalStore?.shop,
-                            file,
-                            userPicturesDoJson: JSON.stringify({
+                              return isImage;
+                            }}
+                            data={(file) => ({
                               shopName: globalStore?.shop,
-                              imageId: img.imageId,
-                              productId: `gid://shopify/Product/${productId}`,
-                              imageBeforeUrl: img.imageBeforeUrl,
-                              altBeforeTranslation: img.altBeforeTranslation,
-                              altAfterTranslation: img.altAfterTranslation,
-                              languageCode: img.languageCode,
-                            }),
-                          })}
-                          showUploadList={{
-                            showPreviewIcon: true,
-                            showRemoveIcon: true,
+                              file,
+                              userPicturesDoJson: JSON.stringify({
+                                shopName: globalStore?.shop,
+                                imageId: img.imageId,
+                                productId: `gid://shopify/Product/${productId}`,
+                                imageBeforeUrl: img.imageBeforeUrl,
+                                altBeforeTranslation: img.altBeforeTranslation,
+                                altAfterTranslation: img.altAfterTranslation,
+                                languageCode: img.languageCode,
+                              }),
+                            })}
+                            showUploadList={{
+                              showPreviewIcon: true,
+                              showRemoveIcon: true,
+                            }}
+                            // style={{
+                            //   width: "100%",
+                            // }}
+                          >
+                            {!img.imageAfterUrl && (
+                              <div>
+                                <PlusOutlined />
+                                <div style={{ marginTop: 8 }}>Upload</div>
+                              </div>
+                            )}
+                          </Upload>
+
+                          <TextArea
+                            style={{ margin: "16px 0" }}
+                            value={
+                              confirmData.find(
+                                (i: any) => i.languageCode === img.languageCode,
+                              )?.value ?? img.altAfterTranslation
+                            }
+                            onChange={(e) =>
+                              handleInputChange(
+                                img.imageId,
+                                img.imageId,
+                                img.imageBeforeUrl,
+                                img.altBeforeTranslation,
+                                img.languageCode,
+                                e.target.value,
+                              )
+                            }
+                            placeholder={t(
+                              "Enter the image to be modified (Alt)",
+                            )}
+                            autoSize={{ minRows: 5, maxRows: 5 }}
+                          />
+                        </div>
+                        <Flex
+                          gap={10}
+                          align="center"
+                          style={{
+                            width: "fit-content",
+                            marginBottom: "8px",
                           }}
                         >
-                          {!img.imageAfterUrl && (
-                            <div>
-                              <PlusOutlined />
-                              <div style={{ marginTop: 8 }}>Upload</div>
-                            </div>
-                          )}
-                        </Upload>
-                        {/* <Upload
-                          name="file" // ✅ 一定要加上
-                          accept="image/*"
-                          action={`${globalStore?.server}/pcUserPic/insertPicToDbAndCloud`}
-                          listType="picture-card"
-                          fileList={
-                            img.imageAfterUrl
-                              ? [
-                                  {
-                                    uid: String(img.id),
-                                    name: `${img.language}.png`,
-                                    status: "done",
-                                    url: img.imageAfterUrl,
-                                  },
-                                ]
-                              : []
-                          }
-                          onChange={(info) => {
-                            console.log(
-                              "上传状态变化:",
-                              info.file.status,
-                              info,
-                            );
+                          <DeleteOutlined
+                            style={{
+                              display: `${img.imageAfterUrl || img.altAfterTranslation ? "block" : "none"}`,
+                            }}
+                            className="deleteIcon"
+                            onClick={() =>
+                              handleDelete(
+                                img.imageId,
+                                img.imageBeforeUrl,
+                                img.languageCode,
+                              )
+                            }
+                          />
+                          <Button
+                            block
+                            loading={
+                              translateLoadingImages[
+                                `${img.imageId}_${img.languageCode}`
+                              ] || false
+                            }
+                            onClick={() =>
+                              handleTranslate(img, img.languageCode)
+                            }
+                          >
+                            {t("Translate")}
+                          </Button>
 
-                            // ✅ 上传完成
-                            if (info.file.status === "done") {
-                              const res = info.file.response; // 后端返回的整个 JSON 对象
-                              const newUrl = res?.response?.imageAfterUrl; // ✅ 按你的后端结构取值
-
-                              if (res?.success && newUrl) {
-                                setImageDatas((prev: any) =>
-                                  prev.map((item: any) =>
-                                    item.languageCode === img.languageCode
-                                      ? { ...item, imageAfterUrl: newUrl }
-                                      : item,
+                          <Upload
+                            style={{ flex: "1" }}
+                            disabled={
+                              translateImageFetcher.state === "submitting"
+                            }
+                            pastable={false}
+                            maxCount={1}
+                            accept="image/*"
+                            name="file"
+                            action={`${globalStore?.server}/pcUserPic/insertPicToDbAndCloud`}
+                            beforeUpload={(file) => {
+                              const isImage = file.type.startsWith("image/");
+                              const isLt20M = file.size / 1024 / 1024 < 20;
+                              const supportedFormats = [
+                                "image/jpeg",
+                                "image/png",
+                                "image/webp",
+                                "image/heic",
+                                "image/gif",
+                              ];
+                              const isSupportedFormat =
+                                supportedFormats.includes(file.type);
+                              if (!isImage) {
+                                shopify.toast.show(
+                                  t("Only images can be uploaded"),
+                                );
+                                return false;
+                              }
+                              if (!isSupportedFormat) {
+                                shopify.toast.show(
+                                  t(
+                                    "Only JPEG, PNG, WEBP, HEIC and GIF formats are supported",
                                   ),
                                 );
-                                shopify.toast.show("Upload success!");
-                              } else {
-                                shopify.toast.show(
-                                  `Upload failed: ${res?.errorMsg || "Unknown error"}`,
-                                );
+                                return false;
                               }
-                            }
-
-                            // ❌ 上传失败
-                            if (info.file.status === "error") {
-                              shopify.toast.show(
-                                "Upload failed (network or server error)",
-                              );
-                            }
-                          }}
-                          itemRender={(originNode, file) => {
-                            if (file.status === "uploading") {
-                              return (
-                                <div
-                                  style={{
-                                    position: "relative",
-                                    width: 100,
-                                    height: 100,
-                                  }}
-                                >
-                                  {originNode}
-                                  <div
-                                    style={{
-                                      position: "absolute",
-                                      inset: 0,
-                                      background: "rgba(255,255,255,0.6)",
-                                      display: "flex",
-                                      justifyContent: "center",
-                                      alignItems: "center",
-                                    }}
-                                  >
-                                    <LoadingOutlined />
-                                  </div>
-                                </div>
-                              );
-                            }
-                            return originNode;
-                          }}
-                          data={(file) => ({
-                            shopName: globalStore?.shop,
-                            file,
-                            userPicturesDoJson: JSON.stringify({
-                              shopName: globalStore?.shop,
-                              imageId: img.imageId,
-                              productId: `gid://shopify/Product/${productId}`,
-                              imageBeforeUrl: img.imageBeforeUrl,
-                              altBeforeTranslation: img.altBeforeTranslation,
-                              altAfterTranslation: img.altAfterTranslation,
-                              languageCode: img.languageCode,
-                            }),
-                          })}
-                          showUploadList={{
-                            showPreviewIcon: true,
-                            showRemoveIcon: true,
-                          }}
-                        >
-                          {!img.imageAfterUrl && (
-                            <div>
-                              <PlusOutlined />
-                              <div style={{ marginTop: 8 }}>Upload</div>
-                            </div>
-                          )}
-                        </Upload> */}
-
-                        <TextArea
-                          value={
-                            confirmData.find(
-                              (i: any) => i.languageCode === img.languageCode,
-                            )?.value ?? img.altAfterTranslation
-                          }
-                          onChange={(e) =>
-                            handleInputChange(
-                              img.imageId,
-                              img.imageId,
-                              img.imageBeforeUrl,
-                              img.altBeforeTranslation,
-                              img.languageCode,
-                              e.target.value,
-                            )
-                          }
-                          placeholder="输入要修改的图片ALT"
-                        />
-
-                        <Button
-                          loading={
-                            translateLoadingImages[
-                              `${img.imageId}_${img.languageCode}`
-                            ] || false
-                          }
-                          onClick={() => handleTranslate(img, img.languageCode)}
-                        >
-                          {t("Translate")}
-                        </Button>
-
-                        <Upload
-                          disabled={
-                            translateImageFetcher.state === "submitting"
-                          }
-                          pastable={false}
-                          maxCount={1}
-                          accept="image/*"
-                          name="file"
-                          action={`${globalStore?.server}/pcUserPic/insertPicToDbAndCloud`}
-                          beforeUpload={(file) => {
-                            const isImage = file.type.startsWith("image/");
-                            const isLt20M = file.size / 1024 / 1024 < 20;
-                            const supportedFormats = [
-                              "image/jpeg",
-                              "image/png",
-                              "image/webp",
-                              "image/heic",
-                              "image/gif",
-                            ];
-                            const isSupportedFormat = supportedFormats.includes(
-                              file.type,
-                            );
-                            if (!isImage) {
-                              shopify.toast.show(
-                                t("Only images can be uploaded"),
-                              );
-                              return false;
-                            }
-                            if (!isSupportedFormat) {
-                              shopify.toast.show(
-                                t(
-                                  "Only JPEG, PNG, WEBP, HEIC and GIF formats are supported",
-                                ),
-                              );
-                              return false;
-                            }
-                            if (!isLt20M) {
-                              shopify.toast.show(
-                                t("File must be less than 20MB"),
-                              );
-                              return false;
-                            }
-                            return true;
-                          }}
-                          data={(file) => ({
-                            shopName: globalStore?.shop,
-                            file,
-                            userPicturesDoJson: JSON.stringify({
-                              shopName: globalStore?.shop,
-                              imageId: img.imageId,
-                              productId: `gid://shopify/Product/${productId}`,
-                              imageBeforeUrl: img.imageBeforeUrl,
-                              altBeforeTranslation: img.altBeforeTranslation,
-                              altAfterTranslation: img.altAfterTranslation,
-                              languageCode: img.languageCode,
-                            }),
-                          })}
-                          onChange={(info) => {
-                            console.log("info", info);
-
-                            if (info.file.status === "done") {
-                              const response = info.file.response; // 后端返回的数据
-                              const newUrl =
-                                typeof response?.response?.imageAfterUrl ===
-                                "string"
-                                  ? response.response?.imageAfterUrl
-                                  : "";
-                              if (response?.success) {
-                                setImageDatas((prev: any[]) => {
-                                  return prev.map((item) =>
-                                    item.languageCode === img.languageCode
-                                      ? {
-                                          ...item,
-                                          imageAfterUrl:
-                                            typeof newUrl === "string"
-                                              ? newUrl
-                                              : item.imageAfterUrl,
-                                        }
-                                      : item,
-                                  );
-                                });
-                                console.log(imageDatas);
-
+                              if (!isLt20M) {
                                 shopify.toast.show(
-                                  `${info.file.name} ${t("Upload Success")}`,
+                                  t("File must be less than 20MB"),
                                 );
-                              } else {
+                                return false;
+                              }
+                              return true;
+                            }}
+                            data={(file) => ({
+                              shopName: globalStore?.shop,
+                              file,
+                              userPicturesDoJson: JSON.stringify({
+                                shopName: globalStore?.shop,
+                                imageId: img.imageId,
+                                productId: `gid://shopify/Product/${productId}`,
+                                imageBeforeUrl: img.imageBeforeUrl,
+                                altBeforeTranslation: img.altBeforeTranslation,
+                                altAfterTranslation: img.altAfterTranslation,
+                                languageCode: img.languageCode,
+                              }),
+                            })}
+                            onChange={(info) => {
+                              setFileLists((prev) => ({
+                                ...prev,
+                                [img.languageCode]: info.fileList, // ✅ 更新对应语言
+                              }));
+                              if (info.file.status === "done") {
+                                const response = info.file.response; // 后端返回的数据
+                                const newUrl =
+                                  typeof response?.response?.imageAfterUrl ===
+                                  "string"
+                                    ? response.response?.imageAfterUrl
+                                    : "";
+                                if (response?.success) {
+                                  setImageDatas((prev: any[]) => {
+                                    return prev.map((item) =>
+                                      item.languageCode === img.languageCode
+                                        ? {
+                                            ...item,
+                                            imageAfterUrl:
+                                              typeof newUrl === "string"
+                                                ? newUrl
+                                                : item.imageAfterUrl,
+                                          }
+                                        : item,
+                                    );
+                                  });
+                                  shopify.toast.show(
+                                    `${info.file.name} ${t("Upload Success")}`,
+                                  );
+                                } else {
+                                  shopify.toast.show(
+                                    `${info.file.name} ${t("Upload Failed")}`,
+                                  );
+                                }
+                              } else if (info.file.status === "error") {
                                 shopify.toast.show(
                                   `${info.file.name} ${t("Upload Failed")}`,
                                 );
                               }
-                            } else if (info.file.status === "error") {
-                              shopify.toast.show(
-                                `${info.file.name} ${t("Upload Failed")}`,
-                              );
-                            }
-                          }}
-                        >
-                          <Button type="default">{t("Click to Upload")}</Button>
-                        </Upload>
+                            }}
+                          >
+                            <Button type="default">
+                              {t("Click to Upload")}
+                            </Button>
+                          </Upload>
 
-                        <Button
-                          style={{
-                            display: `${img.imageAfterUrl ? "block" : "none"}`,
-                          }}
-                          disabled={!img.imageAfterUrl}
-                          loading={
-                            deleteLoadingImages[
-                              `${img.imageId}_${img.languageCode}`
-                            ]
-                          }
-                          onClick={() =>
-                            handleDelete(
-                              img.imageId,
-                              img.imageBeforeUrl,
-                              img.languageCode,
-                            )
-                          }
-                        >
-                          {t("Delete")}
-                        </Button>
-                        {/* <Button
-                          loading={
-                            altTranslateLoadingImages[
-                              `${img.imageId}_${img.languageCode}`
-                            ]
-                          }
-                          onClick={() => handleTranslateAlt(img)}
-                        >
-                          翻译ALt文本
-                        </Button> */}
+                          {/* <Button
+                            block
+                            style={{
+                              display: `${img.imageAfterUrl ? "block" : "none"}`,
+                            }}
+                            disabled={!img.imageAfterUrl}
+                            loading={
+                              deleteLoadingImages[
+                                `${img.imageId}_${img.languageCode}`
+                              ]
+                            }
+                            onClick={() =>
+                              handleDelete(
+                                img.imageId,
+                                img.imageBeforeUrl,
+                                img.languageCode,
+                              )
+                            }
+                          >
+                            {t("Delete")}
+                          </Button> */}
+                        </Flex>
                       </Flex>
-                    </Card>
+                    </div>
                   </Flex>
                 ))}
             </div>
           </Space>
+          <Modal
+            open={previewVisible}
+            title={t("Image Preview")}
+            footer={null}
+            onCancel={handleCancel}
+            centered
+          >
+            <img
+              alt="Preview"
+              style={{
+                width: "100%",
+                borderRadius: 8,
+                objectFit: "contain",
+                // maxHeight: "70vh",
+              }}
+              src={previewImage}
+            />
+          </Modal>
+          <Modal
+            open={open}
+            title={null}
+            footer={null}
+            onCancel={onCancel}
+            centered
+            // bodyStyle={{ textAlign: "center", padding: "32px 24px" }}
+          >
+            <Space
+              direction="vertical"
+              size="middle"
+              style={{ width: "100%", textAlign: "center" }}
+            >
+              <ExclamationCircleOutlined
+                style={{ fontSize: 48, color: "#faad14" }}
+              />
+
+              <Typography.Title level={4} style={{ marginBottom: 0 }}>
+                {t("Insufficient translation quota")}
+              </Typography.Title>
+
+              <Paragraph type="secondary" style={{ margin: 0 }}>
+                {t(
+                  "Your current translation quota has been used up. Please purchase more quota to continue using the translation function.",
+                )}
+              </Paragraph>
+
+              <Space
+                style={{
+                  marginTop: 24,
+                  display: "flex",
+                  justifyContent: "center",
+                }}
+              >
+                <Button onClick={onCancel}>{t("Cancel")}</Button>
+                <Button type="primary" onClick={onBuy}>
+                  {t("Purchase quota")}
+                </Button>
+              </Space>
+            </Space>
+          </Modal>
         </Layout.Section>
       </Layout>
     </Page>

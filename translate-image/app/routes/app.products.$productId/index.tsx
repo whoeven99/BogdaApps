@@ -495,7 +495,7 @@ export default function ProductDetailPage() {
                   padding: "40px 0",
                 }}
               >
-                <Empty description="暂无图片数据" />
+                <Empty description={t("No image data available.")} />
               </div>
             )}
           </div>

@@ -1,0 +1,32 @@
+.custom-upload .ant-upload-list {
+  display: block; 
+}
+
+.custom-upload .ant-upload-select,
+.custom-upload .ant-upload-list-item,
+.custom-upload .ant-upload-list-item-container {
+  width: 100% !important;
+  height: 300px !important;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.custom-upload .ant-upload-list-item img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+}
+
+.custom-upload .ant-upload-list-item-info,
+.custom-upload .ant-upload-list-item-meta {
+  position: static !important;
+  background: transparent !important;
+}
+/* 
+.custom-upload .ant-upload-list-item-progress {
+  height: 6px !important; 
+  bottom: 8px !important; 
+} */
+ .deleteIcon:hover{
+    color: red;
+ }

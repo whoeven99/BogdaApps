@@ -45,9 +45,7 @@ export default function Index() {
 
   const [sortKey, setSortKey] = useState("CREATED_AT");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
-  const didMountRef = useRef(false);
-  const [initialized, setInitialized] = useState(false);
-  // const [lastPageCursorInfo, setLastPageCursorInfo] = useState<any>();
+
   const dispatch = useDispatch<AppDispatch>();
   const lastPageCursorInfo = useSelector(
     (state: RootState) => state.product.lastPageCursorInfo,
@@ -75,7 +73,7 @@ export default function Index() {
       }),
     },
     {
-      title: "产品",
+      title: t("Product"),
       // 不需要 dataIndex，用 render 直接取 item.node.title
       maxWidth: 250, // ✅ 指定列宽（单位是像素）
       render: (_: any, record: any) => (
@@ -100,37 +98,37 @@ export default function Index() {
       }),
     },
     {
-      title: "状态",
+      title: t("State"),
       render: (_: any, record: any) => {
         const status = record?.status;
 
         let color = "default";
-        let label = "未知状态";
+        let label = "Unknown";
 
         switch (status) {
           case "ACTIVE":
             color = "green";
-            label = "有效";
+            label = "Efficient";
             break;
           case "DRAFT":
             color = "orange";
-            label = "草稿";
+            label = "Draft";
             break;
           case "ARCHIVED":
             color = "gray";
-            label = "已归档";
+            label = "Archived";
             break;
           default:
             color = "default";
-            label = "未知";
+            label = "Unknown";
             break;
         }
 
-        return <Tag color={color}>{label}</Tag>;
+        return <Tag color={color}>{t(label)}</Tag>;
       },
     },
     {
-      title: "操作",
+      title: t("Action"),
       render: (_: any, record: any) => (
         <Button onClick={() => handleView(record)}>{t("Manage")}</Button>
       ),
@@ -185,22 +183,8 @@ export default function Index() {
     });
   }, []);
   useEffect(() => {
-    // 页面加载完后再允许触发请求
-    setInitialized(true);
-  }, []);
-  useEffect(() => {
     if (loadFetcher.data) {
-      // console.log(loadFetcher.data);
-
       setMenuData(loadFetcher.data.menuData);
-      // dispatch(
-      //   setLastPageCursorInfo({
-      //     productsHasNextPage: loadFetcher.data.productHasNextPage,
-      //     productsHasPreviousPage: loadFetcher.data.productHasPreviousPage,
-      //     productsStartCursor: loadFetcher.data.productStartCursor,
-      //     productsEndCursor: loadFetcher.data.productEndCursor,
-      //   }),
-      // );
       setSelectedKey(loadFetcher.data.menuData[0]?.key || "");
       setProductsHasNextPage(loadFetcher.data.productHasNextPage);
       setProductsHasPreviousPage(loadFetcher.data.productHasPreviousPage);
@@ -211,7 +195,6 @@ export default function Index() {
   }, [loadFetcher.data]);
   useEffect(() => {
     if (productsFetcher.data) {
-      // console.log(productsFetcher.data);
       dispatch(
         setLastPageCursorInfo({
           productsHasNextPage: productsFetcher.data.productHasNextPage,
@@ -230,13 +213,6 @@ export default function Index() {
     }
   }, [productsFetcher.data]);
   useEffect(() => {
-    // setLastPageCursorInfo((pre: any) => ({
-    //   ...pre,
-    //   searchText: searchText,
-    //   activeKey: activeKey,
-    //   sortOrder: sortOrder,
-    //   sortKey: sortKey,
-    // }));
     dispatch(
       setLastPageCursorInfo({
         searchText,
@@ -246,16 +222,6 @@ export default function Index() {
       }),
     );
   }, [searchText, activeKey, sortOrder, sortKey]);
-  // useEffect(() => {
-  //   if (lastPageCursorInfo) {
-  //     console.log("变化：", lastPageCursorInfo);
-
-  //     localStorage.setItem(
-  //       "pagination-cursor-store",
-  //       JSON.stringify(lastPageCursorInfo),
-  //     );
-  //   }
-  // }, [lastPageCursorInfo]);
   useEffect(() => {
     if (imageFetcher.data) {
       console.log("dsdqeqsa: ", imageFetcher.data);
@@ -413,17 +379,17 @@ export default function Index() {
                 type="line"
                 style={{ width: "30%" }}
                 items={[
-                  { label: "All", key: "ALL" },
+                  { label: t("All"), key: "ALL" },
                   {
-                    label: "Active",
+                    label: t("Active"),
                     key: "ACTIVE",
                   },
                   {
-                    label: "Draft",
+                    label: t("Draft"),
                     key: "DRAFT",
                   },
                   {
-                    label: "Archived",
+                    label: t("Archived"),
                     key: "ARCHIVED",
                   },
                 ]}
@@ -431,27 +397,16 @@ export default function Index() {
 
               <Flex align="center" justify="center" gap={20}>
                 <Input
-                  placeholder="搜索..."
+                  placeholder={t("Search...")}
                   value={searchText}
                   onChange={(e) => handleSearch(e.target.value)}
                   prefix={<SearchOutlined />}
                 />
-                {/* <Button>
-                    <Icon source={SortIcon} tone="base" />
-                  </Button> */}
                 <SortPopover
                   onChange={(key, order) => handleSortProduct(key, order)}
                 />
-                {/* <Button
-                  onClick={() => {
-                    console.log(lastPageCursorInfo);
-                  }}
-                >
-                  输出信息
-                </Button> */}
               </Flex>
             </Flex>
-            {/* 搜索和排序行 */}
           </Card>
 
           {/* 产品表格 */}

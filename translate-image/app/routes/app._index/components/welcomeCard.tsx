@@ -1,5 +1,13 @@
 import { useFetcher, useLoaderData, useNavigate } from "@remix-run/react";
-import { Button, Card, ConfigProvider, Flex, Skeleton, Typography } from "antd";
+import {
+  Badge,
+  Button,
+  Card,
+  ConfigProvider,
+  Flex,
+  Skeleton,
+  Typography,
+} from "antd";
 import { useTranslation } from "react-i18next";
 // import useReport from "scripts/eventReport";
 import { useState, useEffect } from "react";
@@ -24,39 +32,6 @@ const WelcomeCard: React.FC<WelcomeCardProps> = ({
   //   const { report, trackExposure, fetcherState } = useReport();
   const handleSetting = () => {
     window.open(blockUrl, "_blank");
-    // if (!switcherOpen) {
-    //   // TODO: Disable App
-    //   window.open(blockUrl, "_blank");
-    //   // fetcher.submit(
-    //   //   {
-    //   //     log: `${shop} 前往开启switcher, 从主页面点击`,
-    //   //   },
-    //   //   {
-    //   //     method: "POST",
-    //   //     action: "/log",
-    //   //   },
-    //   // );
-    // } else {
-    //   // TODO: Setup App
-    //   localStorage.setItem("switcherCard", "true");
-    //   // fetcher.submit(
-    //   //   {
-    //   //     log: `${shop} 前往配置switcher, 从主页面点击`,
-    //   //   },
-    //   //   {
-    //   //     method: "POST",
-    //   //     action: "/log",
-    //   //   },
-    //   // );
-    //   // setTimeout(() => {
-    //   //   navigate("/app/switcher");
-    //   // }, 500);
-    // }
-    // report(
-    //   { status: !switcherOpen ? 0 : 1 },
-    //   { method: "post", action: "/app", eventType: "click" },
-    //   "dashboard_switcher_button",
-    // );
   };
   const handleTestGraphqlData = () => {
     const formData = new FormData();
@@ -79,11 +54,16 @@ const WelcomeCard: React.FC<WelcomeCardProps> = ({
   return (
     <Card
       title={
-        <h2 style={{ margin: 0, fontSize: "20px",fontWeight:600 }}>
-          {switcherOpen
-            ? t("Image Translation Plugin active")
-            : t("Image Translation Plugin not enabled")}
-        </h2>
+        <Flex align="center" gap={10}>
+          <h2 style={{ margin: 0, fontSize: "20px", fontWeight: 600 }}>
+            {t("Image Translation Plugin")}
+          </h2>
+          {switcherOpen ? (
+            <Badge color="hsl(102, 53%, 61%)" />
+          ) : (
+            <Badge color="#f50" />
+          )}
+        </Flex>
       }
       styles={{
         header: { borderBottom: "none" },
@@ -91,13 +71,6 @@ const WelcomeCard: React.FC<WelcomeCardProps> = ({
           padding: "0 24px 12px 24px",
         },
       }}
-      // extra={
-      //   <Button
-      //     icon={<RedoOutlined spin={loading} />}
-      //     type="link"
-      //     onClick={handleReload}
-      //   />
-      // }
     >
       <Flex vertical align="center" gap={8}>
         <Flex
@@ -107,10 +80,10 @@ const WelcomeCard: React.FC<WelcomeCardProps> = ({
           <Text style={{ fontSize: "14px" }}>
             {switcherOpen
               ? t(
-                  "Your image translation plugin is currently active. Product images and alt text are automatically synced and translated for all enabled languages. ",
+                  "Plugin enabled — product images and alt text will appear in the right language based on your site’s language settings.",
                 )
               : t(
-                  "Enable the plugin to automatically translate product images and alt text across languages. This allows your store visuals to stay consistent with translated content.",
+                  "Enable the plugin to ensure product images and alt text are displayed correctly for each published language.",
                 )}
           </Text>
         </Flex>
