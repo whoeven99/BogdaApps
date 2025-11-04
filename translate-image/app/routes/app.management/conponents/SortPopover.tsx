@@ -4,12 +4,16 @@ import { SortAscendingOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 export default function SortPopover({
   onChange,
+  sortKeyProp,
+  sortOrderProp,
 }: {
   onChange?: (sortKey: string, sortOrder: "asc" | "desc") => void;
+  sortKeyProp: string;
+  sortOrderProp: "asc" | "desc";
 }) {
   const { t } = useTranslation();
-  const [sortKey, setSortKey] = useState("CREATED_AT");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [sortKey, setSortKey] = useState(sortKeyProp);
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">(sortOrderProp);
   const [open, setOpen] = useState(false);
 
   const sortOptions = [
@@ -21,6 +25,11 @@ export default function SortPopover({
     // { label: "发布时间", value: "PUBLISHED_AT" },
     { label: "Manufacturers", value: "VENDOR" },
   ];
+  useEffect(() => {
+    console.log("过滤传值: ",sortKeyProp, sortOrderProp);
+    setSortKey(sortKeyProp);
+    setSortOrder(sortOrderProp);
+  }, [sortKeyProp, sortOrderProp]);
 
   const handleSortChange = (value: string) => {
     setSortKey(value);

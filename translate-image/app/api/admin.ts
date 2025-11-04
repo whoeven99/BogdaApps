@@ -64,7 +64,7 @@ export const mutationAppPurchaseOneTimeCreate = async ({
     const res = response.data;
     return res;
   } catch (error) {
-    console.error("Error mutationAppPurchaseOneTimeCreate:", error);
+    console.error(`${shop} Error mutationAppPurchaseOneTimeCreate:`, error);
   }
 };
 

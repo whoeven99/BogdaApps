@@ -71,7 +71,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           shop,
           accessToken: accessToken as string,
         });
-        return json({ success: true, response });
+        return json({ response });
       } catch (error) {
         console.error("Error loading app:", error);
         return json({
@@ -209,7 +209,6 @@ export default function App() {
   }, []);
   useEffect(() => {
     if (initFetcher.data) {
-      console.log(initFetcher.data);
       getWords();
     }
   }, [initFetcher.data]);

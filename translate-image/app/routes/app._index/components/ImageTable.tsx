@@ -17,7 +17,7 @@ import SortPopover from "~/routes/app.management/conponents/SortPopover";
 import { useDispatch, useSelector } from "react-redux";
 import { AppDispatch, RootState } from "~/store";
 import { setLastPageCursorInfo } from "~/store/modules/productSlice";
-import '../style.css'
+import "../style.css";
 export default function Index() {
   const loadFetcher = useFetcher<any>();
   const languageFetcher = useFetcher<any>();
@@ -160,6 +160,7 @@ export default function Index() {
     setActiveKey(activeKey);
     setSortOrder(sortOrder);
     setSortKey(sortKey);
+    // handleSortProduct(sortKey, sortOrder);
     setSearchText(searchText);
 
     const formData = new FormData();
@@ -234,7 +235,6 @@ export default function Index() {
   }, [imageFetcher.data]);
 
   const handleSortProduct = (key: string, order: "asc" | "desc") => {
-    console.log(key, order);
     setSortKey(key);
     setSortOrder(order);
     // 延迟 1s 再执行请求
@@ -344,7 +344,6 @@ export default function Index() {
 
   const handleChangeStatusTab = (key: string) => {
     setActiveKey(key);
-    console.log(key);
     if (timeoutIdRef.current) {
       clearTimeout(timeoutIdRef.current);
     }
@@ -407,7 +406,12 @@ export default function Index() {
                 />
                 <SortPopover
                   onChange={(key, order) => handleSortProduct(key, order)}
+                  sortKeyProp={sortKey}
+                  sortOrderProp={sortOrder}
                 />
+                <Button onClick={() => console.log(lastPageCursorInfo)}>
+                  输出store存储数据
+                </Button>
               </Flex>
             </Flex>
           </Card>
