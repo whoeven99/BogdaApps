@@ -26,7 +26,6 @@ export default function SortPopover({
     { label: "Manufacturers", value: "VENDOR" },
   ];
   useEffect(() => {
-    console.log("过滤传值: ",sortKeyProp, sortOrderProp);
     setSortKey(sortKeyProp);
     setSortOrder(sortOrderProp);
   }, [sortKeyProp, sortOrderProp]);

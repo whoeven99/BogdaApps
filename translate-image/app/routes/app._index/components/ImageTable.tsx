@@ -18,6 +18,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { AppDispatch, RootState } from "~/store";
 import { setLastPageCursorInfo } from "~/store/modules/productSlice";
 import "../style.css";
+import { ColumnsType } from "antd/es/table";
 export default function Index() {
   const loadFetcher = useFetcher<any>();
   const languageFetcher = useFetcher<any>();
@@ -52,7 +53,7 @@ export default function Index() {
     (state: RootState) => state.product.lastPageCursorInfo,
   );
 
-  const panelColumns = [
+  const panelColumns: ColumnsType<any> = [
     {
       // 不需要 dataIndex，用 render 直接取 item.node.title
       render: (_: any, record: any) => {
@@ -67,6 +68,7 @@ export default function Index() {
           <Thumbnail source={ImageIcon} size="large" alt="Small document" />
         );
       },
+      responsive: ["xs", "sm", "md", "lg", "xl", "xxl"], // ✅ 正确
       onCell: () => ({
         style: {
           padding: "4px 8px", // ✅ 控制上下、左右 padding
@@ -76,7 +78,7 @@ export default function Index() {
     {
       title: t("Product"),
       // 不需要 dataIndex，用 render 直接取 item.node.title
-      maxWidth: 250, // ✅ 指定列宽（单位是像素）
+      // maxWidth: 250, // ✅ 指定列宽（单位是像素）
       render: (_: any, record: any) => (
         <Text
           className="hover-underline"
@@ -94,6 +96,7 @@ export default function Index() {
           {record?.label || "未命名产品"}
         </Text>
       ),
+      responsive: ["xs", "sm", "md", "lg", "xl", "xxl"], // ✅ 正确
       onCell: () => ({
         style: {
           padding: "4px 8px", // ✅ 控制上下、左右 padding
@@ -129,12 +132,14 @@ export default function Index() {
 
         return <Tag color={color}>{t(label)}</Tag>;
       },
+      responsive: ["md", "lg", "xl", "xxl"], // ✅ 手机端隐藏
     },
     {
       title: t("Action"),
       render: (_: any, record: any) => (
         <Button onClick={() => handleView(record)}>{t("Manage")}</Button>
       ),
+      responsive: ["md", "lg", "xl", "xxl"], // ✅ 手机端隐藏
     },
   ];
   useEffect(() => {

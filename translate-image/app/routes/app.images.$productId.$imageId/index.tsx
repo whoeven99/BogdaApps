@@ -213,8 +213,8 @@ const ImageAltTextPage = () => {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { productId, imageId } = useParams();
-  const [selectedLocale, setSelectedLocale] = useState<any>("");
   const [languageList, setLanguageList] = useState<any[]>([]);
+  const [languageLoading, setLanguageLoading] = useState<boolean>(true);
   const [productImageData, setProductImageData] = useState<any>([]);
   const [defaultLanguageData, setDefaultLanguageData] = useState<any>();
   const languageFetcher = useFetcher<any>();
@@ -229,7 +229,7 @@ const ImageAltTextPage = () => {
   const [saveLoading, setSaveLoading] = useState<boolean>(false);
   const [translatrImageactive, setTranslatrImageactive] = useState(false);
   const imageFetcher = useFetcher<any>();
-  const [imageDatas, setImageDatas] = useState<any>();
+  const [imageDatas, setImageDatas] = useState<any[]>([]);
   const [textareaLoading, setTextareaLoading] = useState<
     Record<string, boolean>
   >({});
@@ -248,7 +248,7 @@ const ImageAltTextPage = () => {
   const [previewImage, setPreviewImage] = useState("");
   const { chars, totalChars } = useSelector((state: any) => state.userConfig);
   const [open, setOpen] = useState<boolean>(false);
-
+  const [dataReady, setDataReady] = useState(false);
   const languageMapping = {
     zh: [
       "en",
@@ -310,7 +310,7 @@ const ImageAltTextPage = () => {
     if (imageFetcher.data) {
       // 后端返回的数据数组
       const fetchedList = imageFetcher.data.response || [];
-      const mergedList = languageList.map((lang) => {
+      const mergedList = languageList?.map((lang) => {
         // 看后端有没有返回
         const existing = fetchedList.find(
           (item: any) => item.languageCode === lang.value,
@@ -339,6 +339,11 @@ const ImageAltTextPage = () => {
       setImageDatas(mergedList);
     }
   }, [imageFetcher.data]);
+  useEffect(() => {
+    if (!languageLoading && imageFetcher.state !== "submitting") {
+      setDataReady(true);
+    }
+  }, [languageLoading, languageList, imageDatas]);
   useEffect(() => {
     if (imageDatas?.length > 0) {
       const initLists = imageDatas.reduce(
@@ -693,7 +698,7 @@ const ImageAltTextPage = () => {
           setDefaultLanguageData(lan);
         }
       });
-      console.log("商店查询语言数据：", languageFetcher.data);
+      // console.log("商店查询语言数据：", languageFetcher.data);
 
       setLanguageList(
         languageFetcher.data.response
@@ -708,6 +713,7 @@ const ImageAltTextPage = () => {
           })
           .filter(Boolean),
       );
+      setLanguageLoading(false);
     }
   }, [languageFetcher.data]);
   const onBuy = () => {
@@ -853,7 +859,9 @@ const ImageAltTextPage = () => {
                 gap: 24,
               }}
             >
-              {imageDatas?.length > 0 &&
+              {!dataReady ? (
+                <Skeleton active></Skeleton>
+              ) : imageDatas?.length > 0 ? (
                 imageDatas.map((img: any) => (
                   <Flex
                     key={img.languageCode}
@@ -1152,7 +1160,25 @@ const ImageAltTextPage = () => {
                       </Flex>
                     </div>
                   </Flex>
-                ))}
+                ))
+              ) : (
+                <div
+                  style={{
+                    gridColumn: "1 / -1", // ✅ 让它跨越整个 grid
+                    width: "100%",
+                    display: "flex",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    padding: "40px 0",
+                  }}
+                >
+                  <Empty
+                    description={t(
+                      "Data loading error, please refresh the page.",
+                    )}
+                  />
+                </div>
+              )}
             </div>
           </Space>
           <Modal
