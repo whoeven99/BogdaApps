@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Layout, Pagination, Thumbnail } from "@shopify/polaris";
+import { Badge, Layout, Pagination, Thumbnail } from "@shopify/polaris";
 import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
 import {
   ArrowLeftIcon,
@@ -76,7 +76,7 @@ export default function Index() {
       }),
     },
     {
-      title: t("Product"),
+      title: t("Product title"),
       // 不需要 dataIndex，用 render 直接取 item.node.title
       // maxWidth: 250, // ✅ 指定列宽（单位是像素）
       render: (_: any, record: any) => (
@@ -104,33 +104,31 @@ export default function Index() {
       }),
     },
     {
-      title: t("State"),
+      title: t("Status"),
       render: (_: any, record: any) => {
         const status = record?.status;
 
-        let color = "default";
+        let tone: "success" | "info" | "attention" | "critical" | "new" =
+          "success";
         let label = "Unknown";
 
         switch (status) {
           case "ACTIVE":
-            color = "green";
-            label = "Efficient";
+            tone = "success";
+            label = "Active";
             break;
           case "DRAFT":
-            color = "orange";
+            tone = "info";
             label = "Draft";
             break;
           case "ARCHIVED":
-            color = "gray";
+            tone = "attention";
             label = "Archived";
-            break;
-          default:
-            color = "default";
-            label = "Unknown";
             break;
         }
 
-        return <Tag color={color}>{t(label)}</Tag>;
+        return <Badge tone={tone}>{t(label)}</Badge>;
+        // return <Tag color={color}>{t(label)}</Tag>
       },
       responsive: ["md", "lg", "xl", "xxl"], // ✅ 手机端隐藏
     },

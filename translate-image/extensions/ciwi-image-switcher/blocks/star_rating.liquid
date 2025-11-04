@@ -2,13 +2,12 @@
   Ciwi Image Switcher - 无前端UI，仅执行图片替换逻辑
 {% endcomment %}
 
-<input id="queryCiwiId" type="hidden" value="{{ shop.permanent_domain }}">
-<input type="hidden" name="language_code" value="{{ localization.language.iso_code }}">
-<input type="hidden" name="product_id" value="{{ product.id }}">
-<input type="hidden" name="block_id" value="{{ block.id }}">
+<input id="image_queryCiwiId" type="hidden" value="{{ shop.permanent_domain }}">
+<input type="hidden" name="image_language_code" value="{{ localization.language.iso_code }}">
+<input type="hidden" name="image_product_id" value="{{ product.id }}">
+<input type="hidden" name="image_block_id" value="{{ block.id }}">
 
 <script type="module" src="{{ 'ciwi-main.js' | asset_url }}"></script>
-
 
 {% schema %}
 {
@@ -16,4 +15,3 @@
   "target": "body"
 }
 {% endschema %}
-

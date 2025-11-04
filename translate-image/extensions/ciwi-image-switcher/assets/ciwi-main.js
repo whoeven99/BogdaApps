@@ -89,10 +89,10 @@ function observeVisibleImages(map, language) {
 // 产品图片翻译逻辑
 // =============================
 async function ProductImgTranslate(blockId, shop, ciwiBlock) {
-  const productId = ciwiBlock.querySelector('input[name="product_id"]').value;
+  const productId = ciwiBlock.querySelector('input[name="image_product_id"]').value;
   if (!productId) return;
   
-  const language = ciwiBlock.querySelector('input[name="language_code"]').value;
+  const language = ciwiBlock.querySelector('input[name="image_language_code"]').value;
   const cachePrefix = `ciwi_product_img_`;
   console.log("查询产品详情数据");
   
@@ -146,8 +146,8 @@ async function ProductImgTranslate(blockId, shop, ciwiBlock) {
 // 店铺主页图片翻译逻辑
 // =============================
 async function HomeImageTranslate(blockId) {
-  const shop = document.querySelector("#queryCiwiId")?.value;
-  const language = document.querySelector('input[name="language_code"]')?.value;
+  const shop = document.querySelector("#image_queryCiwiId")?.value;
+  const language = document.querySelector('input[name="image_language_code"]')?.value;
   if (!shop || !language) return;
 
   const cachePrefix = `ciwi_shop_img_`;
@@ -191,11 +191,11 @@ window.onload = async () => {
   const startTime = performance.now();
   console.log("🚀 Ciwi_Image_Switcher 启动（带缓存校验）");
 
-  const blockId = document.querySelector('input[name="block_id"]')?.value;
+  const blockId = document.querySelector('input[name="image_block_id"]')?.value;
   if (!blockId) return console.warn("blockId not found");
   const ciwiBlock = document.querySelector(`#shopify-block-${blockId}`);
   if (!ciwiBlock) return console.warn("ciwiBlock not found");
-  const shop = ciwiBlock.querySelector("#queryCiwiId");
+  const shop = ciwiBlock.querySelector("#image_queryCiwiId");
 
   // 爬虫检测
   const reason = isLikelyBotByUA();

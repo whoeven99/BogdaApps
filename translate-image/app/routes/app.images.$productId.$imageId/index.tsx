@@ -879,7 +879,7 @@ const ImageAltTextPage = () => {
                   >
                     <Text style={{ fontSize: "14px" }}>
                       {img.language}
-                      {img.published ? t("(Published)") : t("(Not released)")}
+                      {img.published ? t("(Published)") : t("(Unpublished)")}
                     </Text>
                     <div
                       style={{
@@ -898,11 +898,16 @@ const ImageAltTextPage = () => {
                         align="center"
                         vertical
                         gap={10}
-                        style={{ width: "100%", padding: "10px" }} // ✅ 占满宽度
+                        style={{
+                          width: "100%",
+                          padding: "10px",
+                          height: "100%",
+                        }} // ✅ 占满宽度
                       >
                         <div
                           style={{
                             width: "100%",
+                            // height:"300px",
                             aspectRatio: "1/1",
                             borderRadius: "8px 8px 0 0",
 
@@ -910,6 +915,7 @@ const ImageAltTextPage = () => {
                             flexDirection: "column",
                             gap: "8x",
                             justifyContent: "center",
+                            flex: "1",
                           }}
                         >
                           <Upload
@@ -932,7 +938,7 @@ const ImageAltTextPage = () => {
                             }}
                             onPreview={() => handlePreview(img)}
                             onRemove={(info) => handleRemove(info, img)}
-                            maxCount={1}
+                            maxCount={0}
                             beforeUpload={(file) => {
                               const isImage = file.type.startsWith("image/");
                               if (!isImage) {
@@ -970,6 +976,12 @@ const ImageAltTextPage = () => {
                               </div>
                             )}
                           </Upload>
+                        </div>
+                        <Flex
+                          vertical
+                          style={{ width: "100%" }}
+                          align="stretch"
+                        >
                           <Spin
                             spinning={
                               textareaLoading[
@@ -977,9 +989,10 @@ const ImageAltTextPage = () => {
                               ] || false
                             }
                             tip="加载中..."
+                            style={{ width: "100%" }}
                           >
                             <TextArea
-                              style={{ margin: "16px 0" }}
+                              style={{ margin: "16px 0", width: "100%" }}
                               value={
                                 confirmData.find(
                                   (i: any) =>
@@ -1002,29 +1015,15 @@ const ImageAltTextPage = () => {
                               autoSize={{ minRows: 5, maxRows: 5 }}
                             />
                           </Spin>
-                        </div>
-                        <Flex
-                          gap={10}
-                          align="flex-start"
-                          style={{
-                            width: "fit-content",
-                            marginBottom: "8px",
-                          }}
-                        >
-                          <Flex align="center" gap={10}>
-                            <DeleteOutlined
-                              style={{
-                                display: `${img.imageAfterUrl || img.altAfterTranslation ? "block" : "none"}`,
-                              }}
-                              className="deleteIcon"
-                              onClick={() =>
-                                handleDelete(
-                                  img.imageId,
-                                  img.imageBeforeUrl,
-                                  img.languageCode,
-                                )
-                              }
-                            />
+                          <Flex
+                            gap={10}
+                            align="center"
+                            justify="center"
+                            style={{
+                              width: "fit-content",
+                              marginBottom: "8px",
+                            }}
+                          >
                             <Button
                               block
                               loading={
@@ -1038,132 +1037,124 @@ const ImageAltTextPage = () => {
                             >
                               {t("Translate")}
                             </Button>
-                          </Flex>
-
-                          <Upload
-                            style={{ flex: "1" }}
-                            disabled={
-                              translateImageFetcher.state === "submitting"
-                            }
-                            pastable={false}
-                            maxCount={1}
-                            accept="image/*"
-                            name="file"
-                            action={`${globalStore?.server}/pcUserPic/insertPicToDbAndCloud`}
-                            beforeUpload={(file) => {
-                              const isImage = file.type.startsWith("image/");
-                              const isLt20M = file.size / 1024 / 1024 < 20;
-                              const supportedFormats = [
-                                "image/jpeg",
-                                "image/png",
-                                "image/webp",
-                                "image/heic",
-                                "image/gif",
-                              ];
-                              const isSupportedFormat =
-                                supportedFormats.includes(file.type);
-                              if (!isImage) {
-                                shopify.toast.show(
-                                  t("Only images can be uploaded"),
-                                );
-                                return false;
+                            <Upload
+                              style={{ flex: "1" }}
+                              disabled={
+                                translateImageFetcher.state === "submitting"
                               }
-                              if (!isSupportedFormat) {
-                                shopify.toast.show(
-                                  t(
-                                    "Only JPEG, PNG, WEBP, HEIC and GIF formats are supported",
-                                  ),
-                                );
-                                return false;
-                              }
-                              if (!isLt20M) {
-                                shopify.toast.show(
-                                  t("File must be less than 20MB"),
-                                );
-                                return false;
-                              }
-                              return true;
-                            }}
-                            data={(file) => ({
-                              shopName: globalStore?.shop,
-                              file,
-                              userPicturesDoJson: JSON.stringify({
-                                shopName: globalStore?.shop,
-                                imageId: img.imageId,
-                                productId: `gid://shopify/Product/${productId}`,
-                                imageBeforeUrl: img.imageBeforeUrl,
-                                altBeforeTranslation: img.altBeforeTranslation,
-                                altAfterTranslation: img.altAfterTranslation,
-                                languageCode: img.languageCode,
-                              }),
-                            })}
-                            onChange={(info) => {
-                              setFileLists((prev) => ({
-                                ...prev,
-                                [img.languageCode]: info.fileList, // ✅ 更新对应语言
-                              }));
-                              if (info.file.status === "done") {
-                                const response = info.file.response; // 后端返回的数据
-                                const newUrl =
-                                  typeof response?.response?.imageAfterUrl ===
-                                  "string"
-                                    ? response.response?.imageAfterUrl
-                                    : "";
-                                if (response?.success) {
-                                  setImageDatas((prev: any[]) => {
-                                    return prev.map((item) =>
-                                      item.languageCode === img.languageCode
-                                        ? {
-                                            ...item,
-                                            imageAfterUrl:
-                                              typeof newUrl === "string"
-                                                ? newUrl
-                                                : item.imageAfterUrl,
-                                          }
-                                        : item,
-                                    );
-                                  });
+                              pastable={false}
+                              maxCount={1}
+                              accept="image/*"
+                              name="file"
+                              action={`${globalStore?.server}/pcUserPic/insertPicToDbAndCloud`}
+                              beforeUpload={(file) => {
+                                const isImage = file.type.startsWith("image/");
+                                const isLt20M = file.size / 1024 / 1024 < 20;
+                                const supportedFormats = [
+                                  "image/jpeg",
+                                  "image/png",
+                                  "image/webp",
+                                  "image/heic",
+                                  "image/gif",
+                                ];
+                                const isSupportedFormat =
+                                  supportedFormats.includes(file.type);
+                                if (!isImage) {
                                   shopify.toast.show(
-                                    `${info.file.name} ${t("Upload Success")}`,
+                                    t("Only images can be uploaded"),
                                   );
-                                } else {
+                                  return false;
+                                }
+                                if (!isSupportedFormat) {
+                                  shopify.toast.show(
+                                    t(
+                                      "Only JPEG, PNG, WEBP, HEIC and GIF formats are supported",
+                                    ),
+                                  );
+                                  return false;
+                                }
+                                if (!isLt20M) {
+                                  shopify.toast.show(
+                                    t("File must be less than 20MB"),
+                                  );
+                                  return false;
+                                }
+                                return true;
+                              }}
+                              data={(file) => ({
+                                shopName: globalStore?.shop,
+                                file,
+                                userPicturesDoJson: JSON.stringify({
+                                  shopName: globalStore?.shop,
+                                  imageId: img.imageId,
+                                  productId: `gid://shopify/Product/${productId}`,
+                                  imageBeforeUrl: img.imageBeforeUrl,
+                                  altBeforeTranslation:
+                                    img.altBeforeTranslation,
+                                  altAfterTranslation: img.altAfterTranslation,
+                                  languageCode: img.languageCode,
+                                }),
+                              })}
+                              onChange={(info) => {
+                                setFileLists((prev) => ({
+                                  ...prev,
+                                  [img.languageCode]: info.fileList, // ✅ 更新对应语言
+                                }));
+                                if (info.file.status === "done") {
+                                  const response = info.file.response; // 后端返回的数据
+                                  const newUrl =
+                                    typeof response?.response?.imageAfterUrl ===
+                                    "string"
+                                      ? response.response?.imageAfterUrl
+                                      : "";
+                                  if (response?.success) {
+                                    setImageDatas((prev: any[]) => {
+                                      return prev.map((item) =>
+                                        item.languageCode === img.languageCode
+                                          ? {
+                                              ...item,
+                                              imageAfterUrl:
+                                                typeof newUrl === "string"
+                                                  ? newUrl
+                                                  : item.imageAfterUrl,
+                                            }
+                                          : item,
+                                      );
+                                    });
+                                    shopify.toast.show(
+                                      `${info.file.name} ${t("Upload Success")}`,
+                                    );
+                                  } else {
+                                    shopify.toast.show(
+                                      `${info.file.name} ${t("Upload Failed")}`,
+                                    );
+                                  }
+                                } else if (info.file.status === "error") {
                                   shopify.toast.show(
                                     `${info.file.name} ${t("Upload Failed")}`,
                                   );
                                 }
-                              } else if (info.file.status === "error") {
-                                shopify.toast.show(
-                                  `${info.file.name} ${t("Upload Failed")}`,
-                                );
+                              }}
+                              showUploadList={false}
+                            >
+                              <Button type="default">{t("Upload")}</Button>
+                            </Upload>
+                            <Button
+                              style={{
+                                display: `${img.imageAfterUrl || img.altAfterTranslation ? "block" : "none"}`,
+                              }}
+                              className="deleteIcon"
+                              onClick={() =>
+                                handleDelete(
+                                  img.imageId,
+                                  img.imageBeforeUrl,
+                                  img.languageCode,
+                                )
                               }
-                            }}
-                          >
-                            <Button type="default">
-                              {t("Click to Upload")}
-                            </Button>
-                          </Upload>
-
-                          {/* <Button
-                            block
-                            style={{
-                              display: `${img.imageAfterUrl ? "block" : "none"}`,
-                            }}
-                            disabled={!img.imageAfterUrl}
-                            loading={
-                              deleteLoadingImages[
-                                `${img.imageId}_${img.languageCode}`
-                              ]
-                            }
-                            onClick={() =>
-                              handleDelete(
-                                img.imageId,
-                                img.imageBeforeUrl,
-                                img.languageCode,
-                              )
-                            }
-                          >
-                            {t("Delete")}
-                          </Button> */}
+                              shape="circle"
+                              icon={<DeleteOutlined />}
+                            ></Button>
+                          </Flex>
                         </Flex>
                       </Flex>
                     </div>
