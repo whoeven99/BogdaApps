@@ -76,7 +76,7 @@ export default function Index() {
       }),
     },
     {
-      title: t("Product"),
+      title: t("Product title"),
       // 不需要 dataIndex，用 render 直接取 item.node.title
       // maxWidth: 250, // ✅ 指定列宽（单位是像素）
       render: (_: any, record: any) => (
@@ -104,7 +104,7 @@ export default function Index() {
       }),
     },
     {
-      title: t("State"),
+      title: t("Status"),
       render: (_: any, record: any) => {
         const status = record?.status;
 
@@ -130,7 +130,8 @@ export default function Index() {
             break;
         }
 
-        return <Tag color={color}>{t(label)}</Tag>;
+        // return <Badge text={t(label)} variant="success" />;
+        return <Tag color={color}>{t(label)}</Tag>
       },
       responsive: ["md", "lg", "xl", "xxl"], // ✅ 手机端隐藏
     },

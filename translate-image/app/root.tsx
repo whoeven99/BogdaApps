@@ -126,7 +126,7 @@ export function ErrorBoundary() {
           <ScrollRestoration />
           <Scripts />
           <script
-            src="//code.tidio.co/inl4rrmds8vvbldv1k6gyc2nzxongl3p.js"
+            src="https://embed.tawk.to/6909a2c4f363bc1955661e51/1j96q7jtm"
             async
           ></script>
         </div>
@@ -153,7 +153,7 @@ export default function App() {
         <ScrollRestoration />
         <Scripts />
         <script
-          src="//code.tidio.co/inl4rrmds8vvbldv1k6gyc2nzxongl3p.js"
+          src="https://embed.tawk.to/6909a2c4f363bc1955661e51/1j96q7jtm"
           async
         ></script>
       </Provider>
