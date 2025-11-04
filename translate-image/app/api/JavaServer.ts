@@ -636,9 +636,9 @@ export const UserAdd = async ({
         userTag: shopOwnerName || "",
       },
     });
-    console.log("addUserInfoResponse: ", addUserInfoResponse.data);
+    console.log(`${shop} addUserInfoResponse: `, addUserInfoResponse.data);
   } catch (error) {
-    console.error("Error UserAdd:", error);
+    console.error(`${shop} Error UserAdd:`, error);
   }
 };
 

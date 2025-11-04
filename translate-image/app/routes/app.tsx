@@ -71,7 +71,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           shop,
           accessToken: accessToken as string,
         });
-        return json({ success: true, response });
+        return json({ response });
       } catch (error) {
         console.error("Error loading app:", error);
         return json({
@@ -196,9 +196,6 @@ export default function App() {
   const dispatch = useDispatch();
   const location = useLocation();
   const initFetcher = useFetcher<any>();
-  const { plan, chars, totalChars, isNew } = useSelector(
-    (state: any) => state.userConfig,
-  );
   useEffect(() => {
     initFetcher.submit(
       { init: JSON.stringify(true) },
@@ -212,45 +209,12 @@ export default function App() {
   }, []);
   useEffect(() => {
     if (initFetcher.data) {
-      console.log(initFetcher.data);
+      getWords();
     }
   }, [initFetcher.data]);
   useEffect(() => {
-    // 当 URL 改变时调用这两个函数
-    // if (!plan?.id) {
-    //   getPlan();
-    // }
-    // if (!chars || !totalChars) {
-
-    // }
     getWords();
   }, [location]); // 监听 URL 的变化
-  // const getPlan = async () => {
-  //   const data = await GetUserSubscriptionPlan({
-  //     shop: shop,
-  //     server: server as string,
-  //   });
-  //   if (data?.success) {
-  //     dispatch(
-  //       setPlan({
-  //         plan: {
-  //           id: data?.response?.userSubscriptionPlan || 2,
-  //           feeType: data?.response?.feeType || 0,
-  //         },
-  //       }),
-  //     );
-  //     if (data?.response?.currentPeriodEnd) {
-  //       const date = new Date(data?.response?.currentPeriodEnd)
-  //         .toLocaleDateString("zh-CN", {
-  //           year: "numeric",
-  //           month: "2-digit",
-  //           day: "2-digit",
-  //         })
-  //         .replace(/\//g, "-");
-  //       dispatch(setUpdateTime({ updateTime: date }));
-  //     }
-  //   }
-  // };
   const getWords = async () => {
     const data = await GetUserWords({
       shop,
