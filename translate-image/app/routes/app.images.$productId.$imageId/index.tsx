@@ -23,6 +23,7 @@ import {
   Upload,
   Col,
   Modal,
+  Spin,
 } from "antd";
 import { TitleBar, useAppBridge, SaveBar } from "@shopify/app-bridge-react";
 import {
@@ -229,7 +230,9 @@ const ImageAltTextPage = () => {
   const [translatrImageactive, setTranslatrImageactive] = useState(false);
   const imageFetcher = useFetcher<any>();
   const [imageDatas, setImageDatas] = useState<any>();
-
+  const [textareaLoading, setTextareaLoading] = useState<
+    Record<string, boolean>
+  >({});
   const [translateLoadingImages, setTranslateLoadingImages] = useState<
     Record<string, boolean>
   >({});
@@ -386,6 +389,10 @@ const ImageAltTextPage = () => {
     formData.append("altTranslateFetcher", JSON.stringify({ record }));
     altTranslateFetcher.submit(formData, { method: "post" });
     setTranslatrImageactive(false);
+    setTextareaLoading((pre) => ({
+      ...pre,
+      [`${record.imageId}_${record.languageCode}`]: true,
+    }));
   };
   useEffect(() => {
     if (translateImageFetcher.data) {
@@ -509,6 +516,10 @@ const ImageAltTextPage = () => {
       ) {
         setOpen(true);
       }
+      setTextareaLoading((pre) => ({
+        ...pre,
+        [`${currentTranslatingImage.imageId}_${currentTranslatingImage.languageCode}`]: false,
+      }));
     }
   }, [altTranslateFetcher.data]);
   const handleInputChange = (
@@ -682,8 +693,8 @@ const ImageAltTextPage = () => {
           setDefaultLanguageData(lan);
         }
       });
-      console.log("商店查询语言数据：",languageFetcher.data);
-      
+      console.log("商店查询语言数据：", languageFetcher.data);
+
       setLanguageList(
         languageFetcher.data.response
           .map((lan: any) => {
@@ -943,29 +954,38 @@ const ImageAltTextPage = () => {
                               </div>
                             )}
                           </Upload>
-
-                          <TextArea
-                            style={{ margin: "16px 0" }}
-                            value={
-                              confirmData.find(
-                                (i: any) => i.languageCode === img.languageCode,
-                              )?.value ?? img.altAfterTranslation
+                          <Spin
+                            spinning={
+                              textareaLoading[
+                                `${img.imageId}_${img.languageCode}`
+                              ] || false
                             }
-                            onChange={(e) =>
-                              handleInputChange(
-                                img.imageId,
-                                img.imageId,
-                                img.imageBeforeUrl,
-                                img.altBeforeTranslation,
-                                img.languageCode,
-                                e.target.value,
-                              )
-                            }
-                            placeholder={t(
-                              "Enter the image to be modified (Alt)",
-                            )}
-                            autoSize={{ minRows: 5, maxRows: 5 }}
-                          />
+                            tip="加载中..."
+                          >
+                            <TextArea
+                              style={{ margin: "16px 0" }}
+                              value={
+                                confirmData.find(
+                                  (i: any) =>
+                                    i.languageCode === img.languageCode,
+                                )?.value ?? img.altAfterTranslation
+                              }
+                              onChange={(e) =>
+                                handleInputChange(
+                                  img.imageId,
+                                  img.imageId,
+                                  img.imageBeforeUrl,
+                                  img.altBeforeTranslation,
+                                  img.languageCode,
+                                  e.target.value,
+                                )
+                              }
+                              placeholder={t(
+                                "Enter the image to be modified (Alt)",
+                              )}
+                              autoSize={{ minRows: 5, maxRows: 5 }}
+                            />
+                          </Spin>
                         </div>
                         <Flex
                           gap={10}

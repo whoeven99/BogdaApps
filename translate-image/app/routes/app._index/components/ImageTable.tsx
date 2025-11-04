@@ -409,9 +409,9 @@ export default function Index() {
                   sortKeyProp={sortKey}
                   sortOrderProp={sortOrder}
                 />
-                <Button onClick={() => console.log(lastPageCursorInfo)}>
+                {/* <Button onClick={() => console.log(lastPageCursorInfo)}>
                   输出store存储数据
-                </Button>
+                </Button> */}
               </Flex>
             </Flex>
           </Card>
