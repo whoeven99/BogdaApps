@@ -6,7 +6,7 @@
 .custom-upload .ant-upload-list-item,
 .custom-upload .ant-upload-list-item-container {
   width: 100% !important;
-  height: 300px !important;
+  height: 250px !important;
   overflow: hidden;
   border-radius: 8px;
 }
