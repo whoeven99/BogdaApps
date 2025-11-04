@@ -17,6 +17,7 @@ import SortPopover from "~/routes/app.management/conponents/SortPopover";
 import { useDispatch, useSelector } from "react-redux";
 import { AppDispatch, RootState } from "~/store";
 import { setLastPageCursorInfo } from "~/store/modules/productSlice";
+import '../style.css'
 export default function Index() {
   const loadFetcher = useFetcher<any>();
   const languageFetcher = useFetcher<any>();
@@ -78,6 +79,7 @@ export default function Index() {
       maxWidth: 250, // ✅ 指定列宽（单位是像素）
       render: (_: any, record: any) => (
         <Text
+          className="hover-underline"
           style={{
             display: "inline-block",
             maxWidth: 550, // 给内部留点空隙
@@ -85,6 +87,7 @@ export default function Index() {
             wordBreak: "break-word", // ✅ 超长单词也能换行
             lineHeight: 1.5,
             fontSize: "14px",
+
             // cursor:"pointer"
           }}
         >

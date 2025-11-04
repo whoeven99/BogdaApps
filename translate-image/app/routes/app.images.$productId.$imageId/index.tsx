@@ -682,6 +682,8 @@ const ImageAltTextPage = () => {
           setDefaultLanguageData(lan);
         }
       });
+      console.log("商店查询语言数据：",languageFetcher.data);
+      
       setLanguageList(
         languageFetcher.data.response
           .map((lan: any) => {
