@@ -204,27 +204,6 @@ export const UpdateProductImageAltData = async ({
   languageCode: string;
 }) => {
   try {
-    console.log(
-      `${shopName} UpdateProductImageAltData: `,
-      server,
-      shopName,
-      imageId,
-      imageUrl,
-      altText,
-      targetAltText,
-      languageCode,
-    );
-    console.log(
-      "samoidjasfiosn",
-      server,
-      shopName,
-      imageId,
-      imageUrl,
-      altText,
-      targetAltText,
-      languageCode,
-    );
-
     const response = await axios({
       url: `${server}/pcUserPic/updateUserPic?shopName=${shopName}`,
       method: "POST",
@@ -353,9 +332,6 @@ export const DeleteProductImageData = async ({
   languageCode: string;
 }) => {
   try {
-    console.log("delete img: ", server, shopName, imageUrl, languageCode);
-    // console.log('dele ',process.env.SERVER_URL);
-
     const response = await axios({
       url: `${server}/pcUserPic/deletePicByShopNameAndPCUserPictures?shopName=${shopName}`,
       method: "POST",
@@ -366,7 +342,7 @@ export const DeleteProductImageData = async ({
       },
     });
 
-    console.log("DeleteProductImageData: ", response.data);
+    // console.log("DeleteProductImageData: ", response.data);
 
     return response.data;
   } catch (error) {

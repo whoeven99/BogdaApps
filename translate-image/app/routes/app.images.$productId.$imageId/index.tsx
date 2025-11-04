@@ -229,6 +229,7 @@ const ImageAltTextPage = () => {
   const [saveLoading, setSaveLoading] = useState<boolean>(false);
   const [translatrImageactive, setTranslatrImageactive] = useState(false);
   const imageFetcher = useFetcher<any>();
+  const [imageFetcherLoading, setImageFetcherLoading] = useState(true);
   const [imageDatas, setImageDatas] = useState<any[]>([]);
   const [textareaLoading, setTextareaLoading] = useState<
     Record<string, boolean>
@@ -245,7 +246,10 @@ const ImageAltTextPage = () => {
   const altTranslateFetcher = useFetcher<any>();
   const [currentAltImage, setCurrentAltImage] = useState<any>();
   const [previewVisible, setPreviewVisible] = useState(false);
-  const [previewImage, setPreviewImage] = useState("");
+  const [previewImage, setPreviewImage] = useState<{
+    imgUrl: string;
+    imgAlt: string;
+  }>({ imgUrl: "", imgAlt: "" });
   const { chars, totalChars } = useSelector((state: any) => state.userConfig);
   const [open, setOpen] = useState<boolean>(false);
   const [dataReady, setDataReady] = useState(false);
@@ -298,7 +302,7 @@ const ImageAltTextPage = () => {
   // 关闭弹窗
   const handleCancel = () => {
     setPreviewVisible(false);
-    setPreviewImage("");
+    setPreviewImage({ imgUrl: "", imgAlt: "" });
   };
   useEffect(() => {
     imageFetcher.submit(
@@ -337,13 +341,14 @@ const ImageAltTextPage = () => {
         }
       });
       setImageDatas(mergedList);
+      setImageFetcherLoading(false);
     }
   }, [imageFetcher.data]);
   useEffect(() => {
-    if (!languageLoading && imageFetcher.state !== "submitting") {
+    if (!languageLoading && !imageFetcherLoading) {
       setDataReady(true);
     }
-  }, [languageLoading, languageList, imageDatas]);
+  }, [languageLoading, imageFetcherLoading]);
   useEffect(() => {
     if (imageDatas?.length > 0) {
       const initLists = imageDatas.reduce(
@@ -653,7 +658,10 @@ const ImageAltTextPage = () => {
   }, [confirmData]);
   // 图片预览
   const handlePreview = async (img: any) => {
-    setPreviewImage(img.imageAfterUrl);
+    setPreviewImage({
+      imgUrl: img.imageAfterUrl,
+      imgAlt: img.altAfterTranslation,
+    });
     setPreviewVisible(true);
   };
   // 删除图片
@@ -1189,14 +1197,14 @@ const ImageAltTextPage = () => {
             centered
           >
             <img
-              alt="Preview"
+              alt={previewImage.imgAlt || "preview image"}
               style={{
                 width: "100%",
                 borderRadius: 8,
                 objectFit: "contain",
                 // maxHeight: "70vh",
               }}
-              src={previewImage}
+              src={previewImage.imgUrl}
             />
           </Modal>
           <Modal
