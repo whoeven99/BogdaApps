@@ -732,11 +732,11 @@ const ImageAltTextPage = () => {
   };
   return (
     <Page>
-      <ScrollNotice
+      {/* <ScrollNotice
         text={t(
           "Welcome to our app! If you have any questions, feel free to email us at, and we will respond as soon as possible.",
         )}
-      />
+      /> */}
       <SaveBar id="save-bar">
         <button
           variant="primary"

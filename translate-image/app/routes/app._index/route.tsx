@@ -125,11 +125,11 @@ const Index = () => {
   return (
     <Page>
       <TitleBar title={t("Image & Alt Text Translation")} />
-      <ScrollNotice
+      {/* <ScrollNotice
         text={t(
           "Welcome to our app! If you have any questions, feel free to email us at support@ciwi.ai, and we will respond as soon as possible.",
         )}
-      />
+      /> */}
       <Space
         direction="vertical"
         size="large"

@@ -126,9 +126,21 @@ export function ErrorBoundary() {
           <ScrollRestoration />
           <Scripts />
           <script
-            src="https://embed.tawk.to/6909a2c4f363bc1955661e51/1j96q7jtm"
-            async
-          ></script>
+          dangerouslySetInnerHTML={{
+            __html: `
+              var Tawk_API=Tawk_API||{}, Tawk_LoadStart=new Date();
+              (function(){
+                var s1=document.createElement("script"),
+                    s0=document.getElementsByTagName("script")[0];
+                s1.async=true;
+                s1.src='https://embed.tawk.to/6909a2c4f363bc1955661e51/1j96q7jtm';
+                s1.charset='UTF-8';
+                s1.setAttribute('crossorigin','*');
+                s0.parentNode.insertBefore(s1,s0);
+              })();
+            `,
+          }}
+        ></script>
         </div>
       </body>
     </html>
@@ -153,8 +165,20 @@ export default function App() {
         <ScrollRestoration />
         <Scripts />
         <script
-          src="https://embed.tawk.to/6909a2c4f363bc1955661e51/1j96q7jtm"
-          async
+          dangerouslySetInnerHTML={{
+            __html: `
+              var Tawk_API=Tawk_API||{}, Tawk_LoadStart=new Date();
+              (function(){
+                var s1=document.createElement("script"),
+                    s0=document.getElementsByTagName("script")[0];
+                s1.async=true;
+                s1.src='https://embed.tawk.to/6909a2c4f363bc1955661e51/1j96q7jtm';
+                s1.charset='UTF-8';
+                s1.setAttribute('crossorigin','*');
+                s0.parentNode.insertBefore(s1,s0);
+              })();
+            `,
+          }}
         ></script>
       </Provider>
     </>
