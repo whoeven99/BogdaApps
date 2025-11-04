@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Layout, Pagination, Thumbnail } from "@shopify/polaris";
+import { Badge, Layout, Pagination, Thumbnail } from "@shopify/polaris";
 import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
 import {
   ArrowLeftIcon,
@@ -108,30 +108,27 @@ export default function Index() {
       render: (_: any, record: any) => {
         const status = record?.status;
 
-        let color = "default";
+        let tone: "success" | "info" | "attention" | "critical" | "new" =
+          "success";
         let label = "Unknown";
 
         switch (status) {
           case "ACTIVE":
-            color = "green";
-            label = "Efficient";
+            tone = "success";
+            label = "Active";
             break;
           case "DRAFT":
-            color = "orange";
+            tone = "info";
             label = "Draft";
             break;
           case "ARCHIVED":
-            color = "gray";
+            tone = "attention";
             label = "Archived";
-            break;
-          default:
-            color = "default";
-            label = "Unknown";
             break;
         }
 
-        // return <Badge text={t(label)} variant="success" />;
-        return <Tag color={color}>{t(label)}</Tag>
+        return <Badge tone={tone}>{t(label)}</Badge>;
+        // return <Tag color={color}>{t(label)}</Tag>
       },
       responsive: ["md", "lg", "xl", "xxl"], // ✅ 手机端隐藏
     },
