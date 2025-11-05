@@ -260,6 +260,9 @@ export default function Index() {
     }, 100);
   };
   const handlePreProductPage = () => {
+    if (productsFetcher.state !== "idle") {
+      return;
+    }
     dispatch(
       setLastPageCursorInfo({
         lastRequestCursor: productsStartCursor,
@@ -284,6 +287,9 @@ export default function Index() {
     ); // 提交表单请求
   };
   const handleNextProductPage = () => {
+    if (productsFetcher.state !== "idle") {
+      return;
+    }
     dispatch(
       setLastPageCursorInfo({
         lastRequestCursor: productsEndCursor,

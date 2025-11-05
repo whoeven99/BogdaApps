@@ -76,7 +76,13 @@ export function ErrorBoundary() {
   };
 
   const currentError = errorMessages[errorCode] || errorMessages["500"];
-
+  useEffect(() => {
+    const s1 = document.createElement("script");
+    s1.src = "https://embed.tawk.to/6909a2c4f363bc1955661e51/1j96q7jtm";
+    s1.async = true;
+    s1.setAttribute("crossorigin", "*");
+    document.body.appendChild(s1);
+  }, []);
   // 服务器端渲染时直接返回基础结构
   return (
     <html>
@@ -118,17 +124,13 @@ export function ErrorBoundary() {
                   fontSize: 16,
                 }}
               >
-                Please click the "Ciwi-Translator" option in the app navigation
+                Please click the "Ciwi.ai: Image & Alt Translate" option in the app navigation
                 bar again
               </p>
             </div>
           </div>
           <ScrollRestoration />
           <Scripts />
-          <script
-            src="https://embed.tawk.to/6909a2c4f363bc1955661e51/1j96q7jtm"
-            async
-          ></script>
         </div>
       </body>
     </html>
@@ -136,6 +138,13 @@ export function ErrorBoundary() {
 }
 
 export default function App() {
+  useEffect(() => {
+    const s1 = document.createElement("script");
+    s1.src = "https://embed.tawk.to/6909a2c4f363bc1955661e51/1j96q7jtm";
+    s1.async = true;
+    s1.setAttribute("crossorigin", "*");
+    document.body.appendChild(s1);
+  }, []);
   return (
     // 使用 Redux Provider 包装整个应用（用于状态管理，必须）,删除后很多功能无法使用
     <>
@@ -152,10 +161,6 @@ export default function App() {
         <Outlet />
         <ScrollRestoration />
         <Scripts />
-        <script
-          src="https://embed.tawk.to/6909a2c4f363bc1955661e51/1j96q7jtm"
-          async
-        ></script>
       </Provider>
     </>
   );
