@@ -468,7 +468,7 @@ export default function ProductDetailPage() {
                       style={{
                         width: "100%",
                         height: "100%",
-                        objectFit: "cover",
+                        objectFit: "contain",
                       }}
                     />
                   </div>
@@ -500,7 +500,7 @@ export default function ProductDetailPage() {
 
           <div
             style={{
-              display: `${imageHasNextPage ? "flex" : "none"}`,
+              display: `${imageHasNextPage || imageHasPreviousPage ? "flex" : "none"}`,
               justifyContent: "center",
               marginTop: "16px",
             }}

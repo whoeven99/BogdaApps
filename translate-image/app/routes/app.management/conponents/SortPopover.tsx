@@ -63,7 +63,7 @@ export default function SortPopover({
 
       <Space direction="vertical" style={{ width: "100%" }}>
         <Button
-          type={sortOrder === "asc" ? "default" : "text"}
+          type={sortOrder === "asc" ? "primary" : "text"}
           icon={<SortAscendingOutlined />}
           onClick={() => handleOrderChange("asc")}
           block
@@ -71,7 +71,7 @@ export default function SortPopover({
           {t("From old to new")}
         </Button>
         <Button
-          type={sortOrder === "desc" ? "default" : "text"}
+          type={sortOrder === "desc" ? "primary" : "text"}
           icon={<SortAscendingOutlined rotate={180} />}
           onClick={() => handleOrderChange("desc")}
           block

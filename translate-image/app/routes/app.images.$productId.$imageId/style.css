@@ -1,4 +1,4 @@
-.custom-upload .ant-upload-list {
+/* .custom-upload .ant-upload-list {
   display: block; 
 }
 
@@ -22,11 +22,55 @@
   position: static !important;
   background: transparent !important;
 }
-/* 
-.custom-upload .ant-upload-list-item-progress {
-  height: 6px !important; 
-  bottom: 8px !important; 
-} */
+
  .deleteIcon:hover{
     background-color: #333;
- }
+ } */
+
+.custom-upload .ant-upload-list {
+  display: block;
+}
+
+.custom-upload .ant-upload-select,
+.custom-upload .ant-upload-list-item,
+.custom-upload .ant-upload-list-item-container {
+  width: 100% !important;
+  height: 300px !important;
+  border-radius: 8px;
+  overflow: hidden;
+  background-color: #fafafa;
+  border: 1px dashed #d9d9d9;
+  transition: all 0.2s ease;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.custom-upload .ant-upload-select:hover,
+.custom-upload .ant-upload-list-item:hover {
+  border-color: #1677ff;
+}
+
+.custom-upload .ant-upload-list-item img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain !important; 
+  background-color: #f5f5f5;
+  display: block;
+  margin: auto;
+}
+
+.custom-upload .ant-upload-list-item-info,
+.custom-upload .ant-upload-list-item-meta {
+  position: static !important;
+  background: transparent !important;
+}
+
+.deleteIcon {
+  transition: background-color 0.2s ease;
+}
+
+.deleteIcon:hover {
+  background-color: #333;
+  color: #fff;
+}

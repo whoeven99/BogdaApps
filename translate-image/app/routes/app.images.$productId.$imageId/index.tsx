@@ -835,7 +835,7 @@ const ImageAltTextPage = () => {
                         style={{
                           width: "100%",
                           height: "100%",
-                          objectFit: "cover",
+                          objectFit: "contain",
                         }}
                       />
                     </div>
@@ -972,7 +972,7 @@ const ImageAltTextPage = () => {
                             {!img.imageAfterUrl && (
                               <div>
                                 <PlusOutlined />
-                                <div style={{ marginTop: 8 }}>Upload</div>
+                                <div style={{ marginTop: 8 }}>{t("Upload")}</div>
                               </div>
                             )}
                           </Upload>
