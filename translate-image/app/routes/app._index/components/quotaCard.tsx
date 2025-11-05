@@ -160,14 +160,14 @@ export const QuotaCard = () => {
             ?.appPurchaseOneTime;
         const confirmationUrl =
           payFetcher.data?.response?.appPurchaseOneTimeCreate?.confirmationUrl;
-        const orderInfo = {
-          id: order?.id,
-          amount: order?.price.amount,
-          name: order?.name,
-          createdAt: order?.createdAt,
-          status: order?.status,
-          confirmationUrl: confirmationUrl,
-        };
+        // const orderInfo = {
+        //   id: order?.id,
+        //   amount: order?.price.amount,
+        //   name: order?.name,
+        //   createdAt: order?.createdAt,
+        //   status: order?.status,
+        //   confirmationUrl: confirmationUrl,
+        // };
         // const formData = new FormData();
         // formData.append("orderInfo", JSON.stringify(orderInfo));
         // orderFetcher.submit(formData, {
@@ -180,11 +180,11 @@ export const QuotaCard = () => {
       }
     }
   }, [payFetcher.data]);
-  useEffect(() => {
-    if (orderFetcher.data) {
-      console.log(orderFetcher.data);
-    }
-  }, [orderFetcher.data]);
+  // useEffect(() => {
+  //   if (orderFetcher.data) {
+  //     console.log(orderFetcher.data);
+  //   }
+  // }, [orderFetcher.data]);
   useEffect(() => {
     setIsLoading(false);
   }, []);

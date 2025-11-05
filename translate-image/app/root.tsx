@@ -124,7 +124,7 @@ export function ErrorBoundary() {
                   fontSize: 16,
                 }}
               >
-                Please click the "Ciwi-Translator" option in the app navigation
+                Please click the "Ciwi.ai: Image & Alt Translate" option in the app navigation
                 bar again
               </p>
             </div>
