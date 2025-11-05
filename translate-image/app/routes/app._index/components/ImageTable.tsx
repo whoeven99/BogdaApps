@@ -106,12 +106,10 @@ export default function Index() {
     },
     {
       title: t("Status"),
-      width:100,
+      width: 100,
       render: (_: any, record: any) => {
         const status = record?.status;
-
-        let tone: "success" | "info" | "attention" | "critical" | "new" =
-          "success";
+        let tone: "success" | "info" = "success";
         let label = "Unknown";
 
         switch (status) {
@@ -124,19 +122,19 @@ export default function Index() {
             label = "Draft";
             break;
           case "ARCHIVED":
-            tone = "attention";
             label = "Archived";
             break;
         }
-
+        if (status === "ARCHIVED") {
+          return <Badge>{t(label)}</Badge>;
+        }
         return <Badge tone={tone}>{t(label)}</Badge>;
-        // return <Tag color={color}>{t(label)}</Tag>
       },
       responsive: ["md", "lg", "xl", "xxl"], // ✅ 手机端隐藏
     },
     {
       title: t("Action"),
-      width:150,
+      width: 150,
       render: (_: any, record: any) => (
         <Button onClick={() => handleView(record)}>{t("Manage")}</Button>
       ),
@@ -299,7 +297,6 @@ export default function Index() {
         direction: "next",
       }),
     );
-    console.log("下一页产品");
 
     productsFetcher.submit(
       {
