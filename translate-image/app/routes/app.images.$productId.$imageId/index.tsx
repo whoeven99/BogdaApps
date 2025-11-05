@@ -51,7 +51,9 @@ import {
 import ScrollNotice from "~/components/ScrollNotice";
 import axios from "axios";
 import "./style.css";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
+import { AddCreaditsModal } from "../app._index/components/addCreditsModal";
+import { setChars, setTotalChars } from "~/store/modules/userConfig";
 const { Text, Title, Paragraph } = Typography;
 const { TextArea } = Input;
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -251,8 +253,11 @@ const ImageAltTextPage = () => {
     imgAlt: string;
   }>({ imgUrl: "", imgAlt: "" });
   const { chars, totalChars } = useSelector((state: any) => state.userConfig);
+
   const [open, setOpen] = useState<boolean>(false);
   const [dataReady, setDataReady] = useState(false);
+  const [openModal, setOpenModal] = useState<boolean>(false);
+  const dispatch = useDispatch();
   const languageMapping = {
     zh: [
       "en",
@@ -373,27 +378,31 @@ const ImageAltTextPage = () => {
   // 图片翻译
   const handleTranslate = async (record: any, languageCode: string) => {
     setCurrentTranslatingImage(record);
+    if (totalChars - chars < 1200) {
+      setOpen(true);
+      return;
+    }
     if (!languageMapping[languageCode]?.includes(languageCode)) {
       shopify.toast.show(
         t("Image translation is not supported in the current language."),
       );
-    } else {
-      setTranslateLoadingImages((pre) => ({
-        ...pre,
-        [`${record.imageId}_${record.languageCode}`]: true,
-      }));
-      translateImageFetcher.submit(
-        {
-          translateImage: JSON.stringify({
-            sourceLanguage: defaultLanguageData?.locale,
-            targetLanguage: languageCode,
-            imageUrl: record?.imageBeforeUrl,
-            imageId: record?.productId,
-          }),
-        },
-        { method: "post" },
-      );
+      return;
     }
+    setTranslateLoadingImages((pre) => ({
+      ...pre,
+      [`${record.imageId}_${record.languageCode}`]: true,
+    }));
+    translateImageFetcher.submit(
+      {
+        translateImage: JSON.stringify({
+          sourceLanguage: defaultLanguageData?.locale,
+          targetLanguage: languageCode,
+          imageUrl: record?.imageBeforeUrl,
+          imageId: record?.productId,
+        }),
+      },
+      { method: "post" },
+    );
 
     const formData = new FormData();
     formData.append("altTranslateFetcher", JSON.stringify({ record }));
@@ -438,6 +447,12 @@ const ImageAltTextPage = () => {
         replaceTranslateImageFetcher.submit(formData, {
           method: "post",
         });
+        dispatch(setChars({ chars: chars + 1000 }));
+        // dispatch(
+        //   setTotalChars({
+        //     totalChars: data?.response?.purchasePoints,
+        //   }),
+        // );
       } else if (
         !translateImageFetcher.data.success &&
         translateImageFetcher.data.errorMsg === "额度不够"
@@ -520,6 +535,7 @@ const ImageAltTextPage = () => {
             ];
           }
         });
+        dispatch(setChars({ chars: chars + 200 }));
       } else if (
         !altTranslateFetcher.data.response.success &&
         altTranslateFetcher.data.response.errorMsg === "额度不够"
@@ -725,7 +741,8 @@ const ImageAltTextPage = () => {
     }
   }, [languageFetcher.data]);
   const onBuy = () => {
-    navigate("/app");
+    setOpen(false);
+    setOpenModal(true);
   };
   const onCancel = () => {
     setOpen(false);
@@ -972,7 +989,9 @@ const ImageAltTextPage = () => {
                             {!img.imageAfterUrl && (
                               <div>
                                 <PlusOutlined />
-                                <div style={{ marginTop: 8 }}>{t("Upload")}</div>
+                                <div style={{ marginTop: 8 }}>
+                                  {t("Upload")}
+                                </div>
                               </div>
                             )}
                           </Upload>
@@ -1211,17 +1230,13 @@ const ImageAltTextPage = () => {
               size="middle"
               style={{ width: "100%", textAlign: "center" }}
             >
-              <ExclamationCircleOutlined
-                style={{ fontSize: 48, color: "#faad14" }}
-              />
-
               <Typography.Title level={4} style={{ marginBottom: 0 }}>
-                {t("Insufficient translation quota")}
+                {t("You’ve run out of translation credits")}
               </Typography.Title>
 
               <Paragraph type="secondary" style={{ margin: 0 }}>
                 {t(
-                  "Your current translation quota has been used up. Please purchase more quota to continue using the translation function.",
+                  "You’ve used all your available translation credits. Add more credits to keep your translations running without interruption.",
                 )}
               </Paragraph>
 
@@ -1232,13 +1247,19 @@ const ImageAltTextPage = () => {
                   justifyContent: "center",
                 }}
               >
-                <Button onClick={onCancel}>{t("Cancel")}</Button>
                 <Button type="primary" onClick={onBuy}>
-                  {t("Purchase quota")}
+                  {t("Add credits")}
                 </Button>
               </Space>
             </Space>
           </Modal>
+          <AddCreaditsModal
+            openModal={openModal}
+            onClose={() => setOpenModal(false)}
+            action="images"
+            productId={productId}
+            imageId={imageId}
+          />
         </Layout.Section>
       </Layout>
     </Page>

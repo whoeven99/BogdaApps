@@ -133,8 +133,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
     if (payInfo) {
       try {
+        console.log("sjdaskdi: ", payInfo);
+
         const returnUrl = new URL(
-          `https://admin.shopify.com/store/${shop.split(".")[0]}/apps/${process.env.HANDLE}/app`,
+          payInfo?.action === "quotacard"
+            ? `https://admin.shopify.com/store/${shop.split(".")[0]}/apps/${process.env.HANDLE}/app`
+            : `https://admin.shopify.com/store/${shop.split(".")[0]}/apps/${process.env.HANDLE}/app/images/${payInfo.productId}/${payInfo.imageId}`,
         );
         const res = await mutationAppPurchaseOneTimeCreate({
           shop,

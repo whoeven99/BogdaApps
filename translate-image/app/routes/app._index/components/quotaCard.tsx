@@ -27,6 +27,7 @@ import { useTranslation } from "react-i18next";
 import { useDispatch, useSelector } from "react-redux";
 // import { OptionType } from "~/components/paymentModal";
 import { useFetcher } from "@remix-run/react/dist/components";
+import { AddCreaditsModal } from "./addCreditsModal";
 const { Title, Text, Paragraph } = Typography;
 export interface OptionType {
   key: string;
@@ -38,153 +39,12 @@ export interface OptionType {
   };
 }
 export const QuotaCard = () => {
-  const payFetcher = useFetcher<any>();
-  const orderFetcher = useFetcher<any>();
   const { reportClick, report } = useReport();
   const { t } = useTranslation();
   const { chars, totalChars } = useSelector((state: any) => state.userConfig);
 
   const [isLoading, setIsLoading] = useState(true);
-  const [addCreditsModalOpen, setAddCreditsModalOpen] = useState(false);
-  const [selectedOptionKey, setSelectedOption] = useState<string>("option-1");
-
-  const [buyButtonLoading, setBuyButtonLoading] = useState<boolean>(false);
-  const creditOptions: OptionType[] = [
-    {
-      key: "option-1",
-      name: "500K",
-      Credits: 500000,
-      price: {
-        comparedPrice: 3.99,
-        currencyCode: "USD",
-      },
-    },
-    {
-      key: "option-2",
-      name: "1M",
-      Credits: 1000000,
-      price: {
-        comparedPrice: 7.99,
-        currencyCode: "USD",
-      },
-    },
-    {
-      key: "option-3",
-      name: "2M",
-      Credits: 2000000,
-      price: {
-        comparedPrice: 15.99,
-        currencyCode: "USD",
-      },
-    },
-    {
-      key: "option-4",
-      name: "3M",
-      Credits: 3000000,
-      price: {
-        comparedPrice: 23.99,
-        currencyCode: "USD",
-      },
-    },
-    {
-      key: "option-5",
-      name: "5M",
-      Credits: 5000000,
-      price: {
-        comparedPrice: 39.99,
-        currencyCode: "USD",
-      },
-    },
-    {
-      key: "option-6",
-      name: "10M",
-      Credits: 10000000,
-      price: {
-        comparedPrice: 79.99,
-        currencyCode: "USD",
-      },
-    },
-    {
-      key: "option-7",
-      name: "20M",
-      Credits: 20000000,
-      price: {
-        comparedPrice: 159.99,
-        currencyCode: "USD",
-      },
-    },
-    {
-      key: "option-8",
-      name: "30M",
-      Credits: 30000000,
-      price: {
-        comparedPrice: 239.99,
-        currencyCode: "USD",
-      },
-    },
-  ];
-
-  const handlePay = () => {
-    // setBuyButtonLoading(true);
-    console.log(selectedOptionKey);
-
-    const selectedOption = creditOptions.find(
-      (item) => item.key === selectedOptionKey,
-    );
-
-    const payInfo = {
-      name: selectedOption?.name,
-      price: {
-        amount: selectedOption?.price.comparedPrice,
-        currencyCode: selectedOption?.price.currencyCode,
-      },
-    };
-    console.log(payInfo);
-
-    const formData = new FormData();
-    formData.append("payInfo", JSON.stringify(payInfo));
-    payFetcher.submit(formData, {
-      method: "POST",
-      action: "/app",
-    });
-  };
-  useEffect(() => {
-    if (payFetcher.data) {
-      console.log(payFetcher.data);
-
-      if (payFetcher.data?.success) {
-        console.log(payFetcher.data);
-
-        const order =
-          payFetcher.data?.response?.appPurchaseOneTimeCreate
-            ?.appPurchaseOneTime;
-        const confirmationUrl =
-          payFetcher.data?.response?.appPurchaseOneTimeCreate?.confirmationUrl;
-        // const orderInfo = {
-        //   id: order?.id,
-        //   amount: order?.price.amount,
-        //   name: order?.name,
-        //   createdAt: order?.createdAt,
-        //   status: order?.status,
-        //   confirmationUrl: confirmationUrl,
-        // };
-        // const formData = new FormData();
-        // formData.append("orderInfo", JSON.stringify(orderInfo));
-        // orderFetcher.submit(formData, {
-        //   method: "post",
-        //   action: "/app",
-        // });
-        open(confirmationUrl, "_top");
-      } else {
-        setBuyButtonLoading(false);
-      }
-    }
-  }, [payFetcher.data]);
-  // useEffect(() => {
-  //   if (orderFetcher.data) {
-  //     console.log(orderFetcher.data);
-  //   }
-  // }, [orderFetcher.data]);
+  const [openModal, setOpenModal] = useState<boolean>(false);
   useEffect(() => {
     setIsLoading(false);
   }, []);
@@ -217,7 +77,7 @@ export const QuotaCard = () => {
             <Button
               type="default"
               onClick={() => {
-                setAddCreditsModalOpen(true);
+                setOpenModal(true);
                 reportClick("pricing_balance_add");
               }}
             >
@@ -255,84 +115,11 @@ export const QuotaCard = () => {
           showInfo={false}
         />
       </Space>
-      <Modal
-        title={t("Buy Credits")}
-        open={addCreditsModalOpen}
-        width={900}
-        centered
-        onCancel={() => setAddCreditsModalOpen(false)}
-        footer={null}
-      >
-        <Space direction="vertical" size="small" style={{ width: "100%" }}>
-          <Row gutter={[16, 16]}>
-            {creditOptions.map((option) => (
-              <Col key={option.key} xs={12} sm={12} md={6} lg={6} xl={6}>
-                <Card
-                  hoverable
-                  style={{
-                    textAlign: "center",
-                    borderColor:
-                      JSON.stringify(selectedOptionKey) ===
-                      JSON.stringify(option.key)
-                        ? "#007F61"
-                        : undefined,
-                    borderWidth:
-                      JSON.stringify(selectedOptionKey) ===
-                      JSON.stringify(option.key)
-                        ? "2px"
-                        : "1px",
-                    cursor: "pointer",
-                    display: "flex",
-                    flexDirection: "column",
-                    justifyContent: "center",
-                    alignItems: "center",
-                    height: "150px",
-                  }}
-                  onClick={() => setSelectedOption(option.key)}
-                >
-                  <Text
-                    style={{
-                      fontSize: "16px",
-                      fontWeight: 500,
-                      display: "block",
-                      marginBottom: "8px",
-                    }}
-                  >
-                    {option.Credits.toLocaleString()} {t("Credits")}
-                  </Text>
-                  <Title
-                    level={3}
-                    style={{ margin: 0, color: "#007F61", fontWeight: 700 }}
-                  >
-                    ${option.price.comparedPrice.toFixed(2)}
-                  </Title>
-                </Card>
-              </Col>
-            ))}
-          </Row>
-          <Flex align="center" justify="center">
-            <Space direction="vertical" align="center">
-              <Text type="secondary" style={{ margin: "16px 0 8px 0" }}>
-                {t("Total pay")}: $
-                {selectedOptionKey
-                  ? creditOptions
-                      .find((item) => item.key === selectedOptionKey)
-                      ?.price.comparedPrice.toFixed(2)
-                  : "0.00"}
-              </Text>
-              <Button
-                type="primary"
-                size="large"
-                disabled={!selectedOptionKey}
-                loading={buyButtonLoading}
-                onClick={handlePay}
-              >
-                {t("Buy now")}
-              </Button>
-            </Space>
-          </Flex>
-        </Space>
-      </Modal>
+      <AddCreaditsModal
+        openModal={openModal}
+        onClose={() => setOpenModal(false)}
+        action="quotacard"
+      />
     </Card>
   );
 };
