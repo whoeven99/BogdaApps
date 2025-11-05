@@ -972,7 +972,7 @@ const ImageAltTextPage = () => {
                             {!img.imageAfterUrl && (
                               <div>
                                 <PlusOutlined />
-                                <div style={{ marginTop: 8 }}>Upload</div>
+                                <div style={{ marginTop: 8 }}>{t("Upload")}</div>
                               </div>
                             )}
                           </Upload>

@@ -56,6 +56,7 @@ export default function Index() {
   const panelColumns: ColumnsType<any> = [
     {
       // 不需要 dataIndex，用 render 直接取 item.node.title
+      width: 100,
       render: (_: any, record: any) => {
         const imageData = record.imageData.edges;
         return imageData.length > 0 ? (
@@ -105,6 +106,7 @@ export default function Index() {
     },
     {
       title: t("Status"),
+      width:100,
       render: (_: any, record: any) => {
         const status = record?.status;
 
@@ -134,6 +136,7 @@ export default function Index() {
     },
     {
       title: t("Action"),
+      width:150,
       render: (_: any, record: any) => (
         <Button onClick={() => handleView(record)}>{t("Manage")}</Button>
       ),
