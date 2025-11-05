@@ -1228,7 +1228,7 @@ const ImageAltTextPage = () => {
             <Space
               direction="vertical"
               size="middle"
-              style={{ width: "100%", textAlign: "center" }}
+              style={{ width: "100%" }}
             >
               <Typography.Title level={4} style={{ marginBottom: 0 }}>
                 {t("You’ve run out of translation credits")}

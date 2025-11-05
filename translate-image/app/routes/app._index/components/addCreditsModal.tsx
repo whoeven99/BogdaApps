@@ -130,9 +130,8 @@ export const AddCreaditsModal = ({
   ];
   const [buyButtonLoading, setBuyButtonLoading] = useState<boolean>(false);
   const handlePay = () => {
-    // setBuyButtonLoading(true);
+    setBuyButtonLoading(true);
     console.log(selectedOptionKey);
-
     const selectedOption = creditOptions.find(
       (item) => item.key === selectedOptionKey,
     );
