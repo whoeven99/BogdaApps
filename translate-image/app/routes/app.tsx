@@ -224,6 +224,7 @@ export default function App() {
       shop,
       server: server as string,
     });
+    
     if (data?.success) {
       dispatch(setChars({ chars: data?.response?.usedPoints }));
       dispatch(

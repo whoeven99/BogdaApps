@@ -106,8 +106,6 @@
   "Enter the image to be modified (Alt)":"Enter the image to be modified (Alt)",
   "Upload":"Upload",
   "Image Preview":"Image Preview",
-  "Insufficient translation quota":"Insufficient translation quota",
-  "Your current translation quota has been used up. Please purchase more quota to continue using the translation function.":"Your current translation quota has been used up. Please purchase more quota to continue using the translation function.",
   "Cancel":"Cancel",
   "Image translation is not supported in the current language.":"Image translation is not supported in the current language.",
   "Image translated successfully":"Image translated successfully",
@@ -120,5 +118,10 @@
   "Some items saved failed":"Some items saved failed",
   "Only images can be uploaded":"Only images can be uploaded",
   "Only JPEG, PNG, WEBP, HEIC and GIF formats are supported":"Only JPEG, PNG, WEBP, HEIC and GIF formats are supported",
-  "File must be less than 20MB":"File must be less than 20MB"
+  "File must be less than 20MB":"File must be less than 20MB",
+  "You’ve run out of translation credits":"You’ve run out of translation credits",
+  "You’ve used all your available translation credits. Add more credits to keep your translations running without interruption.":"You’ve used all your available translation credits. Add more credits to keep your translations running without interruption.",
+  "Image Translation Not Supported":"Image Translation Not Supported",
+  "Got it":"Got it",
+  "Image translation is only available when your store’s default language is Chinese or English.":"Image translation is only available when your store’s default language is Chinese or English."
 }
