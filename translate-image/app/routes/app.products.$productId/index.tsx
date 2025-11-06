@@ -357,7 +357,7 @@ export default function ProductDetailPage() {
       {/* <TitleBar title="产品详情" /> */}
       <ScrollNotice
         text={t(
-          "Welcome to our app! If you have any questions, feel free to email us at, and we will respond as soon as possible.",
+          "Welcome to our app! If you have any questions, feel free to email us at support@ciwi.ai, and we will respond as soon as possible.",
         )}
       />
       <Affix offsetTop={0}>

@@ -10,7 +10,7 @@ embedded = true
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_legal_policies,read_online_store_navigation,unauthenticated_read_product_listings,read_themes,read_translations,unauthenticated_read_metaobjects,write_locales,write_metaobjects,write_products"
+scopes = "read_content,read_legal_policies,read_online_store_navigation,unauthenticated_read_product_listings,read_themes,read_translations,unauthenticated_read_metaobjects,write_locales,write_metaobjects,write_products"
 [auth]
 redirect_urls = [
   "https://translateimageprod.onrender.com/auth/callback",
