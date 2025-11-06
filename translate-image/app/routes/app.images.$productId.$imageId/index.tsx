@@ -255,6 +255,7 @@ const ImageAltTextPage = () => {
   const { chars, totalChars } = useSelector((state: any) => state.userConfig);
 
   const [open, setOpen] = useState<boolean>(false);
+  const [notTranslateModal, setNotTranslateModal] = useState<boolean>(false);
   const [dataReady, setDataReady] = useState(false);
   const [openModal, setOpenModal] = useState<boolean>(false);
   const dispatch = useDispatch();
@@ -383,9 +384,10 @@ const ImageAltTextPage = () => {
       return;
     }
     if (!languageMapping[languageCode]?.includes(languageCode)) {
-      shopify.toast.show(
-        t("Image translation is not supported in the current language."),
-      );
+      // shopify.toast.show(
+      //   t("Image translation is not supported in the current language."),
+      // );
+      setNotTranslateModal(true);
       return;
     }
     setTranslateLoadingImages((pre) => ({
@@ -604,6 +606,10 @@ const ImageAltTextPage = () => {
         shopify.toast.show(`${info.file.name} ${t("Upload Failed")}`);
       }
     } else if (info.file.status === "error") {
+      setFileLists((prev) => ({
+        ...prev,
+        [languageCode]: [], // ✅ 更新对应语言
+      }));
       shopify.toast.show(`${info.file.name} ${t("Upload Failed")}`);
     }
   };
@@ -1225,11 +1231,7 @@ const ImageAltTextPage = () => {
             centered
             // bodyStyle={{ textAlign: "center", padding: "32px 24px" }}
           >
-            <Space
-              direction="vertical"
-              size="middle"
-              style={{ width: "100%" }}
-            >
+            <Space direction="vertical" size="middle" style={{ width: "100%" }}>
               <Typography.Title level={4} style={{ marginBottom: 0 }}>
                 {t("You’ve run out of translation credits")}
               </Typography.Title>
@@ -1260,6 +1262,23 @@ const ImageAltTextPage = () => {
             productId={productId}
             imageId={imageId}
           />
+          <Modal
+            title={t("Image Translation Not Supported")}
+            open={notTranslateModal}
+            onCancel={() => setNotTranslateModal(false)}
+            onOk={() => setNotTranslateModal(false)}
+            centered
+            okText={t("Got it")}
+            cancelButtonProps={{ style: { display: "none" } }}
+          >
+            <Typography>
+              <Paragraph>
+                {t(
+                  "Image translation is only available when your store’s default language is Chinese or English.",
+                )}
+              </Paragraph>
+            </Typography>
+          </Modal>
         </Layout.Section>
       </Layout>
     </Page>

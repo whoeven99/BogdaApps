@@ -302,6 +302,9 @@ export default function ProductDetailPage() {
     }
   }, [productLoadingFetcher]);
   const handleImagePrevious = () => {
+    if (imageFetcher.state !== 'idle') {
+      return;
+    }
     setProductLoading(true);
     imageFetcher.submit(
       {
@@ -317,6 +320,9 @@ export default function ProductDetailPage() {
     );
   };
   const handleImageNext = () => {
+    if (imageFetcher.state !== 'idle') {
+      return;
+    }
     setProductLoading(true);
     imageFetcher.submit(
       {
@@ -335,7 +341,6 @@ export default function ProductDetailPage() {
     if (imageFetcher.data) {
       setProductLoading(false);
       // console.log("dsdqeqsa: ", imageFetcher.data);
-
       setProductImageData(imageFetcher.data.imageData);
       setImageHasNextPage(imageFetcher.data.imageData[0]?.imageHasNextPage);
       setImageHasPreviousPage(
