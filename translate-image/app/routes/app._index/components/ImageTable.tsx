@@ -106,7 +106,7 @@ export default function Index() {
     },
     {
       title: t("Status"),
-      width: 100,
+      width: 110,
       render: (_: any, record: any) => {
         const status = record?.status;
         let tone: "success" | "info" = "success";
@@ -388,7 +388,7 @@ export default function Index() {
                 onChange={(key) => handleChangeStatusTab(key)}
                 defaultActiveKey="all"
                 type="line"
-                style={{ width: "30%" }}
+                style={{ width: "40%" }}
                 items={[
                   { label: t("All"), key: "ALL" },
                   {
