@@ -71,5 +71,7 @@
   "Got it": "Понятно",
   "Image translation is only available when your store’s default language is Chinese or English.": "Перевод изображений доступен только в том случае, если языком вашего магазина по умолчанию является китайский или английский.",
   "zxit": "Понятно",
-  "Buy Credits": "Купить кредиты"
+  "Buy Credits": "Купить кредиты",
+  "The language you need for translation is not available in the store. Please add it via the store settings (Add Language).": "Необходимый вам язык перевода отсутствует в магазине. Добавьте его через настройки магазина (Добавить язык).",
+  "Add Language": "Добавить язык"
 }

@@ -1,4 +1,9 @@
-import { useFetcher, useNavigate, useParams } from "@remix-run/react";
+import {
+  useFetcher,
+  useLoaderData,
+  useNavigate,
+  useParams,
+} from "@remix-run/react";
 import {
   Page,
   Icon,
@@ -37,7 +42,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { ArrowLeftIcon, ImageIcon } from "@shopify/polaris-icons";
 import { useEffect, useState } from "react";
-import { ActionFunctionArgs, json } from "@remix-run/node";
+import { ActionFunctionArgs, json, LoaderFunctionArgs } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
 import { globalStore } from "~/globalStore";
 import {
@@ -56,6 +61,11 @@ import { AddCreaditsModal } from "../app._index/components/addCreditsModal";
 import { setChars, setTotalChars } from "~/store/modules/userConfig";
 const { Text, Title, Paragraph } = Typography;
 const { TextArea } = Input;
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const adminAuthResult = await authenticate.admin(request);
+  const { shop } = adminAuthResult.session;
+  return json({ shop });
+};
 export const action = async ({ request }: ActionFunctionArgs) => {
   const adminAuthResult = await authenticate.admin(request);
   const { admin } = adminAuthResult;
@@ -212,6 +222,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 };
 const ImageAltTextPage = () => {
+  const loader = useLoaderData<{ shop: string }>();
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { productId, imageId } = useParams();
@@ -376,6 +387,18 @@ const ImageAltTextPage = () => {
       setFileLists(initLists);
     }
   }, [imageDatas]);
+  // 语言转换函数
+  const normalizeLocale = (locale: string): string => {
+    if (!locale) return "";
+    const lower = locale.toLowerCase();
+
+    if (lower.startsWith("zh-cn")) return "zh";
+    if (lower.startsWith("zh-tw")) return "zh-tw";
+    if (lower.startsWith("en")) return "en";
+
+    // ✅ 处理其它常见格式（如 en-US / fr-CA）
+    return locale;
+  };
   // 图片翻译
   const handleTranslate = async (record: any, languageCode: string) => {
     setCurrentTranslatingImage(record);
@@ -383,7 +406,11 @@ const ImageAltTextPage = () => {
       setOpen(true);
       return;
     }
-    if (!languageMapping[languageCode]?.includes(languageCode)) {
+    if (
+      !languageMapping[normalizeLocale(defaultLanguageData.locale)]?.includes(
+        normalizeLocale(languageCode),
+      )
+    ) {
       // shopify.toast.show(
       //   t("Image translation is not supported in the current language."),
       // );
@@ -728,8 +755,6 @@ const ImageAltTextPage = () => {
           setDefaultLanguageData(lan);
         }
       });
-      // console.log("商店查询语言数据：", languageFetcher.data);
-
       setLanguageList(
         languageFetcher.data.response
           .map((lan: any) => {
@@ -1186,22 +1211,46 @@ const ImageAltTextPage = () => {
                   </Flex>
                 ))
               ) : (
-                <div
+                <Flex
+                  vertical
+                  align="center"
+                  justify="center"
                   style={{
-                    gridColumn: "1 / -1", // ✅ 让它跨越整个 grid
+                    gridColumn: "1 / -1",
                     width: "100%",
-                    display: "flex",
-                    justifyContent: "center",
-                    alignItems: "center",
-                    padding: "40px 0",
+                    minHeight: "320px", // ✅ 提供一定视觉高度
+                    // background: "#fff",
+                    borderRadius: 12,
+                    border: "1px solid #f0f0f0",
+                    padding: "48px 16px",
                   }}
                 >
                   <Empty
-                    description={t(
-                      "Data loading error, please refresh the page.",
-                    )}
+                    description={
+                      <Typography.Text
+                        type="secondary"
+                        style={{ fontSize: 15 }}
+                      >
+                        {t(
+                          "The language you need for translation is not available in the store. Please add it via the store settings (Add Language).",
+                        )}
+                      </Typography.Text>
+                    }
                   />
-                </div>
+
+                  <Button
+                    type="primary"
+                    style={{ marginTop: 24 }}
+                    onClick={() =>
+                      window.open(
+                        `https://admin.shopify.com/store/${loader.shop.split(".")[0]}/settings/languages`,
+                        "_blank",
+                      )
+                    }
+                  >
+                    {t("Add Language")}
+                  </Button>
+                </Flex>
               )}
             </div>
           </Space>

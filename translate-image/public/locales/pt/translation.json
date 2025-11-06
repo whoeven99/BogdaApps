@@ -71,5 +71,7 @@
   "Got it": "Entendi",
   "Image translation is only available when your store’s default language is Chinese or English.": "A tradução de imagens só está disponível se o idioma padrão da sua loja for chinês ou inglês.",
   "zxit": "Entendi",
-  "Buy Credits": "Comprar Créditos"
+  "Buy Credits": "Comprar Créditos",
+  "The language you need for translation is not available in the store. Please add it via the store settings (Add Language).": "O idioma que você precisa para a tradução não está disponível na loja. Adicione-o através das configurações da loja (Adicionar idioma).",
+  "Add Language": "Adicionar idioma"
 }

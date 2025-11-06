@@ -70,5 +70,7 @@
   "Image Translation Not Supported":"Image Translation Not Supported",
   "zxit":"Got it",
   "Buy Credits":"Buy Credits",
-  "Image translation is only available when your store’s default language is Chinese or English.":"Image translation is only available when your store’s default language is Chinese or English."
+  "Image translation is only available when your store’s default language is Chinese or English.":"Image translation is only available when your store’s default language is Chinese or English.",
+  "The language you need for translation is not available in the store. Please add it via the store settings (Add Language).":"The language you need for translation is not available in the store. Please add it via the store settings (Add Language).",
+  "Add Language":"Add Language"
 }

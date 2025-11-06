@@ -71,5 +71,7 @@
   "Got it": "知道了",
   "Image translation is only available when your store’s default language is Chinese or English.": "只有当您的商店默认语言为中文或英文时，图片翻译功能才可用。",
   "zxit": "知道了",
-  "Buy Credits": "购买积分"
+  "Buy Credits": "购买积分",
+  "The language you need for translation is not available in the store. Please add it via the store settings (Add Language).": "您需要的翻译语言在应用商店中不可用。请通过应用商店设置（添加语言）添加。",
+  "Add Language": "添加语言"
 }
