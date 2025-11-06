@@ -22,15 +22,15 @@
   "Plugin enabled — product images and alt text will appear in the right language based on your site’s language settings.": "外掛程式已啟用——產品圖片和替代文字將根據您網站的語言設定以正確的語言顯示。",
   "Enable the plugin to ensure product images and alt text are displayed correctly for each published language.": "啟用該插件，以確保每種已發布語言的產品圖片和替代文字都能正確顯示。",
   "Manage": "管理",
-  "Enable": "使能夠",
+  "Enable": "啟用",
   "All": "全部",
   "Active": "已啟用",
   "Draft": "草稿",
   "Archived": "已歸檔",
   "Search...": "搜尋...",
   "Product title": "產品標題",
-  "Status": "地位",
-  "Action": "行動",
+  "Status": "狀態",
+  "Action": "操作",
   "Efficient": "高效率的",
   "Unknown": "未知",
   "Product Title": "產品標題",
@@ -69,5 +69,7 @@
   "You’ve used all your available translation credits. Add more credits to keep your translations running without interruption.": "您的翻譯額度已用完。請增加更多額度，以確保翻譯服務不間斷運作。",
   "Image Translation Not Supported": "不支援圖像翻譯",
   "Got it": "知道了",
-  "Image translation is only available when your store’s default language is Chinese or English.": "只有當您的商店預設語言為中文或英文時，圖片翻譯功能才可用。"
+  "Image translation is only available when your store’s default language is Chinese or English.": "只有當您的商店預設語言為中文或英文時，圖片翻譯功能才可用。",
+  "zxit": "知道了",
+  "Buy Credits": "購買積分"
 }
