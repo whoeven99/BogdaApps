@@ -257,7 +257,6 @@ const ImageAltTextPage = () => {
     Record<string, boolean>
   >({});
   const altTranslateFetcher = useFetcher<any>();
-  const [currentAltImage, setCurrentAltImage] = useState<any>();
   const [previewVisible, setPreviewVisible] = useState(false);
   const [previewImage, setPreviewImage] = useState<{
     imgUrl: string;
@@ -401,6 +400,10 @@ const ImageAltTextPage = () => {
   };
   // 图片翻译
   const handleTranslate = async (record: any, languageCode: string) => {
+    if (translateImageFetcher.state !== 'idle') {
+      shopify.toast.show("Translation tasks are in progress.");
+      return;
+    }
     setCurrentTranslatingImage(record);
     if (totalChars - chars < 1200) {
       setOpen(true);
