@@ -71,5 +71,7 @@
   "Got it": "알았어요",
   "Image translation is only available when your store’s default language is Chinese or English.": "이미지 번역은 매장의 기본 언어가 중국어 또는 영어인 경우에만 사용할 수 있습니다.",
   "zxit": "알았어요",
-  "Buy Credits": "크레딧 구매"
+  "Buy Credits": "크레딧 구매",
+  "The language you need for translation is not available in the store. Please add it via the store settings (Add Language).": "번역에 필요한 언어는 스토어에서 사용할 수 없습니다. 스토어 설정(언어 추가)을 통해 추가해 주세요.",
+  "Add Language": "언어 추가"
 }

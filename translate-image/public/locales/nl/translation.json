@@ -71,5 +71,7 @@
   "Got it": "Ik snap het",
   "Image translation is only available when your store’s default language is Chinese or English.": "Afbeeldingvertaling is alleen beschikbaar als de standaardtaal van uw winkel Chinees of Engels is.",
   "zxit": "Ik snap het",
-  "Buy Credits": "Credits kopen"
+  "Buy Credits": "Credits kopen",
+  "The language you need for translation is not available in the store. Please add it via the store settings (Add Language).": "De taal die u nodig heeft voor vertaling is niet beschikbaar in de winkel. Voeg deze toe via de winkelinstellingen (Taal toevoegen).",
+  "Add Language": "Taal toevoegen"
 }

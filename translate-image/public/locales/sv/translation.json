@@ -71,5 +71,7 @@
   "Got it": "Förstod",
   "Image translation is only available when your store’s default language is Chinese or English.": "Bildöversättning är endast tillgänglig när din butiks standardspråk är kinesiska eller engelska.",
   "zxit": "Förstod",
-  "Buy Credits": "Köp krediter"
+  "Buy Credits": "Köp krediter",
+  "The language you need for translation is not available in the store. Please add it via the store settings (Add Language).": "Språket du behöver för översättningen finns inte tillgängligt i butiken. Lägg till det via butiksinställningarna (Lägg till språk).",
+  "Add Language": "Lägg till språk"
 }
