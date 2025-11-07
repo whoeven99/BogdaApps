@@ -57,16 +57,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
   } catch (error: any) {  
     console.error("❌ Webhook 处理失败:", error);
-
-    // Shopify HMAC 验证失败时返回 401
-    if (
-      error?.message?.includes("SHOPIFY_HMAC_VALIDATION_FAILED") ||
-      error?.message?.includes("HMAC verification failed")
-    ) {
-      return new Response("Unauthorized", { status: 401 });
-    }
-
-    // 其它异常才返回 500
-    return new Response("Internal error", { status: 500 });
+    return new Response();
   }
 };
