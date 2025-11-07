@@ -39,27 +39,44 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           const loadData = await admin.graphql(
             `query GetArticles {
               articles(first: 10) {
-                edges {
-                  node {
+                nodes {
+                  id
+                  image {
+                    url
                     id
-                    title
-                    publishedAt
-                    blog {
-                      id
-                      title
-                    }
                   }
+                  title
+                }
+                pageInfo {
+                  endCursor
+                  hasNextPage
+                  hasPreviousPage
+                  startCursor
                 }
               }
             }`,
           );
 
           const response = await loadData.json();
-          const data = response.data.articles.edges.map((data: any) => data.node);
-          console.log("dada", response);
-
-          console.log("blog response:", response);
-          return data;
+          console.log("response:", response);
+          if (response.data.articles.nodes.length > 0) {
+            const data = response.data.articles.nodes.map((item: any) => item);
+            return {
+              data,
+              endCursor: response.data.articles.pageInfo.endCursor,
+              hasNextPage: response.data.articles.pageInfo.hasNextPage,
+              hasPreviousPage: response.data.articles.pageInfo.hasPreviousPage,
+              startCursor: response.data.articles.pageInfo.startCursor,
+            };
+          } else {
+            return {
+              data: [],
+              endCursor: "",
+              hasNextPage: "",
+              hasPreviousPage: "",
+              startCursor: "",
+            };
+          }
         } catch (error) {
           console.error("Error action loadData productImage:", error);
           return json({
