@@ -5,8 +5,8 @@ import { AddCharsByShopName } from "~/api/JavaServer";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { topic, admin } = await authenticate.webhook(request);
-  console.log("webhook topic: ",topic);
-  
+  console.log("webhook topic: ", topic);
+
   if (!admin && topic !== "APP_PURCHASES_ONE_TIME_UPDATE") {
     // The admin context isn't returned if the webhook fired after a shop was uninstalled.
     // The SHOP_REDACT webhook will be fired up to 48 hours after a shop uninstalls the app.
@@ -15,7 +15,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
   try {
     // 验证 webhook 签名
-    const { topic, shop, payload } = await authenticate.webhook(request);
+    const { shop, payload } = await authenticate.webhook(request);
     console.log("✅ Webhook received:", topic, shop);
 
     switch (topic) {
