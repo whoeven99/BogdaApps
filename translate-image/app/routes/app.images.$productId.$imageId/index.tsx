@@ -644,12 +644,16 @@ const ImageAltTextPage = () => {
       ...prev,
       [languageCode]: info.fileList, // ✅ 更新对应语言
     }));
+    console.log("上传图片");
+
     if (info.file.status === "done") {
       const response = info.file.response; // 后端返回的数据
       const newUrl =
         typeof response?.response?.imageAfterUrl === "string"
           ? response.response?.imageAfterUrl
           : "";
+      console.log("后端返回的数据:", newUrl);
+
       if (response?.success) {
         setImageDatas((prev: any[]) => {
           return prev.map((item) =>
@@ -675,6 +679,13 @@ const ImageAltTextPage = () => {
     }
   };
   const handleConfirm = async () => {
+    const uploading = Object.values(fileLists).some((list: any[]) =>
+      list.some((f) => f.status !== "done"),
+    );
+    if (uploading) {
+      shopify.toast.show(t("Please wait until all images are uploaded"));
+      return;
+    }
     setSaveLoading(true);
     const promises = confirmData.map((item: any) =>
       UpdateProductImageAltData({
@@ -714,6 +725,7 @@ const ImageAltTextPage = () => {
             (confirmItem: any) =>
               item.languageCode === confirmItem.languageCode,
           );
+          if (!matched) return item;
           return {
             ...item,
             altAfterTranslation: matched
@@ -746,14 +758,6 @@ const ImageAltTextPage = () => {
       imgAlt: img.altAfterTranslation,
     });
     setPreviewVisible(true);
-  };
-  // 删除图片
-  const handleRemove = async (info: any, img: any) => {
-    setFileLists((prev) => ({
-      ...prev,
-      [img.languageCode]: [],
-    }));
-    handleDelete(img.imageId, img.imageBeforeUrl, img.languageCode);
   };
   useEffect(() => {
     imageLoadingFetcher.submit(
