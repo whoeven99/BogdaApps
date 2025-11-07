@@ -679,9 +679,6 @@ export const Uninstall = async ({ shop }: { shop: string }) => {
     const response = await axios({
       url: `${process.env.SERVER_URL}/pcUsers/uninstall?shopName=${shop}`,
       method: "POST",
-      data: {
-        shopName: shop,
-      },
     });
 
     const res = response.data.response;
