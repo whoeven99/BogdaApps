@@ -22,8 +22,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       case "APP_UNINSTALLED":
         try {
           await Uninstall({ shop });
+          console.log("webhook session", session);
+
           if (session) {
-            await db.session.deleteMany({ where: { shop } });
+            const res = await db.session.deleteMany({ where: { shop } });
+            console.log("delete session", res);
           }
           break;
         } catch (error) {

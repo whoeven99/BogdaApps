@@ -1020,8 +1020,6 @@ const ImageAltTextPage = () => {
                             }}
                             onPreview={() => handlePreview(img)}
                             onRemove={() => {
-                              console.log(img);
-
                               handleDeleteSingleImage(
                                 img.imageId,
                                 img.imageBeforeUrl,
