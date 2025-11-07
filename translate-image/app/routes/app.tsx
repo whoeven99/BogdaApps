@@ -266,7 +266,7 @@ export default function App() {
           <Link to="/app" rel="home">
             Home
           </Link>
-          {/* <Link to="/app/management">Image Manage</Link> */}
+          <Link to="/app/article">Article Image Translate</Link>
           {/* <Link to="/app/pricing">Pricing</Link> */}
         </NavMenu>
         <Outlet />
