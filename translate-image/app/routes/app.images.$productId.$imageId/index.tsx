@@ -644,7 +644,6 @@ const ImageAltTextPage = () => {
       ...prev,
       [languageCode]: info.fileList, // ✅ 更新对应语言
     }));
-    console.log("上传图片");
 
     if (info.file.status === "done") {
       const response = info.file.response; // 后端返回的数据
@@ -652,8 +651,7 @@ const ImageAltTextPage = () => {
         typeof response?.response?.imageAfterUrl === "string"
           ? response.response?.imageAfterUrl
           : "";
-      console.log("后端返回的数据:", newUrl);
-
+          
       if (response?.success) {
         setImageDatas((prev: any[]) => {
           return prev.map((item) =>

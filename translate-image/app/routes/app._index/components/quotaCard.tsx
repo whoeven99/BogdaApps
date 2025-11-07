@@ -74,7 +74,7 @@ export const QuotaCard = () => {
                 <QuestionCircleOutlined />
               </Popover>
             </Flex>
-            <Button
+            {/* <Button
               type="default"
               onClick={() => {
                 setOpenModal(true);
@@ -82,7 +82,7 @@ export const QuotaCard = () => {
               }}
             >
               {t("Add credits")}
-            </Button>
+            </Button> */}
           </Flex>
         </div>
         <div
