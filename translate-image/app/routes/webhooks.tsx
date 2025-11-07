@@ -1,13 +1,14 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { AddCharsByShopName } from "~/api/JavaServer";
+import { AddCharsByShopName, Uninstall } from "~/api/JavaServer";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { topic, admin } = await authenticate.webhook(request);
-  console.log("webhook topic: ",topic);
-  
-  if (!admin && topic !== "APP_PURCHASES_ONE_TIME_UPDATE") {
+  const { topic, admin, shop, session, payload } =
+    await authenticate.webhook(request);
+  console.log("webhook topic: ", topic);
+
+  if (!admin && topic !== "SHOP_REDACT") {
     // The admin context isn't returned if the webhook fired after a shop was uninstalled.
     // The SHOP_REDACT webhook will be fired up to 48 hours after a shop uninstalls the app.
     // Because of this, no admin context is available.
@@ -15,10 +16,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
   try {
     // 验证 webhook 签名
-    const { topic, shop, payload } = await authenticate.webhook(request);
     console.log("✅ Webhook received:", topic, shop);
 
     switch (topic) {
+      case "APP_UNINSTALLED":
+        try {
+          await Uninstall({ shop });
+          console.log("webhook session", session);
+
+          if (session) {
+            const res = await db.session.deleteMany({ where: { shop } });
+            console.log("delete session", res);
+          }
+          return new Response("OK", { status: 200 });
+        } catch (error) {
+          console.error("Error APP_UNINSTALLED:", error);
+          return new Response(null, { status: 200 });
+        }
       case "APP_PURCHASES_ONE_TIME_UPDATE": {
         console.log("购买积分：", payload);
 
@@ -59,6 +73,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         // ✅ 一定要返回 200，否则 Shopify 会重试或标记 410
         return new Response("OK", { status: 200 });
       }
+      case "SHOP_REDACT":
+        try {
+          new Response(null, { status: 200 });
+          await Uninstall({ shop });
+          if (session) {
+            await db.session.deleteMany({ where: { shop } });
+          }
+          return new Response("OK", { status: 200 });
+        } catch (error) {
+          console.error("Error SHOP_REDACT:", error);
+          return new Response(null, { status: 200 });
+        }
 
       default:
         console.warn(" 未处理的 webhook topic:", topic);
