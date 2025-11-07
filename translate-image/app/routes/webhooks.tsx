@@ -4,6 +4,15 @@ import db from "../db.server";
 import { AddCharsByShopName } from "~/api/JavaServer";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
+  const { topic, admin } = await authenticate.webhook(request);
+  console.log("webhook topic: ",topic);
+  
+  if (!admin && topic !== "APP_PURCHASES_ONE_TIME_UPDATE") {
+    // The admin context isn't returned if the webhook fired after a shop was uninstalled.
+    // The SHOP_REDACT webhook will be fired up to 48 hours after a shop uninstalls the app.
+    // Because of this, no admin context is available.
+    throw new Response();
+  }
   try {
     // 验证 webhook 签名
     const { topic, shop, payload } = await authenticate.webhook(request);
@@ -52,11 +61,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
 
       default:
-        console.warn("⚠️ 未处理的 webhook topic:", topic);
-        return new Response("Unhandled webhook topic", { status: 200 });
+        console.warn(" 未处理的 webhook topic:", topic);
+        return new Response("Unhandled webhook topic", { status: 401 });
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error("❌ Webhook 处理失败:", error);
-    return new Response("Internal error", { status: 500 });
+    return new Response();
   }
 };
