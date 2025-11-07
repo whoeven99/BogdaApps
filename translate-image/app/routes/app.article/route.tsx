@@ -37,35 +37,29 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           console.log("loading: ", loading);
           const { lastRequestCursor, direction } = loading;
           const loadData = await admin.graphql(
-            `{
+            `query GetArticles {
               articles(first: 10) {
                 edges {
                   node {
                     id
                     title
-                    handle
-                    blog { id title }
-                    image { id altText url }
-                    author
                     publishedAt
-                    bodySummary
-                    bodyHtml
+                    blog {
+                      id
+                      title
+                    }
                   }
-                }
-                pageInfo {
-                  hasNextPage
-                  endCursor
                 }
               }
             }`,
           );
 
           const response = await loadData.json();
-          // const data = json.data.blogs.nodes.map((data: any) => data);
+          const data = response.data.articles.edges.map((data: any) => data.node);
           console.log("dada", response);
 
           console.log("blog response:", response);
-          return response;
+          return data;
         } catch (error) {
           console.error("Error action loadData productImage:", error);
           return json({
@@ -147,7 +141,7 @@ export default function Index() {
       {blogsData.length > 0 &&
         blogsData?.map((item) => {
           return (
-            <Flex vertical gap={8}>
+            <Flex key={item.id} vertical gap={8}>
               <Text>{item.title}</Text>
               <Button onClick={() => handleQueryArticle(item.id)}>
                 查询文章数据
