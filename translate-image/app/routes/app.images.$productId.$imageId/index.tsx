@@ -48,6 +48,7 @@ import { globalStore } from "~/globalStore";
 import {
   AltTranslate,
   DeleteProductImageData,
+  DeleteSingleImage,
   getProductAllLanguageImagesData,
   storageTranslateImage,
   TranslateImage,
@@ -400,7 +401,7 @@ const ImageAltTextPage = () => {
   };
   // 图片翻译
   const handleTranslate = async (record: any, languageCode: string) => {
-    if (translateImageFetcher.state !== 'idle') {
+    if (translateImageFetcher.state !== "idle") {
       shopify.toast.show("Translation tasks are in progress.");
       return;
     }
@@ -530,6 +531,36 @@ const ImageAltTextPage = () => {
         ...pre,
         [`${imageId}_${languageCode}`]: false,
       }));
+    } catch (error) {
+      console.log("delete image error", error);
+    }
+  };
+  const handleDeleteSingleImage = async (
+    imageId: string,
+    imageUrl: string,
+    languageCode: string,
+  ) => {
+    try {
+      const res = await DeleteSingleImage({
+        server: globalStore?.server || "",
+        shopName: globalStore?.shop || "",
+        imageId: imageId,
+        imageUrl: imageUrl,
+        languageCode: languageCode,
+      });
+      if (res.success) {
+        setImageDatas(
+          imageDatas.map((item: any) => {
+            if (item.languageCode === languageCode) {
+              item.imageAfterUrl = "";
+            }
+            return item;
+          }),
+        );
+        shopify.toast.show(t("Delete Success"));
+      } else {
+        shopify.toast.show(t("Delete Failed"));
+      }
     } catch (error) {
       console.log("delete image error", error);
     }
@@ -900,7 +931,7 @@ const ImageAltTextPage = () => {
                       }}
                       disabled
                       value={productImageData?.altText || "—"}
-                      autoSize={{ minRows: 2, maxRows: 10 }}
+                      autoSize={{ minRows: 5, maxRows: 10 }}
                     />
                   </Flex>
                 </div>
@@ -988,7 +1019,15 @@ const ImageAltTextPage = () => {
                               handleChangeImage(info, img.languageCode);
                             }}
                             onPreview={() => handlePreview(img)}
-                            onRemove={(info) => handleRemove(info, img)}
+                            onRemove={() => {
+                              console.log(img);
+
+                              handleDeleteSingleImage(
+                                img.imageId,
+                                img.imageBeforeUrl,
+                                img.languageCode,
+                              );
+                            }}
                             maxCount={0}
                             beforeUpload={(file) => {
                               const isImage = file.type.startsWith("image/");

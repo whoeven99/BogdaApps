@@ -355,6 +355,42 @@ export const DeleteProductImageData = async ({
     };
   }
 };
+// 删除单张图片数据
+export const DeleteSingleImage = async ({
+  server,
+  shopName,
+  imageId,
+  imageUrl,
+  languageCode,
+}: {
+  server: string;
+  shopName: string;
+  imageId: string;
+  imageUrl: string;
+  languageCode: string;
+}) => {
+  try {
+    const response = await axios({
+      url: `${server}/pcUserPic/deleteTranslateUrl?shopName=${shopName}`,
+      method: "POST",
+      data: {
+        imageId: imageId,
+        imageBeforeUrl: imageUrl,
+        languageCode: languageCode,
+      },
+    });
+    // console.log("DeleteProductImageData: ", response.data);
+    return response.data;
+  } catch (error) {
+    console.error("Error DeleteProductImageData:", error);
+    return {
+      success: false,
+      errorCode: 10001,
+      errorMsg: "SERVER_ERROR",
+      response: undefined,
+    };
+  }
+};
 
 export const GetLatestActiveSubscribeId = async ({
   shop,
@@ -634,5 +670,26 @@ export const AltTranslate = async ({
       errorMsg: "SERVER_ERROR",
       response: [],
     };
+  }
+};
+
+//用户卸载
+export const Uninstall = async ({ shop }: { shop: string }) => {
+  try {
+    const response = await axios({
+      url: `${process.env.SERVER_URL}/pcUsers/uninstall`,
+      method: "POST",
+      data: {
+        shopName: shop,
+      },
+    });
+
+    const res = response.data.response;
+
+    console.log(`${shop} has been uninstalled`);
+
+    return res;
+  } catch (error) {
+    console.error("Error Uninstall:", error);
   }
 };
