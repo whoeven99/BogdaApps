@@ -677,7 +677,7 @@ export const AltTranslate = async ({
 export const Uninstall = async ({ shop }: { shop: string }) => {
   try {
     const response = await axios({
-      url: `${process.env.SERVER_URL}/pcUsers/uninstall`,
+      url: `${process.env.SERVER_URL}/pcUsers/uninstall?shopName=${shop}`,
       method: "POST",
       data: {
         shopName: shop,
