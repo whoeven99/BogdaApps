@@ -52,13 +52,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
 
       default:
-        console.warn("⚠️ 未处理的 webhook topic:", topic);
-        return new Response("Unhandled webhook topic", { status: 200 });
+        console.warn(" 未处理的 webhook topic:", topic);
+        return new Response("Unhandled webhook topic", { status: 404 });
     }
-  } catch (error: any) {
+  } catch (error: any) {  
     console.error("❌ Webhook 处理失败:", error);
 
-    // 🟡 Shopify HMAC 验证失败时返回 401
+    // Shopify HMAC 验证失败时返回 401
     if (
       error?.message?.includes("SHOPIFY_HMAC_VALIDATION_FAILED") ||
       error?.message?.includes("HMAC verification failed")
