@@ -355,6 +355,42 @@ export const DeleteProductImageData = async ({
     };
   }
 };
+// 删除单张图片数据
+export const DeleteSingleImage = async ({
+  server,
+  shopName,
+  imageId,
+  imageUrl,
+  languageCode,
+}: {
+  server: string;
+  shopName: string;
+  imageId: string;
+  imageUrl: string;
+  languageCode: string;
+}) => {
+  try {
+    const response = await axios({
+      url: `${server}/pcUserPic/deleteTranslateUrl?shopName=${shopName}`,
+      method: "POST",
+      data: {
+        imageId: imageId,
+        imageBeforeUrl: imageUrl,
+        languageCode: languageCode,
+      },
+    });
+    // console.log("DeleteProductImageData: ", response.data);
+    return response.data;
+  } catch (error) {
+    console.error("Error DeleteProductImageData:", error);
+    return {
+      success: false,
+      errorCode: 10001,
+      errorMsg: "SERVER_ERROR",
+      response: undefined,
+    };
+  }
+};
 
 export const GetLatestActiveSubscribeId = async ({
   shop,
@@ -485,93 +521,6 @@ export const getProductAllLanguageImagesData = async ({
 
     console.log("getProductAllLanguageImagesData: ", response.data);
     return response.data;
-    // return {
-    //   success: true,
-    //   errorCode: 0,
-    //   errorMsg: "OK",
-    //   response: [
-    // {
-    // id: 103,
-    // shopName: "ciwishop.myshopify.com",
-    // productId: "gid://shopify/Product/7434315202583",
-    // imageId: "gid://shopify/ProductImage/34565775065111",
-    // imageBeforeUrl:
-    //   "https://cdn.shopify.com/s/files/1/0728/0948/0215/files/Snipaste_2025-05-26_15-46-37.png?v=1750991411",
-    // imageAfterUrl:
-    //   "https://ciwi-us-1327177217.cos.na-ashburn.myqcloud.com/image-Translation/ciwishop.myshopify.com/gid://shopify/Product/7434315202583/16264210.png",
-    // altBeforeTranslation:
-    //   "'Casual Pink Mountain Landscape Printed White Pullover With Round Neckline And Long Sleeves' - ciwishop",
-    // altAfterTranslation:
-    //   "'بلوفر أبيض كاجوال بطبعة مناظر طبيعية جبلية وردية، بياقة دائرية وأكمام طويلة' - ciwishop",
-    // languageCode: "ar",
-    // language: "Arabic",
-    // isDelete: false,
-    // },
-    //     {
-    //       id: 13,
-    //       shopName: "ciwishop.myshopify.com",
-    //       productId: "gid://shopify/Product/7434315202583",
-    //       imageId: "gid://shopify/ProductImage/34565775065111",
-    //       imageBeforeUrl:
-    //         "https://cdn.shopify.com/s/files/1/0728/0948/0215/files/Snipaste_2025-05-26_15-46-37.png?v=1750991411",
-    //       imageAfterUrl:
-    //         "https://cdn.translate.alibaba.com/r/9342e75e0c6143e1a05e5055f030e81f.jpg",
-    //       altBeforeTranslation:
-    //         "'Casual Pink Mountain Landscape Printed White Pullover With Round Neckline And Long Sleeves' - ciwishop",
-    //       altAfterTranslation:
-    //         "「カジュアルなピンクの山の風景プリントの白いプルオーバー（ラウンドネックと長袖）」 - ciwishop",
-    //       languageCode: "ja",
-    //       language: "Japanese",
-    //       isDelete: false,
-    //     },
-    //     {
-    //       id: 173,
-    //       shopName: "ciwishop.myshopify.com",
-    //       imageId: "gid://shopify/ProductImage/34565775065111",
-    //       imageBeforeUrl:
-    //         "https://cdn.shopify.com/s/files/1/0728/0948/0215/files/Snipaste_2025-05-26_15-46-37.png?v=1750991411",
-    //       imageAfterUrl: "",
-    //       altBeforeTranslation:
-    //         "'Casual Pink Mountain Landscape Printed White Pullover With Round Neckline And Long Sleeves' - ciwishop",
-    //       altAfterTranslation:
-    //         "'Иаабац ашьхатә ландшафт ԥшьаала икьыԥхьу апуловер шкәакәа, абӷьы круглый, анапы еиҵыхқәа' - ciwishop",
-    //       languageCode: "ko",
-    //       language: "Korean",
-    //       isDelete: false,
-    //     },
-    //     {
-    //       id: 183,
-    //       shopName: "ciwishop.myshopify.com",
-    //       productId: "gid://shopify/Product/7434315202583",
-    //       imageId: "gid://shopify/ProductImage/34565775065111",
-    //       imageBeforeUrl:
-    //         "https://cdn.shopify.com/s/files/1/0728/0948/0215/files/Snipaste_2025-05-26_15-46-37.png?v=1750991411",
-    //       imageAfterUrl:
-    //         "	https://cdn.shopify.com/s/files/1/0728/0948/0215/files/71isjALguFL._AC_SY695.jpg?v=1757055470",
-    //       altBeforeTranslation:
-    //         "'Casual Pink Mountain Landscape Printed White Pullover With Round Neckline And Long Sleeves' - ciwishop",
-    //       altAfterTranslation: "",
-    //       languageCode: "zh-CN",
-    //       language: "Chinese (Simplified)",
-    //       isDelete: false,
-    //     },
-    //     {
-    //       id: 193,
-    //       shopName: "ciwishop.myshopify.com",
-    //       productId: "gid://shopify/Product/7434315202583",
-    //       imageId: "gid://shopify/ProductImage/34565775065111",
-    //       imageBeforeUrl:
-    //         "https://cdn.shopify.com/s/files/1/0728/0948/0215/files/20250904-175349.png?v=1756979649",
-    //       imageAfterUrl: "",
-    //       altBeforeTranslation:
-    //         "'Casual Pink Mountain Landscape Printed White Pullover With Round Neckline And Long Sleeves' - ciwishop",
-    //       altAfterTranslation: "",
-    //       languageCode: "zh-TW",
-    //       language: "Chinese (Traditional)",
-    //       isDelete: false,
-    //     },
-    //   ],
-    // };
   } catch (error) {
     console.error("Error getProductAllLanguageImagesData:", error);
     return {
@@ -721,5 +670,23 @@ export const AltTranslate = async ({
       errorMsg: "SERVER_ERROR",
       response: [],
     };
+  }
+};
+
+//用户卸载
+export const Uninstall = async ({ shop }: { shop: string }) => {
+  try {
+    const response = await axios({
+      url: `${process.env.SERVER_URL}/pcUsers/uninstall?shopName=${shop}`,
+      method: "POST",
+    });
+
+    const res = response.data.response;
+
+    console.log(`${shop} has been uninstalled`);
+
+    return res;
+  } catch (error) {
+    console.error("Error Uninstall:", error);
   }
 };
