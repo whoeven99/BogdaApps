@@ -4,7 +4,7 @@ import db from "../db.server";
 import { AddCharsByShopName } from "~/api/JavaServer";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { topic, admin } = await authenticate.webhook(request);
+  const { topic, admin, shop, payload } = await authenticate.webhook(request);
   console.log("webhook topic: ", topic);
 
   if (!admin && topic !== "SHOP_REDACT") {
@@ -15,7 +15,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
   try {
     // 验证 webhook 签名
-    const { shop, payload } = await authenticate.webhook(request);
     console.log("✅ Webhook received:", topic, shop);
 
     switch (topic) {
