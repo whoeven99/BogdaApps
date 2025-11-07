@@ -28,7 +28,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             const res = await db.session.deleteMany({ where: { shop } });
             console.log("delete session", res);
           }
-          break;
+          return new Response("OK", { status: 200 });
         } catch (error) {
           console.error("Error APP_UNINSTALLED:", error);
           return new Response(null, { status: 200 });
@@ -80,7 +80,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           if (session) {
             await db.session.deleteMany({ where: { shop } });
           }
-          break;
+          return new Response("OK", { status: 200 });
         } catch (error) {
           console.error("Error SHOP_REDACT:", error);
           return new Response(null, { status: 200 });
