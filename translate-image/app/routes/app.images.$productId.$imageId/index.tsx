@@ -436,7 +436,9 @@ const ImageAltTextPage = () => {
       },
       { method: "post" },
     );
-
+    // if (record.) {
+      
+    // }
     const formData = new FormData();
     formData.append("altTranslateFetcher", JSON.stringify({ record }));
     altTranslateFetcher.submit(formData, { method: "post" });
@@ -932,7 +934,7 @@ const ImageAltTextPage = () => {
                         color: "#000",
                       }}
                       disabled
-                      value={productImageData?.altText || "—"}
+                      value={productImageData?.altText || ""}
                       autoSize={{ minRows: 5, maxRows: 10 }}
                     />
                   </Flex>
