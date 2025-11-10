@@ -16,7 +16,7 @@ import { useNavigate, useFetcher, useLoaderData } from "@remix-run/react";
 import SortPopover from "~/routes/app.management/conponents/SortPopover";
 import { useDispatch, useSelector } from "react-redux";
 import { AppDispatch, RootState } from "~/store";
-import { setLastPageCursorInfo } from "~/store/modules/productSlice";
+import { setLastPageCursorInfo } from "~/store/modules/articleSlice";
 import { ColumnsType } from "antd/es/table";
 import { ActionFunctionArgs, json } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
@@ -40,7 +40,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     switch (true) {
       case !!loading:
         try {
-          console.log("loading: ", loading);
           const { lastRequestCursor, direction } = loading;
           const loadData = await admin.graphql(
             `query GetArticles {
@@ -74,7 +73,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           );
 
           const response = await loadData.json();
-          console.log("response:", response);
           const articles = response?.data?.articles;
           if (articles?.nodes?.length > 0) {
             const data = articles?.nodes?.map((item: any) => item);
@@ -102,8 +100,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
       case !!articleStartCursor:
         try {
-          console.log("articleStartCursor", articleStartCursor);
-
           const loadData = await admin.graphql(
             `query GetArticles($startCursor: String, $query: String, $sortKey: ArticleSortKeys, $reverse: Boolean) {
               articles(last: 10 ,before: $startCursor, query: $query, sortKey: $sortKey, reverse: $reverse) {
@@ -146,8 +142,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           );
 
           const response = await loadData.json();
-
-          console.log("response start cursor:", response);
           const articles = response?.data?.articles;
           if (articles?.nodes?.length > 0) {
             const data = articles?.nodes?.map((item: any) => item);
@@ -180,8 +174,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
       case !!articleEndCursor:
         try {
-          console.log("articleEndCursor:", articleEndCursor);
-
           const loadData = await admin.graphql(
             `query GetArticles($endCursor: String, $query: String, $sortKey: ArticleSortKeys, $reverse: Boolean) {
               articles(first: 10, after: $endCursor, query: $query, sortKey: $sortKey, reverse: $reverse) {
@@ -258,7 +250,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
       case !!articleFetcher:
         try {
-          console.log("articleFetcher: ", articleFetcher);
           const response = await admin.graphql(
             `#graphql
               query ArticleShow($id: ID!) {
@@ -321,7 +312,7 @@ export default function Index() {
   const [activeKey, setActiveKey] = useState("ALL");
   const [searchText, setSearchText] = useState<string>("");
   const timeoutIdRef = useRef<any>(true);
-
+  const dispatch = useDispatch<AppDispatch>();
   const [sortKey, setSortKey] = useState("AUTHOR");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const loadFetcher = useFetcher<any>();
@@ -479,6 +470,14 @@ export default function Index() {
   }, [loadFetcher.data]);
   useEffect(() => {
     if (artilclesFetcher.data) {
+      dispatch(
+        setLastPageCursorInfo({
+          articlesHasNextPage: artilclesFetcher.data.hasNextPage,
+          articlesHasPreviousPage: artilclesFetcher.data.hasPreviousPage,
+          articlesStartCursor: artilclesFetcher.data.startCursor,
+          articlesEndCursor: artilclesFetcher.data.endCursor,
+        }),
+      );
       setArticlesHasNextPage(artilclesFetcher.data.hasNextPage);
       setArticlesHasPreviousPage(artilclesFetcher.data.hasPreviousPage);
       setArticlesStartCursor(artilclesFetcher.data.startCursor);
@@ -486,11 +485,25 @@ export default function Index() {
       setArticleData(artilclesFetcher.data?.data);
     }
   }, [artilclesFetcher.data]);
+  useEffect(() => {
+    dispatch(
+      setLastPageCursorInfo({
+        searchText,
+        sortOrder,
+        sortKey,
+      }),
+    );
+  }, [searchText, sortOrder, sortKey]);
   const handlePreProductPage = () => {
     if (artilclesFetcher.state !== "idle") {
       return;
     }
-
+    dispatch(
+      setLastPageCursorInfo({
+        lastRequestCursor: articlesStartCursor,
+        direction: "prev",
+      }),
+    );
     artilclesFetcher.submit(
       {
         articleStartCursor: JSON.stringify({
@@ -510,7 +523,12 @@ export default function Index() {
     if (artilclesFetcher.state !== "idle") {
       return;
     }
-
+    dispatch(
+      setLastPageCursorInfo({
+        lastRequestCursor: articlesEndCursor,
+        direction: "next",
+      }),
+    );
     artilclesFetcher.submit(
       {
         articleEndCursor: JSON.stringify({
@@ -638,9 +656,6 @@ export default function Index() {
               sortOrderProp={sortOrder}
               sortOptions={sortOptions}
             />
-            {/* <Button onClick={() => console.log(lastPageCursorInfo)}>
-                          输出store存储数据
-                        </Button> */}
           </Flex>
         </Flex>
       </Card>
@@ -665,8 +680,6 @@ export default function Index() {
               onClick: (e) => {
                 // 排除点击按钮等交互元素
                 if ((e.target as HTMLElement).closest("button")) return;
-                console.log(record);
-
                 const articleId = record.id.split("/").pop();
                 navigate(`/app/articles/${articleId}`);
               },
