@@ -6,25 +6,27 @@ export default function SortPopover({
   onChange,
   sortKeyProp,
   sortOrderProp,
+  sortOptions,
 }: {
   onChange?: (sortKey: string, sortOrder: "asc" | "desc") => void;
   sortKeyProp: string;
   sortOrderProp: "asc" | "desc";
+  sortOptions: any;
 }) {
   const { t } = useTranslation();
   const [sortKey, setSortKey] = useState(sortKeyProp);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">(sortOrderProp);
   const [open, setOpen] = useState(false);
 
-  const sortOptions = [
-    { label: "Product Title", value: "TITLE" },
-    { label: "Creation time", value: "CREATED_AT" },
-    { label: "Update time", value: "UPDATED_AT" },
-    { label: "Inventory", value: "INVENTORY" },
-    { label: "Product Type", value: "PRODUCT_TYPE" },
-    // { label: "发布时间", value: "PUBLISHED_AT" },
-    { label: "Manufacturers", value: "VENDOR" },
-  ];
+  // const sortOptions = [
+  //   { label: "Product Title", value: "TITLE" },
+  //   { label: "Creation time", value: "CREATED_AT" },
+  //   { label: "Update time", value: "UPDATED_AT" },
+  //   { label: "Inventory", value: "INVENTORY" },
+  //   { label: "Product Type", value: "PRODUCT_TYPE" },
+  //   // { label: "发布时间", value: "PUBLISHED_AT" },
+  //   { label: "Manufacturers", value: "VENDOR" },
+  // ];
   useEffect(() => {
     setSortKey(sortKeyProp);
     setSortOrder(sortOrderProp);
@@ -52,7 +54,7 @@ export default function SortPopover({
         value={sortKey}
         style={{ display: "flex", flexDirection: "column", gap: 6 }}
       >
-        {sortOptions.map((opt) => (
+        {sortOptions.map((opt:any) => (
           <Radio key={opt.value} value={opt.value}>
             {t(opt.label)}
           </Radio>

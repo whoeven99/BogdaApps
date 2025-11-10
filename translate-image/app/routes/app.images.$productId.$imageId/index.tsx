@@ -1,6 +1,7 @@
 import {
   useFetcher,
   useLoaderData,
+  useLocation,
   useNavigate,
   useParams,
 } from "@remix-run/react";
@@ -74,6 +75,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { shop, accessToken } = adminAuthResult.session;
   const formData = await request.formData();
   const imageLoading = JSON.parse(formData.get("imageLoading") as string);
+  const articleImageLoading = JSON.parse(
+    formData.get("articleImageLoading") as string,
+  );
   const imagesFetcher = JSON.parse(formData.get("imagesFetcher") as string);
   const translateImage = JSON.parse(formData.get("translateImage") as string);
   const replaceTranslateImage = JSON.parse(
@@ -140,12 +144,57 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             imageData: [],
           });
         }
+      case !!articleImageLoading:
+        try {
+          const loadData = await admin.graphql(
+            `#graphql
+              query ArticleShow($id: ID!) {
+                article(id: $id) {
+                  title
+                  id
+                  author {
+                    name
+                  }
+                  createdAt
+                  handle
+                  image {
+                    url
+                    altText
+                    id
+                  }
+                }
+              }`,
+            {
+              variables: {
+                id: articleImageLoading?.productId,
+              },
+            },
+          );
+          const response = await loadData.json();
+          let imageData = {
+            title: response?.data?.article?.title,
+            altText: response?.data?.article?.image?.altText,
+            key: response?.data?.article?.id,
+            productId: response?.data?.article?.id,
+            productTitle: response?.data?.article?.title,
+            imageId: response?.data?.article?.image?.id,
+            imageUrl: response?.data?.article?.image?.url,
+            targetImageUrl: "",
+          };
+          return json({
+            imageData,
+          });
+        } catch (error) {
+          console.error("Error action imageStartCursor productImage:", error);
+          return json({
+            imageData: [],
+          });
+        }
       case !!imagesFetcher:
         try {
-          const imageId = `gid://shopify/ProductImage/${imagesFetcher.imageId}`;
           const response = await getProductAllLanguageImagesData({
             shop,
-            imageId,
+            imageId: imagesFetcher.imageId,
           });
           return response;
         } catch (error) {
@@ -156,8 +205,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
       case !!translateImage:
         try {
-          const { sourceLanguage, targetLanguage, imageUrl, imageId } =
-            translateImage;
+          const { sourceLanguage, targetLanguage, imageUrl } = translateImage;
           const response = (await TranslateImage({
             shop,
             imageUrl,
@@ -225,8 +273,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 const ImageAltTextPage = () => {
   const loader = useLoaderData<{ shop: string }>();
   const navigate = useNavigate();
+  const { search } = useLocation();
+  const params = new URLSearchParams(search);
+  const [imageType, setImageType] = useState(params.get("type"));
   const { t } = useTranslation();
   const { productId, imageId } = useParams();
+  const [currentImageId, setCurrentImageId] = useState<string>(
+    imageType === "article"
+      ? `gid://shopify/ArticleImage/${imageId}`
+      : `gid://shopify/ProductImage/${imageId}`,
+  );
+  const [currentResourceId, setCurrentResourceID] = useState<string>(
+    imageType === "article"
+      ? `gid://shopify/Article/${imageId}`
+      : `gid://shopify/Product/${imageId}`,
+  );
   const [languageList, setLanguageList] = useState<any[]>([]);
   const [languageLoading, setLanguageLoading] = useState<boolean>(true);
   const [productImageData, setProductImageData] = useState<any>([]);
@@ -313,7 +374,11 @@ const ImageAltTextPage = () => {
       shopify.saveBar.leaveConfirmation();
     } else {
       shopify.saveBar.hide("save-bar");
-      navigate(`/app/products/${productId}`);
+      if (imageType === "article") {
+        navigate(`/app/articles/${productId}`);
+      } else {
+        navigate(`/app/products/${productId}`);
+      }
     }
   };
   // 关闭弹窗
@@ -323,7 +388,7 @@ const ImageAltTextPage = () => {
   };
   useEffect(() => {
     imageFetcher.submit(
-      { imagesFetcher: JSON.stringify({ imageId }) },
+      { imagesFetcher: JSON.stringify({ imageId: currentImageId }) },
       { method: "POST" },
     );
   }, []);
@@ -345,10 +410,10 @@ const ImageAltTextPage = () => {
           };
         } else {
           return {
-            imageId: productImageData.imageId,
-            imageBeforeUrl: productImageData.imageUrl,
+            imageId: productImageData?.imageId,
+            imageBeforeUrl: productImageData?.imageUrl,
             imageAfterUrl: "",
-            altBeforeTranslation: productImageData.altText,
+            altBeforeTranslation: productImageData?.altText,
             altAfterTranslation: "",
             languageCode: lang.value,
             language: lang.label, // 使用语言名
@@ -431,7 +496,6 @@ const ImageAltTextPage = () => {
           sourceLanguage: defaultLanguageData?.locale,
           targetLanguage: languageCode,
           imageUrl: record?.imageBeforeUrl,
-          imageId: record?.productId,
         }),
       },
       { method: "post" },
@@ -468,7 +532,7 @@ const ImageAltTextPage = () => {
           }),
         );
         const replaceTranslateImage = {
-          productId: `gid://shopify/Product/${productId}`,
+          productId: currentResourceId,
           imageAfterUrl: translateImageFetcher.data.response,
           imageId: currentTranslatingImage?.imageId,
           imageBeforeUrl: currentTranslatingImage.imageBeforeUrl,
@@ -691,7 +755,7 @@ const ImageAltTextPage = () => {
       UpdateProductImageAltData({
         server: globalStore?.server || "",
         shopName: globalStore?.shop || "",
-        productId: `gid://shopify/Product/${productId}`,
+        productId: currentResourceId,
         imageId: item.imageId,
         imageUrl: item.imageUrl,
         altText: item.altText,
@@ -760,17 +824,31 @@ const ImageAltTextPage = () => {
     setPreviewVisible(true);
   };
   useEffect(() => {
-    imageLoadingFetcher.submit(
-      {
-        imageLoading: JSON.stringify({
-          productId: `gid://shopify/Product/${productId}`,
-          imageId: `gid://shopify/ProductImage/${imageId}`,
-        }),
-      },
-      {
-        method: "POST",
-      },
-    );
+    if (imageType === "article") {
+      imageLoadingFetcher.submit(
+        {
+          articleImageLoading: JSON.stringify({
+            productId: `gid://shopify/Article/${productId}`,
+            imageId: `gid://shopify/ArticleImage/${imageId}`,
+          }),
+        },
+        {
+          method: "POST",
+        },
+      );
+    } else {
+      imageLoadingFetcher.submit(
+        {
+          imageLoading: JSON.stringify({
+            productId: `gid://shopify/Product/${productId}`,
+            imageId: `gid://shopify/ProductImage/${imageId}`,
+          }),
+        },
+        {
+          method: "POST",
+        },
+      );
+    }
   }, []);
   useEffect(() => {
     if (imageLoadingFetcher.data) {
@@ -1046,7 +1124,7 @@ const ImageAltTextPage = () => {
                               userPicturesDoJson: JSON.stringify({
                                 shopName: globalStore?.shop,
                                 imageId: img.imageId,
-                                productId: `gid://shopify/Product/${productId}`,
+                                productId: currentResourceId,
                                 imageBeforeUrl: img.imageBeforeUrl,
                                 altBeforeTranslation: img.altBeforeTranslation,
                                 altAfterTranslation: img.altAfterTranslation,
@@ -1181,7 +1259,7 @@ const ImageAltTextPage = () => {
                                 userPicturesDoJson: JSON.stringify({
                                   shopName: globalStore?.shop,
                                   imageId: img.imageId,
-                                  productId: `gid://shopify/Product/${productId}`,
+                                  productId: currentResourceId,
                                   imageBeforeUrl: img.imageBeforeUrl,
                                   altBeforeTranslation:
                                     img.altBeforeTranslation,
@@ -1238,13 +1316,13 @@ const ImageAltTextPage = () => {
                                 display: `${img.imageAfterUrl || img.altAfterTranslation ? "block" : "none"}`,
                               }}
                               className="deleteIcon"
-                              onClick={() =>
+                              onClick={() => {
                                 handleDelete(
                                   img.imageId,
                                   img.imageBeforeUrl,
                                   img.languageCode,
-                                )
-                              }
+                                );
+                              }}
                               shape="circle"
                               icon={<DeleteOutlined />}
                             ></Button>

@@ -28,6 +28,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { shop, accessToken } = adminAuthResult.session;
   const formData = await request.formData();
   const loading = JSON.parse(formData.get("loading") as string);
+  const articleStartCursor: any = JSON.parse(
+    formData.get("articleStartCursor") as string,
+  );
+  const articleEndCursor: any = JSON.parse(
+    formData.get("articleEndCursor") as string,
+  );
   const articleFetcher = JSON.parse(formData.get("articleFetcher") as string);
 
   try {
@@ -48,6 +54,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                   }
                   title
                   isPublished
+                  author {
+                    name
+                  }
+                  blog {
+                    title
+                  }
+                  publishedAt
+                  updatedAt
                 }
                 pageInfo {
                   endCursor
@@ -86,6 +100,162 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             resonse: null,
           });
         }
+      case !!articleStartCursor:
+        try {
+          console.log("articleStartCursor", articleStartCursor);
+
+          const loadData = await admin.graphql(
+            `query GetArticles($startCursor: String, $query: String, $sortKey: ArticleSortKeys, $reverse: Boolean) {
+              articles(last: 10 ,before: $startCursor, query: $query, sortKey: $sortKey, reverse: $reverse) {
+                nodes {
+                  id
+                  image {
+                    url
+                    id
+                    altText
+                  }
+                  title
+                  isPublished
+                  author {
+                    name
+                  }
+                  blog {
+                    title
+                  }
+                  publishedAt
+                  updatedAt
+                }
+                pageInfo {
+                  endCursor
+                  hasNextPage
+                  hasPreviousPage
+                  startCursor
+                }
+              }
+            }`,
+            {
+              variables: {
+                startCursor: articleStartCursor?.cursor
+                  ? articleStartCursor?.cursor
+                  : undefined,
+                query: articleStartCursor.query,
+                sortKey: articleStartCursor?.sortKey || "AUTHOR",
+                reverse: articleStartCursor?.reverse ?? false,
+              },
+            },
+          );
+
+          const response = await loadData.json();
+
+          console.log("response start cursor:", response);
+          const articles = response?.data?.articles;
+          if (articles?.nodes?.length > 0) {
+            const data = articles?.nodes?.map((item: any) => item);
+            return json({
+              data,
+              endCursor: articles?.pageInfo?.endCursor,
+              hasNextPage: articles?.pageInfo?.hasNextPage,
+              hasPreviousPage: articles?.pageInfo?.hasPreviousPage,
+              startCursor: articles?.pageInfo?.startCursor,
+            });
+          } else {
+            return json({
+              data: [],
+              endCursor: "",
+              hasNextPage: "",
+              hasPreviousPage: "",
+              startCursor: "",
+            });
+          }
+        } catch (error) {
+          console.error("Error action productStartCursor productImage:", error);
+          return json({
+            menuData: [],
+            imageData: [],
+            productStartCursor: "",
+            productEndCursor: "",
+            productHasNextPage: "",
+            productHasPreviousPage: "",
+          });
+        }
+      case !!articleEndCursor:
+        try {
+          console.log("articleEndCursor:", articleEndCursor);
+
+          const loadData = await admin.graphql(
+            `query GetArticles($endCursor: String, $query: String, $sortKey: ArticleSortKeys, $reverse: Boolean) {
+              articles(first: 10, after: $endCursor, query: $query, sortKey: $sortKey, reverse: $reverse) {
+                nodes {
+                  id
+                  image {
+                    url
+                    id
+                    altText
+                  }
+                  title
+                  isPublished
+                  author {
+                    name
+                  }
+                  blog {
+                    title
+                  }
+                  publishedAt
+                  updatedAt
+                }
+                pageInfo {
+                  endCursor
+                  hasNextPage
+                  hasPreviousPage
+                  startCursor
+                }
+              }
+            }`,
+            {
+              variables: {
+                endCursor: articleEndCursor?.cursor
+                  ? articleEndCursor?.cursor
+                  : undefined,
+                query: articleEndCursor.query,
+                sortKey: articleEndCursor?.sortKey || "AUTHOR",
+                reverse: articleEndCursor?.reverse ?? false,
+              },
+            },
+          );
+
+          const response = await loadData.json();
+
+          console.log("response end cursor:", response);
+          const articles = response?.data?.articles;
+          if (articles?.nodes?.length > 0) {
+            const data = articles?.nodes?.map((item: any) => item);
+            return json({
+              data,
+              endCursor: articles?.pageInfo?.endCursor,
+              hasNextPage: articles?.pageInfo?.hasNextPage,
+              hasPreviousPage: articles?.pageInfo?.hasPreviousPage,
+              startCursor: articles?.pageInfo?.startCursor,
+            });
+          } else {
+            return json({
+              data: [],
+              endCursor: "",
+              hasNextPage: "",
+              hasPreviousPage: "",
+              startCursor: "",
+            });
+          }
+        } catch (error) {
+          console.error("Error action productStartCursor productImage:", error);
+          return json({
+            menuData: [],
+            imageData: [],
+            productStartCursor: "",
+            productEndCursor: "",
+            productHasNextPage: "",
+            productHasPreviousPage: "",
+          });
+        }
       case !!articleFetcher:
         try {
           console.log("articleFetcher: ", articleFetcher);
@@ -108,9 +278,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             },
           );
           const json = await response.json();
-          console.log("dada", json);
-
-          console.log("blog response:", json);
           return json;
         } catch (error) {
           console.error("Error action loadData productImage:", error);
@@ -132,11 +299,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 export default function Index() {
   const languageFetcher = useFetcher<any>();
-  const productsFetcher = useFetcher<any>();
+  const artilclesFetcher = useFetcher<any>();
   const imageFetcher = useFetcher<any>();
 
-  const [productsStartCursor, setProductsStartCursor] = useState("");
-  const [productsEndCursor, setProductsEndCursor] = useState("");
+  const [articlesStartCursor, setArticlesStartCursor] = useState("");
+  const [articlesEndCursor, setArticlesEndCursor] = useState("");
   const [lastRequestCursor, setLastRequestCursor] = useState<any>(null);
   const [productImageData, setProductImageData] = useState<any>([]);
   const [tableDataLoading, setTableDataLoading] = useState(true);
@@ -144,8 +311,8 @@ export default function Index() {
   const [articleData, setArticleData] = useState<any>([]);
   const [selectedKey, setSelectedKey] = useState("");
 
-  const [productsHasNextPage, setProductsHasNextPage] = useState(false);
-  const [productsHasPreviousPage, setProductsHasPreviousPage] = useState(false);
+  const [articlesHasNextPage, setArticlesHasNextPage] = useState(false);
+  const [articlesHasPreviousPage, setArticlesHasPreviousPage] = useState(false);
 
   const { t } = useTranslation();
   const { Text } = Typography;
@@ -155,11 +322,20 @@ export default function Index() {
   const [searchText, setSearchText] = useState<string>("");
   const timeoutIdRef = useRef<any>(true);
 
-  const [sortKey, setSortKey] = useState("CREATED_AT");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [sortKey, setSortKey] = useState("AUTHOR");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const loadFetcher = useFetcher<any>();
-  const articleFetcher = useFetcher<any>();
   const [blogsData, setBlogsData] = useState<any[]>([]);
+  const sortOptions = [
+    { label: "Title", value: "TITLE" },
+    { label: "Author", value: "AUTHOR" },
+    { label: "Blog Title", value: "BLOG_TITLE" },
+    { label: "Published Time", value: "PUBLISHED_AT" },
+    { label: "Updata Time", value: "UPDATED_AT" },
+  ];
+  const lastPageCursorInfo = useSelector(
+    (state: RootState) => state.article.lastPageCursorInfo,
+  );
   const panelColumns: ColumnsType<any> = [
     {
       // 不需要 dataIndex，用 render 直接取 item.node.title
@@ -184,7 +360,7 @@ export default function Index() {
       }),
     },
     {
-      title: t("Article title"),
+      title: t("Title"),
       // 不需要 dataIndex，用 render 直接取 item.node.title
       // maxWidth: 250, // ✅ 指定列宽（单位是像素）
       render: (_: any, record: any) => (
@@ -212,6 +388,22 @@ export default function Index() {
       }),
     },
     {
+      title: t("Author"),
+      width: 110,
+      render: (_: any, record: any) => {
+        return <Text>{record.author.name}</Text>;
+      },
+      responsive: ["md", "lg", "xl", "xxl"], // ✅ 手机端隐藏
+    },
+    {
+      title: t("Blog"),
+      width: 110,
+      render: (_: any, record: any) => {
+        return <Text>{record.blog.title}</Text>;
+      },
+      responsive: ["md", "lg", "xl", "xxl"], // ✅ 手机端隐藏
+    },
+    {
       title: t("Status"),
       width: 110,
       render: (_: any, record: any) => {
@@ -232,41 +424,77 @@ export default function Index() {
     },
   ];
   function handleView(record: any): void {
-    console.log("Viewing record:", record);
-    // navigate(`/app/products/${productId}`);
+    const articleId = record.id.split("/").pop();
+    navigate(`/app/articles/${articleId}`);
   }
   useEffect(() => {
+    const {
+      lastRequestCursor,
+      direction,
+      searchText,
+      sortOrder,
+      sortKey,
+      articlesHasNextPage,
+      articlesHasPreviousPage,
+      articlesStartCursor,
+      articlesEndCursor,
+    } = lastPageCursorInfo;
+    // console.log("执行数据初始化操作", lastPageCursorInfo);
+
+    setArticlesHasNextPage(articlesHasNextPage);
+    setArticlesHasPreviousPage(articlesHasPreviousPage);
+    setArticlesStartCursor(articlesStartCursor);
+    setArticlesEndCursor(articlesEndCursor);
+    setSortOrder(sortOrder);
+    setSortKey(sortKey);
+    // handleSortProduct(sortKey, sortOrder);
+    setSearchText(searchText);
     const formData = new FormData();
-    formData.append("loading", JSON.stringify({}));
+    formData.append(
+      direction === "next"
+        ? "articleEndCursor"
+        : direction === "prev"
+          ? "articleStartCursor"
+          : "articleEndCursor",
+      JSON.stringify({
+        cursor: lastRequestCursor,
+        query: searchText,
+        status: activeKey,
+        sortKey,
+        reverse: sortOrder === "asc" ? false : true,
+      }),
+    );
     loadFetcher.submit(formData, { method: "POST" });
   }, []);
   useEffect(() => {
     if (loadFetcher.data) {
-      // console.log(loadFetcher.data);
+      setArticlesHasNextPage(loadFetcher.data.hasNextPage);
+      setArticlesHasPreviousPage(loadFetcher.data.hasPreviousPage);
+      setArticlesStartCursor(loadFetcher.data.startCursor);
+      setArticlesEndCursor(loadFetcher.data.endCursor);
       setArticleData(loadFetcher.data?.data);
       setTableDataLoading(false);
       // setBlogsData(loadFetcher.data);
     }
   }, [loadFetcher.data]);
   useEffect(() => {
-    if (articleFetcher.data) {
-      console.log(articleFetcher.data);
+    if (artilclesFetcher.data) {
+      setArticlesHasNextPage(artilclesFetcher.data.hasNextPage);
+      setArticlesHasPreviousPage(artilclesFetcher.data.hasPreviousPage);
+      setArticlesStartCursor(artilclesFetcher.data.startCursor);
+      setArticlesEndCursor(artilclesFetcher.data.endCursor);
+      setArticleData(artilclesFetcher.data?.data);
     }
-  }, [articleFetcher.data]);
-  const handleQueryArticle = (id: string) => {
-    const formData = new FormData();
-    formData.append("articleFetcher", JSON.stringify({ id }));
-    articleFetcher.submit(formData, { method: "POST" });
-  };
+  }, [artilclesFetcher.data]);
   const handlePreProductPage = () => {
-    if (productsFetcher.state !== "idle") {
+    if (artilclesFetcher.state !== "idle") {
       return;
     }
 
-    productsFetcher.submit(
+    artilclesFetcher.submit(
       {
-        productStartCursor: JSON.stringify({
-          cursor: productsStartCursor,
+        articleStartCursor: JSON.stringify({
+          cursor: articlesStartCursor,
           query: searchText,
           status: activeKey,
           sortKey,
@@ -275,19 +503,18 @@ export default function Index() {
       },
       {
         method: "post",
-        action: "/app/management",
       },
     ); // 提交表单请求
   };
   const handleNextProductPage = () => {
-    if (productsFetcher.state !== "idle") {
+    if (artilclesFetcher.state !== "idle") {
       return;
     }
 
-    productsFetcher.submit(
+    artilclesFetcher.submit(
       {
-        productEndCursor: JSON.stringify({
-          cursor: productsEndCursor,
+        articleEndCursor: JSON.stringify({
+          cursor: articlesEndCursor,
           query: searchText,
           status: activeKey,
           sortKey,
@@ -296,7 +523,6 @@ export default function Index() {
       },
       {
         method: "post",
-        action: "/app/management",
       },
     ); // 提交表单请求
   };
@@ -309,9 +535,9 @@ export default function Index() {
 
     // 延迟 1s 再执行请求
     timeoutIdRef.current = setTimeout(() => {
-      productsFetcher.submit(
+      artilclesFetcher.submit(
         {
-          productEndCursor: JSON.stringify({
+          articleEndCursor: JSON.stringify({
             cursor: "",
             query: searchText,
             status: key,
@@ -321,7 +547,6 @@ export default function Index() {
         },
         {
           method: "post",
-          action: "/app/management",
         },
       );
     }, 500);
@@ -336,9 +561,9 @@ export default function Index() {
 
     // 延迟 1s 再执行请求
     timeoutIdRef.current = setTimeout(() => {
-      productsFetcher.submit(
+      artilclesFetcher.submit(
         {
-          productEndCursor: JSON.stringify({
+          articleEndCursor: JSON.stringify({
             cursor: "",
             query: value,
             status: activeKey,
@@ -348,7 +573,6 @@ export default function Index() {
         },
         {
           method: "post",
-          action: "/app/management",
         },
       );
     }, 100);
@@ -358,9 +582,9 @@ export default function Index() {
     setSortOrder(order);
     // 延迟 1s 再执行请求
     timeoutIdRef.current = setTimeout(() => {
-      productsFetcher.submit(
+      artilclesFetcher.submit(
         {
-          productEndCursor: JSON.stringify({
+          articleEndCursor: JSON.stringify({
             cursor: "",
             query: searchText,
             sortKey: key,
@@ -370,24 +594,12 @@ export default function Index() {
         },
         {
           method: "post",
-          action: "/app/management",
         },
       );
     }, 100);
   };
   return (
     <Page>
-      {/* {blogsData.length > 0 &&
-        blogsData?.map((item) => {
-          return (
-            <Flex key={item.id} vertical gap={8}>
-              <Text>{item.title}</Text>
-              <Button onClick={() => handleQueryArticle(item.id)}>
-                查询文章数据
-              </Button>
-            </Flex>
-          );
-        })} */}
       <Card styles={{ body: { padding: "12px 24px" } }}>
         <Flex align="center" justify="space-between">
           <Tabs
@@ -398,18 +610,18 @@ export default function Index() {
             style={{ width: "40%" }}
             items={[
               { label: t("All"), key: "ALL" },
-              {
-                label: t("Active"),
-                key: "ACTIVE",
-              },
-              {
-                label: t("Draft"),
-                key: "DRAFT",
-              },
-              {
-                label: t("Archived"),
-                key: "ARCHIVED",
-              },
+              // {
+              //   label: t("Active"),
+              //   key: "ACTIVE",
+              // },
+              // {
+              //   label: t("Draft"),
+              //   key: "DRAFT",
+              // },
+              // {
+              //   label: t("Archived"),
+              //   key: "ARCHIVED",
+              // },
             ]}
           />
 
@@ -424,6 +636,7 @@ export default function Index() {
               onChange={(key, order) => handleSortProduct(key, order)}
               sortKeyProp={sortKey}
               sortOrderProp={sortOrder}
+              sortOptions={sortOptions}
             />
             {/* <Button onClick={() => console.log(lastPageCursorInfo)}>
                           输出store存储数据
@@ -446,14 +659,16 @@ export default function Index() {
             dataSource={articleData}
             columns={panelColumns}
             pagination={false}
-            rowKey={(record) => record.key} // ✅ 建议加上 key，避免警告
+            rowKey={(record) => record.id} // ✅ 建议加上 key，避免警告
             loading={tableDataLoading}
             onRow={(record) => ({
               onClick: (e) => {
                 // 排除点击按钮等交互元素
                 if ((e.target as HTMLElement).closest("button")) return;
-                const productId = record.key.split("/").pop();
-                navigate(`/app/products/${productId}`);
+                console.log(record);
+
+                const articleId = record.id.split("/").pop();
+                navigate(`/app/articles/${articleId}`);
               },
               style: { cursor: "pointer" },
             })}
@@ -474,9 +689,9 @@ export default function Index() {
           }}
         >
           <Pagination
-            hasPrevious={productsHasPreviousPage}
+            hasPrevious={articlesHasPreviousPage}
             onPrevious={handlePreProductPage}
-            hasNext={productsHasNextPage}
+            hasNext={articlesHasNextPage}
             onNext={handleNextProductPage}
           />
         </div>

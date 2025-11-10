@@ -1,4 +1,9 @@
-import { useFetcher, useNavigate, useParams } from "@remix-run/react";
+import {
+  useFetcher,
+  useLocation,
+  useNavigate,
+  useParams,
+} from "@remix-run/react";
 import { Page, Icon, Pagination, Layout } from "@shopify/polaris";
 import {
   Typography,
@@ -25,7 +30,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   const { shop, accessToken } = adminAuthResult.session;
   const formData = await request.formData();
-  const productLoading = JSON.parse(formData.get("productLoading") as string);
+  const articleLoading = JSON.parse(formData.get("articleLoading") as string);
   const imageStartCursor: any = JSON.parse(
     formData.get("imageStartCursor") as string,
   );
@@ -48,70 +53,29 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return str.trim();
     };
     switch (true) {
-      case !!productLoading:
+      case !!articleLoading:
         try {
+          console.log("articleLoading", articleLoading);
+
           const loadData = await admin.graphql(
-            `query {
-              product(id: "${productLoading?.productId}") { 
-                id
-                title
-                images(first: 8) {
-                  edges {
-                    node {
-                      id
-                      url
-                      altText
-                    }
-                  }
-                  pageInfo {
-                    hasNextPage
-                    hasPreviousPage
-                    startCursor
-                    endCursor
-                  }
+            `query ShopName {
+              article(id: "${articleLoading.articleId}") {
+                image {
+                  altText
+                  url
+                  id
                 }
+                id
+                updatedAt
+                title
               }
             }`,
           );
 
           const response = await loadData.json();
-          console.log("dassada: ", response);
 
-          console.log(
-            "productLoading: ",
-            response?.data?.product?.images?.edges,
-          );
-          if (response?.data?.product?.images?.edges.length > 0) {
-            const imageData = response?.data?.product?.images?.edges.map(
-              (item: any) => {
-                return {
-                  title: response?.data?.product?.title,
-                  altText: item?.node?.altText,
-                  key: item?.node?.id,
-                  productId: response?.data?.product?.id,
-                  productTitle: item?.node?.title,
-                  imageId: item?.node?.id,
-                  imageUrl: item?.node?.url,
-                  targetImageUrl: "",
-                  imageStartCursor:
-                    response?.data?.product?.images?.pageInfo?.startCursor,
-                  imageEndCursor:
-                    response?.data?.product?.images?.pageInfo?.endCursor,
-                  imageHasNextPage:
-                    response?.data?.product?.images?.pageInfo?.hasNextPage,
-                  imageHasPreviousPage:
-                    response?.data?.product?.images?.pageInfo?.hasPreviousPage,
-                };
-              },
-            );
-            return json({
-              imageData,
-            });
-          } else {
-            return json({
-              imageData: [],
-            });
-          }
+          console.log("articleLoading: ", response?.data?.article?.image);
+          return json(response?.data?.article);
         } catch (error) {
           console.error("Error action imageStartCursor productImage:", error);
           return json({
@@ -263,25 +227,24 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function ProductDetailPage() {
-  const { productId } = useParams(); // ✅ 获取路径参数
+  const { articleId } = useParams(); // ✅ 获取路径参数
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [imageHasPreviousPage, setImageHasPreviousPage] = useState(false);
-  const [productImageData, setProductImageData] = useState<any>([]);
+  const [articleImageData, setArticleImageData] = useState<any>([]);
   const [imageHasNextPage, setImageHasNextPage] = useState(false);
   const [selectedKey, setSelectedKey] = useState(
-    `gid://shopify/Product/${productId}`,
+    `gid://shopify/Article/${articleId}`,
   );
   const [productLoading, setProductLoading] = useState<boolean>(true);
-  const imageFetcher = useFetcher<any>();
-  const productLoadingFetcher = useFetcher<any>();
+  const articleLoadingFetcher = useFetcher<any>();
   const handleNavigate = () => {
-    navigate("/app");
+    navigate("/app/article");
   };
   useEffect(() => {
-    productLoadingFetcher.submit(
+    articleLoadingFetcher.submit(
       {
-        productLoading: JSON.stringify({ productId: selectedKey }),
+        articleLoading: JSON.stringify({ articleId: selectedKey }),
       },
       {
         method: "POST",
@@ -289,68 +252,14 @@ export default function ProductDetailPage() {
     );
   }, []);
   useEffect(() => {
-    if (productLoadingFetcher.data) {
+    if (articleLoadingFetcher.data) {
       setProductLoading(false);
-      // console.log(productLoadingFetcher.data.imageData);
-      setProductImageData(productLoadingFetcher.data.imageData);
-      setImageHasNextPage(
-        productLoadingFetcher.data.imageData[0]?.imageHasNextPage,
-      );
-      setImageHasPreviousPage(
-        productLoadingFetcher.data.imageData[0]?.imageHasPreviousPage,
-      );
+      setArticleImageData(articleLoadingFetcher.data);
     }
-  }, [productLoadingFetcher]);
-  const handleImagePrevious = () => {
-    if (imageFetcher.state !== 'idle') {
-      return;
-    }
-    setProductLoading(true);
-    imageFetcher.submit(
-      {
-        imageStartCursor: JSON.stringify({
-          imageStartCursor: productImageData[0]?.imageStartCursor,
-          productId: selectedKey,
-        }),
-      },
-      {
-        method: "post",
-        action: "/app/management",
-      },
-    );
-  };
-  const handleImageNext = () => {
-    if (imageFetcher.state !== 'idle') {
-      return;
-    }
-    setProductLoading(true);
-    imageFetcher.submit(
-      {
-        imageEndCursor: JSON.stringify({
-          imageEndCursor: productImageData[0]?.imageEndCursor,
-          productId: selectedKey,
-        }),
-      },
-      {
-        method: "post",
-        action: "/app/management",
-      },
-    );
-  };
-  useEffect(() => {
-    if (imageFetcher.data) {
-      setProductLoading(false);
-      // console.log("dsdqeqsa: ", imageFetcher.data);
-      setProductImageData(imageFetcher.data.imageData);
-      setImageHasNextPage(imageFetcher.data.imageData[0]?.imageHasNextPage);
-      setImageHasPreviousPage(
-        imageFetcher.data.imageData[0]?.imageHasPreviousPage,
-      );
-    }
-  }, [imageFetcher.data]);
+  }, [articleLoadingFetcher]);
   const handleSelect = (id: string) => {
     const imageId = id.split("/").pop();
-    navigate(`/app/images/${productId}/${imageId}?type=product`);
+    navigate(`/app/images/${articleId}/${imageId}?type=article`);
   };
   return (
     <Page>
@@ -401,8 +310,8 @@ export default function ProductDetailPage() {
       </Affix>
       <Layout>
         <Layout.Section>
-          <Title level={4} style={{ fontSize: "16px",marginBottom:"16px" }}>
-            {productImageData.length > 0 && productImageData[0].title}
+          <Title level={4} style={{ fontSize: "16px", marginBottom: "16px" }}>
+            {articleImageData?.title}
           </Title>
           <div
             style={{
@@ -427,66 +336,63 @@ export default function ProductDetailPage() {
                   }}
                 />
               </div>
-            ) : productImageData.length > 0 ? (
-              productImageData.map((item: any) => (
+            ) : articleImageData?.image ? (
+              <div
+                style={{
+                  textAlign: "center",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  cursor: "pointer",
+                  transition: "all 0.3s ease",
+                  border: "1px solid #f0f0f0",
+                  borderRadius: "8px",
+                  padding: 0,
+                  backgroundColor: "#fff",
+                }}
+                onClick={() => handleSelect(articleImageData?.image?.id)}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = "translateY(-4px)";
+                  e.currentTarget.style.boxShadow =
+                    "0 6px 12px rgba(0,0,0,0.1)";
+                  // e.currentTarget.style.borderColor = "#1677ff";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = "translateY(0)";
+                  e.currentTarget.style.boxShadow = "none";
+                  e.currentTarget.style.borderColor = "#f0f0f0";
+                }}
+              >
                 <div
-                  key={item.key}
                   style={{
-                    textAlign: "center",
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    cursor: "pointer",
-                    transition: "all 0.3s ease",
-                    border: "1px solid #f0f0f0",
-                    borderRadius: "8px",
+                    width: "100%",
+                    aspectRatio: "1/1",
+                    borderRadius: "8px 8px 0 0",
+                    overflow: "hidden",
+                    backgroundColor: "#f7f7f7",
+                    marginBottom: "30px",
                     padding: 0,
-                    backgroundColor: "#fff",
-                  }}
-                  onClick={() => handleSelect(item.imageId)}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = "translateY(-4px)";
-                    e.currentTarget.style.boxShadow =
-                      "0 6px 12px rgba(0,0,0,0.1)";
-                    // e.currentTarget.style.borderColor = "#1677ff";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = "translateY(0)";
-                    e.currentTarget.style.boxShadow = "none";
-                    e.currentTarget.style.borderColor = "#f0f0f0";
                   }}
                 >
-                  <div
+                  <img
+                    src={articleImageData?.image?.url}
+                    alt={articleImageData?.image?.altText || "Article Image"}
                     style={{
                       width: "100%",
-                      aspectRatio: "1/1",
-                      borderRadius: "8px 8px 0 0",
-                      overflow: "hidden",
-                      backgroundColor: "#f7f7f7",
-                      marginBottom: "30px",
-                      padding: 0,
+                      height: "100%",
+                      objectFit: "contain",
                     }}
-                  >
-                    <img
-                      src={item.imageUrl}
-                      alt={item.altText || "Product Image"}
-                      style={{
-                        width: "100%",
-                        height: "100%",
-                        objectFit: "contain",
-                      }}
-                    />
-                  </div>
-                  <div style={{ padding: "12px" }}>
-                    <Button
-                      type="default"
-                      onClick={() => handleSelect(item.imageId)}
-                    >
-                      {t("View translation")}
-                    </Button>
-                  </div>
+                  />
                 </div>
-              ))
+                <div style={{ padding: "12px" }}>
+                  <Button
+                    type="default"
+                    onClick={() => handleSelect(articleImageData?.image?.id)}
+                  >
+                    {t("View translation")}
+                  </Button>
+                </div>
+              </div>
             ) : (
               <div
                 style={{
@@ -510,12 +416,12 @@ export default function ProductDetailPage() {
               marginTop: "16px",
             }}
           >
-            <Pagination
+            {/* <Pagination
               hasPrevious={imageHasPreviousPage}
               onPrevious={handleImagePrevious}
               hasNext={imageHasNextPage}
               onNext={handleImageNext}
-            />
+            /> */}
           </div>
         </Layout.Section>
       </Layout>

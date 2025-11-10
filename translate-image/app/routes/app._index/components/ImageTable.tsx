@@ -52,6 +52,15 @@ export default function Index() {
   const lastPageCursorInfo = useSelector(
     (state: RootState) => state.product.lastPageCursorInfo,
   );
+  const sortOptions = [
+    { label: "Product Title", value: "TITLE" },
+    { label: "Creation time", value: "CREATED_AT" },
+    { label: "Update time", value: "UPDATED_AT" },
+    { label: "Inventory", value: "INVENTORY" },
+    { label: "Product Type", value: "PRODUCT_TYPE" },
+    // { label: "发布时间", value: "PUBLISHED_AT" },
+    { label: "Manufacturers", value: "VENDOR" },
+  ];
 
   const panelColumns: ColumnsType<any> = [
     {
@@ -417,6 +426,7 @@ export default function Index() {
                   onChange={(key, order) => handleSortProduct(key, order)}
                   sortKeyProp={sortKey}
                   sortOrderProp={sortOrder}
+                  sortOptions={sortOptions}
                 />
                 {/* <Button onClick={() => console.log(lastPageCursorInfo)}>
                   输出store存储数据
