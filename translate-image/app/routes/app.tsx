@@ -133,7 +133,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
     if (payInfo) {
       try {
-        console.log("sjdaskdi: ", payInfo);
+        // console.log("sjdaskdi: ", payInfo);
 
         const returnUrl = new URL(
           payInfo?.action === "quotacard"
