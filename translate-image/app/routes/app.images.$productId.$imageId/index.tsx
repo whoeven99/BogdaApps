@@ -436,9 +436,9 @@ const ImageAltTextPage = () => {
       },
       { method: "post" },
     );
-    // if (record.) {
-      
-    // }
+    if (!record?.altBeforeTranslation) {
+      return;
+    }
     const formData = new FormData();
     formData.append("altTranslateFetcher", JSON.stringify({ record }));
     altTranslateFetcher.submit(formData, { method: "post" });
@@ -653,7 +653,7 @@ const ImageAltTextPage = () => {
         typeof response?.response?.imageAfterUrl === "string"
           ? response.response?.imageAfterUrl
           : "";
-          
+
       if (response?.success) {
         setImageDatas((prev: any[]) => {
           return prev.map((item) =>
