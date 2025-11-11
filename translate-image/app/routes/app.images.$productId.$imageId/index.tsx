@@ -310,15 +310,6 @@ const ImageAltTextPage = () => {
     ],
   } as any;
   const handleNavigate = () => {
-    fetcher.submit(
-      {
-        log: `${loader.shop} 从图像翻译返回翻译产品图片页面`,
-      },
-      {
-        method: "POST",
-        action: "/app/log",
-      },
-    );
     if (confirmData.length > 0) {
       shopify.saveBar.leaveConfirmation();
     } else {
@@ -854,6 +845,10 @@ const ImageAltTextPage = () => {
     setOpen(false);
   };
   const handleAddLanguage = () => {
+    window.open(
+      `https://admin.shopify.com/store/${loader.shop.split(".")[0]}/settings/languages`,
+      "_blank",
+    );
     fetcher.submit(
       {
         log: `${loader.shop} 前往添加语言页面`,
@@ -862,10 +857,6 @@ const ImageAltTextPage = () => {
         method: "POST",
         action: "/app/log",
       },
-    );
-    window.open(
-      `https://admin.shopify.com/store/${loader.shop.split(".")[0]}/settings/languages`,
-      "_blank",
     );
   };
   return (

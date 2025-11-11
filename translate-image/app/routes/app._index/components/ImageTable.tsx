@@ -190,6 +190,7 @@ export default function Index({ shop }: { shop: string }) {
       method: "POST",
     });
   }, []);
+
   useEffect(() => {
     if (loadFetcher.data) {
       setMenuData(loadFetcher.data.menuData);
@@ -315,33 +316,12 @@ export default function Index({ shop }: { shop: string }) {
     ); // 提交表单请求
   };
 
-  function handleView(record: any): void {
-    fetcher.submit(
-      {
-        log: `${shop} 前往翻译产品图片页面`,
-      },
-      {
-        method: "POST",
-        action: "/app/log",
-      },
-    );
-    console.log("Viewing record:", record);
+  function handleView(record: any) {
     const productId = record.key.split("/").pop();
-    console.log("productId:", productId);
-
     navigate(`/app/products/${productId}`);
   }
   const handleNavigate = (e: any, record: any) => {
     // 排除点击按钮等交互元素
-    fetcher.submit(
-      {
-        log: `${shop} 前往翻译产品图片页面`,
-      },
-      {
-        method: "POST",
-        action: "/app/log",
-      },
-    );
     if ((e.target as HTMLElement).closest("button")) return;
     const productId = record.key.split("/").pop();
     navigate(`/app/products/${productId}`);

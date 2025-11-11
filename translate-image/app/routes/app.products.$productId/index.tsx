@@ -290,15 +290,6 @@ export default function ProductDetailPage() {
   const productLoadingFetcher = useFetcher<any>();
   const fetcher = useFetcher();
   const handleNavigate = () => {
-    fetcher.submit(
-      {
-        log: `${shop} 从翻译产品图片页面返回主页`,
-      },
-      {
-        method: "POST",
-        action: "/app/log",
-      },
-    );
     navigate("/app");
   };
   useEffect(() => {
@@ -308,6 +299,15 @@ export default function ProductDetailPage() {
       },
       {
         method: "POST",
+      },
+    );
+    fetcher.submit(
+      {
+        log: `${shop} 当前在翻译产品图片页面`,
+      },
+      {
+        method: "POST",
+        action: "/app/log",
       },
     );
   }, []);
@@ -372,15 +372,6 @@ export default function ProductDetailPage() {
     }
   }, [imageFetcher.data]);
   const handleSelect = (id: string) => {
-    fetcher.submit(
-      {
-        log: `${shop} 前往管理图片翻译页面`,
-      },
-      {
-        method: "POST",
-        action: "/app/log",
-      },
-    );
     const imageId = id.split("/").pop();
     navigate(`/app/images/${productId}/${imageId}`);
   };
