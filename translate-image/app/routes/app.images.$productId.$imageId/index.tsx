@@ -416,7 +416,7 @@ const ImageAltTextPage = () => {
       return;
     }
     setCurrentTranslatingImage(record);
-    if (totalChars - chars < 1200) {
+    if (totalChars - chars < 2000) {
       setOpen(true);
       return;
     }
@@ -610,7 +610,7 @@ const ImageAltTextPage = () => {
             ];
           }
         });
-        dispatch(setChars({ chars: chars + 200 }));
+        dispatch(setChars({ chars: chars + 1000 }));
       } else if (
         !altTranslateFetcher.data.response.success &&
         altTranslateFetcher.data.response.errorMsg === "额度不够"

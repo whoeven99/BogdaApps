@@ -11,7 +11,7 @@
   "Setup App": "设置应用程序",
   "The switcher is currently enabled.": "切换器当前已启用。",
   "Enable language and currency switcher": "启用语言和货币切换器",
-  "{{currentCredits}} has been used, total credits: {{maxCredits}}.": "已使用 {{currentCredits}} 积分，总积分：{{maxCredits}}。",
+  "{{currentCredits}} has been used, total credits: {{maxCredits}}.": "已使用 {{currentCredits}} 张图，总数量：{{maxCredits}}。",
   "Translation Quota": "翻译额度",
   "Permanent quotas · Never expire · Top up anytime.": "永久额度 · 永不过期 · 随时充值。",
   "Add credits": "添加积分",

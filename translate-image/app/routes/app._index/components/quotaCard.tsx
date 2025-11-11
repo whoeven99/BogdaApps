@@ -52,7 +52,6 @@ export const QuotaCard = ({ shop }: { shop: string }) => {
   const handleAddCredits = () => {
     setOpenModal(true);
     reportClick("pricing_balance_add");
-
     fetcher.submit(
       {
         log: `${shop} 点击了添加积分按钮`,
@@ -107,8 +106,8 @@ export const QuotaCard = ({ shop }: { shop: string }) => {
                 __html: t(
                   "{{currentCredits}} has been used, total credits: {{maxCredits}}.",
                   {
-                    currentCredits: chars?.toLocaleString() || 0,
-                    maxCredits: totalChars?.toLocaleString() || 0,
+                    currentCredits: Math.floor((Number(chars) || 0) / 2000),
+                    maxCredits: Math.floor((Number(totalChars) || 0) / 2000),
                   },
                 ),
               }}
@@ -117,7 +116,13 @@ export const QuotaCard = ({ shop }: { shop: string }) => {
         </div>
         <Progress
           percent={
-            totalChars == 0 ? 100 : Math.round((chars / totalChars) * 100)
+            totalChars == 0
+              ? 100
+              : Math.round(
+                  (Math.floor((Number(chars) || 0) / 2000) /
+                    Math.floor((Number(totalChars) || 0) / 2000)) *
+                    100,
+                )
           }
           size={["100%", 15]}
           strokeColor="#007F61"
