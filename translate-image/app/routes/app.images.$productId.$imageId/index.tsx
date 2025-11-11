@@ -336,15 +336,6 @@ const ImageAltTextPage = () => {
       { imagesFetcher: JSON.stringify({ imageId }) },
       { method: "POST" },
     );
-    fetcher.submit(
-      {
-        log: `${loader.shop} 当前在图像翻译页面，默认语言是 ${defaultLanguageData?.locale}`,
-      },
-      {
-        method: "POST",
-        action: "/log",
-      },
-    );
   }, []);
   useEffect(() => {
     if (imageFetcher.data) {
@@ -819,6 +810,15 @@ const ImageAltTextPage = () => {
       languageFetcher.data.response.forEach((lan: any) => {
         if (lan.primary) {
           setDefaultLanguageData(lan);
+          fetcher.submit(
+            {
+              log: `${loader.shop} 当前在图像翻译页面，商店默认语言是 ${lan?.locale}`,
+            },
+            {
+              method: "POST",
+              action: "/log",
+            },
+          );
         }
       });
       setLanguageList(
