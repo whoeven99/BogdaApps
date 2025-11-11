@@ -22,6 +22,8 @@ import { useEffect, useState } from "react";
 import { ActionFunctionArgs, json } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
 import ScrollNotice from "~/components/ScrollNotice";
+import { load } from "cheerio";
+
 const { Text, Title } = Typography;
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -31,27 +33,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { shop, accessToken } = adminAuthResult.session;
   const formData = await request.formData();
   const articleLoading = JSON.parse(formData.get("articleLoading") as string);
-  const imageStartCursor: any = JSON.parse(
-    formData.get("imageStartCursor") as string,
-  );
-  const imageEndCursor: any = JSON.parse(
-    formData.get("imageEndCursor") as string,
-  );
   try {
-    const queryString = (productCursor: any) => {
-      const { query, status } = productCursor || { query: "", status: "" };
-      let str = "";
-
-      if (status && status !== "ALL") {
-        str += `status:${status.toUpperCase()} `;
-      }
-
-      if (query && query.trim()) {
-        str += `${query.trim()}`;
-      }
-
-      return str.trim();
-    };
     switch (true) {
       case !!articleLoading:
         try {
@@ -65,6 +47,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                   url
                   id
                 }
+                body
                 id
                 updatedAt
                 title
@@ -73,143 +56,28 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           );
 
           const response = await loadData.json();
+          const article = response?.data?.article;
 
-          console.log("articleLoading: ", response?.data?.article?.image);
-          return json(response?.data?.article);
+          // ✅ 提取 body 里的 <img> 标签
+          const $ = load(article.body || "");
+          const embeddedImages: { src: string; alt: string | null }[] = [];
+
+          $("img").each((_, el) => {
+            embeddedImages.push({
+              src: $(el).attr("src") || "",
+              alt: $(el).attr("alt") || null,
+            });
+          });
+
+          // ✅ 组合返回的数据结构
+          const result = {
+            ...article,
+            embeddedImages,
+          };
+
+          return json(result);
         } catch (error) {
           console.error("Error action imageStartCursor productImage:", error);
-          return json({
-            imageData: [],
-          });
-        }
-
-      case !!imageStartCursor:
-        try {
-          const loadData = await admin.graphql(
-            `query {
-              product(id: "${imageStartCursor?.productId}") {
-                id
-                title
-                images(last: 8, before: "${imageStartCursor?.imageStartCursor}") {
-                  edges {
-                    node {
-                      id
-                      url
-                      altText
-                    }
-                  }
-                  pageInfo {
-                    hasNextPage
-                    hasPreviousPage
-                    startCursor
-                    endCursor
-                  }
-                }
-              }
-            }`,
-          );
-
-          const response = await loadData.json();
-
-          console.log(
-            "imageStartCursor",
-            response?.data?.product?.images?.edges,
-          );
-          if (response?.data?.product?.images?.edges.length > 0) {
-            const imageData = response?.data?.product?.images?.edges.map(
-              (item: any) => {
-                return {
-                  key: item?.node?.id,
-                  productId: item?.node?.id,
-                  productTitle: item?.node?.title,
-                  imageId: item?.node?.id,
-                  imageUrl: item?.node?.url,
-                  targetImageUrl: "",
-                  imageStartCursor:
-                    response?.data?.product?.images?.pageInfo?.startCursor,
-                  imageEndCursor:
-                    response?.data?.product?.images?.pageInfo?.endCursor,
-                  imageHasNextPage:
-                    response?.data?.product?.images?.pageInfo?.hasNextPage,
-                  imageHasPreviousPage:
-                    response?.data?.product?.images?.pageInfo?.hasPreviousPage,
-                };
-              },
-            );
-            return json({
-              imageData,
-            });
-          } else {
-            return json({
-              imageData: [],
-            });
-          }
-        } catch (error) {
-          console.error("Error action imageStartCursor productImage:", error);
-          return json({
-            imageData: [],
-          });
-        }
-      case !!imageEndCursor:
-        try {
-          const loadData = await admin.graphql(
-            `query {
-              product(id: "${imageEndCursor?.productId}") {
-                id
-                title
-                images(first: 8, after: "${imageEndCursor?.imageEndCursor}") {
-                  edges {
-                    node {
-                      id
-                      url
-                      altText
-                    }
-                  }
-                  pageInfo {
-                    hasNextPage
-                    hasPreviousPage
-                    startCursor
-                    endCursor
-                  }
-                }
-              }
-            }`,
-          );
-
-          const response = await loadData.json();
-
-          console.log("imageEndCursor", response?.data?.product?.images);
-          if (response?.data?.product?.images?.edges.length > 0) {
-            const imageData = response?.data?.product?.images?.edges.map(
-              (item: any) => {
-                return {
-                  key: item?.node?.id,
-                  productId: item?.node?.id,
-                  productTitle: item?.node?.title,
-                  imageId: item?.node?.id,
-                  imageUrl: item?.node?.url,
-                  targetImageUrl: "",
-                  imageStartCursor:
-                    response?.data?.product?.images?.pageInfo?.startCursor,
-                  imageEndCursor:
-                    response?.data?.product?.images?.pageInfo?.endCursor,
-                  imageHasNextPage:
-                    response?.data?.product?.images?.pageInfo?.hasNextPage,
-                  imageHasPreviousPage:
-                    response?.data?.product?.images?.pageInfo?.hasPreviousPage,
-                };
-              },
-            );
-            return json({
-              imageData,
-            });
-          } else {
-            return json({
-              imageData: [],
-            });
-          }
-        } catch (error) {
-          console.error("Error action imageEndCursor productImage:", error);
           return json({
             imageData: [],
           });
@@ -253,6 +121,8 @@ export default function ProductDetailPage() {
   }, []);
   useEffect(() => {
     if (articleLoadingFetcher.data) {
+      console.log(articleLoadingFetcher.data);
+
       setProductLoading(false);
       setArticleImageData(articleLoadingFetcher.data);
     }
@@ -407,6 +277,53 @@ export default function ProductDetailPage() {
                 <Empty description={t("No image data available.")} />
               </div>
             )}
+            {!productLoading &&
+              articleImageData?.embeddedImages?.length > 0 && (
+                <>
+                  <Title level={4} style={{ marginTop: "24px" }}>
+                    Embedded Images
+                  </Title>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns:
+                        "repeat(auto-fill, minmax(200px, 1fr))",
+                      gap: "20px",
+                    }}
+                  >
+                    {articleImageData.embeddedImages.map(
+                      (img: any, index: number) => (
+                        <div
+                          key={index}
+                          style={{
+                            border: "1px solid #f0f0f0",
+                            borderRadius: "8px",
+                            backgroundColor: "#fff",
+                            padding: "8px",
+                          }}
+                          onClick={() =>
+                            console.log("selected image:", img.src)
+                          }
+                        >
+                          <img
+                            src={img.src}
+                            alt={img.alt || `Image ${index + 1}`}
+                            style={{
+                              width: "100%",
+                              height: "200px",
+                              objectFit: "contain",
+                              borderRadius: "8px",
+                            }}
+                          />
+                          <div style={{ marginTop: "8px" }}>
+                            <Text>{img.alt || "No alt text"}</Text>
+                          </div>
+                        </div>
+                      ),
+                    )}
+                  </div>
+                </>
+              )}
           </div>
 
           <div

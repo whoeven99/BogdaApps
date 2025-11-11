@@ -40,7 +40,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     switch (true) {
       case !!loading:
         try {
-          const { lastRequestCursor, direction } = loading;
           const loadData = await admin.graphql(
             `query GetArticles {
               articles(first: 10) {
@@ -194,6 +193,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                   }
                   publishedAt
                   updatedAt
+                  body
                 }
                 pageInfo {
                   endCursor
@@ -395,7 +395,7 @@ export default function Index() {
       responsive: ["md", "lg", "xl", "xxl"], // ✅ 手机端隐藏
     },
     {
-      title: t("Status"),
+      title: t("Visibility"),
       width: 110,
       render: (_: any, record: any) => {
         if (record?.isPublished) {
@@ -459,6 +459,8 @@ export default function Index() {
   }, []);
   useEffect(() => {
     if (loadFetcher.data) {
+      console.log(loadFetcher.data);
+      
       setArticlesHasNextPage(loadFetcher.data.hasNextPage);
       setArticlesHasPreviousPage(loadFetcher.data.hasPreviousPage);
       setArticlesStartCursor(loadFetcher.data.startCursor);
@@ -470,6 +472,8 @@ export default function Index() {
   }, [loadFetcher.data]);
   useEffect(() => {
     if (artilclesFetcher.data) {
+      console.log(artilclesFetcher.data);
+      
       dispatch(
         setLastPageCursorInfo({
           articlesHasNextPage: artilclesFetcher.data.hasNextPage,
@@ -618,6 +622,7 @@ export default function Index() {
   };
   return (
     <Page>
+      <TitleBar title={t("Article Image Translate")}></TitleBar>
       <Card styles={{ body: { padding: "12px 24px" } }}>
         <Flex align="center" justify="space-between">
           <Tabs
@@ -625,7 +630,7 @@ export default function Index() {
             onChange={(key) => handleChangeStatusTab(key)}
             defaultActiveKey="all"
             type="line"
-            style={{ width: "40%" }}
+            // style={{ width: "40%" }}
             items={[
               { label: t("All"), key: "ALL" },
               // {
