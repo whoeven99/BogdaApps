@@ -59,7 +59,7 @@ export const AddCreaditsModal = ({
   const creditOptions: OptionType[] = [
     {
       key: "option-1",
-      name: "500K",
+      name: "250",
       Credits: 500000/2000,
       price: {
         comparedPrice: 3.99,
@@ -68,7 +68,7 @@ export const AddCreaditsModal = ({
     },
     {
       key: "option-2",
-      name: "1M",
+      name: "500",
       Credits: 1000000/2000,
       price: {
         comparedPrice: 7.99,
@@ -77,7 +77,7 @@ export const AddCreaditsModal = ({
     },
     {
       key: "option-3",
-      name: "2M",
+      name: "1000",
       Credits: 2000000/2000,
       price: {
         comparedPrice: 15.99,
@@ -86,7 +86,7 @@ export const AddCreaditsModal = ({
     },
     {
       key: "option-4",
-      name: "3M",
+      name: "1500",
       Credits: 3000000/2000,
       price: {
         comparedPrice: 23.99,
@@ -95,7 +95,7 @@ export const AddCreaditsModal = ({
     },
     {
       key: "option-5",
-      name: "5M",
+      name: "2500",
       Credits: 5000000/2000,
       price: {
         comparedPrice: 39.99,
@@ -104,7 +104,7 @@ export const AddCreaditsModal = ({
     },
     {
       key: "option-6",
-      name: "10M",
+      name: "5000",
       Credits: 10000000/2000,
       price: {
         comparedPrice: 79.99,
@@ -113,7 +113,7 @@ export const AddCreaditsModal = ({
     },
     {
       key: "option-7",
-      name: "20M",
+      name: "10000",
       Credits: 20000000/2000,
       price: {
         comparedPrice: 159.99,
@@ -122,7 +122,7 @@ export const AddCreaditsModal = ({
     },
     {
       key: "option-8",
-      name: "30M",
+      name: "15000",
       Credits: 30000000/2000,
       price: {
         comparedPrice: 239.99,

@@ -49,7 +49,7 @@ export const mutationAppPurchaseOneTimeCreate = async ({
           }
         }`,
         variables: {
-          name: `${name} Credits`,
+          name: `${name} extra times`,
           returnUrl: returnUrl,
           price: {
             amount: price.amount,
