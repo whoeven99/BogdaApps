@@ -22,7 +22,7 @@ export default function SortPopover({
     { label: "Update time", value: "UPDATED_AT" },
     { label: "Inventory", value: "INVENTORY_TOTAL" },
     { label: "Product Type", value: "PRODUCT_TYPE" },
-    { label: "发布时间", value: "PUBLISHED_AT" },
+    { label: "Published time", value: "PUBLISHED_AT" },
     { label: "Manufacturers", value: "VENDOR" },
   ];
   useEffect(() => {
