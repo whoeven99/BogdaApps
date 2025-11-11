@@ -28,39 +28,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { shop } = adminAuthResult.session;
   const language =
     request.headers.get("Accept-Language")?.split(",")[0] || "en";
-  const languageCode = language.split("-")[0];
-  if (languageCode === "zh" || languageCode === "zh-CN") {
-    return {
-      language,
-      isChinese: true,
-      ciwiSwitcherId: process.env.SHOPIFY_CIWI_SWITCHER_ID as string,
-      ciwiSwitcherBlocksId: process.env
-        .SHOPIFY_CIWI_SWITCHER_THEME_ID as string,
-      server: process.env.SERVER_URL,
-      shop: shop,
-    };
-  } else {
-    return {
-      language,
-      isChinese: false,
-      ciwiSwitcherId: process.env.SHOPIFY_CIWI_SWITCHER_ID as string,
-      ciwiSwitcherBlocksId: process.env
-        .SHOPIFY_CIWI_SWITCHER_THEME_ID as string,
-      server: process.env.SERVER_URL,
-      shop: shop,
-    };
-  }
+  return {
+    language,
+    ciwiSwitcherId: process.env.SHOPIFY_CIWI_SWITCHER_ID as string,
+    ciwiSwitcherBlocksId: process.env.SHOPIFY_CIWI_SWITCHER_THEME_ID as string,
+    server: process.env.SERVER_URL,
+    shop: shop,
+  };
 };
 
 const Index = () => {
-  const {
-    language,
-    isChinese,
-    server,
-    shop,
-    ciwiSwitcherBlocksId,
-    ciwiSwitcherId,
-  } = useLoaderData<typeof loader>();
+  const { language, server, shop, ciwiSwitcherBlocksId, ciwiSwitcherId } =
+    useLoaderData<typeof loader>();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
@@ -77,6 +56,15 @@ const Index = () => {
   const themeFetcher = useFetcher<any>();
   useEffect(() => {
     setIsLoading(false);
+    fetcher.submit(
+      {
+        log: `${shop} 目前在主页面, 页面语言为${language}`,
+      },
+      {
+        method: "POST",
+        action: "/log",
+      },
+    );
   }, []);
   useEffect(() => {
     setIsLoading(false);
@@ -139,13 +127,13 @@ const Index = () => {
         }}
       >
         <Space direction="vertical" size="middle" style={{ display: "flex" }}>
-          <QuotaCard />
+          <QuotaCard shop={shop}/>
           <WelcomeCard
             switcherOpen={switcherOpen}
             blockUrl={blockUrl}
             shop={shop}
           />
-          <ImageTable />
+          <ImageTable shop={shop}/>
         </Space>
       </Space>
       <Text

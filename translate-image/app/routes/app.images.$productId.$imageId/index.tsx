@@ -270,6 +270,7 @@ const ImageAltTextPage = () => {
   const [dataReady, setDataReady] = useState(false);
   const [openModal, setOpenModal] = useState<boolean>(false);
   const dispatch = useDispatch();
+  const fetcher = useFetcher();
   const languageMapping = {
     zh: [
       "en",
@@ -309,6 +310,15 @@ const ImageAltTextPage = () => {
     ],
   } as any;
   const handleNavigate = () => {
+    fetcher.submit(
+      {
+        log: `${loader.shop} 从图像翻译返回翻译产品图片页面`,
+      },
+      {
+        method: "POST",
+        action: "/log",
+      },
+    );
     if (confirmData.length > 0) {
       shopify.saveBar.leaveConfirmation();
     } else {
@@ -676,6 +686,15 @@ const ImageAltTextPage = () => {
         [languageCode]: [], // ✅ 更新对应语言
       }));
       shopify.toast.show(`${info.file.name} ${t("Upload Failed")}`);
+      fetcher.submit(
+        {
+          log: `${loader.shop} 上传图片失败`,
+        },
+        {
+          method: "POST",
+          action: "/log",
+        },
+      );
     }
   };
   const handleConfirm = async () => {
@@ -791,6 +810,15 @@ const ImageAltTextPage = () => {
       languageFetcher.data.response.forEach((lan: any) => {
         if (lan.primary) {
           setDefaultLanguageData(lan);
+          fetcher.submit(
+            {
+              log: `${loader.shop} 当前在图像翻译页面，商店默认语言是 ${lan?.locale}`,
+            },
+            {
+              method: "POST",
+              action: "/log",
+            },
+          );
         }
       });
       setLanguageList(
@@ -810,11 +838,35 @@ const ImageAltTextPage = () => {
     }
   }, [languageFetcher.data]);
   const onBuy = () => {
+    fetcher.submit(
+      {
+        log: `${loader.shop} 触发了积分不足弹框`,
+      },
+      {
+        method: "POST",
+        action: "/log",
+      },
+    );
     setOpen(false);
     setOpenModal(true);
   };
   const onCancel = () => {
     setOpen(false);
+  };
+  const handleAddLanguage = () => {
+    fetcher.submit(
+      {
+        log: `${loader.shop} 前往添加语言页面`,
+      },
+      {
+        method: "POST",
+        action: "/log",
+      },
+    );
+    window.open(
+      `https://admin.shopify.com/store/${loader.shop.split(".")[0]}/settings/languages`,
+      "_blank",
+    );
   };
   return (
     <Page>
@@ -1285,12 +1337,7 @@ const ImageAltTextPage = () => {
                   <Button
                     type="primary"
                     style={{ marginTop: 24 }}
-                    onClick={() =>
-                      window.open(
-                        `https://admin.shopify.com/store/${loader.shop.split(".")[0]}/settings/languages`,
-                        "_blank",
-                      )
-                    }
+                    onClick={handleAddLanguage}
                   >
                     {t("Add Language")}
                   </Button>
@@ -1349,6 +1396,7 @@ const ImageAltTextPage = () => {
             </Space>
           </Modal>
           <AddCreaditsModal
+            shop={loader.shop}
             openModal={openModal}
             onClose={() => setOpenModal(false)}
             action="images"

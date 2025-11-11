@@ -221,7 +221,7 @@ export const UpdateProductImageAltData = async ({
 
     return response.data;
   } catch (error) {
-    console.error("Error UpdateProductImageAltData:", error);
+    console.error(`${shopName} 保存alt文本失败:`, error);
     return {
       success: false,
       errorCode: 10001,
@@ -263,7 +263,7 @@ export const TranslateImage = async ({
     console.log("imageTranslate Response", response.data);
     return response;
   } catch (error) {
-    console.log("Error GetImageTranslate", error);
+    console.log(`${shop}  图片翻译失败`, error);
     return {
       success: false,
       errorCode: 10001,
@@ -307,7 +307,7 @@ export const storageTranslateImage = async ({
       };
     }
   } catch (error) {
-    console.log("replace image filed", error);
+    console.log(`${shop} 翻译图片保存失败`, error);
     return {
       success: false,
       errorCode: 10001,
@@ -346,7 +346,7 @@ export const DeleteProductImageData = async ({
 
     return response.data;
   } catch (error) {
-    console.error("Error DeleteProductImageData:", error);
+    console.error(`${shopName} 删除图片失败`, error);
     return {
       success: false,
       errorCode: 10001,
@@ -382,7 +382,7 @@ export const DeleteSingleImage = async ({
     // console.log("DeleteProductImageData: ", response.data);
     return response.data;
   } catch (error) {
-    console.error("Error DeleteProductImageData:", error);
+    console.error(`${shopName}删除单张图片失败:`, error);
     return {
       success: false,
       errorCode: 10001,
@@ -663,7 +663,7 @@ export const AltTranslate = async ({
     });
     return response.data;
   } catch (error) {
-    console.log("alt translate error", error);
+    console.log(`${shop}alt 翻译失败`, error);
     return {
       success: false,
       errorCode: 10001,

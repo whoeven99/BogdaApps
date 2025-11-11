@@ -38,16 +38,31 @@ export interface OptionType {
     currencyCode: string;
   };
 }
-export const QuotaCard = () => {
+export const QuotaCard = ({ shop }: { shop: string }) => {
   const { reportClick, report } = useReport();
   const { t } = useTranslation();
   const { chars, totalChars } = useSelector((state: any) => state.userConfig);
 
   const [isLoading, setIsLoading] = useState(true);
   const [openModal, setOpenModal] = useState<boolean>(false);
+  const fetcher = useFetcher();
   useEffect(() => {
     setIsLoading(false);
   }, []);
+  const handleAddCredits = () => {
+    setOpenModal(true);
+    reportClick("pricing_balance_add");
+
+    fetcher.submit(
+      {
+        log: `${shop} 点击了添加积分按钮`,
+      },
+      {
+        method: "POST",
+        action: "/log",
+      },
+    );
+  };
   return (
     <Card loading={isLoading}>
       <Space direction="vertical" size="small" style={{ width: "100%" }}>
@@ -74,13 +89,7 @@ export const QuotaCard = () => {
                 <QuestionCircleOutlined />
               </Popover>
             </Flex>
-            <Button
-              type="default"
-              onClick={() => {
-                setOpenModal(true);
-                reportClick("pricing_balance_add");
-              }}
-            >
+            <Button type="default" onClick={handleAddCredits}>
               {t("Add credits")}
             </Button>
           </Flex>
@@ -116,6 +125,7 @@ export const QuotaCard = () => {
         />
       </Space>
       <AddCreaditsModal
+        shop={shop}
         openModal={openModal}
         onClose={() => setOpenModal(false)}
         action="quotacard"
