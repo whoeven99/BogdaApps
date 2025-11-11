@@ -43,14 +43,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
           // 匹配积分套餐
           const priceMap: Record<string, { credits: number; price: number }> = {
-            "250": { credits: 500000, price: 3.99 },
-            "500": { credits: 1000000, price: 7.99 },
-            "1000": { credits: 2000000, price: 15.99 },
-            "1500": { credits: 3000000, price: 23.99 },
-            "2500": { credits: 5000000, price: 39.99 },
-            "5000": { credits: 10000000, price: 79.99 },
-            "10000": { credits: 20000000, price: 159.99 },
-            "15000": { credits: 30000000, price: 239.99 },
+            "250 extra times": { credits: 500000, price: 3.99 },
+            "500 extra times": { credits: 1000000, price: 7.99 },
+            "1000 extra times": { credits: 2000000, price: 15.99 },
+            "1500 extra times": { credits: 3000000, price: 23.99 },
+            "2500 extra times": { credits: 5000000, price: 39.99 },
+            "5000 extra times": { credits: 10000000, price: 79.99 },
+            "10000 extra times": { credits: 20000000, price: 159.99 },
+            "15000 extra times": { credits: 30000000, price: 239.99 },
           };
 
           const plan = priceMap[name];
