@@ -38,17 +38,9 @@ const WelcomeCard: React.FC<WelcomeCardProps> = ({
       },
       {
         method: "POST",
-        action: "/log",
+        action: "/app/log",
       },
     );
-  };
-  const handleTestGraphqlData = () => {
-    const formData = new FormData();
-    formData.append("quailtyEvaluation", JSON.stringify({}));
-    graphqlFetcher.submit(formData, {
-      method: "post",
-      action: "/app",
-    });
   };
   useEffect(() => {
     const handleResize = () => {

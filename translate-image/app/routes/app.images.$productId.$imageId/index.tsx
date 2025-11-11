@@ -316,7 +316,7 @@ const ImageAltTextPage = () => {
       },
       {
         method: "POST",
-        action: "/log",
+        action: "/app/log",
       },
     );
     if (confirmData.length > 0) {
@@ -692,7 +692,7 @@ const ImageAltTextPage = () => {
         },
         {
           method: "POST",
-          action: "/log",
+          action: "/app/log",
         },
       );
     }
@@ -816,7 +816,7 @@ const ImageAltTextPage = () => {
             },
             {
               method: "POST",
-              action: "/log",
+              action: "/app/log",
             },
           );
         }
@@ -844,7 +844,7 @@ const ImageAltTextPage = () => {
       },
       {
         method: "POST",
-        action: "/log",
+        action: "/app/log",
       },
     );
     setOpen(false);
@@ -860,7 +860,7 @@ const ImageAltTextPage = () => {
       },
       {
         method: "POST",
-        action: "/log",
+        action: "/app/log",
       },
     );
     window.open(

@@ -59,7 +59,7 @@ export const QuotaCard = ({ shop }: { shop: string }) => {
       },
       {
         method: "POST",
-        action: "/log",
+        action: "/app/log",
       },
     );
   };

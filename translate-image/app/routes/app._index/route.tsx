@@ -62,7 +62,7 @@ const Index = () => {
       },
       {
         method: "POST",
-        action: "/log",
+        action: "/app/log",
       },
     );
   }, []);

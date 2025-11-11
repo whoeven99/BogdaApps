@@ -296,7 +296,7 @@ export default function ProductDetailPage() {
       },
       {
         method: "POST",
-        action: "/log",
+        action: "/app/log",
       },
     );
     navigate("/app");
@@ -378,7 +378,7 @@ export default function ProductDetailPage() {
       },
       {
         method: "POST",
-        action: "/log",
+        action: "/app/log",
       },
     );
     const imageId = id.split("/").pop();

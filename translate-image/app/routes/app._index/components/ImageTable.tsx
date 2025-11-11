@@ -322,7 +322,7 @@ export default function Index({ shop }: { shop: string }) {
       },
       {
         method: "POST",
-        action: "/log",
+        action: "/app/log",
       },
     );
     console.log("Viewing record:", record);
@@ -339,7 +339,7 @@ export default function Index({ shop }: { shop: string }) {
       },
       {
         method: "POST",
-        action: "/log",
+        action: "/app/log",
       },
     );
     if ((e.target as HTMLElement).closest("button")) return;
