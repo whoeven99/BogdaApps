@@ -243,7 +243,7 @@ export const AddCreaditsModal = ({
                     marginBottom: "8px",
                   }}
                 >
-                  {option.Credits.toLocaleString()}
+                  {option.Credits.toLocaleString()} {t("extra times")}
                 </Text>
                 <Title
                   level={3}
