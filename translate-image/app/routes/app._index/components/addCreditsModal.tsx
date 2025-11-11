@@ -139,7 +139,7 @@ export const AddCreaditsModal = ({
       },
       {
         method: "POST",
-        action: "/log",
+        action: "/app/log",
       },
     );
     setBuyButtonLoading(true);
