@@ -11,7 +11,9 @@
   "Setup App":"Setup App",
   "The switcher is currently enabled.":"The switcher is currently enabled.",
   "Enable language and currency switcher":"Enable language and currency switcher",
-  "{{currentCredits}} has been used, total credits: {{maxCredits}}.":"{{currentCredits}} has been used, total credits: {{maxCredits}}.",
+  "{{currentCredits}} of {{maxCredits}} translations used":"{{currentCredits}} of {{maxCredits}} translations used",
+  "Buy more":"Buy more",
+  "Buy Extra Image Translation Times":"Buy Extra Image Translation Times",
   "Translation Quota":"Translation Quota",
   "Permanent quotas · Never expire · Top up anytime.":"Permanent quotas · Never expire · Top up anytime.",
   "Add credits":"Add credits",
@@ -73,5 +75,9 @@
   "Image translation is only available when your store’s default language is Chinese or English.":"Image translation is only available when your store’s default language is Chinese or English.",
   "The language you need for translation is not available in the store. Please add it via the store settings (Add Language).":"The language you need for translation is not available in the store. Please add it via the store settings (Add Language).",
   "Add Language":"Add Language",
-  "Please wait until all images are uploaded":"Please wait until all images are uploaded"
+  "Please wait until all images are uploaded":"Please wait until all images are uploaded",
+  "Translation limit reached":"Translation limit reached",
+  "You’ve used all your available image translations. Add more to continue translating instantly.":"You’ve used all your available image translations. Add more to continue translating instantly.",
+  "Add more":"Add more",
+  "extra times":"extra times"
 }

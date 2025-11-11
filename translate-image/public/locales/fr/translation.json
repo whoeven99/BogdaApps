@@ -74,5 +74,12 @@
   "Buy Credits": "Acheter des crédits",
   "The language you need for translation is not available in the store. Please add it via the store settings (Add Language).": "La langue dont vous avez besoin pour la traduction n'est pas disponible dans la boutique. Veuillez l'ajouter via les paramètres de la boutique (Ajouter une langue).",
   "Add Language": "Ajouter une langue",
-  "Please wait until all images are uploaded": "Veuillez patienter jusqu'à ce que toutes les images soient téléchargées."
+  "Please wait until all images are uploaded": "Veuillez patienter jusqu'à ce que toutes les images soient téléchargées.",
+  "{{currentCredits}} of {{maxCredits}} translations used": "{{currentCredits}} sur {{maxCredits}} traductions utilisées",
+  "Buy more": "Achetez plus",
+  "Buy Extra Image Translation Times": "Acheter des heures de traduction d'images supplémentaires",
+  "Translation limit reached": "Limite de traduction atteinte",
+  "You’ve used all your available image translations. Add more to continue translating instantly.": "Vous avez utilisé toutes vos traductions d'images disponibles. Ajoutez-en d'autres pour continuer à traduire instantanément.",
+  "Add more": "Ajouter plus",
+  "extra times": "temps supplémentaires"
 }

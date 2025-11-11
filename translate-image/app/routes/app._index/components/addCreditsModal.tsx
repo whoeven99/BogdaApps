@@ -59,8 +59,8 @@ export const AddCreaditsModal = ({
   const creditOptions: OptionType[] = [
     {
       key: "option-1",
-      name: "500K",
-      Credits: 500000,
+      name: "250",
+      Credits: 500000/2000,
       price: {
         comparedPrice: 3.99,
         currencyCode: "USD",
@@ -68,8 +68,8 @@ export const AddCreaditsModal = ({
     },
     {
       key: "option-2",
-      name: "1M",
-      Credits: 1000000,
+      name: "500",
+      Credits: 1000000/2000,
       price: {
         comparedPrice: 7.99,
         currencyCode: "USD",
@@ -77,8 +77,8 @@ export const AddCreaditsModal = ({
     },
     {
       key: "option-3",
-      name: "2M",
-      Credits: 2000000,
+      name: "1000",
+      Credits: 2000000/2000,
       price: {
         comparedPrice: 15.99,
         currencyCode: "USD",
@@ -86,8 +86,8 @@ export const AddCreaditsModal = ({
     },
     {
       key: "option-4",
-      name: "3M",
-      Credits: 3000000,
+      name: "1500",
+      Credits: 3000000/2000,
       price: {
         comparedPrice: 23.99,
         currencyCode: "USD",
@@ -95,8 +95,8 @@ export const AddCreaditsModal = ({
     },
     {
       key: "option-5",
-      name: "5M",
-      Credits: 5000000,
+      name: "2500",
+      Credits: 5000000/2000,
       price: {
         comparedPrice: 39.99,
         currencyCode: "USD",
@@ -104,8 +104,8 @@ export const AddCreaditsModal = ({
     },
     {
       key: "option-6",
-      name: "10M",
-      Credits: 10000000,
+      name: "5000",
+      Credits: 10000000/2000,
       price: {
         comparedPrice: 79.99,
         currencyCode: "USD",
@@ -113,8 +113,8 @@ export const AddCreaditsModal = ({
     },
     {
       key: "option-7",
-      name: "20M",
-      Credits: 20000000,
+      name: "10000",
+      Credits: 20000000/2000,
       price: {
         comparedPrice: 159.99,
         currencyCode: "USD",
@@ -122,8 +122,8 @@ export const AddCreaditsModal = ({
     },
     {
       key: "option-8",
-      name: "30M",
-      Credits: 30000000,
+      name: "15000",
+      Credits: 30000000/2000,
       price: {
         comparedPrice: 239.99,
         currencyCode: "USD",
@@ -201,7 +201,7 @@ export const AddCreaditsModal = ({
   }, [payFetcher.data]);
   return (
     <Modal
-      title={t("Buy Credits")}
+      title={t("Buy Extra Image Translation Times")}
       open={openModal}
       width={900}
       centered
@@ -243,7 +243,7 @@ export const AddCreaditsModal = ({
                     marginBottom: "8px",
                   }}
                 >
-                  {option.Credits.toLocaleString()} {t("Credits")}
+                  {option.Credits.toLocaleString()} {t("extra times")}
                 </Text>
                 <Title
                   level={3}

@@ -74,5 +74,12 @@
   "Buy Credits": "クレジットを購入",
   "The language you need for translation is not available in the store. Please add it via the store settings (Add Language).": "翻訳に必要な言語はストアでご利用いただけません。ストア設定（言語の追加）から追加してください。",
   "Add Language": "言語を追加",
-  "Please wait until all images are uploaded": "すべての画像がアップロードされるまでお待ちください"
+  "Please wait until all images are uploaded": "すべての画像がアップロードされるまでお待ちください",
+  "{{currentCredits}} of {{maxCredits}} translations used": "{{currentCredits}} 件中 {{maxCredits}} 件の翻訳が使用されました",
+  "Buy more": "もっと買う",
+  "Buy Extra Image Translation Times": "追加の画像翻訳時間を購入する",
+  "Translation limit reached": "翻訳の上限に達しました",
+  "You’ve used all your available image translations. Add more to continue translating instantly.": "利用可能な画像翻訳はすべて使用済みです。さらに画像翻訳を追加すると、すぐに翻訳を続けることができます。",
+  "Add more": "さらに追加",
+  "extra times": "延長戦"
 }

@@ -407,7 +407,7 @@ const ImageAltTextPage = () => {
       return;
     }
     setCurrentTranslatingImage(record);
-    if (totalChars - chars < 1200) {
+    if (totalChars - chars < 2000) {
       setOpen(true);
       return;
     }
@@ -601,7 +601,7 @@ const ImageAltTextPage = () => {
             ];
           }
         });
-        dispatch(setChars({ chars: chars + 200 }));
+        dispatch(setChars({ chars: chars + 1000 }));
       } else if (
         !altTranslateFetcher.data.response.success &&
         altTranslateFetcher.data.response.errorMsg === "额度不够"
@@ -1364,12 +1364,12 @@ const ImageAltTextPage = () => {
           >
             <Space direction="vertical" size="middle" style={{ width: "100%" }}>
               <Typography.Title level={4} style={{ marginBottom: 0 }}>
-                {t("You’ve run out of translation credits")}
+                {t("Translation limit reached")}
               </Typography.Title>
 
               <Paragraph type="secondary" style={{ margin: 0 }}>
                 {t(
-                  "You’ve used all your available translation credits. Add more credits to keep your translations running without interruption.",
+                  "You’ve used all your available image translations. Add more to continue translating instantly.",
                 )}
               </Paragraph>
 
@@ -1381,7 +1381,7 @@ const ImageAltTextPage = () => {
                 }}
               >
                 <Button type="primary" onClick={onBuy}>
-                  {t("Add credits")}
+                  {t("Add more")}
                 </Button>
               </Space>
             </Space>
