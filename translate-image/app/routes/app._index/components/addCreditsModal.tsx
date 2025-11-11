@@ -201,7 +201,7 @@ export const AddCreaditsModal = ({
   }, [payFetcher.data]);
   return (
     <Modal
-      title={t("Buy Credits")}
+      title={t("Buy Extra Image Translation Times")}
       open={openModal}
       width={900}
       centered
@@ -243,7 +243,7 @@ export const AddCreaditsModal = ({
                     marginBottom: "8px",
                   }}
                 >
-                  {option.Credits.toLocaleString()} {t("Images")}
+                  {option.Credits.toLocaleString()}
                 </Text>
                 <Title
                   level={3}

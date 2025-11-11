@@ -74,5 +74,11 @@
   "Buy Credits": "购买积分",
   "The language you need for translation is not available in the store. Please add it via the store settings (Add Language).": "您需要的翻译语言在应用商店中不可用。请通过应用商店设置（添加语言）添加。",
   "Add Language": "添加语言",
-  "Please wait until all images are uploaded": "请稍候，待所有图片上传完毕。"
+  "Please wait until all images are uploaded": "请稍候，待所有图片上传完毕。",
+  "{{currentCredits}} of {{maxCredits}} translations used": "已使用 {{currentCredits}} 次翻译，共 {{maxCredits}} 次翻译",
+  "Buy more": "购买更多",
+  "Buy Extra Image Translation Times": "购买额外图像翻译次数",
+  "Translation limit reached": "翻译次数已达上限",
+  "You’ve used all your available image translations. Add more to continue translating instantly.": "您已用完所有可用的图像翻译次数。添加更多翻译次数即可继续即时翻译。",
+  "Add more": "添加更多"
 }

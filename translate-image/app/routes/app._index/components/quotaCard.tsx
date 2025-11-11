@@ -89,7 +89,7 @@ export const QuotaCard = ({ shop }: { shop: string }) => {
               </Popover>
             </Flex>
             <Button type="default" onClick={handleAddCredits}>
-              {t("Add credits")}
+              {t("Buy more")}
             </Button>
           </Flex>
         </div>
@@ -104,7 +104,7 @@ export const QuotaCard = ({ shop }: { shop: string }) => {
             <div
               dangerouslySetInnerHTML={{
                 __html: t(
-                  "{{currentCredits}} has been used, total credits: {{maxCredits}}.",
+                  "{{currentCredits}} of {{maxCredits}} translations used",
                   {
                     currentCredits: Math.floor((Number(chars) || 0) / 2000),
                     maxCredits: Math.floor((Number(totalChars) || 0) / 2000),
