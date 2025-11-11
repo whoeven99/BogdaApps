@@ -38,12 +38,14 @@ export interface OptionType {
   };
 }
 export const AddCreaditsModal = ({
+  shop,
   openModal,
   onClose,
   action,
   productId,
   imageId,
 }: {
+  shop: string;
   openModal: boolean;
   onClose: () => void;
   action: string;
@@ -128,8 +130,18 @@ export const AddCreaditsModal = ({
       },
     },
   ];
+  const fetcher = useFetcher();
   const [buyButtonLoading, setBuyButtonLoading] = useState<boolean>(false);
   const handlePay = () => {
+    fetcher.submit(
+      {
+        log: `${shop} 点击了立即支付按钮`,
+      },
+      {
+        method: "POST",
+        action: "/log",
+      },
+    );
     setBuyButtonLoading(true);
     console.log(selectedOptionKey);
     const selectedOption = creditOptions.find(

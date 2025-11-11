@@ -19,7 +19,7 @@ import { AppDispatch, RootState } from "~/store";
 import { setLastPageCursorInfo } from "~/store/modules/productSlice";
 import "../style.css";
 import { ColumnsType } from "antd/es/table";
-export default function Index() {
+export default function Index({ shop }: { shop: string }) {
   const loadFetcher = useFetcher<any>();
   const languageFetcher = useFetcher<any>();
   const productsFetcher = useFetcher<any>();
@@ -52,7 +52,7 @@ export default function Index() {
   const lastPageCursorInfo = useSelector(
     (state: RootState) => state.product.lastPageCursorInfo,
   );
-
+  const fetcher = useFetcher();
   const panelColumns: ColumnsType<any> = [
     {
       // 不需要 dataIndex，用 render 直接取 item.node.title
@@ -316,13 +316,36 @@ export default function Index() {
   };
 
   function handleView(record: any): void {
+    fetcher.submit(
+      {
+        log: `${shop} 前往翻译产品图片页面`,
+      },
+      {
+        method: "POST",
+        action: "/log",
+      },
+    );
     console.log("Viewing record:", record);
     const productId = record.key.split("/").pop();
     console.log("productId:", productId);
 
     navigate(`/app/products/${productId}`);
   }
-
+  const handleNavigate = (e: any, record: any) => {
+    // 排除点击按钮等交互元素
+    fetcher.submit(
+      {
+        log: `${shop} 前往翻译产品图片页面`,
+      },
+      {
+        method: "POST",
+        action: "/log",
+      },
+    );
+    if ((e.target as HTMLElement).closest("button")) return;
+    const productId = record.key.split("/").pop();
+    navigate(`/app/products/${productId}`);
+  };
   const handleSearch = (value: string) => {
     setSearchText(value);
 
@@ -444,12 +467,7 @@ export default function Index() {
                 rowKey={(record) => record.key} // ✅ 建议加上 key，避免警告
                 loading={tableDataLoading}
                 onRow={(record) => ({
-                  onClick: (e) => {
-                    // 排除点击按钮等交互元素
-                    if ((e.target as HTMLElement).closest("button")) return;
-                    const productId = record.key.split("/").pop();
-                    navigate(`/app/products/${productId}`);
-                  },
+                  onClick: (e) => handleNavigate(e, record),
                   style: { cursor: "pointer" },
                 })}
               />
