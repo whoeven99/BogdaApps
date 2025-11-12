@@ -29,6 +29,8 @@ import {
   Col,
   Modal,
   Spin,
+  Checkbox,
+  Tag,
 } from "antd";
 import { TitleBar, useAppBridge, SaveBar } from "@shopify/app-bridge-react";
 import {
@@ -156,8 +158,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
       case !!translateImage:
         try {
-          const { sourceLanguage, targetLanguage, imageUrl, imageId } =
-            translateImage;
+          const { sourceLanguage, targetLanguage, imageUrl } = translateImage;
           const response = (await TranslateImage({
             shop,
             imageUrl,
@@ -271,6 +272,8 @@ const ImageAltTextPage = () => {
   const [openModal, setOpenModal] = useState<boolean>(false);
   const dispatch = useDispatch();
   const fetcher = useFetcher();
+  const [selectedLanguages, setSelectedLanguages] = useState<string[]>([]);
+  const [batchTranslating, setBatchTranslating] = useState(false);
   const languageMapping = {
     zh: [
       "en",
@@ -432,7 +435,6 @@ const ImageAltTextPage = () => {
           sourceLanguage: defaultLanguageData?.locale,
           targetLanguage: languageCode,
           imageUrl: record?.imageBeforeUrl,
-          imageId: record?.productId,
         }),
       },
       { method: "post" },
@@ -859,6 +861,42 @@ const ImageAltTextPage = () => {
       },
     );
   };
+  const handleBatchTranslate = async () => {
+    setBatchTranslating(true);
+
+    try {
+      // 过滤出需要翻译的图片数据
+      const targets = imageDatas.filter((img) =>
+        selectedLanguages.includes(img.languageCode),
+      );
+      console.log(targets);
+
+      // 批量请求：一次发一个 Promise.all()
+      const responses = await Promise.all(
+        targets.map((img) => handleTranslate(img, img.languageCode)),
+      );
+      responses.forEach((res) => {
+        console.log(res);
+      });
+      shopify.toast.show(t("Batch translation completed successfully"));
+    } catch (error) {
+      console.error("Batch translation error:", error);
+      shopify.toast.show(t("Batch translation failed"));
+    } finally {
+      setBatchTranslating(false);
+    }
+  };
+  const handleSelectAllLanguages = () => {
+    if (selectedLanguages.length === imageDatas.length) {
+      // 已经全选了 → 点击后取消全选
+      setSelectedLanguages([]);
+    } else {
+      console.log(imageDatas);
+
+      // 还没全选 → 点击后选中全部语言
+      setSelectedLanguages(imageDatas.map((img) => img.languageCode));
+    }
+  };
   return (
     <Page>
       <ScrollNotice
@@ -930,58 +968,130 @@ const ImageAltTextPage = () => {
             {pageLoading ? (
               <Skeleton></Skeleton>
             ) : (
-              <Flex vertical gap={8}>
-                <Title level={4} style={{ fontSize: "16px" }}>
-                  {`${defaultLanguageData?.name}(${t("Default")})`}
-                </Title>
-                <div
-                  style={{
-                    width: "300px",
-                    textAlign: "center",
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    border: "1px solid #f0f0f0",
-                    borderRadius: "8px",
-                    padding: "10px",
-                    backgroundColor: "#fff",
-                  }}
-                >
-                  <Flex justify="space-between" align="center" vertical gap={8}>
-                    <div
-                      style={{
-                        width: "100%",
-                        aspectRatio: "1/1",
-                        borderRadius: "8px 8px 0 0",
-                        overflow: "hidden",
-                        marginBottom: "30px",
-                        padding: 0,
-                      }}
+              <Flex justify="space-between" gap={16}>
+                <Flex vertical gap={8}>
+                  <Title level={4} style={{ fontSize: "16px" }}>
+                    {`${defaultLanguageData?.name}(${t("Default")})`}
+                  </Title>
+                  <div
+                    style={{
+                      width: "300px",
+                      textAlign: "center",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      border: "1px solid #f0f0f0",
+                      borderRadius: "8px",
+                      padding: "10px",
+                      backgroundColor: "#fff",
+                    }}
+                  >
+                    <Flex
+                      justify="space-between"
+                      align="center"
+                      vertical
+                      gap={8}
                     >
-                      <img
-                        src={productImageData?.imageUrl}
-                        alt={productImageData?.altText}
+                      <div
                         style={{
                           width: "100%",
-                          height: "100%",
-                          objectFit: "contain",
+                          aspectRatio: "1/1",
+                          borderRadius: "8px 8px 0 0",
+                          overflow: "hidden",
+                          marginBottom: "30px",
+                          padding: 0,
                         }}
+                      >
+                        <img
+                          src={productImageData?.imageUrl}
+                          alt={productImageData?.altText}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "contain",
+                          }}
+                        />
+                      </div>
+                      <TextArea
+                        placeholder=""
+                        style={{
+                          margin: "0 0 24px 0",
+                          resize: "none", // ✅ 禁止手动拖拽
+                          backgroundColor: "#fff",
+                          color: "#000",
+                        }}
+                        disabled
+                        value={productImageData?.altText || ""}
+                        autoSize={{ minRows: 5, maxRows: 10 }}
                       />
-                    </div>
-                    <TextArea
-                      placeholder=""
-                      style={{
-                        margin: "0 0 24px 0",
-                        resize: "none", // ✅ 禁止手动拖拽
-                        backgroundColor: "#fff",
-                        color: "#000",
-                      }}
-                      disabled
-                      value={productImageData?.altText || ""}
-                      autoSize={{ minRows: 5, maxRows: 10 }}
-                    />
-                  </Flex>
-                </div>
+                    </Flex>
+                  </div>
+                </Flex>
+                <Flex
+                  // justify="space-between"
+                  align="center"
+                  vertical
+                  style={{ marginBottom: 16 }}
+                >
+                  <Typography.Title level={4}>{t("批量翻译")}</Typography.Title>
+                  <div
+                    style={{
+                      width: "300px",
+                      textAlign: "center",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      border: "1px solid #f0f0f0",
+                      borderRadius: "8px",
+                      padding: "10px",
+                      backgroundColor: "#fff",
+                      flex: "1",
+                    }}
+                  >
+                    <Flex gap={8} style={{ marginBottom: "16px" }}>
+                      <Button
+                        type="default"
+                        onClick={handleSelectAllLanguages}
+                        disabled={!imageDatas?.length}
+                      >
+                        {t("Select All")}
+                      </Button>
+
+                      <Button
+                        type="primary"
+                        onClick={handleBatchTranslate}
+                        loading={batchTranslating}
+                        disabled={!selectedLanguages.length}
+                      >
+                        {t("Batch Translate")}
+                      </Button>
+                    </Flex>
+                    <Flex wrap gap={8}>
+                      {selectedLanguages?.length > 0 &&
+                        selectedLanguages.map((lang) => (
+                          <Tag
+                            key={lang}
+                            color="blue"
+                            closable
+                            onClose={(e) => {
+                              e.preventDefault(); // 防止触发默认关闭动画（页面闪烁）
+                              setSelectedLanguages((prev) =>
+                                prev.filter((item) => item !== lang),
+                              );
+                            }}
+                            style={{
+                              fontSize: 14,
+                              padding: "4px 10px",
+                              borderRadius: 8,
+                              cursor: "pointer",
+                            }}
+                          >
+                            {lang.toUpperCase()}
+                          </Tag>
+                        ))}
+                    </Flex>
+                  </div>
+                </Flex>
               </Flex>
             )}
           </Space>
@@ -1006,10 +1116,26 @@ const ImageAltTextPage = () => {
                     vertical
                     gap={8}
                   >
-                    <Text style={{ fontSize: "14px" }}>
-                      {img.language}
-                      {img.published ? t("(Published)") : t("(Unpublished)")}
-                    </Text>
+                    <Flex gap={8} align="center">
+                      <Checkbox
+                        checked={selectedLanguages.includes(img.languageCode)}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setSelectedLanguages((prev) =>
+                            checked
+                              ? [...prev, img.languageCode]
+                              : prev.filter(
+                                  (code) => code !== img.languageCode,
+                                ),
+                          );
+                        }}
+                      />
+                      <Text style={{ fontSize: "14px" }}>
+                        {img.language}
+                        {img.published ? t("(Published)") : t("(Unpublished)")}
+                      </Text>
+                    </Flex>
+
                     <div
                       style={{
                         width: "100%",
