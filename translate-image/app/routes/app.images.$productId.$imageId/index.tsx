@@ -271,6 +271,73 @@ const ImageAltTextPage = () => {
   const [openModal, setOpenModal] = useState<boolean>(false);
   const dispatch = useDispatch();
   const fetcher = useFetcher();
+  const baseInput = new Set([
+    "zh",
+    "zh-tw",
+    "en",
+    "fr",
+    "it",
+    "ja",
+    "ko",
+    "pt",
+    "ru",
+    "es",
+    "th",
+    "tr",
+    "vi",
+  ]);
+  const baseOutput = new Set([
+    "ar",
+    "bn",
+    "zh",
+    "zh-tw",
+    "cs",
+    "da",
+    "nl",
+    "en",
+    "fi",
+    "fr",
+    "de",
+    "el",
+    "he",
+    "hu",
+    "id",
+    "it",
+    "ja",
+    "kk",
+    "ko",
+    "ms",
+    "pl",
+    "pt",
+    "ru",
+    "es",
+    "sv",
+    "th",
+    "tl",
+    "tr",
+    "uk",
+    "ur",
+    "vi",
+  ]);
+
+  const specialSourceRules: Record<string, string[]> = {
+    "zh-tw": ["zh", "en"], // 繁体中文
+    el: ["en", "tr"], // 希腊语
+    kk: ["zh"], // 哈萨克语
+  };
+  const canTranslate = (source: string, target: string): boolean => {
+    const src = normalizeLocale(source);
+    const tgt = normalizeLocale(target);
+    // 目标语言必须在输出范围
+    if (!baseOutput.has(tgt)) return false;
+    // 源语言必须在输入范围
+    if (!baseInput.has(src)) return false;
+    // 检查是否有特殊规则
+    if (specialSourceRules[tgt]) {
+      return specialSourceRules[tgt].includes(src);
+    }
+    return true;
+  };
   const languageMapping = {
     zh: [
       "en",
@@ -396,6 +463,7 @@ const ImageAltTextPage = () => {
     if (lower.startsWith("zh-cn")) return "zh";
     if (lower.startsWith("zh-tw")) return "zh-tw";
     if (lower.startsWith("en")) return "en";
+    if (lower.startsWith("pt")) return "pt";
 
     // ✅ 处理其它常见格式（如 en-US / fr-CA）
     return locale;
@@ -411,14 +479,7 @@ const ImageAltTextPage = () => {
       setOpen(true);
       return;
     }
-    if (
-      !languageMapping[normalizeLocale(defaultLanguageData.locale)]?.includes(
-        normalizeLocale(languageCode),
-      )
-    ) {
-      // shopify.toast.show(
-      //   t("Image translation is not supported in the current language."),
-      // );
+    if (!canTranslate(defaultLanguageData.locale, languageCode)) {
       setNotTranslateModal(true);
       return;
     }
@@ -798,6 +859,8 @@ const ImageAltTextPage = () => {
   }, []);
   useEffect(() => {
     if (languageFetcher.data) {
+      console.log(languageFetcher.data);
+
       languageFetcher.data.response.forEach((lan: any) => {
         if (lan.primary) {
           setDefaultLanguageData(lan);
