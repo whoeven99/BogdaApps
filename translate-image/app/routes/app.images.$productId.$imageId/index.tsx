@@ -512,6 +512,8 @@ const ImageAltTextPage = () => {
   };
   useEffect(() => {
     if (translateImageFetcher.data) {
+      console.log(translateImageFetcher.data);
+      
       setTranslateLoadingImages((pre) => ({
         ...pre,
         [`${currentTranslatingImage.imageId}_${currentTranslatingImage.languageCode}`]: false,
@@ -859,8 +861,6 @@ const ImageAltTextPage = () => {
   }, []);
   useEffect(() => {
     if (languageFetcher.data) {
-      console.log(languageFetcher.data);
-
       languageFetcher.data.response.forEach((lan: any) => {
         if (lan.primary) {
           setDefaultLanguageData(lan);
