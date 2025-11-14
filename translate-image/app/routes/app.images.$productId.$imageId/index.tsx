@@ -277,7 +277,6 @@ const ImageAltTextPage = () => {
     languageCode: string;
     imageUrl: string;
   } | null>(null);
-  const [currentEditorImage, setCurrentEditorImage] = useState<any>();
   const currentEditorImageRef = useRef<any>(null);
   const languageMapping = {
     zh: [
@@ -1345,7 +1344,6 @@ const ImageAltTextPage = () => {
                               onClick={() => {
                                 console.log("打开编辑器", img);
 
-                                setCurrentEditorImage(img);
                                 currentEditorImageRef.current = img;
                                 setEditModalOpen(true);
                                 setEditTarget({

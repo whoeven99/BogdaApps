@@ -1,5 +1,7 @@
 import { Button, Modal, Spin } from "antd";
 import { useEffect, useRef, useState } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import { setChars } from "~/store/modules/userConfig";
 
 interface AidgeEditorProps {
   open: boolean;
@@ -20,6 +22,8 @@ export default function AidgeEditorModal({
   sourceLanguage,
   onSaveImage,
 }: AidgeEditorProps) {
+  const { chars, totalChars } = useSelector((state: any) => state.userConfig);
+  const dispatch = useDispatch();
   const [loading, setLoading] = useState(true);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
@@ -70,6 +74,7 @@ export default function AidgeEditorModal({
           break;
 
         case "taskSuccess":
+          dispatch(setChars({ chars: chars + 1000 }));
           console.log("🖼️ 生成任务成功：", data);
           break;
 
@@ -84,13 +89,15 @@ export default function AidgeEditorModal({
           break;
         case "generate":
           const { imageNum } = data;
-          console.log("📩 点击翻译按钮返回的结果：", action, data);
+          const success = totalChars - chars > 2000;
+          // console.log("📩 点击翻译按钮返回的结果：", action, data);
+          console.log(chars, totalChars);
 
           iframeRef?.current?.contentWindow?.postMessage(
             {
               biz: biz, // 抠图 nhci-cutout；消除 nhci-elimination；场景图 nhci-scene；图翻nhci-translate；图翻pro nhci-translate-pro
               action: "respond",
-              success: true,
+              success,
             },
             "*",
           );
