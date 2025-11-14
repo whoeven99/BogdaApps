@@ -29,7 +29,7 @@ export default function AidgeEditorModal({
 
   const payload = {
     apiHost: "aibcn", // 中文站
-    reEdit: false,
+    reEdit: true,
     lang: "zh-cn",
     trial: true, // 开启试用
     charge: true,
@@ -83,6 +83,9 @@ export default function AidgeEditorModal({
           console.log("💾 拦截到用户的付费调用，手动验证是否有额度", data);
           break;
         case "generate":
+          const { imageNum } = data;
+          console.log("📩 点击翻译按钮返回的结果：", action, data);
+
           iframeRef?.current?.contentWindow?.postMessage(
             {
               biz: biz, // 抠图 nhci-cutout；消除 nhci-elimination；场景图 nhci-scene；图翻nhci-translate；图翻pro nhci-translate-pro
