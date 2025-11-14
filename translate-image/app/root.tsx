@@ -124,8 +124,8 @@ export function ErrorBoundary() {
                   fontSize: 16,
                 }}
               >
-                Please click the "Ciwi.ai: Image & Alt Translate" option in the app navigation
-                bar again
+                Please click the "Ciwi.ai: Image & Alt Translate" option in the
+                app navigation bar again
               </p>
             </div>
           </div>
@@ -136,6 +136,13 @@ export function ErrorBoundary() {
     </html>
   );
 }
+declare global {
+  interface Window {
+    INTL_OP_FRAME_SDK_CONFIG?: {
+      apiMap?: Record<string, string>;
+    };
+  }
+}
 
 export default function App() {
   useEffect(() => {
@@ -144,6 +151,27 @@ export default function App() {
     s1.async = true;
     s1.setAttribute("crossorigin", "*");
     document.body.appendChild(s1);
+  }, []);
+  useEffect(() => {
+    // 设置 SDK 配置
+    if (window.INTL_OP_FRAME_SDK_CONFIG) return;
+    window.INTL_OP_FRAME_SDK_CONFIG = {
+      apiMap: {
+        "/open/api/signature":
+          "https://springbackendservice-e3hgbjgqafb9cpdh.canadacentral-01.azurewebsites.net/pc/edit/getSignResponse",
+      },
+    };
+
+    // 动态加载 SDK 脚本
+    const script = document.createElement("script");
+    script.src =
+      "https://g.alicdn.com/code/npm/@ali/intl-op-frame-sdk/0.1.10/main.min.js";
+    script.async = true;
+    document.body.appendChild(script);
+
+    return () => {
+      document.body.removeChild(script);
+    };
   }, []);
   return (
     // 使用 Redux Provider 包装整个应用（用于状态管理，必须）,删除后很多功能无法使用

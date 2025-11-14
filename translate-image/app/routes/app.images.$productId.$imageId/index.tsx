@@ -41,7 +41,7 @@ import {
 } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { ArrowLeftIcon, ImageIcon } from "@shopify/polaris-icons";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ActionFunctionArgs, json, LoaderFunctionArgs } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
 import { globalStore } from "~/globalStore";
@@ -60,6 +60,7 @@ import "./style.css";
 import { useDispatch, useSelector } from "react-redux";
 import { AddCreaditsModal } from "../app._index/components/addCreditsModal";
 import { setChars, setTotalChars } from "~/store/modules/userConfig";
+import AidgeEditorModal from "./components/AidgeEditorModal";
 const { Text, Title, Paragraph } = Typography;
 const { TextArea } = Input;
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -271,6 +272,13 @@ const ImageAltTextPage = () => {
   const [openModal, setOpenModal] = useState<boolean>(false);
   const dispatch = useDispatch();
   const fetcher = useFetcher();
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<{
+    languageCode: string;
+    imageUrl: string;
+  } | null>(null);
+  const [currentEditorImage, setCurrentEditorImage] = useState<any>();
+  const currentEditorImageRef = useRef<any>(null);
   const languageMapping = {
     zh: [
       "en",
@@ -798,6 +806,8 @@ const ImageAltTextPage = () => {
   }, []);
   useEffect(() => {
     if (languageFetcher.data) {
+      console.log(languageFetcher.data);
+
       languageFetcher.data.response.forEach((lan: any) => {
         if (lan.primary) {
           setDefaultLanguageData(lan);
@@ -859,6 +869,45 @@ const ImageAltTextPage = () => {
       },
     );
   };
+  const onSaveImage = (data: any) => {
+    const current = currentEditorImageRef.current;
+    console.log("image 页面", data);
+    console.log("currentEditorImage", current);
+
+    if (data.length > 0) {
+      setImageDatas(
+        imageDatas.map((item: any) => {
+          if (item.languageCode === current.languageCode) {
+            return {
+              ...item,
+              imageAfterUrl: data[0].url,
+            };
+          }
+          return item;
+        }),
+      );
+      const replaceTranslateImage = {
+        productId: `gid://shopify/Product/${productId}`,
+        imageAfterUrl: data[0].url,
+        imageId: current?.imageId,
+        imageBeforeUrl: data[0].originalUrl,
+        languageCode: data[0].extraInfo.targetLanguage,
+      };
+      const formData = new FormData();
+      formData.append(
+        "replaceTranslateImage",
+        JSON.stringify(replaceTranslateImage),
+      );
+      replaceTranslateImageFetcher.submit(formData, {
+        method: "post",
+      });
+    }
+  };
+  useEffect(() => {
+    if (replaceTranslateImageFetcher.data) {
+      console.log(replaceTranslateImageFetcher.data);
+    }
+  }, [replaceTranslateImageFetcher.data]);
   return (
     <Page>
       <ScrollNotice
@@ -1291,6 +1340,23 @@ const ImageAltTextPage = () => {
                               shape="circle"
                               icon={<DeleteOutlined />}
                             ></Button>
+                            <Button
+                              style={{}}
+                              onClick={() => {
+                                console.log("打开编辑器", img);
+
+                                setCurrentEditorImage(img);
+                                currentEditorImageRef.current = img;
+                                setEditModalOpen(true);
+                                setEditTarget({
+                                  imageUrl:
+                                    img.imageAfterUrl || img.imageBeforeUrl,
+                                  languageCode: img.languageCode,
+                                });
+                              }}
+                            >
+                              {t("编辑图片")}
+                            </Button>
                           </Flex>
                         </Flex>
                       </Flex>
@@ -1411,6 +1477,26 @@ const ImageAltTextPage = () => {
               </Paragraph>
             </Typography>
           </Modal>
+          <script type="module" src=""></script>
+          <AidgeEditorModal
+            open={editModalOpen}
+            imageUrl={editTarget?.imageUrl || ""}
+            languageCode={editTarget?.languageCode || "en"}
+            sourceLanguage={defaultLanguageData?.locale}
+            onClose={() => setEditModalOpen(false)}
+            onSaveImage={onSaveImage}
+            onComplete={(editedUrl) => {
+              // 更新你的状态
+              setImageDatas((prev) =>
+                prev.map((item) =>
+                  item.languageCode === editTarget?.languageCode
+                    ? { ...item, imageAfterUrl: editedUrl }
+                    : item,
+                ),
+              );
+              shopify.toast.show("图片编辑成功");
+            }}
+          />
         </Layout.Section>
       </Layout>
     </Page>
