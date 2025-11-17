@@ -1,0 +1,34 @@
+.ant-ribbon-wrapper {
+  width: 100%;
+}
+
+.yearly_save {
+  background-color: rgb(255, 230, 0);
+  color: #fff;
+  padding: 4px 12px;
+  border-radius: 100px;
+  text-align: center;
+  margin-left: 10px;
+  gap: 4px;
+}
+
+.free_trial {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(to right, rgb(254, 247, 246), rgb(253, 223, 217));
+  padding: 4px 8px;
+  border-radius: 8px;
+  gap: 4px;
+}
+
+
+.flexBox{
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.blodSharedPlan {
+  font-weight: 500;
+  font-size: 24px;
+}

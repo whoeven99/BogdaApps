@@ -218,6 +218,7 @@ export default function App() {
   }, [initFetcher.data]);
   useEffect(() => {
     getWords();
+    dispatch(setIsNew({ isNew: true }));
   }, [location]); // 监听 URL 的变化
   const getWords = async () => {
     const data = await GetUserWords({
@@ -243,6 +244,7 @@ export default function App() {
           },
         }),
       );
+
     }
   };
   return (

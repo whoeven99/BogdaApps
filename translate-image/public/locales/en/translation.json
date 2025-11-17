@@ -105,9 +105,10 @@
   "pro_features3": "Image quality: Original image resolution",
   "pro_features4": "Supports 50+ languages",
   "pro_features5": "Batch translation",
-  "premium_features1": "200 images/month",
+  "premium_features1": "500 images/month",
   "premium_features2": "AI large-scale model translation",
   "premium_features3": "Image quality: Original image resolution",
   "premium_features4": "Supports 50+ languages",
-  "premium_features5  ": "Batch translation"
+  "premium_features5  ": "Batch translation",
+  "Free trial":"Free trial"
 }

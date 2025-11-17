@@ -9,7 +9,6 @@ import {
   Icon,
   Pagination,
   Layout,
-  Select,
   Thumbnail,
   Spinner,
 } from "@shopify/polaris";
@@ -29,6 +28,8 @@ import {
   Col,
   Modal,
   Spin,
+  Radio,
+  Select,
 } from "antd";
 import { TitleBar, useAppBridge, SaveBar } from "@shopify/app-bridge-react";
 import {
@@ -60,6 +61,7 @@ import "./style.css";
 import { useDispatch, useSelector } from "react-redux";
 import { AddCreaditsModal } from "../app._index/components/addCreditsModal";
 import { setChars, setTotalChars } from "~/store/modules/userConfig";
+import { CheckboxGroupProps } from "antd/es/checkbox";
 const { Text, Title, Paragraph } = Typography;
 const { TextArea } = Input;
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -267,10 +269,15 @@ const ImageAltTextPage = () => {
 
   const [open, setOpen] = useState<boolean>(false);
   const [notTranslateModal, setNotTranslateModal] = useState<boolean>(false);
+  const [translateModal, setTranslateModal] = useState<boolean>(false);
   const [dataReady, setDataReady] = useState(false);
   const [openModal, setOpenModal] = useState<boolean>(false);
   const dispatch = useDispatch();
   const fetcher = useFetcher();
+  const options: CheckboxGroupProps<string>["options"] = [
+    { label: "Standard Edition", value: "Apple" },
+    { label: "pro", value: "Pear" },
+  ];
   const languageMapping = {
     zh: [
       "en",
@@ -401,19 +408,24 @@ const ImageAltTextPage = () => {
     return locale;
   };
   // 图片翻译
-  const handleTranslate = async (record: any, languageCode: string) => {
+  const TriggerTranslate = async (record: any, languageCode: string) => {
+    setTranslateModal(true);
+    setCurrentTranslatingImage(record);
+    console.log(record);
+  };
+  const handleTranslate = () => {
     if (translateImageFetcher.state !== "idle") {
       shopify.toast.show("Translation tasks are in progress.");
       return;
     }
-    setCurrentTranslatingImage(record);
+    // setCurrentTranslatingImage(record);
     if (totalChars - chars < 2000) {
       setOpen(true);
       return;
     }
     if (
       !languageMapping[normalizeLocale(defaultLanguageData.locale)]?.includes(
-        normalizeLocale(languageCode),
+        normalizeLocale(currentTranslatingImage.language),
       )
     ) {
       // shopify.toast.show(
@@ -424,29 +436,32 @@ const ImageAltTextPage = () => {
     }
     setTranslateLoadingImages((pre) => ({
       ...pre,
-      [`${record.imageId}_${record.languageCode}`]: true,
+      [`${currentTranslatingImage.record.imageId}_${currentTranslatingImage.record.languageCode}`]: true,
     }));
     translateImageFetcher.submit(
       {
         translateImage: JSON.stringify({
           sourceLanguage: defaultLanguageData?.locale,
-          targetLanguage: languageCode,
-          imageUrl: record?.imageBeforeUrl,
-          imageId: record?.productId,
+          targetLanguage: currentTranslatingImage.language,
+          imageUrl: currentTranslatingImage?.imageBeforeUrl,
+          imageId: currentTranslatingImage?.productId,
         }),
       },
       { method: "post" },
     );
-    if (!record?.altBeforeTranslation) {
+    if (!currentTranslatingImage?.altBeforeTranslation) {
       return;
     }
     const formData = new FormData();
-    formData.append("altTranslateFetcher", JSON.stringify({ record }));
+    formData.append(
+      "altTranslateFetcher",
+      JSON.stringify({ currentTranslatingImage }),
+    );
     altTranslateFetcher.submit(formData, { method: "post" });
     setTranslatrImageactive(false);
     setTextareaLoading((pre) => ({
       ...pre,
-      [`${record.imageId}_${record.languageCode}`]: true,
+      [`${currentTranslatingImage.imageId}_${currentTranslatingImage.languageCode}`]: true,
     }));
   };
   useEffect(() => {
@@ -798,6 +813,8 @@ const ImageAltTextPage = () => {
   }, []);
   useEffect(() => {
     if (languageFetcher.data) {
+      console.log(languageFetcher.data);
+      
       languageFetcher.data.response.forEach((lan: any) => {
         if (lan.primary) {
           setDefaultLanguageData(lan);
@@ -859,6 +876,8 @@ const ImageAltTextPage = () => {
       },
     );
   };
+  const querySourceLanguage = (value: string) => {};
+  const queryTargetLanguage = (value: string) => {};
   return (
     <Page>
       <ScrollNotice
@@ -1169,7 +1188,7 @@ const ImageAltTextPage = () => {
                                 ] || false
                               }
                               onClick={() =>
-                                handleTranslate(img, img.languageCode)
+                                TriggerTranslate(img, img.languageCode)
                               }
                             >
                               {t("Translate")}
@@ -1409,6 +1428,50 @@ const ImageAltTextPage = () => {
                 )}
               </Paragraph>
             </Typography>
+          </Modal>
+          <Modal
+            title={t("Select Language")}
+            open={translateModal}
+            onCancel={() => setTranslateModal(false)}
+            onOk={() => setTranslateModal(false)}
+            centered
+            okText={t("Got it")}
+            cancelButtonProps={{ style: { display: "none" } }}
+          >
+            <Radio.Group block options={options} defaultValue="Apple" />
+            <Select
+              defaultValue="lucy"
+              style={{ width: 120 }}
+              onChange={querySourceLanguage}
+              options={[
+                { value: "jack", label: "Jack" },
+                { value: "lucy", label: "Lucy" },
+                { value: "Yiminghe", label: "yiminghe" },
+                { value: "disabled", label: "Disabled", disabled: true },
+              ]}
+            />
+            <Select
+              defaultValue="lucy"
+              style={{ width: 120 }}
+              onChange={queryTargetLanguage}
+              options={[
+                { value: "jack", label: "Jack" },
+                { value: "lucy", label: "Lucy" },
+                { value: "Yiminghe", label: "yiminghe" },
+                { value: "disabled", label: "Disabled", disabled: true },
+              ]}
+            />
+            <Button
+              block
+              loading={
+                translateLoadingImages[
+                  `${currentTranslatingImage.imageId}_${currentTranslatingImage.languageCode}`
+                ] || false
+              }
+              onClick={() => handleTranslate()}
+            >
+              {t("Translate")}
+            </Button>
           </Modal>
         </Layout.Section>
       </Layout>

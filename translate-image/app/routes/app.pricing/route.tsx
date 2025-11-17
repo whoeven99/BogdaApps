@@ -27,9 +27,12 @@ import { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { GetLatestActiveSubscribeId } from "~/api/JavaServer";
 import { authenticate } from "~/shopify.server";
 import { useFetcher, useLoaderData } from "@remix-run/react";
-import { OptionType } from "../app._index/components/addCreditsModal";
+import {
+  AddCreaditsModal,
+  OptionType,
+} from "../app._index/components/addCreditsModal";
 import { CheckOutlined, QuestionCircleOutlined } from "@ant-design/icons";
-// import "./style.css";
+import "./style.css";
 import {
   mutationAppPurchaseOneTimeCreate,
   mutationAppSubscriptionCreate,
@@ -321,6 +324,7 @@ const Index = () => {
     [plan],
   );
   const [yearly, setYearly] = useState(false);
+  const [openModal, setOpenModal] = useState<boolean>(false);
   const [selectedOptionKey, setSelectedOption] = useState<string>("option-1");
   const [isLoading, setIsLoading] = useState(true);
   const [addCreditsModalOpen, setAddCreditsModalOpen] = useState(false);
@@ -451,14 +455,14 @@ const Index = () => {
         title: "Basic",
         yearlyTitle: "Basic - Yearly",
         monthlyPrice: 9.99,
-        yearlyPrice: 6.39,
+        yearlyPrice: 7.99,
         subtitle: t("<strong>${{amount}}</strong> billed once a year", {
-          amount: 76.68,
+          amount: 95.9,
         }),
         buttonText:
           plan.type === "Basic" && yearly === !!(plan.feeType === 2)
             ? t("pricing.current_plan")
-            : t("pricing.get_start"),   
+            : t("pricing.get_start"),
         buttonType: "default",
         disabled: plan.type === "Basic" && yearly === !!(plan.feeType === 2),
         features: [
@@ -475,9 +479,9 @@ const Index = () => {
         title: "Pro",
         yearlyTitle: "Pro - Yearly",
         monthlyPrice: 49.99,
-        yearlyPrice: 15.99,
+        yearlyPrice: 39.99,
         subtitle: t("<strong>${{amount}}</strong> billed once a year", {
-          amount: 191.88,
+          amount: 479.9,
         }),
         buttonText:
           plan.type === "Pro" && yearly === !!(plan.feeType === 2)
@@ -500,9 +504,9 @@ const Index = () => {
         title: "Premium",
         yearlyTitle: "Premium - Yearly",
         monthlyPrice: 99.99,
-        yearlyPrice: 31.99,
+        yearlyPrice: 79.99,
         subtitle: t("<strong>${{amount}}</strong> billed once a year", {
-          amount: 383.88,
+          amount: 959.9,
         }),
         buttonText:
           plan.type === "Premium" && yearly === !!(plan.feeType === 2)
@@ -742,6 +746,20 @@ const Index = () => {
   //     });
   //   };
 
+  const handleAddCredits = () => {
+    setOpenModal(true);
+    reportClick("pricing_balance_add");
+    // fetcher.submit(
+    //   {
+    //     log: `${shop} 点击了添加积分按钮`,
+    //   },
+    //   {
+    //     method: "POST",
+    //     action: "/app/log",
+    //   },
+    // );
+  };
+
   const handleCancelPlan = async () => {
     const data = await GetLatestActiveSubscribeId({
       shop: globalStore?.shop as string,
@@ -766,6 +784,8 @@ const Index = () => {
     trialDays: number;
     id: string;
   }) => {
+    console.log(plan, trialDays, id);
+
     setPayForPlanButtonLoading(id);
     setSelectedPayPlanOption({ ...plan, yearly, trialDays });
     payForPlanFetcher.submit(
@@ -784,6 +804,100 @@ const Index = () => {
         )}
       />
       <Space direction="vertical" size="large" style={{ display: "flex" }}>
+        <Card loading={isLoading}>
+          <Space direction="vertical" size="small" style={{ width: "100%" }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <Flex
+                gap={8}
+                align="center"
+                justify="space-between"
+                style={{ width: "100%" }}
+              >
+                <Flex align="center" gap={8}>
+                  <Title
+                    level={2}
+                    style={{ marginBottom: 0, fontSize: "20px" }}
+                  >
+                    {t("Translation Quota")}
+                  </Title>
+                  <Popover
+                    content={t(
+                      "Permanent quotas · Never expire · Top up anytime.",
+                    )}
+                  >
+                    <QuestionCircleOutlined />
+                  </Popover>
+                  <Button type="default" onClick={handleAddCredits}>
+                    {t("Buy more")}
+                  </Button>
+                </Flex>
+                {plan && (
+                  <div>
+                    <Text>{t("Current plan: ")}</Text>
+                    <Text style={{ color: "#007F61", fontWeight: "bold" }}>
+                      {plan.type === "Basic"
+                        ? "Basic"
+                        : plan.type === "Pro"
+                          ? "Pro"
+                          : plan.type === "Premium"
+                            ? "Premium"
+                            : "Free"}
+                      {t("plan")}
+                    </Text>
+                  </div>
+                )}
+              </Flex>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              {chars !== undefined && totalChars !== undefined && (
+                <div
+                  dangerouslySetInnerHTML={{
+                    __html: t(
+                      "{{currentCredits}} of {{maxCredits}} translations used",
+                      {
+                        currentCredits: Math.floor((Number(chars) || 0) / 2000),
+                        maxCredits: Math.floor(
+                          (Number(totalChars) || 0) / 2000,
+                        ),
+                      },
+                    ),
+                  }}
+                />
+              )}
+            </div>
+            <Progress
+              percent={
+                totalChars == 0
+                  ? 100
+                  : Math.round(
+                      (Math.floor((Number(chars) || 0) / 2000) /
+                        Math.floor((Number(totalChars) || 0) / 2000)) *
+                        100,
+                    )
+              }
+              size={["100%", 15]}
+              strokeColor="#007F61"
+              showInfo={false}
+            />
+          </Space>
+          <AddCreaditsModal
+            openModal={openModal}
+            onClose={() => setOpenModal(false)}
+            action="quotacard"
+          />
+        </Card>
         {/* <Card loading={isLoading}>
           <Space direction="vertical" size="small" style={{ width: "100%" }}>
             <div
@@ -868,7 +982,7 @@ const Index = () => {
             />
           </Space>
         </Card> */}
-        <QuotaCard />
+        {/* <QuotaCard /> */}
         {isQuotaExceeded && (
           <Alert
             message={t("The quota has been used up")}
@@ -881,7 +995,7 @@ const Index = () => {
           <Title level={3} style={{ fontWeight: 700 }}>
             {t("Choose the right plan for you")}
           </Title>
-          {/* <Row style={{ width: "100%" }}>
+          <Row style={{ width: "100%" }}>
             <Col
               span={screens.xs ? 16 : 18}
               style={{
@@ -902,7 +1016,7 @@ const Index = () => {
                 </div>
               </Flex>
             </Col>
-          </Row> */}
+          </Row>
         </Flex>
         <Row gutter={[16, 16]}>
           <Col

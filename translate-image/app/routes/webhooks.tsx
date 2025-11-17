@@ -73,6 +73,55 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         // ✅ 一定要返回 200，否则 Shopify 会重试或标记 410
         return new Response("OK", { status: 200 });
       }
+      case "APP_SUBSCRIPTIONS_UPDATE":
+        try {
+          new Response(null, { status: 200 });
+          let plan = 0;
+          console.log("payload:",payload);
+          
+          switch (payload?.app_subscription.name) {
+            case "Basic":
+              plan = 4;
+              break;
+            case "Pro":
+              plan = 5;
+              break;
+            case "Premium":
+              plan = 6;
+              break;
+          }
+          // InsertOrUpdateOrder({
+          //   id: payload?.app_subscription.admin_graphql_api_id,
+          //   status: payload?.app_subscription.status,
+          // });
+          // if (payload?.app_subscription.status === "ACTIVE") {
+          //   const addChars = await AddCharsByShopNameAfterSubscribe({
+          //     shop,
+          //     appSubscription: payload?.app_subscription.admin_graphql_api_id,
+          //   });
+          //   if (addChars?.success) {
+          //     AddSubscriptionQuotaRecord({
+          //       subscriptionId: payload?.app_subscription.admin_graphql_api_id,
+          //     });
+          //     UpdateUserPlan({ shop, plan });
+          //     UpdateStatus({ shop });
+          //     SendSubscribeSuccessEmail({
+          //       id: payload?.app_subscription.admin_graphql_api_id,
+          //       shopName: shop,
+          //       feeType:
+          //         payload?.app_subscription?.interval == "every_30_days"
+          //           ? 1
+          //           : 2,
+          //     });
+          //   }
+          // }
+          // if (payload?.app_subscription.status === "CANCELLED") {
+          //   UpdateUserPlan({ shop, plan: 2 });
+          // }
+        } catch (error) {
+          console.error("Error APP_SUBSCRIPTIONS_UPDATE:", error);
+          return new Response(null, { status: 200 });
+        }
       case "SHOP_REDACT":
         try {
           new Response(null, { status: 200 });
