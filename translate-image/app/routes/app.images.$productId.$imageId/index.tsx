@@ -275,47 +275,76 @@ const ImageAltTextPage = () => {
   const dispatch = useDispatch();
   const fetcher = useFetcher();
   const options: CheckboxGroupProps<string>["options"] = [
-    { label: "Standard Edition", value: "Apple" },
-    { label: "pro", value: "Pear" },
+    { label: "标准版", value: "Apple" },
+    { label: "pro大模型", value: "Pear" },
   ];
-  const languageMapping = {
-    zh: [
-      "en",
-      "ru",
-      "es",
-      "fr",
-      "de",
-      "it",
-      "nl",
-      "pt",
-      "vi",
-      "tr",
-      "ms",
-      "zh-tw",
-      "th",
-      "pl",
-      "id",
-      "ja",
-      "ko",
-    ],
-    en: [
-      "zh",
-      "ru",
-      "es",
-      "fr",
-      "de",
-      "it",
-      "pt",
-      "vi",
-      "tr",
-      "ms",
-      "th",
-      "pl",
-      "id",
-      "ja",
-      "ko",
-    ],
-  } as any;
+  const baseInput = new Set([
+    "zh",
+    "zh-tw",
+    "en",
+    "fr",
+    "it",
+    "ja",
+    "ko",
+    "pt",
+    "ru",
+    "es",
+    "th",
+    "tr",
+    "vi",
+  ]);
+  const baseOutput = new Set([
+    "ar",
+    "bn",
+    "zh",
+    "zh-tw",
+    "cs",
+    "da",
+    "nl",
+    "en",
+    "fi",
+    "fr",
+    "de",
+    "el",
+    "he",
+    "hu",
+    "id",
+    "it",
+    "ja",
+    "kk",
+    "ko",
+    "ms",
+    "pl",
+    "pt",
+    "ru",
+    "es",
+    "sv",
+    "th",
+    "tl",
+    "tr",
+    "uk",
+    "ur",
+    "vi",
+  ]);
+
+  const specialSourceRules: Record<string, string[]> = {
+    "zh-tw": ["zh", "en"], // 繁体中文
+    el: ["en", "tr"], // 希腊语
+    kk: ["zh"], // 哈萨克语
+  };
+  const canTranslate = (source: string, target: string): boolean => {
+    const src = normalizeLocale(source);
+    const tgt = normalizeLocale(target);
+    // 目标语言必须在输出范围
+    if (!baseOutput.has(tgt)) return false;
+    // 源语言必须在输入范围
+    if (!baseInput.has(src)) return false;
+    // 检查是否有特殊规则
+    if (specialSourceRules[tgt]) {
+      return specialSourceRules[tgt].includes(src);
+    }
+    return true;
+  };
   const handleNavigate = () => {
     if (confirmData.length > 0) {
       shopify.saveBar.leaveConfirmation();
@@ -403,6 +432,7 @@ const ImageAltTextPage = () => {
     if (lower.startsWith("zh-cn")) return "zh";
     if (lower.startsWith("zh-tw")) return "zh-tw";
     if (lower.startsWith("en")) return "en";
+    if (lower.startsWith("pt")) return "pt";
 
     // ✅ 处理其它常见格式（如 en-US / fr-CA）
     return locale;
@@ -424,13 +454,11 @@ const ImageAltTextPage = () => {
       return;
     }
     if (
-      !languageMapping[normalizeLocale(defaultLanguageData.locale)]?.includes(
-        normalizeLocale(currentTranslatingImage.language),
+      !canTranslate(
+        defaultLanguageData.locale,
+        currentTranslatingImage.language,
       )
     ) {
-      // shopify.toast.show(
-      //   t("Image translation is not supported in the current language."),
-      // );
       setNotTranslateModal(true);
       return;
     }
@@ -441,8 +469,8 @@ const ImageAltTextPage = () => {
     translateImageFetcher.submit(
       {
         translateImage: JSON.stringify({
-          sourceLanguage: defaultLanguageData?.locale,
-          targetLanguage: currentTranslatingImage.language,
+          sourceLanguage: normalizeLocale(defaultLanguageData?.locale),
+          targetLanguage: normalizeLocale(currentTranslatingImage.language),
           imageUrl: currentTranslatingImage?.imageBeforeUrl,
           imageId: currentTranslatingImage?.productId,
         }),
@@ -814,7 +842,7 @@ const ImageAltTextPage = () => {
   useEffect(() => {
     if (languageFetcher.data) {
       console.log(languageFetcher.data);
-      
+
       languageFetcher.data.response.forEach((lan: any) => {
         if (lan.primary) {
           setDefaultLanguageData(lan);
@@ -1368,7 +1396,7 @@ const ImageAltTextPage = () => {
                 width: "100%",
                 borderRadius: 8,
                 objectFit: "contain",
-                // maxHeight: "70vh",
+                maxHeight: "90vh",
               }}
               src={previewImage.imgUrl}
             />
@@ -1424,7 +1452,7 @@ const ImageAltTextPage = () => {
             <Typography>
               <Paragraph>
                 {t(
-                  "Image translation is only available when your store’s default language is Chinese or English.",
+                  "If you need to add a new supported language, please contact the team support.",
                 )}
               </Paragraph>
             </Typography>
