@@ -38,7 +38,7 @@ export interface OptionType {
     currencyCode: string;
   };
 }
-export const QuotaCard = ({ shop }: { shop: string }) => {
+export const QuotaCard = () => {
   const { reportClick, report } = useReport();
   const { t } = useTranslation();
   const { chars, totalChars } = useSelector((state: any) => state.userConfig);
@@ -52,15 +52,15 @@ export const QuotaCard = ({ shop }: { shop: string }) => {
   const handleAddCredits = () => {
     setOpenModal(true);
     reportClick("pricing_balance_add");
-    fetcher.submit(
-      {
-        log: `${shop} 点击了添加积分按钮`,
-      },
-      {
-        method: "POST",
-        action: "/app/log",
-      },
-    );
+    // fetcher.submit(
+    //   {
+    //     log: `${shop} 点击了添加积分按钮`,
+    //   },
+    //   {
+    //     method: "POST",
+    //     action: "/app/log",
+    //   },
+    // );
   };
   return (
     <Card loading={isLoading}>
@@ -130,7 +130,6 @@ export const QuotaCard = ({ shop }: { shop: string }) => {
         />
       </Space>
       <AddCreaditsModal
-        shop={shop}
         openModal={openModal}
         onClose={() => setOpenModal(false)}
         action="quotacard"

@@ -224,7 +224,7 @@ export default function App() {
       shop,
       server: server as string,
     });
-    
+
     if (data?.success) {
       dispatch(setChars({ chars: data?.response?.usedPoints }));
       dispatch(
@@ -233,6 +233,16 @@ export default function App() {
         }),
       );
       dispatch(setUserConfigIsLoading({ isLoading: false }));
+      dispatch(
+        setPlan({
+          plan: {
+            id: 6,
+            type:"Free",
+            feeType: 2,
+            isInFreePlanTime: false,
+          },
+        }),
+      );
     }
   };
   return (
@@ -267,7 +277,7 @@ export default function App() {
             Home
           </Link>
           {/* <Link to="/app/management">Image Manage</Link> */}
-          {/* <Link to="/app/pricing">Pricing</Link> */}
+          <Link to="/app/pricing">Pricing</Link>
         </NavMenu>
         <Outlet />
       </ConfigProvider>

@@ -127,7 +127,7 @@ const Index = () => {
         }}
       >
         <Space direction="vertical" size="middle" style={{ display: "flex" }}>
-          <QuotaCard shop={shop}/>
+          <QuotaCard/>
           <WelcomeCard
             switcherOpen={switcherOpen}
             blockUrl={blockUrl}

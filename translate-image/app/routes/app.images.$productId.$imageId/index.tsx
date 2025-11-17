@@ -1387,7 +1387,6 @@ const ImageAltTextPage = () => {
             </Space>
           </Modal>
           <AddCreaditsModal
-            shop={loader.shop}
             openModal={openModal}
             onClose={() => setOpenModal(false)}
             action="images"
