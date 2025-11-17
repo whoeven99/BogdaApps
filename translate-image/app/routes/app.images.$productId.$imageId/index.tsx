@@ -338,44 +338,6 @@ const ImageAltTextPage = () => {
     }
     return true;
   };
-  const languageMapping = {
-    zh: [
-      "en",
-      "ru",
-      "es",
-      "fr",
-      "de",
-      "it",
-      "nl",
-      "pt",
-      "vi",
-      "tr",
-      "ms",
-      "zh-tw",
-      "th",
-      "pl",
-      "id",
-      "ja",
-      "ko",
-    ],
-    en: [
-      "zh",
-      "ru",
-      "es",
-      "fr",
-      "de",
-      "it",
-      "pt",
-      "vi",
-      "tr",
-      "ms",
-      "th",
-      "pl",
-      "id",
-      "ja",
-      "ko",
-    ],
-  } as any;
   const handleNavigate = () => {
     if (confirmData.length > 0) {
       shopify.saveBar.leaveConfirmation();
@@ -490,8 +452,8 @@ const ImageAltTextPage = () => {
     translateImageFetcher.submit(
       {
         translateImage: JSON.stringify({
-          sourceLanguage: defaultLanguageData?.locale,
-          targetLanguage: languageCode,
+          sourceLanguage: normalizeLocale(defaultLanguageData?.locale),
+          targetLanguage: normalizeLocale(languageCode),
           imageUrl: record?.imageBeforeUrl,
           imageId: record?.productId,
         }),
@@ -512,8 +474,6 @@ const ImageAltTextPage = () => {
   };
   useEffect(() => {
     if (translateImageFetcher.data) {
-      console.log(translateImageFetcher.data);
-      
       setTranslateLoadingImages((pre) => ({
         ...pre,
         [`${currentTranslatingImage.imageId}_${currentTranslatingImage.languageCode}`]: false,
