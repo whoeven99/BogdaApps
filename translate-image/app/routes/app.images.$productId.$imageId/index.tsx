@@ -1372,7 +1372,7 @@ const ImageAltTextPage = () => {
                 width: "100%",
                 borderRadius: 8,
                 objectFit: "contain",
-                // maxHeight: "70vh",
+                maxHeight: "90vh",
               }}
               src={previewImage.imgUrl}
             />
@@ -1429,7 +1429,7 @@ const ImageAltTextPage = () => {
             <Typography>
               <Paragraph>
                 {t(
-                  "Image translation is only available when your store’s default language is Chinese or English.",
+                  "If you need to add a new supported language, please contact the team support.",
                 )}
               </Paragraph>
             </Typography>
