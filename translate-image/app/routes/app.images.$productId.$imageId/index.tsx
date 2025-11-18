@@ -197,11 +197,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
       case !!altTranslateFetcher:
         try {
-          const { record } = altTranslateFetcher;
+          const { alt, targetCode } = altTranslateFetcher;
           const response = await AltTranslate({
             shop: shop as string,
             accessToken: accessToken as string,
-            record,
+            alt,
+            targetCode,
           });
           return json({ response });
         } catch (error) {
@@ -253,12 +254,6 @@ const ImageAltTextPage = () => {
   const [translateLoadingImages, setTranslateLoadingImages] = useState<
     Record<string, boolean>
   >({});
-  const [deleteLoadingImages, setDeleteLoadingImages] = useState<
-    Record<string, boolean>
-  >({});
-  const [altTranslateLoadingImages, setAltTranslateLoadingImages] = useState<
-    Record<string, boolean>
-  >({});
   const altTranslateFetcher = useFetcher<any>();
   const [previewVisible, setPreviewVisible] = useState(false);
   const [previewImage, setPreviewImage] = useState<{
@@ -269,14 +264,13 @@ const ImageAltTextPage = () => {
 
   const [open, setOpen] = useState<boolean>(false);
   const [notTranslateModal, setNotTranslateModal] = useState<boolean>(false);
-  const [translateModal, setTranslateModal] = useState<boolean>(false);
   const [dataReady, setDataReady] = useState(false);
   const [openModal, setOpenModal] = useState<boolean>(false);
   const dispatch = useDispatch();
   const fetcher = useFetcher();
   const options: CheckboxGroupProps<string>["options"] = [
-    { label: "标准版", value: "Apple" },
-    { label: "pro大模型", value: "Pear" },
+    { label: "标准版", value: "bassic" },
+    { label: "pro大模型", value: "pro" },
   ];
   const baseInput = new Set([
     "zh",
@@ -326,6 +320,44 @@ const ImageAltTextPage = () => {
     "ur",
     "vi",
   ]);
+  const allLanguageOptions = [
+    { label: "Arabic", value: "ar" },
+    { label: "Bengali", value: "bn" },
+    { label: "Chinese (Simplified)", value: "zh" },
+    { label: "Chinese (Traditional)", value: "zh-tw" },
+    { label: "Czech", value: "cs" },
+    { label: "Danish", value: "da" },
+    { label: "Dutch", value: "nl" },
+    { label: "English", value: "en" },
+    { label: "Finnish", value: "fi" },
+    { label: "French", value: "fr" },
+    { label: "German", value: "de" },
+    { label: "Greek", value: "el" },
+    { label: "Hebrew", value: "he" },
+    { label: "Hungarian", value: "hu" },
+    { label: "Indonesian", value: "id" },
+    { label: "Italian", value: "it" },
+    { label: "Japanese", value: "ja" },
+    { label: "Kazakh", value: "kk" },
+    { label: "Korean", value: "ko" },
+    { label: "Malay", value: "ms" },
+    { label: "Polish", value: "pl" },
+    { label: "Portuguese", value: "pt" },
+    { label: "Russian", value: "ru" },
+    { label: "Spanish", value: "es" },
+    { label: "Swedish", value: "sv" },
+    { label: "Thai", value: "th" },
+    { label: "Tagalog (Filipino)", value: "tl" },
+    { label: "Turkish", value: "tr" },
+    { label: "Ukrainian", value: "uk" },
+    { label: "Urdu", value: "ur" },
+    { label: "Vietnamese", value: "vi" },
+  ];
+
+  const [sourceLanguage, setSourceLanguage] = useState<string>("zh");
+  const [targetLanguage, setTargetLanguage] = useState<any>();
+  const [sourceLanguages, setSourceLanguages] = useState<any[]>([]);
+  const [targetLanguages, setTargetLanguages] = useState<any[]>();
 
   const specialSourceRules: Record<string, string[]> = {
     "zh-tw": ["zh", "en"], // 繁体中文
@@ -435,13 +467,67 @@ const ImageAltTextPage = () => {
     if (lower.startsWith("pt")) return "pt";
 
     // ✅ 处理其它常见格式（如 en-US / fr-CA）
-    return locale;
+    return lower;
   };
+  useEffect(() => {
+    // 初始化源语言下拉
+    const sourceLangOptions = [...baseInput].map((lang) => {
+      return {
+        label: allLanguageOptions.find((o) => o.value === lang)?.label ?? lang,
+        value: lang,
+      };
+    });
+    setSourceLanguages(sourceLangOptions);
+  }, []);
+  useEffect(() => {
+    const allowedTargets = [...baseOutput].filter((target) => {
+      // 排除跟 source 相同的 code（避免自翻译）
+      if (target === normalizeLocale(sourceLanguage)) return false;
+
+      // 如果目标在特殊规则里，则仅当当前 source 在允许列表中才允许该目标
+      if (specialSourceRules[target]) {
+        return specialSourceRules[target]?.includes(
+          normalizeLocale(sourceLanguage),
+        );
+      }
+      // 否则默认允许
+      return true;
+    });
+
+    const options = allowedTargets.map((v) => {
+      const label = allLanguageOptions.find((o) => o.value === v)?.label ?? v;
+      return { label: label, value: v };
+    });
+    setTargetLanguages(options);
+    // 如果当前选的 targetLanguage 不在新候选里，重置为第一个（如果存在）
+    // if (!allowedTargets.includes(targetLanguage)) {
+    //   setTargetLanguage(options[0]?.value ?? "");
+    // }
+  }, [sourceLanguage]);
+  const buildOptions = (langs: string[]) =>
+    langs.map((v) => {
+      const label = allLanguageOptions.find((o) => o.value === v)?.label ?? v;
+
+      return { label, value: v };
+    });
+  useEffect(() => {
+    if (targetLanguage && specialSourceRules[targetLanguage]) {
+      const allowedSources = specialSourceRules[targetLanguage];
+      setSourceLanguages(buildOptions(allowedSources)); // 🎯 转换成 {label, value} 格式
+    } else {
+      setSourceLanguages(buildOptions([...baseInput])); // 🎯 同样格式
+    }
+  }, [targetLanguage]);
   // 图片翻译
   const TriggerTranslate = async (record: any, languageCode: string) => {
-    setTranslateModal(true);
     setCurrentTranslatingImage(record);
-    console.log(record);
+    setTranslatrImageactive(true);
+    setSourceLanguage(normalizeLocale(defaultLanguageData.locale));
+
+    setTargetLanguage(normalizeLocale(languageCode));
+  };
+  const onClose = () => {
+    setTranslatrImageactive(false);
   };
   const handleTranslate = () => {
     if (translateImageFetcher.state !== "idle") {
@@ -453,24 +539,19 @@ const ImageAltTextPage = () => {
       setOpen(true);
       return;
     }
-    if (
-      !canTranslate(
-        defaultLanguageData.locale,
-        currentTranslatingImage.language,
-      )
-    ) {
+    if (!canTranslate(sourceLanguage, targetLanguage)) {
       setNotTranslateModal(true);
       return;
     }
     setTranslateLoadingImages((pre) => ({
       ...pre,
-      [`${currentTranslatingImage.record.imageId}_${currentTranslatingImage.record.languageCode}`]: true,
+      [`${currentTranslatingImage.imageId}_${currentTranslatingImage.languageCode}`]: true,
     }));
     translateImageFetcher.submit(
       {
         translateImage: JSON.stringify({
-          sourceLanguage: normalizeLocale(defaultLanguageData?.locale),
-          targetLanguage: normalizeLocale(currentTranslatingImage.language),
+          sourceLanguage: sourceLanguage,
+          targetLanguage: targetLanguage,
           imageUrl: currentTranslatingImage?.imageBeforeUrl,
           imageId: currentTranslatingImage?.productId,
         }),
@@ -483,10 +564,14 @@ const ImageAltTextPage = () => {
     const formData = new FormData();
     formData.append(
       "altTranslateFetcher",
-      JSON.stringify({ currentTranslatingImage }),
+      JSON.stringify({
+        alt: currentTranslatingImage.altBeforeTranslation,
+        targetCode: targetLanguage,
+      }),
     );
     altTranslateFetcher.submit(formData, { method: "post" });
     setTranslatrImageactive(false);
+
     setTextareaLoading((pre) => ({
       ...pre,
       [`${currentTranslatingImage.imageId}_${currentTranslatingImage.languageCode}`]: true,
@@ -547,10 +632,6 @@ const ImageAltTextPage = () => {
     languageCode: string,
   ) => {
     try {
-      setDeleteLoadingImages((pre) => ({
-        ...pre,
-        [`${imageId}_${languageCode}`]: true,
-      }));
       const res = await DeleteProductImageData({
         server: globalStore?.server || "",
         shopName: globalStore?.shop || "",
@@ -573,10 +654,6 @@ const ImageAltTextPage = () => {
       } else {
         shopify.toast.show(t("Delete Failed"));
       }
-      setDeleteLoadingImages((pre) => ({
-        ...pre,
-        [`${imageId}_${languageCode}`]: false,
-      }));
     } catch (error) {
       console.log("delete image error", error);
     }
@@ -613,10 +690,6 @@ const ImageAltTextPage = () => {
   };
   useEffect(() => {
     if (altTranslateFetcher.data) {
-      setAltTranslateLoadingImages((pre) => ({
-        ...pre,
-        [`${currentTranslatingImage.imageId}_${currentTranslatingImage.languageCode}`]: false,
-      }));
       if (altTranslateFetcher.data.response.success) {
         setConfirmData((prev: any) => {
           const exists = prev.find(
@@ -841,8 +914,6 @@ const ImageAltTextPage = () => {
   }, []);
   useEffect(() => {
     if (languageFetcher.data) {
-      console.log(languageFetcher.data);
-
       languageFetcher.data.response.forEach((lan: any) => {
         if (lan.primary) {
           setDefaultLanguageData(lan);
@@ -1458,48 +1529,49 @@ const ImageAltTextPage = () => {
             </Typography>
           </Modal>
           <Modal
-            title={t("Select Language")}
-            open={translateModal}
-            onCancel={() => setTranslateModal(false)}
-            onOk={() => setTranslateModal(false)}
+            title={t("Image Translation")}
+            open={translatrImageactive}
+            onCancel={onClose}
+            footer={[
+              <Space
+                key="manage-translation-product-image-footer"
+                direction="vertical"
+                style={{ textAlign: "center" }}
+              >
+                <Button
+                  key="translate"
+                  type="primary"
+                  onClick={handleTranslate}
+                >
+                  {t("Image Translation")}
+                </Button>
+                {/* <span>{t("1000 credits")}</span> */}
+              </Space>,
+            ]}
             centered
-            okText={t("Got it")}
-            cancelButtonProps={{ style: { display: "none" } }}
           >
-            <Radio.Group block options={options} defaultValue="Apple" />
-            <Select
-              defaultValue="lucy"
-              style={{ width: 120 }}
-              onChange={querySourceLanguage}
-              options={[
-                { value: "jack", label: "Jack" },
-                { value: "lucy", label: "Lucy" },
-                { value: "Yiminghe", label: "yiminghe" },
-                { value: "disabled", label: "Disabled", disabled: true },
-              ]}
-            />
-            <Select
-              defaultValue="lucy"
-              style={{ width: 120 }}
-              onChange={queryTargetLanguage}
-              options={[
-                { value: "jack", label: "Jack" },
-                { value: "lucy", label: "Lucy" },
-                { value: "Yiminghe", label: "yiminghe" },
-                { value: "disabled", label: "Disabled", disabled: true },
-              ]}
-            />
-            <Button
-              block
-              loading={
-                translateLoadingImages[
-                  `${currentTranslatingImage.imageId}_${currentTranslatingImage.languageCode}`
-                ] || false
-              }
-              onClick={() => handleTranslate()}
-            >
-              {t("Translate")}
-            </Button>
+            <div style={{ padding: "15px 0" }}>
+              <Radio.Group
+                block
+                options={options}
+                defaultValue="bassic"
+                style={{ marginBottom: "10px" }}
+              />
+              <p style={{ marginBottom: "10px" }}>{t("Source Language")}</p>
+              <Select
+                style={{ width: "100%", marginBottom: "20px" }}
+                value={sourceLanguage}
+                onChange={setSourceLanguage}
+                options={sourceLanguages}
+              />
+              <span>{t("Target Language")}</span>
+              <Select
+                style={{ width: "100%", marginTop: "10px" }}
+                value={targetLanguage}
+                onChange={setTargetLanguage}
+                options={targetLanguages}
+              />
+            </div>
           </Modal>
         </Layout.Section>
       </Layout>

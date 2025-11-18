@@ -643,11 +643,13 @@ export const AddCharsByShopName = async ({
 export const AltTranslate = async ({
   shop,
   accessToken,
-  record,
+  alt,
+  targetCode,
 }: {
   shop: string;
   accessToken: string;
-  record: any;
+  alt: string;
+  targetCode: string;
 }) => {
   try {
     console.log("alt aaaa", process.env.server, shop);
@@ -656,8 +658,8 @@ export const AltTranslate = async ({
       url: `${process.env.SERVER_URL}/pcUserPic/altTranslate?shopName=${shop}`,
       method: "POST",
       data: {
-        alt: record.altBeforeTranslation,
-        targetCode: record.languageCode,
+        alt,
+        targetCode,
         accessToken: accessToken,
       },
     });
