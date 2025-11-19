@@ -322,7 +322,6 @@ const ImageAltTextPage = () => {
     "da",
     "de",
     "en",
-    "es",
     "el",
     "et",
     "fi",
@@ -672,7 +671,7 @@ const ImageAltTextPage = () => {
       !canAidgeTranslate(sourceLanguage, targetLanguage) &&
       !canHuoshanTranslate(sourceLanguage, targetLanguage, res)
     ) {
-      setOpen(true);
+      setNotTranslateModal(true);
       return;
     }
     setTranslateLoadingImages((pre) => ({
