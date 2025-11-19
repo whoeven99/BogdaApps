@@ -504,9 +504,9 @@ const ImageAltTextPage = () => {
     const src = normalizeLocale(source);
     const tgt = normalizeLocale(target);
     // 目标语言必须在输出范围
-    if (!aidgeBaseInput.has(tgt)) return false;
+    if (!aidgeBaseInput.has(src)) return false;
     // 源语言必须在输入范围
-    if (!aidgeBaseOutput.has(src)) return false;
+    if (!aidgeBaseOutput.has(tgt)) return false;
     // 检查是否有特殊规则
     if (specialSourceRules[tgt]) {
       return specialSourceRules[tgt].includes(src);
