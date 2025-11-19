@@ -238,15 +238,17 @@ export const TranslateImage = async ({
   sourceCode,
   targetCode,
   accessToken,
+  modelType,
 }: {
   shop: string;
   imageUrl: string;
   sourceCode: string;
   targetCode: string;
   accessToken: string;
+  modelType: number;
 }) => {
   try {
-    console.log("dqws: ", shop, imageUrl, sourceCode, targetCode, accessToken);
+    console.log("dqws: ", shop, imageUrl, sourceCode, targetCode, accessToken,modelType);
 
     const response = await axios({
       url: `${process.env.SERVER_URL}/pcUserPic/translatePic?shopName=${shop}`,
@@ -256,6 +258,7 @@ export const TranslateImage = async ({
         sourceCode,
         targetCode,
         accessToken,
+        modelType
       },
     });
     // console.log();
@@ -643,11 +646,13 @@ export const AddCharsByShopName = async ({
 export const AltTranslate = async ({
   shop,
   accessToken,
-  record,
+  alt,
+  targetCode,
 }: {
   shop: string;
   accessToken: string;
-  record: any;
+  alt: string;
+  targetCode: string;
 }) => {
   try {
     console.log("alt aaaa", process.env.server, shop);
@@ -656,8 +661,8 @@ export const AltTranslate = async ({
       url: `${process.env.SERVER_URL}/pcUserPic/altTranslate?shopName=${shop}`,
       method: "POST",
       data: {
-        alt: record.altBeforeTranslation,
-        targetCode: record.languageCode,
+        alt,
+        targetCode,
         accessToken: accessToken,
       },
     });
