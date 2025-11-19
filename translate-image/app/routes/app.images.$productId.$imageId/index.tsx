@@ -805,6 +805,8 @@ const ImageAltTextPage = () => {
       ) {
         shopify.toast.show(t("Image translation failed"));
         setOpen(true);
+      } else {
+        shopify.toast.show(t("Image translation failed"));
       }
     }
   }, [translateImageFetcher.data]);
