@@ -218,7 +218,7 @@ export default function App() {
   }, [initFetcher.data]);
   useEffect(() => {
     getWords();
-    dispatch(setIsNew({ isNew: true }));
+    dispatch(setIsNew({ isNew: false }));
   }, [location]); // 监听 URL 的变化
   const getWords = async () => {
     const data = await GetUserWords({
@@ -237,9 +237,8 @@ export default function App() {
       dispatch(
         setPlan({
           plan: {
-            id: 6,
-            type:"Free",
-            feeType: 2,
+            id: 4,
+            type:"Pro",
             isInFreePlanTime: false,
           },
         }),

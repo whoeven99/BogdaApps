@@ -173,6 +173,8 @@ const Index = () => {
   const { plan, updateTime, chars, totalChars, isNew } = useSelector(
     (state: any) => state.userConfig,
   );
+  console.log(plan,isNew);
+  
   const { reportClick, report } = useReport();
   const creditOptions: OptionType[] = useMemo(
     () => [
@@ -439,7 +441,6 @@ const Index = () => {
           plan: {
             id: 2,
             type: "Free",
-            feeType: 0,
             isInFreePlanTime: false,
           },
         }),
@@ -460,11 +461,11 @@ const Index = () => {
           amount: 95.9,
         }),
         buttonText:
-          plan.type === "Basic" && yearly === !!(plan.feeType === 2)
+          plan.type === "Basic"
             ? t("pricing.current_plan")
             : t("pricing.get_start"),
         buttonType: "default",
-        disabled: plan.type === "Basic" && yearly === !!(plan.feeType === 2),
+        disabled: plan.type === "Basic",
         features: [
           //   t("{{credits}} credits/month", { credits: "1,500,000" }),
           //   t("Glossary ({{count}} entries)", { count: 10 }),
@@ -484,11 +485,11 @@ const Index = () => {
           amount: 479.9,
         }),
         buttonText:
-          plan.type === "Pro" && yearly === !!(plan.feeType === 2)
+          plan.type === "Pro"
             ? t("pricing.current_plan")
             : t("pricing.get_start"),
         buttonType: "default",
-        disabled: plan.type === "Pro" && yearly === !!(plan.feeType === 2),
+        disabled: plan.type === "Pro",
         features: [
           //   t("all in Basic Plan"),
           //   t("{{credits}} credits/month", { credits: "3,000,000" }),
@@ -509,10 +510,10 @@ const Index = () => {
           amount: 959.9,
         }),
         buttonText:
-          plan.type === "Premium" && yearly === !!(plan.feeType === 2)
+          plan.type === "Premium"
             ? t("pricing.current_plan")
             : t("pricing.get_start"),
-        disabled: plan.type === "Premium" && yearly === !!(plan.feeType === 2),
+        disabled: plan.type === "Premium",
         isRecommended: true,
         features: [
           //   t("all in Pro Plan"),

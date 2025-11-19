@@ -6,7 +6,6 @@ interface UserConfigState {
   plan: {
     id: number;
     type: string;
-    feeType: number;
     isInFreePlanTime: boolean;
   };
   updateTime: string | null;
@@ -22,7 +21,6 @@ const initialState: UserConfigState = {
   plan: {
     id: 0,
     type: "",
-    feeType: 0,
     isInFreePlanTime: false,
   },
   updateTime: null,
@@ -42,7 +40,6 @@ const userConfigSlice = createSlice({
         plan: {
           id: number;
           type: string;
-          feeType: number;
           isInFreePlanTime: boolean;
         };
       }>,
