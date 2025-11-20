@@ -221,7 +221,7 @@ export const UpdateProductImageAltData = async ({
 
     return response.data;
   } catch (error) {
-    console.error("Error UpdateProductImageAltData:", error);
+    console.error(`${shopName} 保存alt文本失败:`, error);
     return {
       success: false,
       errorCode: 10001,
@@ -238,15 +238,17 @@ export const TranslateImage = async ({
   sourceCode,
   targetCode,
   accessToken,
+  modelType,
 }: {
   shop: string;
   imageUrl: string;
   sourceCode: string;
   targetCode: string;
   accessToken: string;
+  modelType: number;
 }) => {
   try {
-    console.log("dqws: ", shop, imageUrl, sourceCode, targetCode, accessToken);
+    console.log("dqws: ", shop, imageUrl, sourceCode, targetCode, accessToken,modelType);
 
     const response = await axios({
       url: `${process.env.SERVER_URL}/pcUserPic/translatePic?shopName=${shop}`,
@@ -256,6 +258,7 @@ export const TranslateImage = async ({
         sourceCode,
         targetCode,
         accessToken,
+        modelType
       },
     });
     // console.log();
@@ -263,7 +266,7 @@ export const TranslateImage = async ({
     console.log("imageTranslate Response", response.data);
     return response;
   } catch (error) {
-    console.log("Error GetImageTranslate", error);
+    console.log(`${shop}  图片翻译失败`, error);
     return {
       success: false,
       errorCode: 10001,
@@ -307,7 +310,7 @@ export const storageTranslateImage = async ({
       };
     }
   } catch (error) {
-    console.log("replace image filed", error);
+    console.log(`${shop} 翻译图片保存失败`, error);
     return {
       success: false,
       errorCode: 10001,
@@ -346,7 +349,7 @@ export const DeleteProductImageData = async ({
 
     return response.data;
   } catch (error) {
-    console.error("Error DeleteProductImageData:", error);
+    console.error(`${shopName} 删除图片失败`, error);
     return {
       success: false,
       errorCode: 10001,
@@ -382,7 +385,7 @@ export const DeleteSingleImage = async ({
     // console.log("DeleteProductImageData: ", response.data);
     return response.data;
   } catch (error) {
-    console.error("Error DeleteProductImageData:", error);
+    console.error(`${shopName}删除单张图片失败:`, error);
     return {
       success: false,
       errorCode: 10001,
@@ -643,11 +646,13 @@ export const AddCharsByShopName = async ({
 export const AltTranslate = async ({
   shop,
   accessToken,
-  record,
+  alt,
+  targetCode,
 }: {
   shop: string;
   accessToken: string;
-  record: any;
+  alt: string;
+  targetCode: string;
 }) => {
   try {
     console.log("alt aaaa", process.env.server, shop);
@@ -656,14 +661,14 @@ export const AltTranslate = async ({
       url: `${process.env.SERVER_URL}/pcUserPic/altTranslate?shopName=${shop}`,
       method: "POST",
       data: {
-        alt: record.altBeforeTranslation,
-        targetCode: record.languageCode,
+        alt,
+        targetCode,
         accessToken: accessToken,
       },
     });
     return response.data;
   } catch (error) {
-    console.log("alt translate error", error);
+    console.log(`${shop}alt 翻译失败`, error);
     return {
       success: false,
       errorCode: 10001,

@@ -32,14 +32,15 @@ const WelcomeCard: React.FC<WelcomeCardProps> = ({
   //   const { report, trackExposure, fetcherState } = useReport();
   const handleSetting = () => {
     window.open(blockUrl, "_blank");
-  };
-  const handleTestGraphqlData = () => {
-    const formData = new FormData();
-    formData.append("quailtyEvaluation", JSON.stringify({}));
-    graphqlFetcher.submit(formData, {
-      method: "post",
-      action: "/app",
-    });
+    fetcher.submit(
+      {
+        log: `${shop} 点击了配置switcher按钮，前往激活插件`,
+      },
+      {
+        method: "POST",
+        action: "/app/log",
+      },
+    );
   };
   useEffect(() => {
     const handleResize = () => {
@@ -88,9 +89,7 @@ const WelcomeCard: React.FC<WelcomeCardProps> = ({
           </Text>
         </Flex>
         <Button
-          onClick={() => {
-            handleSetting();
-          }}
+          onClick={handleSetting}
           type="default"
           style={{ width: "auto", alignSelf: "flex-end" }}
         >

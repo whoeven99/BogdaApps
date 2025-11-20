@@ -74,5 +74,14 @@
   "Buy Credits": "Credits kopen",
   "The language you need for translation is not available in the store. Please add it via the store settings (Add Language).": "De taal die u nodig heeft voor vertaling is niet beschikbaar in de winkel. Voeg deze toe via de winkelinstellingen (Taal toevoegen).",
   "Add Language": "Taal toevoegen",
-  "Please wait until all images are uploaded": "Wacht tot alle afbeeldingen zijn geüpload"
+  "Please wait until all images are uploaded": "Wacht tot alle afbeeldingen zijn geüpload",
+  "{{currentCredits}} of {{maxCredits}} translations used": "{{currentCredits}} van {{maxCredits}} vertalingen gebruikt",
+  "Buy more": "Koop meer",
+  "Buy Extra Image Translation Times": "Koop extra beeldvertaaltijden",
+  "Translation limit reached": "Vertalingslimiet bereikt",
+  "You’ve used all your available image translations. Add more to continue translating instantly.": "Je hebt alle beschikbare beeldvertalingen gebruikt. Voeg er meer toe om direct door te gaan met vertalen.",
+  "Add more": "Voeg meer toe",
+  "extra times": "extra keer",
+  "Published time": "Gepubliceerde tijd",
+  "If you need to add a new supported language, please contact the team support.": "Als u een nieuwe ondersteunde taal wilt toevoegen, neem dan contact op met het ondersteuningsteam."
 }

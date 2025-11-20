@@ -11,7 +11,7 @@
   "Setup App": "设置应用程序",
   "The switcher is currently enabled.": "切换器当前已启用。",
   "Enable language and currency switcher": "启用语言和货币切换器",
-  "{{currentCredits}} has been used, total credits: {{maxCredits}}.": "已使用 {{currentCredits}} 积分，总积分：{{maxCredits}}。",
+  "{{currentCredits}} has been used, total credits: {{maxCredits}}.": "已使用 {{currentCredits}} 张图，总数量：{{maxCredits}}。",
   "Translation Quota": "翻译额度",
   "Permanent quotas · Never expire · Top up anytime.": "永久额度 · 永不过期 · 随时充值。",
   "Add credits": "添加积分",
@@ -74,5 +74,14 @@
   "Buy Credits": "购买积分",
   "The language you need for translation is not available in the store. Please add it via the store settings (Add Language).": "您需要的翻译语言在应用商店中不可用。请通过应用商店设置（添加语言）添加。",
   "Add Language": "添加语言",
-  "Please wait until all images are uploaded": "请稍候，待所有图片上传完毕。"
+  "Please wait until all images are uploaded": "请稍候，待所有图片上传完毕。",
+  "{{currentCredits}} of {{maxCredits}} translations used": "已使用 {{currentCredits}} 次翻译，共 {{maxCredits}} 次翻译",
+  "Buy more": "购买更多",
+  "Buy Extra Image Translation Times": "购买额外图像翻译次数",
+  "Translation limit reached": "翻译次数已达上限",
+  "You’ve used all your available image translations. Add more to continue translating instantly.": "您已用完所有可用的图像翻译次数。添加更多翻译次数即可继续即时翻译。",
+  "Add more": "添加更多",
+  "extra times": "次数",
+  "Published time": "发布时间",
+  "If you need to add a new supported language, please contact the team support.": "如果您需要添加新的支持语言，请联系团队支持。"
 }

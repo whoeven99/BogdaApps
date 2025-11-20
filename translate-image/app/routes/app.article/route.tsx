@@ -459,7 +459,7 @@ export default function Index() {
   }, []);
   useEffect(() => {
     if (loadFetcher.data) {
-      console.log(loadFetcher.data);
+      // console.log(loadFetcher.data);
       
       setArticlesHasNextPage(loadFetcher.data.hasNextPage);
       setArticlesHasPreviousPage(loadFetcher.data.hasPreviousPage);
@@ -472,7 +472,7 @@ export default function Index() {
   }, [loadFetcher.data]);
   useEffect(() => {
     if (artilclesFetcher.data) {
-      console.log(artilclesFetcher.data);
+      // console.log(artilclesFetcher.data);
       
       dispatch(
         setLastPageCursorInfo({

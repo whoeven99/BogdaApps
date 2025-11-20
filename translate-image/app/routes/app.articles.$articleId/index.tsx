@@ -121,7 +121,7 @@ export default function ProductDetailPage() {
   }, []);
   useEffect(() => {
     if (articleLoadingFetcher.data) {
-      console.log(articleLoadingFetcher.data);
+      // console.log(articleLoadingFetcher.data);
 
       setProductLoading(false);
       setArticleImageData(articleLoadingFetcher.data);
@@ -277,7 +277,7 @@ export default function ProductDetailPage() {
                 <Empty description={t("No image data available.")} />
               </div>
             )}
-            {!productLoading &&
+            {/* {!productLoading &&
               articleImageData?.embeddedImages?.length > 0 && (
                 <>
                   <Title level={4} style={{ marginTop: "24px" }}>
@@ -323,7 +323,7 @@ export default function ProductDetailPage() {
                     )}
                   </div>
                 </>
-              )}
+              )} */}
           </div>
 
           <div

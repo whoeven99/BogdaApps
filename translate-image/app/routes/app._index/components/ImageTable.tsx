@@ -19,7 +19,7 @@ import { AppDispatch, RootState } from "~/store";
 import { setLastPageCursorInfo } from "~/store/modules/productSlice";
 import "../style.css";
 import { ColumnsType } from "antd/es/table";
-export default function Index() {
+export default function Index({ shop }: { shop: string }) {
   const loadFetcher = useFetcher<any>();
   const languageFetcher = useFetcher<any>();
   const productsFetcher = useFetcher<any>();
@@ -199,6 +199,7 @@ export default function Index() {
       method: "POST",
     });
   }, []);
+
   useEffect(() => {
     if (loadFetcher.data) {
       setMenuData(loadFetcher.data.menuData);
@@ -324,14 +325,16 @@ export default function Index() {
     ); // 提交表单请求
   };
 
-  function handleView(record: any): void {
-    console.log("Viewing record:", record);
+  function handleView(record: any) {
     const productId = record.key.split("/").pop();
-    console.log("productId:", productId);
-
     navigate(`/app/products/${productId}`);
   }
-
+  const handleNavigate = (e: any, record: any) => {
+    // 排除点击按钮等交互元素
+    if ((e.target as HTMLElement).closest("button")) return;
+    const productId = record.key.split("/").pop();
+    navigate(`/app/products/${productId}`);
+  };
   const handleSearch = (value: string) => {
     setSearchText(value);
 
@@ -454,12 +457,7 @@ export default function Index() {
                 rowKey={(record) => record.key} // ✅ 建议加上 key，避免警告
                 loading={tableDataLoading}
                 onRow={(record) => ({
-                  onClick: (e) => {
-                    // 排除点击按钮等交互元素
-                    if ((e.target as HTMLElement).closest("button")) return;
-                    const productId = record.key.split("/").pop();
-                    navigate(`/app/products/${productId}`);
-                  },
+                  onClick: (e) => handleNavigate(e, record),
                   style: { cursor: "pointer" },
                 })}
               />

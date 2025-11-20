@@ -22,9 +22,9 @@ export default function SortPopover({
   //   { label: "Product Title", value: "TITLE" },
   //   { label: "Creation time", value: "CREATED_AT" },
   //   { label: "Update time", value: "UPDATED_AT" },
-  //   { label: "Inventory", value: "INVENTORY" },
+  //   { label: "Inventory", value: "INVENTORY_TOTAL" },
   //   { label: "Product Type", value: "PRODUCT_TYPE" },
-  //   // { label: "发布时间", value: "PUBLISHED_AT" },
+  //   { label: "Published time", value: "PUBLISHED_AT" },
   //   { label: "Manufacturers", value: "VENDOR" },
   // ];
   useEffect(() => {

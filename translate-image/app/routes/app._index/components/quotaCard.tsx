@@ -38,16 +38,30 @@ export interface OptionType {
     currencyCode: string;
   };
 }
-export const QuotaCard = () => {
+export const QuotaCard = ({ shop }: { shop: string }) => {
   const { reportClick, report } = useReport();
   const { t } = useTranslation();
   const { chars, totalChars } = useSelector((state: any) => state.userConfig);
 
   const [isLoading, setIsLoading] = useState(true);
   const [openModal, setOpenModal] = useState<boolean>(false);
+  const fetcher = useFetcher();
   useEffect(() => {
     setIsLoading(false);
   }, []);
+  const handleAddCredits = () => {
+    setOpenModal(true);
+    reportClick("pricing_balance_add");
+    fetcher.submit(
+      {
+        log: `${shop} 点击了添加积分按钮`,
+      },
+      {
+        method: "POST",
+        action: "/app/log",
+      },
+    );
+  };
   return (
     <Card loading={isLoading}>
       <Space direction="vertical" size="small" style={{ width: "100%" }}>
@@ -74,14 +88,8 @@ export const QuotaCard = () => {
                 <QuestionCircleOutlined />
               </Popover>
             </Flex>
-            <Button
-              type="default"
-              onClick={() => {
-                setOpenModal(true);
-                reportClick("pricing_balance_add");
-              }}
-            >
-              {t("Add credits")}
+            <Button type="default" onClick={handleAddCredits}>
+              {t("Buy more")}
             </Button>
           </Flex>
         </div>
@@ -96,10 +104,10 @@ export const QuotaCard = () => {
             <div
               dangerouslySetInnerHTML={{
                 __html: t(
-                  "{{currentCredits}} has been used, total credits: {{maxCredits}}.",
+                  "{{currentCredits}} of {{maxCredits}} translations used",
                   {
-                    currentCredits: chars?.toLocaleString() || 0,
-                    maxCredits: totalChars?.toLocaleString() || 0,
+                    currentCredits: Math.floor((Number(chars) || 0) / 2000),
+                    maxCredits: Math.floor((Number(totalChars) || 0) / 2000),
                   },
                 ),
               }}
@@ -108,7 +116,13 @@ export const QuotaCard = () => {
         </div>
         <Progress
           percent={
-            totalChars == 0 ? 100 : Math.round((chars / totalChars) * 100)
+            totalChars == 0
+              ? 100
+              : Math.round(
+                  (Math.floor((Number(chars) || 0) / 2000) /
+                    Math.floor((Number(totalChars) || 0) / 2000)) *
+                    100,
+                )
           }
           size={["100%", 15]}
           strokeColor="#007F61"
@@ -116,6 +130,7 @@ export const QuotaCard = () => {
         />
       </Space>
       <AddCreaditsModal
+        shop={shop}
         openModal={openModal}
         onClose={() => setOpenModal(false)}
         action="quotacard"

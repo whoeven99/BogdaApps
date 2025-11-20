@@ -1,4 +1,9 @@
-import { useFetcher, useNavigate, useParams } from "@remix-run/react";
+import {
+  useFetcher,
+  useLoaderData,
+  useNavigate,
+  useParams,
+} from "@remix-run/react";
 import { Page, Icon, Pagination, Layout } from "@shopify/polaris";
 import {
   Typography,
@@ -14,10 +19,17 @@ import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
 import { useTranslation } from "react-i18next";
 import { ArrowLeftIcon } from "@shopify/polaris-icons";
 import { useEffect, useState } from "react";
-import { ActionFunctionArgs, json } from "@remix-run/node";
+import { ActionFunctionArgs, json, LoaderFunctionArgs } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
 import ScrollNotice from "~/components/ScrollNotice";
 const { Text, Title } = Typography;
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const adminAuthResult = await authenticate.admin(request);
+  const { shop } = adminAuthResult.session;
+  return {
+    shop: shop,
+  };
+};
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const adminAuthResult = await authenticate.admin(request);
@@ -263,6 +275,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function ProductDetailPage() {
+  const { shop } = useLoaderData<typeof loader>();
   const { productId } = useParams(); // ✅ 获取路径参数
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -275,6 +288,7 @@ export default function ProductDetailPage() {
   const [productLoading, setProductLoading] = useState<boolean>(true);
   const imageFetcher = useFetcher<any>();
   const productLoadingFetcher = useFetcher<any>();
+  const fetcher = useFetcher();
   const handleNavigate = () => {
     navigate("/app");
   };
@@ -285,6 +299,15 @@ export default function ProductDetailPage() {
       },
       {
         method: "POST",
+      },
+    );
+    fetcher.submit(
+      {
+        log: `${shop} 当前在翻译产品图片页面`,
+      },
+      {
+        method: "POST",
+        action: "/app/log",
       },
     );
   }, []);
@@ -302,7 +325,7 @@ export default function ProductDetailPage() {
     }
   }, [productLoadingFetcher]);
   const handleImagePrevious = () => {
-    if (imageFetcher.state !== 'idle') {
+    if (imageFetcher.state !== "idle") {
       return;
     }
     setProductLoading(true);
@@ -320,7 +343,7 @@ export default function ProductDetailPage() {
     );
   };
   const handleImageNext = () => {
-    if (imageFetcher.state !== 'idle') {
+    if (imageFetcher.state !== "idle") {
       return;
     }
     setProductLoading(true);
@@ -401,7 +424,7 @@ export default function ProductDetailPage() {
       </Affix>
       <Layout>
         <Layout.Section>
-          <Title level={4} style={{ fontSize: "16px",marginBottom:"16px" }}>
+          <Title level={4} style={{ fontSize: "16px", marginBottom: "16px" }}>
             {productImageData.length > 0 && productImageData[0].title}
           </Title>
           <div

@@ -74,5 +74,14 @@
   "Buy Credits": "Купити кредити",
   "The language you need for translation is not available in the store. Please add it via the store settings (Add Language).": "Потрібна вам мова для перекладу недоступна в магазині. Будь ласка, додайте її через налаштування магазину (Додати мову).",
   "Add Language": "Додати мову",
-  "Please wait until all images are uploaded": "Будь ласка, зачекайте, поки всі зображення будуть завантажені"
+  "Please wait until all images are uploaded": "Будь ласка, зачекайте, поки всі зображення будуть завантажені",
+  "{{currentCredits}} of {{maxCredits}} translations used": "Використано {{currentCredits}} з {{maxCredits}} перекладів",
+  "Buy more": "Купити більше",
+  "Buy Extra Image Translation Times": "Купити додатковий час перекладу зображень",
+  "Translation limit reached": "Досягнуто ліміту перекладів",
+  "You’ve used all your available image translations. Add more to continue translating instantly.": "Ви використали всі доступні переклади зображень. Додайте ще, щоб продовжити перекладати миттєво.",
+  "Add more": "Додати ще",
+  "extra times": "додаткові рази",
+  "Published time": "Час публікації",
+  "If you need to add a new supported language, please contact the team support.": "Якщо вам потрібно додати нову підтримувану мову, зверніться до команди підтримки."
 }

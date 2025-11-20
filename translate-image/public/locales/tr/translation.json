@@ -74,5 +74,14 @@
   "Buy Credits": "Kredi Satın Al",
   "The language you need for translation is not available in the store. Please add it via the store settings (Add Language).": "Çeviri için ihtiyaç duyduğunuz dil mağazada mevcut değil. Lütfen mağaza ayarlarından (Dil Ekle) ekleyin.",
   "Add Language": "Dil Ekle",
-  "Please wait until all images are uploaded": "Lütfen tüm resimler yüklenene kadar bekleyin"
+  "Please wait until all images are uploaded": "Lütfen tüm resimler yüklenene kadar bekleyin",
+  "{{currentCredits}} of {{maxCredits}} translations used": "{{currentCredits}} / {{maxCredits}} çeviri kullanıldı",
+  "Buy more": "Daha fazlasını satın al",
+  "Buy Extra Image Translation Times": "Ekstra Resim Çeviri Zamanları Satın Alın",
+  "Translation limit reached": "Çeviri sınırına ulaşıldı",
+  "You’ve used all your available image translations. Add more to continue translating instantly.": "Mevcut tüm görsel çevirilerinizi kullandınız. Anında çeviriye devam etmek için daha fazla ekleyin.",
+  "Add more": "Daha fazlasını ekle",
+  "extra times": "uzatmalar",
+  "Published time": "Yayınlanma zamanı",
+  "If you need to add a new supported language, please contact the team support.": "Yeni bir desteklenen dil eklemeniz gerekiyorsa lütfen ekip desteğiyle iletişime geçin."
 }
