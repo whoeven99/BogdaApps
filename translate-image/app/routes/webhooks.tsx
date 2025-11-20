@@ -1,7 +1,7 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { AddCharsByShopName, Uninstall } from "~/api/JavaServer";
+import { AddCharsByShopName, AddCharsByShopNameAfterSubscribe, AddSubscriptionQuotaRecord, InsertOrUpdateOrder, SendSubscribeSuccessEmail, Uninstall, UpdateStatus, UpdateUserPlan } from "~/api/JavaServer";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { topic, admin, shop, session, payload } =
@@ -75,7 +75,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
       case "APP_SUBSCRIPTIONS_UPDATE":
         try {
-          new Response(null, { status: 200 });
           let plan = 0;
           console.log("payload:",payload);
           
@@ -90,41 +89,40 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               plan = 6;
               break;
           }
-          // InsertOrUpdateOrder({
-          //   id: payload?.app_subscription.admin_graphql_api_id,
-          //   status: payload?.app_subscription.status,
-          // });
-          // if (payload?.app_subscription.status === "ACTIVE") {
-          //   const addChars = await AddCharsByShopNameAfterSubscribe({
-          //     shop,
-          //     appSubscription: payload?.app_subscription.admin_graphql_api_id,
-          //   });
-          //   if (addChars?.success) {
-          //     AddSubscriptionQuotaRecord({
-          //       subscriptionId: payload?.app_subscription.admin_graphql_api_id,
-          //     });
-          //     UpdateUserPlan({ shop, plan });
-          //     UpdateStatus({ shop });
-          //     SendSubscribeSuccessEmail({
-          //       id: payload?.app_subscription.admin_graphql_api_id,
-          //       shopName: shop,
-          //       feeType:
-          //         payload?.app_subscription?.interval == "every_30_days"
-          //           ? 1
-          //           : 2,
-          //     });
-          //   }
-          // }
-          // if (payload?.app_subscription.status === "CANCELLED") {
-          //   UpdateUserPlan({ shop, plan: 2 });
-          // }
+          InsertOrUpdateOrder({
+            id: payload?.app_subscription.admin_graphql_api_id,
+            status: payload?.app_subscription.status,
+          });
+          if (payload?.app_subscription.status === "ACTIVE") {
+            const addChars = await AddCharsByShopNameAfterSubscribe({
+              shop,
+              appSubscription: payload?.app_subscription.admin_graphql_api_id,
+            });
+            if (addChars?.success) {
+              AddSubscriptionQuotaRecord({
+                subscriptionId: payload?.app_subscription.admin_graphql_api_id,
+              });
+              UpdateUserPlan({ shop, plan });
+              UpdateStatus({ shop });
+              SendSubscribeSuccessEmail({
+                id: payload?.app_subscription.admin_graphql_api_id,
+                shopName: shop,
+                feeType:
+                  payload?.app_subscription?.interval == "every_30_days"
+                    ? 1
+                    : 2,
+              });
+            }
+          }
+          if (payload?.app_subscription.status === "CANCELLED") {
+            UpdateUserPlan({ shop, plan: 2 });
+          }
         } catch (error) {
           console.error("Error APP_SUBSCRIPTIONS_UPDATE:", error);
           return new Response(null, { status: 200 });
         }
       case "SHOP_REDACT":
         try {
-          new Response(null, { status: 200 });
           await Uninstall({ shop });
           if (session) {
             await db.session.deleteMany({ where: { shop } });

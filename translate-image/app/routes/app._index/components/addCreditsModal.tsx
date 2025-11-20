@@ -51,6 +51,7 @@ export const AddCreaditsModal = ({
   imageId?: string;
 }) => {
   const payFetcher = useFetcher<any>();
+  const orderFetcher = useFetcher<any>();
   const { t } = useTranslation();
   const [addCreditsModalOpen, setAddCreditsModalOpen] = useState(openModal);
   const [selectedOptionKey, setSelectedOption] = useState<string>("option-1");
@@ -58,7 +59,7 @@ export const AddCreaditsModal = ({
     {
       key: "option-1",
       name: "250",
-      Credits: 500000/2000,
+      Credits: 500000 / 2000,
       price: {
         comparedPrice: 3.99,
         currencyCode: "USD",
@@ -67,7 +68,7 @@ export const AddCreaditsModal = ({
     {
       key: "option-2",
       name: "500",
-      Credits: 1000000/2000,
+      Credits: 1000000 / 2000,
       price: {
         comparedPrice: 7.99,
         currencyCode: "USD",
@@ -76,7 +77,7 @@ export const AddCreaditsModal = ({
     {
       key: "option-3",
       name: "1000",
-      Credits: 2000000/2000,
+      Credits: 2000000 / 2000,
       price: {
         comparedPrice: 15.99,
         currencyCode: "USD",
@@ -85,7 +86,7 @@ export const AddCreaditsModal = ({
     {
       key: "option-4",
       name: "1500",
-      Credits: 3000000/2000,
+      Credits: 3000000 / 2000,
       price: {
         comparedPrice: 23.99,
         currencyCode: "USD",
@@ -94,7 +95,7 @@ export const AddCreaditsModal = ({
     {
       key: "option-5",
       name: "2500",
-      Credits: 5000000/2000,
+      Credits: 5000000 / 2000,
       price: {
         comparedPrice: 39.99,
         currencyCode: "USD",
@@ -103,7 +104,7 @@ export const AddCreaditsModal = ({
     {
       key: "option-6",
       name: "5000",
-      Credits: 10000000/2000,
+      Credits: 10000000 / 2000,
       price: {
         comparedPrice: 79.99,
         currencyCode: "USD",
@@ -112,7 +113,7 @@ export const AddCreaditsModal = ({
     {
       key: "option-7",
       name: "10000",
-      Credits: 20000000/2000,
+      Credits: 20000000 / 2000,
       price: {
         comparedPrice: 159.99,
         currencyCode: "USD",
@@ -121,7 +122,7 @@ export const AddCreaditsModal = ({
     {
       key: "option-8",
       name: "15000",
-      Credits: 30000000/2000,
+      Credits: 30000000 / 2000,
       price: {
         comparedPrice: 239.99,
         currencyCode: "USD",
@@ -161,27 +162,25 @@ export const AddCreaditsModal = ({
       console.log(payFetcher.data);
 
       if (payFetcher.data?.success) {
-        console.log(payFetcher.data);
-
         const order =
           payFetcher.data?.response?.appPurchaseOneTimeCreate
             ?.appPurchaseOneTime;
         const confirmationUrl =
           payFetcher.data?.response?.appPurchaseOneTimeCreate?.confirmationUrl;
-        // const orderInfo = {
-        //   id: order?.id,
-        //   amount: order?.price.amount,
-        //   name: order?.name,
-        //   createdAt: order?.createdAt,
-        //   status: order?.status,
-        //   confirmationUrl: confirmationUrl,
-        // };
-        // const formData = new FormData();
-        // formData.append("orderInfo", JSON.stringify(orderInfo));
-        // orderFetcher.submit(formData, {
-        //   method: "post",
-        //   action: "/app",
-        // });
+        const orderInfo = {
+          id: order?.id,
+          amount: order?.price.amount,
+          name: order?.name,
+          createdAt: order?.createdAt,
+          status: order?.status,
+          confirmationUrl: confirmationUrl,
+        };
+        const formData = new FormData();
+        formData.append("orderInfo", JSON.stringify(orderInfo));
+        orderFetcher.submit(formData, {
+          method: "post",
+          action: "/app",
+        });
         open(confirmationUrl, "_top");
       } else {
         setBuyButtonLoading(false);

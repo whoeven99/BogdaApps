@@ -238,15 +238,25 @@ export const TranslateImage = async ({
   sourceCode,
   targetCode,
   accessToken,
+  modelType,
 }: {
   shop: string;
   imageUrl: string;
   sourceCode: string;
   targetCode: string;
   accessToken: string;
+  modelType: number;
 }) => {
   try {
-    console.log("dqws: ", shop, imageUrl, sourceCode, targetCode, accessToken);
+    console.log(
+      "dqws: ",
+      shop,
+      imageUrl,
+      sourceCode,
+      targetCode,
+      accessToken,
+      modelType,
+    );
 
     const response = await axios({
       url: `${process.env.SERVER_URL}/pcUserPic/translatePic?shopName=${shop}`,
@@ -256,6 +266,7 @@ export const TranslateImage = async ({
         sourceCode,
         targetCode,
         accessToken,
+        modelType,
       },
     });
     // console.log();
@@ -690,5 +701,181 @@ export const Uninstall = async ({ shop }: { shop: string }) => {
     return res;
   } catch (error) {
     console.error("Error Uninstall:", error);
+  }
+};
+
+export const AddCharsByShopNameAfterSubscribe = async ({
+  shop,
+  appSubscription,
+}: {
+  shop: string;
+  appSubscription: string;
+}) => {
+  try {
+    const response = await axios({
+      url: `${process.env.SERVER_URL}/translationCounter/addCharsByShopNameAfterSubscribe?shopName=${shop}`,
+      method: "POST",
+      data: {
+        subGid: appSubscription, //订阅计划的id
+      },
+    });
+
+    console.log(`${shop} AddCharsByShopNameAfterSubscribe: `, response.data);
+
+    return response.data;
+  } catch (error) {
+    console.error(`${shop} AddCharsByShopNameAfterSubscribe error:`, error);
+    return {
+      success: false,
+      errorCode: 10001,
+      errorMsg: "SERVER_ERROR",
+      response: false,
+    };
+  }
+};
+
+export const AddSubscriptionQuotaRecord = async ({
+  subscriptionId,
+}: {
+  subscriptionId: string;
+}) => {
+  try {
+    await axios({
+      url: `${process.env.SERVER_URL}/subscriptionQuotaRecord/addSubscriptionQuotaRecord`,
+      method: "PUT",
+      data: {
+        subscriptionId: subscriptionId,
+      },
+    });
+  } catch (error) {
+    console.error("Error AddSubscriptionQuotaRecord:", error);
+  }
+};
+
+//修改用户计划
+export const UpdateUserPlan = async ({
+  shop,
+  plan,
+}: {
+  shop: string;
+  plan: number;
+}) => {
+  try {
+    const response = await axios({
+      url: `${process.env.SERVER_URL}/user/checkUserPlan`,
+      method: "POST",
+      data: {
+        shopName: shop,
+        planId: plan,
+      },
+    });
+
+    console.log(`${shop} UpdateUserPlan: `, response.data);
+
+    return response.data;
+  } catch (error) {
+    console.error("Error UpdateUserPlan:", error);
+  }
+};
+
+//付费后更新状态
+export const UpdateStatus = async ({ shop }: { shop: string }) => {
+  try {
+    const response = await axios({
+      url: `${process.env.SERVER_URL}/translate/updateStatus`,
+      method: "POST",
+      data: {
+        shopName: shop,
+      },
+    });
+
+    console.log(`${shop} UpdateStatus: `, response.data);
+  } catch (error) {
+    console.error("Error UpdateStatus:", error);
+  }
+};
+
+export const SendSubscribeSuccessEmail = async ({
+  id,
+  shopName,
+  feeType,
+}: {
+  id: string;
+  shopName: string;
+  feeType: number;
+}) => {
+  console.log(`${shopName} SendSubscribeSuccessEmail Input: `, {
+    id,
+    shopName,
+    feeType,
+  });
+
+  try {
+    const response = await axios({
+      url: `${process.env.SERVER_URL}/orders/sendSubscribeSuccessEmail?shopName=${shopName}`,
+      method: "POST",
+      data: {
+        subGid: id,
+        shopName: shopName,
+        feeType: feeType,
+      },
+    });
+    console.log(`${shopName} SendSubscribeSuccessEmail: `, response.data);
+  } catch (error) {
+    console.error("Error SendSubscribeSuccessEmail:", error);
+  }
+};
+
+export const IsInFreePlanTime = async ({
+  shop,
+  server,
+}: {
+  shop: string;
+  server: string;
+}) => {
+  try {
+    const response = await axios({
+      url: `${server}/userTrials/isInFreePlanTime?shopName=${shop}`,
+      method: "POST",
+    });
+
+    console.log(`${shop} IsInFreePlanTime: `, response.data);
+
+    return response.data;
+  } catch (error) {
+    console.error(`${shop} IsInFreePlanTime error:`, error);
+    return {
+      success: false,
+      errorCode: 10001,
+      errorMsg: "SERVER_ERROR",
+      response: null,
+    };
+  }
+};
+
+export const IsOpenFreePlan = async ({
+  shop,
+  server,
+}: {
+  shop: string;
+  server: string;
+}) => {
+  try {
+    const response = await axios({
+      url: `${server}/userTrials/isOpenFreePlan?shopName=${shop}`,
+      method: "POST",
+    });
+
+    console.log(`${shop} IsOpenFreePlan: `, response.data);
+
+    return { ...response.data, success: true };
+  } catch (error) {
+    console.error(`${shop} IsOpenFreePlan error:`, error);
+    return {
+      success: false,
+      errorCode: 10001,
+      errorMsg: "SERVER_ERROR",
+      response: false,
+    };
   }
 };

@@ -173,7 +173,7 @@ const Index = () => {
   const { plan, updateTime, chars, totalChars, isNew } = useSelector(
     (state: any) => state.userConfig,
   );
-  console.log(plan,isNew);
+  // console.log(plan,isNew);
   
   const { reportClick, report } = useReport();
   const creditOptions: OptionType[] = useMemo(
@@ -335,10 +335,10 @@ const Index = () => {
   const [payForPlanButtonLoading, setPayForPlanButtonLoading] =
     useState<string>("");
   const [selectedPayPlanOption, setSelectedPayPlanOption] = useState<any>();
-  const isQuotaExceeded = useMemo(
-    () => chars >= totalChars && totalChars > 0,
-    [chars, totalChars],
-  );
+  // const isQuotaExceeded = useMemo(
+  //   () => chars >= totalChars && totalChars > 0,
+  //   [chars, totalChars],
+  // );
   const { t } = useTranslation();
   const dispatch = useDispatch();
 
@@ -984,14 +984,14 @@ const Index = () => {
           </Space>
         </Card> */}
         {/* <QuotaCard /> */}
-        {isQuotaExceeded && (
+        {/* {isQuotaExceeded && (
           <Alert
             message={t("The quota has been used up")}
             description={t("Buy extra credits now to continue using")}
             type="warning"
             showIcon
           />
-        )}
+        )} */}
         <Flex vertical align="center" style={{ width: "100%" }}>
           <Title level={3} style={{ fontWeight: 700 }}>
             {t("Choose the right plan for you")}

@@ -23,6 +23,8 @@ import {
   GetUserSubscriptionPlan,
   GetUserWords,
   InsertOrUpdateOrder,
+  IsInFreePlanTime,
+  IsOpenFreePlan,
   storageTranslateImage,
   UserAdd,
 } from "~/api/JavaServer";
@@ -55,10 +57,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 export const action = async ({ request }: ActionFunctionArgs) => {
   try {
     const adminAuthResult = await authenticate.admin(request);
-    console.log("Auth result:", adminAuthResult);
     const { shop, accessToken } = adminAuthResult.session;
-    // console.log("accessToken: ",accessToken);
-
     const { admin } = adminAuthResult;
     const formData = await request.formData();
     const init = JSON.parse(formData.get("init") as string);
@@ -128,13 +127,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           success: false,
           response: null,
         });
-        console.error("Error theme currency:", error);
       }
     }
     if (payInfo) {
       try {
-        // console.log("sjdaskdi: ", payInfo);
-
         const returnUrl = new URL(
           payInfo?.action === "quotacard"
             ? `https://admin.shopify.com/store/${shop.split(".")[0]}/apps/${process.env.HANDLE}/app`
@@ -200,6 +196,11 @@ export default function App() {
   const dispatch = useDispatch();
   const location = useLocation();
   const initFetcher = useFetcher<any>();
+  const { plan, chars, totalChars, isNew } = useSelector(
+    (state: any) => state.userConfig,
+  );
+  console.log(plan);
+  
   useEffect(() => {
     initFetcher.submit(
       { init: JSON.stringify(true) },
@@ -211,15 +212,75 @@ export default function App() {
     globalStore.shop = shop as string;
     globalStore.server = server as string;
   }, []);
+  // useEffect(() => {
+  //   if (initFetcher.data) {
+  //     console.log(initFetcher.data);
+
+  //     getWords();
+  //   }
+  // }, [initFetcher.data]);
   useEffect(() => {
-    if (initFetcher.data) {
+    if (!plan?.id) {
+      getPlan();
+    }
+    if (!chars || !totalChars) {
       getWords();
     }
-  }, [initFetcher.data]);
-  useEffect(() => {
-    getWords();
     dispatch(setIsNew({ isNew: false }));
+    // if (isNew === null) {
+    //   checkFreeUsed();
+    // }
+    dispatch(setIsNew({ isNew: true }));
   }, [location]); // 监听 URL 的变化
+  const getPlan = async () => {
+    const getUserSubscriptionPlan = await GetUserSubscriptionPlan({
+      shop: shop,
+      server: server as string,
+    });
+    console.log("getUserSubscriptionPlan",getUserSubscriptionPlan);
+    
+    const isInFreePlanTime = await IsInFreePlanTime({
+      shop: shop,
+      server: server as string,
+    });
+
+    let data: any = {
+      id: 2,
+      type: "Free",
+      // feeType: 0,
+      isInFreePlanTime: false,
+    };
+
+    if (getUserSubscriptionPlan?.success) {
+      data = {
+        ...data,
+        id: getUserSubscriptionPlan?.response?.userSubscriptionPlan || 2,
+        type: getUserSubscriptionPlan?.response?.planType || "Free",
+        // feeType: getUserSubscriptionPlan?.response?.feeType || 0,
+      };
+
+      if (getUserSubscriptionPlan?.response?.currentPeriodEnd) {
+        const updateTime = new Date(
+          getUserSubscriptionPlan?.response?.currentPeriodEnd,
+        )
+          .toLocaleDateString("zh-CN", {
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+          })
+          .replace(/\//g, "-");
+        dispatch(setUpdateTime({ updateTime: updateTime }));
+      }
+    }
+    if (isInFreePlanTime?.success) {
+      data = { ...data, isInFreePlanTime: isInFreePlanTime?.response || false };
+    }
+    dispatch(
+      setPlan({
+        plan: data,
+      }),
+    );
+  };
   const getWords = async () => {
     const data = await GetUserWords({
       shop,
@@ -234,16 +295,25 @@ export default function App() {
         }),
       );
       dispatch(setUserConfigIsLoading({ isLoading: false }));
-      dispatch(
-        setPlan({
-          plan: {
-            id: 4,
-            type:"Pro",
-            isInFreePlanTime: false,
-          },
-        }),
-      );
+      // dispatch(
+      //   setPlan({
+      //     plan: {
+      //       id: 4,
+      //       type: "Pro",
+      //       isInFreePlanTime: false,
+      //     },
+      //   }),
+      // );
+    }
+  };
 
+  const checkFreeUsed = async () => {
+    const data = await IsOpenFreePlan({
+      shop,
+      server: server as string,
+    });
+    if (data?.success) {
+      dispatch(setIsNew({ isNew: !data?.response }));
     }
   };
   return (

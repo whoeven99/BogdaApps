@@ -158,7 +158,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
       case !!translateImage:
         try {
-          const { sourceLanguage, targetLanguage, imageUrl, imageId } =
+          const { sourceLanguage, targetLanguage, imageUrl, translation_api } =
             translateImage;
           const response = (await TranslateImage({
             shop,
@@ -166,6 +166,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             sourceCode: sourceLanguage,
             targetCode: targetLanguage,
             accessToken: accessToken as string,
+            modelType: translation_api,
           })) as any;
           return response.data;
         } catch (error) {
@@ -272,7 +273,146 @@ const ImageAltTextPage = () => {
     { label: "标准版", value: "bassic" },
     { label: "pro大模型", value: "pro" },
   ];
-  const baseInput = new Set([
+  const allLanguageRenderCode = new Set([
+    "ar",
+    "af",
+    "bn",
+    "bs",
+    "bg",
+    "cs",
+    "da",
+    "de",
+    "en",
+    "es",
+    "el",
+    "et",
+    "fi",
+    "fr",
+    "he",
+    "hr",
+    "hi",
+    "id",
+    "it",
+    "ja",
+    "ka",
+    "ko",
+    "kk",
+    "km",
+    "kn",
+    "lv",
+    "ms",
+    "mk",
+    "mn",
+    "mr",
+    "my",
+    "ml",
+    "nl",
+    "no",
+    "pl",
+    "pt",
+    "ru",
+    "ro",
+    "sv",
+    "sk",
+    "th",
+    "tl",
+    "tr",
+    "ta",
+    "te",
+    "uk",
+    "ur",
+    "vi",
+    "zh",
+    "zh-tw",
+  ]);
+  const huoshanBaseInput = new Set([
+    "az",
+    "bs",
+    "bn",
+    "cs",
+    "da",
+    "de",
+    "en",
+    "es",
+    "et",
+    "fr",
+    "fi",
+    "gu",
+    "hi",
+    "hr",
+    "it",
+    "id",
+    "ja",
+    "ko",
+    "lv",
+    "mr",
+    "ml",
+    "ms",
+    "nl",
+    "no",
+    "pt",
+    "pa",
+    "pl",
+    "ru",
+    "sv",
+    "sl",
+    "sk",
+    "ta",
+    "th",
+    "tr",
+    "vi",
+    "zh",
+    "zh-tw",
+  ]);
+  const huoshanBaseOutput = new Set([
+    "af",
+    "bn",
+    "bs",
+    "bg",
+    "cs",
+    "da",
+    "de",
+    "en",
+    "el",
+    "et",
+    "fi",
+    "fr",
+    "he",
+    "hr",
+    "hi",
+    "id",
+    "it",
+    "ja",
+    "ka",
+    "ko",
+    "km",
+    "kn",
+    "lv",
+    "ms",
+    "mk",
+    "mn",
+    "mr",
+    "my",
+    "ml",
+    "nl",
+    "no",
+    "pl",
+    "pt",
+    "ru",
+    "ro",
+    "sv",
+    "sk",
+    "th",
+    "tl",
+    "tr",
+    "ta",
+    "te",
+    "uk",
+    "vi",
+    "zh",
+    "zh-tw",
+  ]);
+  const aidgeBaseInput = new Set([
     "zh",
     "zh-tw",
     "en",
@@ -287,7 +427,7 @@ const ImageAltTextPage = () => {
     "tr",
     "vi",
   ]);
-  const baseOutput = new Set([
+  const aidgeBaseOutput = new Set([
     "ar",
     "bn",
     "zh",
@@ -321,33 +461,57 @@ const ImageAltTextPage = () => {
     "vi",
   ]);
   const allLanguageOptions = [
+    { label: "Afrikaans", value: "af" },
     { label: "Arabic", value: "ar" },
+    { label: "Azerbaijani", value: "az" },
     { label: "Bengali", value: "bn" },
+    { label: "Bosnian", value: "bs" },
+    { label: "Bulgarian", value: "bg" },
+    { label: "Croatian", value: "hr" },
     { label: "Chinese (Simplified)", value: "zh" },
     { label: "Chinese (Traditional)", value: "zh-tw" },
     { label: "Czech", value: "cs" },
     { label: "Danish", value: "da" },
     { label: "Dutch", value: "nl" },
     { label: "English", value: "en" },
+    { label: "Estonian", value: "et" },
     { label: "Finnish", value: "fi" },
     { label: "French", value: "fr" },
+    { label: "Georgian", value: "ka" },
     { label: "German", value: "de" },
     { label: "Greek", value: "el" },
+    { label: "Gujarati", value: "gu" },
     { label: "Hebrew", value: "he" },
+    { label: "Hindi", value: "hi" },
     { label: "Hungarian", value: "hu" },
     { label: "Indonesian", value: "id" },
     { label: "Italian", value: "it" },
     { label: "Japanese", value: "ja" },
+    { label: "Kannada", value: "kn" },
     { label: "Kazakh", value: "kk" },
+    { label: "Khmer", value: "km" },
     { label: "Korean", value: "ko" },
+    { label: "Latvian", value: "lv" },
     { label: "Malay", value: "ms" },
+    { label: "Malayalam", value: "ml" },
+    { label: "Marathi", value: "mr" },
+    { label: "Macedonian", value: "mk" },
+    { label: "Mongolian", value: "mn" },
+    { label: "Burmese (Myanmar)", value: "my" },
+    { label: "Norwegian", value: "no" },
     { label: "Polish", value: "pl" },
     { label: "Portuguese", value: "pt" },
+    { label: "Punjabi", value: "pa" },
+    { label: "Romanian", value: "ro" },
     { label: "Russian", value: "ru" },
+    { label: "Slovak", value: "sk" },
+    { label: "Slovenian", value: "sl" },
     { label: "Spanish", value: "es" },
     { label: "Swedish", value: "sv" },
-    { label: "Thai", value: "th" },
     { label: "Tagalog (Filipino)", value: "tl" },
+    { label: "Tamil", value: "ta" },
+    { label: "Telugu", value: "te" },
+    { label: "Thai", value: "th" },
     { label: "Turkish", value: "tr" },
     { label: "Ukrainian", value: "uk" },
     { label: "Urdu", value: "ur" },
@@ -364,13 +528,32 @@ const ImageAltTextPage = () => {
     el: ["en", "tr"], // 希腊语
     kk: ["zh"], // 哈萨克语
   };
-  const canTranslate = (source: string, target: string): boolean => {
+  const canHuoshanTranslate = (
+    source: string,
+    target: string,
+    imgType: string,
+  ): boolean => {
     const src = normalizeLocale(source);
     const tgt = normalizeLocale(target);
     // 目标语言必须在输出范围
-    if (!baseOutput.has(tgt)) return false;
+    if (!huoshanBaseOutput.has(tgt)) return false;
     // 源语言必须在输入范围
-    if (!baseInput.has(src)) return false;
+    if (!huoshanBaseInput.has(src)) return false;
+    // 必须是png或者jpg格式的图片
+    if (imgType !== "png" && imgType !== "jpg") return false;
+    // 检查是否有特殊规则
+    // if (specialSourceRules[tgt]) {
+    //   return specialSourceRules[tgt].includes(src);
+    // }
+    return true;
+  };
+  const canAidgeTranslate = (source: string, target: string): boolean => {
+    const src = normalizeLocale(source);
+    const tgt = normalizeLocale(target);
+    // 目标语言必须在输出范围
+    if (!aidgeBaseInput.has(src)) return false;
+    // 源语言必须在输入范围
+    if (!aidgeBaseOutput.has(tgt)) return false;
     // 检查是否有特殊规则
     if (specialSourceRules[tgt]) {
       return specialSourceRules[tgt].includes(src);
@@ -471,82 +654,81 @@ const ImageAltTextPage = () => {
   };
   useEffect(() => {
     // 初始化源语言下拉
-    const sourceLangOptions = [...baseInput].map((lang) => {
+    const sourceLangOptions = [...huoshanBaseInput].map((lang) => {
       return {
         label: allLanguageOptions.find((o) => o.value === lang)?.label ?? lang,
         value: lang,
       };
     });
     setSourceLanguages(sourceLangOptions);
+    const targetLangOptions = [...allLanguageRenderCode].map((lang) => {
+      return {
+        label: allLanguageOptions.find((o) => o.value === lang)?.label ?? lang,
+        value: lang,
+      };
+    });
+    setTargetLanguages(targetLangOptions);
   }, []);
-  useEffect(() => {
-    const allowedTargets = [...baseOutput].filter((target) => {
-      // 排除跟 source 相同的 code（避免自翻译）
-      if (target === normalizeLocale(sourceLanguage)) return false;
+  // 检测图片格式
+  async function detectImageFormat(url: string): Promise<"png" | "jpg" | null> {
+    try {
+      const response = await fetch(url, { method: "HEAD" });
 
-      // 如果目标在特殊规则里，则仅当当前 source 在允许列表中才允许该目标
-      if (specialSourceRules[target]) {
-        return specialSourceRules[target]?.includes(
-          normalizeLocale(sourceLanguage),
-        );
-      }
-      // 否则默认允许
-      return true;
-    });
+      const contentType = response.headers.get("Content-Type")?.toLowerCase();
+      if (contentType === "image/png") return "png";
+      if (contentType === "image/jpeg") return "jpg";
 
-    const options = allowedTargets.map((v) => {
-      const label = allLanguageOptions.find((o) => o.value === v)?.label ?? v;
-      return { label: label, value: v };
-    });
-    setTargetLanguages(options);
-    // 如果当前选的 targetLanguage 不在新候选里，重置为第一个（如果存在）
-    // if (!allowedTargets.includes(targetLanguage)) {
-    //   setTargetLanguage(options[0]?.value ?? "");
-    // }
-  }, [sourceLanguage]);
-  const buildOptions = (langs: string[]) =>
-    langs.map((v) => {
-      const label = allLanguageOptions.find((o) => o.value === v)?.label ?? v;
-
-      return { label, value: v };
-    });
-  useEffect(() => {
-    if (targetLanguage && specialSourceRules[targetLanguage]) {
-      const allowedSources = specialSourceRules[targetLanguage];
-      setSourceLanguages(buildOptions(allowedSources)); // 🎯 转换成 {label, value} 格式
-    } else {
-      setSourceLanguages(buildOptions([...baseInput])); // 🎯 同样格式
+      return null;
+    } catch (error) {
+      console.error("Failed to fetch image headers:", error);
+      return null;
     }
-  }, [targetLanguage]);
+  }
   // 图片翻译
   const TriggerTranslate = async (record: any, languageCode: string) => {
+    if (translateImageFetcher.state !== "idle") {
+      shopify.toast.show("Translation tasks are in progress.");
+      return;
+    }
+    if (totalChars - chars < 2000) {
+      setOpen(true);
+      return;
+    }
     setCurrentTranslatingImage(record);
     setTranslatrImageactive(true);
     setSourceLanguage(normalizeLocale(defaultLanguageData.locale));
-
     setTargetLanguage(normalizeLocale(languageCode));
   };
   const onClose = () => {
     setTranslatrImageactive(false);
   };
-  const handleTranslate = () => {
-    if (translateImageFetcher.state !== "idle") {
-      shopify.toast.show("Translation tasks are in progress.");
-      return;
+  const selectTranslationApi = (imgType: string) => {
+    if (canAidgeTranslate(sourceLanguage, targetLanguage)) {
+      return 1;
     }
-    // setCurrentTranslatingImage(record);
-    if (totalChars - chars < 2000) {
-      setOpen(true);
-      return;
+    if (canHuoshanTranslate(sourceLanguage, targetLanguage, imgType)) {
+      return 2;
     }
-    if (!canTranslate(sourceLanguage, targetLanguage)) {
+  };
+  const handleTranslate = async () => {
+    // 判断图片的格式
+    const res = (await detectImageFormat(
+      currentTranslatingImage.imageBeforeUrl,
+    )) as string;
+    if (
+      !canAidgeTranslate(sourceLanguage, targetLanguage) &&
+      !canHuoshanTranslate(sourceLanguage, targetLanguage, res)
+    ) {
       setNotTranslateModal(true);
       return;
     }
     setTranslateLoadingImages((pre) => ({
       ...pre,
       [`${currentTranslatingImage.imageId}_${currentTranslatingImage.languageCode}`]: true,
+      [`${currentTranslatingImage.imageId}_${currentTranslatingImage.languageCode}`]: true,
     }));
+    //     aidge_standard   huoshan  aidge_pro
+    //            1           2          3
     translateImageFetcher.submit(
       {
         translateImage: JSON.stringify({
@@ -554,10 +736,12 @@ const ImageAltTextPage = () => {
           targetLanguage: targetLanguage,
           imageUrl: currentTranslatingImage?.imageBeforeUrl,
           imageId: currentTranslatingImage?.productId,
+          translation_api: selectTranslationApi(res),
         }),
       },
       { method: "post" },
     );
+    setTranslatrImageactive(false);
     if (!currentTranslatingImage?.altBeforeTranslation) {
       return;
     }
@@ -569,8 +753,14 @@ const ImageAltTextPage = () => {
         targetCode: targetLanguage,
       }),
     );
+    formData.append(
+      "altTranslateFetcher",
+      JSON.stringify({
+        alt: currentTranslatingImage.altBeforeTranslation,
+        targetCode: targetLanguage,
+      }),
+    );
     altTranslateFetcher.submit(formData, { method: "post" });
-    setTranslatrImageactive(false);
 
     setTextareaLoading((pre) => ({
       ...pre,
@@ -623,6 +813,8 @@ const ImageAltTextPage = () => {
       ) {
         shopify.toast.show(t("Image translation failed"));
         setOpen(true);
+      } else {
+        shopify.toast.show(t("Image translation failed"));
       }
     }
   }, [translateImageFetcher.data]);
@@ -1551,12 +1743,6 @@ const ImageAltTextPage = () => {
             centered
           >
             <div style={{ padding: "15px 0" }}>
-              <Radio.Group
-                block
-                options={options}
-                defaultValue="bassic"
-                style={{ marginBottom: "10px" }}
-              />
               <p style={{ marginBottom: "10px" }}>{t("Source Language")}</p>
               <Select
                 style={{ width: "100%", marginBottom: "20px" }}
