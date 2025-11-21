@@ -620,12 +620,10 @@ export const AddCharsByShopName = async ({
   shop,
   amount,
   gid,
-  accessToken,
 }: {
   shop: string;
   amount: number;
   gid: string;
-  accessToken: string;
 }) => {
   try {
     const response = await axios({
@@ -634,13 +632,9 @@ export const AddCharsByShopName = async ({
       data: {
         chars: amount,
         gid: gid,
-        accessToken,
       },
     });
-    console.log(
-      `${shop} AddCharsByShopName ${amount} ${gid} ${accessToken}:`,
-      response.data,
-    );
+    console.log(`${shop} AddCharsByShopName ${amount} ${gid}:`, response.data);
 
     return response.data;
   } catch (error) {

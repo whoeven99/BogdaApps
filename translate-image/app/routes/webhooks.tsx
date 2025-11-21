@@ -68,7 +68,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               shop,
               amount: plan.credits,
               gid: purchase.admin_graphql_api_id,
-              accessToken: purchase.accessToken,
             });
 
             if (addChars?.success) {
