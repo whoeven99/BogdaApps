@@ -239,24 +239,21 @@ export default function App() {
     globalStore.shop = shop as string;
     globalStore.server = server as string;
   }, []);
-  // useEffect(() => {
-  //   if (initFetcher.data) {
-  //     console.log(initFetcher.data);
-
-  //     getWords();
-  //   }
-  // }, [initFetcher.data]);
+  useEffect(() => {
+    if (initFetcher.data) {
+      getWords();
+    }
+  }, [initFetcher.data]);
   useEffect(() => {
     if (!plan?.id) {
       getPlan();
-    }getPlan();
+    }
     if (!chars || !totalChars) {
       getWords();
     }
     if (isNew === null) {
       checkFreeUsed();
     }
-    
   }, [location]); // 监听 URL 的变化
   const getPlan = async () => {
     const getUserSubscriptionPlan = await GetUserSubscriptionPlan({
@@ -332,7 +329,7 @@ export default function App() {
       server: server as string,
     });
     // console.log(data);
-    
+
     if (data?.success) {
       dispatch(setIsNew({ isNew: !data?.response }));
     }
