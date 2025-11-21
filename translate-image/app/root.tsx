@@ -124,8 +124,8 @@ export function ErrorBoundary() {
                   fontSize: 16,
                 }}
               >
-                Please click the "Ciwi.ai: Image & Alt Translate" option in the app navigation
-                bar again
+                Please click the "Ciwi.ai: Image & Alt Translate" option in the
+                app navigation bar again
               </p>
             </div>
           </div>
@@ -138,6 +138,22 @@ export function ErrorBoundary() {
 }
 
 export default function App() {
+  useEffect(() => {
+    // GTM 初始化脚本
+    const script = document.createElement("script");
+    script.async = true;
+    script.src = "https://www.googletagmanager.com/gtag/js?id=G-26Z1LZQJRV";
+    document.head.appendChild(script);
+
+    const gaInitScript = document.createElement("script");
+    gaInitScript.innerHTML = `
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-26Z1LZQJRV');
+    `;
+    document.head.appendChild(gaInitScript);
+  }, []);
   useEffect(() => {
     const s1 = document.createElement("script");
     s1.src = "https://embed.tawk.to/6909a2c4f363bc1955661e51/1j96q7jtm";

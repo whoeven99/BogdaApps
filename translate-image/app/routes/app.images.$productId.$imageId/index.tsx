@@ -62,6 +62,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { AddCreaditsModal } from "../app._index/components/addCreditsModal";
 import { setChars, setTotalChars } from "~/store/modules/userConfig";
 import { CheckboxGroupProps } from "antd/es/checkbox";
+import useReport from "scripts/eventReport";
 const { Text, Title, Paragraph } = Typography;
 const { TextArea } = Input;
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -228,6 +229,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 const ImageAltTextPage = () => {
   const loader = useLoaderData<{ shop: string }>();
+  const { reportClick, report } = useReport();
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { productId, imageId } = useParams();
@@ -711,6 +713,7 @@ const ImageAltTextPage = () => {
     }
   };
   const handleTranslate = async () => {
+    reportClick("manage_image_translate");
     // 判断图片的格式
     const res = (await detectImageFormat(
       currentTranslatingImage.imageBeforeUrl,
@@ -824,6 +827,7 @@ const ImageAltTextPage = () => {
     languageCode: string,
   ) => {
     try {
+      reportClick("manage_image_delete");
       const res = await DeleteProductImageData({
         server: globalStore?.server || "",
         shopName: globalStore?.shop || "",
@@ -1071,6 +1075,7 @@ const ImageAltTextPage = () => {
   }, [confirmData]);
   // 图片预览
   const handlePreview = async (img: any) => {
+    reportClick("manage_image_preview");
     setPreviewImage({
       imgUrl: img.imageAfterUrl,
       imgAlt: img.altAfterTranslation,
@@ -1495,6 +1500,7 @@ const ImageAltTextPage = () => {
                               name="file"
                               action={`${globalStore?.server}/pcUserPic/insertPicToDbAndCloud`}
                               beforeUpload={(file) => {
+                                reportClick("manage_image_upload");
                                 const isImage = file.type.startsWith("image/");
                                 const isLt20M = file.size / 1024 / 1024 < 20;
                                 const supportedFormats = [

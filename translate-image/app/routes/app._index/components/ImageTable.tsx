@@ -19,7 +19,9 @@ import { AppDispatch, RootState } from "~/store";
 import { setLastPageCursorInfo } from "~/store/modules/productSlice";
 import "../style.css";
 import { ColumnsType } from "antd/es/table";
+import useReport from "scripts/eventReport";
 export default function Index({ shop }: { shop: string }) {
+  const { reportClick, report } = useReport();
   const loadFetcher = useFetcher<any>();
   const languageFetcher = useFetcher<any>();
   const productsFetcher = useFetcher<any>();
@@ -242,6 +244,18 @@ export default function Index({ shop }: { shop: string }) {
   const handleSortProduct = (key: string, order: "asc" | "desc") => {
     setSortKey(key);
     setSortOrder(order);
+    report(
+      {
+        sortKey: key,
+        order: order,
+      },
+      {
+        action: "/app",
+        method: "post",
+        eventType: "click",
+      },
+      "dashboard_sort_product",
+    );
     // 延迟 1s 再执行请求
     timeoutIdRef.current = setTimeout(() => {
       productsFetcher.submit(
@@ -328,7 +342,17 @@ export default function Index({ shop }: { shop: string }) {
   };
   const handleSearch = (value: string) => {
     setSearchText(value);
-
+    report(
+      {
+        searchValue: value,
+      },
+      {
+        action: "/app",
+        method: "post",
+        eventType: "click",
+      },
+      "dashboard_query_search",
+    );
     // 清除上一次的定时器
     if (timeoutIdRef.current) {
       clearTimeout(timeoutIdRef.current);
@@ -355,6 +379,17 @@ export default function Index({ shop }: { shop: string }) {
   };
 
   const handleChangeStatusTab = (key: string) => {
+    report(
+      {
+        activeKey: key,
+      },
+      {
+        action: "/app",
+        method: "post",
+        eventType: "click",
+      },
+      "dashboard_filter_active_status",
+    );
     setActiveKey(key);
     if (timeoutIdRef.current) {
       clearTimeout(timeoutIdRef.current);

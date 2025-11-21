@@ -22,6 +22,7 @@ import {
   GetUnTranslatedWords,
   GetUserSubscriptionPlan,
   GetUserWords,
+  GoogleAnalyticClickReport,
   InsertOrUpdateOrder,
   IsInFreePlanTime,
   IsOpenFreePlan,
@@ -64,6 +65,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const theme = JSON.parse(formData.get("theme") as string);
     const payInfo = JSON.parse(formData.get("payInfo") as string);
     const orderInfo = JSON.parse(formData.get("orderInfo") as string);
+    const googleAnalytics = JSON.parse(
+      formData.get("googleAnalytics") as string,
+    );
     if (init) {
       try {
         const response = await UserAdd({
@@ -181,6 +185,30 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     }
 
+    if (googleAnalytics) {
+      try {
+        const { data, eventType, timestamp, name } = googleAnalytics;
+        const response = await GoogleAnalyticClickReport(
+          { ...data, eventType, timestamp, shopName: shop },
+          name,
+        );
+        return json({
+          data: {
+            success: response,
+            message: `${name} ${eventType} success googleAnalytics`,
+          },
+        });
+      } catch (error) {
+        console.error("Error googleAnalytics app:", error);
+        return json({
+          data: {
+            success: false,
+            message: "Error googleAnalytics app",
+          },
+        });
+      }
+    }
+
     return json({
       success: false,
       message: "Invalid data",
@@ -199,8 +227,7 @@ export default function App() {
   const { plan, chars, totalChars, isNew } = useSelector(
     (state: any) => state.userConfig,
   );
-  console.log(plan);
-  
+
   useEffect(() => {
     initFetcher.submit(
       { init: JSON.stringify(true) },
@@ -222,41 +249,41 @@ export default function App() {
   useEffect(() => {
     if (!plan?.id) {
       getPlan();
-    }
+    }getPlan();
     if (!chars || !totalChars) {
       getWords();
     }
-    dispatch(setIsNew({ isNew: false }));
-    // if (isNew === null) {
-    //   checkFreeUsed();
-    // }
-    dispatch(setIsNew({ isNew: true }));
+    if (isNew === null) {
+      checkFreeUsed();
+    }
+    
   }, [location]); // 监听 URL 的变化
   const getPlan = async () => {
     const getUserSubscriptionPlan = await GetUserSubscriptionPlan({
       shop: shop,
       server: server as string,
     });
-    console.log("getUserSubscriptionPlan",getUserSubscriptionPlan);
-    
+    console.log("getUserSubscriptionPlan", getUserSubscriptionPlan);
+
     const isInFreePlanTime = await IsInFreePlanTime({
       shop: shop,
       server: server as string,
     });
+    // console.log("isInFreePlanTime", isInFreePlanTime);
 
     let data: any = {
-      id: 2,
+      id: 1,
       type: "Free",
-      // feeType: 0,
+      feeType: 0,
       isInFreePlanTime: false,
     };
 
     if (getUserSubscriptionPlan?.success) {
       data = {
         ...data,
-        id: getUserSubscriptionPlan?.response?.userSubscriptionPlan || 2,
+        id: getUserSubscriptionPlan?.response?.userSubscriptionPlan || 1,
         type: getUserSubscriptionPlan?.response?.planType || "Free",
-        // feeType: getUserSubscriptionPlan?.response?.feeType || 0,
+        feeType: getUserSubscriptionPlan?.response?.feeType || 0,
       };
 
       if (getUserSubscriptionPlan?.response?.currentPeriodEnd) {
@@ -295,23 +322,17 @@ export default function App() {
         }),
       );
       dispatch(setUserConfigIsLoading({ isLoading: false }));
-      // dispatch(
-      //   setPlan({
-      //     plan: {
-      //       id: 4,
-      //       type: "Pro",
-      //       isInFreePlanTime: false,
-      //     },
-      //   }),
-      // );
     }
   };
 
   const checkFreeUsed = async () => {
+    // true 开过 / false 没开过 有订单记录就返回true
     const data = await IsOpenFreePlan({
       shop,
       server: server as string,
     });
+    // console.log(data);
+    
     if (data?.success) {
       dispatch(setIsNew({ isNew: !data?.response }));
     }
@@ -348,7 +369,7 @@ export default function App() {
             Home
           </Link>
           {/* <Link to="/app/management">Image Manage</Link> */}
-          <Link to="/app/pricing">Pricing</Link>
+          <Link to="/app/pricing">{t("Pricing")}</Link>
         </NavMenu>
         <Outlet />
       </ConfigProvider>

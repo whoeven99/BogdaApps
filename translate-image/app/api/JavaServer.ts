@@ -412,7 +412,7 @@ export const GetLatestActiveSubscribeId = async ({
 }) => {
   try {
     const response = await axios({
-      url: `${server}/orders/getLatestActiveSubscribeId?shopName=${shop}`,
+      url: `${server}/pc/orders/getLatestActiveSubscribeId?shopName=${shop}`,
       method: "POST",
     });
 
@@ -439,7 +439,7 @@ export const IsShowFreePlan = async ({
 }) => {
   try {
     const response = await axios({
-      url: `${server}/userTrials/isShowFreePlan?shopName=${shop}`,
+      url: `${server}/pc/userTrials/isShowFreePlan?shopName=${shop}`,
       method: "POST",
     });
 
@@ -467,7 +467,7 @@ export const GetUserSubscriptionPlan = async ({
 }) => {
   try {
     const response = await axios({
-      url: `${server}/shopify/getUserSubscriptionPlan?shopName=${shop}`,
+      url: `${server}/pc/userSubscription/getUserSubscriptionPlan?shopName=${shop}`,
       method: "GET",
     });
 
@@ -588,7 +588,7 @@ export const InsertOrUpdateOrder = async ({
   status,
   confirmationUrl,
 }: {
-  shop?: string;
+  shop: string;
   id: string;
   amount?: number;
   name?: string;
@@ -598,11 +598,10 @@ export const InsertOrUpdateOrder = async ({
 }) => {
   try {
     await axios({
-      url: `${process.env.SERVER_URL}/orders/insertOrUpdateOrder?shopName=${shop}`,
+      url: `${process.env.SERVER_URL}/pc/orders/insertOrUpdateOrder?shopName=${shop}`,
       method: "POST",
       data: {
-        shopName: shop,
-        id: id,
+        orderId: id,
         amount: amount,
         name: name,
         createdAt: createdAt,
@@ -610,6 +609,7 @@ export const InsertOrUpdateOrder = async ({
         confirmationUrl: confirmationUrl,
       },
     });
+    console.log("更新订单数据");
   } catch (error) {
     console.error("Error InsertOrUpdateOrder:", error);
   }
@@ -637,7 +637,10 @@ export const AddCharsByShopName = async ({
         accessToken,
       },
     });
-    console.log(`${shop} AddCharsByShopName ${amount}:`, response.data);
+    console.log(
+      `${shop} AddCharsByShopName ${amount} ${gid} ${accessToken}:`,
+      response.data,
+    );
 
     return response.data;
   } catch (error) {
@@ -707,16 +710,19 @@ export const Uninstall = async ({ shop }: { shop: string }) => {
 export const AddCharsByShopNameAfterSubscribe = async ({
   shop,
   appSubscription,
+  feeType,
 }: {
   shop: string;
   appSubscription: string;
+  feeType: number;
 }) => {
   try {
     const response = await axios({
-      url: `${process.env.SERVER_URL}/translationCounter/addCharsByShopNameAfterSubscribe?shopName=${shop}`,
+      url: `${process.env.SERVER_URL}/pcUsers/addCharsByShopNameAfterSubscribe?shopName=${shop}`,
       method: "POST",
       data: {
         subGid: appSubscription, //订阅计划的id
+        feeType: feeType, //0月度 1年度
       },
     });
 
@@ -734,6 +740,7 @@ export const AddCharsByShopNameAfterSubscribe = async ({
   }
 };
 
+//在购买订阅之后,给用户添加对应的订阅信息
 export const AddSubscriptionQuotaRecord = async ({
   subscriptionId,
 }: {
@@ -761,13 +768,11 @@ export const UpdateUserPlan = async ({
   plan: number;
 }) => {
   try {
+    console.log("djasid:", plan);
+
     const response = await axios({
-      url: `${process.env.SERVER_URL}/user/checkUserPlan`,
+      url: `${process.env.SERVER_URL}/pc/userSubscription/checkUserPlan?shopName=${shop}&planId=${plan}`,
       method: "POST",
-      data: {
-        shopName: shop,
-        planId: plan,
-      },
     });
 
     console.log(`${shop} UpdateUserPlan: `, response.data);
@@ -835,7 +840,7 @@ export const IsInFreePlanTime = async ({
 }) => {
   try {
     const response = await axios({
-      url: `${server}/userTrials/isInFreePlanTime?shopName=${shop}`,
+      url: `${server}/pc/userTrials/isInFreePlanTime?shopName=${shop}`,
       method: "POST",
     });
 
@@ -862,13 +867,13 @@ export const IsOpenFreePlan = async ({
 }) => {
   try {
     const response = await axios({
-      url: `${server}/userTrials/isOpenFreePlan?shopName=${shop}`,
+      url: `${server}/pc/userTrials/isOpenFreePlan?shopName=${shop}`,
       method: "POST",
     });
 
     console.log(`${shop} IsOpenFreePlan: `, response.data);
 
-    return { ...response.data, success: true };
+    return response.data;
   } catch (error) {
     console.error(`${shop} IsOpenFreePlan error:`, error);
     return {
@@ -877,5 +882,31 @@ export const IsOpenFreePlan = async ({
       errorMsg: "SERVER_ERROR",
       response: false,
     };
+  }
+};
+
+// 获取谷歌分析
+export const GoogleAnalyticClickReport = async (params: any, name: string) => {
+  try {
+    const response = await fetch(
+      `https://www.google-analytics.com/mp/collect?measurement_id=${process.env.MEASURE_ID}&api_secret=${process.env.GTM_API_KEY}`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          client_id: `${params.shopName}`, // 用shop作为用户的唯一标识
+          events: [
+            {
+              name: `${name}`,
+              params: params,
+            },
+          ],
+        }),
+      },
+    );
+    console.log(`${name} ${params.eventType}`, response.status === 204);
+    return response.status === 204;
+  } catch (error) {
+    console.log("google analytic error:", error);
+    return false;
   }
 };

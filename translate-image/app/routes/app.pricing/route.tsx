@@ -44,7 +44,16 @@ import useReport from "scripts/eventReport";
 // import HasPayForFreePlanModal from "./components/hasPayForFreePlanModal";
 import { QuotaCard } from "../app._index/components/quotaCard";
 import { globalStore } from "~/globalStore";
+import HasPayForFreePlanModal from "./components/hasPayForFreePlanModal";
 const { Title, Text, Paragraph } = Typography;
+
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const adminAuthResult = await authenticate.admin(request);
+  const { shop } = adminAuthResult.session;
+  return {
+    shop: shop,
+  };
+};
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const adminAuthResult = await authenticate.admin(request);
@@ -173,8 +182,7 @@ const Index = () => {
   const { plan, updateTime, chars, totalChars, isNew } = useSelector(
     (state: any) => state.userConfig,
   );
-  // console.log(plan,isNew);
-  
+  const { shop } = useLoaderData<typeof loader>();
   const { reportClick, report } = useReport();
   const creditOptions: OptionType[] = useMemo(
     () => [
@@ -439,8 +447,9 @@ const Index = () => {
       dispatch(
         setPlan({
           plan: {
-            id: 2,
+            id: 1,
             type: "Free",
+            feeType: 0,
             isInFreePlanTime: false,
           },
         }),
@@ -461,11 +470,11 @@ const Index = () => {
           amount: 95.9,
         }),
         buttonText:
-          plan.type === "Basic"
+          plan.type === "Basic"&& yearly === !!(plan.feeType === 1)
             ? t("pricing.current_plan")
             : t("pricing.get_start"),
         buttonType: "default",
-        disabled: plan.type === "Basic",
+        disabled: plan.type === "Basic" && yearly === !!(plan.feeType === 1),
         features: [
           //   t("{{credits}} credits/month", { credits: "1,500,000" }),
           //   t("Glossary ({{count}} entries)", { count: 10 }),
@@ -479,17 +488,17 @@ const Index = () => {
       {
         title: "Pro",
         yearlyTitle: "Pro - Yearly",
-        monthlyPrice: 49.99,
-        yearlyPrice: 39.99,
+        monthlyPrice: 29.99,
+        yearlyPrice: 23.92,
         subtitle: t("<strong>${{amount}}</strong> billed once a year", {
-          amount: 479.9,
+          amount: 287.04,
         }),
         buttonText:
-          plan.type === "Pro"
+          plan.type === "Pro" && !yearly
             ? t("pricing.current_plan")
             : t("pricing.get_start"),
         buttonType: "default",
-        disabled: plan.type === "Pro",
+        disabled: plan.type === "Pro" && !yearly,
         features: [
           //   t("all in Basic Plan"),
           //   t("{{credits}} credits/month", { credits: "3,000,000" }),
@@ -504,16 +513,16 @@ const Index = () => {
       {
         title: "Premium",
         yearlyTitle: "Premium - Yearly",
-        monthlyPrice: 99.99,
-        yearlyPrice: 79.99,
+        monthlyPrice: 79.99,
+        yearlyPrice: 63.92,
         subtitle: t("<strong>${{amount}}</strong> billed once a year", {
-          amount: 959.9,
+          amount: 767.04,
         }),
         buttonText:
-          plan.type === "Premium"
+          plan.type === "Premium" && !yearly
             ? t("pricing.current_plan")
             : t("pricing.get_start"),
-        disabled: plan.type === "Premium",
+        disabled: plan.type === "Premium" && !yearly,
         isRecommended: true,
         features: [
           //   t("all in Pro Plan"),
@@ -750,15 +759,15 @@ const Index = () => {
   const handleAddCredits = () => {
     setOpenModal(true);
     reportClick("pricing_balance_add");
-    // fetcher.submit(
-    //   {
-    //     log: `${shop} 点击了添加积分按钮`,
-    //   },
-    //   {
-    //     method: "POST",
-    //     action: "/app/log",
-    //   },
-    // );
+    fetcher.submit(
+      {
+        log: `${shop} 点击了添加积分按钮`,
+      },
+      {
+        method: "POST",
+        action: "/app/log",
+      },
+    );
   };
 
   const handleCancelPlan = async () => {
@@ -767,6 +776,8 @@ const Index = () => {
       server: globalStore?.server as string,
     });
     if (data.success) {
+      console.log(data);
+
       planCancelFetcher.submit(
         {
           cancelId: JSON.stringify(data.response),
@@ -849,7 +860,7 @@ const Index = () => {
                           : plan.type === "Premium"
                             ? "Premium"
                             : "Free"}
-                      {t("plan")}
+                      {t("Plan")}
                     </Text>
                   </div>
                 )}
@@ -877,6 +888,13 @@ const Index = () => {
                   }}
                 />
               )}
+              <Text
+                style={{
+                  display: updateTime && totalChars ? "block" : "none",
+                }}
+              >
+                {t("This bill was issued on {{date}}", { date: updateTime })}
+              </Text>
             </div>
             <Progress
               percent={
@@ -1311,7 +1329,7 @@ const Index = () => {
         </Row>
       </Space>
 
-      {/* <HasPayForFreePlanModal /> */}
+      <HasPayForFreePlanModal />
       <Modal
         title={t("Buy Credits")}
         open={addCreditsModalOpen}

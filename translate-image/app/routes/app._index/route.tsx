@@ -21,6 +21,7 @@ import WelcomeCard from "./components/welcomeCard";
 import { QuotaCard } from "./components/quotaCard";
 import ImageTable from "./components/ImageTable";
 import ScrollNotice from "~/components/ScrollNotice";
+import useReport from "scripts/eventReport";
 const { Title, Text } = Typography;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -40,6 +41,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 const Index = () => {
   const { language, server, shop, ciwiSwitcherBlocksId, ciwiSwitcherId } =
     useLoaderData<typeof loader>();
+  const { reportClick, report } = useReport();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
@@ -107,7 +109,7 @@ const Index = () => {
   }, [themeFetcher.data]);
 
   const handleReportCiwiHelpCenter = () => {
-    // reportClick("dashboard_footer_help_center");
+    reportClick("dashboard_footer_help_center");
   };
 
   return (
@@ -127,13 +129,13 @@ const Index = () => {
         }}
       >
         <Space direction="vertical" size="middle" style={{ display: "flex" }}>
-          <QuotaCard/>
+          <QuotaCard />
           <WelcomeCard
             switcherOpen={switcherOpen}
             blockUrl={blockUrl}
             shop={shop}
           />
-          <ImageTable shop={shop}/>
+          <ImageTable shop={shop} />
         </Space>
       </Space>
       <Text

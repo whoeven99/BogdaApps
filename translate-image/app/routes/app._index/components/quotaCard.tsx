@@ -51,7 +51,7 @@ export const QuotaCard = () => {
   }, []);
   const handleAddCredits = () => {
     setOpenModal(true);
-    reportClick("pricing_balance_add");
+    reportClick("dashboard_buy_more");
     // fetcher.submit(
     //   {
     //     log: `${shop} 点击了添加积分按钮`,
