@@ -410,7 +410,6 @@ const ImageAltTextPage = () => {
     "ta",
     "te",
     "uk",
-    "vi",
     "zh",
     "zh-tw",
   ]);

@@ -247,7 +247,7 @@ export default function App() {
   useEffect(() => {
     if (!plan?.id) {
       getPlan();
-    }
+    }getPlan();
     if (!chars || !totalChars) {
       getWords();
     }
