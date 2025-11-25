@@ -790,6 +790,17 @@ export const StartFreePlan = async ({ shop }: { shop: string }) => {
     console.error("Error StartFreePlan:", error);
   }
 };
+export const InsertOrUpdateFreePlan = async ({ shop }: { shop: string }) => {
+  try {
+    const response = await axios({
+      url: `${process.env.SERVER_URL}/pc/userTrials/insertOrUpdateFreePlan?shopName=${shop}`,
+      method: "POST",
+    });
+    console.log(`${shop} InsertOrUpdateFreePlan: `, response.data);
+  } catch (error) {
+    console.error("Error InsertOrUpdateFreePlan:", error);
+  }
+};
 
 //付费后更新状态
 export const UpdateStatus = async ({ shop }: { shop: string }) => {

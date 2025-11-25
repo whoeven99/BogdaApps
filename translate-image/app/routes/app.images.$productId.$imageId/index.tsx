@@ -1788,13 +1788,28 @@ const ImageAltTextPage = () => {
           >
             <Typography>
               <Paragraph>{t("Need more image translations? ")}</Paragraph>
-              <Paragraph>{t("🎁 Start your 5-day free trial!")}</Paragraph>
-              <ul>
-                <li>{t("Get 40 extra translations instantly")}</li>
-                <li>{t("Clearer images with advanced AI models")}</li>
-                <li>{t("More accurate multilingual results")}</li>
-                <li>{t("Batch translate to save time")}</li>
-              </ul>
+
+              {/* 包裹免费试用的介绍区块 */}
+              <div
+                style={{
+                  border: "1px solid #e5e5e5",
+                  borderRadius: "10px",
+                  padding: "16px",
+                  marginTop: "12px",
+                  background: "#fafafa",
+                }}
+              >
+                <Paragraph strong style={{ marginBottom: "8px" }}>
+                  {t("🎁 Start your 5-day free trial!")}
+                </Paragraph>
+
+                <ul style={{ paddingLeft: "20px", margin: 0 }}>
+                  <li>{t("Get 40 extra translations instantly")}</li>
+                  <li>{t("Clearer images with advanced AI models")}</li>
+                  <li>{t("More accurate multilingual results")}</li>
+                  <li>{t("Batch translate to save time")}</li>
+                </ul>
+              </div>
             </Typography>
           </Modal>
         </Layout.Section>

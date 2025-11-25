@@ -24,7 +24,7 @@ import { useTranslation } from "react-i18next";
 import { useEffect, useMemo, useState } from "react";
 import ScrollNotice from "~/components/ScrollNotice";
 import { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
-import { GetLatestActiveSubscribeId } from "~/api/JavaServer";
+import { GetLatestActiveSubscribeId, InsertOrUpdateFreePlan } from "~/api/JavaServer";
 import { authenticate } from "~/shopify.server";
 import { useFetcher, useLoaderData } from "@remix-run/react";
 import {
@@ -151,7 +151,7 @@ const Index = () => {
     (state: any) => state.userConfig,
   );
   console.log(plan);
-  
+
   const { shop } = useLoaderData<typeof loader>();
   const { reportClick, report } = useReport();
   const creditOptions: OptionType[] = useMemo(
@@ -755,6 +755,23 @@ const Index = () => {
       );
     }
   };
+  useEffect(() => {
+    if (planCancelFetcher.data) {
+      console.log(planCancelFetcher.data);
+      const userErrors =
+        planCancelFetcher.data.data?.appSubscriptionCancel?.userErrors ?? [];
+      const subscription =
+        planCancelFetcher.data.data?.appSubscriptionCancel?.appSubscription;
+      if (userErrors.length === 0 && subscription) {
+        // 取消成功
+        console.log("取消成功:", subscription);
+        InsertOrUpdateFreePlan({ shop: globalStore?.shop as string });
+      } else {
+        // 取消失败
+        console.error("取消失败:", userErrors);
+      }
+    }
+  }, [planCancelFetcher.data]);
 
   const handlePayForPlan = ({
     plan,
