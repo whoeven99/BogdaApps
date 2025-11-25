@@ -803,7 +803,7 @@ const ImageAltTextPage = () => {
         replaceTranslateImageFetcher.submit(formData, {
           method: "post",
         });
-        dispatch(setChars({ chars: chars + 1000 }));
+        dispatch(setChars({ chars: chars + 2000 }));
         // dispatch(
         //   setTotalChars({
         //     totalChars: data?.response?.purchasePoints,
@@ -912,12 +912,14 @@ const ImageAltTextPage = () => {
             ];
           }
         });
-        dispatch(setChars({ chars: chars + 1000 }));
+        // dispatch(setChars({ chars: chars + 1000 }));
       } else if (
         !altTranslateFetcher.data.response.success &&
         altTranslateFetcher.data.response.errorMsg === "额度不够"
       ) {
         setOpen(true);
+      } else {
+        // shopify.toast.show(t("Alt text translation failed"));
       }
       setTextareaLoading((pre) => ({
         ...pre,

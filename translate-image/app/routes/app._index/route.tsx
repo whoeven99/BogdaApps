@@ -88,7 +88,7 @@ const Index = () => {
     if (themeFetcher.data) {
       const switcherData =
         themeFetcher?.data?.data?.nodes[0]?.files?.nodes[0]?.body?.content;
-      const jsonString = switcherData.replace(/\/\*[\s\S]*?\*\//g, "").trim();
+      const jsonString = switcherData?.replace(/\/\*[\s\S]*?\*\//g, "")?.trim();
       const blocks = JSON.parse(jsonString).current?.blocks;
       if (blocks) {
         const switcherJson: any = Object.values(blocks).find(

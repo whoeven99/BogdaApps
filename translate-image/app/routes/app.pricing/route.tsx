@@ -470,7 +470,7 @@ const Index = () => {
           amount: 95.9,
         }),
         buttonText:
-          plan.type === "Basic"&& yearly === !!(plan.feeType === 1)
+          plan.type === "Basic" && yearly === !!(plan.feeType === 1)
             ? t("pricing.current_plan")
             : t("pricing.get_start"),
         buttonType: "default",
@@ -494,11 +494,11 @@ const Index = () => {
           amount: 287.04,
         }),
         buttonText:
-          plan.type === "Pro" && !yearly
+          plan.type === "Pro" && yearly === !!(plan.feeType === 1)
             ? t("pricing.current_plan")
             : t("pricing.get_start"),
         buttonType: "default",
-        disabled: plan.type === "Pro" && !yearly,
+        disabled: plan.type === "Pro" && yearly === !!(plan.feeType === 1),
         features: [
           //   t("all in Basic Plan"),
           //   t("{{credits}} credits/month", { credits: "3,000,000" }),
@@ -519,10 +519,10 @@ const Index = () => {
           amount: 767.04,
         }),
         buttonText:
-          plan.type === "Premium" && !yearly
+          plan.type === "Premium" && yearly === !!(plan.feeType === 1)
             ? t("pricing.current_plan")
             : t("pricing.get_start"),
-        disabled: plan.type === "Premium" && !yearly,
+        disabled: plan.type === "Premium" && yearly === !!(plan.feeType === 1),
         isRecommended: true,
         features: [
           //   t("all in Pro Plan"),
@@ -1234,6 +1234,7 @@ const Index = () => {
                   >
                     {item.buttonText}
                   </Button>
+                  {item.disabled ? "禁用" : "可用"}
                   {isNew && (
                     <Button
                       id={`${item.title}-${yearly ? "yearly" : "month"}-${index}-5`}
