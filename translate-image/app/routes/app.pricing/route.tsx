@@ -1234,7 +1234,6 @@ const Index = () => {
                   >
                     {item.buttonText}
                   </Button>
-                  {item.disabled ? "禁用" : "可用"}
                   {isNew && (
                     <Button
                       id={`${item.title}-${yearly ? "yearly" : "month"}-${index}-5`}
