@@ -61,41 +61,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin } = adminAuthResult;
 
   const formData = await request.formData();
-  const payInfo = JSON.parse(formData.get("payInfo") as string);
   const payForPlan = JSON.parse(formData.get("payForPlan") as string);
   const cancelId = JSON.parse(formData.get("cancelId") as string);
   switch (true) {
-    case !!payInfo:
-      try {
-        const returnUrl = new URL(
-          `https://admin.shopify.com/store/${shop.split(".")[0]}/apps/${process.env.HANDLE}/app/pricing`,
-        );
-        const res = await mutationAppPurchaseOneTimeCreate({
-          shop,
-          accessToken: accessToken as string,
-          name: payInfo.name,
-          price: payInfo.price,
-          returnUrl,
-          test:
-            process.env.NODE_ENV === "development" ||
-            process.env.NODE_ENV === "test",
-        });
-        return {
-          success: true,
-          errorCode: 0,
-          errorMsg: "",
-          response: res?.data,
-        };
-      } catch (error) {
-        console.error("Error payInfo app:", error);
-        return {
-          success: false,
-          errorCode: 10001,
-          errorMsg: "SERVER_ERROR",
-          response: undefined,
-        };
-      }
-
     case !!payForPlan:
       try {
         const returnUrl = new URL(

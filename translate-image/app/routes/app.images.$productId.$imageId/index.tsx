@@ -1352,7 +1352,7 @@ const ImageAltTextPage = () => {
                         <div
                           style={{
                             width: "100%",
-                            // height:"300px",
+                            height:"300px",
                             aspectRatio: "1/1",
                             borderRadius: "8px 8px 0 0",
 
