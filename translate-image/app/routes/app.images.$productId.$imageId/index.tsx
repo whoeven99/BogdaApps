@@ -1778,16 +1778,23 @@ const ImageAltTextPage = () => {
             </div>
           </Modal>
           <Modal
-            title={t("免费试用")}
+            title={t("You’ve reached your image translation limit")}
             open={trialModal}
             onCancel={() => setTrialModal(false)}
             onOk={handleNavigateToFreeTrial}
             centered
-            okText={t("去开启")}
+            okText={t("Start Free Trial")}
             cancelButtonProps={{ style: { display: "none" } }}
           >
             <Typography>
-              <Paragraph>{t("你还没有使用过免费试用，快去试试吧！")}</Paragraph>
+              <Paragraph>{t("Need more image translations? ")}</Paragraph>
+              <Paragraph>{t("🎁 Start your 5-day free trial!")}</Paragraph>
+              <ul>
+                <li>{t("Get 40 extra translations instantly")}</li>
+                <li>{t("Clearer images with advanced AI models")}</li>
+                <li>{t("More accurate multilingual results")}</li>
+                <li>{t("Batch translate to save time")}</li>
+              </ul>
             </Typography>
           </Modal>
         </Layout.Section>
