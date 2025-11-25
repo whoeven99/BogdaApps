@@ -7,6 +7,7 @@ import {
   AddSubscriptionQuotaRecord,
   InsertOrUpdateOrder,
   SendSubscribeSuccessEmail,
+  StartFreePlan,
   Uninstall,
   UpdateStatus,
   UpdateUserPlan,
@@ -113,6 +114,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 payload?.app_subscription?.interval == "every_30_days" ? 0 : 1,
             });
             if (addChars?.success) {
+              StartFreePlan({ shop });
               AddSubscriptionQuotaRecord({
                 subscriptionId: payload?.app_subscription.admin_graphql_api_id,
               });

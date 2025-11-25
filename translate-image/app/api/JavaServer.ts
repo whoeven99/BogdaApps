@@ -5,6 +5,7 @@ import { authenticate } from "~/shopify.server";
 import pLimit from "p-limit";
 import { queryShop } from "./admin";
 import { Progress } from "antd";
+import { log } from "node:console";
 // import { withRetry } from "~/utils/retry";
 
 // 查询未翻译的字符数
@@ -776,6 +777,18 @@ export const UpdateUserPlan = async ({
     return response.data;
   } catch (error) {
     console.error("Error UpdateUserPlan:", error);
+  }
+};
+
+export const StartFreePlan = async ({ shop }: { shop: string }) => {
+  try {
+    const response = await axios({
+      url: `${process.env.SERVER_URL}/pc/userTrials/startFreePlan?shopName=${shop}`,
+      method: "POST",
+    });
+    log(`${shop} StartFreePlan: `, response.data);
+  } catch (error) {
+    console.error("Error StartFreePlan:", error);
   }
 };
 

@@ -263,7 +263,9 @@ const ImageAltTextPage = () => {
     imgUrl: string;
     imgAlt: string;
   }>({ imgUrl: "", imgAlt: "" });
-  const { chars, totalChars } = useSelector((state: any) => state.userConfig);
+  const { isNew, chars, totalChars } = useSelector(
+    (state: any) => state.userConfig,
+  );
 
   const [open, setOpen] = useState<boolean>(false);
   const [notTranslateModal, setNotTranslateModal] = useState<boolean>(false);
@@ -271,6 +273,7 @@ const ImageAltTextPage = () => {
   const [openModal, setOpenModal] = useState<boolean>(false);
   const dispatch = useDispatch();
   const fetcher = useFetcher();
+  const [trialModal, setTrialModal] = useState<boolean>(false);
   const options: CheckboxGroupProps<string>["options"] = [
     { label: "标准版", value: "bassic" },
     { label: "pro大模型", value: "pro" },
@@ -692,6 +695,10 @@ const ImageAltTextPage = () => {
       return;
     }
     if (totalChars - chars < 2000) {
+      if (isNew) {
+        setTrialModal(true);
+        return;
+      }
       setOpen(true);
       return;
     }
@@ -1175,6 +1182,10 @@ const ImageAltTextPage = () => {
   };
   const querySourceLanguage = (value: string) => {};
   const queryTargetLanguage = (value: string) => {};
+  const handleNavigateToFreeTrial = () => {
+    setTrialModal(false);
+    navigate("/app/pricing");
+  };
   return (
     <Page>
       <ScrollNotice
@@ -1352,7 +1363,7 @@ const ImageAltTextPage = () => {
                         <div
                           style={{
                             width: "100%",
-                            height:"300px",
+                            height: "300px",
                             aspectRatio: "1/1",
                             borderRadius: "8px 8px 0 0",
 
@@ -1765,6 +1776,19 @@ const ImageAltTextPage = () => {
                 options={targetLanguages}
               />
             </div>
+          </Modal>
+          <Modal
+            title={t("免费试用")}
+            open={trialModal}
+            onCancel={() => setTrialModal(false)}
+            onOk={handleNavigateToFreeTrial}
+            centered
+            okText={t("去开启")}
+            cancelButtonProps={{ style: { display: "none" } }}
+          >
+            <Typography>
+              <Paragraph>{t("你还没有使用过免费试用，快去试试吧！")}</Paragraph>
+            </Typography>
           </Modal>
         </Layout.Section>
       </Layout>

@@ -54,7 +54,6 @@ export const AddCreaditsModal = ({
   const payFetcher = useFetcher<any>();
   const orderFetcher = useFetcher<any>();
   const { t } = useTranslation();
-  const [addCreditsModalOpen, setAddCreditsModalOpen] = useState(openModal);
   const [selectedOptionKey, setSelectedOption] = useState<string>("option-1");
   const creditOptions: OptionType[] = [
     {
