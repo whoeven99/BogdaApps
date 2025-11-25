@@ -94,9 +94,10 @@ const HasPayForFreePlanModal: React.FC<HasPayForFreePlanModalProps> = ({}) => {
             borderRadius: "8px",
           }}
         >
-          <Text>{t("✅ 1,000,000 free credits for translation")}</Text>
-          <Text>{t("✅ IP-based language & currency switching")}</Text>
-          <Text>{t("✅ Glossary support for brand consistency")}</Text>
+          <Text>{t("Get 40 extra translations instantly")}</Text>
+          <Text>{t("Clearer images with advanced AI models")}</Text>
+          <Text>{t("More accurate multilingual results")}</Text>
+          <Text>{t("Batch translate to save time")}</Text>
         </Space>
         <Flex justify="center">
           <Button
