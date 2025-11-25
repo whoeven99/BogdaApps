@@ -790,10 +790,16 @@ export const StartFreePlan = async ({ shop }: { shop: string }) => {
     console.error("Error StartFreePlan:", error);
   }
 };
-export const InsertOrUpdateFreePlan = async ({ shop }: { shop: string }) => {
+export const InsertOrUpdateFreePlan = async ({
+  shop,
+  server,
+}: {
+  shop: string;
+  server: string;
+}) => {
   try {
     const response = await axios({
-      url: `${process.env.SERVER_URL}/pc/userTrials/insertOrUpdateFreePlan?shopName=${shop}`,
+      url: `${server}/pc/userTrials/insertOrUpdateFreePlan?shopName=${shop}`,
       method: "POST",
     });
     console.log(`${shop} InsertOrUpdateFreePlan: `, response.data);

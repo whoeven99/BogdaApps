@@ -24,7 +24,10 @@ import { useTranslation } from "react-i18next";
 import { useEffect, useMemo, useState } from "react";
 import ScrollNotice from "~/components/ScrollNotice";
 import { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
-import { GetLatestActiveSubscribeId, InsertOrUpdateFreePlan } from "~/api/JavaServer";
+import {
+  GetLatestActiveSubscribeId,
+  InsertOrUpdateFreePlan,
+} from "~/api/JavaServer";
 import { authenticate } from "~/shopify.server";
 import { useFetcher, useLoaderData } from "@remix-run/react";
 import {
@@ -746,7 +749,10 @@ const Index = () => {
     });
     if (data.success) {
       console.log(data);
-
+      // InsertOrUpdateFreePlan({
+      //   shop: globalStore?.shop as string,
+      //   server: globalStore?.server as string,
+      // });
       planCancelFetcher.submit(
         {
           cancelId: JSON.stringify(data.response),
@@ -765,7 +771,10 @@ const Index = () => {
       if (userErrors.length === 0 && subscription) {
         // 取消成功
         console.log("取消成功:", subscription);
-        InsertOrUpdateFreePlan({ shop: globalStore?.shop as string });
+        InsertOrUpdateFreePlan({
+          shop: globalStore?.shop as string,
+          server: globalStore?.server as string,
+        });
       } else {
         // 取消失败
         console.error("取消失败:", userErrors);
