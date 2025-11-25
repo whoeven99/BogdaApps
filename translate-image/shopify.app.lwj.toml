@@ -3,7 +3,7 @@
 client_id = "e7fe2398f1feb814e87fb51ac1364bb9"
 name = "Ciwi.ai: Image & Alt (local)"
 handle = "translate-image-local"
-application_url = "https://prefers-interested-fighters-provisions.trycloudflare.com"
+application_url = "https://church-begun-counted-eau.trycloudflare.com"
 embedded = true
 
 [build]
@@ -15,9 +15,9 @@ dev_store_url = "ciwishop.myshopify.com"
 scopes = "read_content,read_legal_policies,read_metaobjects,read_online_store_navigation,unauthenticated_read_product_listings,read_themes,read_translations,unauthenticated_read_metaobjects,write_locales,write_markets,write_metaobjects,write_products,write_translations"
 [auth]
 redirect_urls = [
-  "https://prefers-interested-fighters-provisions.trycloudflare.com/auth/callback",
-  "https://prefers-interested-fighters-provisions.trycloudflare.com/auth/shopify/callback",
-  "https://prefers-interested-fighters-provisions.trycloudflare.com/api/auth/callback"
+  "https://church-begun-counted-eau.trycloudflare.com/auth/callback",
+  "https://church-begun-counted-eau.trycloudflare.com/auth/shopify/callback",
+  "https://church-begun-counted-eau.trycloudflare.com/api/auth/callback"
 ]
 
 [webhooks]

@@ -757,19 +757,21 @@ export const AddSubscriptionQuotaRecord = async ({
 export const UpdateUserPlan = async ({
   shop,
   plan,
+  feeType,
 }: {
   shop: string;
   plan: number;
+  feeType: number;
 }) => {
   try {
     console.log("djasid:", plan);
 
     const response = await axios({
-      url: `${process.env.SERVER_URL}/pc/userSubscription/checkUserPlan?shopName=${shop}&planId=${plan}`,
+      url: `${process.env.SERVER_URL}/pc/userSubscription/checkUserPlan?shopName=${shop}&planId=${plan}&feeType=${feeType}`,
       method: "POST",
     });
 
-    console.log(`${shop} UpdateUserPlan: `, response.data);
+    console.log(`${shop} ${plan} ${feeType} UpdateUserPlan: `, response.data);
 
     return response.data;
   } catch (error) {

@@ -182,6 +182,8 @@ const Index = () => {
   const { plan, updateTime, chars, totalChars, isNew } = useSelector(
     (state: any) => state.userConfig,
   );
+  console.log(plan);
+  
   const { shop } = useLoaderData<typeof loader>();
   const { reportClick, report } = useReport();
   const creditOptions: OptionType[] = useMemo(

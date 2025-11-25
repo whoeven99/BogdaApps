@@ -116,7 +116,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               AddSubscriptionQuotaRecord({
                 subscriptionId: payload?.app_subscription.admin_graphql_api_id,
               });
-              UpdateUserPlan({ shop, plan });
+              UpdateUserPlan({
+                shop,
+                plan,
+                feeType:
+                  payload?.app_subscription?.interval == "every_30_days"
+                    ? 0
+                    : 1,
+              });
               // UpdateStatus({ shop });
               // SendSubscribeSuccessEmail({
               //   id: payload?.app_subscription.admin_graphql_api_id,
@@ -129,7 +136,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             }
           }
           if (status === "CANCELLED") {
-            UpdateUserPlan({ shop, plan: 1 });
+            UpdateUserPlan({
+              shop,
+              plan: 1,
+              feeType:
+                payload?.app_subscription?.interval == "every_30_days" ? 0 : 1,
+            });
           }
           return new Response("OK", { status: 200 });
         } catch (error) {
