@@ -26,7 +26,9 @@ const HasPayForFreePlanModal: React.FC<HasPayForFreePlanModalProps> = ({}) => {
 
   const GetOrderStatus = async () => {
     if (!isNew && isNew !== null) {
-      const hasShowModal = localStorage.getItem("ciwi-image-translation-freetrial-hasShow");
+      const hasShowModal = localStorage.getItem(
+        "ciwi-image-translation-freetrial-hasShow",
+      );
       if (hasShowModal) {
         return;
       } else {
@@ -36,7 +38,7 @@ const HasPayForFreePlanModal: React.FC<HasPayForFreePlanModalProps> = ({}) => {
             server: globalStore?.server || "",
           });
           console.log(hasShowModalResponse);
-          
+
           if (hasShowModalResponse?.success) {
             if (hasShowModalResponse?.response) {
               setContent({
@@ -85,20 +87,12 @@ const HasPayForFreePlanModal: React.FC<HasPayForFreePlanModalProps> = ({}) => {
             plan: plan?.type,
           })}
         </Text>
-        <Space
-          direction="vertical"
-          style={{
-            width: "100%",
-            padding: "8px 4px",
-            border: "1px solid #f0f0f0",
-            borderRadius: "8px",
-          }}
-        >
-          <Text>{t("Get 40 extra translations instantly")}</Text>
-          <Text>{t("Clearer images with advanced AI models")}</Text>
-          <Text>{t("More accurate multilingual results")}</Text>
-          <Text>{t("Batch translate to save time")}</Text>
-        </Space>
+        <ul style={{ paddingLeft: "20px", margin: 0 }}>
+          <li>{t("Get 40 extra translations instantly")}</li>
+          <li>{t("Clearer images with advanced AI models")}</li>
+          <li>{t("More accurate multilingual results")}</li>
+          <li>{t("Batch translate to save time")}</li>
+        </ul>
         <Flex justify="center">
           <Button
             type="primary"

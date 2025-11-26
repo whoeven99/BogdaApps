@@ -471,7 +471,7 @@ export const GetUserSubscriptionPlan = async ({
       method: "GET",
     });
 
-    console.log("GetUserSubscriptionPlan: ", response.data);
+    // console.log("GetUserSubscriptionPlan: ", response.data);
 
     return response.data;
   } catch (error) {
@@ -869,7 +869,7 @@ export const IsInFreePlanTime = async ({
       method: "POST",
     });
 
-    console.log(`${shop} IsInFreePlanTime: `, response.data);
+    // console.log(`${shop} IsInFreePlanTime: `, response.data);
 
     return response.data;
   } catch (error) {
@@ -896,7 +896,7 @@ export const IsOpenFreePlan = async ({
       method: "POST",
     });
 
-    console.log(`${shop} IsOpenFreePlan: `, response.data);
+    // console.log(`${shop} IsOpenFreePlan: `, response.data);
 
     return response.data;
   } catch (error) {

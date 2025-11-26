@@ -523,7 +523,7 @@ const Index = () => {
       {
         key: 1,
         features: t("Translation quota"),
-        free: "10 free image translations",
+        free: "0",
         basic: "100 images/month",
         pro: "300 images/month",
         premium: "800 images/month",
