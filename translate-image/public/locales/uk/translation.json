@@ -173,5 +173,7 @@
   "50+ languages": "50+ мов",
   "Batch translation": "Пакетний переклад",
   "support": "підтримка",
-  "<strong>${{amount}}</strong> billed once a year": "<strong>${{amount}}</strong> виставляється один раз на рік"
+  "<strong>${{amount}}</strong> billed once a year": "<strong>${{amount}}</strong> виставляється один раз на рік",
+  "Get 40 extra translations instantly,plus 100 more after 5 days": "Отримайте 40 додаткових перекладів миттєво, а також ще 100 через 5 днів",
+  "Get 40 extra translations instantly,plus {{count}} more after 5 days": "Отримайте 40 додаткових перекладів миттєво, а також {{count}} більше через 5 днів"
 }

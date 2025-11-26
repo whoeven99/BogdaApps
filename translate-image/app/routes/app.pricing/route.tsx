@@ -437,7 +437,7 @@ const Index = () => {
         monthlyPrice: 9.99,
         yearlyPrice: 7.99,
         subtitle: t("<strong>${{amount}}</strong> billed once a year", {
-          amount: 95.9,
+          amount: 95.88,
         }),
         buttonText:
           plan.type === "Basic" && yearly === !!(plan.feeType === 1)

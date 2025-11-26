@@ -173,5 +173,7 @@
   "50+ languages": "50+ talen",
   "Batch translation": "Batchvertaling",
   "support": "steun",
-  "<strong>${{amount}}</strong> billed once a year": "<strong>${{bedrag}}</strong> eenmaal per jaar gefactureerd"
+  "<strong>${{amount}}</strong> billed once a year": "<strong>${{bedrag}}</strong> eenmaal per jaar gefactureerd",
+  "Get 40 extra translations instantly,plus 100 more after 5 days": "Ontvang direct 40 extra vertalingen, plus 100 extra na 5 dagen",
+  "Get 40 extra translations instantly,plus {{count}} more after 5 days": "Ontvang direct 40 extra vertalingen, plus {{count}} meer na 5 dagen"
 }

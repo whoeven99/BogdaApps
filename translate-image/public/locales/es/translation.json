@@ -173,5 +173,7 @@
   "50+ languages": "Más de 50 idiomas",
   "Batch translation": "Traducción por lotes",
   "support": "apoyo",
-  "<strong>${{amount}}</strong> billed once a year": "<strong>${{amount}}</strong> facturado una vez al año"
+  "<strong>${{amount}}</strong> billed once a year": "<strong>${{amount}}</strong> facturado una vez al año",
+  "Get 40 extra translations instantly,plus 100 more after 5 days": "Obtén 40 traducciones adicionales al instante y 100 más después de 5 días",
+  "Get 40 extra translations instantly,plus {{count}} more after 5 days": "Obtén 40 traducciones adicionales al instante, y {{count}} más después de 5 días"
 }

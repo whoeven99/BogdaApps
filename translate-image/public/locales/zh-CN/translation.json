@@ -173,5 +173,7 @@
   "50+ languages": "50多种语言",
   "Batch translation": "批量翻译",
   "support": "支持",
-  "<strong>${{amount}}</strong> billed once a year": "<strong>${{amount}}</strong> 每年计费"
+  "<strong>${{amount}}</strong> billed once a year": "<strong>${{amount}}</strong> 每年计费",
+  "Get 40 extra translations instantly,plus 100 more after 5 days": "立即获得 40 个额外翻译，5 天后再获得 100 个。",
+  "Get 40 extra translations instantly,plus {{count}} more after 5 days": "立即获得 40 个额外翻译，5 天后还可获得 {{count}} 个额外翻译"
 }
