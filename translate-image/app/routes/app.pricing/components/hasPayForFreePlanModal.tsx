@@ -37,8 +37,7 @@ const HasPayForFreePlanModal: React.FC<HasPayForFreePlanModalProps> = ({}) => {
             shop: globalStore?.shop || "",
             server: globalStore?.server || "",
           });
-          console.log(hasShowModalResponse);
-
+          // console.log("hasShowModalResponse", hasShowModalResponse);
           if (hasShowModalResponse?.success) {
             if (hasShowModalResponse?.response) {
               setContent({
