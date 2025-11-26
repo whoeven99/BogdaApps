@@ -37,8 +37,7 @@ const HasPayForFreePlanModal: React.FC<HasPayForFreePlanModalProps> = ({}) => {
             shop: globalStore?.shop || "",
             server: globalStore?.server || "",
           });
-          console.log(hasShowModalResponse);
-
+          // console.log("hasShowModalResponse", hasShowModalResponse);
           if (hasShowModalResponse?.success) {
             if (hasShowModalResponse?.response) {
               setContent({
@@ -88,7 +87,12 @@ const HasPayForFreePlanModal: React.FC<HasPayForFreePlanModalProps> = ({}) => {
           })}
         </Text>
         <ul style={{ paddingLeft: "20px", margin: 0 }}>
-          <li>{t("Get 40 extra translations instantly")}</li>
+          <li>
+            {t(
+              "Get 40 extra translations instantly,plus {{count}} more after 5 days",
+              { count: plan.id === 2 ? 100 : plan.id === 3 ? 300 : 800 },
+            )}
+          </li>
           <li>{t("Clearer images with advanced AI models")}</li>
           <li>{t("More accurate multilingual results")}</li>
           <li>{t("Batch translate to save time")}</li>

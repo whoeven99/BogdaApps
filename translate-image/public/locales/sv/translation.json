@@ -112,7 +112,7 @@
   "premium_features2": "Översättning av storskaliga AI-modeller",
   "premium_features3": "Bildkvalitet: Ursprunglig bildupplösning",
   "premium_features4": "Stöder 50+ språk",
-  "premium_features5  ": "Batchöversättning",
+  "premium_features5": "Batchöversättning",
   "Free trial": "Gratis provperiod",
   "Plan": "Planera",
   "How does the 5-day free trial work?": "Hur fungerar den 5-dagars gratis provperioden?",
@@ -173,5 +173,7 @@
   "50+ languages": "50+ språk",
   "Batch translation": "Batchöversättning",
   "support": "stöd",
-  "<strong>${{amount}}</strong> billed once a year": "<strong>${{amount}}</strong> faktureras en gång om året"
+  "<strong>${{amount}}</strong> billed once a year": "<strong>${{amount}}</strong> faktureras en gång om året",
+  "Get 40 extra translations instantly,plus 100 more after 5 days": "Få 40 extra översättningar direkt, plus 100 fler efter 5 dagar",
+  "Get 40 extra translations instantly,plus {{count}} more after 5 days": "Få 40 extra översättningar direkt, plus {{count}} fler efter 5 dagar"
 }

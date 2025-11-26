@@ -1804,7 +1804,7 @@ const ImageAltTextPage = () => {
                 </Paragraph>
 
                 <ul style={{ paddingLeft: "20px", margin: 0 }}>
-                  <li>{t("Get 40 extra translations instantly")}</li>
+                  <li>{t("Get 40 extra translations instantly,plus 100 more after 5 days")}</li>
                   <li>{t("Clearer images with advanced AI models")}</li>
                   <li>{t("More accurate multilingual results")}</li>
                   <li>{t("Batch translate to save time")}</li>

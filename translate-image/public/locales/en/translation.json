@@ -109,7 +109,7 @@
   "premium_features2": "AI large-scale model translation",
   "premium_features3": "Image quality: Original image resolution",
   "premium_features4": "Supports 50+ languages",
-  "premium_features5  ": "Batch translation",
+  "premium_features5": "Batch translation",
   "Free trial":"Free trial",
   "If you need to add a new supported language, please contact the team support.":"If you need to add a new supported language, please contact the team support.",
   "Plan":"Plan",
@@ -149,7 +149,7 @@
   "Start Free Trial":"Start Free Trial",
   "Need more image translations? ":"Need more image translations? ",
   "🎁 Start your 5-day free trial!":"🎁 Start your 5-day free trial!",
-  "Get 40 extra translations instantly":"Get 40 extra translations instantly",
+  "Get 40 extra translations instantly,plus 100 more after 5 days":"Get 40 extra translations instantly,plus 100 more after 5 days",
   "Clearer images with advanced AI models":"Clearer images with advanced AI models",
   "More accurate multilingual results":"More accurate multilingual results",
   "Batch translate to save time":"Batch translate to save time",
@@ -171,5 +171,6 @@
   "50+ languages":"50+ languages",
   "Batch translation":"Batch translation",
   "support":"support",
-  "<strong>${{amount}}</strong> billed once a year":"<strong>${{amount}}</strong> billed once a year"
+  "<strong>${{amount}}</strong> billed once a year":"<strong>${{amount}}</strong> billed once a year",
+  "Get 40 extra translations instantly,plus {{count}} more after 5 days":"Get 40 extra translations instantly,plus {{count}} more after 5 days"
 }

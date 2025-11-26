@@ -112,7 +112,7 @@
   "premium_features2": "Yapay zeka büyük ölçekli model çevirisi",
   "premium_features3": "Görüntü kalitesi: Orijinal görüntü çözünürlüğü",
   "premium_features4": "50'den fazla dili destekler",
-  "premium_features5  ": "Toplu çeviri",
+  "premium_features5": "Toplu çeviri",
   "Free trial": "Ücretsiz deneme",
   "Plan": "Plan",
   "How does the 5-day free trial work?": "5 günlük ücretsiz deneme nasıl çalışır?",
@@ -173,5 +173,7 @@
   "50+ languages": "50'den fazla dil",
   "Batch translation": "Toplu çeviri",
   "support": "Destek",
-  "<strong>${{amount}}</strong> billed once a year": "<strong>${{amount}}</strong> yılda bir kez faturalandırılır"
+  "<strong>${{amount}}</strong> billed once a year": "<strong>${{amount}}</strong> yılda bir kez faturalandırılır",
+  "Get 40 extra translations instantly,plus 100 more after 5 days": "Anında 40 ekstra çeviri alın, ayrıca 5 gün sonra 100 daha fazla çeviri alın",
+  "Get 40 extra translations instantly,plus {{count}} more after 5 days": "Anında 40 ek çeviri alın, ayrıca 5 gün sonra {{count}} daha alın"
 }

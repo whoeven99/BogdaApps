@@ -112,7 +112,7 @@
   "premium_features2": "AI grootschalige modelvertaling",
   "premium_features3": "Beeldkwaliteit: Originele beeldresolutie",
   "premium_features4": "Ondersteunt meer dan 50 talen",
-  "premium_features5  ": "Batchvertaling",
+  "premium_features5": "Batchvertaling",
   "Free trial": "Gratis proefperiode",
   "Plan": "Plan",
   "How does the 5-day free trial work?": "Hoe werkt de gratis proefperiode van 5 dagen?",
@@ -173,5 +173,7 @@
   "50+ languages": "50+ talen",
   "Batch translation": "Batchvertaling",
   "support": "steun",
-  "<strong>${{amount}}</strong> billed once a year": "<strong>${{bedrag}}</strong> eenmaal per jaar gefactureerd"
+  "<strong>${{amount}}</strong> billed once a year": "<strong>${{bedrag}}</strong> eenmaal per jaar gefactureerd",
+  "Get 40 extra translations instantly,plus 100 more after 5 days": "Ontvang direct 40 extra vertalingen, plus 100 extra na 5 dagen",
+  "Get 40 extra translations instantly,plus {{count}} more after 5 days": "Ontvang direct 40 extra vertalingen, plus {{count}} meer na 5 dagen"
 }

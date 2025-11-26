@@ -112,7 +112,7 @@
   "premium_features2": "Трансляция крупномасштабной модели ИИ",
   "premium_features3": "Качество изображения: Исходное разрешение изображения",
   "premium_features4": "Поддерживает более 50 языков",
-  "premium_features5  ": "Пакетный перевод",
+  "premium_features5": "Пакетный перевод",
   "Free trial": "Бесплатная пробная версия",
   "Plan": "План",
   "How does the 5-day free trial work?": "Как работает 5-дневная бесплатная пробная версия?",
@@ -173,5 +173,7 @@
   "50+ languages": "50+ языков",
   "Batch translation": "Пакетный перевод",
   "support": "поддерживать",
-  "<strong>${{amount}}</strong> billed once a year": "<strong>${{amount}}</strong> выставляется один раз в год"
+  "<strong>${{amount}}</strong> billed once a year": "<strong>${{amount}}</strong> выставляется один раз в год",
+  "Get 40 extra translations instantly,plus 100 more after 5 days": "Получите 40 дополнительных переводов мгновенно, плюс еще 100 через 5 дней",
+  "Get 40 extra translations instantly,plus {{count}} more after 5 days": "Получите 40 дополнительных переводов мгновенно, плюс еще {{count}} через 5 дней"
 }

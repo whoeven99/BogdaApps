@@ -112,7 +112,7 @@
   "premium_features2": "Traduzione di modelli su larga scala tramite intelligenza artificiale",
   "premium_features3": "Qualità dell'immagine: risoluzione dell'immagine originale",
   "premium_features4": "Supporta oltre 50 lingue",
-  "premium_features5  ": "Traduzione in batch",
+  "premium_features5": "Traduzione in batch",
   "Free trial": "Prova gratuita",
   "Plan": "Piano",
   "How does the 5-day free trial work?": "Come funziona la prova gratuita di 5 giorni?",
@@ -173,5 +173,7 @@
   "50+ languages": "Oltre 50 lingue",
   "Batch translation": "Traduzione in batch",
   "support": "supporto",
-  "<strong>${{amount}}</strong> billed once a year": "<strong>${{amount}}</strong> fatturato una volta all&#39;anno"
+  "<strong>${{amount}}</strong> billed once a year": "<strong>${{amount}}</strong> fatturato una volta all&#39;anno",
+  "Get 40 extra translations instantly,plus 100 more after 5 days": "Ottieni subito 40 traduzioni extra, più altre 100 dopo 5 giorni",
+  "Get 40 extra translations instantly,plus {{count}} more after 5 days": "Ottieni subito 40 traduzioni extra, più {{count}} in più dopo 5 giorni"
 }

@@ -112,7 +112,7 @@
   "premium_features2": "AI大規模モデル翻訳",
   "premium_features3": "画像品質: 元の画像解像度",
   "premium_features4": "50以上の言語をサポート",
-  "premium_features5  ": "一括翻訳",
+  "premium_features5": "一括翻訳",
   "Free trial": "無料トライアル",
   "Plan": "プラン",
   "How does the 5-day free trial work?": "5 日間の無料トライアルはどのように機能しますか?",
@@ -173,5 +173,7 @@
   "50+ languages": "50以上の言語",
   "Batch translation": "一括翻訳",
   "support": "サポート",
-  "<strong>${{amount}}</strong> billed once a year": "<strong>${{amount}} が</strong>年に1回請求されます"
+  "<strong>${{amount}}</strong> billed once a year": "<strong>${{amount}} が</strong>年に1回請求されます",
+  "Get 40 extra translations instantly,plus 100 more after 5 days": "すぐに40件の追加翻訳を入手、さらに5日後には100件の追加翻訳を入手",
+  "Get 40 extra translations instantly,plus {{count}} more after 5 days": "すぐに 40 件の追加翻訳を入手できます。さらに 5 日後には {{count}} 件が追加されます"
 }

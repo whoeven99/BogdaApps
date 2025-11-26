@@ -112,7 +112,7 @@
   "premium_features2": "AI大规模模型翻译",
   "premium_features3": "图像质量：原始图像分辨率",
   "premium_features4": "支持 50 多种语言",
-  "premium_features5  ": "批量翻译",
+  "premium_features5": "批量翻译",
   "Free trial": "免费试用",
   "Plan": "计划",
   "How does the 5-day free trial work?": "5天免费试用期是如何运作的？",
@@ -173,5 +173,7 @@
   "50+ languages": "50多种语言",
   "Batch translation": "批量翻译",
   "support": "支持",
-  "<strong>${{amount}}</strong> billed once a year": "<strong>${{amount}}</strong> 每年计费"
+  "<strong>${{amount}}</strong> billed once a year": "<strong>${{amount}}</strong> 每年计费",
+  "Get 40 extra translations instantly,plus 100 more after 5 days": "立即获得 40 个额外翻译，5 天后再获得 100 个。",
+  "Get 40 extra translations instantly,plus {{count}} more after 5 days": "立即获得 40 个额外翻译，5 天后还可获得 {{count}} 个额外翻译"
 }

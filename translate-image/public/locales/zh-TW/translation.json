@@ -112,7 +112,7 @@
   "premium_features2": "AI大規模模型翻譯",
   "premium_features3": "影像品質：原始影像解析度",
   "premium_features4": "支援 50 多種語言",
-  "premium_features5  ": "大量翻譯",
+  "premium_features5": "大量翻譯",
   "Free trial": "免費試用",
   "Plan": "計劃",
   "How does the 5-day free trial work?": "5天免費試用期是如何運作的？",
@@ -173,5 +173,7 @@
   "50+ languages": "50多種語言",
   "Batch translation": "大量翻譯",
   "support": "支援",
-  "<strong>${{amount}}</strong> billed once a year": "每年計費一次，<strong>金額為${{amount}}</strong>"
+  "<strong>${{amount}}</strong> billed once a year": "每年計費一次，<strong>金額為${{amount}}</strong>",
+  "Get 40 extra translations instantly,plus 100 more after 5 days": "立即獲得 40 個額外翻譯，5 天後再獲得 100 個。",
+  "Get 40 extra translations instantly,plus {{count}} more after 5 days": "立即獲得 40 個額外翻譯，5 天後還可獲得 {{count}} 個額外翻譯"
 }
