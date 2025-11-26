@@ -62,6 +62,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { AddCreaditsModal } from "../app._index/components/addCreditsModal";
 import { setChars, setTotalChars } from "~/store/modules/userConfig";
 import { CheckboxGroupProps } from "antd/es/checkbox";
+import useReport from "scripts/eventReport";
 const { Text, Title, Paragraph } = Typography;
 const { TextArea } = Input;
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -228,6 +229,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 const ImageAltTextPage = () => {
   const loader = useLoaderData<{ shop: string }>();
+  const { reportClick, report } = useReport();
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { productId, imageId } = useParams();
@@ -261,7 +263,9 @@ const ImageAltTextPage = () => {
     imgUrl: string;
     imgAlt: string;
   }>({ imgUrl: "", imgAlt: "" });
-  const { chars, totalChars } = useSelector((state: any) => state.userConfig);
+  const { isNew, chars, totalChars } = useSelector(
+    (state: any) => state.userConfig,
+  );
 
   const [open, setOpen] = useState<boolean>(false);
   const [notTranslateModal, setNotTranslateModal] = useState<boolean>(false);
@@ -269,6 +273,7 @@ const ImageAltTextPage = () => {
   const [openModal, setOpenModal] = useState<boolean>(false);
   const dispatch = useDispatch();
   const fetcher = useFetcher();
+  const [trialModal, setTrialModal] = useState<boolean>(false);
   const options: CheckboxGroupProps<string>["options"] = [
     { label: "标准版", value: "bassic" },
     { label: "pro大模型", value: "pro" },
@@ -408,7 +413,6 @@ const ImageAltTextPage = () => {
     "ta",
     "te",
     "uk",
-    "vi",
     "zh",
     "zh-tw",
   ]);
@@ -691,6 +695,10 @@ const ImageAltTextPage = () => {
       return;
     }
     if (totalChars - chars < 2000) {
+      if (isNew) {
+        setTrialModal(true);
+        return;
+      }
       setOpen(true);
       return;
     }
@@ -711,6 +719,7 @@ const ImageAltTextPage = () => {
     }
   };
   const handleTranslate = async () => {
+    reportClick("manage_image_translate");
     // 判断图片的格式
     const res = (await detectImageFormat(
       currentTranslatingImage.imageBeforeUrl,
@@ -724,6 +733,7 @@ const ImageAltTextPage = () => {
     }
     setTranslateLoadingImages((pre) => ({
       ...pre,
+      [`${currentTranslatingImage.imageId}_${currentTranslatingImage.languageCode}`]: true,
       [`${currentTranslatingImage.imageId}_${currentTranslatingImage.languageCode}`]: true,
     }));
     //     aidge_standard   huoshan  aidge_pro
@@ -745,6 +755,13 @@ const ImageAltTextPage = () => {
       return;
     }
     const formData = new FormData();
+    formData.append(
+      "altTranslateFetcher",
+      JSON.stringify({
+        alt: currentTranslatingImage.altBeforeTranslation,
+        targetCode: targetLanguage,
+      }),
+    );
     formData.append(
       "altTranslateFetcher",
       JSON.stringify({
@@ -793,7 +810,7 @@ const ImageAltTextPage = () => {
         replaceTranslateImageFetcher.submit(formData, {
           method: "post",
         });
-        dispatch(setChars({ chars: chars + 1000 }));
+        dispatch(setChars({ chars: chars + 2000 }));
         // dispatch(
         //   setTotalChars({
         //     totalChars: data?.response?.purchasePoints,
@@ -816,6 +833,7 @@ const ImageAltTextPage = () => {
     languageCode: string,
   ) => {
     try {
+      reportClick("manage_image_delete");
       const res = await DeleteProductImageData({
         server: globalStore?.server || "",
         shopName: globalStore?.shop || "",
@@ -901,12 +919,14 @@ const ImageAltTextPage = () => {
             ];
           }
         });
-        dispatch(setChars({ chars: chars + 1000 }));
+        // dispatch(setChars({ chars: chars + 1000 }));
       } else if (
         !altTranslateFetcher.data.response.success &&
         altTranslateFetcher.data.response.errorMsg === "额度不够"
       ) {
         setOpen(true);
+      } else {
+        // shopify.toast.show(t("Alt text translation failed"));
       }
       setTextareaLoading((pre) => ({
         ...pre,
@@ -1063,6 +1083,7 @@ const ImageAltTextPage = () => {
   }, [confirmData]);
   // 图片预览
   const handlePreview = async (img: any) => {
+    reportClick("manage_image_preview");
     setPreviewImage({
       imgUrl: img.imageAfterUrl,
       imgAlt: img.altAfterTranslation,
@@ -1161,6 +1182,10 @@ const ImageAltTextPage = () => {
   };
   const querySourceLanguage = (value: string) => {};
   const queryTargetLanguage = (value: string) => {};
+  const handleNavigateToFreeTrial = () => {
+    setTrialModal(false);
+    navigate("/app/pricing");
+  };
   return (
     <Page>
       <ScrollNotice
@@ -1338,7 +1363,7 @@ const ImageAltTextPage = () => {
                         <div
                           style={{
                             width: "100%",
-                            // height:"300px",
+                            height: "300px",
                             aspectRatio: "1/1",
                             borderRadius: "8px 8px 0 0",
 
@@ -1487,6 +1512,7 @@ const ImageAltTextPage = () => {
                               name="file"
                               action={`${globalStore?.server}/pcUserPic/insertPicToDbAndCloud`}
                               beforeUpload={(file) => {
+                                reportClick("manage_image_upload");
                                 const isImage = file.type.startsWith("image/");
                                 const isLt20M = file.size / 1024 / 1024 < 20;
                                 const supportedFormats = [
@@ -1689,7 +1715,6 @@ const ImageAltTextPage = () => {
             </Space>
           </Modal>
           <AddCreaditsModal
-            shop={loader.shop}
             openModal={openModal}
             onClose={() => setOpenModal(false)}
             action="images"
@@ -1751,6 +1776,41 @@ const ImageAltTextPage = () => {
                 options={targetLanguages}
               />
             </div>
+          </Modal>
+          <Modal
+            title={t("You’ve reached your image translation limit")}
+            open={trialModal}
+            onCancel={() => setTrialModal(false)}
+            onOk={handleNavigateToFreeTrial}
+            centered
+            okText={t("Start Free Trial")}
+            cancelButtonProps={{ style: { display: "none" } }}
+          >
+            <Typography>
+              <Paragraph>{t("Need more image translations? ")}</Paragraph>
+
+              {/* 包裹免费试用的介绍区块 */}
+              <div
+                style={{
+                  border: "1px solid #e5e5e5",
+                  borderRadius: "10px",
+                  padding: "16px",
+                  marginTop: "12px",
+                  background: "#fafafa",
+                }}
+              >
+                <Paragraph strong style={{ marginBottom: "8px" }}>
+                  {t("🎁 Start your 5-day free trial!")}
+                </Paragraph>
+
+                <ul style={{ paddingLeft: "20px", margin: 0 }}>
+                  <li>{t("Get 40 extra translations instantly")}</li>
+                  <li>{t("Clearer images with advanced AI models")}</li>
+                  <li>{t("More accurate multilingual results")}</li>
+                  <li>{t("Batch translate to save time")}</li>
+                </ul>
+              </div>
+            </Typography>
           </Modal>
         </Layout.Section>
       </Layout>

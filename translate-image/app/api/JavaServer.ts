@@ -248,7 +248,15 @@ export const TranslateImage = async ({
   modelType: number;
 }) => {
   try {
-    console.log("dqws: ", shop, imageUrl, sourceCode, targetCode, accessToken,modelType);
+    console.log(
+      "dqws: ",
+      shop,
+      imageUrl,
+      sourceCode,
+      targetCode,
+      accessToken,
+      modelType,
+    );
 
     const response = await axios({
       url: `${process.env.SERVER_URL}/pcUserPic/translatePic?shopName=${shop}`,
@@ -258,7 +266,7 @@ export const TranslateImage = async ({
         sourceCode,
         targetCode,
         accessToken,
-        modelType
+        modelType,
       },
     });
     // console.log();
@@ -404,7 +412,7 @@ export const GetLatestActiveSubscribeId = async ({
 }) => {
   try {
     const response = await axios({
-      url: `${server}/orders/getLatestActiveSubscribeId?shopName=${shop}`,
+      url: `${server}/pc/orders/getLatestActiveSubscribeId?shopName=${shop}`,
       method: "POST",
     });
 
@@ -431,7 +439,7 @@ export const IsShowFreePlan = async ({
 }) => {
   try {
     const response = await axios({
-      url: `${server}/userTrials/isShowFreePlan?shopName=${shop}`,
+      url: `${server}/pc/userTrials/isShowFreePlan?shopName=${shop}`,
       method: "POST",
     });
 
@@ -459,11 +467,11 @@ export const GetUserSubscriptionPlan = async ({
 }) => {
   try {
     const response = await axios({
-      url: `${server}/shopify/getUserSubscriptionPlan?shopName=${shop}`,
+      url: `${server}/pc/userSubscription/getUserSubscriptionPlan?shopName=${shop}`,
       method: "GET",
     });
 
-    console.log("GetUserSubscriptionPlan: ", response.data);
+    // console.log("GetUserSubscriptionPlan: ", response.data);
 
     return response.data;
   } catch (error) {
@@ -580,7 +588,7 @@ export const InsertOrUpdateOrder = async ({
   status,
   confirmationUrl,
 }: {
-  shop?: string;
+  shop: string;
   id: string;
   amount?: number;
   name?: string;
@@ -590,11 +598,10 @@ export const InsertOrUpdateOrder = async ({
 }) => {
   try {
     await axios({
-      url: `${process.env.SERVER_URL}/orders/insertOrUpdateOrder?shopName=${shop}`,
+      url: `${process.env.SERVER_URL}/pc/orders/insertOrUpdateOrder?shopName=${shop}`,
       method: "POST",
       data: {
-        shopName: shop,
-        id: id,
+        orderId: id,
         amount: amount,
         name: name,
         createdAt: createdAt,
@@ -602,6 +609,7 @@ export const InsertOrUpdateOrder = async ({
         confirmationUrl: confirmationUrl,
       },
     });
+    console.log("更新订单数据");
   } catch (error) {
     console.error("Error InsertOrUpdateOrder:", error);
   }
@@ -612,12 +620,10 @@ export const AddCharsByShopName = async ({
   shop,
   amount,
   gid,
-  accessToken,
 }: {
   shop: string;
   amount: number;
   gid: string;
-  accessToken: string;
 }) => {
   try {
     const response = await axios({
@@ -626,10 +632,9 @@ export const AddCharsByShopName = async ({
       data: {
         chars: amount,
         gid: gid,
-        accessToken,
       },
     });
-    console.log(`${shop} AddCharsByShopName ${amount}:`, response.data);
+    console.log(`${shop} AddCharsByShopName ${amount} ${gid}:`, response.data);
 
     return response.data;
   } catch (error) {
@@ -693,5 +698,240 @@ export const Uninstall = async ({ shop }: { shop: string }) => {
     return res;
   } catch (error) {
     console.error("Error Uninstall:", error);
+  }
+};
+
+export const AddCharsByShopNameAfterSubscribe = async ({
+  shop,
+  appSubscription,
+  feeType,
+}: {
+  shop: string;
+  appSubscription: string;
+  feeType: number;
+}) => {
+  try {
+    const response = await axios({
+      url: `${process.env.SERVER_URL}/pcUsers/addCharsByShopNameAfterSubscribe?shopName=${shop}`,
+      method: "POST",
+      data: {
+        subGid: appSubscription, //订阅计划的id
+        feeType: feeType, //0月度 1年度
+      },
+    });
+
+    console.log(`${shop} AddCharsByShopNameAfterSubscribe: `, response.data);
+
+    return response.data;
+  } catch (error) {
+    console.error(`${shop} AddCharsByShopNameAfterSubscribe error:`, error);
+    return {
+      success: false,
+      errorCode: 10001,
+      errorMsg: "SERVER_ERROR",
+      response: false,
+    };
+  }
+};
+
+//在购买订阅之后,给用户添加对应的订阅信息
+export const AddSubscriptionQuotaRecord = async ({
+  subscriptionId,
+}: {
+  subscriptionId: string;
+}) => {
+  try {
+    await axios({
+      url: `${process.env.SERVER_URL}/subscriptionQuotaRecord/addSubscriptionQuotaRecord`,
+      method: "PUT",
+      data: {
+        subscriptionId: subscriptionId,
+      },
+    });
+  } catch (error) {
+    console.error("Error AddSubscriptionQuotaRecord:", error);
+  }
+};
+
+//修改用户计划
+export const UpdateUserPlan = async ({
+  shop,
+  plan,
+  feeType,
+}: {
+  shop: string;
+  plan: number;
+  feeType: number;
+}) => {
+  try {
+    console.log("djasid:", plan);
+
+    const response = await axios({
+      url: `${process.env.SERVER_URL}/pc/userSubscription/checkUserPlan?shopName=${shop}&planId=${plan}&feeType=${feeType}`,
+      method: "POST",
+    });
+
+    console.log(`${shop} ${plan} ${feeType} UpdateUserPlan: `, response.data);
+
+    return response.data;
+  } catch (error) {
+    console.error("Error UpdateUserPlan:", error);
+  }
+};
+
+export const StartFreePlan = async ({ shop }: { shop: string }) => {
+  try {
+    const response = await axios({
+      url: `${process.env.SERVER_URL}/pc/userTrials/startFreePlan?shopName=${shop}`,
+      method: "POST",
+    });
+    console.log(`${shop} StartFreePlan: `, response.data);
+  } catch (error) {
+    console.error("Error StartFreePlan:", error);
+  }
+};
+export const InsertOrUpdateFreePlan = async ({
+  shop,
+  server,
+}: {
+  shop: string;
+  server: string;
+}) => {
+  try {
+    const response = await axios({
+      url: `${server}/pc/userTrials/insertOrUpdateFreePlan?shopName=${shop}`,
+      method: "POST",
+    });
+    console.log(`${shop} InsertOrUpdateFreePlan: `, response.data);
+  } catch (error) {
+    console.error("Error InsertOrUpdateFreePlan:", error);
+  }
+};
+
+//付费后更新状态
+export const UpdateStatus = async ({ shop }: { shop: string }) => {
+  try {
+    const response = await axios({
+      url: `${process.env.SERVER_URL}/translate/updateStatus`,
+      method: "POST",
+      data: {
+        shopName: shop,
+      },
+    });
+
+    console.log(`${shop} UpdateStatus: `, response.data);
+  } catch (error) {
+    console.error("Error UpdateStatus:", error);
+  }
+};
+
+export const SendSubscribeSuccessEmail = async ({
+  id,
+  shopName,
+  feeType,
+}: {
+  id: string;
+  shopName: string;
+  feeType: number;
+}) => {
+  console.log(`${shopName} SendSubscribeSuccessEmail Input: `, {
+    id,
+    shopName,
+    feeType,
+  });
+
+  try {
+    const response = await axios({
+      url: `${process.env.SERVER_URL}/orders/sendSubscribeSuccessEmail?shopName=${shopName}`,
+      method: "POST",
+      data: {
+        subGid: id,
+        shopName: shopName,
+        feeType: feeType,
+      },
+    });
+    console.log(`${shopName} SendSubscribeSuccessEmail: `, response.data);
+  } catch (error) {
+    console.error("Error SendSubscribeSuccessEmail:", error);
+  }
+};
+
+export const IsInFreePlanTime = async ({
+  shop,
+  server,
+}: {
+  shop: string;
+  server: string;
+}) => {
+  try {
+    const response = await axios({
+      url: `${server}/pc/userTrials/isInFreePlanTime?shopName=${shop}`,
+      method: "POST",
+    });
+
+    // console.log(`${shop} IsInFreePlanTime: `, response.data);
+
+    return response.data;
+  } catch (error) {
+    console.error(`${shop} IsInFreePlanTime error:`, error);
+    return {
+      success: false,
+      errorCode: 10001,
+      errorMsg: "SERVER_ERROR",
+      response: null,
+    };
+  }
+};
+
+export const IsOpenFreePlan = async ({
+  shop,
+  server,
+}: {
+  shop: string;
+  server: string;
+}) => {
+  try {
+    const response = await axios({
+      url: `${server}/pc/userTrials/isOpenFreePlan?shopName=${shop}`,
+      method: "POST",
+    });
+
+    // console.log(`${shop} IsOpenFreePlan: `, response.data);
+
+    return response.data;
+  } catch (error) {
+    console.error(`${shop} IsOpenFreePlan error:`, error);
+    return {
+      success: false,
+      errorCode: 10001,
+      errorMsg: "SERVER_ERROR",
+      response: false,
+    };
+  }
+};
+
+// 获取谷歌分析
+export const GoogleAnalyticClickReport = async (params: any, name: string) => {
+  try {
+    const response = await fetch(
+      `https://www.google-analytics.com/mp/collect?measurement_id=${process.env.MEASURE_ID}&api_secret=${process.env.GTM_API_KEY}`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          client_id: `${params.shopName}`, // 用shop作为用户的唯一标识
+          events: [
+            {
+              name: `${name}`,
+              params: params,
+            },
+          ],
+        }),
+      },
+    );
+    console.log(`${name} ${params.eventType}`, response.status === 204);
+    return response.status === 204;
+  } catch (error) {
+    console.log("google analytic error:", error);
+    return false;
   }
 };

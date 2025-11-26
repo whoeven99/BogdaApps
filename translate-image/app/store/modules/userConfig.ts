@@ -5,7 +5,9 @@ interface UserConfigState {
   locale: string;
   plan: {
     id: number;
+    type: string;
     feeType: number;
+    isInFreePlanTime: boolean;
   };
   updateTime: string | null;
   chars: number | undefined;
@@ -19,7 +21,9 @@ const initialState: UserConfigState = {
   locale: "",
   plan: {
     id: 0,
+    type: "",
     feeType: 0,
+    isInFreePlanTime: false,
   },
   updateTime: null,
   chars: 0,
@@ -37,7 +41,9 @@ const userConfigSlice = createSlice({
       action: PayloadAction<{
         plan: {
           id: number;
+          type: string;
           feeType: number;
+          isInFreePlanTime: boolean;
         };
       }>,
     ) => {
