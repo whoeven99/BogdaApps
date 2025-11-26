@@ -260,14 +260,10 @@ export default function App() {
       shop: shop,
       server: server as string,
     });
-    console.log("getUserSubscriptionPlan", getUserSubscriptionPlan);
-
     const isInFreePlanTime = await IsInFreePlanTime({
       shop: shop,
       server: server as string,
     });
-    // console.log("isInFreePlanTime", isInFreePlanTime);
-
     let data: any = {
       id: 1,
       type: "Free",
@@ -328,8 +324,6 @@ export default function App() {
       shop,
       server: server as string,
     });
-    // console.log(data);
-
     if (data?.success) {
       dispatch(setIsNew({ isNew: !data?.response }));
     }

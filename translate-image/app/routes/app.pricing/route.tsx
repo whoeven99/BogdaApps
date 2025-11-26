@@ -153,8 +153,6 @@ const Index = () => {
   const { plan, updateTime, chars, totalChars, isNew } = useSelector(
     (state: any) => state.userConfig,
   );
-  console.log(plan);
-
   const { shop } = useLoaderData<typeof loader>();
   const { reportClick, report } = useReport();
   const creditOptions: OptionType[] = useMemo(
@@ -577,7 +575,7 @@ const Index = () => {
         key: 0,
         label: t("How does the 5-day free trial work?"),
         children: t(
-          "Choosing Pro or Premium gives you 5 days of full access to all features, along with 200,000 trial credits. Cancel anytime before the trial ends to avoid billing.",
+          "Choosing Pro or Premium gives you 5 days of full access to all features, along with 40 trial times. Cancel anytime before the trial ends to avoid billing.",
         ),
       },
       {
@@ -598,7 +596,7 @@ const Index = () => {
         key: 3,
         label: t("What happens when I run out of credits?"),
         children: t(
-          "You'll need to purchase extra credits to keep creating content. You won't lose access to features, only to credit-based actions.",
+          "You'll need to purchase extra credits to keep translating images. You won't lose access to features, only to credit-based actions.",
         ),
       },
       {
@@ -627,13 +625,6 @@ const Index = () => {
         label: t("Will I lose credits if I cancel or downgrade?"),
         children: t(
           "No. Your unused credits stay available for 3 months. But you'll only have access to the features included in your new (lower) plan.",
-        ),
-      },
-      {
-        key: 8,
-        label: t("How many credits do actions use?"),
-        children: t(
-          "We calculate usage at 1 credit per word. However, if AI model is used, the consumption of prompt tokens also needs to be included—each request requires approximately an additional 80 credits. If you would like to know the estimated cost of a translation task, please feel free to contact customer support.",
         ),
       },
     ],
@@ -707,27 +698,6 @@ const Index = () => {
       },
     },
   ];
-
-  //   const handlePay = () => {
-  //     setBuyButtonLoading(true);
-  //     const selectedOption = creditOptions.find(
-  //       (item) => item.key === selectedOptionKey,
-  //     );
-
-  //     const payInfo = {
-  //       name: selectedOption?.name,
-  //       price: {
-  //         amount: selectedOption?.price.currentPrice,
-  //         currencyCode: selectedOption?.price.currencyCode,
-  //       },
-  //     };
-  //     const formData = new FormData();
-  //     formData.append("payInfo", JSON.stringify(payInfo));
-  //     payFetcher.submit(formData, {
-  //       method: "POST",
-  //     });
-  //   };
-
   const handleAddCredits = () => {
     setOpenModal(true);
     reportClick("pricing_balance_add");
@@ -748,7 +718,6 @@ const Index = () => {
       server: globalStore?.server as string,
     });
     if (data.success) {
-      console.log(data);
       // InsertOrUpdateFreePlan({
       //   shop: globalStore?.shop as string,
       //   server: globalStore?.server as string,
@@ -763,14 +732,12 @@ const Index = () => {
   };
   useEffect(() => {
     if (planCancelFetcher.data) {
-      console.log(planCancelFetcher.data);
       const userErrors =
         planCancelFetcher.data.data?.appSubscriptionCancel?.userErrors ?? [];
       const subscription =
         planCancelFetcher.data.data?.appSubscriptionCancel?.appSubscription;
       if (userErrors.length === 0 && subscription) {
         // 取消成功
-        console.log("取消成功:", subscription);
         InsertOrUpdateFreePlan({
           shop: globalStore?.shop as string,
           server: globalStore?.server as string,
@@ -791,8 +758,6 @@ const Index = () => {
     trialDays: number;
     id: string;
   }) => {
-    console.log(plan, trialDays, id);
-
     setPayForPlanButtonLoading(id);
     setSelectedPayPlanOption({ ...plan, yearly, trialDays });
     payForPlanFetcher.submit(
