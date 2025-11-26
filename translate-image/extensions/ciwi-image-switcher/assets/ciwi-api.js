@@ -1,5 +1,5 @@
 export function switchUrl(blockId) {
-  if (blockId !== "AUzlXTjlsSFgvK0NwM__17935315542682432006") {
+  if (blockId === "AZXdIQ0pzK2ZsWlZqW__17209211813463636621") {
     return "https://springbackendprod.azurewebsites.net";
   } else {
     return "https://springbackendservice-e3hgbjgqafb9cpdh.canadacentral-01.azurewebsites.net";
