@@ -658,6 +658,13 @@ const ImageAltTextPage = () => {
     if (imageFetcher.data) {
       // 后端返回的数据数组
       const fetchedList = imageFetcher.data.response || [];
+      console.log(imageFetcher.data);
+      // 处理不同模块之间的数据结构差异
+      switch (imageType) {
+        case "article":
+          case "product":
+            case "json_template":
+      
       const mergedList = languageList?.map((lang) => {
         // 看后端有没有返回
         const existing = fetchedList.find(
@@ -773,6 +780,10 @@ const ImageAltTextPage = () => {
       setOpen(true);
       return;
     }
+    console.log("FAJIDAJSIS");
+    
+    console.log("record:",record);
+    
     setCurrentTranslatingImage(record);
     setTranslatrImageactive(true);
     setSourceLanguage(normalizeLocale(defaultLanguageData.locale));
