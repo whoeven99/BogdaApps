@@ -459,9 +459,9 @@ const Index = () => {
         title: "Pro",
         yearlyTitle: "Pro - Yearly",
         monthlyPrice: 29.99,
-        yearlyPrice: 23.92,
+        yearlyPrice: 23.99,
         subtitle: t("<strong>${{amount}}</strong> billed once a year", {
-          amount: 287.04,
+          amount: 287.88,
         }),
         buttonText:
           plan.type === "Pro" && yearly === !!(plan.feeType === 1)
@@ -484,9 +484,9 @@ const Index = () => {
         title: "Premium",
         yearlyTitle: "Premium - Yearly",
         monthlyPrice: 79.99,
-        yearlyPrice: 63.92,
+        yearlyPrice: 63.99,
         subtitle: t("<strong>${{amount}}</strong> billed once a year", {
-          amount: 767.04,
+          amount: 767.88,
         }),
         buttonText:
           plan.type === "Premium" && yearly === !!(plan.feeType === 1)
