@@ -175,5 +175,7 @@
   "support": "支援",
   "<strong>${{amount}}</strong> billed once a year": "每年計費一次，<strong>金額為${{amount}}</strong>",
   "Get 40 extra translations instantly,plus 100 more after 5 days": "立即獲得 40 個額外翻譯，5 天後再獲得 100 個。",
-  "Get 40 extra translations instantly,plus {{count}} more after 5 days": "立即獲得 40 個額外翻譯，5 天後還可獲得 {{count}} 個額外翻譯"
+  "Get 40 extra translations instantly,plus {{count}} more after 5 days": "立即獲得 40 個額外翻譯，5 天後還可獲得 {{count}} 個額外翻譯",
+  "Medium": "中等的",
+  "Support": "支援"
 }

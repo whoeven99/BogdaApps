@@ -175,5 +175,7 @@
   "support": "지원하다",
   "<strong>${{amount}}</strong> billed once a year": "<strong>${{amount}}가</strong> 1년에 한 번 청구됩니다.",
   "Get 40 extra translations instantly,plus 100 more after 5 days": "즉시 40개의 추가 번역을 받고 5일 후에는 100개 더 받습니다.",
-  "Get 40 extra translations instantly,plus {{count}} more after 5 days": "즉시 40개의 추가 번역을 받고, 5일 후에는 {{count}}개 더 받습니다."
+  "Get 40 extra translations instantly,plus {{count}} more after 5 days": "즉시 40개의 추가 번역을 받고, 5일 후에는 {{count}}개 더 받습니다.",
+  "Medium": "중간",
+  "Support": "지원하다"
 }
