@@ -164,7 +164,6 @@
   "Machine translation":"Machine translation",
   "AI large-scale model translation":"AI large-scale model translation",
   "Translation quality":"Translation quality",
-  "medium":"medium",
   "Original image resolution":"Original image resolution",
   "Supported languages":"Supported languages",
   "Original language: English":"Original language: English",
@@ -172,5 +171,7 @@
   "Batch translation":"Batch translation",
   "support":"support",
   "<strong>${{amount}}</strong> billed once a year":"<strong>${{amount}}</strong> billed once a year",
-  "Get 40 extra translations instantly,plus {{count}} more after 5 days":"Get 40 extra translations instantly,plus {{count}} more after 5 days"
+  "Get 40 extra translations instantly,plus {{count}} more after 5 days":"Get 40 extra translations instantly,plus {{count}} more after 5 days",
+  "Medium":"Medium",
+  "Support":"Support"
 }
