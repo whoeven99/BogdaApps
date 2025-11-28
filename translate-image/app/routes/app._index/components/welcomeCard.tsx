@@ -11,6 +11,7 @@ import {
 import { useTranslation } from "react-i18next";
 // import useReport from "scripts/eventReport";
 import { useState, useEffect } from "react";
+import useReport from "scripts/eventReport";
 const { Text } = Typography;
 
 interface WelcomeCardProps {
@@ -24,6 +25,7 @@ const WelcomeCard: React.FC<WelcomeCardProps> = ({
   blockUrl,
   shop,
 }) => {
+  const { reportClick, report } = useReport();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const fetcher = useFetcher<any>();
@@ -31,6 +33,7 @@ const WelcomeCard: React.FC<WelcomeCardProps> = ({
   const [isMobile, setIsMobile] = useState<boolean>(false);
   //   const { report, trackExposure, fetcherState } = useReport();
   const handleSetting = () => {
+    reportClick("dashboard_open_setting");
     window.open(blockUrl, "_blank");
     fetcher.submit(
       {

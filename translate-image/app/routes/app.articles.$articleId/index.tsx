@@ -129,7 +129,7 @@ export default function ProductDetailPage() {
   }, [articleLoadingFetcher]);
   const handleSelect = (id: string) => {
     const imageId = id.split("/").pop();
-    navigate(`/app/images/${articleId}/${imageId}?type=article`);
+    navigate(`/app/articles/${articleId}/${imageId}?type=article`);
   };
   return (
     <Page>
@@ -172,7 +172,7 @@ export default function ProductDetailPage() {
                   fontWeight: 700,
                 }}
               >
-                {t("Translate product images")}
+                {t("Translate article images")}
               </Title>
             </Flex>
           </Flex>

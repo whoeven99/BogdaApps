@@ -338,7 +338,6 @@ export default function ProductDetailPage() {
       },
       {
         method: "post",
-        action: "/app/management",
       },
     );
   };
@@ -356,7 +355,6 @@ export default function ProductDetailPage() {
       },
       {
         method: "post",
-        action: "/app/management",
       },
     );
   };
@@ -373,7 +371,7 @@ export default function ProductDetailPage() {
   }, [imageFetcher.data]);
   const handleSelect = (id: string) => {
     const imageId = id.split("/").pop();
-    navigate(`/app/images/${productId}/${imageId}?type=product`);
+    navigate(`/app/products/${productId}/${imageId}?type=product`);
   };
   return (
     <Page>

@@ -13,13 +13,13 @@ import { Table, Button, Tabs, Tag, Input, Flex, Card, Typography } from "antd";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useFetcher, useLoaderData } from "@remix-run/react";
 
-import SortPopover from "~/routes/app.management/conponents/SortPopover";
 import { useDispatch, useSelector } from "react-redux";
 import { AppDispatch, RootState } from "~/store";
 import { setLastPageCursorInfo } from "~/store/modules/articleSlice";
 import { ColumnsType } from "antd/es/table";
 import { ActionFunctionArgs, json } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
+import SortPopover from "~/components/SortPopover";
 const { Text } = Typography;
 export const action = async ({ request }: ActionFunctionArgs) => {
   const adminAuthResult = await authenticate.admin(request);

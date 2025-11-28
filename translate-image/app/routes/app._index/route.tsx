@@ -21,6 +21,8 @@ import WelcomeCard from "./components/welcomeCard";
 import { QuotaCard } from "./components/quotaCard";
 import ImageTable from "./components/ImageTable";
 import ScrollNotice from "~/components/ScrollNotice";
+import useReport from "scripts/eventReport";
+import ImageTranslatePanel from "./components/imageTranslatePanel";
 const { Title, Text } = Typography;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -40,6 +42,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 const Index = () => {
   const { language, server, shop, ciwiSwitcherBlocksId, ciwiSwitcherId } =
     useLoaderData<typeof loader>();
+  const { reportClick, report } = useReport();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
@@ -86,8 +89,10 @@ const Index = () => {
     if (themeFetcher.data) {
       const switcherData =
         themeFetcher?.data?.data?.nodes[0]?.files?.nodes[0]?.body?.content;
-      const jsonString = switcherData.replace(/\/\*[\s\S]*?\*\//g, "").trim();
-      const blocks = JSON.parse(jsonString).current?.blocks;
+      const jsonString = switcherData?.replace(/\/\*[\s\S]*?\*\//g, "")?.trim();
+      const blocks = !jsonString
+        ? JSON.parse(jsonString).current?.blocks
+        : undefined;
       if (blocks) {
         const switcherJson: any = Object.values(blocks).find(
           (block: any) => block.type === ciwiSwitcherBlocksId,
@@ -107,7 +112,7 @@ const Index = () => {
   }, [themeFetcher.data]);
 
   const handleReportCiwiHelpCenter = () => {
-    // reportClick("dashboard_footer_help_center");
+    reportClick("dashboard_footer_help_center");
   };
 
   return (
@@ -127,13 +132,17 @@ const Index = () => {
         }}
       >
         <Space direction="vertical" size="middle" style={{ display: "flex" }}>
-          <QuotaCard shop={shop}/>
+          <QuotaCard />
           <WelcomeCard
             switcherOpen={switcherOpen}
             blockUrl={blockUrl}
             shop={shop}
           />
-          <ImageTable shop={shop}/>
+          {/* <ImageTable shop={shop} /> */}
+          <ImageTranslatePanel
+            images={["/uploads/img1.png", "/uploads/img2.png"]}
+            translatedImage={"/uploads/translated.png"}
+          />
         </Space>
       </Space>
       <Text

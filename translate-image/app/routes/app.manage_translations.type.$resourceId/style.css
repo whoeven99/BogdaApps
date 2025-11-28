@@ -1,0 +1,83 @@
+/* .custom-upload .ant-upload-list {
+  display: block; 
+}
+
+.custom-upload .ant-upload-select,
+.custom-upload .ant-upload-list-item,
+.custom-upload .ant-upload-list-item-container {
+  width: 100% !important;
+  height: 300px !important;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.custom-upload .ant-upload-list-item img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+}
+
+.custom-upload .ant-upload-list-item-info,
+.custom-upload .ant-upload-list-item-meta {
+  position: static !important;
+  background: transparent !important;
+}
+
+ .deleteIcon:hover{
+    background-color: #333;
+ } */
+
+.custom-upload .ant-upload-list {
+  display: block;
+}
+
+.custom-upload .ant-upload-select,
+.custom-upload .ant-upload-list-item,
+.custom-upload .ant-upload-list-item-container {
+  width: 100% !important;
+  height: 300px !important;
+  border-radius: 8px;
+  overflow: hidden;
+  /* background-color: #fafafa; */
+  /* border: 1px dashed #d9d9d9; */
+  padding: 0 !important;
+  border: none;
+  transition: all 0.2s ease;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+/* 设置遮罩层的长宽 */
+.ant-upload-list-item::before {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.custom-upload .ant-upload-select:hover,
+.custom-upload .ant-upload-list-item:hover {
+  border-color: #1677ff;
+}
+
+.custom-upload .ant-upload-list-item img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain !important;
+  /* background-color: #f5f5ae; */
+  display: block;
+  margin: auto;
+}
+
+.custom-upload .ant-upload-list-item-info,
+.custom-upload .ant-upload-list-item-meta {
+  position: static !important;
+  background: transparent !important;
+}
+
+.deleteIcon {
+  transition: background-color 0.2s ease;
+}
+
+.deleteIcon:hover {
+  background-color: #333;
+  color: #fff;
+}
