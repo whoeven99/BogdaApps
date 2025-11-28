@@ -461,9 +461,9 @@ const Index = () => {
         title: "Pro",
         yearlyTitle: "Pro - Yearly",
         monthlyPrice: 29.99,
-        yearlyPrice: 23.92,
+        yearlyPrice: 23.99,
         subtitle: t("<strong>${{amount}}</strong> billed once a year", {
-          amount: 287.04,
+          amount: 287.88,
         }),
         buttonText:
           plan.type === "Pro" && yearly === !!(plan.feeType === 1)
@@ -486,9 +486,9 @@ const Index = () => {
         title: "Premium",
         yearlyTitle: "Premium - Yearly",
         monthlyPrice: 79.99,
-        yearlyPrice: 63.92,
+        yearlyPrice: 63.99,
         subtitle: t("<strong>${{amount}}</strong> billed once a year", {
-          amount: 767.04,
+          amount: 767.88,
         }),
         buttonText:
           plan.type === "Premium" && yearly === !!(plan.feeType === 1)
@@ -525,7 +525,7 @@ const Index = () => {
       {
         key: 1,
         features: t("Translation quota"),
-        free: "0",
+        free: "10",
         basic: t("100 images/month"),
         pro: t("300 images/month"),
         premium: t("800 images/month"),
@@ -543,7 +543,7 @@ const Index = () => {
       {
         key: 3,
         features: t("Translation quality"),
-        free: t("medium"),
+        free: t("Medium"),
         basic: t("Original image resolution"),
         pro: t("Original image resolution"),
         premium: t("Original image resolution"),
@@ -562,9 +562,9 @@ const Index = () => {
         key: 5,
         features: t("Batch translation"),
         free: "",
-        basic: t("support"),
-        pro: t("support"),
-        premium: t("support"),
+        basic: t("Support"),
+        pro: t("Support"),
+        premium: t("Support"),
         type: "text",
       },
     ],

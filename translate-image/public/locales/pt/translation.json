@@ -175,5 +175,7 @@
   "support": "apoiar",
   "<strong>${{amount}}</strong> billed once a year": "<strong>${{amount}}</strong> cobrado uma vez por ano",
   "Get 40 extra translations instantly,plus 100 more after 5 days": "Receba 40 traduções extras instantaneamente, além de mais 100 após 5 dias.",
-  "Get 40 extra translations instantly,plus {{count}} more after 5 days": "Obtenha 40 traduções extras instantaneamente, além de {{count}} traduções adicionais após 5 dias."
+  "Get 40 extra translations instantly,plus {{count}} more after 5 days": "Obtenha 40 traduções extras instantaneamente, além de {{count}} traduções adicionais após 5 dias.",
+  "Medium": "Médio",
+  "Support": "Apoiar"
 }
