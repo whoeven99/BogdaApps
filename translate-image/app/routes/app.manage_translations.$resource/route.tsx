@@ -98,6 +98,7 @@ export default function ProductDetailPage() {
   const { t } = useTranslation();
   const location = useLocation();
   const { resourceId, record } = location.state || {};
+  const { resource } = useParams();
   const [initData, setInitData] = useState<any>(
     JSON.parse(sessionStorage.getItem("record") || "{}"),
   );
@@ -110,11 +111,11 @@ export default function ProductDetailPage() {
   const navigate = useNavigate();
 
   const handleNavigate = () => {
-    navigate("/app/management");
+    navigate(`/app/manage_translation/json_template`);
   };
   const handleSelect = (id: string) => {
     // const imageId = id.split("/").pop();
-    navigate(`/app/manage_translation/${initData?.digest}/${initData.digest}`, {
+    navigate(`/app/${resource}/${initData?.digest}/${initData.digest}`, {
       state: { record: initData },
     });
   };

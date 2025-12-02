@@ -58,57 +58,192 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const startCursor: any = JSON.parse(formData.get("startCursor") as string);
   const endCursor: any = JSON.parse(formData.get("endCursor") as string);
+  // 识别是否为图片 URL
+  const IMAGE_TYPES = new Set([
+    "FILE_REFERENCE",
+    "LIST_FILE_REFERENCE",
+    "HTML",
+    "RICH_TEXT_FIELD",
+  ]);
+
+  // 从富文本递归提取图片
+  const extractFromRichText = (nodes: any[]): string[] => {
+    const result: string[] = [];
+    if (!Array.isArray(nodes)) return result;
+
+    for (const node of nodes) {
+      if (node.type === "image" && node.src) result.push(node.src);
+      if (node.children) result.push(...extractFromRichText(node.children));
+    }
+
+    return result;
+  };
+
+  // 从 HTML 提取 <img src="">
+  const extractFromHtml = (html: string): string[] => {
+    const result: string[] = [];
+    const regex = /<img[^>]+src=["']([^"']+)["']/g;
+
+    let match;
+    while ((match = regex.exec(html)) !== null) {
+      result.push(match[1]);
+    }
+
+    return result;
+  };
+
+  const fetchFileReferences = async (admin: any, nodes: any[]) => {
+    const tasks: Promise<any>[] = [];
+
+    for (const node of nodes) {
+      for (const contentItem of node.translatableContent || []) {
+        const type = contentItem.type;
+        if (!IMAGE_TYPES.has(type)) continue;
+
+        // ---- 1) FILE_REFERENCE ----
+        if (type === "FILE_REFERENCE") {
+          tasks.push(
+            (async () => {
+              const fileName = contentItem.value?.split("/").pop() ?? "";
+              const src = await findImageSrc(admin, fileName);
+
+              if (!src) return null; // ❗没有图片则忽略
+
+              return {
+                resourceId: node.resourceId,
+                key: contentItem.key,
+                type,
+                value: src, // 单一值
+                translations: node.translations || [],
+                digest: contentItem.digest,
+              };
+            })(),
+          );
+        }
+
+        // ---- 2) LIST_FILE_REFERENCE ----
+        if (type === "LIST_FILE_REFERENCE") {
+          tasks.push(
+            (async () => {
+              const refs: string[] = contentItem.value || [];
+
+              const urls = (
+                await Promise.all(
+                  refs.map(async (ref) => {
+                    const fileName = ref?.split("/").pop() ?? "";
+                    return await findImageSrc(admin, fileName);
+                  }),
+                )
+              ).filter(Boolean);
+
+              // ❗LIST_FILE_REFERENCE 也只返回第一张（你要求单一）
+              if (urls.length === 0) return null;
+
+              return {
+                resourceId: node.resourceId,
+                key: contentItem.key,
+                type,
+                value: urls[0],
+                translations: node.translations || [],
+              };
+            })(),
+          );
+        }
+
+        // ---- 3) HTML ----
+        if (type === "HTML") {
+          const urls = extractFromHtml(contentItem.value || "");
+
+          if (urls.length === 0) continue; // ❗没有图片，不返回
+
+          tasks.push(
+            Promise.resolve({
+              resourceId: node.resourceId,
+              key: contentItem.key,
+              type,
+              value: urls[0], // 单一值
+              translations: node.translations || [],
+            }),
+          );
+        }
+
+        // ---- 4) RICH_TEXT_FIELD ----
+        if (type === "RICH_TEXT_FIELD") {
+          const urls = extractFromRichText(contentItem.value?.children || []);
+
+          if (urls.length === 0) continue;
+
+          tasks.push(
+            Promise.resolve({
+              resourceId: node.resourceId,
+              key: contentItem.key,
+              type,
+              value: urls[0],
+              translations: node.translations || [],
+            }),
+          );
+        }
+      }
+    }
+
+    const resolved = await Promise.all(tasks);
+
+    // ❗过滤掉 null（无图片的项）
+    return resolved.filter(Boolean);
+  };
+
   const findImageSrc = async (admin: any, fileName: string) => {
     const response = await admin.graphql(
       `query GetFile($query: String!) {
-      files(query: $query, first: 1) {
-        edges {
-          node {
-            preview {
-              image {
-                src
+        files(query: $query, first: 1) {
+          edges {
+            node {
+              preview {
+                image {
+                  src
+                }
               }
             }
           }
         }
-      }
-    }`,
+      }`,
       { variables: { query: fileName } },
     );
 
     const parsed = await response.json();
     return parsed?.data?.files?.edges?.[0]?.node?.preview?.image?.src ?? null;
   };
-  const fetchFileReferences = async (admin: any, nodes: any[]) => {
-    // 扁平化所有 FILE_REFERENCE 项
-    const fileItems = nodes.flatMap((node) => {
-      return (node.translatableContent || [])
-        .filter((c: any) => c.type === "FILE_REFERENCE")
-        .map((contentItem: any) => ({
-          node,
-          contentItem,
-        }));
-    });
+  // const fetchFileReferences = async (admin: any, nodes: any[]) => {
+  //   // 扁平化所有 FILE_REFERENCE 项
+  //   const fileItems = nodes.flatMap((node) => {
+  //     return (node.translatableContent || [])
+  //       .filter((c: any) => c.type === "FILE_REFERENCE")
+  //       .map((contentItem: any) => ({
+  //         node,
+  //         contentItem,
+  //       }));
+  //   });
 
-    // 并行解析所有文件引用
-    const resolved = await Promise.all(
-      fileItems.map(async ({ node, contentItem }) => {
-        const fileName = contentItem.value.split("/").pop() ?? "";
+  //   // 并行解析所有文件引用
+  //   const resolved = await Promise.all(
+  //     fileItems.map(async ({ node, contentItem }) => {
+  //       const fileName = contentItem.value.split("/").pop() ?? "";
 
-        const src = await findImageSrc(admin, fileName);
+  //       const src = await findImageSrc(admin, fileName);
 
-        return {
-          resourceId: node.resourceId,
-          ...contentItem,
-          value: src, // 转换成真正 CDN URL
-          translations: node.translations || [],
-        };
-      }),
-    );
-    console.log("asdiasdj", resolved);
+  //       return {
+  //         resourceId: node.resourceId,
+  //         ...contentItem,
+  //         value: src, // 转换成真正 CDN URL
+  //         translations: node.translations || [],
+  //       };
+  //     }),
+  //   );
+  //   console.log("asdiasdj", resolved);
 
-    return resolved;
-  };
+  //   return resolved;
+  // };
+
   try {
     switch (true) {
       case !!startCursor:
@@ -250,46 +385,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 export default function Index() {
   const { searchTerm } = useLoaderData<typeof loader>();
-  const languageFetcher = useFetcher<any>();
-  const artilclesFetcher = useFetcher<any>();
   const dataFetcher = useFetcher<any>();
-  const queryImageFetcher = useFetcher<any>();
-  const imageFetcher = useFetcher<any>();
 
-  const [articlesStartCursor, setArticlesStartCursor] = useState("");
-  const [articlesEndCursor, setArticlesEndCursor] = useState("");
-  const [lastRequestCursor, setLastRequestCursor] = useState<any>(null);
-  const [productImageData, setProductImageData] = useState<any>([]);
+  const [startCursor, setStartCursor] = useState("");
+  const [endCursor, setEndCursor] = useState("");
   const [tableDataLoading, setTableDataLoading] = useState(false);
 
   const [articleData, setArticleData] = useState<any>([]);
-  const [selectedKey, setSelectedKey] = useState("");
 
-  const [articlesHasNextPage, setArticlesHasNextPage] = useState(false);
-  const [articlesHasPreviousPage, setArticlesHasPreviousPage] = useState(false);
+  const [hasNextPage, setHasNextPage] = useState(false);
+  const [hasPreviousPage, setHasPreviousPage] = useState(false);
 
   const { t } = useTranslation();
   const { Text } = Typography;
   const navigate = useNavigate();
-
-  const [activeKey, setActiveKey] = useState("ALL");
-  const [searchText, setSearchText] = useState<string>("");
-  const timeoutIdRef = useRef<any>(true);
-  const dispatch = useDispatch<AppDispatch>();
-  const [sortKey, setSortKey] = useState("AUTHOR");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
-  const loadFetcher = useFetcher<any>();
-  const [blogsData, setBlogsData] = useState<any[]>([]);
-  const sortOptions = [
-    { label: "Title", value: "TITLE" },
-    { label: "Author", value: "AUTHOR" },
-    { label: "Blog Title", value: "BLOG_TITLE" },
-    { label: "Published Time", value: "PUBLISHED_AT" },
-    { label: "Updata Time", value: "UPDATED_AT" },
-  ];
-  const lastPageCursorInfo = useSelector(
-    (state: RootState) => state.article.lastPageCursorInfo,
-  );
   const panelColumns: ColumnsType<any> = [
     {
       // 不需要 dataIndex，用 render 直接取 item.node.title
@@ -356,9 +465,6 @@ export default function Index() {
   ];
   function handleView(record: any): void {
     console.log(record);
-
-    // const articleId = record.id.split("/").pop();
-    // navigate(`/app/articles/${articleId}`);
   }
   useEffect(() => {
     setTableDataLoading(true);
@@ -373,84 +479,28 @@ export default function Index() {
         method: "POST",
       },
     );
-    // const handleResize = () => {
-    //   setIsMobile(window.innerWidth < 768);
-    // };
-    // handleResize();
-    // window.addEventListener("resize", handleResize);
-    // return () => {
-    //   window.removeEventListener("resize", handleResize);
-    // };
   }, []);
   useEffect(() => {
     if (dataFetcher.data) {
       setTableDataLoading(false);
 
       console.log(dataFetcher.data);
+      setHasNextPage(dataFetcher.data.hasNextPage);
+      setHasPreviousPage(dataFetcher.data.hasPreviousPage);
+      setStartCursor(dataFetcher.data.startCursor);
+      setEndCursor(dataFetcher.data.endCursor);
       setArticleData(dataFetcher.data?.data);
-      if (dataFetcher.data?.success) {
-      }
     }
   }, [dataFetcher.data]);
-  // useEffect(() => {
-  //   if (loadFetcher.data) {
-  //     // console.log(loadFetcher.data);
-
-  //     setArticlesHasNextPage(loadFetcher.data.hasNextPage);
-  //     setArticlesHasPreviousPage(loadFetcher.data.hasPreviousPage);
-  //     setArticlesStartCursor(loadFetcher.data.startCursor);
-  //     setArticlesEndCursor(loadFetcher.data.endCursor);
-  //     setArticleData(loadFetcher.data?.data);
-  //     setTableDataLoading(false);
-  //     // setBlogsData(loadFetcher.data);
-  //   }
-  // }, [loadFetcher.data]);
-  // useEffect(() => {
-  //   if (artilclesFetcher.data) {
-  //     // console.log(artilclesFetcher.data);
-
-  //     dispatch(
-  //       setLastPageCursorInfo({
-  //         articlesHasNextPage: artilclesFetcher.data.hasNextPage,
-  //         articlesHasPreviousPage: artilclesFetcher.data.hasPreviousPage,
-  //         articlesStartCursor: artilclesFetcher.data.startCursor,
-  //         articlesEndCursor: artilclesFetcher.data.endCursor,
-  //       }),
-  //     );
-  //     setArticlesHasNextPage(artilclesFetcher.data.hasNextPage);
-  //     setArticlesHasPreviousPage(artilclesFetcher.data.hasPreviousPage);
-  //     setArticlesStartCursor(artilclesFetcher.data.startCursor);
-  //     setArticlesEndCursor(artilclesFetcher.data.endCursor);
-  //     setArticleData(artilclesFetcher.data?.data);
-  //   }
-  // }, [artilclesFetcher.data]);
-  useEffect(() => {
-    dispatch(
-      setLastPageCursorInfo({
-        searchText,
-        sortOrder,
-        sortKey,
-      }),
-    );
-  }, [searchText, sortOrder, sortKey]);
-  const handlePreProductPage = () => {
-    if (artilclesFetcher.state !== "idle") {
+  const handlePrePage = () => {
+    if (dataFetcher.state !== "idle") {
       return;
     }
-    dispatch(
-      setLastPageCursorInfo({
-        lastRequestCursor: articlesStartCursor,
-        direction: "prev",
-      }),
-    );
-    artilclesFetcher.submit(
+    dataFetcher.submit(
       {
-        articleStartCursor: JSON.stringify({
-          cursor: articlesStartCursor,
-          query: searchText,
-          status: activeKey,
-          sortKey,
-          reverse: sortOrder === "asc" ? false : true,
+        startCursor: JSON.stringify({
+          cursor: startCursor,
+          searchTerm,
         }),
       },
       {
@@ -458,131 +508,21 @@ export default function Index() {
       },
     ); // 提交表单请求
   };
-  const handleNextProductPage = () => {
-    if (artilclesFetcher.state !== "idle") {
+  const handleNextPage = () => {
+    if (dataFetcher.state !== "idle") {
       return;
     }
-    dispatch(
-      setLastPageCursorInfo({
-        lastRequestCursor: articlesEndCursor,
-        direction: "next",
-      }),
-    );
-    artilclesFetcher.submit(
+    dataFetcher.submit(
       {
-        articleEndCursor: JSON.stringify({
-          cursor: articlesEndCursor,
-          query: searchText,
-          status: activeKey,
-          sortKey,
-          reverse: sortOrder === "asc" ? false : true,
+        endCursor: JSON.stringify({
+          cursor: endCursor,
+          searchTerm,
         }),
       },
       {
         method: "post",
       },
     ); // 提交表单请求
-  };
-
-  const handleChangeStatusTab = (key: string) => {
-    setActiveKey(key);
-    if (timeoutIdRef.current) {
-      clearTimeout(timeoutIdRef.current);
-    }
-
-    // 延迟 1s 再执行请求
-    timeoutIdRef.current = setTimeout(() => {
-      artilclesFetcher.submit(
-        {
-          articleEndCursor: JSON.stringify({
-            cursor: "",
-            query: searchText,
-            status: key,
-            sortKey,
-            reverse: sortOrder === "asc" ? false : true,
-          }),
-        },
-        {
-          method: "post",
-        },
-      );
-    }, 500);
-  };
-  const handleSearch = (value: string) => {
-    setSearchText(value);
-
-    // 清除上一次的定时器
-    if (timeoutIdRef.current) {
-      clearTimeout(timeoutIdRef.current);
-    }
-
-    // 延迟 1s 再执行请求
-    timeoutIdRef.current = setTimeout(() => {
-      artilclesFetcher.submit(
-        {
-          articleEndCursor: JSON.stringify({
-            cursor: "",
-            query: value,
-            status: activeKey,
-            sortKey,
-            reverse: sortOrder === "asc" ? false : true,
-          }),
-        },
-        {
-          method: "post",
-        },
-      );
-    }, 100);
-  };
-  const handleSortProduct = (key: string, order: "asc" | "desc") => {
-    setSortKey(key);
-    setSortOrder(order);
-    // 延迟 1s 再执行请求
-    timeoutIdRef.current = setTimeout(() => {
-      artilclesFetcher.submit(
-        {
-          articleEndCursor: JSON.stringify({
-            cursor: "",
-            query: searchText,
-            sortKey: key,
-            status: activeKey,
-            reverse: order === "asc" ? false : true,
-          }),
-        },
-        {
-          method: "post",
-        },
-      );
-    }, 100);
-  };
-  const exMenuData = (data: any) => {
-    const menuData = data
-      ?.filter((item: any) => {
-        const contents = item?.translatableContent;
-
-        // 如果没有 translatableContent，跳过
-        if (!Array.isArray(contents) || contents.length === 0) return false;
-
-        // 检查是否全部为空（包括仅有空格）
-        const allEmpty = contents.every(
-          (c: any) => !c?.value || c.value.trim() === "",
-        );
-
-        return !allEmpty; // 仅保留有实际内容的项
-      })
-      ?.map((item: any) => {
-        const match = item?.resourceId.match(
-          /OnlineStoreThemeJsonTemplate\/([^?]+)/,
-        );
-
-        const label = match ? match[1] : item?.resourceId;
-
-        return {
-          key: item?.resourceId,
-          label: label,
-        };
-      });
-    return menuData;
   };
   const handleNavigate = () => {
     navigate("/app/manage_translation");
@@ -623,52 +563,12 @@ export default function Index() {
                   fontWeight: 700,
                 }}
               >
-                {t("Page")}
+                {t("online store theme")}
               </Title>
             </Flex>
           </Flex>
         </div>
       </Affix>
-      <Card styles={{ body: { padding: "12px 24px" } }}>
-        <Flex align="center" justify="space-between">
-          <Tabs
-            activeKey={activeKey}
-            onChange={(key) => handleChangeStatusTab(key)}
-            defaultActiveKey="all"
-            type="line"
-            // style={{ width: "40%" }}
-            items={[
-              { label: t("All"), key: "ALL" },
-              // {
-              //   label: t("Active"),
-              //   key: "ACTIVE",
-              // },
-              // {
-              //   label: t("Draft"),
-              //   key: "DRAFT",
-              // },
-              // {
-              //   label: t("Archived"),
-              //   key: "ARCHIVED",
-              // },
-            ]}
-          />
-          <Flex align="center" justify="center" gap={20}>
-            <Input
-              placeholder={t("Search...")}
-              value={searchText}
-              onChange={(e) => handleSearch(e.target.value)}
-              prefix={<SearchOutlined />}
-            />
-            <SortPopover
-              onChange={(key, order) => handleSortProduct(key, order)}
-              sortKeyProp={sortKey}
-              sortOrderProp={sortOrder}
-              sortOptions={sortOptions}
-            />
-          </Flex>
-        </Flex>
-      </Card>
       <div
         style={{
           display: "flex",
@@ -692,7 +592,7 @@ export default function Index() {
                 if ((e.target as HTMLElement).closest("button")) return;
                 console.log("嗯？？");
                 sessionStorage.setItem("record", JSON.stringify(record));
-                navigate(`/app/manage_translations/jsonTemplate`, {
+                navigate(`/app/manage_translations/page`, {
                   state: { resourceId: record.resourceId, record: record },
                 });
               },
@@ -715,10 +615,10 @@ export default function Index() {
           }}
         >
           <Pagination
-            hasPrevious={articlesHasPreviousPage}
-            onPrevious={handlePreProductPage}
-            hasNext={articlesHasNextPage}
-            onNext={handleNextProductPage}
+            hasPrevious={hasPreviousPage}
+            onPrevious={handlePrePage}
+            hasNext={hasNextPage}
+            onNext={handleNextPage}
           />
         </div>
       </div>
