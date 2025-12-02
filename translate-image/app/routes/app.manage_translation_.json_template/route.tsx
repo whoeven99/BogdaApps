@@ -283,14 +283,29 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             },
           );
 
-          const data = await response.json();
+          const parsed = await response.json();
+          const tr = parsed?.data?.translatableResources;
 
-          return {
-            success: true,
-            errorCode: 0,
-            errorMsg: "",
-            response: data?.data?.translatableResources || null,
-          };
+          if (!tr) {
+            return json({
+              data: [],
+              endCursor: "",
+              hasNextPage: false,
+              hasPreviousPage: false,
+              startCursor: "",
+            });
+          }
+
+          // ⭐ 关键改动：等所有 FILE_REFERENCE 图片解析完
+          const fileReferences = await fetchFileReferences(admin, tr.nodes);
+
+          return json({
+            data: fileReferences,
+            endCursor: tr.pageInfo.endCursor || "",
+            hasNextPage: tr.pageInfo.hasNextPage || false,
+            hasPreviousPage: tr.pageInfo.hasPreviousPage || false,
+            startCursor: tr.pageInfo.startCursor || "",
+          });
         } catch (error) {
           console.error("Error manage theme loading:", error);
           return {
