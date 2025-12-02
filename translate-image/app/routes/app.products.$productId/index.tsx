@@ -290,7 +290,7 @@ export default function ProductDetailPage() {
   const productLoadingFetcher = useFetcher<any>();
   const fetcher = useFetcher();
   const handleNavigate = () => {
-    navigate("/app");
+    navigate("/app/product");
   };
   useEffect(() => {
     productLoadingFetcher.submit(

@@ -392,7 +392,9 @@ const ImageAltTextPage = () => {
     console.log("dsdjaisdj", type);
 
     switch (type) {
-      case "manage_translation":
+      case "json_template":
+      case "metafield":
+      case "page":
         return `${localTranslationData?.resourceId}_${localTranslationData.key}`;
         break;
       case "articles":
@@ -411,7 +413,9 @@ const ImageAltTextPage = () => {
       sessionStorage.getItem("record") || "{}",
     );
     switch (type) {
-      case "manage_translation":
+      case "json_template":
+      case "metafield":
+      case "page":
         return localTranslationData?.resourceId;
 
       case "articles":
@@ -762,13 +766,20 @@ const ImageAltTextPage = () => {
     if (confirmData.length > 0) {
       shopify.saveBar.leaveConfirmation();
     } else {
+      console.log("jdiasjdia");
+      console.log(type);
+
       shopify.saveBar.hide("save-bar");
       if (type === "articles") {
         navigate(`/app/articles/${productId}`);
       } else if (type === "products") {
         navigate(`/app/products/${productId}`);
-      } else if (type === "manage_translation") {
-        navigate(`/app/manage_translations/jsonTemplate`);
+      } else if (
+        type === "json_template" ||
+        type === "metafield" ||
+        type === "page"
+      ) {
+        navigate(`/app/manage_translations/${type}`);
       }
     }
   };
@@ -821,11 +832,16 @@ const ImageAltTextPage = () => {
             };
           }
         });
-      } else if (type === "manage_translation") {
+      } else if (
+        type === "json_template" ||
+        type === "metafield" ||
+        type === "page"
+      ) {
         const localTranslationData = JSON.parse(
           sessionStorage.getItem("record") || "{}",
         );
         console.log(localTranslationData);
+        console.log("languageList", languageList);
 
         mergedList = languageList?.map((lang) => {
           // 看后端有没有返回
@@ -854,6 +870,7 @@ const ImageAltTextPage = () => {
           }
         });
       }
+      console.log("mergedList:", mergedList);
 
       setImageDatas(mergedList);
       setImageFetcherLoading(false);
@@ -1054,7 +1071,9 @@ const ImageAltTextPage = () => {
           method: "post",
         });
         if (
-          type === "manage_translation" &&
+          (type === "json_template" ||
+            type === "metafield" ||
+            type === "page") &&
           currentTranslatingImage.imageAfterUrl
         ) {
           // 如果翻译前有数据，则进行删除操作
@@ -1067,7 +1086,11 @@ const ImageAltTextPage = () => {
             },
             { method: "post" },
           );
-        } else if (type === "manage_translation") {
+        } else if (
+          type === "json_template" ||
+          type === "metafield" ||
+          type === "page"
+        ) {
           saveImageFetcher.submit(
             {
               saveImageToShopify: JSON.stringify({
@@ -1136,7 +1159,7 @@ const ImageAltTextPage = () => {
         imageUrl: imageUrl,
         languageCode: languageCode,
       });
-      if (type === "manage_translation") {
+      if (type === "json_template" || type === "metafield" || type === "page") {
         deleteImageFetcher.submit(
           {
             deleteImageInShopify: JSON.stringify({
@@ -1178,7 +1201,7 @@ const ImageAltTextPage = () => {
         imageUrl: imageUrl,
         languageCode: languageCode,
       });
-      if (type === "manage_translation") {
+      if (type === "json_template" || type === "metafield" || type === "page") {
         deleteImageFetcher.submit(
           {
             deleteImageInShopify: JSON.stringify({
@@ -1305,7 +1328,11 @@ const ImageAltTextPage = () => {
               : item,
           );
         });
-        if (type === "manage_translation") {
+        if (
+          type === "json_template" ||
+          type === "metafield" ||
+          type === "page"
+        ) {
           saveImageFetcher.submit(
             {
               saveImageToShopify: JSON.stringify({
@@ -1478,6 +1505,8 @@ const ImageAltTextPage = () => {
   }, []);
   useEffect(() => {
     if (languageFetcher.data) {
+      console.log(languageFetcher.data);
+
       languageFetcher.data.response.forEach((lan: any) => {
         if (lan.primary) {
           setDefaultLanguageData(lan);
@@ -1942,7 +1971,9 @@ const ImageAltTextPage = () => {
                                   // 判断用户二次上传行为
                                   if (
                                     img.imageAfterUrl &&
-                                    type === "manage_translation"
+                                    (type === "json_template" ||
+                                      type === "metafield" ||
+                                      type === "page")
                                   ) {
                                     deleteImageFetcher.submit(
                                       {
@@ -1981,7 +2012,11 @@ const ImageAltTextPage = () => {
                                     });
                                     console.log("执行保存数据到shopify");
 
-                                    if (type === "manage_translation") {
+                                    if (
+                                      type === "json_template" ||
+                                      type === "metafield" ||
+                                      type === "page"
+                                    ) {
                                       saveImageFetcher.submit(
                                         {
                                           saveImageToShopify: JSON.stringify({
