@@ -973,62 +973,6 @@ export const updateManageTranslation = async ({
   }
 };
 
-// 处理文章body图片翻译内容，需要判断当下翻译的语言是否有文本翻译
-export const updateArticleImageManageTranslation = async ({
-  shop,
-  accessToken,
-  item,
-}: {
-  shop: string;
-  accessToken: string;
-  item: any;
-}) => {
-  try {
-    function extractImageKey(url: string) {
-      if (!url) return null;
-
-      // 去掉 protocol + domain
-      const withoutDomain = url.replace(/^https?:\/\/[^/]+\//, "");
-
-      // 去掉 query string
-      const pathOnly = withoutDomain.split("?")[0];
-
-      // 如果包含编码后的 "%2F" -> 是 OSS 编码 key，直接返回
-      if (pathOnly.includes("%2F")) {
-        return pathOnly; // 保持原样
-      }
-
-      // 普通路径 -> 只取最后文件名
-      return pathOnly.split("/").pop() ?? null;
-    }
-
-    console.log(
-      "djaidaj:",
-      item.imageAfterUrl,
-      `shopify://shop_images/${extractImageKey(item.imageAfterUrl)}`,
-    );
-
-    const response = await axios({
-      url: `${process.env.SERVER_URL}/shopify/updateShopifyDataByTranslateTextRequest`,
-      method: "POST",
-      timeout: 10000, // 添加超时设置
-      data: {
-        shopName: shop,
-        accessToken: accessToken,
-        locale: item.locale,
-        key: item.key,
-        value: `shopify://shop_images/${extractImageKey(item.imageAfterUrl)}`,
-        translatableContentDigest: item.digest,
-        resourceId: item.resourceId,
-        target: item.languageCode,
-      },
-    });
-    console.log(`updateManageTranslation: `, response.data);
-    return response.data;
-  } catch (error) {
-    console.error("Error updateManageTranslation:", error);
-  }
-};
 
 // 删除存储在shopify的文件
 export const deleteSaveInShopify = async ({

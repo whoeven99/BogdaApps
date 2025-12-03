@@ -55,7 +55,6 @@ import {
   getProductAllLanguageImagesData,
   storageTranslateImage,
   TranslateImage,
-  updateArticleImageManageTranslation,
   updateManageTranslation,
   UpdateProductImageAltData,
 } from "~/api/JavaServer";
@@ -97,9 +96,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   );
   const deleteImageInShopify = JSON.parse(
     formData.get("deleteImageInShopify") as string,
-  );
-  const saveArticleImageToShopify = JSON.parse(
-    formData.get("saveArticleImageToShopify") as string,
   );
   function extractImageKey(url: string) {
     if (!url) return null;
@@ -417,89 +413,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           });
           return json({ response });
         } catch (error) {
-          console.log("save image to shopify error action", error);
-          return {
-            success: false,
-            errorCode: 10001,
-            errorMsg: "SERVER_ERROR",
-            response: [],
-          };
-        }
-      case !!saveArticleImageToShopify:
-        try {
-          console.log("dasidas", saveArticleImageToShopify);
-          // const { shop, accessToken } = adminAuthResult.session;
-          const queryTranslations = await admin.graphql(
-            `#graphql
-              query {
-                translatableResource(resourceId: "${saveArticleImageToShopify.articleId}") {
-                  resourceId
-                  translations(locale: "${saveArticleImageToShopify.languageCode}") {
-                    key
-                    value
-                  }
-                }
-              }`,
-          );
-          const translationsJson = await queryTranslations.json();
-          console.log("translationsJson", translationsJson);
-          const createFileRes = await admin.graphql(
-            `#graphql
-              mutation fileCreate($files: [FileCreateInput!]!) {
-                fileCreate(files: $files) {
-                  files {
-                    id
-                    fileStatus
-                    alt
-                    createdAt
-                    ... on MediaImage {
-                      image {
-                        width
-                        height
-                      }
-                    }
-                    preview {
-                      status
-                      image {
-                        altText
-                        id
-                        url
-                      }
-                    }
-                  }
-                  userErrors {
-                    field
-                    message
-                  }
-                }
-              }`,
-            {
-              variables: {
-                files: [
-                  {
-                    alt: saveArticleImageToShopify.altText,
-                    contentType: "IMAGE",
-                    originalSource: saveArticleImageToShopify.imageAfterUrl,
-                  },
-                ],
-              },
-            },
-          );
-          const parse = await createFileRes.json();
-          console.log("parse", parse);
-          if (
-            translationsJson.data.translatableResource.translations.length > 0
-          ) {
-          } else {
-          }
-          // const response = await updateArticleImageManageTranslation({
-          //   shop,
-          //   accessToken: accessToken as string,
-          //   item: saveImageToShopify,
-          // });
-          return json({ response: translationsJson, createFileRes: parse });
-        } catch (error) {
-          console.log("save image to shopify error action", error);
+          console.log("delete image file in shopify action error", error);
           return {
             success: false,
             errorCode: 10001,
