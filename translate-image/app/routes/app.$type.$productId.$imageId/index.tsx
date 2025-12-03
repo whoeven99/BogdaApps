@@ -318,8 +318,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           const translation = await queryTranslations.json();
           console.log("translation111", translation);
           let transferValue = "";
-          switch (saveImageToShopify.themeType) {
-            case "article_image":
+          switch (saveImageToShopify.type) {
+            case "HTML":
               if (translation.data.translations?.length > 0) {
                 translation.data.translations.forEach((item: any) => {
                   if ((item?.dbKey ?? item?.key) === saveImageToShopify.key) {
@@ -338,7 +338,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 );
               }
               break;
-            case "json_template":
+            case "FILE_REFERENCE":
               transferValue = `shopify://shop_images/${extractImageKey(saveImageToShopify.imageAfterUrl)}`;
               break;
           }
@@ -1174,7 +1174,6 @@ const ImageAltTextPage = () => {
                 altText: currentTranslatingImage.altAfterTranslation
                   ? currentTranslatingImage.altAfterTranslation
                   : currentTranslatingImage.altBeforeTranslation,
-                themeType: type,
               }),
             },
             { method: "post" },
@@ -1206,7 +1205,6 @@ const ImageAltTextPage = () => {
             "https://ciwi-us-1327177217.cos.na-ashburn.myqcloud.com/image-Translation/ciwishop.myshopify.com/63748991.jpg",
           languageCode: "en",
           altText: "",
-          themeType: type,
           locale: defaultLanguageData.locale,
         }),
       },
@@ -1429,7 +1427,6 @@ const ImageAltTextPage = () => {
                 imageAfterUrl: newUrl,
                 languageCode,
                 altText: "",
-                themeType: type,
                 locale: defaultLanguageData.locale,
               }),
             },
@@ -1802,7 +1799,7 @@ const ImageAltTextPage = () => {
             )}
           </Space>
         </Layout.Section>
-        {/* <Button onClick={handleSaveImage}>{t("Save Image")}</Button> */}
+        <Button onClick={handleSaveImage}>{t("Save Image")}</Button>
         <Layout.Section>
           <Space direction="vertical" size="large" style={{ width: "100%" }}>
             <div
@@ -2123,7 +2120,6 @@ const ImageAltTextPage = () => {
                                             imageAfterUrl: newUrl,
                                             languageCode: img.languageCode·,
                                             altText: "",
-                                            themeType: type,
                                             locale: defaultLanguageData.locale,
                                           }),
                                         },
