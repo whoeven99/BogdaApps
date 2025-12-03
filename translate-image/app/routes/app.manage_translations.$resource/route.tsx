@@ -103,7 +103,12 @@ export default function ProductDetailPage() {
     JSON.parse(sessionStorage.getItem("record") || "{}"),
   );
   useEffect(() => {
-    console.log(initData);
+    // const data =
+    //   resource === "article_image"
+    //     ? JSON.parse(sessionStorage.getItem("article_image") || "{}")
+    //     : JSON.parse(sessionStorage.getItem("record") || "{}");
+    // console.log(data);
+    // setInitData(data);
   }, []);
   // console.log(resourceId);
   // console.log(record);
@@ -111,10 +116,16 @@ export default function ProductDetailPage() {
   const navigate = useNavigate();
 
   const handleNavigate = () => {
-    navigate(`/app/manage_translation/json_template`);
+    navigate(`/app/manage_translation/${resource}`);
   };
   const handleSelect = (id: string) => {
     // const imageId = id.split("/").pop();
+    // const data =
+    //   resource === "article_image"
+    //     ? JSON.parse(sessionStorage.getItem("article_image") || "{}")
+    //     : JSON.parse(sessionStorage.getItem("record") || "{}");
+    // console.log(data);
+
     navigate(`/app/${resource}/${initData?.digest}/${initData.digest}`, {
       state: { record: initData },
     });

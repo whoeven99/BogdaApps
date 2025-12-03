@@ -940,6 +940,44 @@ export const updateManageTranslation = async ({
   shop,
   accessToken,
   item,
+  transferValue,
+}: {
+  shop: string;
+  accessToken: string;
+  item: any;
+  transferValue: string;
+}) => {
+  try {
+    console.log("item dsad",item);
+    console.log("dasdas",transferValue);
+    
+    const response = await axios({
+      url: `${process.env.SERVER_URL}/shopify/updateShopifyDataByTranslateTextRequest`,
+      method: "POST",
+      timeout: 10000, // 添加超时设置
+      data: {
+        shopName: shop,
+        accessToken: accessToken,
+        locale: item.locale,
+        key: item.key,
+        value: transferValue,
+        translatableContentDigest: item.digest,
+        resourceId: item.resourceId,
+        target: item.languageCode,
+      },
+    });
+    console.log(`updateManageTranslation: `, response.data);
+    return response.data;
+  } catch (error) {
+    console.error("Error updateManageTranslation:", error);
+  }
+};
+
+// 处理文章body图片翻译内容，需要判断当下翻译的语言是否有文本翻译
+export const updateArticleImageManageTranslation = async ({
+  shop,
+  accessToken,
+  item,
 }: {
   shop: string;
   accessToken: string;

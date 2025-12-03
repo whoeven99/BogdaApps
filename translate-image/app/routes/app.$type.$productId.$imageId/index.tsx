@@ -55,6 +55,7 @@ import {
   getProductAllLanguageImagesData,
   storageTranslateImage,
   TranslateImage,
+  updateArticleImageManageTranslation,
   updateManageTranslation,
   UpdateProductImageAltData,
 } from "~/api/JavaServer";
@@ -97,6 +98,26 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const deleteImageInShopify = JSON.parse(
     formData.get("deleteImageInShopify") as string,
   );
+  const saveArticleImageToShopify = JSON.parse(
+    formData.get("saveArticleImageToShopify") as string,
+  );
+  function extractImageKey(url: string) {
+    if (!url) return null;
+
+    // 去掉 protocol + domain
+    const withoutDomain = url.replace(/^https?:\/\/[^/]+\//, "");
+
+    // 去掉 query string
+    const pathOnly = withoutDomain.split("?")[0];
+
+    // 如果包含编码后的 "%2F" -> 是 OSS 编码 key，直接返回
+    if (pathOnly.includes("%2F")) {
+      return pathOnly; // 保持原样
+    }
+
+    // 普通路径 -> 只取最后文件名
+    return pathOnly.split("/").pop() ?? null;
+  }
   try {
     switch (true) {
       case !!imageLoading:
@@ -279,7 +300,52 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         try {
           console.log("dasidas", saveImageToShopify);
           // const { shop, accessToken } = adminAuthResult.session;
-
+          const queryTranslations = await admin.graphql(
+            `#graphql
+              query {
+                translatableResource(resourceId: "${saveImageToShopify.resourceId}") {
+                  resourceId
+                  translations(locale: "${saveImageToShopify.languageCode}") {
+                    key
+                    value
+                  }
+                }
+              }`,
+          );
+          function replaceImageUrl(
+            html: string,
+            url: string,
+            translateUrl: string,
+          ) {
+            return html.split(url).join(translateUrl);
+          }
+          const translation = await queryTranslations.json();
+          console.log("translation111", translation);
+          let transferValue = "";
+          switch (saveImageToShopify.themeType) {
+            case "article_image":
+              if (translation.data.translations?.length > 0) {
+                translation.data.translations.forEach((item: any) => {
+                  if ((item?.dbKey ?? item?.key) === saveImageToShopify.key) {
+                    transferValue = replaceImageUrl(
+                      item.value,
+                      saveImageToShopify.value,
+                      saveImageToShopify.imageAfterUrl,
+                    );
+                  }
+                });
+              } else {
+                transferValue = replaceImageUrl(
+                  saveImageToShopify.originValue,
+                  saveImageToShopify.value,
+                  saveImageToShopify.imageAfterUrl,
+                );
+              }
+              break;
+            case "json_template":
+              transferValue = `shopify://shop_images/${extractImageKey(saveImageToShopify.imageAfterUrl)}`;
+              break;
+          }
           const createFileRes = await admin.graphql(
             `#graphql
               mutation fileCreate($files: [FileCreateInput!]!) {
@@ -328,6 +394,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             shop,
             accessToken: accessToken as string,
             item: saveImageToShopify,
+            transferValue,
           });
           return json({ response, createFileRes: parse });
         } catch (error) {
@@ -358,6 +425,88 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             response: [],
           };
         }
+      case !!saveArticleImageToShopify:
+        try {
+          console.log("dasidas", saveArticleImageToShopify);
+          // const { shop, accessToken } = adminAuthResult.session;
+          const queryTranslations = await admin.graphql(
+            `#graphql
+              query {
+                translatableResource(resourceId: "${saveArticleImageToShopify.articleId}") {
+                  resourceId
+                  translations(locale: "${saveArticleImageToShopify.languageCode}") {
+                    key
+                    value
+                  }
+                }
+              }`,
+          );
+          const translationsJson = await queryTranslations.json();
+          console.log("translationsJson", translationsJson);
+          const createFileRes = await admin.graphql(
+            `#graphql
+              mutation fileCreate($files: [FileCreateInput!]!) {
+                fileCreate(files: $files) {
+                  files {
+                    id
+                    fileStatus
+                    alt
+                    createdAt
+                    ... on MediaImage {
+                      image {
+                        width
+                        height
+                      }
+                    }
+                    preview {
+                      status
+                      image {
+                        altText
+                        id
+                        url
+                      }
+                    }
+                  }
+                  userErrors {
+                    field
+                    message
+                  }
+                }
+              }`,
+            {
+              variables: {
+                files: [
+                  {
+                    alt: saveArticleImageToShopify.altText,
+                    contentType: "IMAGE",
+                    originalSource: saveArticleImageToShopify.imageAfterUrl,
+                  },
+                ],
+              },
+            },
+          );
+          const parse = await createFileRes.json();
+          console.log("parse", parse);
+          if (
+            translationsJson.data.translatableResource.translations.length > 0
+          ) {
+          } else {
+          }
+          // const response = await updateArticleImageManageTranslation({
+          //   shop,
+          //   accessToken: accessToken as string,
+          //   item: saveImageToShopify,
+          // });
+          return json({ response: translationsJson, createFileRes: parse });
+        } catch (error) {
+          console.log("save image to shopify error action", error);
+          return {
+            success: false,
+            errorCode: 10001,
+            errorMsg: "SERVER_ERROR",
+            response: [],
+          };
+        }
     }
 
     return {
@@ -379,9 +528,14 @@ const ImageAltTextPage = () => {
 
   const { t } = useTranslation();
   const { type, productId, imageId } = useParams();
+
   // console.log(type);
   const [initData, setInitData] = useState<any>(
     JSON.parse(sessionStorage.getItem("record") || "{}"),
+  );
+
+  const [initArticleData, setArticleInitData] = useState<any>(
+    JSON.parse(sessionStorage.getItem("article_image") || "{}"),
   );
   // console.log(initData);
 
@@ -402,7 +556,9 @@ const ImageAltTextPage = () => {
 
       case "products":
         return `gid://shopify/ProductImage/${imageId}`;
-
+      case "article_image":
+        return `${localTranslationData?.resourceId}_${localTranslationData.dbKey || localTranslationData.key}`;
+        break;
       default:
         return "";
     }
@@ -416,6 +572,7 @@ const ImageAltTextPage = () => {
       case "json_template":
       case "metafield":
       case "page":
+      case "article_image":
         return localTranslationData?.resourceId;
 
       case "articles":
@@ -423,7 +580,6 @@ const ImageAltTextPage = () => {
 
       case "products":
         return `gid://shopify/Product/${productId}`;
-
       default:
         return "";
     }
@@ -440,6 +596,7 @@ const ImageAltTextPage = () => {
   const replaceTranslateImageFetcher = useFetcher<any>();
   const imageLoadingFetcher = useFetcher<any>();
   const saveImageFetcher = useFetcher<any>();
+  const saveArticleImageFetcher = useFetcher<any>();
   const deleteImageFetcher = useFetcher<any>();
   const [pageLoading, setPageLoading] = useState<boolean>(true);
   const [confirmData, setConfirmData] = useState<any>([]);
@@ -770,7 +927,7 @@ const ImageAltTextPage = () => {
       console.log(type);
 
       shopify.saveBar.hide("save-bar");
-      if (type === "articles") {
+      if (type === "articles" || type === "article_image") {
         navigate(`/app/articles/${productId}`);
       } else if (type === "products") {
         navigate(`/app/products/${productId}`);
@@ -835,7 +992,8 @@ const ImageAltTextPage = () => {
       } else if (
         type === "json_template" ||
         type === "metafield" ||
-        type === "page"
+        type === "page" ||
+        type === "article_image"
       ) {
         const localTranslationData = JSON.parse(
           sessionStorage.getItem("record") || "{}",
@@ -857,7 +1015,7 @@ const ImageAltTextPage = () => {
             };
           } else {
             return {
-              imageId: `${localTranslationData?.resourceId}_${localTranslationData.key}`,
+              imageId: `${localTranslationData?.resourceId}_${localTranslationData.dbKey || localTranslationData.key}`,
               imageBeforeUrl: localTranslationData?.value,
               imageAfterUrl: "",
               altBeforeTranslation: "",
@@ -1073,7 +1231,8 @@ const ImageAltTextPage = () => {
         if (
           (type === "json_template" ||
             type === "metafield" ||
-            type === "page") &&
+            type === "page" ||
+            type === "article_image") &&
           currentTranslatingImage.imageAfterUrl
         ) {
           // 如果翻译前有数据，则进行删除操作
@@ -1089,7 +1248,8 @@ const ImageAltTextPage = () => {
         } else if (
           type === "json_template" ||
           type === "metafield" ||
-          type === "page"
+          type === "page" ||
+          type === "article_image"
         ) {
           saveImageFetcher.submit(
             {
@@ -1100,6 +1260,7 @@ const ImageAltTextPage = () => {
                 altText: currentTranslatingImage.altAfterTranslation
                   ? currentTranslatingImage.altAfterTranslation
                   : currentTranslatingImage.altBeforeTranslation,
+                type,
               }),
             },
             { method: "post" },
@@ -1130,6 +1291,9 @@ const ImageAltTextPage = () => {
           imageAfterUrl:
             "https://ciwi-us-1327177217.cos.na-ashburn.myqcloud.com/image-Translation/ciwishop.myshopify.com/63748991.jpg",
           languageCode: "en",
+          altText: "",
+          themeType: type,
+          locale: defaultLanguageData.locale,
         }),
       },
       { method: "post" },
@@ -1137,12 +1301,12 @@ const ImageAltTextPage = () => {
   };
   useEffect(() => {
     if (saveImageFetcher.data) {
-      console.log(saveImageFetcher.data);
+      console.log("saveImageFetcher", saveImageFetcher.data);
     }
   }, [saveImageFetcher.data]);
   useEffect(() => {
     if (deleteImageFetcher.data) {
-      console.log(deleteImageFetcher.data);
+      console.log("deleteImageFetcher", deleteImageFetcher.data);
     }
   }, [deleteImageFetcher.data]);
   const handleDelete = async (
@@ -1159,7 +1323,12 @@ const ImageAltTextPage = () => {
         imageUrl: imageUrl,
         languageCode: languageCode,
       });
-      if (type === "json_template" || type === "metafield" || type === "page") {
+      if (
+        type === "json_template" ||
+        type === "metafield" ||
+        type === "page" ||
+        type === "article_image"
+      ) {
         deleteImageFetcher.submit(
           {
             deleteImageInShopify: JSON.stringify({
@@ -1201,7 +1370,12 @@ const ImageAltTextPage = () => {
         imageUrl: imageUrl,
         languageCode: languageCode,
       });
-      if (type === "json_template" || type === "metafield" || type === "page") {
+      if (
+        type === "json_template" ||
+        type === "metafield" ||
+        type === "page" ||
+        type === "article_image"
+      ) {
         deleteImageFetcher.submit(
           {
             deleteImageInShopify: JSON.stringify({
@@ -1331,7 +1505,8 @@ const ImageAltTextPage = () => {
         if (
           type === "json_template" ||
           type === "metafield" ||
-          type === "page"
+          type === "page" ||
+          type === "article_image"
         ) {
           saveImageFetcher.submit(
             {
@@ -1339,6 +1514,9 @@ const ImageAltTextPage = () => {
                 ...initData,
                 imageAfterUrl: newUrl,
                 languageCode,
+                altText: "",
+                themeType: type,
+                locale: defaultLanguageData.locale,
               }),
             },
             { method: "post" },
@@ -1473,7 +1651,12 @@ const ImageAltTextPage = () => {
           method: "POST",
         },
       );
-    } else {
+    } else if (
+      type === "json_template" ||
+      type === "metafield" ||
+      type === "page" ||
+      type === "article_image"
+    ) {
       const localTranslationData = JSON.parse(
         sessionStorage.getItem("record") || "{}",
       );
@@ -1705,7 +1888,7 @@ const ImageAltTextPage = () => {
             )}
           </Space>
         </Layout.Section>
-        {/* <Button onClick={handleSaveImage}>{t("Save Image")}</Button> */}
+        <Button onClick={handleSaveImage}>{t("Save Image")}</Button>
         <Layout.Section>
           <Space direction="vertical" size="large" style={{ width: "100%" }}>
             <div
@@ -1973,7 +2156,8 @@ const ImageAltTextPage = () => {
                                     img.imageAfterUrl &&
                                     (type === "json_template" ||
                                       type === "metafield" ||
-                                      type === "page")
+                                      type === "page" ||
+                                      type === "article_image")
                                   ) {
                                     deleteImageFetcher.submit(
                                       {
@@ -2015,7 +2199,8 @@ const ImageAltTextPage = () => {
                                     if (
                                       type === "json_template" ||
                                       type === "metafield" ||
-                                      type === "page"
+                                      type === "page" ||
+                                      type === "article_image"
                                     ) {
                                       saveImageFetcher.submit(
                                         {
@@ -2023,6 +2208,9 @@ const ImageAltTextPage = () => {
                                             ...initData,
                                             imageAfterUrl: newUrl,
                                             languageCode: img.languageCode·,
+                                            altText: "",
+                                            themeType: type,
+                                            locale: defaultLanguageData.locale,
                                           }),
                                         },
                                         { method: "post" },

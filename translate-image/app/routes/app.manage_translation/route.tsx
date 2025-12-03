@@ -242,7 +242,7 @@ const Index = () => {
             </Card>
 
             {/* === 4. ARTICLE === */}
-            {/* <Card>
+            <Card>
               <Table
                 pagination={false}
                 showHeader={false}
@@ -268,7 +268,7 @@ const Index = () => {
                     render: () => (
                       <Button
                         onClick={() => {
-                          navigate("/app/management");
+                          navigate("/app/manage_translation/article_image");
                         }}
                       >
                         {t("操作")}
@@ -277,12 +277,19 @@ const Index = () => {
                   },
                 ]}
               />
-            </Card> */}
+            </Card>
           </Space>
         </Space>
       </Space>
     </Page>
   );
 };
+
+export const getItemOptions = (t: (key: string) => string) => [
+  { label: t("Json Template"), value: "json_template" },
+  { label: t("Metafield"), value: "metafield" },
+  { label: t("Pages"), value: "page" },
+  { label: t("Articles"), value: "article_image" },
+];
 
 export default Index;

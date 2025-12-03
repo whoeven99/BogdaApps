@@ -6,6 +6,7 @@ import {
   Page,
   Pagination,
   Thumbnail,
+  Select,
 } from "@shopify/polaris";
 import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
 import {
@@ -37,10 +38,12 @@ import { ColumnsType } from "antd/es/table";
 import { ActionFunctionArgs, json, LoaderFunctionArgs } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
 import SortPopover from "~/components/SortPopover";
+import { getItemOptions } from "../app.manage_translation/route";
 const { Text, Title } = Typography;
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
   const searchTerm = url.searchParams.get("language");
+  console.log("sesdas", searchTerm);
 
   return json({
     searchTerm,
@@ -49,7 +52,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const url = new URL(request.url);
-
   const searchTerm = url.searchParams.get("language");
 
   const adminAuthResult = await authenticate.admin(request);
@@ -146,6 +148,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 type,
                 value: urls[0],
                 translations: node.translations || [],
+                digest: contentItem.digest,
                 originValue: contentItem.value,
               };
             })(),
@@ -155,19 +158,24 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         // ---- 3) HTML ----
         if (type === "HTML") {
           const urls = extractFromHtml(contentItem.value || "");
+          console.log("contentItem.value", contentItem.value);
+          console.log("urls", urls);
 
           if (urls.length === 0) continue; // ❗没有图片，不返回
-
-          tasks.push(
-            Promise.resolve({
-              resourceId: node.resourceId,
-              key: contentItem.key,
-              type,
-              value: urls[0], // 单一值
-              translations: node.translations || [],
-              originValue: contentItem.value,
-            }),
-          );
+          urls.forEach((url, index) => {
+            tasks.push(
+              Promise.resolve({
+                resourceId: node.resourceId,
+                key: contentItem.key,
+                dbKey: `${contentItem.key}_${index}`,
+                type,
+                value: url, // 单一值
+                translations: node.translations || [],
+                digest: contentItem.digest,
+                originValue: contentItem.value,
+              }),
+            );
+          });
         }
 
         // ---- 4) RICH_TEXT_FIELD ----
@@ -183,6 +191,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               type,
               value: urls[0],
               translations: node.translations || [],
+              digest: contentItem.digest,
               originValue: contentItem.value,
             }),
           );
@@ -255,7 +264,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           const response = await admin.graphql(
             `#graphql
                 query JsonTemplate($startCursor: String){     
-                    translatableResources(resourceType: ONLINE_STORE_THEME, last: 20, ,before: $startCursor) {
+                    translatableResources(resourceType: ARTICLE, last: 20, ,before: $startCursor) {
                       nodes {
                         resourceId
                         translatableContent {
@@ -325,7 +334,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             `#graphql
               query JsonTemplate($endCursor: String){     
                 translatableResources(
-                  resourceType: ONLINE_STORE_THEME, 
+                  resourceType: ARTICLE, 
                   first: 20, 
                   after: $endCursor
                 ) {
@@ -373,6 +382,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
           // ⭐ 关键改动：等所有 FILE_REFERENCE 图片解析完
           const fileReferences = await fetchFileReferences(admin, tr.nodes);
+          console.log("fileReferences", fileReferences);
 
           return json({
             data: fileReferences,
@@ -405,6 +415,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 export default function Index() {
   const { searchTerm } = useLoaderData<typeof loader>();
   const dataFetcher = useFetcher<any>();
+  const { t } = useTranslation();
+  const itemOptions = getItemOptions(t);
 
   const [startCursor, setStartCursor] = useState("");
   const [endCursor, setEndCursor] = useState("");
@@ -415,8 +427,8 @@ export default function Index() {
   const [hasNextPage, setHasNextPage] = useState(false);
   const [hasPreviousPage, setHasPreviousPage] = useState(false);
 
-  const { t } = useTranslation();
   const { Text } = Typography;
+  const [selectedItem, setSelectedItem] = useState<string>("article");
   const navigate = useNavigate();
   const panelColumns: ColumnsType<any> = [
     {
@@ -455,7 +467,7 @@ export default function Index() {
             // cursor:"pointer"
           }}
         >
-          {record?.key || "未命名产品"}
+          {record?.dbKey || "未命名产品"}
         </Text>
       ),
       responsive: ["xs", "sm", "md", "lg", "xl", "xxl"], // ✅ 正确
@@ -546,6 +558,15 @@ export default function Index() {
   const handleNavigate = () => {
     navigate("/app/manage_translation");
   };
+  const handleItemChange = (item: string) => {
+    shopify.saveBar.hide("save-bar");
+    // setIsLoading(true);
+    // isManualChangeRef.current = true;
+    setSelectedItem(item);
+    console.log(item);
+
+    navigate(`/app/manage_translation/${item}`);
+  };
   return (
     <Page>
       {/* <TitleBar title={t("Article Image Translate")}></TitleBar> */}
@@ -582,12 +603,29 @@ export default function Index() {
                   fontWeight: 700,
                 }}
               >
-                {t("online store theme")}
+                {t("article")}
               </Title>
             </Flex>
           </Flex>
         </div>
       </Affix>
+      <div
+        style={{ display: "flex", justifyContent: "flex-end", width: "100%" }}
+      >
+        <div
+          style={{
+            width: "100px",
+          }}
+        >
+          <Select
+            label={""}
+            options={itemOptions}
+            value={selectedItem}
+            onChange={(value) => handleItemChange(value)}
+          />
+        </div>
+      </div>
+
       <div
         style={{
           display: "flex",
@@ -603,15 +641,17 @@ export default function Index() {
             dataSource={articleData}
             columns={panelColumns}
             pagination={false}
-            rowKey={(record) => `${record.key}_${record.digest}`} // ✅ 建议加上 key，避免警告
+            rowKey={(record) =>
+              `${record.dbKey || record.key}_${record.digest}`
+            } // ✅ 建议加上 key，避免警告
             loading={tableDataLoading}
             onRow={(record) => ({
               onClick: (e) => {
                 // 排除点击按钮等交互元素
                 if ((e.target as HTMLElement).closest("button")) return;
-                console.log("嗯？？");
+                console.log("嗯？？",record);
                 sessionStorage.setItem("record", JSON.stringify(record));
-                navigate(`/app/manage_translations/json_template`, {
+                navigate(`/app/manage_translations/article_image`, {
                   state: { resourceId: record.resourceId, record: record },
                 });
               },
