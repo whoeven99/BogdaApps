@@ -411,7 +411,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             accessToken: accessToken as string,
             item: deleteImageInShopify,
           });
-          return json({ response });
+          return json({ response: response?.data });
         } catch (error) {
           console.log("delete image file in shopify action error", error);
           return {
