@@ -242,7 +242,7 @@ const Index = () => {
             </Card>
 
             {/* === 4. ARTICLE === */}
-            <Card>
+            {/* <Card>
               <Table
                 pagination={false}
                 showHeader={false}
@@ -277,7 +277,7 @@ const Index = () => {
                   },
                 ]}
               />
-            </Card>
+            </Card> */}
           </Space>
         </Space>
       </Space>
