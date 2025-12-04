@@ -99,17 +99,35 @@ export default function ProductDetailPage() {
   const location = useLocation();
   const { resourceId, record } = location.state || {};
   const { resource } = useParams();
-  const [initData, setInitData] = useState<any>(
-    JSON.parse(sessionStorage.getItem("record") || "{}"),
-  );
-  useEffect(() => {
-    // const data =
-    //   resource === "article_image"
-    //     ? JSON.parse(sessionStorage.getItem("article_image") || "{}")
-    //     : JSON.parse(sessionStorage.getItem("record") || "{}");
-    // console.log(data);
-    // setInitData(data);
-  }, []);
+  const [initData, setInitData] = useState<any>(() => {
+    const raw = sessionStorage.getItem("record");
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+
+    // 如果 value 是数组 → 拆分成多个对象
+    if (Array.isArray(parsed.value)) {
+      return parsed.value.map((v: string, index: number) => ({
+        ...parsed,
+        value: v,
+        dbKey: `${parsed.key}_${index}`,
+      }));
+    }
+
+    return parsed;
+  });
+  console.log(initData);
+
+  // useEffect(() => {
+  //   const data = JSON.parse(sessionStorage.getItem("record") || "{}");
+  //   if (data) {
+  //     const result = return data.value.map((value: string) => {
+  //       return { ...data, value };
+  //     });
+  //   }
+  //   console.log(data);
+
+  // }, []);
   // console.log(resourceId);
   // console.log(record);
 
@@ -118,16 +136,26 @@ export default function ProductDetailPage() {
   const handleNavigate = () => {
     navigate(`/app/manage_translation/${resource}`);
   };
-  const handleSelect = (id: string) => {
+  const handleSelect = (item: any, index: number) => {
     // const imageId = id.split("/").pop();
     // const data =
     //   resource === "article_image"
     //     ? JSON.parse(sessionStorage.getItem("article_image") || "{}")
     //     : JSON.parse(sessionStorage.getItem("record") || "{}");
     // console.log(data);
+    console.log(item);
+    const raw = sessionStorage.getItem("record");
+    const parsed = JSON.parse(raw || "{}");
 
-    navigate(`/app/${resource}/${initData?.digest}/${initData.digest}`, {
-      state: { record: initData },
+    sessionStorage.setItem(
+      "record",
+      JSON.stringify({
+        ...parsed,
+        index,
+      }),
+    );
+    navigate(`/app/${resource}/${item?.digest}/${item.digest}`, {
+      state: { record: item },
     });
   };
   return (
@@ -184,6 +212,75 @@ export default function ProductDetailPage() {
           </Title> */}
           <div
             style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+              gap: "20px",
+              // padding: "10px",
+            }}
+          >
+            {initData.length > 0 &&
+              initData?.map((item: any, index: number) => (
+                <div
+                  key={item.dbKey || item.key}
+                  style={{
+                    textAlign: "center",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    cursor: "pointer",
+                    transition: "all 0.3s ease",
+                    border: "1px solid #f0f0f0",
+                    borderRadius: "8px",
+                    padding: 0,
+                    backgroundColor: "#fff",
+                  }}
+                  onClick={() => handleSelect(item, index)}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = "translateY(-4px)";
+                    e.currentTarget.style.boxShadow =
+                      "0 6px 12px rgba(0,0,0,0.1)";
+                    // e.currentTarget.style.borderColor = "#1677ff";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = "translateY(0)";
+                    e.currentTarget.style.boxShadow = "none";
+                    e.currentTarget.style.borderColor = "#f0f0f0";
+                  }}
+                >
+                  <div
+                    style={{
+                      width: "100%",
+                      aspectRatio: "1/1",
+                      borderRadius: "8px 8px 0 0",
+                      overflow: "hidden",
+                      backgroundColor: "#f7f7f7",
+                      marginBottom: "30px",
+                      padding: 0,
+                    }}
+                  >
+                    <img
+                      src={item.value}
+                      alt={item.altText || "article image"}
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "contain",
+                      }}
+                    />
+                  </div>
+                  <div style={{ padding: "12px" }}>
+                    <Button
+                      type="default"
+                      onClick={() => handleSelect(item, index)}
+                    >
+                      {t("View translation")}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+          </div>
+          {/* <div
+            style={{
               width: "300px",
               textAlign: "center",
               display: "flex",
@@ -237,7 +334,7 @@ export default function ProductDetailPage() {
                 {t("View translation")}
               </Button>
             </div>
-          </div>
+          </div> */}
         </Layout.Section>
       </Layout>
     </Page>

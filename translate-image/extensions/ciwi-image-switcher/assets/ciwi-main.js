@@ -159,7 +159,14 @@ async function ProductImgTranslate(blockId, shop, ciwiBlock) {
 // =============================
 // 店铺主页图片翻译逻辑
 // =============================
-async function HomeImageTranslate(blockId) {
+async function HomeImageTranslate(blockId, ciwiBlock) {
+  const productId = ciwiBlock.querySelector(
+    'input[name="image_product_id"]',
+  ).value;
+  // console.log("productId", productId);
+  if (!productId) {
+    return;
+  }
   const shop = document.querySelector("#image_queryCiwiId")?.value;
   const language = document.querySelector(
     'input[name="image_language_code"]',
@@ -228,7 +235,7 @@ window.onload = async () => {
 
   await Promise.all([
     ProductImgTranslate(blockId, shop, ciwiBlock),
-    HomeImageTranslate(blockId),
+    HomeImageTranslate(blockId, ciwiBlock),
   ]);
 
   const endTime = performance.now();

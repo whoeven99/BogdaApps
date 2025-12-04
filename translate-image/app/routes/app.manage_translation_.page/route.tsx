@@ -5,6 +5,7 @@ import {
   Layout,
   Page,
   Pagination,
+  Select,
   Thumbnail,
 } from "@shopify/polaris";
 import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
@@ -37,6 +38,7 @@ import { ColumnsType } from "antd/es/table";
 import { ActionFunctionArgs, json, LoaderFunctionArgs } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
 import SortPopover from "~/components/SortPopover";
+import { getItemOptions } from "../app.manage_translation/route";
 const { Text, Title } = Typography;
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
@@ -92,109 +94,194 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return result;
   };
 
+  // const fetchFileReferences = async (admin: any, nodes: any[]) => {
+  //   const tasks: Promise<any>[] = [];
+
+  //   for (const node of nodes) {
+  //     for (const contentItem of node.translatableContent || []) {
+  //       const type = contentItem.type;
+  //       if (!IMAGE_TYPES.has(type)) continue;
+
+  //       // ---- 1) FILE_REFERENCE ----
+  //       if (type === "FILE_REFERENCE") {
+  //         tasks.push(
+  //           (async () => {
+  //             const fileName = contentItem.value?.split("/").pop() ?? "";
+  //             const src = await findImageSrc(admin, fileName);
+
+  //             if (!src) return null; // ❗没有图片则忽略
+
+  //             return {
+  //               resourceId: node.resourceId,
+  //               key: contentItem.key,
+  //               type,
+  //               value: src, // 单一值
+  //               translations: node.translations || [],
+  //               digest: contentItem.digest,
+  //             };
+  //           })(),
+  //         );
+  //       }
+
+  //       // ---- 2) LIST_FILE_REFERENCE ----
+  //       if (type === "LIST_FILE_REFERENCE") {
+  //         tasks.push(
+  //           (async () => {
+  //             const refs: string[] = contentItem.value || [];
+
+  //             const urls = (
+  //               await Promise.all(
+  //                 refs.map(async (ref) => {
+  //                   const fileName = ref?.split("/").pop() ?? "";
+  //                   return await findImageSrc(admin, fileName);
+  //                 }),
+  //               )
+  //             ).filter(Boolean);
+
+  //             // ❗LIST_FILE_REFERENCE 也只返回第一张（你要求单一）
+  //             if (urls.length === 0) return null;
+
+  //             return {
+  //               resourceId: node.resourceId,
+  //               key: contentItem.key,
+  //               type,
+  //               value: urls[0],
+  //               translations: node.translations || [],
+  //             };
+  //           })(),
+  //         );
+  //       }
+
+  //       // ---- 3) HTML ----
+  //       if (type === "HTML") {
+  //         const urls = extractFromHtml(contentItem.value || "");
+
+  //         if (urls.length === 0) continue; // ❗没有图片，不返回
+
+  //         urls.forEach((url, index) => {
+  //           tasks.push(
+  //             Promise.resolve({
+  //               resourceId: node.resourceId,
+  //               key: contentItem.key,
+  //               dbKey: `${contentItem.key}_${index}`,
+  //               type,
+  //               value: url, // 单一值
+  //               translations: node.translations || [],
+  //               digest: contentItem.digest,
+  //               originValue: contentItem.value,
+  //             }),
+  //           );
+  //         });
+  //       }
+
+  //       // ---- 4) RICH_TEXT_FIELD ----
+  //       if (type === "RICH_TEXT_FIELD") {
+  //         const urls = extractFromRichText(contentItem.value?.children || []);
+
+  //         if (urls.length === 0) continue;
+
+  //         tasks.push(
+  //           Promise.resolve({
+  //             resourceId: node.resourceId,
+  //             key: contentItem.key,
+  //             type,
+  //             value: urls[0],
+  //             translations: node.translations || [],
+  //           }),
+  //         );
+  //       }
+  //     }
+  //   }
+
+  //   const resolved = await Promise.all(tasks);
+
+  //   // ❗过滤掉 null（无图片的项）
+  //   return resolved.filter(Boolean);
+  // };
   const fetchFileReferences = async (admin: any, nodes: any[]) => {
-    const tasks: Promise<any>[] = [];
+    const results: any[] = [];
 
     for (const node of nodes) {
       for (const contentItem of node.translatableContent || []) {
         const type = contentItem.type;
         if (!IMAGE_TYPES.has(type)) continue;
 
-        // ---- 1) FILE_REFERENCE ----
+        // === 1) FILE_REFERENCE ===
         if (type === "FILE_REFERENCE") {
-          tasks.push(
-            (async () => {
-              const fileName = contentItem.value?.split("/").pop() ?? "";
-              const src = await findImageSrc(admin, fileName);
+          const fileName = contentItem.value?.split("/").pop() ?? "";
+          const src = await findImageSrc(admin, fileName);
 
-              if (!src) return null; // ❗没有图片则忽略
+          if (!src) continue;
 
-              return {
-                resourceId: node.resourceId,
-                key: contentItem.key,
-                type,
-                value: src, // 单一值
-                translations: node.translations || [],
-                digest: contentItem.digest,
-              };
-            })(),
-          );
-        }
-
-        // ---- 2) LIST_FILE_REFERENCE ----
-        if (type === "LIST_FILE_REFERENCE") {
-          tasks.push(
-            (async () => {
-              const refs: string[] = contentItem.value || [];
-
-              const urls = (
-                await Promise.all(
-                  refs.map(async (ref) => {
-                    const fileName = ref?.split("/").pop() ?? "";
-                    return await findImageSrc(admin, fileName);
-                  }),
-                )
-              ).filter(Boolean);
-
-              // ❗LIST_FILE_REFERENCE 也只返回第一张（你要求单一）
-              if (urls.length === 0) return null;
-
-              return {
-                resourceId: node.resourceId,
-                key: contentItem.key,
-                type,
-                value: urls[0],
-                translations: node.translations || [],
-              };
-            })(),
-          );
-        }
-
-        // ---- 3) HTML ----
-        if (type === "HTML") {
-          const urls = extractFromHtml(contentItem.value || "");
-
-          if (urls.length === 0) continue; // ❗没有图片，不返回
-
-          urls.forEach((url, index) => {
-            tasks.push(
-              Promise.resolve({
-                resourceId: node.resourceId,
-                key: contentItem.key,
-                dbKey: `${contentItem.key}_${index}`,
-                type,
-                value: url, // 单一值
-                translations: node.translations || [],
-                digest: contentItem.digest,
-                originValue: contentItem.value,
-              }),
-            );
+          results.push({
+            resourceId: node.resourceId,
+            key: contentItem.key,
+            type,
+            value: [src], // ❗单图也用数组统一格式
+            translations: node.translations || [],
+            digest: contentItem.digest,
           });
         }
 
-        // ---- 4) RICH_TEXT_FIELD ----
-        if (type === "RICH_TEXT_FIELD") {
-          const urls = extractFromRichText(contentItem.value?.children || []);
+        // === 2) LIST_FILE_REFERENCE ===
+        if (type === "LIST_FILE_REFERENCE") {
+          const refs: string[] = contentItem.value || [];
+
+          const urls = (
+            await Promise.all(
+              refs.map(async (ref) => {
+                const fileName = ref?.split("/").pop() ?? "";
+                return await findImageSrc(admin, fileName);
+              }),
+            )
+          ).filter(Boolean);
 
           if (urls.length === 0) continue;
 
-          tasks.push(
-            Promise.resolve({
-              resourceId: node.resourceId,
-              key: contentItem.key,
-              type,
-              value: urls[0],
-              translations: node.translations || [],
-            }),
-          );
+          results.push({
+            resourceId: node.resourceId,
+            key: contentItem.key,
+            type,
+            value: urls, // ❗多图放一起
+            translations: node.translations || [],
+            digest: contentItem.digest,
+          });
+        }
+
+        // === 3) HTML ===
+        if (type === "HTML") {
+          const urls = extractFromHtml(contentItem.value || "");
+          if (urls.length === 0) continue;
+
+          results.push({
+            resourceId: node.resourceId,
+            key: contentItem.key,
+            type,
+            value: urls, // ❗html 多图放一起
+            translations: node.translations || [],
+            digest: contentItem.digest,
+            originValue: contentItem.value,
+          });
+        }
+
+        // === 4) RICH_TEXT_FIELD ===
+        if (type === "RICH_TEXT_FIELD") {
+          const urls = extractFromRichText(contentItem.value?.children || []);
+          if (urls.length === 0) continue;
+
+          results.push({
+            resourceId: node.resourceId,
+            key: contentItem.key,
+            type,
+            value: urls, // ❗多图放一起
+            translations: node.translations || [],
+            digest: contentItem.digest,
+          });
         }
       }
     }
 
-    const resolved = await Promise.all(tasks);
-
-    // ❗过滤掉 null（无图片的项）
-    return resolved.filter(Boolean);
+    return results;
   };
 
   const findImageSrc = async (admin: any, fileName: string) => {
@@ -415,8 +502,9 @@ export default function Index() {
 
   const [hasNextPage, setHasNextPage] = useState(false);
   const [hasPreviousPage, setHasPreviousPage] = useState(false);
-
+  const [selectedItem, setSelectedItem] = useState<string>("page");
   const { t } = useTranslation();
+  const itemOptions = getItemOptions(t);
   const { Text } = Typography;
   const navigate = useNavigate();
   const panelColumns: ColumnsType<any> = [
@@ -426,7 +514,11 @@ export default function Index() {
       render: (_: any, record: any) => {
         // console.log("record", record);
         return record.value ? (
-          <Thumbnail source={record.value} size="large" alt={record.value} />
+          <Thumbnail
+            source={record?.value[0]}
+            size="large"
+            alt={record?.value[0]}
+          />
         ) : (
           <Thumbnail source={ImageIcon} size="large" alt="Small document" />
         );
@@ -456,7 +548,7 @@ export default function Index() {
             // cursor:"pointer"
           }}
         >
-          {record?.dbKey || record?.key}
+          {record?.key}
         </Text>
       ),
       responsive: ["xs", "sm", "md", "lg", "xl", "xxl"], // ✅ 正确
@@ -547,6 +639,14 @@ export default function Index() {
   const handleNavigate = () => {
     navigate("/app/manage_translation");
   };
+  const handleItemChange = (item: string) => {
+    // setIsLoading(true);
+    // isManualChangeRef.current = true;
+    setSelectedItem(item);
+    console.log(item);
+
+    navigate(`/app/manage_translation/${item}`);
+  };
   return (
     <Page>
       {/* <TitleBar title={t("Article Image Translate")}></TitleBar> */}
@@ -590,6 +690,23 @@ export default function Index() {
         </div>
       </Affix>
       <div
+        style={{ display: "flex", justifyContent: "flex-end", width: "100%" }}
+      >
+        <div
+          style={{
+            width: "150px",
+            marginBottom: "20px",
+          }}
+        >
+          <Select
+            label={""}
+            options={itemOptions}
+            value={selectedItem}
+            onChange={(value) => handleItemChange(value)}
+          />
+        </div>
+      </div>
+      <div
         style={{
           display: "flex",
           flexDirection: "column",
@@ -604,9 +721,7 @@ export default function Index() {
             dataSource={articleData}
             columns={panelColumns}
             pagination={false}
-            rowKey={(record) =>
-              `${record.dbKey || record.key}_${record.digest}`
-            } // ✅ 建议加上 key，避免警告
+            rowKey={(record) => `${record.digest}`} // ✅ 建议加上 key，避免警告
             loading={tableDataLoading}
             onRow={(record) => ({
               onClick: (e) => {

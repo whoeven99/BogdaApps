@@ -286,10 +286,10 @@ const Index = () => {
 };
 
 export const getItemOptions = (t: (key: string) => string) => [
-  { label: t("Online store theme"), value: "online_store_theme" },
+  { label: t("Json Template"), value: "json_template" },
   { label: t("Metafield"), value: "metafield" },
   { label: t("Pages"), value: "page" },
-  { label: t("Articles"), value: "article_image" },
+  // { label: t("Articles"), value: "article_image" },
 ];
 
 export default Index;

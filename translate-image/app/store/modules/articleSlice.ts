@@ -26,7 +26,7 @@ const initialState: ArticleState = {
     direction:"",
     searchText: "",
     sortOrder: "desc",
-    sortKey: "AUTHOR",
+    sortKey: "UPDATED_AT",
   },
 };
 

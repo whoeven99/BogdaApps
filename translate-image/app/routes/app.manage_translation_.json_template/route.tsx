@@ -95,107 +95,89 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   };
 
   const fetchFileReferences = async (admin: any, nodes: any[]) => {
-    const tasks: Promise<any>[] = [];
+    const results: any[] = [];
 
     for (const node of nodes) {
       for (const contentItem of node.translatableContent || []) {
         const type = contentItem.type;
         if (!IMAGE_TYPES.has(type)) continue;
 
-        // ---- 1) FILE_REFERENCE ----
+        // === 1) FILE_REFERENCE ===
         if (type === "FILE_REFERENCE") {
-          tasks.push(
-            (async () => {
-              const fileName = contentItem.value?.split("/").pop() ?? "";
-              const src = await findImageSrc(admin, fileName);
+          const fileName = contentItem.value?.split("/").pop() ?? "";
+          const src = await findImageSrc(admin, fileName);
 
-              if (!src) return null; // ❗没有图片则忽略
+          if (!src) continue;
 
-              return {
-                resourceId: node.resourceId,
-                key: contentItem.key,
-                type,
-                value: src, // 单一值
-                translations: node.translations || [],
-                digest: contentItem.digest,
-                originValue: contentItem.value,
-              };
-            })(),
-          );
+          results.push({
+            resourceId: node.resourceId,
+            key: contentItem.key,
+            type,
+            value: [src], // ❗单图也用数组统一格式
+            translations: node.translations || [],
+            digest: contentItem.digest,
+          });
         }
 
-        // ---- 2) LIST_FILE_REFERENCE ----
+        // === 2) LIST_FILE_REFERENCE ===
         if (type === "LIST_FILE_REFERENCE") {
-          tasks.push(
-            (async () => {
-              const refs: string[] = contentItem.value || [];
+          const refs: string[] = contentItem.value || [];
 
-              const urls = (
-                await Promise.all(
-                  refs.map(async (ref) => {
-                    const fileName = ref?.split("/").pop() ?? "";
-                    return await findImageSrc(admin, fileName);
-                  }),
-                )
-              ).filter(Boolean);
-
-              // ❗LIST_FILE_REFERENCE 也只返回第一张（你要求单一）
-              if (urls.length === 0) return null;
-
-              return {
-                resourceId: node.resourceId,
-                key: contentItem.key,
-                type,
-                value: urls[0],
-                translations: node.translations || [],
-                originValue: contentItem.value,
-              };
-            })(),
-          );
-        }
-
-        // ---- 3) HTML ----
-        if (type === "HTML") {
-          const urls = extractFromHtml(contentItem.value || "");
-
-          if (urls.length === 0) continue; // ❗没有图片，不返回
-
-          tasks.push(
-            Promise.resolve({
-              resourceId: node.resourceId,
-              key: contentItem.key,
-              type,
-              value: urls[0], // 单一值
-              translations: node.translations || [],
-              originValue: contentItem.value,
-            }),
-          );
-        }
-
-        // ---- 4) RICH_TEXT_FIELD ----
-        if (type === "RICH_TEXT_FIELD") {
-          const urls = extractFromRichText(contentItem.value?.children || []);
+          const urls = (
+            await Promise.all(
+              refs.map(async (ref) => {
+                const fileName = ref?.split("/").pop() ?? "";
+                return await findImageSrc(admin, fileName);
+              }),
+            )
+          ).filter(Boolean);
 
           if (urls.length === 0) continue;
 
-          tasks.push(
-            Promise.resolve({
-              resourceId: node.resourceId,
-              key: contentItem.key,
-              type,
-              value: urls[0],
-              translations: node.translations || [],
-              originValue: contentItem.value,
-            }),
-          );
+          results.push({
+            resourceId: node.resourceId,
+            key: contentItem.key,
+            type,
+            value: urls, // ❗多图放一起
+            translations: node.translations || [],
+            digest: contentItem.digest,
+          });
+        }
+
+        // === 3) HTML ===
+        if (type === "HTML") {
+          const urls = extractFromHtml(contentItem.value || "");
+          if (urls.length === 0) continue;
+
+          results.push({
+            resourceId: node.resourceId,
+            key: contentItem.key,
+            type,
+            value: urls, // ❗html 多图放一起
+            translations: node.translations || [],
+            digest: contentItem.digest,
+            originValue: contentItem.value,
+          });
+        }
+
+        // === 4) RICH_TEXT_FIELD ===
+        if (type === "RICH_TEXT_FIELD") {
+          const urls = extractFromRichText(contentItem.value?.children || []);
+          if (urls.length === 0) continue;
+
+          results.push({
+            resourceId: node.resourceId,
+            key: contentItem.key,
+            type,
+            value: urls, // ❗多图放一起
+            translations: node.translations || [],
+            digest: contentItem.digest,
+          });
         }
       }
     }
 
-    const resolved = await Promise.all(tasks);
-
-    // ❗过滤掉 null（无图片的项）
-    return resolved.filter(Boolean);
+    return results;
   };
 
   const findImageSrc = async (admin: any, fileName: string) => {
@@ -411,8 +393,7 @@ export default function Index() {
   const itemOptions = getItemOptions(t);
   const [startCursor, setStartCursor] = useState("");
   const [endCursor, setEndCursor] = useState("");
-  const [selectedItem, setSelectedItem] =
-    useState<string>("online_store_theme");
+  const [selectedItem, setSelectedItem] = useState<string>("json_template");
   const [tableDataLoading, setTableDataLoading] = useState(false);
 
   const [articleData, setArticleData] = useState<any>([]);
@@ -429,7 +410,7 @@ export default function Index() {
       render: (_: any, record: any) => {
         // console.log("record", record);
         return record.value ? (
-          <Thumbnail source={record.value} size="large" alt={record.value} />
+          <Thumbnail source={record?.value[0]} size="large" alt={record?.value[0]} />
         ) : (
           <Thumbnail source={ImageIcon} size="large" alt="Small document" />
         );
@@ -551,7 +532,6 @@ export default function Index() {
     navigate("/app/manage_translation");
   };
   const handleItemChange = (item: string) => {
-    shopify.saveBar.hide("save-bar");
     // setIsLoading(true);
     // isManualChangeRef.current = true;
     setSelectedItem(item);
@@ -606,7 +586,8 @@ export default function Index() {
       >
         <div
           style={{
-            width: "100px",
+            width: "150px",
+            marginBottom: "20px",
           }}
         >
           <Select
@@ -639,6 +620,8 @@ export default function Index() {
                 // 排除点击按钮等交互元素
                 if ((e.target as HTMLElement).closest("button")) return;
                 console.log("嗯？？");
+                console.log("record",record);
+                
                 sessionStorage.setItem("record", JSON.stringify(record));
                 navigate(`/app/manage_translations/json_template`, {
                   state: { resourceId: record.resourceId, record: record },

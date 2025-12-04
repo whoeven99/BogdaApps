@@ -5,6 +5,7 @@ import {
   Layout,
   Page,
   Pagination,
+  Select,
   Thumbnail,
 } from "@shopify/polaris";
 import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
@@ -37,6 +38,7 @@ import { ColumnsType } from "antd/es/table";
 import { ActionFunctionArgs, json, LoaderFunctionArgs } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
 import SortPopover from "~/components/SortPopover";
+import { getItemOptions } from "../app.manage_translation/route";
 const { Text, Title } = Typography;
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
@@ -410,8 +412,9 @@ export default function Index() {
 
   const [hasNextPage, setHasNextPage] = useState(false);
   const [hasPreviousPage, setHasPreviousPage] = useState(false);
-
+  const [selectedItem, setSelectedItem] = useState<string>("metafield");
   const { t } = useTranslation();
+  const itemOptions = getItemOptions(t);
   const { Text } = Typography;
   const navigate = useNavigate();
   const panelColumns: ColumnsType<any> = [
@@ -542,6 +545,14 @@ export default function Index() {
   const handleNavigate = () => {
     navigate("/app/manage_translation");
   };
+  const handleItemChange = (item: string) => {
+    // setIsLoading(true);
+    // isManualChangeRef.current = true;
+    setSelectedItem(item);
+    console.log(item);
+
+    navigate(`/app/manage_translation/${item}`);
+  };
   return (
     <Page>
       {/* <TitleBar title={t("Article Image Translate")}></TitleBar> */}
@@ -584,6 +595,23 @@ export default function Index() {
           </Flex>
         </div>
       </Affix>
+      <div
+        style={{ display: "flex", justifyContent: "flex-end", width: "100%" }}
+      >
+        <div
+          style={{
+            width: "150px",
+            marginBottom: "20px",
+          }}
+        >
+          <Select
+            label={""}
+            options={itemOptions}
+            value={selectedItem}
+            onChange={(value) => handleItemChange(value)}
+          />
+        </div>
+      </div>
       <div
         style={{
           display: "flex",

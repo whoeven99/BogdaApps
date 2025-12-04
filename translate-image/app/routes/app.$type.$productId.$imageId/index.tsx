@@ -294,7 +294,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
       case !!saveImageToShopify:
         try {
-          console.log("dasidas", saveImageToShopify);
+          console.log("dasidasweq", saveImageToShopify);
           // const { shop, accessToken } = adminAuthResult.session;
           const queryTranslations = await admin.graphql(
             `#graphql
@@ -385,7 +385,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             },
           );
           const parse = await createFileRes.json();
-          console.log("parse", parse);
+          console.log("parse", parse.data.fileCreate.files);
           const response = await updateManageTranslation({
             shop,
             accessToken: accessToken as string,
@@ -457,21 +457,20 @@ const ImageAltTextPage = () => {
     const localTranslationData = JSON.parse(
       sessionStorage.getItem("record") || "{}",
     );
-    console.log("dsdjaisdj", type);
+    console.log("dsdjaisdj", localTranslationData);
 
     switch (type) {
       case "json_template":
       case "metafield":
       case "page":
-        return `${localTranslationData?.resourceId}_${localTranslationData.dbKey || localTranslationData.key}`;
-        break;
+      case "article_image":
+        return hashString(
+          `${localTranslationData?.value[localTranslationData?.index]}_${localTranslationData.resourceId}`,
+        );
       case "articles":
         return `gid://shopify/ArticleImage/${imageId}`;
-
       case "products":
         return `gid://shopify/ProductImage/${imageId}`;
-      case "article_image":
-        return `${localTranslationData?.resourceId}_${localTranslationData.dbKey || localTranslationData.key}`;
         break;
       default:
         return "";
@@ -790,6 +789,14 @@ const ImageAltTextPage = () => {
     { label: "Urdu", value: "ur" },
     { label: "Vietnamese", value: "vi" },
   ];
+  function hashString(str: string) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = (hash << 5) - hash + str.charCodeAt(i);
+      hash |= 0;
+    }
+    return Math.abs(hash).toString();
+  }
 
   const [sourceLanguage, setSourceLanguage] = useState<string>("zh");
   const [targetLanguage, setTargetLanguage] = useState<any>();
@@ -929,8 +936,11 @@ const ImageAltTextPage = () => {
             };
           } else {
             return {
-              imageId: `${localTranslationData?.resourceId}_${localTranslationData.dbKey || localTranslationData.key}`,
-              imageBeforeUrl: localTranslationData?.value,
+              imageId: hashString(
+                `${localTranslationData?.value[localTranslationData?.index]}_${localTranslationData.resourceId}`,
+              ),
+              imageBeforeUrl:
+                localTranslationData?.value[localTranslationData?.index],
               imageAfterUrl: "",
               altBeforeTranslation: "",
               altAfterTranslation: "",
@@ -1142,6 +1152,7 @@ const ImageAltTextPage = () => {
         replaceTranslateImageFetcher.submit(formData, {
           method: "post",
         });
+
         if (
           (type === "json_template" ||
             type === "metafield" ||
@@ -1154,31 +1165,37 @@ const ImageAltTextPage = () => {
             {
               deleteImageInShopify: JSON.stringify({
                 ...initData,
+                value: initData.value?.[initData.index],
                 languageCode: currentTranslatingImage.languageCode,
-              }),
-            },
-            { method: "post" },
-          );
-        } else if (
-          type === "json_template" ||
-          type === "metafield" ||
-          type === "page" ||
-          type === "article_image"
-        ) {
-          saveImageFetcher.submit(
-            {
-              saveImageToShopify: JSON.stringify({
-                ...initData,
-                imageAfterUrl: translateImageFetcher.data.response,
-                languageCode: currentTranslatingImage.languageCode,
-                altText: currentTranslatingImage.altAfterTranslation
-                  ? currentTranslatingImage.altAfterTranslation
-                  : currentTranslatingImage.altBeforeTranslation,
               }),
             },
             { method: "post" },
           );
         }
+        setTimeout(() => {
+          if (
+            type === "json_template" ||
+            type === "metafield" ||
+            type === "page" ||
+            type === "article_image"
+          ) {
+            saveImageFetcher.submit(
+              {
+                saveImageToShopify: JSON.stringify({
+                  ...initData,
+                  value: initData.value?.[initData.index],
+                  imageAfterUrl: translateImageFetcher.data.response,
+                  languageCode: currentTranslatingImage.languageCode,
+                  altText: currentTranslatingImage.altAfterTranslation
+                    ? currentTranslatingImage.altAfterTranslation
+                    : currentTranslatingImage.altBeforeTranslation,
+                }),
+              },
+              { method: "post" },
+            );
+          }
+        }, 1000);
+
         dispatch(setChars({ chars: chars + 2000 }));
         // dispatch(
         //   setTotalChars({
@@ -1201,6 +1218,7 @@ const ImageAltTextPage = () => {
       {
         saveImageToShopify: JSON.stringify({
           ...initData,
+          value: initData.value?.[initData.index],
           imageAfterUrl:
             "https://ciwi-us-1327177217.cos.na-ashburn.myqcloud.com/image-Translation/ciwishop.myshopify.com/63748991.jpg",
           languageCode: "en",
@@ -1218,7 +1236,7 @@ const ImageAltTextPage = () => {
   }, [saveImageFetcher.data]);
   useEffect(() => {
     if (deleteImageFetcher.data) {
-      console.log("deleteImageFetcher", deleteImageFetcher.data.response.data);
+      console.log("deleteImageFetcher", deleteImageFetcher.data);
     }
   }, [deleteImageFetcher.data]);
   const handleDelete = async (
@@ -1245,6 +1263,7 @@ const ImageAltTextPage = () => {
           {
             deleteImageInShopify: JSON.stringify({
               ...initData,
+              value: initData.value?.[initData.index],
               languageCode,
             }),
           },
@@ -1292,6 +1311,7 @@ const ImageAltTextPage = () => {
           {
             deleteImageInShopify: JSON.stringify({
               ...initData,
+              value: initData.value?.[initData.index],
               languageCode,
             }),
           },
@@ -1387,14 +1407,10 @@ const ImageAltTextPage = () => {
     });
   };
   // 上传或删除图片时更新 fileList
-  const handleChangeImage = (
-    info: any,
-    languageCode: string,
-    imageAfterUrl: string,
-  ) => {
+  const handleChangeImage = (info: any, img: any) => {
     setFileLists((prev) => ({
       ...prev,
-      [languageCode]: info.fileList, // ✅ 更新对应语言
+      [img.languageCode]: info.fileList, // ✅ 更新对应语言
     }));
     if (info.file.status === "done") {
       const response = info.file.response; // 后端返回的数据
@@ -1405,7 +1421,7 @@ const ImageAltTextPage = () => {
       if (response?.success) {
         setImageDatas((prev: any[]) => {
           return prev.map((item) =>
-            item.languageCode === languageCode
+            item.languageCode === img.languageCode
               ? {
                   ...item,
                   imageAfterUrl:
@@ -1424,10 +1440,13 @@ const ImageAltTextPage = () => {
             {
               saveImageToShopify: JSON.stringify({
                 ...initData,
+                value: initData.value?.[initData.index],
                 imageAfterUrl: newUrl,
-                languageCode,
-                altText: "",
-                locale: defaultLanguageData.locale,
+                languageCode: img.languageCode,
+                altText: img.altAfterTranslation
+                  ? img.altAfterTranslation
+                  : img.altBeforeTranslation,
+                // locale: defaultLanguageData.locale,
               }),
             },
             { method: "post" },
@@ -1441,7 +1460,7 @@ const ImageAltTextPage = () => {
     } else if (info.file.status === "error") {
       setFileLists((prev) => ({
         ...prev,
-        [languageCode]: [], // ✅ 更新对应语言
+        [img.languageCode]: [], // ✅ 更新对应语言
       }));
       shopify.toast.show(`${info.file.name} ${t("Upload Failed")}`);
       fetcher.submit(
@@ -1574,7 +1593,7 @@ const ImageAltTextPage = () => {
 
       if (localTranslationData) {
         setProductImageData({
-          imageUrl: localTranslationData?.value,
+          imageUrl: localTranslationData?.value[localTranslationData?.index],
           altText: "",
         });
       }
@@ -1876,11 +1895,7 @@ const ImageAltTextPage = () => {
                             }`}
                             fileList={fileLists[img.languageCode] || []}
                             onChange={(info) => {
-                              handleChangeImage(
-                                info,
-                                img.languageCode,
-                                img.imageAfterUrl,
-                              );
+                              handleChangeImage(info, img);
                             }}
                             onPreview={() => handlePreview(img)}
                             onRemove={() => {
@@ -2074,6 +2089,8 @@ const ImageAltTextPage = () => {
                                       {
                                         deleteImageInShopify: JSON.stringify({
                                           ...initData,
+                                          value:
+                                            initData.value?.[initData.index],
                                           languageCode: img.languageCode,
                                         }),
                                       },
@@ -2106,26 +2123,33 @@ const ImageAltTextPage = () => {
                                       );
                                     });
                                     console.log("执行保存数据到shopify");
+                                    setTimeout(() => {
+                                      if (
+                                        type === "json_template" ||
+                                        type === "metafield" ||
+                                        type === "page" ||
+                                        type === "article_image"
+                                      ) {
+                                        saveImageFetcher.submit(
+                                          {
+                                            saveImageToShopify: JSON.stringify({
+                                              ...initData,
+                                              value:
+                                                initData.value?.[
+                                                  initData.index
+                                                ],
+                                              imageAfterUrl: newUrl,
+                                              languageCode: img.languageCode·,
+                                              altText: "",
+                                              locale:
+                                                defaultLanguageData.locale,
+                                            }),
+                                          },
+                                          { method: "post" },
+                                        );
+                                      }
+                                    }, 500);
 
-                                    if (
-                                      type === "json_template" ||
-                                      type === "metafield" ||
-                                      type === "page" ||
-                                      type === "article_image"
-                                    ) {
-                                      saveImageFetcher.submit(
-                                        {
-                                          saveImageToShopify: JSON.stringify({
-                                            ...initData,
-                                            imageAfterUrl: newUrl,
-                                            languageCode: img.languageCode·,
-                                            altText: "",
-                                            locale: defaultLanguageData.locale,
-                                          }),
-                                        },
-                                        { method: "post" },
-                                      );
-                                    }
                                     shopify.toast.show(
                                       `${info.file.name} ${t("Upload Success")}`,
                                     );
