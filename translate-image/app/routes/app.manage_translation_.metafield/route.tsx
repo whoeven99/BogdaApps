@@ -578,7 +578,7 @@ export default function Index() {
                   fontWeight: 700,
                 }}
               >
-                {t("online store theme")}
+                {t("Metafield")}
               </Title>
             </Flex>
           </Flex>

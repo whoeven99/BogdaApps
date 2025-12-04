@@ -313,7 +313,7 @@ export default function Index() {
   const [searchText, setSearchText] = useState<string>("");
   const timeoutIdRef = useRef<any>(true);
   const dispatch = useDispatch<AppDispatch>();
-  const [sortKey, setSortKey] = useState("AUTHOR");
+  const [sortKey, setSortKey] = useState("UPDATED_AT");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const loadFetcher = useFetcher<any>();
   const [blogsData, setBlogsData] = useState<any[]>([]);

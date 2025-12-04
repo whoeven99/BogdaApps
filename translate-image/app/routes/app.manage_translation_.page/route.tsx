@@ -156,15 +156,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
           if (urls.length === 0) continue; // ❗没有图片，不返回
 
-          tasks.push(
-            Promise.resolve({
-              resourceId: node.resourceId,
-              key: contentItem.key,
-              type,
-              value: urls[0], // 单一值
-              translations: node.translations || [],
-            }),
-          );
+          urls.forEach((url, index) => {
+            tasks.push(
+              Promise.resolve({
+                resourceId: node.resourceId,
+                key: contentItem.key,
+                dbKey: `${contentItem.key}_${index}`,
+                type,
+                value: url, // 单一值
+                translations: node.translations || [],
+                digest: contentItem.digest,
+                originValue: contentItem.value,
+              }),
+            );
+          });
         }
 
         // ---- 4) RICH_TEXT_FIELD ----
@@ -451,7 +456,7 @@ export default function Index() {
             // cursor:"pointer"
           }}
         >
-          {record?.key || "未命名产品"}
+          {record?.dbKey || record?.key}
         </Text>
       ),
       responsive: ["xs", "sm", "md", "lg", "xl", "xxl"], // ✅ 正确
@@ -578,7 +583,7 @@ export default function Index() {
                   fontWeight: 700,
                 }}
               >
-                {t("online store theme")}
+                {t("Page")}
               </Title>
             </Flex>
           </Flex>
@@ -599,7 +604,9 @@ export default function Index() {
             dataSource={articleData}
             columns={panelColumns}
             pagination={false}
-            rowKey={(record) => `${record.key}_${record.digest}`} // ✅ 建议加上 key，避免警告
+            rowKey={(record) =>
+              `${record.dbKey || record.key}_${record.digest}`
+            } // ✅ 建议加上 key，避免警告
             loading={tableDataLoading}
             onRow={(record) => ({
               onClick: (e) => {

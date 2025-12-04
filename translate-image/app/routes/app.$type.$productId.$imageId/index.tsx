@@ -463,7 +463,7 @@ const ImageAltTextPage = () => {
       case "json_template":
       case "metafield":
       case "page":
-        return `${localTranslationData?.resourceId}_${localTranslationData.key}`;
+        return `${localTranslationData?.resourceId}_${localTranslationData.dbKey || localTranslationData.key}`;
         break;
       case "articles":
         return `gid://shopify/ArticleImage/${imageId}`;
@@ -1218,7 +1218,7 @@ const ImageAltTextPage = () => {
   }, [saveImageFetcher.data]);
   useEffect(() => {
     if (deleteImageFetcher.data) {
-      console.log("deleteImageFetcher", deleteImageFetcher.data);
+      console.log("deleteImageFetcher", deleteImageFetcher.data.response.data);
     }
   }, [deleteImageFetcher.data]);
   const handleDelete = async (

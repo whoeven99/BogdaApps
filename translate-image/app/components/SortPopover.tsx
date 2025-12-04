@@ -15,6 +15,8 @@ export default function SortPopover({
 }) {
   const { t } = useTranslation();
   const [sortKey, setSortKey] = useState(sortKeyProp);
+  console.log("sortKeyProp",sortKeyProp);
+  
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">(sortOrderProp);
   const [open, setOpen] = useState(false);
 
