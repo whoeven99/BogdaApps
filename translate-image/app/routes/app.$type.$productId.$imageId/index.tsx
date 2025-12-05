@@ -359,6 +359,48 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           ) {
             return html.split(url).join(translateUrl);
           }
+          function replaceRichTextImageUrl(
+            richTextJsonStr: string,
+            fromUrl: string,
+            toUrl: string,
+          ): string {
+            if (!richTextJsonStr) return richTextJsonStr;
+
+            let data;
+            try {
+              data = JSON.parse(richTextJsonStr);
+            } catch (err) {
+              console.error("rich_text JSON 解析失败：", err);
+              return richTextJsonStr;
+            }
+
+            function walk(node: any) {
+              if (!node || typeof node !== "object") return;
+
+              // 1. image 节点（Shopify DraftJS / AST 格式）
+              if (node.type === "image" && node.src) {
+                if (node.src === fromUrl) {
+                  node.src = toUrl;
+                }
+              }
+
+              // 2. link 节点（Shopify rich_text 图片有可能放在 link.url）
+              if (node.type === "link" && node.url) {
+                if (node.url === fromUrl) {
+                  node.url = toUrl;
+                }
+              }
+
+              // 3. 递归 children
+              if (Array.isArray(node.children)) {
+                node.children.forEach(walk);
+              }
+            }
+
+            walk(data);
+
+            return JSON.stringify(data);
+          }
           const translation = await queryTranslations.json();
           console.log("translation111", translation);
           let transferValue = "";
@@ -393,6 +435,25 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               const ids = JSON.parse(saveImageToShopify.originValue);
               ids[saveImageToShopify.index] = parse.data.fileCreate.files[0].id;
               transferValue = JSON.stringify(ids);
+              break;
+            case "RICH_TEXT_FIELD":
+              if (translation.data.translations?.length > 0) {
+                translation.data.translations.forEach((item: any) => {
+                  if ((item?.dbKey ?? item?.key) === saveImageToShopify.key) {
+                    transferValue = replaceRichTextImageUrl(
+                      item.value,
+                      saveImageToShopify.value,
+                      saveImageToShopify.imageAfterUrl,
+                    );
+                  }
+                });
+              } else {
+                transferValue = replaceRichTextImageUrl(
+                  saveImageToShopify.originValue,
+                  saveImageToShopify.value,
+                  saveImageToShopify.imageAfterUrl,
+                );
+              }
               break;
           }
 

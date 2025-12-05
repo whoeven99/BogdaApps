@@ -35,8 +35,28 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (!Array.isArray(nodes)) return result;
 
     for (const node of nodes) {
-      if (node.type === "image" && node.src) result.push(node.src);
-      if (node.children) result.push(...extractFromRichText(node.children));
+      // 可作为候选的 URL
+      let possibleUrl: string | undefined;
+
+      // 1. image 节点
+      if (node.type === "image" && node.src) {
+        possibleUrl = node.src;
+      }
+
+      // 2. link 节点里的 URL（Rich text 中图片也可能存在这里）
+      if (node.type === "link" && node.url) {
+        possibleUrl = node.url;
+      }
+
+      // 🎯 只提取 Shopify CDN 图片
+      if (possibleUrl && possibleUrl.includes("cdn.shopify.com")) {
+        result.push(possibleUrl);
+      }
+
+      // 递归 children
+      if (node.children) {
+        result.push(...extractFromRichText(node.children));
+      }
     }
 
     return result;
@@ -136,15 +156,30 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
         // === 4) RICH_TEXT_FIELD ===
         if (type === "RICH_TEXT_FIELD") {
-          const urls = extractFromRichText(contentItem.value?.children || []);
+          let richValue = contentItem.value;
+
+          // 1. 解析 JSON_STRING → 对象
+          if (typeof richValue === "string") {
+            try {
+              richValue = JSON.parse(richValue);
+            } catch (e) {
+              console.error("富文本解析失败:", richValue);
+              continue;
+            }
+          }
+
+          // 2. 富文本正确结构是 richValue.children
+          const urls = extractFromRichText(richValue.children || []);
+
           if (urls.length === 0) continue;
 
           results.push({
             resourceId: node.resourceId,
             key: contentItem.key,
             type,
-            value: urls, // ❗多图放一起
+            value: urls,
             digest: contentItem.digest,
+            originValue: contentItem.value,
           });
         }
       }
@@ -448,7 +483,7 @@ export default function Index() {
     if (dataFetcher.data) {
       setTableDataLoading(false);
 
-      console.log(dataFetcher.data);
+      // console.log(dataFetcher.data);
       setHasNextPage(dataFetcher.data.hasNextPage);
       setHasPreviousPage(dataFetcher.data.hasPreviousPage);
       setStartCursor(dataFetcher.data.startCursor);

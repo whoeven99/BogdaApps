@@ -50,8 +50,28 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (!Array.isArray(nodes)) return result;
 
     for (const node of nodes) {
-      if (node.type === "image" && node.src) result.push(node.src);
-      if (node.children) result.push(...extractFromRichText(node.children));
+      // 可作为候选的 URL
+      let possibleUrl: string | undefined;
+
+      // 1. image 节点
+      if (node.type === "image" && node.src) {
+        possibleUrl = node.src;
+      }
+
+      // 2. link 节点里的 URL（Rich text 中图片也可能存在这里）
+      if (node.type === "link" && node.url) {
+        possibleUrl = node.url;
+      }
+
+      // 🎯 只提取 Shopify CDN 图片
+      if (possibleUrl && possibleUrl.includes("cdn.shopify.com")) {
+        result.push(possibleUrl);
+      }
+
+      // 递归 children
+      if (node.children) {
+        result.push(...extractFromRichText(node.children));
+      }
     }
 
     return result;
@@ -150,15 +170,30 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
       // === 4) RICH_TEXT_FIELD ===
       if (type === "RICH_TEXT_FIELD") {
-        const urls = extractFromRichText(contentItem.value?.children || []);
+        let richValue = contentItem.value;
+
+        // 1. 解析 JSON_STRING → 对象
+        if (typeof richValue === "string") {
+          try {
+            richValue = JSON.parse(richValue);
+          } catch (e) {
+            console.error("富文本解析失败:", richValue);
+            continue;
+          }
+        }
+
+        // 2. 富文本正确结构是 richValue.children
+        const urls = extractFromRichText(richValue.children || []);
+
         if (urls.length === 0) continue;
 
         results.push({
           resourceId: translatableResource.resourceId,
           key: contentItem.key,
           type,
-          value: urls, // ❗多图放一起
+          value: urls,
           digest: contentItem.digest,
+          originValue: contentItem.value,
         });
       }
     }
@@ -356,7 +391,7 @@ export default function ProductDetailPage() {
   }, []);
   useEffect(() => {
     if (articleLoadingFetcher.data) {
-      console.log(articleLoadingFetcher.data);
+      // console.log(articleLoadingFetcher.data);
 
       setProductLoading(false);
       setArticleImageData(articleLoadingFetcher.data);
@@ -364,7 +399,7 @@ export default function ProductDetailPage() {
   }, [articleLoadingFetcher]);
   useEffect(() => {
     if (articleImageFetcher.data) {
-      console.log(articleImageFetcher.data.data);
+      // console.log(articleImageFetcher.data.data);
 
       const articleImages = articleImageFetcher.data.data;
       if (!Array.isArray(articleImages) || articleImages.length === 0) {
@@ -398,8 +433,6 @@ export default function ProductDetailPage() {
             });
         },
       );
-      console.log("flat", flat);
-
       setImageLoading(false);
       setImageData(flat);
     }
@@ -410,7 +443,7 @@ export default function ProductDetailPage() {
   };
   const handleSelectImage = (img: any, index: number) => {
     // const imageId = id.split("/").pop();
-    console.log("img", img);
+    // console.log("img", img);
     sessionStorage.setItem(
       "record",
       JSON.stringify({
@@ -418,31 +451,9 @@ export default function ProductDetailPage() {
         index,
       }),
     );
-    // const raw = sessionStorage.getItem("record");
-    // const parsed = JSON.parse(raw || "{}");
-
-    // sessionStorage.setItem(
-    //   "record",
-    //   JSON.stringify({
-    //     ...parsed,
-    //     index,
-    //   }),
-    // );
-    // navigate(`/app/articles/${articleId}/${imageId}?type=article`);
     navigate(`/app/article_image/${articleId}/${img.digest}`, {
       state: { record: img },
     });
-  };
-  const handleSelectArticleImage = (img: any) => {
-    // https://cdn.shopify.com/s/files/1/0714/6959/6922/files/71QCCuepSJL._AC_SX679.jpg?v=1764666270
-    console.log(img);
-    let filenameWithExt = img.src.substring(img.src.lastIndexOf("/") + 1);
-    filenameWithExt = filenameWithExt.split("?")[0];
-    const filenameWithoutExt = filenameWithExt.replace(/\.[^/.]+$/, "");
-    console.log(filenameWithoutExt);
-    const articleId = img.articleId.split("/").pop();
-    // sessionStorage.setItem("article_image", JSON.stringify(img));
-    navigate(`/app/article_image/${articleId}/${filenameWithoutExt}`);
   };
   return (
     <Page>
