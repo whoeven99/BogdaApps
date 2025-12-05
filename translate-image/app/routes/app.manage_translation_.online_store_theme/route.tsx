@@ -112,12 +112,30 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
         // === 2) LIST_FILE_REFERENCE ===
         if (type === "LIST_FILE_REFERENCE") {
-          const refs: string[] = contentItem.value || [];
+          let ids = contentItem.value;
+
+          // 如果是 JSON_STRING，先转成数组
+          if (typeof ids === "string") {
+            try {
+              ids = JSON.parse(ids);
+            } catch (err) {
+              console.error(
+                "无法解析 list.file_reference JSON:",
+                contentItem.value,
+              );
+              continue;
+            }
+          }
+
+          if (!Array.isArray(ids)) {
+            console.error("list.file_reference 的 value 不是数组:", ids);
+            continue;
+          }
 
           const urls = (
             await Promise.all(
-              refs.map(async (ref) => {
-                return await findImageSrc(admin, ref);
+              ids.map(async (metaImageId: string) => {
+                return await findImageSrc(admin, metaImageId);
               }),
             )
           ).filter(Boolean);
@@ -128,9 +146,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             resourceId: node.resourceId,
             key: contentItem.key,
             type,
-            value: urls, // ❗多图放一起
+            value: urls,
             translations: node.translations || [],
             digest: contentItem.digest,
+            originValue: contentItem.value,
           });
         }
 

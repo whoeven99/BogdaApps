@@ -389,6 +389,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 transferValue = `shopify://shop_images/${extractImageKey(saveImageToShopify.imageAfterUrl)}`;
               }
               break;
+            case "LIST_FILE_REFERENCE":
+              const ids = JSON.parse(saveImageToShopify.originValue);
+              ids[saveImageToShopify.index] = parse.data.fileCreate.files[0].id;
+              transferValue = JSON.stringify(ids);
+              break;
           }
 
           const response = await updateManageTranslation({
