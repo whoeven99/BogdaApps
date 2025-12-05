@@ -1017,7 +1017,6 @@ const ImageAltTextPage = () => {
       setOpen(true);
       return;
     }
-    console.log("record:", record);
     setCurrentTranslatingImage(record);
     setTranslatrImageactive(true);
     setSourceLanguage(normalizeLocale(defaultLanguageData.locale));
@@ -1759,7 +1758,7 @@ const ImageAltTextPage = () => {
             )}
           </Space>
         </Layout.Section>
-        <Button onClick={handleSaveImage}>{t("Save Image")}</Button>
+        {/* <Button onClick={handleSaveImage}>{t("Save Image")}</Button> */}
         <Layout.Section>
           <Space direction="vertical" size="large" style={{ width: "100%" }}>
             <div
