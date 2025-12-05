@@ -96,8 +96,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
         // === 1) FILE_REFERENCE ===
         if (type === "FILE_REFERENCE") {
-          const fileName = contentItem.value?.split("/").pop() ?? "";
-          const src = await findImageSrc(admin, fileName);
+          const src = await findImageSrc(admin, contentItem.value);
 
           if (!src) continue;
 
@@ -118,8 +117,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           const urls = (
             await Promise.all(
               refs.map(async (ref) => {
-                const fileName = ref?.split("/").pop() ?? "";
-                return await findImageSrc(admin, fileName);
+                return await findImageSrc(admin, ref);
               }),
             )
           ).filter(Boolean);
@@ -172,9 +170,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return results;
   };
 
-  const findImageSrc = async (admin: any, fileName: string) => {
-    const response = await admin.graphql(
-      `query GetFile($query: String!) {
+  const findImageSrc = async (admin: any, value: string) => {
+    if (value.includes("shop_images")) {
+      const fileName = value?.split("/").pop() ?? "";
+      const response = await admin.graphql(
+        `query GetFile($query: String!) {
         files(query: $query, first: 1) {
           edges {
             node {
@@ -187,11 +187,31 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           }
         }
       }`,
-      { variables: { query: fileName } },
-    );
+        { variables: { query: fileName } },
+      );
+      const parsed = await response.json();
+      return parsed?.data?.files?.edges?.[0]?.node?.preview?.image?.src ?? null;
+    } else {
+      const response = await admin.graphql(
+        `query {
+          node(id: "${value}") {
+            ... on MediaImage {
+              id
+              alt
+              image {
+                url
+                width
+                height
+              }
+            }
+          }
+        }`,
+      );
+      const parsed = await response.json();
+      console.log("dadasda", parsed);
 
-    const parsed = await response.json();
-    return parsed?.data?.files?.edges?.[0]?.node?.preview?.image?.src ?? null;
+      return parsed?.data?.node?.image?.url ?? null;
+    }
   };
 
   try {
@@ -346,7 +366,8 @@ export default function Index() {
   const itemOptions = getItemOptions(t);
   const [startCursor, setStartCursor] = useState("");
   const [endCursor, setEndCursor] = useState("");
-  const [selectedItem, setSelectedItem] = useState<string>("online_store_theme");
+  const [selectedItem, setSelectedItem] =
+    useState<string>("online_store_theme");
   const [tableDataLoading, setTableDataLoading] = useState(false);
 
   const [articleData, setArticleData] = useState<any>([]);

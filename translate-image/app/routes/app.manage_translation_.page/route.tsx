@@ -1,22 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  Icon,
-  Page,
-  Pagination,
-  Select,
-  Thumbnail,
-} from "@shopify/polaris";
-import {
-  ArrowLeftIcon,
-  ImageIcon,
-} from "@shopify/polaris-icons";
-import {
-  Table,
-  Button,
-  Flex,
-  Typography,
-  Affix,
-} from "antd";
+import { Icon, Page, Pagination, Select, Thumbnail } from "@shopify/polaris";
+import { ArrowLeftIcon, ImageIcon } from "@shopify/polaris-icons";
+import { Table, Button, Flex, Typography, Affix } from "antd";
 
 import { useTranslation } from "react-i18next";
 import { useNavigate, useFetcher, useLoaderData } from "@remix-run/react";
@@ -80,8 +65,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
         // === 1) FILE_REFERENCE ===
         if (type === "FILE_REFERENCE") {
-          const fileName = contentItem.value?.split("/").pop() ?? "";
-          const src = await findImageSrc(admin, fileName);
+          const src = await findImageSrc(admin, contentItem.value);
 
           if (!src) continue;
 
@@ -102,8 +86,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           const urls = (
             await Promise.all(
               refs.map(async (ref) => {
-                const fileName = ref?.split("/").pop() ?? "";
-                return await findImageSrc(admin, fileName);
+                return await findImageSrc(admin, ref);
               }),
             )
           ).filter(Boolean);
@@ -156,9 +139,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return results;
   };
 
-  const findImageSrc = async (admin: any, fileName: string) => {
-    const response = await admin.graphql(
-      `query GetFile($query: String!) {
+  const findImageSrc = async (admin: any, value: string) => {
+    if (value.includes("shop_images")) {
+      const fileName = value?.split("/").pop() ?? "";
+      const response = await admin.graphql(
+        `query GetFile($query: String!) {
         files(query: $query, first: 1) {
           edges {
             node {
@@ -171,11 +156,31 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           }
         }
       }`,
-      { variables: { query: fileName } },
-    );
+        { variables: { query: fileName } },
+      );
+      const parsed = await response.json();
+      return parsed?.data?.files?.edges?.[0]?.node?.preview?.image?.src ?? null;
+    } else {
+      const response = await admin.graphql(
+        `query {
+          node(id: "${value}") {
+            ... on MediaImage {
+              id
+              alt
+              image {
+                url
+                width
+                height
+              }
+            }
+          }
+        }`,
+      );
+      const parsed = await response.json();
+      console.log("dadasda", parsed);
 
-    const parsed = await response.json();
-    return parsed?.data?.files?.edges?.[0]?.node?.preview?.image?.src ?? null;
+      return parsed?.data?.node?.image?.url ?? null;
+    }
   };
 
   try {

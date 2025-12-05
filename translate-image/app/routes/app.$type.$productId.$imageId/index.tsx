@@ -308,40 +308,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 }
               }`,
           );
-          function replaceImageUrl(
-            html: string,
-            url: string,
-            translateUrl: string,
-          ) {
-            return html.split(url).join(translateUrl);
-          }
-          const translation = await queryTranslations.json();
-          console.log("translation111", translation);
-          let transferValue = "";
-          switch (saveImageToShopify.type) {
-            case "HTML":
-              if (translation.data.translations?.length > 0) {
-                translation.data.translations.forEach((item: any) => {
-                  if ((item?.dbKey ?? item?.key) === saveImageToShopify.key) {
-                    transferValue = replaceImageUrl(
-                      item.value,
-                      saveImageToShopify.value,
-                      saveImageToShopify.imageAfterUrl,
-                    );
-                  }
-                });
-              } else {
-                transferValue = replaceImageUrl(
-                  saveImageToShopify.originValue,
-                  saveImageToShopify.value,
-                  saveImageToShopify.imageAfterUrl,
-                );
-              }
-              break;
-            case "FILE_REFERENCE":
-              transferValue = `shopify://shop_images/${extractImageKey(saveImageToShopify.imageAfterUrl)}`;
-              break;
-          }
           const createFileRes = await admin.graphql(
             `#graphql
               mutation fileCreate($files: [FileCreateInput!]!) {
@@ -386,6 +352,45 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           );
           const parse = await createFileRes.json();
           console.log("parse", parse.data.fileCreate.files);
+          function replaceImageUrl(
+            html: string,
+            url: string,
+            translateUrl: string,
+          ) {
+            return html.split(url).join(translateUrl);
+          }
+          const translation = await queryTranslations.json();
+          console.log("translation111", translation);
+          let transferValue = "";
+          switch (saveImageToShopify.type) {
+            case "HTML":
+              if (translation.data.translations?.length > 0) {
+                translation.data.translations.forEach((item: any) => {
+                  if ((item?.dbKey ?? item?.key) === saveImageToShopify.key) {
+                    transferValue = replaceImageUrl(
+                      item.value,
+                      saveImageToShopify.value,
+                      saveImageToShopify.imageAfterUrl,
+                    );
+                  }
+                });
+              } else {
+                transferValue = replaceImageUrl(
+                  saveImageToShopify.originValue,
+                  saveImageToShopify.value,
+                  saveImageToShopify.imageAfterUrl,
+                );
+              }
+              break;
+            case "FILE_REFERENCE":
+              if (saveImageToShopify.resourceId.includes("Metafield")) {
+                transferValue = parse.data.fileCreate.files[0].id;
+              } else {
+                transferValue = `shopify://shop_images/${extractImageKey(saveImageToShopify.imageAfterUrl)}`;
+              }
+              break;
+          }
+
           const response = await updateManageTranslation({
             shop,
             accessToken: accessToken as string,
