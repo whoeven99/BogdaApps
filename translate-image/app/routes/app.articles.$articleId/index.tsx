@@ -72,16 +72,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const fetchFileReferences = async (admin: any, translatableResource: any) => {
     const results: any[] = [];
     const translatableContent = translatableResource.translatableContent;
-    console.log("sadasdas", translatableContent);
-
     for (const contentItem of translatableContent || []) {
       const type = contentItem.type;
       if (!IMAGE_TYPES.has(type)) continue;
 
       // === 1) FILE_REFERENCE ===
       if (type === "FILE_REFERENCE") {
-        const fileName = contentItem.value?.split("/").pop() ?? "";
-        const src = await findImageSrc(admin, fileName);
+        const src = await findImageSrc(admin, contentItem.value);
 
         if (!src) continue;
 
@@ -96,13 +93,30 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
       // === 2) LIST_FILE_REFERENCE ===
       if (type === "LIST_FILE_REFERENCE") {
-        const refs: string[] = contentItem.value || [];
+        let ids = contentItem.value;
+
+        // 如果是 JSON_STRING，先转成数组
+        if (typeof ids === "string") {
+          try {
+            ids = JSON.parse(ids);
+          } catch (err) {
+            console.error(
+              "无法解析 list.file_reference JSON:",
+              contentItem.value,
+            );
+            continue;
+          }
+        }
+
+        if (!Array.isArray(ids)) {
+          console.error("list.file_reference 的 value 不是数组:", ids);
+          continue;
+        }
 
         const urls = (
           await Promise.all(
-            refs.map(async (ref) => {
-              const fileName = ref?.split("/").pop() ?? "";
-              return await findImageSrc(admin, fileName);
+            ids.map(async (metaImageId: string) => {
+              return await findImageSrc(admin, metaImageId);
             }),
           )
         ).filter(Boolean);
@@ -113,8 +127,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           resourceId: translatableResource.resourceId,
           key: contentItem.key,
           type,
-          value: urls, // ❗多图放一起
+          value: urls,
           digest: contentItem.digest,
+          originValue: contentItem.value,
         });
       }
 
@@ -151,115 +166,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return results;
   };
 
-  // const fetchFileReferences = async (admin: any, translatableResource: any) => {
-  //   const tasks: Promise<any>[] = [];
-  //   const translatableContent = translatableResource.translatableContent;
-
-  //   for (const contentItem of translatableContent || []) {
-  //     const type = contentItem.type;
-  //     if (!IMAGE_TYPES.has(type)) continue;
-
-  //     // ---- 1) FILE_REFERENCE ----
-  //     if (type === "FILE_REFERENCE") {
-  //       tasks.push(
-  //         (async () => {
-  //           const fileName = contentItem.value?.split("/").pop() ?? "";
-  //           const src = await findImageSrc(admin, fileName);
-
-  //           if (!src) return null; // ❗没有图片则忽略
-
-  //           return {
-  //             resourceId: translatableResource.resourceId,
-  //             key: contentItem.key,
-  //             type,
-  //             value: src, // 单一值
-  //             digest: contentItem.digest,
-  //             originValue: contentItem.value,
-  //           };
-  //         })(),
-  //       );
-  //     }
-
-  //     // ---- 2) LIST_FILE_REFERENCE ----
-  //     if (type === "LIST_FILE_REFERENCE") {
-  //       tasks.push(
-  //         (async () => {
-  //           const refs: string[] = contentItem.value || [];
-
-  //           const urls = (
-  //             await Promise.all(
-  //               refs.map(async (ref) => {
-  //                 const fileName = ref?.split("/").pop() ?? "";
-  //                 return await findImageSrc(admin, fileName);
-  //               }),
-  //             )
-  //           ).filter(Boolean);
-
-  //           // ❗LIST_FILE_REFERENCE 也只返回第一张（你要求单一）
-  //           if (urls.length === 0) return null;
-
-  //           return {
-  //             resourceId: translatableResource.resourceId,
-  //             key: contentItem.key,
-  //             type,
-  //             value: urls[0],
-  //             digest: contentItem.digest,
-  //             originValue: contentItem.value,
-  //           };
-  //         })(),
-  //       );
-  //     }
-
-  //     // ---- 3) HTML ----
-  //     if (type === "HTML") {
-  //       const urls = extractFromHtml(contentItem.value || "");
-  //       console.log("contentItem.value", contentItem.value);
-  //       console.log("urls", urls);
-
-  //       if (urls.length === 0) continue; // ❗没有图片，不返回
-  //       urls.forEach((url, index) => {
-  //         tasks.push(
-  //           Promise.resolve({
-  //             resourceId: translatableResource.resourceId,
-  //             key: contentItem.key,
-  //             dbKey: `${contentItem.key}_${index}`,
-  //             type,
-  //             value: url, // 单一值
-  //             digest: contentItem.digest,
-  //             originValue: contentItem.value,
-  //           }),
-  //         );
-  //       });
-  //     }
-
-  //     // ---- 4) RICH_TEXT_FIELD ----
-  //     if (type === "RICH_TEXT_FIELD") {
-  //       const urls = extractFromRichText(contentItem.value?.children || []);
-
-  //       if (urls.length === 0) continue;
-
-  //       tasks.push(
-  //         Promise.resolve({
-  //           resourceId: translatableResource.resourceId,
-  //           key: contentItem.key,
-  //           type,
-  //           value: urls[0],
-  //           digest: contentItem.digest,
-  //           originValue: contentItem.value,
-  //         }),
-  //       );
-  //     }
-  //   }
-
-  //   const resolved = await Promise.all(tasks);
-
-  //   // ❗过滤掉 null（无图片的项）
-  //   return resolved.filter(Boolean);
-  // };
-
-  const findImageSrc = async (admin: any, fileName: string) => {
-    const response = await admin.graphql(
-      `query GetFile($query: String!) {
+  const findImageSrc = async (admin: any, value: string) => {
+    if (value.includes("shop_images")) {
+      const fileName = value?.split("/").pop() ?? "";
+      const response = await admin.graphql(
+        `query GetFile($query: String!) {
         files(query: $query, first: 1) {
           edges {
             node {
@@ -272,11 +183,31 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           }
         }
       }`,
-      { variables: { query: fileName } },
-    );
+        { variables: { query: fileName } },
+      );
+      const parsed = await response.json();
+      return parsed?.data?.files?.edges?.[0]?.node?.preview?.image?.src ?? null;
+    } else {
+      const response = await admin.graphql(
+        `query {
+          node(id: "${value}") {
+            ... on MediaImage {
+              id
+              alt
+              image {
+                url
+                width
+                height
+              }
+            }
+          }
+        }`,
+      );
+      const parsed = await response.json();
+      console.log("dadasda", parsed);
 
-    const parsed = await response.json();
-    return parsed?.data?.files?.edges?.[0]?.node?.preview?.image?.src ?? null;
+      return parsed?.data?.node?.image?.url ?? null;
+    }
   };
   try {
     switch (true) {

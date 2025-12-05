@@ -75,7 +75,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             key: contentItem.key,
             type,
             value: [src], // ❗单图也用数组统一格式
-            translations: node.translations || [],
             digest: contentItem.digest,
           });
         }
@@ -117,7 +116,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             key: contentItem.key,
             type,
             value: urls,
-            translations: node.translations || [],
             digest: contentItem.digest,
             originValue: contentItem.value,
           });
@@ -133,7 +131,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             key: contentItem.key,
             type,
             value: urls, // ❗html 多图放一起
-            translations: node.translations || [],
             digest: contentItem.digest,
             originValue: contentItem.value,
           });
@@ -149,7 +146,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             key: contentItem.key,
             type,
             value: urls, // ❗多图放一起
-            translations: node.translations || [],
             digest: contentItem.digest,
           });
         }
