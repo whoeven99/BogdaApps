@@ -139,10 +139,7 @@ const Index = () => {
             shop={shop}
           />
           {/* <ImageTable shop={shop} /> */}
-          <ImageTranslatePanel
-            images={["/uploads/img1.png", "/uploads/img2.png"]}
-            translatedImage={"/uploads/translated.png"}
-          />
+          <ImageTranslatePanel images={[]} translatedImage={""} />
         </Space>
       </Space>
       <Text

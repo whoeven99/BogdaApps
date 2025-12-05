@@ -563,7 +563,7 @@ export default function ProductDetailPage() {
       <Layout>
         <Layout.Section>
           <Title level={4} style={{ fontSize: "16px", marginBottom: "16px" }}>
-            {articleImageData?.title}
+            文章封面图：{articleImageData?.title}
           </Title>
           <div
             style={{
@@ -662,7 +662,7 @@ export default function ProductDetailPage() {
           </div>
           <Space size="middle" direction="vertical">
             <Title level={4} style={{ marginTop: "24px" }}>
-              {t("文章图片")}
+              {t("文章内容图片")}
             </Title>
             <div
               style={{

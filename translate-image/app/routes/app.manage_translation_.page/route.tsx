@@ -1,54 +1,30 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  Badge,
   Icon,
-  Layout,
   Page,
   Pagination,
   Select,
   Thumbnail,
 } from "@shopify/polaris";
-import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
 import {
   ArrowLeftIcon,
-  NoteIcon,
-  SortIcon,
   ImageIcon,
 } from "@shopify/polaris-icons";
-import { UploadOutlined, SearchOutlined } from "@ant-design/icons";
 import {
   Table,
   Button,
-  Tabs,
-  Tag,
-  Input,
   Flex,
-  Card,
   Typography,
   Affix,
 } from "antd";
 
 import { useTranslation } from "react-i18next";
 import { useNavigate, useFetcher, useLoaderData } from "@remix-run/react";
-
-import { useDispatch, useSelector } from "react-redux";
-import { AppDispatch, RootState } from "~/store";
-import { setLastPageCursorInfo } from "~/store/modules/articleSlice";
 import { ColumnsType } from "antd/es/table";
 import { ActionFunctionArgs, json, LoaderFunctionArgs } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
-import SortPopover from "~/components/SortPopover";
 import { getItemOptions } from "../app.manage_translation/route";
 const { Text, Title } = Typography;
-export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const url = new URL(request.url);
-  const searchTerm = url.searchParams.get("language");
-
-  return json({
-    searchTerm,
-  });
-};
-
 export const action = async ({ request }: ActionFunctionArgs) => {
   const url = new URL(request.url);
 
@@ -94,110 +70,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return result;
   };
 
-  // const fetchFileReferences = async (admin: any, nodes: any[]) => {
-  //   const tasks: Promise<any>[] = [];
-
-  //   for (const node of nodes) {
-  //     for (const contentItem of node.translatableContent || []) {
-  //       const type = contentItem.type;
-  //       if (!IMAGE_TYPES.has(type)) continue;
-
-  //       // ---- 1) FILE_REFERENCE ----
-  //       if (type === "FILE_REFERENCE") {
-  //         tasks.push(
-  //           (async () => {
-  //             const fileName = contentItem.value?.split("/").pop() ?? "";
-  //             const src = await findImageSrc(admin, fileName);
-
-  //             if (!src) return null; // ❗没有图片则忽略
-
-  //             return {
-  //               resourceId: node.resourceId,
-  //               key: contentItem.key,
-  //               type,
-  //               value: src, // 单一值
-  //               translations: node.translations || [],
-  //               digest: contentItem.digest,
-  //             };
-  //           })(),
-  //         );
-  //       }
-
-  //       // ---- 2) LIST_FILE_REFERENCE ----
-  //       if (type === "LIST_FILE_REFERENCE") {
-  //         tasks.push(
-  //           (async () => {
-  //             const refs: string[] = contentItem.value || [];
-
-  //             const urls = (
-  //               await Promise.all(
-  //                 refs.map(async (ref) => {
-  //                   const fileName = ref?.split("/").pop() ?? "";
-  //                   return await findImageSrc(admin, fileName);
-  //                 }),
-  //               )
-  //             ).filter(Boolean);
-
-  //             // ❗LIST_FILE_REFERENCE 也只返回第一张（你要求单一）
-  //             if (urls.length === 0) return null;
-
-  //             return {
-  //               resourceId: node.resourceId,
-  //               key: contentItem.key,
-  //               type,
-  //               value: urls[0],
-  //               translations: node.translations || [],
-  //             };
-  //           })(),
-  //         );
-  //       }
-
-  //       // ---- 3) HTML ----
-  //       if (type === "HTML") {
-  //         const urls = extractFromHtml(contentItem.value || "");
-
-  //         if (urls.length === 0) continue; // ❗没有图片，不返回
-
-  //         urls.forEach((url, index) => {
-  //           tasks.push(
-  //             Promise.resolve({
-  //               resourceId: node.resourceId,
-  //               key: contentItem.key,
-  //               dbKey: `${contentItem.key}_${index}`,
-  //               type,
-  //               value: url, // 单一值
-  //               translations: node.translations || [],
-  //               digest: contentItem.digest,
-  //               originValue: contentItem.value,
-  //             }),
-  //           );
-  //         });
-  //       }
-
-  //       // ---- 4) RICH_TEXT_FIELD ----
-  //       if (type === "RICH_TEXT_FIELD") {
-  //         const urls = extractFromRichText(contentItem.value?.children || []);
-
-  //         if (urls.length === 0) continue;
-
-  //         tasks.push(
-  //           Promise.resolve({
-  //             resourceId: node.resourceId,
-  //             key: contentItem.key,
-  //             type,
-  //             value: urls[0],
-  //             translations: node.translations || [],
-  //           }),
-  //         );
-  //       }
-  //     }
-  //   }
-
-  //   const resolved = await Promise.all(tasks);
-
-  //   // ❗过滤掉 null（无图片的项）
-  //   return resolved.filter(Boolean);
-  // };
   const fetchFileReferences = async (admin: any, nodes: any[]) => {
     const results: any[] = [];
 
@@ -305,36 +177,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const parsed = await response.json();
     return parsed?.data?.files?.edges?.[0]?.node?.preview?.image?.src ?? null;
   };
-  // const fetchFileReferences = async (admin: any, nodes: any[]) => {
-  //   // 扁平化所有 FILE_REFERENCE 项
-  //   const fileItems = nodes.flatMap((node) => {
-  //     return (node.translatableContent || [])
-  //       .filter((c: any) => c.type === "FILE_REFERENCE")
-  //       .map((contentItem: any) => ({
-  //         node,
-  //         contentItem,
-  //       }));
-  //   });
-
-  //   // 并行解析所有文件引用
-  //   const resolved = await Promise.all(
-  //     fileItems.map(async ({ node, contentItem }) => {
-  //       const fileName = contentItem.value.split("/").pop() ?? "";
-
-  //       const src = await findImageSrc(admin, fileName);
-
-  //       return {
-  //         resourceId: node.resourceId,
-  //         ...contentItem,
-  //         value: src, // 转换成真正 CDN URL
-  //         translations: node.translations || [],
-  //       };
-  //     }),
-  //   );
-  //   console.log("asdiasdj", resolved);
-
-  //   return resolved;
-  // };
 
   try {
     switch (true) {
@@ -343,7 +185,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           const response = await admin.graphql(
             `#graphql
                 query JsonTemplate($startCursor: String){     
-                    translatableResources(resourceType: PAGE, last: 20, ,before: $startCursor) {
+                    translatableResources(resourceType: PAGE, last: 10, ,before: $startCursor) {
                       nodes {
                         resourceId
                         translatableContent {
@@ -352,10 +194,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                           locale
                           type
                           value
-                        }
-                        translations(locale: "${startCursor?.searchTerm || searchTerm}") {
-                          value
-                          key
                         }
                       }
                       pageInfo {
@@ -414,7 +252,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               query JsonTemplate($endCursor: String){     
                 translatableResources(
                   resourceType: PAGE, 
-                  first: 20, 
+                  first: 10, 
                   after: $endCursor
                 ) {
                   nodes {
@@ -425,10 +263,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                       locale
                       type
                       value
-                    }
-                    translations(locale: "${endCursor?.searchTerm || searchTerm}") {
-                      value
-                      key
                     }
                   }
                   pageInfo {
@@ -491,7 +325,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function Index() {
-  const { searchTerm } = useLoaderData<typeof loader>();
   const dataFetcher = useFetcher<any>();
 
   const [startCursor, setStartCursor] = useState("");
@@ -576,7 +409,8 @@ export default function Index() {
     },
   ];
   function handleView(record: any): void {
-    console.log(record);
+    sessionStorage.setItem("record", JSON.stringify(record));
+    navigate(`/app/manage_translations/page`);
   }
   useEffect(() => {
     setTableDataLoading(true);
@@ -584,7 +418,6 @@ export default function Index() {
       {
         endCursor: JSON.stringify({
           cursor: "",
-          searchTerm,
         }),
       },
       {
@@ -612,7 +445,6 @@ export default function Index() {
       {
         startCursor: JSON.stringify({
           cursor: startCursor,
-          searchTerm,
         }),
       },
       {
@@ -628,7 +460,6 @@ export default function Index() {
       {
         endCursor: JSON.stringify({
           cursor: endCursor,
-          searchTerm,
         }),
       },
       {
@@ -727,11 +558,8 @@ export default function Index() {
               onClick: (e) => {
                 // 排除点击按钮等交互元素
                 if ((e.target as HTMLElement).closest("button")) return;
-                console.log("嗯？？");
                 sessionStorage.setItem("record", JSON.stringify(record));
-                navigate(`/app/manage_translations/page`, {
-                  state: { resourceId: record.resourceId, record: record },
-                });
+                navigate(`/app/manage_translations/page`);
               },
               style: { cursor: "pointer" },
             })}

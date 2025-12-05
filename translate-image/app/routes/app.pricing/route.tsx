@@ -153,7 +153,6 @@ const Index = () => {
   const { plan, updateTime, chars, totalChars, isNew } = useSelector(
     (state: any) => state.userConfig,
   );
-  console.log(updateTime);
   
   const { shop } = useLoaderData<typeof loader>();
   const { reportClick, report } = useReport();

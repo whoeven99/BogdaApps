@@ -436,31 +436,19 @@ const ImageAltTextPage = () => {
   const loader = useLoaderData<{ shop: string }>();
   const { reportClick, report } = useReport();
   const navigate = useNavigate();
-  const { search } = useLocation();
-  const params = new URLSearchParams(search);
-  const [imageType, setImageType] = useState(params.get("type"));
 
   const { t } = useTranslation();
   const { type, productId, imageId } = useParams();
-
-  // console.log(type);
   const [initData, setInitData] = useState<any>(
     JSON.parse(sessionStorage.getItem("record") || "{}"),
   );
-
-  const [initArticleData, setArticleInitData] = useState<any>(
-    JSON.parse(sessionStorage.getItem("article_image") || "{}"),
-  );
-  // console.log(initData);
 
   const currentImageId = useMemo(() => {
     const localTranslationData = JSON.parse(
       sessionStorage.getItem("record") || "{}",
     );
-    console.log("dsdjaisdj", localTranslationData);
-
     switch (type) {
-      case "json_template":
+      case "online_store_theme":
       case "metafield":
       case "page":
       case "article_image":
@@ -471,7 +459,6 @@ const ImageAltTextPage = () => {
         return `gid://shopify/ArticleImage/${imageId}`;
       case "products":
         return `gid://shopify/ProductImage/${imageId}`;
-        break;
       default:
         return "";
     }
@@ -482,7 +469,7 @@ const ImageAltTextPage = () => {
       sessionStorage.getItem("record") || "{}",
     );
     switch (type) {
-      case "json_template":
+      case "online_store_theme":
       case "metafield":
       case "page":
       case "article_image":
@@ -509,7 +496,6 @@ const ImageAltTextPage = () => {
   const replaceTranslateImageFetcher = useFetcher<any>();
   const imageLoadingFetcher = useFetcher<any>();
   const saveImageFetcher = useFetcher<any>();
-  const saveArticleImageFetcher = useFetcher<any>();
   const deleteImageFetcher = useFetcher<any>();
   const [pageLoading, setPageLoading] = useState<boolean>(true);
   const [confirmData, setConfirmData] = useState<any>([]);
@@ -844,16 +830,13 @@ const ImageAltTextPage = () => {
     if (confirmData.length > 0) {
       shopify.saveBar.leaveConfirmation();
     } else {
-      console.log("jdiasjdia");
-      console.log(type);
-
       shopify.saveBar.hide("save-bar");
       if (type === "articles" || type === "article_image") {
         navigate(`/app/articles/${productId}`);
       } else if (type === "products") {
         navigate(`/app/products/${productId}`);
       } else if (
-        type === "json_template" ||
+        type === "online_store_theme" ||
         type === "metafield" ||
         type === "page"
       ) {
@@ -867,8 +850,6 @@ const ImageAltTextPage = () => {
     setPreviewImage({ imgUrl: "", imgAlt: "" });
   };
   useEffect(() => {
-    console.log("currentImageId", currentImageId);
-
     imageFetcher.submit(
       { imagesFetcher: JSON.stringify({ imageId: currentImageId }) },
       { method: "POST" },
@@ -878,10 +859,8 @@ const ImageAltTextPage = () => {
     if (imageFetcher.data) {
       // 后端返回的数据数组
       const fetchedList = imageFetcher.data.response || [];
-      console.log(imageFetcher.data);
       // 处理不同模块之间的数据结构差异
       let mergedList = [];
-      // console.log(type);
 
       if (["articles", "products"].includes(type as string)) {
         mergedList = languageList?.map((lang) => {
@@ -911,7 +890,7 @@ const ImageAltTextPage = () => {
           }
         });
       } else if (
-        type === "json_template" ||
+        type === "online_store_theme" ||
         type === "metafield" ||
         type === "page" ||
         type === "article_image"
@@ -919,9 +898,6 @@ const ImageAltTextPage = () => {
         const localTranslationData = JSON.parse(
           sessionStorage.getItem("record") || "{}",
         );
-        console.log(localTranslationData);
-        console.log("languageList", languageList);
-
         mergedList = languageList?.map((lang) => {
           // 看后端有没有返回
           const existing = fetchedList.find(
@@ -952,8 +928,6 @@ const ImageAltTextPage = () => {
           }
         });
       }
-      console.log("mergedList:", mergedList);
-
       setImageDatas(mergedList);
       setImageFetcherLoading(false);
     }
@@ -1152,28 +1126,8 @@ const ImageAltTextPage = () => {
         replaceTranslateImageFetcher.submit(formData, {
           method: "post",
         });
-
-        // if (
-        //   (type === "json_template" ||
-        //     type === "metafield" ||
-        //     type === "page" ||
-        //     type === "article_image") &&
-        //   currentTranslatingImage.imageAfterUrl
-        // ) {
-        //   // 如果翻译前有数据，则进行删除操作
-        //   deleteImageFetcher.submit(
-        //     {
-        //       deleteImageInShopify: JSON.stringify({
-        //         ...initData,
-        //         value: initData.value?.[initData.index],
-        //         languageCode: currentTranslatingImage.languageCode,
-        //       }),
-        //     },
-        //     { method: "post" },
-        //   );
-        // }
         if (
-          type === "json_template" ||
+          type === "online_store_theme" ||
           type === "metafield" ||
           type === "page" ||
           type === "article_image"
@@ -1195,11 +1149,6 @@ const ImageAltTextPage = () => {
         }
 
         dispatch(setChars({ chars: chars + 2000 }));
-        // dispatch(
-        //   setTotalChars({
-        //     totalChars: data?.response?.purchasePoints,
-        //   }),
-        // );
       } else if (
         !translateImageFetcher.data.success &&
         translateImageFetcher.data.errorMsg === "额度不够"
@@ -1255,7 +1204,7 @@ const ImageAltTextPage = () => {
         languageCode: languageCode,
       });
       if (
-        type === "json_template" ||
+        type === "online_store_theme" ||
         type === "metafield" ||
         type === "page" ||
         type === "article_image"
@@ -1303,7 +1252,7 @@ const ImageAltTextPage = () => {
         languageCode: languageCode,
       });
       if (
-        type === "json_template" ||
+        type === "online_store_theme" ||
         type === "metafield" ||
         type === "page" ||
         type === "article_image"
@@ -1432,7 +1381,7 @@ const ImageAltTextPage = () => {
           );
         });
         if (
-          type === "json_template" ||
+          type === "online_store_theme" ||
           type === "metafield" ||
           type === "page" ||
           type === "article_image"
@@ -1581,7 +1530,7 @@ const ImageAltTextPage = () => {
         },
       );
     } else if (
-      type === "json_template" ||
+      type === "online_store_theme" ||
       type === "metafield" ||
       type === "page" ||
       type === "article_image"
@@ -1589,7 +1538,6 @@ const ImageAltTextPage = () => {
       const localTranslationData = JSON.parse(
         sessionStorage.getItem("record") || "{}",
       );
-
       if (localTranslationData) {
         setProductImageData({
           imageUrl: localTranslationData?.value[localTranslationData?.index],
@@ -1602,8 +1550,6 @@ const ImageAltTextPage = () => {
   useEffect(() => {
     if (imageLoadingFetcher.data) {
       setProductImageData(imageLoadingFetcher.data.imageData);
-      // console.log(imageLoadingFetcher.data.imageData);
-
       setPageLoading(false);
     }
   }, [imageLoadingFetcher.data]);
@@ -1617,8 +1563,6 @@ const ImageAltTextPage = () => {
   }, []);
   useEffect(() => {
     if (languageFetcher.data) {
-      console.log(languageFetcher.data);
-
       languageFetcher.data.response.forEach((lan: any) => {
         if (lan.primary) {
           setDefaultLanguageData(lan);
@@ -1680,8 +1624,6 @@ const ImageAltTextPage = () => {
       },
     );
   };
-  const querySourceLanguage = (value: string) => {};
-  const queryTargetLanguage = (value: string) => {};
   const handleNavigateToFreeTrial = () => {
     setTrialModal(false);
     navigate("/app/pricing");
@@ -2094,31 +2036,8 @@ const ImageAltTextPage = () => {
                                           : item,
                                       );
                                     });
-                                    console.log("上传前判断有无数据");
-
-                                    // 判断用户二次上传行为
-                                    // if (
-                                    //   img.imageAfterUrl &&
-                                    //   (type === "json_template" ||
-                                    //     type === "metafield" ||
-                                    //     type === "page" ||
-                                    //     type === "article_image")
-                                    // ) {
-                                    //   deleteImageFetcher.submit(
-                                    //     {
-                                    //       deleteImageInShopify: JSON.stringify({
-                                    //         ...initData,
-                                    //         value:
-                                    //           initData.value?.[initData.index],
-                                    //         languageCode: img.languageCode,
-                                    //       }),
-                                    //     },
-                                    //     { method: "post" },
-                                    //   );
-                                    // }
-                                    console.log("执行保存数据到shopify");
                                     if (
-                                      type === "json_template" ||
+                                      type === "online_store_theme" ||
                                       type === "metafield" ||
                                       type === "page" ||
                                       type === "article_image"

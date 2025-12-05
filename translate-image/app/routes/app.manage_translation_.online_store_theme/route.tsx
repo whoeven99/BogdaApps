@@ -5,8 +5,8 @@ import {
   Layout,
   Page,
   Pagination,
-  Thumbnail,
   Select,
+  Thumbnail,
 } from "@shopify/polaris";
 import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
 import {
@@ -40,18 +40,10 @@ import { authenticate } from "~/shopify.server";
 import SortPopover from "~/components/SortPopover";
 import { getItemOptions } from "../app.manage_translation/route";
 const { Text, Title } = Typography;
-export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const url = new URL(request.url);
-  const searchTerm = url.searchParams.get("language");
-  console.log("sesdas", searchTerm);
-
-  return json({
-    searchTerm,
-  });
-};
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const url = new URL(request.url);
+
   const searchTerm = url.searchParams.get("language");
 
   const adminAuthResult = await authenticate.admin(request);
@@ -95,114 +87,89 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   };
 
   const fetchFileReferences = async (admin: any, nodes: any[]) => {
-    const tasks: Promise<any>[] = [];
+    const results: any[] = [];
 
     for (const node of nodes) {
       for (const contentItem of node.translatableContent || []) {
         const type = contentItem.type;
         if (!IMAGE_TYPES.has(type)) continue;
 
-        // ---- 1) FILE_REFERENCE ----
+        // === 1) FILE_REFERENCE ===
         if (type === "FILE_REFERENCE") {
-          tasks.push(
-            (async () => {
-              const fileName = contentItem.value?.split("/").pop() ?? "";
-              const src = await findImageSrc(admin, fileName);
+          const fileName = contentItem.value?.split("/").pop() ?? "";
+          const src = await findImageSrc(admin, fileName);
 
-              if (!src) return null; // ❗没有图片则忽略
+          if (!src) continue;
 
-              return {
-                resourceId: node.resourceId,
-                key: contentItem.key,
-                type,
-                value: src, // 单一值
-                translations: node.translations || [],
-                digest: contentItem.digest,
-                originValue: contentItem.value,
-              };
-            })(),
-          );
-        }
-
-        // ---- 2) LIST_FILE_REFERENCE ----
-        if (type === "LIST_FILE_REFERENCE") {
-          tasks.push(
-            (async () => {
-              const refs: string[] = contentItem.value || [];
-
-              const urls = (
-                await Promise.all(
-                  refs.map(async (ref) => {
-                    const fileName = ref?.split("/").pop() ?? "";
-                    return await findImageSrc(admin, fileName);
-                  }),
-                )
-              ).filter(Boolean);
-
-              // ❗LIST_FILE_REFERENCE 也只返回第一张（你要求单一）
-              if (urls.length === 0) return null;
-
-              return {
-                resourceId: node.resourceId,
-                key: contentItem.key,
-                type,
-                value: urls[0],
-                translations: node.translations || [],
-                digest: contentItem.digest,
-                originValue: contentItem.value,
-              };
-            })(),
-          );
-        }
-
-        // ---- 3) HTML ----
-        if (type === "HTML") {
-          const urls = extractFromHtml(contentItem.value || "");
-          console.log("contentItem.value", contentItem.value);
-          console.log("urls", urls);
-
-          if (urls.length === 0) continue; // ❗没有图片，不返回
-          urls.forEach((url, index) => {
-            tasks.push(
-              Promise.resolve({
-                resourceId: node.resourceId,
-                key: contentItem.key,
-                dbKey: `${contentItem.key}_${index}`,
-                type,
-                value: url, // 单一值
-                translations: node.translations || [],
-                digest: contentItem.digest,
-                originValue: contentItem.value,
-              }),
-            );
+          results.push({
+            resourceId: node.resourceId,
+            key: contentItem.key,
+            type,
+            value: [src], // ❗单图也用数组统一格式
+            translations: node.translations || [],
+            digest: contentItem.digest,
           });
         }
 
-        // ---- 4) RICH_TEXT_FIELD ----
-        if (type === "RICH_TEXT_FIELD") {
-          const urls = extractFromRichText(contentItem.value?.children || []);
+        // === 2) LIST_FILE_REFERENCE ===
+        if (type === "LIST_FILE_REFERENCE") {
+          const refs: string[] = contentItem.value || [];
+
+          const urls = (
+            await Promise.all(
+              refs.map(async (ref) => {
+                const fileName = ref?.split("/").pop() ?? "";
+                return await findImageSrc(admin, fileName);
+              }),
+            )
+          ).filter(Boolean);
 
           if (urls.length === 0) continue;
 
-          tasks.push(
-            Promise.resolve({
-              resourceId: node.resourceId,
-              key: contentItem.key,
-              type,
-              value: urls[0],
-              translations: node.translations || [],
-              digest: contentItem.digest,
-              originValue: contentItem.value,
-            }),
-          );
+          results.push({
+            resourceId: node.resourceId,
+            key: contentItem.key,
+            type,
+            value: urls, // ❗多图放一起
+            translations: node.translations || [],
+            digest: contentItem.digest,
+          });
+        }
+
+        // === 3) HTML ===
+        if (type === "HTML") {
+          const urls = extractFromHtml(contentItem.value || "");
+          if (urls.length === 0) continue;
+
+          results.push({
+            resourceId: node.resourceId,
+            key: contentItem.key,
+            type,
+            value: urls, // ❗html 多图放一起
+            translations: node.translations || [],
+            digest: contentItem.digest,
+            originValue: contentItem.value,
+          });
+        }
+
+        // === 4) RICH_TEXT_FIELD ===
+        if (type === "RICH_TEXT_FIELD") {
+          const urls = extractFromRichText(contentItem.value?.children || []);
+          if (urls.length === 0) continue;
+
+          results.push({
+            resourceId: node.resourceId,
+            key: contentItem.key,
+            type,
+            value: urls, // ❗多图放一起
+            translations: node.translations || [],
+            digest: contentItem.digest,
+          });
         }
       }
     }
 
-    const resolved = await Promise.all(tasks);
-
-    // ❗过滤掉 null（无图片的项）
-    return resolved.filter(Boolean);
+    return results;
   };
 
   const findImageSrc = async (admin: any, fileName: string) => {
@@ -226,36 +193,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const parsed = await response.json();
     return parsed?.data?.files?.edges?.[0]?.node?.preview?.image?.src ?? null;
   };
-  // const fetchFileReferences = async (admin: any, nodes: any[]) => {
-  //   // 扁平化所有 FILE_REFERENCE 项
-  //   const fileItems = nodes.flatMap((node) => {
-  //     return (node.translatableContent || [])
-  //       .filter((c: any) => c.type === "FILE_REFERENCE")
-  //       .map((contentItem: any) => ({
-  //         node,
-  //         contentItem,
-  //       }));
-  //   });
-
-  //   // 并行解析所有文件引用
-  //   const resolved = await Promise.all(
-  //     fileItems.map(async ({ node, contentItem }) => {
-  //       const fileName = contentItem.value.split("/").pop() ?? "";
-
-  //       const src = await findImageSrc(admin, fileName);
-
-  //       return {
-  //         resourceId: node.resourceId,
-  //         ...contentItem,
-  //         value: src, // 转换成真正 CDN URL
-  //         translations: node.translations || [],
-  //       };
-  //     }),
-  //   );
-  //   console.log("asdiasdj", resolved);
-
-  //   return resolved;
-  // };
 
   try {
     switch (true) {
@@ -264,7 +201,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           const response = await admin.graphql(
             `#graphql
                 query JsonTemplate($startCursor: String){     
-                    translatableResources(resourceType: ARTICLE, last: 20, ,before: $startCursor) {
+                    translatableResources(resourceType: ONLINE_STORE_THEME, last: 10, ,before: $startCursor) {
                       nodes {
                         resourceId
                         translatableContent {
@@ -273,10 +210,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                           locale
                           type
                           value
-                        }
-                        translations(locale: "${startCursor?.searchTerm || searchTerm}") {
-                          value
-                          key
                         }
                       }
                       pageInfo {
@@ -334,8 +267,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             `#graphql
               query JsonTemplate($endCursor: String){     
                 translatableResources(
-                  resourceType: ARTICLE, 
-                  first: 20, 
+                  resourceType: ONLINE_STORE_THEME, 
+                  first: 10, 
                   after: $endCursor
                 ) {
                   nodes {
@@ -346,10 +279,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                       locale
                       type
                       value
-                    }
-                    translations(locale: "${endCursor?.searchTerm || searchTerm}") {
-                      value
-                      key
                     }
                   }
                   pageInfo {
@@ -382,7 +311,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
           // ⭐ 关键改动：等所有 FILE_REFERENCE 图片解析完
           const fileReferences = await fetchFileReferences(admin, tr.nodes);
-          console.log("fileReferences", fileReferences);
 
           return json({
             data: fileReferences,
@@ -413,13 +341,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function Index() {
-  const { searchTerm } = useLoaderData<typeof loader>();
   const dataFetcher = useFetcher<any>();
   const { t } = useTranslation();
   const itemOptions = getItemOptions(t);
-
   const [startCursor, setStartCursor] = useState("");
   const [endCursor, setEndCursor] = useState("");
+  const [selectedItem, setSelectedItem] = useState<string>("online_store_theme");
   const [tableDataLoading, setTableDataLoading] = useState(false);
 
   const [articleData, setArticleData] = useState<any>([]);
@@ -428,7 +355,6 @@ export default function Index() {
   const [hasPreviousPage, setHasPreviousPage] = useState(false);
 
   const { Text } = Typography;
-  const [selectedItem, setSelectedItem] = useState<string>("article");
   const navigate = useNavigate();
   const panelColumns: ColumnsType<any> = [
     {
@@ -437,7 +363,11 @@ export default function Index() {
       render: (_: any, record: any) => {
         // console.log("record", record);
         return record.value ? (
-          <Thumbnail source={record.value} size="large" alt={record.value} />
+          <Thumbnail
+            source={record?.value[0]}
+            size="large"
+            alt={record?.value[0]}
+          />
         ) : (
           <Thumbnail source={ImageIcon} size="large" alt="Small document" />
         );
@@ -467,7 +397,7 @@ export default function Index() {
             // cursor:"pointer"
           }}
         >
-          {record?.dbKey || "未命名产品"}
+          {record?.key || "未命名产品"}
         </Text>
       ),
       responsive: ["xs", "sm", "md", "lg", "xl", "xxl"], // ✅ 正确
@@ -495,7 +425,8 @@ export default function Index() {
     },
   ];
   function handleView(record: any): void {
-    console.log(record);
+    sessionStorage.setItem("record", JSON.stringify(record));
+    navigate(`/app/manage_translations/online_store_theme`);
   }
   useEffect(() => {
     setTableDataLoading(true);
@@ -503,7 +434,6 @@ export default function Index() {
       {
         endCursor: JSON.stringify({
           cursor: "",
-          searchTerm,
         }),
       },
       {
@@ -531,7 +461,6 @@ export default function Index() {
       {
         startCursor: JSON.stringify({
           cursor: startCursor,
-          searchTerm,
         }),
       },
       {
@@ -547,7 +476,6 @@ export default function Index() {
       {
         endCursor: JSON.stringify({
           cursor: endCursor,
-          searchTerm,
         }),
       },
       {
@@ -559,12 +487,7 @@ export default function Index() {
     navigate("/app/manage_translation");
   };
   const handleItemChange = (item: string) => {
-    shopify.saveBar.hide("save-bar");
-    // setIsLoading(true);
-    // isManualChangeRef.current = true;
     setSelectedItem(item);
-    console.log(item);
-
     navigate(`/app/manage_translation/${item}`);
   };
   return (
@@ -603,7 +526,7 @@ export default function Index() {
                   fontWeight: 700,
                 }}
               >
-                {t("article")}
+                {t("online store theme")}
               </Title>
             </Flex>
           </Flex>
@@ -614,7 +537,8 @@ export default function Index() {
       >
         <div
           style={{
-            width: "100px",
+            width: "150px",
+            marginBottom: "20px",
           }}
         >
           <Select
@@ -625,7 +549,6 @@ export default function Index() {
           />
         </div>
       </div>
-
       <div
         style={{
           display: "flex",
@@ -641,19 +564,14 @@ export default function Index() {
             dataSource={articleData}
             columns={panelColumns}
             pagination={false}
-            rowKey={(record) =>
-              `${record.dbKey || record.key}_${record.digest}`
-            } // ✅ 建议加上 key，避免警告
+            rowKey={(record) => `${record.key}_${record.digest}`} // ✅ 建议加上 key，避免警告
             loading={tableDataLoading}
             onRow={(record) => ({
               onClick: (e) => {
                 // 排除点击按钮等交互元素
                 if ((e.target as HTMLElement).closest("button")) return;
-                console.log("嗯？？",record);
                 sessionStorage.setItem("record", JSON.stringify(record));
-                navigate(`/app/manage_translations/article_image`, {
-                  state: { resourceId: record.resourceId, record: record },
-                });
+                navigate(`/app/manage_translations/online_store_theme`);
               },
               style: { cursor: "pointer" },
             })}

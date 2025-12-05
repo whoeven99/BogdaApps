@@ -36,28 +36,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 const Index = () => {
-  const { language, server, shop, ciwiSwitcherBlocksId, ciwiSwitcherId } =
-    useLoaderData<typeof loader>();
+  const { shop } = useLoaderData<typeof loader>();
   const { reportClick, report } = useReport();
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(true);
-  const [switcherOpen, setSwitcherOpen] = useState(true);
-  const [switcherLoading, setSwitcherLoading] = useState(true);
-  const [isMobile, setIsMobile] = useState<boolean>(false);
-  const blockUrl = useMemo(
-    () =>
-      `https://${shop}/admin/themes/current/editor?context=apps&activateAppId=${ciwiSwitcherId}/star_rating`,
-    [shop, ciwiSwitcherBlocksId],
-  );
-
   const fetcher = useFetcher<any>();
-  const themeFetcher = useFetcher<any>();
   useEffect(() => {
-    setIsLoading(false);
     fetcher.submit(
       {
-        log: `${shop} 目前在主页面, 页面语言为${language}`,
+        log: `${shop} 目前在管理主题图片翻译页面`,
       },
       {
         method: "POST",
@@ -65,49 +52,6 @@ const Index = () => {
       },
     );
   }, []);
-  useEffect(() => {
-    setIsLoading(false);
-    themeFetcher.submit(
-      {
-        theme: JSON.stringify(true),
-      },
-      {
-        method: "post",
-        action: "/app",
-      },
-    );
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    handleResize();
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
-  useEffect(() => {
-    if (themeFetcher.data) {
-      const switcherData =
-        themeFetcher?.data?.data?.nodes[0]?.files?.nodes[0]?.body?.content;
-      const jsonString = switcherData?.replace(/\/\*[\s\S]*?\*\//g, "")?.trim();
-      const blocks = JSON.parse(jsonString).current?.blocks;
-      if (blocks) {
-        const switcherJson: any = Object.values(blocks).find(
-          (block: any) => block.type === ciwiSwitcherBlocksId,
-        );
-        if (switcherJson) {
-          if (switcherJson.disabled) {
-            setSwitcherOpen(false);
-            localStorage.setItem("switcherEnableCardOpen", "false");
-          } else {
-            setSwitcherOpen(true);
-            localStorage.setItem("switcherEnableCardOpen", "true");
-          }
-        }
-      }
-      setSwitcherLoading(false);
-    }
-  }, [themeFetcher.data]);
-
-  const handleReportCiwiHelpCenter = () => {
-    reportClick("dashboard_footer_help_center");
-  };
 
   return (
     <Page>
@@ -154,7 +98,8 @@ const Index = () => {
                     render: (_, record) => (
                       <Button
                         onClick={() => {
-                          navigate("/app/manage_translation/json_template");
+                          reportClick("manage_translation_online_store_theme");
+                          navigate("/app/manage_translation/online_store_theme");
                         }}
                       >
                         {t("操作")}
@@ -192,6 +137,7 @@ const Index = () => {
                     render: () => (
                       <Button
                         onClick={() => {
+                          reportClick("manage_translation_page");
                           navigate("/app/manage_translation/page");
                         }}
                       >
@@ -230,6 +176,7 @@ const Index = () => {
                     render: () => (
                       <Button
                         onClick={() => {
+                          reportClick("manage_translation_metafield");
                           navigate("/app/manage_translation/metafield");
                         }}
                       >
@@ -240,44 +187,6 @@ const Index = () => {
                 ]}
               />
             </Card>
-
-            {/* === 4. ARTICLE === */}
-            {/* <Card>
-              <Table
-                pagination={false}
-                showHeader={false}
-                dataSource={[
-                  {
-                    key: "article",
-                    name: t("ARTICLE"),
-                    count: "4565/7878",
-                  },
-                ]}
-                columns={[
-                  {
-                    dataIndex: "name",
-                    render: (text) => <Text>{text}</Text>,
-                  },
-                  {
-                    dataIndex: "count",
-                    width: 120,
-                    render: (text) => <Text>{text}</Text>,
-                  },
-                  {
-                    width: 120,
-                    render: () => (
-                      <Button
-                        onClick={() => {
-                          navigate("/app/manage_translation/article_image");
-                        }}
-                      >
-                        {t("操作")}
-                      </Button>
-                    ),
-                  },
-                ]}
-              />
-            </Card> */}
           </Space>
         </Space>
       </Space>
@@ -286,10 +195,9 @@ const Index = () => {
 };
 
 export const getItemOptions = (t: (key: string) => string) => [
-  { label: t("Json Template"), value: "json_template" },
+  { label: t("Online Store Theme"), value: "online_store_theme" },
   { label: t("Metafield"), value: "metafield" },
   { label: t("Pages"), value: "page" },
-  // { label: t("Articles"), value: "article_image" },
 ];
 
 export default Index;

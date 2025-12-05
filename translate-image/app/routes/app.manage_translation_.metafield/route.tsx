@@ -1,53 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  Badge,
-  Icon,
-  Layout,
-  Page,
-  Pagination,
-  Select,
-  Thumbnail,
-} from "@shopify/polaris";
-import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
-import {
-  ArrowLeftIcon,
-  NoteIcon,
-  SortIcon,
-  ImageIcon,
-} from "@shopify/polaris-icons";
-import { UploadOutlined, SearchOutlined } from "@ant-design/icons";
-import {
-  Table,
-  Button,
-  Tabs,
-  Tag,
-  Input,
-  Flex,
-  Card,
-  Typography,
-  Affix,
-} from "antd";
+import { Icon, Page, Pagination, Select, Thumbnail } from "@shopify/polaris";
+import { ArrowLeftIcon, ImageIcon } from "@shopify/polaris-icons";
+import { Table, Button, Flex, Typography, Affix } from "antd";
 
 import { useTranslation } from "react-i18next";
 import { useNavigate, useFetcher, useLoaderData } from "@remix-run/react";
-
-import { useDispatch, useSelector } from "react-redux";
-import { AppDispatch, RootState } from "~/store";
-import { setLastPageCursorInfo } from "~/store/modules/articleSlice";
 import { ColumnsType } from "antd/es/table";
 import { ActionFunctionArgs, json, LoaderFunctionArgs } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
-import SortPopover from "~/components/SortPopover";
 import { getItemOptions } from "../app.manage_translation/route";
 const { Text, Title } = Typography;
-export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const url = new URL(request.url);
-  const searchTerm = url.searchParams.get("language");
-
-  return json({
-    searchTerm,
-  });
-};
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const url = new URL(request.url);
@@ -215,36 +177,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const parsed = await response.json();
     return parsed?.data?.files?.edges?.[0]?.node?.preview?.image?.src ?? null;
   };
-  // const fetchFileReferences = async (admin: any, nodes: any[]) => {
-  //   // 扁平化所有 FILE_REFERENCE 项
-  //   const fileItems = nodes.flatMap((node) => {
-  //     return (node.translatableContent || [])
-  //       .filter((c: any) => c.type === "FILE_REFERENCE")
-  //       .map((contentItem: any) => ({
-  //         node,
-  //         contentItem,
-  //       }));
-  //   });
-
-  //   // 并行解析所有文件引用
-  //   const resolved = await Promise.all(
-  //     fileItems.map(async ({ node, contentItem }) => {
-  //       const fileName = contentItem.value.split("/").pop() ?? "";
-
-  //       const src = await findImageSrc(admin, fileName);
-
-  //       return {
-  //         resourceId: node.resourceId,
-  //         ...contentItem,
-  //         value: src, // 转换成真正 CDN URL
-  //         translations: node.translations || [],
-  //       };
-  //     }),
-  //   );
-  //   console.log("asdiasdj", resolved);
-
-  //   return resolved;
-  // };
 
   try {
     switch (true) {
@@ -253,7 +185,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           const response = await admin.graphql(
             `#graphql
                 query JsonTemplate($startCursor: String){     
-                    translatableResources(resourceType: METAFIELD, last: 20, ,before: $startCursor) {
+                    translatableResources(resourceType: METAFIELD, last: 10, ,before: $startCursor) {
                       nodes {
                         resourceId
                         translatableContent {
@@ -262,10 +194,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                           locale
                           type
                           value
-                        }
-                        translations(locale: "${startCursor?.searchTerm || searchTerm}") {
-                          value
-                          key
                         }
                       }
                       pageInfo {
@@ -324,7 +252,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               query JsonTemplate($endCursor: String){     
                 translatableResources(
                   resourceType: METAFIELD, 
-                  first: 20, 
+                  first: 10, 
                   after: $endCursor
                 ) {
                   nodes {
@@ -335,10 +263,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                       locale
                       type
                       value
-                    }
-                    translations(locale: "${endCursor?.searchTerm || searchTerm}") {
-                      value
-                      key
                     }
                   }
                   pageInfo {
@@ -401,7 +325,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function Index() {
-  const { searchTerm } = useLoaderData<typeof loader>();
   const dataFetcher = useFetcher<any>();
 
   const [startCursor, setStartCursor] = useState("");
@@ -482,7 +405,8 @@ export default function Index() {
     },
   ];
   function handleView(record: any): void {
-    console.log(record);
+    sessionStorage.setItem("record", JSON.stringify(record));
+    navigate(`/app/manage_translations/metafield`);
   }
   useEffect(() => {
     setTableDataLoading(true);
@@ -490,7 +414,6 @@ export default function Index() {
       {
         endCursor: JSON.stringify({
           cursor: "",
-          searchTerm,
         }),
       },
       {
@@ -518,7 +441,6 @@ export default function Index() {
       {
         startCursor: JSON.stringify({
           cursor: startCursor,
-          searchTerm,
         }),
       },
       {
@@ -534,7 +456,6 @@ export default function Index() {
       {
         endCursor: JSON.stringify({
           cursor: endCursor,
-          searchTerm,
         }),
       },
       {
@@ -633,11 +554,8 @@ export default function Index() {
               onClick: (e) => {
                 // 排除点击按钮等交互元素
                 if ((e.target as HTMLElement).closest("button")) return;
-                console.log("嗯？？");
                 sessionStorage.setItem("record", JSON.stringify(record));
-                navigate(`/app/manage_translations/metafield`, {
-                  state: { resourceId: record.resourceId, record: record },
-                });
+                navigate(`/app/manage_translations/metafield`);
               },
               style: { cursor: "pointer" },
             })}
