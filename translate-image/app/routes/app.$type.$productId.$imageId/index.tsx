@@ -1153,48 +1153,46 @@ const ImageAltTextPage = () => {
           method: "post",
         });
 
+        // if (
+        //   (type === "json_template" ||
+        //     type === "metafield" ||
+        //     type === "page" ||
+        //     type === "article_image") &&
+        //   currentTranslatingImage.imageAfterUrl
+        // ) {
+        //   // 如果翻译前有数据，则进行删除操作
+        //   deleteImageFetcher.submit(
+        //     {
+        //       deleteImageInShopify: JSON.stringify({
+        //         ...initData,
+        //         value: initData.value?.[initData.index],
+        //         languageCode: currentTranslatingImage.languageCode,
+        //       }),
+        //     },
+        //     { method: "post" },
+        //   );
+        // }
         if (
-          (type === "json_template" ||
-            type === "metafield" ||
-            type === "page" ||
-            type === "article_image") &&
-          currentTranslatingImage.imageAfterUrl
+          type === "json_template" ||
+          type === "metafield" ||
+          type === "page" ||
+          type === "article_image"
         ) {
-          // 如果翻译前有数据，则进行删除操作
-          deleteImageFetcher.submit(
+          saveImageFetcher.submit(
             {
-              deleteImageInShopify: JSON.stringify({
+              saveImageToShopify: JSON.stringify({
                 ...initData,
                 value: initData.value?.[initData.index],
+                imageAfterUrl: translateImageFetcher.data.response,
                 languageCode: currentTranslatingImage.languageCode,
+                altText: currentTranslatingImage.altAfterTranslation
+                  ? currentTranslatingImage.altAfterTranslation
+                  : currentTranslatingImage.altBeforeTranslation,
               }),
             },
             { method: "post" },
           );
         }
-        setTimeout(() => {
-          if (
-            type === "json_template" ||
-            type === "metafield" ||
-            type === "page" ||
-            type === "article_image"
-          ) {
-            saveImageFetcher.submit(
-              {
-                saveImageToShopify: JSON.stringify({
-                  ...initData,
-                  value: initData.value?.[initData.index],
-                  imageAfterUrl: translateImageFetcher.data.response,
-                  languageCode: currentTranslatingImage.languageCode,
-                  altText: currentTranslatingImage.altAfterTranslation
-                    ? currentTranslatingImage.altAfterTranslation
-                    : currentTranslatingImage.altBeforeTranslation,
-                }),
-              },
-              { method: "post" },
-            );
-          }
-        }, 1000);
 
         dispatch(setChars({ chars: chars + 2000 }));
         // dispatch(
@@ -1221,7 +1219,7 @@ const ImageAltTextPage = () => {
           value: initData.value?.[initData.index],
           imageAfterUrl:
             "https://ciwi-us-1327177217.cos.na-ashburn.myqcloud.com/image-Translation/ciwishop.myshopify.com/63748991.jpg",
-          languageCode: "en",
+          languageCode: "zh-CN",
           altText: "",
           locale: defaultLanguageData.locale,
         }),
@@ -1433,30 +1431,26 @@ const ImageAltTextPage = () => {
               : item,
           );
         });
-        setTimeout(() => {
-          if (
-            type === "json_template" ||
-            type === "metafield" ||
-            type === "page" ||
-            type === "article_image"
-          ) {
-            saveImageFetcher.submit(
-              {
-                saveImageToShopify: JSON.stringify({
-                  ...initData,
-                  value: initData.value?.[initData.index],
-                  imageAfterUrl: newUrl,
-                  languageCode: img.languageCode,
-                  altText: img.altAfterTranslation
-                    ? img.altAfterTranslation
-                    : img.altBeforeTranslation,
-                  // locale: defaultLanguageData.locale,
-                }),
-              },
-              { method: "post" },
-            );
-          }
-        }, 1000);
+        if (
+          type === "json_template" ||
+          type === "metafield" ||
+          type === "page" ||
+          type === "article_image"
+        ) {
+          saveImageFetcher.submit(
+            {
+              saveImageToShopify: JSON.stringify({
+                ...initData,
+                value: initData.value?.[initData.index],
+                imageAfterUrl: newUrl,
+                languageCode: img.languageCode,
+                altText: "",
+                locale: defaultLanguageData.locale,
+              }),
+            },
+            { method: "post" },
+          );
+        }
 
         shopify.toast.show(`${info.file.name} ${t("Upload Success")}`);
       } else {
@@ -1823,7 +1817,7 @@ const ImageAltTextPage = () => {
             )}
           </Space>
         </Layout.Section>
-        {/* <Button onClick={handleSaveImage}>{t("Save Image")}</Button> */}
+        <Button onClick={handleSaveImage}>{t("Save Image")}</Button>
         <Layout.Section>
           <Space direction="vertical" size="large" style={{ width: "100%" }}>
             <div
@@ -2103,54 +2097,49 @@ const ImageAltTextPage = () => {
                                     console.log("上传前判断有无数据");
 
                                     // 判断用户二次上传行为
+                                    // if (
+                                    //   img.imageAfterUrl &&
+                                    //   (type === "json_template" ||
+                                    //     type === "metafield" ||
+                                    //     type === "page" ||
+                                    //     type === "article_image")
+                                    // ) {
+                                    //   deleteImageFetcher.submit(
+                                    //     {
+                                    //       deleteImageInShopify: JSON.stringify({
+                                    //         ...initData,
+                                    //         value:
+                                    //           initData.value?.[initData.index],
+                                    //         languageCode: img.languageCode,
+                                    //       }),
+                                    //     },
+                                    //     { method: "post" },
+                                    //   );
+                                    // }
+                                    console.log("执行保存数据到shopify");
                                     if (
-                                      img.imageAfterUrl &&
-                                      (type === "json_template" ||
-                                        type === "metafield" ||
-                                        type === "page" ||
-                                        type === "article_image")
+                                      type === "json_template" ||
+                                      type === "metafield" ||
+                                      type === "page" ||
+                                      type === "article_image"
                                     ) {
-                                      deleteImageFetcher.submit(
+                                      saveImageFetcher.submit(
                                         {
-                                          deleteImageInShopify: JSON.stringify({
+                                          saveImageToShopify: JSON.stringify({
                                             ...initData,
                                             value:
                                               initData.value?.[initData.index],
+                                            imageAfterUrl: newUrl,
                                             languageCode: img.languageCode,
+                                            altText: img.altAfterTranslation
+                                              ? img.altAfterTranslation
+                                              : img.altBeforeTranslation,
+                                            locale: defaultLanguageData.locale,
                                           }),
                                         },
                                         { method: "post" },
                                       );
                                     }
-                                    console.log("执行保存数据到shopify");
-                                    setTimeout(() => {
-                                      if (
-                                        type === "json_template" ||
-                                        type === "metafield" ||
-                                        type === "page" ||
-                                        type === "article_image"
-                                      ) {
-                                        saveImageFetcher.submit(
-                                          {
-                                            saveImageToShopify: JSON.stringify({
-                                              ...initData,
-                                              value:
-                                                initData.value?.[
-                                                  initData.index
-                                                ],
-                                              imageAfterUrl: newUrl,
-                                              languageCode: img.languageCode,
-                                              altText: img.altAfterTranslation
-                                                ? img.altAfterTranslation
-                                                : img.altBeforeTranslation,
-                                              locale:
-                                                defaultLanguageData.locale,
-                                            }),
-                                          },
-                                          { method: "post" },
-                                        );
-                                      }
-                                    }, 500);
 
                                     shopify.toast.show(
                                       `${info.file.name} ${t("Upload Success")}`,
