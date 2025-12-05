@@ -1013,7 +1013,7 @@ export const deleteSaveInShopify = async ({
         },
       },
     });
-    console.log("delete image file in shopify", response);
+    console.log("delete image file in shopify", response.data);
     return response;
   } catch (error) {
     console.log("delete image file error", error);

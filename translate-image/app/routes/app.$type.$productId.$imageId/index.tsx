@@ -1236,7 +1236,10 @@ const ImageAltTextPage = () => {
   }, [saveImageFetcher.data]);
   useEffect(() => {
     if (deleteImageFetcher.data) {
-      console.log("deleteImageFetcher", deleteImageFetcher.data);
+      console.log(
+        "deleteImageFetcher",
+        deleteImageFetcher.data.response.data.translationsRemove.translations,
+      );
     }
   }, [deleteImageFetcher.data]);
   const handleDelete = async (
@@ -1430,28 +1433,30 @@ const ImageAltTextPage = () => {
               : item,
           );
         });
-        if (
-          type === "json_template" ||
-          type === "metafield" ||
-          type === "page" ||
-          type === "article_image"
-        ) {
-          saveImageFetcher.submit(
-            {
-              saveImageToShopify: JSON.stringify({
-                ...initData,
-                value: initData.value?.[initData.index],
-                imageAfterUrl: newUrl,
-                languageCode: img.languageCode,
-                altText: img.altAfterTranslation
-                  ? img.altAfterTranslation
-                  : img.altBeforeTranslation,
-                // locale: defaultLanguageData.locale,
-              }),
-            },
-            { method: "post" },
-          );
-        }
+        setTimeout(() => {
+          if (
+            type === "json_template" ||
+            type === "metafield" ||
+            type === "page" ||
+            type === "article_image"
+          ) {
+            saveImageFetcher.submit(
+              {
+                saveImageToShopify: JSON.stringify({
+                  ...initData,
+                  value: initData.value?.[initData.index],
+                  imageAfterUrl: newUrl,
+                  languageCode: img.languageCode,
+                  altText: img.altAfterTranslation
+                    ? img.altAfterTranslation
+                    : img.altBeforeTranslation,
+                  // locale: defaultLanguageData.locale,
+                }),
+              },
+              { method: "post" },
+            );
+          }
+        }, 1000);
 
         shopify.toast.show(`${info.file.name} ${t("Upload Success")}`);
       } else {
@@ -2071,33 +2076,6 @@ const ImageAltTextPage = () => {
                                   [img.languageCode]: info.fileList, // ✅ 更新对应语言
                                 }));
                                 if (info.file.status === "uploading") {
-                                  console.log(
-                                    "imageAfterUrl",
-                                    img.imageAfterUrl,
-                                  );
-                                  console.log("上传前判断有无数据");
-
-                                  // 判断用户二次上传行为
-                                  if (
-                                    img.imageAfterUrl &&
-                                    (type === "json_template" ||
-                                      type === "metafield" ||
-                                      type === "page" ||
-                                      type === "article_image")
-                                  ) {
-                                    deleteImageFetcher.submit(
-                                      {
-                                        deleteImageInShopify: JSON.stringify({
-                                          ...initData,
-                                          value:
-                                            initData.value?.[initData.index],
-                                          languageCode: img.languageCode,
-                                        }),
-                                      },
-                                      { method: "post" },
-                                    );
-                                  }
-                                  console.log("info", info);
                                 }
                                 if (info.file.status === "done") {
                                   const response = info.file.response; // 后端返回的数据
@@ -2122,6 +2100,28 @@ const ImageAltTextPage = () => {
                                           : item,
                                       );
                                     });
+                                    console.log("上传前判断有无数据");
+
+                                    // 判断用户二次上传行为
+                                    if (
+                                      img.imageAfterUrl &&
+                                      (type === "json_template" ||
+                                        type === "metafield" ||
+                                        type === "page" ||
+                                        type === "article_image")
+                                    ) {
+                                      deleteImageFetcher.submit(
+                                        {
+                                          deleteImageInShopify: JSON.stringify({
+                                            ...initData,
+                                            value:
+                                              initData.value?.[initData.index],
+                                            languageCode: img.languageCode,
+                                          }),
+                                        },
+                                        { method: "post" },
+                                      );
+                                    }
                                     console.log("执行保存数据到shopify");
                                     setTimeout(() => {
                                       if (
@@ -2139,8 +2139,10 @@ const ImageAltTextPage = () => {
                                                   initData.index
                                                 ],
                                               imageAfterUrl: newUrl,
-                                              languageCode: img.languageCode·,
-                                              altText: "",
+                                              languageCode: img.languageCode,
+                                              altText: img.altAfterTranslation
+                                                ? img.altAfterTranslation
+                                                : img.altBeforeTranslation,
                                               locale:
                                                 defaultLanguageData.locale,
                                             }),
