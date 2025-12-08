@@ -8,7 +8,7 @@ import { useNavigate, useFetcher, useLoaderData } from "@remix-run/react";
 import { ColumnsType } from "antd/es/table";
 import { ActionFunctionArgs, json, LoaderFunctionArgs } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
-import { getItemOptions } from "../app.all/route";
+import { getItemOptions } from "../app.theme/route";
 import { queryShopifyThemeData } from "~/api/JavaServer";
 const { Text, Title } = Typography;
 

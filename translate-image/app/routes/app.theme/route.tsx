@@ -292,7 +292,7 @@ export default function Index() {
   const dataFetcher = useFetcher<any>();
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
-  const themeParam = searchParams.get("theme") || "all";
+  const themeParam = searchParams.get("themetype") || "all";
 
   const itemOptions = getItemOptions(t);
   const [startCursor, setStartCursor] = useState("");
@@ -377,10 +377,10 @@ export default function Index() {
   ];
   function handleView(record: any): void {
     sessionStorage.setItem("record", JSON.stringify(record));
-    navigate(`/app/all/${themeParam}`);
+    navigate(`/app/themes/${themeParam}`);
   }
   useEffect(() => {
-    const theme = searchParams.get("theme") || "all";
+    const theme = searchParams.get("themetype") || "all";
     setTableDataLoading(true);
     let type = "";
 
@@ -501,7 +501,7 @@ export default function Index() {
     setSelectedItem(item);
 
     setTableDataLoading(true);
-    navigate(`/app/all?theme=${item}`);
+    navigate(`/app/theme?themetype=${item}`);
   };
   return (
     <Page>
@@ -584,7 +584,7 @@ export default function Index() {
                 // 排除点击按钮等交互元素
                 if ((e.target as HTMLElement).closest("button")) return;
                 sessionStorage.setItem("record", JSON.stringify(record));
-                navigate(`/app/all/${themeParam}`);
+                navigate(`/app/themes/${themeParam}`);
               },
               style: { cursor: "pointer" },
             })}

@@ -38,7 +38,7 @@ import { ColumnsType } from "antd/es/table";
 import { ActionFunctionArgs, json, LoaderFunctionArgs } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
 import SortPopover from "~/components/SortPopover";
-import { getItemOptions } from "../app.all/route";
+import { getItemOptions } from "../app.theme/route";
 import { queryShopifyThemeData } from "~/api/JavaServer";
 const { Text, Title } = Typography;
 

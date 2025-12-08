@@ -32,7 +32,7 @@ export default function ProductDetailPage() {
   });
   const navigate = useNavigate();
   const handleNavigate = () => {
-    navigate(`/app/all?theme=${resource}`);
+    navigate(`/app/theme?themetype=${resource}`);
   };
   const handleSelect = (item: any, index: number) => {
     const raw = sessionStorage.getItem("record");
