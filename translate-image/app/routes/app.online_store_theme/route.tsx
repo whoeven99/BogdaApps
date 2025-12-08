@@ -1,16 +1,47 @@
 import { useEffect, useRef, useState } from "react";
-import { Icon, Page, Pagination, Select, Thumbnail } from "@shopify/polaris";
-import { ArrowLeftIcon, ImageIcon } from "@shopify/polaris-icons";
-import { Table, Button, Flex, Typography, Affix } from "antd";
+import {
+  Badge,
+  Icon,
+  Layout,
+  Page,
+  Pagination,
+  Select,
+  Thumbnail,
+} from "@shopify/polaris";
+import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
+import {
+  ArrowLeftIcon,
+  NoteIcon,
+  SortIcon,
+  ImageIcon,
+} from "@shopify/polaris-icons";
+import { UploadOutlined, SearchOutlined } from "@ant-design/icons";
+import {
+  Table,
+  Button,
+  Tabs,
+  Tag,
+  Input,
+  Flex,
+  Card,
+  Typography,
+  Affix,
+} from "antd";
 
 import { useTranslation } from "react-i18next";
 import { useNavigate, useFetcher, useLoaderData } from "@remix-run/react";
+
+import { useDispatch, useSelector } from "react-redux";
+import { AppDispatch, RootState } from "~/store";
+import { setLastPageCursorInfo } from "~/store/modules/articleSlice";
 import { ColumnsType } from "antd/es/table";
 import { ActionFunctionArgs, json, LoaderFunctionArgs } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
-import { getItemOptions } from "../app.manage_translation_.all/route";
+import SortPopover from "~/components/SortPopover";
+import { getItemOptions } from "../app.all/route";
 import { queryShopifyThemeData } from "~/api/JavaServer";
 const { Text, Title } = Typography;
+
 export const action = async ({ request }: ActionFunctionArgs) => {
   const url = new URL(request.url);
 
@@ -22,6 +53,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const startCursor: any = JSON.parse(formData.get("startCursor") as string);
   const endCursor: any = JSON.parse(formData.get("endCursor") as string);
+
   try {
     switch (true) {
       case !!startCursor:
@@ -29,7 +61,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           const response = await admin.graphql(
             `#graphql
                 query JsonTemplate($startCursor: String){     
-                    translatableResources(resourceType: COLLECTION, last: 100, ,before: $startCursor) {
+                    translatableResources(resourceType: ONLINE_STORE_THEME, last: 10, ,before: $startCursor) {
                       nodes {
                         resourceId
                         translatableContent {
@@ -98,8 +130,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             `#graphql
               query JsonTemplate($endCursor: String){     
                 translatableResources(
-                  resourceType: COLLECTION, 
-                  first: 100, 
+                  resourceType: ONLINE_STORE_THEME, 
+                  first: 10, 
                   after: $endCursor
                 ) {
                   nodes {
@@ -139,13 +171,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               startCursor: "",
             });
           }
-
           // ⭐ 关键改动：等所有 FILE_REFERENCE 图片解析完
           const fileReferences = await queryShopifyThemeData({
             admin,
             nodes: tr.nodes,
           });
-
           return json({
             data: fileReferences,
             endCursor: tr.pageInfo.endCursor || "",
@@ -176,18 +206,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 export default function Index() {
   const dataFetcher = useFetcher<any>();
-
+  const { t } = useTranslation();
+  const itemOptions = getItemOptions(t);
   const [startCursor, setStartCursor] = useState("");
   const [endCursor, setEndCursor] = useState("");
+  const [selectedItem, setSelectedItem] =
+    useState<string>("online_store_theme");
   const [tableDataLoading, setTableDataLoading] = useState(false);
 
   const [articleData, setArticleData] = useState<any>([]);
 
   const [hasNextPage, setHasNextPage] = useState(false);
   const [hasPreviousPage, setHasPreviousPage] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<string>("collection");
-  const { t } = useTranslation();
-  const itemOptions = getItemOptions(t);
+
   const { Text } = Typography;
   const navigate = useNavigate();
   const panelColumns: ColumnsType<any> = [
@@ -231,7 +262,7 @@ export default function Index() {
             // cursor:"pointer"
           }}
         >
-          {record?.key}
+          {record?.key || "未命名产品"}
         </Text>
       ),
       responsive: ["xs", "sm", "md", "lg", "xl", "xxl"], // ✅ 正确
@@ -260,7 +291,7 @@ export default function Index() {
   ];
   function handleView(record: any): void {
     sessionStorage.setItem("record", JSON.stringify(record));
-    navigate(`/app/manage_translations/page`);
+    navigate(`/app/online_store_theme/detail`);
   }
   useEffect(() => {
     setTableDataLoading(true);
@@ -317,16 +348,12 @@ export default function Index() {
       },
     ); // 提交表单请求
   };
-  const handleNavigate = () => {
-    navigate("/app/manage_translation");
-  };
+  // const handleNavigate = () => {
+  //   navigate("/app/manage_translation");
+  // };
   const handleItemChange = (item: string) => {
-    // setIsLoading(true);
-    // isManualChangeRef.current = true;
     setSelectedItem(item);
-    console.log(item);
-
-    navigate(`/app/manage_translation/${item}`);
+    navigate(`/app/${item}`);
   };
   return (
     <Page>
@@ -348,14 +375,14 @@ export default function Index() {
             style={{ width: "100%" }}
           >
             <Flex align="center" gap={8}>
-              <Button
+              {/* <Button
                 type="text"
                 variant="outlined"
                 onClick={handleNavigate}
                 style={{ padding: "4px" }}
               >
                 <Icon source={ArrowLeftIcon} tone="base" />
-              </Button>
+              </Button> */}
               <Title
                 level={2}
                 style={{
@@ -364,7 +391,7 @@ export default function Index() {
                   fontWeight: 700,
                 }}
               >
-                {t("Page")}
+                {t("online store theme")}
               </Title>
             </Flex>
           </Flex>
@@ -402,14 +429,14 @@ export default function Index() {
             dataSource={articleData}
             columns={panelColumns}
             pagination={false}
-            rowKey={(record) => `${record.digest}`} // ✅ 建议加上 key，避免警告
+            rowKey={(record) => `${record.key}_${record.digest}`} // ✅ 建议加上 key，避免警告
             loading={tableDataLoading}
             onRow={(record) => ({
               onClick: (e) => {
                 // 排除点击按钮等交互元素
                 if ((e.target as HTMLElement).closest("button")) return;
                 sessionStorage.setItem("record", JSON.stringify(record));
-                navigate(`/app/manage_translations/page`);
+                navigate(`/app/online_store_theme/detail`);
               },
               style: { cursor: "pointer" },
             })}

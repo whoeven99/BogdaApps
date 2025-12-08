@@ -41,7 +41,7 @@ export default function ProductDetailPage() {
   });
   const navigate = useNavigate();
   const handleNavigate = () => {
-    navigate(`/app/manage_translation/${resource}`);
+    navigate(`/app/${resource}`);
   };
   const handleSelect = (item: any, index: number) => {
     const raw = sessionStorage.getItem("record");

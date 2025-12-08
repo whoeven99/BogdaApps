@@ -1,16 +1,51 @@
 import { useEffect, useRef, useState } from "react";
-import { Icon, Page, Pagination, Select, Thumbnail } from "@shopify/polaris";
-import { ArrowLeftIcon, ImageIcon } from "@shopify/polaris-icons";
-import { Table, Button, Flex, Typography, Affix } from "antd";
+import {
+  Badge,
+  Icon,
+  Layout,
+  Page,
+  Pagination,
+  Select,
+  Thumbnail,
+} from "@shopify/polaris";
+import { TitleBar, useAppBridge } from "@shopify/app-bridge-react";
+import {
+  ArrowLeftIcon,
+  NoteIcon,
+  SortIcon,
+  ImageIcon,
+} from "@shopify/polaris-icons";
+import { UploadOutlined, SearchOutlined } from "@ant-design/icons";
+import {
+  Table,
+  Button,
+  Tabs,
+  Tag,
+  Input,
+  Flex,
+  Card,
+  Typography,
+  Affix,
+} from "antd";
 
 import { useTranslation } from "react-i18next";
-import { useNavigate, useFetcher, useLoaderData } from "@remix-run/react";
+import {
+  useNavigate,
+  useFetcher,
+  useLoaderData,
+  useSearchParams,
+} from "@remix-run/react";
+
+import { useDispatch, useSelector } from "react-redux";
+import { AppDispatch, RootState } from "~/store";
+import { setLastPageCursorInfo } from "~/store/modules/articleSlice";
 import { ColumnsType } from "antd/es/table";
 import { ActionFunctionArgs, json, LoaderFunctionArgs } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
-import { getItemOptions } from "../app.manage_translation_.all/route";
+import SortPopover from "~/components/SortPopover";
 import { queryShopifyThemeData } from "~/api/JavaServer";
 const { Text, Title } = Typography;
+
 export const action = async ({ request }: ActionFunctionArgs) => {
   const url = new URL(request.url);
 
@@ -22,6 +57,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const startCursor: any = JSON.parse(formData.get("startCursor") as string);
   const endCursor: any = JSON.parse(formData.get("endCursor") as string);
+  const normalCursor: any = JSON.parse(formData.get("normalCursor") as string);
+  const RESOURCE_TYPES = [
+    "ONLINE_STORE_THEME",
+    "PAGE",
+    "COLLECTION",
+    "METAFIELD",
+  ];
   try {
     switch (true) {
       case !!startCursor:
@@ -29,7 +71,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           const response = await admin.graphql(
             `#graphql
                 query JsonTemplate($startCursor: String){     
-                    translatableResources(resourceType: PAGE, last: 10, ,before: $startCursor) {
+                    translatableResources(resourceType: ONLINE_STORE_THEME, last: 10 ,before: $startCursor) {
                       nodes {
                         resourceId
                         translatableContent {
@@ -92,14 +134,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             response: null,
           };
         }
-      case !!endCursor:
+      case !!normalCursor:
         try {
           const response = await admin.graphql(
             `#graphql
               query JsonTemplate($endCursor: String){     
                 translatableResources(
-                  resourceType: PAGE, 
-                  first: 10, 
+                  resourceType: ${normalCursor.type}, 
+                  first: 100, 
                   after: $endCursor
                 ) {
                   nodes {
@@ -122,7 +164,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               }`,
             {
               variables: {
-                endCursor: endCursor.cursor || null,
+                endCursor: normalCursor.cursor || null,
               },
             },
           );
@@ -139,19 +181,91 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               startCursor: "",
             });
           }
-
           // ⭐ 关键改动：等所有 FILE_REFERENCE 图片解析完
           const fileReferences = await queryShopifyThemeData({
             admin,
             nodes: tr.nodes,
           });
-
           return json({
             data: fileReferences,
             endCursor: tr.pageInfo.endCursor || "",
             hasNextPage: tr.pageInfo.hasNextPage || false,
             hasPreviousPage: tr.pageInfo.hasPreviousPage || false,
             startCursor: tr.pageInfo.startCursor || "",
+          });
+        } catch (error) {
+          console.error("Error manage theme loading:", error);
+          return json({
+            success: false,
+            errorCode: 10001,
+            errorMsg: "SERVER_ERROR",
+            response: null,
+          });
+        }
+      case !!endCursor:
+        try {
+          const all = [];
+
+          for (const type of RESOURCE_TYPES) {
+            const response = await admin.graphql(
+              `#graphql
+              query JsonTemplate($endCursor: String){     
+                translatableResources(
+                  resourceType: ${type}, 
+                  first: 100, 
+                  after: $endCursor
+                ) {
+                  nodes {
+                    resourceId
+                    translatableContent {
+                      digest
+                      key
+                      locale
+                      type
+                      value
+                    }
+                  }
+                  pageInfo {
+                    endCursor
+                    hasNextPage
+                    hasPreviousPage
+                    startCursor
+                  }
+                }
+              }`,
+              {
+                variables: {
+                  endCursor: endCursor.cursor || null,
+                },
+              },
+            );
+
+            const parsed = await response.json();
+            const tr = parsed?.data?.translatableResources;
+
+            if (!tr) continue;
+            // ⭐ 关键改动：等所有 FILE_REFERENCE 图片解析完
+            const records = (await queryShopifyThemeData({
+              admin,
+              nodes: tr.nodes,
+            })) as any;
+
+            // 给每条记录加入类型标记
+            const withType = records.map((x: any) => ({
+              ...x,
+              resourceType: type,
+            }));
+
+            all.push(...withType);
+          }
+
+          return json({
+            data: all,
+            // ❗ 这里的分页逻辑你要根据业务决定如何合并，目前取最后一个
+            endCursor: endCursor.cursor,
+            hasNextPage: false,
+            hasPreviousPage: false,
+            startCursor: "",
           });
         } catch (error) {
           console.error("Error manage theme loading:", error);
@@ -176,18 +290,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 export default function Index() {
   const dataFetcher = useFetcher<any>();
+  const { t } = useTranslation();
+  const [searchParams] = useSearchParams();
+  const themeParam = searchParams.get("theme") || "all";
 
+  const itemOptions = getItemOptions(t);
   const [startCursor, setStartCursor] = useState("");
   const [endCursor, setEndCursor] = useState("");
+  const [selectedItem, setSelectedItem] = useState<string>(themeParam);
   const [tableDataLoading, setTableDataLoading] = useState(false);
 
   const [articleData, setArticleData] = useState<any>([]);
 
   const [hasNextPage, setHasNextPage] = useState(false);
   const [hasPreviousPage, setHasPreviousPage] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<string>("page");
-  const { t } = useTranslation();
-  const itemOptions = getItemOptions(t);
+
   const { Text } = Typography;
   const navigate = useNavigate();
   const panelColumns: ColumnsType<any> = [
@@ -231,7 +348,7 @@ export default function Index() {
             // cursor:"pointer"
           }}
         >
-          {record?.key}
+          {record?.key || "未命名产品"}
         </Text>
       ),
       responsive: ["xs", "sm", "md", "lg", "xl", "xxl"], // ✅ 正确
@@ -243,9 +360,9 @@ export default function Index() {
     },
     {
       title: t("type"),
-      width: 200,
+      width: 210,
       render: (_: any, record: any) => {
-        return <Text>{record.type}</Text>;
+        return <Text>{record.resourceType}</Text>;
       },
       responsive: ["md", "lg", "xl", "xxl"], // ✅ 手机端隐藏
     },
@@ -260,26 +377,86 @@ export default function Index() {
   ];
   function handleView(record: any): void {
     sessionStorage.setItem("record", JSON.stringify(record));
-    navigate(`/app/manage_translations/page`);
+    navigate(`/app/all/detail`);
   }
   useEffect(() => {
+    const theme = searchParams.get("theme") || "all";
     setTableDataLoading(true);
-    dataFetcher.submit(
-      {
-        endCursor: JSON.stringify({
-          cursor: "",
-        }),
-      },
-      {
-        method: "POST",
-      },
-    );
-  }, []);
+    let type = "";
+
+    switch (theme) {
+      case "page":
+        type = "PAGE";
+        break;
+      case "collection":
+        type = "COLLECTION";
+        break;
+      case "metafield":
+        type = "METAFIELD";
+        break;
+      case "online_store_theme":
+        type = "ONLINE_STORE_THEME";
+        break;
+      case "all":
+        type = "ALL"; // ⭐ 新增处理 ALL
+        break;
+    }
+    sessionStorage.removeItem("shopify_theme_all_data");
+
+    if (type === "ALL") {
+      console.log("查询全部");
+      dataFetcher.submit(
+        {
+          endCursor: JSON.stringify({
+            cursor: "",
+          }),
+        },
+        { method: "POST" },
+      );
+    } else {
+      console.log("查询部分");
+
+      dataFetcher.submit(
+        {
+          normalCursor: JSON.stringify({
+            cursor: "",
+            type,
+          }),
+        },
+        { method: "POST" },
+      );
+    }
+  }, [themeParam]);
+  useEffect(() => {
+    setSelectedItem(themeParam);
+  }, [themeParam]);
+  // useEffect(() => {
+  //   setTableDataLoading(true);
+  //   const localThemeData = sessionStorage.getItem(
+  //     "shopify_theme_all_data",
+  //   ) as any;
+  //   const parse = localThemeData ? JSON.parse(localThemeData) : null;
+  //   if (!parse && theme === "") {
+  //     dataFetcher.submit(
+  //       {
+  //         endCursor: JSON.stringify({
+  //           cursor: "",
+  //         }),
+  //       },
+  //       {
+  //         method: "POST",
+  //       },
+  //     );
+  //   } else {
+  //     setArticleData(parse);
+  //     setTableDataLoading(false);
+  //   }
+  // }, [theme]);
   useEffect(() => {
     if (dataFetcher.data) {
       setTableDataLoading(false);
 
-      // console.log(dataFetcher.data);
+      console.log(dataFetcher.data);
       setHasNextPage(dataFetcher.data.hasNextPage);
       setHasPreviousPage(dataFetcher.data.hasPreviousPage);
       setStartCursor(dataFetcher.data.startCursor);
@@ -317,16 +494,14 @@ export default function Index() {
       },
     ); // 提交表单请求
   };
-  const handleNavigate = () => {
-    navigate("/app/manage_translation");
-  };
+  // const handleNavigate = () => {
+  //   navigate("/app/manage_translation");
+  // };
   const handleItemChange = (item: string) => {
-    // setIsLoading(true);
-    // isManualChangeRef.current = true;
     setSelectedItem(item);
-    console.log(item);
 
-    navigate(`/app/manage_translation/${item}`);
+    setTableDataLoading(true);
+    navigate(`/app/all?theme=${item}`);
   };
   return (
     <Page>
@@ -348,14 +523,14 @@ export default function Index() {
             style={{ width: "100%" }}
           >
             <Flex align="center" gap={8}>
-              <Button
+              {/* <Button
                 type="text"
                 variant="outlined"
                 onClick={handleNavigate}
                 style={{ padding: "4px" }}
               >
                 <Icon source={ArrowLeftIcon} tone="base" />
-              </Button>
+              </Button> */}
               <Title
                 level={2}
                 style={{
@@ -364,7 +539,7 @@ export default function Index() {
                   fontWeight: 700,
                 }}
               >
-                {t("Page")}
+                {t("translatableResources")}
               </Title>
             </Flex>
           </Flex>
@@ -402,14 +577,14 @@ export default function Index() {
             dataSource={articleData}
             columns={panelColumns}
             pagination={false}
-            rowKey={(record) => `${record.digest}`} // ✅ 建议加上 key，避免警告
-            loading={tableDataLoading}
+            rowKey={(record) => `${record.key}_${record.digest}`} // ✅ 建议加上 key，避免警告
+            loading={dataFetcher.state !== "idle"}
             onRow={(record) => ({
               onClick: (e) => {
                 // 排除点击按钮等交互元素
                 if ((e.target as HTMLElement).closest("button")) return;
                 sessionStorage.setItem("record", JSON.stringify(record));
-                navigate(`/app/manage_translations/page`);
+                navigate(`/app/all/detail`);
               },
               style: { cursor: "pointer" },
             })}
@@ -440,3 +615,11 @@ export default function Index() {
     </Page>
   );
 }
+
+export const getItemOptions = (t: (key: string) => string) => [
+  { label: t("All"), value: "all" },
+  { label: t("Online Store Theme"), value: "online_store_theme" },
+  { label: t("Metafield"), value: "metafield" },
+  { label: t("Pages"), value: "page" },
+  { label: t("Collections"), value: "collection" },
+];
