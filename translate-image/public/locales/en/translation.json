@@ -173,5 +173,9 @@
   "<strong>${{amount}}</strong> billed once a year":"<strong>${{amount}}</strong> billed once a year",
   "Get 40 extra translations instantly,plus {{count}} more after 5 days":"Get 40 extra translations instantly,plus {{count}} more after 5 days",
   "Medium":"Medium",
-  "Support":"Support"
+  "Support":"Support",
+  "Article":"Article",
+  "Product":"Product",
+  "Theme":"Theme"
+
 }

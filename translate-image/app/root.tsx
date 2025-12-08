@@ -152,7 +152,6 @@ export default function App() {
       gtag('js', new Date());
       gtag('config', 'G-26Z1LZQJRV');
     `;
-    document.head.appendChild(gaInitScript);
   }, []);
   useEffect(() => {
     const s1 = document.createElement("script");
@@ -190,6 +189,10 @@ export const Head = createHead(() => (
     <link
       rel="stylesheet"
       href="https://cdn.shopify.com/static/fonts/inter/v4/styles.css"
+    />
+    <link
+      rel="stylesheet"
+      href="//at.alicdn.com/t/c/font_4288661_k5in085dl8.css"
     />
     <Meta />
     <Links />

@@ -6,7 +6,6 @@ import { ArrowLeftIcon } from "@shopify/polaris-icons";
 import { useEffect, useState } from "react";
 import { ActionFunctionArgs, json } from "@remix-run/node";
 import ScrollNotice from "../../components/ScrollNotice";
-import { load } from "cheerio";
 
 const { Text, Title } = Typography;
 

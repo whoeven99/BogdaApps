@@ -23,6 +23,8 @@ import ImageTable from "./components/ImageTable";
 import ScrollNotice from "~/components/ScrollNotice";
 import useReport from "scripts/eventReport";
 import ImageTranslatePanel from "./components/imageTranslatePanel";
+import ThemeModule from "./components/themeModule";
+import { FaqComponent } from "./components/faqComponent";
 const { Title, Text } = Typography;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -132,12 +134,14 @@ const Index = () => {
         }}
       >
         <Space direction="vertical" size="middle" style={{ display: "flex" }}>
-          <QuotaCard />
+          {/* <QuotaCard /> */}
           <WelcomeCard
             switcherOpen={switcherOpen}
             blockUrl={blockUrl}
             shop={shop}
           />
+          <ThemeModule />
+          <FaqComponent />
           {/* <ImageTable shop={shop} /> */}
           {/* <ImageTranslatePanel images={[]} translatedImage={""} /> */}
         </Space>
