@@ -377,7 +377,7 @@ export default function Index() {
   ];
   function handleView(record: any): void {
     sessionStorage.setItem("record", JSON.stringify(record));
-    navigate(`/app/${themeParam}/aa`);
+    navigate(`/app/all/${themeParam}`);
   }
   useEffect(() => {
     const theme = searchParams.get("theme") || "all";
@@ -584,7 +584,7 @@ export default function Index() {
                 // 排除点击按钮等交互元素
                 if ((e.target as HTMLElement).closest("button")) return;
                 sessionStorage.setItem("record", JSON.stringify(record));
-                navigate(`/app/${themeParam}`);
+                navigate(`/app/all/${themeParam}`);
               },
               style: { cursor: "pointer" },
             })}
