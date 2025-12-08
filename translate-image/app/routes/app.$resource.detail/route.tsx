@@ -1,14 +1,6 @@
-import {
-  useNavigate,
-  useParams,
-} from "@remix-run/react";
+import { useNavigate, useParams } from "@remix-run/react";
 import { Page, Icon, Pagination, Layout } from "@shopify/polaris";
-import {
-  Typography,
-  Affix,
-  Flex,
-  Button,
-} from "antd";
+import { Typography, Affix, Flex, Button } from "antd";
 import { useTranslation } from "react-i18next";
 import { ArrowLeftIcon } from "@shopify/polaris-icons";
 import { useEffect, useState } from "react";
@@ -41,7 +33,7 @@ export default function ProductDetailPage() {
   });
   const navigate = useNavigate();
   const handleNavigate = () => {
-    navigate(`/app/${resource}`);
+    navigate(`/app/${resource}?theme=${resource}`);
   };
   const handleSelect = (item: any, index: number) => {
     const raw = sessionStorage.getItem("record");

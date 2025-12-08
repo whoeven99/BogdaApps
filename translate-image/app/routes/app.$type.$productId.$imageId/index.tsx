@@ -734,7 +734,7 @@ const ImageAltTextPage = () => {
         type === "page" ||
         type === "all"
       ) {
-        navigate(`/app/manage_translations/${type}`);
+        navigate(`/app/${type}/detail`);
       }
     }
   };
