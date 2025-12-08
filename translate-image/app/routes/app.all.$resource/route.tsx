@@ -5,8 +5,7 @@ import { useTranslation } from "react-i18next";
 import { ArrowLeftIcon } from "@shopify/polaris-icons";
 import { useEffect, useState } from "react";
 import { ActionFunctionArgs, json } from "@remix-run/node";
-import { authenticate } from "~/shopify.server";
-import ScrollNotice from "~/components/ScrollNotice";
+import ScrollNotice from "../../components/ScrollNotice";
 import { load } from "cheerio";
 
 const { Text, Title } = Typography;
