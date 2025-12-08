@@ -8,7 +8,8 @@ import { useNavigate, useFetcher, useLoaderData } from "@remix-run/react";
 import { ColumnsType } from "antd/es/table";
 import { ActionFunctionArgs, json, LoaderFunctionArgs } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
-import { getItemOptions } from "../app.manage_translation/route";
+import { getItemOptions } from "../app.manage_translation_.all/route";
+import { queryShopifyThemeData } from "~/api/JavaServer";
 const { Text, Title } = Typography;
 export const action = async ({ request }: ActionFunctionArgs) => {
   const url = new URL(request.url);
@@ -21,217 +22,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const startCursor: any = JSON.parse(formData.get("startCursor") as string);
   const endCursor: any = JSON.parse(formData.get("endCursor") as string);
-  // 识别是否为图片 URL
-  const IMAGE_TYPES = new Set([
-    "FILE_REFERENCE",
-    "LIST_FILE_REFERENCE",
-    "HTML",
-    "RICH_TEXT_FIELD",
-  ]);
-
-  // 从富文本递归提取图片
-  const extractFromRichText = (nodes: any[]): string[] => {
-    const result: string[] = [];
-    if (!Array.isArray(nodes)) return result;
-
-    for (const node of nodes) {
-      // 可作为候选的 URL
-      let possibleUrl: string | undefined;
-
-      // 1. image 节点
-      if (node.type === "image" && node.src) {
-        possibleUrl = node.src;
-      }
-
-      // 2. link 节点里的 URL（Rich text 中图片也可能存在这里）
-      if (node.type === "link" && node.url) {
-        possibleUrl = node.url;
-      }
-
-      // 🎯 只提取 Shopify CDN 图片
-      if (possibleUrl && possibleUrl.includes("cdn.shopify.com")) {
-        result.push(possibleUrl);
-      }
-
-      // 递归 children
-      if (node.children) {
-        result.push(...extractFromRichText(node.children));
-      }
-    }
-
-    return result;
-  };
-
-  // 从 HTML 提取 <img src="">
-  const extractFromHtml = (html: string): string[] => {
-    const result: string[] = [];
-    const regex = /<img[^>]+src=["']([^"']+)["']/g;
-
-    let match;
-    while ((match = regex.exec(html)) !== null) {
-      result.push(match[1]);
-    }
-
-    return result;
-  };
-
-  const fetchFileReferences = async (admin: any, nodes: any[]) => {
-    const results: any[] = [];
-
-    for (const node of nodes) {
-      for (const contentItem of node.translatableContent || []) {
-        const type = contentItem.type;
-        if (!IMAGE_TYPES.has(type)) continue;
-
-        // === 1) FILE_REFERENCE ===
-        if (type === "FILE_REFERENCE") {
-          const src = await findImageSrc(admin, contentItem.value);
-
-          if (!src) continue;
-
-          results.push({
-            resourceId: node.resourceId,
-            key: contentItem.key,
-            type,
-            value: [src], // ❗单图也用数组统一格式
-            digest: contentItem.digest,
-          });
-        }
-
-        // === 2) LIST_FILE_REFERENCE ===
-        if (type === "LIST_FILE_REFERENCE") {
-          let ids = contentItem.value;
-
-          // 如果是 JSON_STRING，先转成数组
-          if (typeof ids === "string") {
-            try {
-              ids = JSON.parse(ids);
-            } catch (err) {
-              console.error(
-                "无法解析 list.file_reference JSON:",
-                contentItem.value,
-              );
-              continue;
-            }
-          }
-
-          if (!Array.isArray(ids)) {
-            console.error("list.file_reference 的 value 不是数组:", ids);
-            continue;
-          }
-
-          const urls = (
-            await Promise.all(
-              ids.map(async (metaImageId: string) => {
-                return await findImageSrc(admin, metaImageId);
-              }),
-            )
-          ).filter(Boolean);
-
-          if (urls.length === 0) continue;
-
-          results.push({
-            resourceId: node.resourceId,
-            key: contentItem.key,
-            type,
-            value: urls,
-            digest: contentItem.digest,
-          });
-        }
-
-        // === 3) HTML ===
-        if (type === "HTML") {
-          const urls = extractFromHtml(contentItem.value || "");
-          if (urls.length === 0) continue;
-
-          results.push({
-            resourceId: node.resourceId,
-            key: contentItem.key,
-            type,
-            value: urls, // ❗html 多图放一起
-            digest: contentItem.digest,
-            originValue: contentItem.value,
-          });
-        }
-
-        // === 4) RICH_TEXT_FIELD ===
-        if (type === "RICH_TEXT_FIELD") {
-          let richValue = contentItem.value;
-
-          // 1. 解析 JSON_STRING → 对象
-          if (typeof richValue === "string") {
-            try {
-              richValue = JSON.parse(richValue);
-            } catch (e) {
-              console.error("富文本解析失败:", richValue);
-              continue;
-            }
-          }
-
-          // 2. 富文本正确结构是 richValue.children
-          const urls = extractFromRichText(richValue.children || []);
-
-          if (urls.length === 0) continue;
-
-          results.push({
-            resourceId: node.resourceId,
-            key: contentItem.key,
-            type,
-            value: urls,
-            digest: contentItem.digest,
-            originValue: contentItem.value,
-          });
-        }
-      }
-    }
-
-    return results;
-  };
-
-  const findImageSrc = async (admin: any, value: string) => {
-    if (value.includes("shop_images")) {
-      const fileName = value?.split("/").pop() ?? "";
-      const response = await admin.graphql(
-        `query GetFile($query: String!) {
-        files(query: $query, first: 1) {
-          edges {
-            node {
-              preview {
-                image {
-                  src
-                }
-              }
-            }
-          }
-        }
-      }`,
-        { variables: { query: fileName } },
-      );
-      const parsed = await response.json();
-      return parsed?.data?.files?.edges?.[0]?.node?.preview?.image?.src ?? null;
-    } else {
-      const response = await admin.graphql(
-        `query {
-          node(id: "${value}") {
-            ... on MediaImage {
-              id
-              alt
-              image {
-                url
-                width
-                height
-              }
-            }
-          }
-        }`,
-      );
-      const parsed = await response.json();
-      console.log("dadasda", parsed);
-
-      return parsed?.data?.node?.image?.url ?? null;
-    }
-  };
-
   try {
     switch (true) {
       case !!startCursor:
@@ -281,7 +71,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           }
 
           // ⭐ 关键改动：等所有 FILE_REFERENCE 图片解析完
-          const fileReferences = await fetchFileReferences(admin, tr.nodes);
+          const fileReferences = await queryShopifyThemeData({
+            admin,
+            nodes: tr.nodes,
+          });
 
           return json({
             data: fileReferences,
@@ -348,7 +141,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           }
 
           // ⭐ 关键改动：等所有 FILE_REFERENCE 图片解析完
-          const fileReferences = await fetchFileReferences(admin, tr.nodes);
+          const fileReferences = await queryShopifyThemeData({
+            admin,
+            nodes: tr.nodes,
+          });
 
           return json({
             data: fileReferences,
@@ -447,7 +243,7 @@ export default function Index() {
     },
     {
       title: t("type"),
-      width: 110,
+      width: 200,
       render: (_: any, record: any) => {
         return <Text>{record.type}</Text>;
       },

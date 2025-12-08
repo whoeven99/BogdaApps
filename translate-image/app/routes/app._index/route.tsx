@@ -139,7 +139,7 @@ const Index = () => {
             shop={shop}
           />
           {/* <ImageTable shop={shop} /> */}
-          <ImageTranslatePanel images={[]} translatedImage={""} />
+          {/* <ImageTranslatePanel images={[]} translatedImage={""} /> */}
         </Space>
       </Space>
       <Text

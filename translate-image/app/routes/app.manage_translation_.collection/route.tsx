@@ -11,7 +11,6 @@ import { authenticate } from "~/shopify.server";
 import { getItemOptions } from "../app.manage_translation_.all/route";
 import { queryShopifyThemeData } from "~/api/JavaServer";
 const { Text, Title } = Typography;
-
 export const action = async ({ request }: ActionFunctionArgs) => {
   const url = new URL(request.url);
 
@@ -23,8 +22,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const startCursor: any = JSON.parse(formData.get("startCursor") as string);
   const endCursor: any = JSON.parse(formData.get("endCursor") as string);
-  // 识别是否为图片 URL
-
   try {
     switch (true) {
       case !!startCursor:
@@ -32,7 +29,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           const response = await admin.graphql(
             `#graphql
                 query JsonTemplate($startCursor: String){     
-                    translatableResources(resourceType: METAFIELD, last: 100, ,before: $startCursor) {
+                    translatableResources(resourceType: COLLECTION, last: 100, ,before: $startCursor) {
                       nodes {
                         resourceId
                         translatableContent {
@@ -101,7 +98,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             `#graphql
               query JsonTemplate($endCursor: String){     
                 translatableResources(
-                  resourceType: METAFIELD, 
+                  resourceType: COLLECTION, 
                   first: 100, 
                   after: $endCursor
                 ) {
@@ -188,7 +185,7 @@ export default function Index() {
 
   const [hasNextPage, setHasNextPage] = useState(false);
   const [hasPreviousPage, setHasPreviousPage] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<string>("metafield");
+  const [selectedItem, setSelectedItem] = useState<string>("collection");
   const { t } = useTranslation();
   const itemOptions = getItemOptions(t);
   const { Text } = Typography;
@@ -234,7 +231,7 @@ export default function Index() {
             // cursor:"pointer"
           }}
         >
-          {record?.key || "未命名产品"}
+          {record?.key}
         </Text>
       ),
       responsive: ["xs", "sm", "md", "lg", "xl", "xxl"], // ✅ 正确
@@ -246,7 +243,7 @@ export default function Index() {
     },
     {
       title: t("type"),
-      width: 210,
+      width: 200,
       render: (_: any, record: any) => {
         return <Text>{record.type}</Text>;
       },
@@ -263,7 +260,7 @@ export default function Index() {
   ];
   function handleView(record: any): void {
     sessionStorage.setItem("record", JSON.stringify(record));
-    navigate(`/app/manage_translations/metafield`);
+    navigate(`/app/manage_translations/page`);
   }
   useEffect(() => {
     setTableDataLoading(true);
@@ -367,7 +364,7 @@ export default function Index() {
                   fontWeight: 700,
                 }}
               >
-                {t("Metafield")}
+                {t("Page")}
               </Title>
             </Flex>
           </Flex>
@@ -405,14 +402,14 @@ export default function Index() {
             dataSource={articleData}
             columns={panelColumns}
             pagination={false}
-            rowKey={(record) => `${record.key}_${record.digest}`} // ✅ 建议加上 key，避免警告
+            rowKey={(record) => `${record.digest}`} // ✅ 建议加上 key，避免警告
             loading={tableDataLoading}
             onRow={(record) => ({
               onClick: (e) => {
                 // 排除点击按钮等交互元素
                 if ((e.target as HTMLElement).closest("button")) return;
                 sessionStorage.setItem("record", JSON.stringify(record));
-                navigate(`/app/manage_translations/metafield`);
+                navigate(`/app/manage_translations/page`);
               },
               style: { cursor: "pointer" },
             })}

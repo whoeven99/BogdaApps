@@ -362,7 +362,7 @@ export default function App() {
           {/* <Link to="/app/management">Image Manage</Link> */}
           <Link to="/app/article">{t("Article")}</Link>
           <Link to="/app/product">{t("Product")}</Link>
-          <Link to="/app/manage_translation">{t("Manage Translation")}</Link>
+          <Link to="/app/manage_translation/all">{t("Theme")}</Link>
           {/* <Link to="/app/management">{t("Managements")}</Link> */}
           <Link to="/app/pricing">{t("Pricing")}</Link>
         </NavMenu>

@@ -97,23 +97,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const deleteImageInShopify = JSON.parse(
     formData.get("deleteImageInShopify") as string,
   );
-  function extractImageKey(url: string) {
-    if (!url) return null;
-
-    // 去掉 protocol + domain
-    const withoutDomain = url.replace(/^https?:\/\/[^/]+\//, "");
-
-    // 去掉 query string
-    const pathOnly = withoutDomain.split("?")[0];
-
-    // 如果包含编码后的 "%2F" -> 是 OSS 编码 key，直接返回
-    if (pathOnly.includes("%2F")) {
-      return pathOnly; // 保持原样
-    }
-
-    // 普通路径 -> 只取最后文件名
-    return pathOnly.split("/").pop() ?? null;
-  }
   try {
     switch (true) {
       case !!imageLoading:
@@ -294,176 +277,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
       case !!saveImageToShopify:
         try {
-          console.log("dasidasweq", saveImageToShopify);
-          // const { shop, accessToken } = adminAuthResult.session;
-          const queryTranslations = await admin.graphql(
-            `#graphql
-              query {
-                translatableResource(resourceId: "${saveImageToShopify.resourceId}") {
-                  resourceId
-                  translations(locale: "${saveImageToShopify.languageCode}") {
-                    key
-                    value
-                  }
-                }
-              }`,
-          );
-          const createFileRes = await admin.graphql(
-            `#graphql
-              mutation fileCreate($files: [FileCreateInput!]!) {
-                fileCreate(files: $files) {
-                  files {
-                    id
-                    fileStatus
-                    alt
-                    createdAt
-                    ... on MediaImage {
-                      image {
-                        width
-                        height
-                      }
-                    }
-                    preview {
-                      status
-                      image {
-                        altText
-                        id
-                        url
-                      }
-                    }
-                  }
-                  userErrors {
-                    field
-                    message
-                  }
-                }
-              }`,
-            {
-              variables: {
-                files: [
-                  {
-                    alt: saveImageToShopify.altText,
-                    contentType: "IMAGE",
-                    originalSource: saveImageToShopify.imageAfterUrl,
-                  },
-                ],
-              },
-            },
-          );
-          const parse = await createFileRes.json();
-          console.log("parse", parse.data.fileCreate.files);
-          function replaceImageUrl(
-            html: string,
-            url: string,
-            translateUrl: string,
-          ) {
-            return html.split(url).join(translateUrl);
-          }
-          function replaceRichTextImageUrl(
-            richTextJsonStr: string,
-            fromUrl: string,
-            toUrl: string,
-          ): string {
-            if (!richTextJsonStr) return richTextJsonStr;
-
-            let data;
-            try {
-              data = JSON.parse(richTextJsonStr);
-            } catch (err) {
-              console.error("rich_text JSON 解析失败：", err);
-              return richTextJsonStr;
-            }
-
-            function walk(node: any) {
-              if (!node || typeof node !== "object") return;
-
-              // 1. image 节点（Shopify DraftJS / AST 格式）
-              if (node.type === "image" && node.src) {
-                if (node.src === fromUrl) {
-                  node.src = toUrl;
-                }
-              }
-
-              // 2. link 节点（Shopify rich_text 图片有可能放在 link.url）
-              if (node.type === "link" && node.url) {
-                if (node.url === fromUrl) {
-                  node.url = toUrl;
-                }
-              }
-
-              // 3. 递归 children
-              if (Array.isArray(node.children)) {
-                node.children.forEach(walk);
-              }
-            }
-
-            walk(data);
-
-            return JSON.stringify(data);
-          }
-          const translation = await queryTranslations.json();
-          console.log("translation111", translation);
-          let transferValue = "";
-          switch (saveImageToShopify.type) {
-            case "HTML":
-              if (translation.data.translations?.length > 0) {
-                translation.data.translations.forEach((item: any) => {
-                  if ((item?.dbKey ?? item?.key) === saveImageToShopify.key) {
-                    transferValue = replaceImageUrl(
-                      item.value,
-                      saveImageToShopify.value,
-                      saveImageToShopify.imageAfterUrl,
-                    );
-                  }
-                });
-              } else {
-                transferValue = replaceImageUrl(
-                  saveImageToShopify.originValue,
-                  saveImageToShopify.value,
-                  saveImageToShopify.imageAfterUrl,
-                );
-              }
-              break;
-            case "FILE_REFERENCE":
-              if (saveImageToShopify.resourceId.includes("Metafield")) {
-                transferValue = parse.data.fileCreate.files[0].id;
-              } else {
-                transferValue = `shopify://shop_images/${extractImageKey(saveImageToShopify.imageAfterUrl)}`;
-              }
-              break;
-            case "LIST_FILE_REFERENCE":
-              const ids = JSON.parse(saveImageToShopify.originValue);
-              ids[saveImageToShopify.index] = parse.data.fileCreate.files[0].id;
-              transferValue = JSON.stringify(ids);
-              break;
-            case "RICH_TEXT_FIELD":
-              if (translation.data.translations?.length > 0) {
-                translation.data.translations.forEach((item: any) => {
-                  if ((item?.dbKey ?? item?.key) === saveImageToShopify.key) {
-                    transferValue = replaceRichTextImageUrl(
-                      item.value,
-                      saveImageToShopify.value,
-                      saveImageToShopify.imageAfterUrl,
-                    );
-                  }
-                });
-              } else {
-                transferValue = replaceRichTextImageUrl(
-                  saveImageToShopify.originValue,
-                  saveImageToShopify.value,
-                  saveImageToShopify.imageAfterUrl,
-                );
-              }
-              break;
-          }
-
           const response = await updateManageTranslation({
             shop,
             accessToken: accessToken as string,
-            item: saveImageToShopify,
-            transferValue,
+            updateData: saveImageToShopify,
+            admin,
           });
-          return json({ response, createFileRes: parse });
+          return json({ response });
         } catch (error) {
           console.log("save image to shopify error action", error);
           return {
@@ -523,6 +343,7 @@ const ImageAltTextPage = () => {
       case "metafield":
       case "page":
       case "article_image":
+      case "all":
         return hashString(
           `${localTranslationData?.value[localTranslationData?.index]}_${localTranslationData.resourceId}`,
         );
@@ -544,6 +365,7 @@ const ImageAltTextPage = () => {
       case "metafield":
       case "page":
       case "article_image":
+      case "all":
         return localTranslationData?.resourceId;
 
       case "articles":
@@ -909,7 +731,8 @@ const ImageAltTextPage = () => {
       } else if (
         type === "online_store_theme" ||
         type === "metafield" ||
-        type === "page"
+        type === "page" ||
+        type === "all"
       ) {
         navigate(`/app/manage_translations/${type}`);
       }
@@ -964,7 +787,8 @@ const ImageAltTextPage = () => {
         type === "online_store_theme" ||
         type === "metafield" ||
         type === "page" ||
-        type === "article_image"
+        type === "article_image" ||
+        type === "all"
       ) {
         const localTranslationData = JSON.parse(
           sessionStorage.getItem("record") || "{}",
@@ -1200,7 +1024,8 @@ const ImageAltTextPage = () => {
           type === "online_store_theme" ||
           type === "metafield" ||
           type === "page" ||
-          type === "article_image"
+          type === "article_image" ||
+          type === "all"
         ) {
           saveImageFetcher.submit(
             {
@@ -1277,7 +1102,8 @@ const ImageAltTextPage = () => {
         type === "online_store_theme" ||
         type === "metafield" ||
         type === "page" ||
-        type === "article_image"
+        type === "article_image" ||
+        type === "all"
       ) {
         deleteImageFetcher.submit(
           {
@@ -1325,7 +1151,8 @@ const ImageAltTextPage = () => {
         type === "online_store_theme" ||
         type === "metafield" ||
         type === "page" ||
-        type === "article_image"
+        type === "article_image" ||
+        type === "all"
       ) {
         deleteImageFetcher.submit(
           {
@@ -1454,7 +1281,8 @@ const ImageAltTextPage = () => {
           type === "online_store_theme" ||
           type === "metafield" ||
           type === "page" ||
-          type === "article_image"
+          type === "article_image" ||
+          type === "all"
         ) {
           saveImageFetcher.submit(
             {
@@ -1603,7 +1431,8 @@ const ImageAltTextPage = () => {
       type === "online_store_theme" ||
       type === "metafield" ||
       type === "page" ||
-      type === "article_image"
+      type === "article_image" ||
+      type === "all"
     ) {
       const localTranslationData = JSON.parse(
         sessionStorage.getItem("record") || "{}",
@@ -2110,7 +1939,8 @@ const ImageAltTextPage = () => {
                                       type === "online_store_theme" ||
                                       type === "metafield" ||
                                       type === "page" ||
-                                      type === "article_image"
+                                      type === "article_image" ||
+                                      type === "all"
                                     ) {
                                       saveImageFetcher.submit(
                                         {

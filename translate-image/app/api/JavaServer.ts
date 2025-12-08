@@ -935,22 +935,192 @@ export const GoogleAnalyticClickReport = async (params: any, name: string) => {
     return false;
   }
 };
+function replaceImageUrl(html: string, url: string, translateUrl: string) {
+  return html.split(url).join(translateUrl);
+}
+function replaceRichTextImageUrl(
+  richTextJsonStr: string,
+  fromUrl: string,
+  toUrl: string,
+): string {
+  if (!richTextJsonStr) return richTextJsonStr;
 
+  let data;
+  try {
+    data = JSON.parse(richTextJsonStr);
+  } catch (err) {
+    console.error("rich_text JSON 解析失败：", err);
+    return richTextJsonStr;
+  }
+
+  function walk(node: any) {
+    if (!node || typeof node !== "object") return;
+
+    // 1. image 节点（Shopify DraftJS / AST 格式）
+    if (node.type === "image" && node.src) {
+      if (node.src === fromUrl) {
+        node.src = toUrl;
+      }
+    }
+
+    // 2. link 节点（Shopify rich_text 图片有可能放在 link.url）
+    if (node.type === "link" && node.url) {
+      if (node.url === fromUrl) {
+        node.url = toUrl;
+      }
+    }
+
+    // 3. 递归 children
+    if (Array.isArray(node.children)) {
+      node.children.forEach(walk);
+    }
+  }
+
+  walk(data);
+
+  return JSON.stringify(data);
+}
+function extractImageKey(url: string) {
+  if (!url) return null;
+
+  // 去掉 protocol + domain
+  const withoutDomain = url.replace(/^https?:\/\/[^/]+\//, "");
+
+  // 去掉 query string
+  const pathOnly = withoutDomain.split("?")[0];
+
+  // 如果包含编码后的 "%2F" -> 是 OSS 编码 key，直接返回
+  if (pathOnly.includes("%2F")) {
+    return pathOnly; // 保持原样
+  }
+
+  // 普通路径 -> 只取最后文件名
+  return pathOnly.split("/").pop() ?? null;
+}
 export const updateManageTranslation = async ({
   shop,
   accessToken,
-  item,
-  transferValue,
+  updateData,
+  admin,
 }: {
   shop: string;
   accessToken: string;
-  item: any;
-  transferValue: string;
+  updateData: any;
+  admin: any;
 }) => {
   try {
-    console.log("item dsad",item);
-    console.log("dasdas",transferValue);
-    
+    console.log("itemdsdadsad", updateData);
+    // console.log("dasdas", transferValue);
+    const queryTranslations = await admin.graphql(
+      `#graphql
+      query {
+        translatableResource(resourceId: "${updateData.resourceId}") {
+          resourceId
+          translations(locale: "${updateData.languageCode}") {
+            key
+            value
+          }
+        }
+      }`,
+    );
+    const translation = await queryTranslations.json();
+    const createFileRes = await admin.graphql(
+      `#graphql
+      mutation fileCreate($files: [FileCreateInput!]!) {
+        fileCreate(files: $files) {
+          files {
+            id
+            fileStatus
+            alt
+            createdAt
+            ... on MediaImage {
+              image {
+                width
+                height
+              }
+            }
+            preview {
+              status
+              image {
+                altText
+                id
+                url
+              }
+            }
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }`,
+      {
+        variables: {
+          files: [
+            {
+              alt: updateData.altText,
+              contentType: "IMAGE",
+              originalSource: updateData.imageAfterUrl,
+            },
+          ],
+        },
+      },
+    );
+    const parse = await createFileRes.json();
+    let transferValue = "";
+    switch (updateData.type) {
+      case "HTML":
+        if (translation.data.translations?.length > 0) {
+          translation.data.translations.forEach((item: any) => {
+            if ((item?.dbKey ?? item?.key) === updateData.key) {
+              transferValue = replaceImageUrl(
+                item.value,
+                updateData.value,
+                updateData.imageAfterUrl,
+              );
+            }
+          });
+        } else {
+          transferValue = replaceImageUrl(
+            updateData.originValue,
+            updateData.value,
+            updateData.imageAfterUrl,
+          );
+        }
+        break;
+      case "FILE_REFERENCE":
+        if (updateData.resourceId.includes("Metafield")) {
+          transferValue = parse.data.fileCreate.files[0].id;
+        } else {
+          transferValue = `shopify://shop_images/${extractImageKey(updateData.imageAfterUrl)}`;
+        }
+        break;
+      case "LIST_FILE_REFERENCE":
+        const ids = JSON.parse(updateData.originValue);
+        ids[updateData.index] = parse.data.fileCreate.files[0].id;
+        transferValue = JSON.stringify(ids);
+        break;
+      case "RICH_TEXT_FIELD":
+        if (translation.data.translations?.length > 0) {
+          translation.data.translations.forEach((item: any) => {
+            if ((item?.dbKey ?? item?.key) === updateData.key) {
+              transferValue = replaceRichTextImageUrl(
+                item.value,
+                updateData.value,
+                updateData.imageAfterUrl,
+              );
+            }
+          });
+        } else {
+          transferValue = replaceRichTextImageUrl(
+            updateData.originValue,
+            updateData.value,
+            updateData.imageAfterUrl,
+          );
+        }
+        break;
+    }
+
     const response = await axios({
       url: `${process.env.SERVER_URL}/shopify/updateShopifyDataByTranslateTextRequest`,
       method: "POST",
@@ -958,12 +1128,12 @@ export const updateManageTranslation = async ({
       data: {
         shopName: shop,
         accessToken: accessToken,
-        locale: item.locale,
-        key: item.key,
+        locale: updateData.locale,
+        key: updateData.key,
         value: transferValue,
-        translatableContentDigest: item.digest,
-        resourceId: item.resourceId,
-        target: item.languageCode,
+        translatableContentDigest: updateData.digest,
+        resourceId: updateData.resourceId,
+        target: updateData.languageCode,
       },
     });
     console.log(`updateManageTranslation: `, response.data);
@@ -972,7 +1142,6 @@ export const updateManageTranslation = async ({
     console.error("Error updateManageTranslation:", error);
   }
 };
-
 
 // 删除存储在shopify的文件
 export const deleteSaveInShopify = async ({
@@ -1017,5 +1186,231 @@ export const deleteSaveInShopify = async ({
     return response;
   } catch (error) {
     console.log("delete image file error", error);
+  }
+};
+const IMAGE_TYPES = new Set([
+  "FILE_REFERENCE",
+  "LIST_FILE_REFERENCE",
+  "HTML",
+  "RICH_TEXT_FIELD",
+]);
+
+// 从富文本递归提取图片
+const extractFromRichText = (nodes: any[]): string[] => {
+  const result: string[] = [];
+  if (!Array.isArray(nodes)) return result;
+
+  for (const node of nodes) {
+    // 可作为候选的 URL
+    let possibleUrl: string | undefined;
+
+    // 1. image 节点
+    if (node.type === "image" && node.src) {
+      possibleUrl = node.src;
+    }
+
+    // 2. link 节点里的 URL（Rich text 中图片也可能存在这里）
+    if (node.type === "link" && node.url) {
+      possibleUrl = node.url;
+    }
+
+    // 🎯 只提取 Shopify CDN 图片
+    if (possibleUrl && possibleUrl.includes("cdn.shopify.com")) {
+      result.push(possibleUrl);
+    }
+
+    // 递归 children
+    if (node.children) {
+      result.push(...extractFromRichText(node.children));
+    }
+  }
+
+  return result;
+};
+
+// 从 HTML 提取 <img src="">
+const extractFromHtml = (html: string): string[] => {
+  const result: string[] = [];
+  const regex = /<img[^>]+src=["']([^"']+)["']/g;
+
+  let match;
+  while ((match = regex.exec(html)) !== null) {
+    result.push(match[1]);
+  }
+
+  return result;
+};
+
+const fetchFileReferences = async (admin: any, nodes: any[]) => {
+  const results: any[] = [];
+
+  for (const node of nodes) {
+    for (const contentItem of node.translatableContent || []) {
+      const type = contentItem.type;
+      if (!IMAGE_TYPES.has(type)) continue;
+
+      // === 1) FILE_REFERENCE ===
+      if (type === "FILE_REFERENCE") {
+        const src = await findImageSrc(admin, contentItem.value);
+
+        if (!src) continue;
+
+        results.push({
+          resourceId: node.resourceId,
+          key: contentItem.key,
+          type,
+          value: [src], // ❗单图也用数组统一格式
+          digest: contentItem.digest,
+        });
+      }
+
+      // === 2) LIST_FILE_REFERENCE ===
+      if (type === "LIST_FILE_REFERENCE") {
+        let ids = contentItem.value;
+
+        // 如果是 JSON_STRING，先转成数组
+        if (typeof ids === "string") {
+          try {
+            ids = JSON.parse(ids);
+          } catch (err) {
+            console.error(
+              "无法解析 list.file_reference JSON:",
+              contentItem.value,
+            );
+            continue;
+          }
+        }
+
+        if (!Array.isArray(ids)) {
+          console.error("list.file_reference 的 value 不是数组:", ids);
+          continue;
+        }
+
+        const urls = (
+          await Promise.all(
+            ids.map(async (metaImageId: string) => {
+              return await findImageSrc(admin, metaImageId);
+            }),
+          )
+        ).filter(Boolean);
+
+        if (urls.length === 0) continue;
+
+        results.push({
+          resourceId: node.resourceId,
+          key: contentItem.key,
+          type,
+          value: urls,
+          digest: contentItem.digest,
+          originValue: contentItem.value,
+        });
+      }
+
+      // === 3) HTML ===
+      if (type === "HTML") {
+        const urls = extractFromHtml(contentItem.value || "");
+        if (urls.length === 0) continue;
+
+        results.push({
+          resourceId: node.resourceId,
+          key: contentItem.key,
+          type,
+          value: urls, // ❗html 多图放一起
+          digest: contentItem.digest,
+          originValue: contentItem.value,
+        });
+      }
+
+      // === 4) RICH_TEXT_FIELD ===
+      if (type === "RICH_TEXT_FIELD") {
+        let richValue = contentItem.value;
+
+        // 1. 解析 JSON_STRING → 对象
+        if (typeof richValue === "string") {
+          try {
+            richValue = JSON.parse(richValue);
+          } catch (e) {
+            console.error("富文本解析失败:", richValue);
+            continue;
+          }
+        }
+
+        // 2. 富文本正确结构是 richValue.children
+        const urls = extractFromRichText(richValue.children || []);
+
+        if (urls.length === 0) continue;
+
+        results.push({
+          resourceId: node.resourceId,
+          key: contentItem.key,
+          type,
+          value: urls,
+          digest: contentItem.digest,
+          originValue: contentItem.value,
+        });
+      }
+    }
+  }
+
+  return results;
+};
+
+const findImageSrc = async (admin: any, value: string) => {
+  if (value.includes("shop_images")) {
+    const fileName = value?.split("/").pop() ?? "";
+    const response = await admin.graphql(
+      `query GetFile($query: String!) {
+        files(query: $query, first: 1) {
+          edges {
+            node {
+              preview {
+                image {
+                  src
+                }
+              }
+            }
+          }
+        }
+      }`,
+      { variables: { query: fileName } },
+    );
+    const parsed = await response.json();
+    return parsed?.data?.files?.edges?.[0]?.node?.preview?.image?.src ?? null;
+  } else {
+    const response = await admin.graphql(
+      `query {
+          node(id: "${value}") {
+            ... on MediaImage {
+              id
+              alt
+              image {
+                url
+                width
+                height
+              }
+            }
+          }
+        }`,
+    );
+    const parsed = await response.json();
+    console.log("dadasda", parsed);
+
+    return parsed?.data?.node?.image?.url ?? null;
+  }
+};
+// 查询shopify数据
+export const queryShopifyThemeData = async ({
+  admin,
+  nodes,  
+}: {
+  admin: any;
+  nodes: any;
+}) => {
+  try {
+    // ⭐ 关键改动：等所有 FILE_REFERENCE 图片解析完
+    const fileReferences = await fetchFileReferences(admin, nodes);
+    return fileReferences;
+  } catch (error) {
+    console.error("Error manage theme loading:", error);
   }
 };
