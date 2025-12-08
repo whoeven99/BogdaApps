@@ -6,10 +6,14 @@ import {
   AuditOutlined,
 } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
+import { useEffect, useState } from "react";
+import { useNavigate } from "@remix-run/react";
 
 const { Title } = Typography;
 
 export default function ThemeModule() {
+  const [isMobile, setIsMobile] = useState(false);
+  const navigate = useNavigate();
   const items = [
     {
       title: "Product image",
@@ -33,60 +37,92 @@ export default function ThemeModule() {
     // },
   ];
   const { t } = useTranslation();
-  const handleManage = (item: any) => {};
+  const handleManage = (item: any) => {
+    console.log(item);
+    switch (item.key) {
+      case "product":
+        navigate("/app/product");
+        break;
+      case "article":
+        navigate("/app/article");
+        break;
+      case "theme":
+        navigate("/app/theme");
+        break;
+    }
+  };
   const handleTranslate = (item: any) => {
     console.log(item);
   };
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth <= 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
   return (
     <div>
       <Title level={3}>{t("Image Translation")}</Title>
 
-      <Flex gap={8} style={{ width: "100% " }} justify="space-between">
+      <Flex
+        gap={8}
+        style={{ width: "100% ", flexWrap: "wrap" }}
+        justify="space-between"
+      >
         {items.map((item) => (
-          <Card
+          <div
             key={item.key}
             style={{
+              width: isMobile ? "100%" : "250px",
               height: 240,
-              textAlign: "center",
+              //   textAlign: "center",
               display: "flex",
               flexDirection: "column",
               justifyContent: "space-between",
-              // padding: "16px",
+              backgroundColor: "#fff",
+              padding: "16px",
+              border: "1px solid black",
+              borderRadius: "5px",
             }}
           >
-            <div style={{ fontSize: 16, fontWeight: 600 }}>{item.title}</div>
+            <Flex vertical justify="space-between" style={{ height: "100%" }}>
+              <div style={{ fontSize: 16, fontWeight: 600 }}>{item.title}</div>
 
-            {/* 中间的 Icon */}
-            <div
-              style={{
-                //   flex: 1,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <i
-                className="iconfont"
-                style={{ fontSize: 48 }}
-                dangerouslySetInnerHTML={{ __html: item.icon }}
-              />
-            </div>
-
-            {/* 底部按钮 */}
-            <div>
-              <Button
-                type="primary"
-                block
-                style={{ marginBottom: 8 }}
-                onClick={() => handleTranslate}
+              {/* 中间的 Icon */}
+              <div
+                style={{
+                  flex: 1,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
               >
-                翻译
-              </Button>
-              <Button block onClick={() => handleManage}>
-                管理
-              </Button>
-            </div>
-          </Card>
+                <i
+                  className="iconfont"
+                  style={{ fontSize: 48 }}
+                  dangerouslySetInnerHTML={{ __html: item.icon }}
+                />
+              </div>
+
+              {/* 底部按钮 */}
+              <Flex justify="center">
+                <Flex vertical style={{ width: "100px" }} gap={8}>
+                  {/* <Button
+                    type="primary"
+                    block
+                    style={{ marginBottom: 8 }}
+                    onClick={() => handleTranslate}
+                  >
+                    {t("Translate")}
+                  </Button> */}
+                  <Button block onClick={() => handleManage(item)}>
+                    {t("Manage")}
+                  </Button>
+                </Flex>
+              </Flex>
+            </Flex>
+          </div>
         ))}
       </Flex>
     </div>
