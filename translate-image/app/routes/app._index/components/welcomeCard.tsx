@@ -72,9 +72,9 @@ const WelcomeCard: React.FC<WelcomeCardProps> = ({
           style={{ flex: 1 }}
         >
           <Flex align="center" gap={10}>
-            <h2 style={{ margin: 0, fontSize: "20px", fontWeight: 600 }}>
+            <h4 style={{ margin: 0, fontSize: "20px", fontWeight: 600 }}>
               {t("Image Translation Plugin")}
-            </h2>
+            </h4>
             {switcherOpen ? (
               <Badge color="hsl(102, 53%, 61%)" />
             ) : (

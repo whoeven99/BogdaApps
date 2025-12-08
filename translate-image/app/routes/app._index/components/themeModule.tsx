@@ -14,19 +14,20 @@ const { Title } = Typography;
 export default function ThemeModule() {
   const [isMobile, setIsMobile] = useState(false);
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const items = [
     {
-      title: "Product image",
+      title: t("Product image"),
       icon: "&#xe617;",
       key: "product",
     },
     {
-      title: "Theme image",
+      title: t("Theme image"),
       icon: "&#xe614;",
       key: "theme",
     },
     {
-      title: "Article image",
+      title: t("Article image"),
       icon: "&#xe615;",
       key: "article",
     },
@@ -36,9 +37,8 @@ export default function ThemeModule() {
     //   key: "alt",
     // },
   ];
-  const { t } = useTranslation();
+
   const handleManage = (item: any) => {
-    console.log(item);
     switch (item.key) {
       case "product":
         navigate("/app/product");
@@ -52,7 +52,17 @@ export default function ThemeModule() {
     }
   };
   const handleTranslate = (item: any) => {
-    console.log(item);
+    switch (item.key) {
+      case "product":
+        navigate("/app/product");
+        break;
+      case "article":
+        navigate("/app/article");
+        break;
+      case "theme":
+        navigate("/app/theme");
+        break;
+    }
   };
 
   useEffect(() => {
@@ -63,18 +73,17 @@ export default function ThemeModule() {
   }, []);
   return (
     <div>
-      <Title level={3}>{t("Image Translation")}</Title>
+      <Title level={4}>{t("Image Translation")}</Title>
 
       <Flex
         gap={8}
         style={{ width: "100% ", flexWrap: "wrap" }}
-        justify="space-between"
       >
         {items.map((item) => (
           <div
             key={item.key}
             style={{
-              width: isMobile ? "100%" : "250px",
+              width: isMobile ? "100%" : "200px",
               height: 240,
               //   textAlign: "center",
               display: "flex",
@@ -107,15 +116,19 @@ export default function ThemeModule() {
 
               {/* 底部按钮 */}
               <Flex justify="center">
-                <Flex vertical style={{ width: "100px" }} gap={8}>
-                  {/* <Button
+                <Flex
+                  vertical
+                  style={{ width: "200px", padding: "12px" }}
+                  gap={8}
+                >
+                  <Button
                     type="primary"
                     block
                     style={{ marginBottom: 8 }}
-                    onClick={() => handleTranslate}
+                    onClick={() => handleTranslate(item)}
                   >
                     {t("Translate")}
-                  </Button> */}
+                  </Button>
                   <Button block onClick={() => handleManage(item)}>
                     {t("Manage")}
                   </Button>

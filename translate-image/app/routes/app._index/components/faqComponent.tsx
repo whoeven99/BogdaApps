@@ -162,7 +162,7 @@ export const FaqComponent = () => {
 
   return (
     <div>
-      <Title level={4}>FAQ</Title>
+      <Title level={4}>{t("FAQ")}</Title>
       <Collapse
         items={collapseData}
         onChange={() => {
