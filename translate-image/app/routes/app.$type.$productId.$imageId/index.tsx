@@ -835,7 +835,7 @@ const ImageAltTextPage = () => {
       setImageDatas(mergedList);
       setImageFetcherLoading(false);
     }
-  }, [imageFetcher.data]);
+  }, [imageFetcher.data,languageList]);
   useEffect(() => {
     if (!languageLoading && !imageFetcherLoading) {
       setDataReady(true);
