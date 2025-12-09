@@ -240,7 +240,16 @@
     "collection": "collection",
     "metafield": "metafield"
   },
-  "Article images":"Article images",
-  "Product images":"Product images",
-  "Theme images":"Theme images"
+  "Article images": "Article images",
+  "Product images": "Product images",
+  "Theme images": "Theme images",
+  "Title": "Title",
+  "Author": "Author",
+  "Blog": "Blog",
+  "Visibility": "Visibility",
+  "Published": "Published",
+  "UnPublished": "UnPublished",
+  "Blog Title": "Blog Title",
+  "Published Time": "Published Time",
+  "Updata Time": "Updata Time"
 }

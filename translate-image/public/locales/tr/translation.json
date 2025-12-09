@@ -246,5 +246,14 @@
   },
   "Article images": "Makale görselleri",
   "Product images": "Ürün görselleri",
-  "Theme images": "Tema görüntüleri"
+  "Theme images": "Tema görüntüleri",
+  "Title": "Başlık",
+  "Author": "Yazar",
+  "Blog": "Blog",
+  "Visibility": "Görünürlük",
+  "Published": "Yayımlandı",
+  "UnPublished": "Yayımlanmamış",
+  "Blog Title": "Blog Başlığı",
+  "Published Time": "Yayınlanma Zamanı",
+  "Updata Time": "Güncelleme Zamanı"
 }

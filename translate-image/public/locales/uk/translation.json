@@ -246,5 +246,14 @@
   },
   "Article images": "Зображення статті",
   "Product images": "Зображення продукту",
-  "Theme images": "Тематичні зображення"
+  "Theme images": "Тематичні зображення",
+  "Title": "Назва",
+  "Author": "Автор",
+  "Blog": "Блог",
+  "Visibility": "Видимість",
+  "Published": "Опубліковано",
+  "UnPublished": "Неопубліковано",
+  "Blog Title": "Назва блогу",
+  "Published Time": "Час публікації",
+  "Updata Time": "Час оновлення"
 }

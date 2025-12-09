@@ -246,5 +246,14 @@
   },
   "Article images": "Artikelbilder",
   "Product images": "Produktbilder",
-  "Theme images": "Themenbilder"
+  "Theme images": "Themenbilder",
+  "Title": "Titel",
+  "Author": "Autor",
+  "Blog": "Blog",
+  "Visibility": "Sichtweite",
+  "Published": "Veröffentlicht",
+  "UnPublished": "Unveröffentlicht",
+  "Blog Title": "Blogtitel",
+  "Published Time": "Veröffentlichungszeit",
+  "Updata Time": "Aktualisierungszeit"
 }

@@ -246,5 +246,14 @@
   },
   "Article images": "文章圖片",
   "Product images": "產品圖片",
-  "Theme images": "主題圖片"
+  "Theme images": "主題圖片",
+  "Title": "標題",
+  "Author": "作者",
+  "Blog": "部落格",
+  "Visibility": "能見度",
+  "Published": "已發布",
+  "UnPublished": "未發表",
+  "Blog Title": "部落格標題",
+  "Published Time": "發佈時間",
+  "Updata Time": "更新時間"
 }

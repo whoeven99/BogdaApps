@@ -246,5 +246,14 @@
   },
   "Article images": "Изображения статей",
   "Product images": "Изображения продукта",
-  "Theme images": "Тематические изображения"
+  "Theme images": "Тематические изображения",
+  "Title": "Заголовок",
+  "Author": "Автор",
+  "Blog": "Блог",
+  "Visibility": "Видимость",
+  "Published": "Опубликовано",
+  "UnPublished": "Неопубликовано",
+  "Blog Title": "Название блога",
+  "Published Time": "Время публикации",
+  "Updata Time": "Время обновления"
 }

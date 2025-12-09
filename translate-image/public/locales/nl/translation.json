@@ -246,5 +246,14 @@
   },
   "Article images": "Artikelafbeeldingen",
   "Product images": "Productafbeeldingen",
-  "Theme images": "Thema-afbeeldingen"
+  "Theme images": "Thema-afbeeldingen",
+  "Title": "Titel",
+  "Author": "Auteur",
+  "Blog": "Blog",
+  "Visibility": "Zichtbaarheid",
+  "Published": "Gepubliceerd",
+  "UnPublished": "Niet gepubliceerd",
+  "Blog Title": "Blogtitel",
+  "Published Time": "Gepubliceerde tijd",
+  "Updata Time": "Updatetijd"
 }

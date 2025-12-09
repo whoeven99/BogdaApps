@@ -246,5 +246,14 @@
   },
   "Article images": "記事画像",
   "Product images": "製品画像",
-  "Theme images": "テーマ画像"
+  "Theme images": "テーマ画像",
+  "Title": "タイトル",
+  "Author": "著者",
+  "Blog": "ブログ",
+  "Visibility": "可視性",
+  "Published": "出版",
+  "UnPublished": "未発表",
+  "Blog Title": "ブログタイトル",
+  "Published Time": "公開日時",
+  "Updata Time": "更新時間"
 }

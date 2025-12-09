@@ -246,5 +246,14 @@
   },
   "Article images": "기사 이미지",
   "Product images": "제품 이미지",
-  "Theme images": "테마 이미지"
+  "Theme images": "테마 이미지",
+  "Title": "제목",
+  "Author": "작가",
+  "Blog": "블로그",
+  "Visibility": "시계",
+  "Published": "게시됨",
+  "UnPublished": "널리 알려지지 않은",
+  "Blog Title": "블로그 제목",
+  "Published Time": "게시된 시간",
+  "Updata Time": "업데이트 시간"
 }

@@ -246,5 +246,14 @@
   },
   "Article images": "Artikelbilder",
   "Product images": "Produktbilder",
-  "Theme images": "Temabilder"
+  "Theme images": "Temabilder",
+  "Title": "Titel",
+  "Author": "Författare",
+  "Blog": "Blogg",
+  "Visibility": "Synlighet",
+  "Published": "Publicerad",
+  "UnPublished": "Opublicerad",
+  "Blog Title": "Bloggtitel",
+  "Published Time": "Publicerad tid",
+  "Updata Time": "Uppdateringstid"
 }

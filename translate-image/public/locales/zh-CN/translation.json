@@ -246,5 +246,14 @@
   },
   "Article images": "文章图片",
   "Product images": "产品图片",
-  "Theme images": "主题图片"
+  "Theme images": "主题图片",
+  "Title": "标题",
+  "Author": "作者",
+  "Blog": "博客",
+  "Visibility": "能见度",
+  "Published": "已发布",
+  "UnPublished": "未发表",
+  "Blog Title": "博客标题",
+  "Published Time": "发布时间",
+  "Updata Time": "更新时间"
 }
