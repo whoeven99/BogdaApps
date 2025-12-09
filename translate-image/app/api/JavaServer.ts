@@ -271,7 +271,7 @@ export const TranslateImage = async ({
     });
     // console.log();
 
-    console.log("imageTranslate Response", response.data);
+    console.log(`${shop} imageTranslate Response`, response.data);
     return response;
   } catch (error) {
     console.log(`${shop}  图片翻译失败`, error);
@@ -938,6 +938,40 @@ export const GoogleAnalyticClickReport = async (params: any, name: string) => {
 function replaceImageUrl(html: string, url: string, translateUrl: string) {
   return html.split(url).join(translateUrl);
 }
+async function waitForFileReady(admin: any, fileId: string, maxAttempts = 10) {
+  for (let i = 0; i < maxAttempts; i++) {
+    const response = await admin.graphql(`
+      query {
+        node(id: "${fileId}") {
+          ... on MediaImage {
+            id
+            fileStatus
+            image {
+              url
+            }
+          }
+        }
+      }
+    `);
+
+    const parsed = await response.json();
+    const node = parsed.data.node;
+    console.log("ewcdsad", node);
+
+    if (node.fileStatus === "READY" && node.image) {
+      return node.image.url;
+    }
+
+    if (node.fileStatus === "FAILED") {
+      throw new Error("File processing failed");
+    }
+
+    // 等待后重试
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+
+  throw new Error("File processing timeout");
+}
 function replaceRichTextImageUrl(
   richTextJsonStr: string,
   fromUrl: string,
@@ -1023,7 +1057,9 @@ export const updateManageTranslation = async ({
         }
       }`,
     );
+
     const translation = await queryTranslations.json();
+    console.log("sadawdqw", translation);
     const createFileRes = await admin.graphql(
       `#graphql
       mutation fileCreate($files: [FileCreateInput!]!) {
@@ -1066,25 +1102,37 @@ export const updateManageTranslation = async ({
         },
       },
     );
+    console.log(
+      "321312321sd",
+      translation.data.translatableResource.translations,
+    );
+
     const parse = await createFileRes.json();
+    console.log("dadadqw", parse.data.fileCreate);
+
     let transferValue = "";
     switch (updateData.type) {
       case "HTML":
-        if (translation.data.translations?.length > 0) {
-          translation.data.translations.forEach((item: any) => {
+        const imageUrl = await waitForFileReady(
+          admin,
+          parse.data.fileCreate.files[0].id,
+        );
+        if (translation.data.translatableResource.translations?.length > 0) {
+          for (const item of translation.data.translatableResource
+            .translations) {
             if ((item?.dbKey ?? item?.key) === updateData.key) {
               transferValue = replaceImageUrl(
                 item.value,
                 updateData.value,
-                updateData.imageAfterUrl,
+                imageUrl,
               );
             }
-          });
+          }
         } else {
           transferValue = replaceImageUrl(
             updateData.originValue,
             updateData.value,
-            updateData.imageAfterUrl,
+            imageUrl,
           );
         }
         break;
@@ -1101,25 +1149,32 @@ export const updateManageTranslation = async ({
         transferValue = JSON.stringify(ids);
         break;
       case "RICH_TEXT_FIELD":
-        if (translation.data.translations?.length > 0) {
-          translation.data.translations.forEach((item: any) => {
-            if ((item?.dbKey ?? item?.key) === updateData.key) {
-              transferValue = replaceRichTextImageUrl(
-                item.value,
-                updateData.value,
-                updateData.imageAfterUrl,
-              );
-            }
-          });
+        const richImageUrl = await waitForFileReady(
+          admin,
+          parse.data.fileCreate.files[0].id,
+        );
+        if (translation.data.translatableResource.translations?.length > 0) {
+          translation.data.translatableResource.translations.forEach(
+            (item: any) => {
+              if ((item?.dbKey ?? item?.key) === updateData.key) {
+                transferValue = replaceRichTextImageUrl(
+                  item.value,
+                  updateData.value,
+                  richImageUrl,
+                );
+              }
+            },
+          );
         } else {
           transferValue = replaceRichTextImageUrl(
             updateData.originValue,
             updateData.value,
-            updateData.imageAfterUrl,
+            richImageUrl,
           );
         }
         break;
     }
+    console.log("sdasdasczxc", transferValue);
 
     const response = await axios({
       url: `${process.env.SERVER_URL}/shopify/updateShopifyDataByTranslateTextRequest`,
