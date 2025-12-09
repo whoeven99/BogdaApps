@@ -223,6 +223,15 @@
   "Yes. You can manually replace images with your own versions at no cost.": "Yes. You can manually replace images with your own versions at no cost.",
   "Does image translation help with SEO?": "Does image translation help with SEO?",
   "Yes. Translated images improve SEO, and we also translate alt text to further enhance search visibility.": "Yes. Translated images improve SEO, and we also translate alt text to further enhance search visibility.",
-  "FAQ":"FAQ",
-  "Article content and images":"Article content and images"
+  "FAQ": "FAQ",
+  "Article content and images": "Article content and images",
+  "Online Store Theme": "Online Store Theme",
+  "Metafield": "Metafield",
+  "Pages": "Pages",
+  "Collections": "Collections",
+  "type": "type",
+  "Key": "Key",
+  "translatableResources": "translatableResources",
+  "Translate {{type}} images":"Translate {{type}} images",
+  "Translate article images":"Translate article images"
 }

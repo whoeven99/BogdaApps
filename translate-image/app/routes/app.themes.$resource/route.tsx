@@ -17,7 +17,7 @@ export default function ProductDetailPage() {
     if (!raw) return null;
 
     const parsed = JSON.parse(raw);
-
+    console.log(parsed);
     // 如果 value 是数组 → 拆分成多个对象
     if (Array.isArray(parsed.value)) {
       return parsed.value.map((v: string, index: number) => ({
@@ -26,9 +26,12 @@ export default function ProductDetailPage() {
         dbKey: `${parsed.key}_${index}`,
       }));
     }
-
+    console.log('aaaaa',parsed);
+    
     return parsed;
   });
+  console.log(initData);
+  
   const navigate = useNavigate();
   const handleNavigate = () => {
     navigate(`/app/theme?themetype=${resource}`);
@@ -88,7 +91,9 @@ export default function ProductDetailPage() {
                   fontWeight: 700,
                 }}
               >
-                {t("Translate json template images")}
+                {t(`Translate {{type}} images`, {
+                  type: resource === "all" ? initData[0]?.resourceType.toLowerCase() : resource,
+                })}
               </Title>
             </Flex>
           </Flex>

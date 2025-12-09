@@ -228,5 +228,14 @@
   "Does image translation help with SEO?": "Resim çevirisi SEO'ya yardımcı olur mu?",
   "Yes. Translated images improve SEO, and we also translate alt text to further enhance search visibility.": "Evet. Çevrilen görseller SEO'yu iyileştirir ve ayrıca arama görünürlüğünü daha da artırmak için alternatif metinleri de çeviririz.",
   "FAQ": "SSS",
-  "Article content and images": "Makale içeriği ve görselleri"
+  "Article content and images": "Makale içeriği ve görselleri",
+  "Online Store Theme": "Çevrimiçi Mağaza Teması",
+  "Metafield": "Metafield",
+  "Pages": "Sayfalar",
+  "Collections": "Koleksiyonlar",
+  "type": "tip",
+  "Key": "Anahtar",
+  "translatableResources": "çevrilebilirKaynaklar",
+  "Translate {{type}} images": "{{type}} resimlerini çevir",
+  "Translate article images": "Makale resimlerini çevir"
 }

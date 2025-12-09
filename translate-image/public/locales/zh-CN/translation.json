@@ -228,5 +228,14 @@
   "Does image translation help with SEO?": "图片翻译对搜索引擎优化有帮助吗？",
   "Yes. Translated images improve SEO, and we also translate alt text to further enhance search visibility.": "是的。翻译图片可以提升搜索引擎优化效果，我们还会翻译替代文字，以进一步提高搜索可见度。",
   "FAQ": "常问问题",
-  "Article content and images": "文章内容和图片"
+  "Article content and images": "文章内容和图片",
+  "Online Store Theme": "在线商店主题",
+  "Metafield": "元场",
+  "Pages": "页",
+  "Collections": "收藏",
+  "type": "类型",
+  "Key": "钥匙",
+  "translatableResources": "可翻译资源",
+  "Translate {{type}} images": "翻译 {{type}} 图片",
+  "Translate article images": "翻译文章图片"
 }

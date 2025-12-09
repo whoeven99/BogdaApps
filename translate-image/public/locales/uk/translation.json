@@ -228,5 +228,14 @@
   "Does image translation help with SEO?": "Чи допомагає переклад зображень з SEO?",
   "Yes. Translated images improve SEO, and we also translate alt text to further enhance search visibility.": "Так. Перекладені зображення покращують SEO, а також ми перекладаємо альтернативний текст, щоб ще більше покращити видимість у пошуку.",
   "FAQ": "Найчастіші запитання",
-  "Article content and images": "Зміст статті та зображення"
+  "Article content and images": "Зміст статті та зображення",
+  "Online Store Theme": "Тема інтернет-магазину",
+  "Metafield": "Метаполе",
+  "Pages": "Сторінки",
+  "Collections": "Колекції",
+  "type": "тип",
+  "Key": "Ключ",
+  "translatableResources": "перекладні ресурси",
+  "Translate {{type}} images": "Перекласти зображення {{type}}",
+  "Translate article images": "Переклад зображень статті"
 }

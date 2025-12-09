@@ -228,5 +228,14 @@
   "Does image translation help with SEO?": "Helpt beeldvertaling bij SEO?",
   "Yes. Translated images improve SEO, and we also translate alt text to further enhance search visibility.": "Ja. Vertaalde afbeeldingen verbeteren de SEO en we vertalen ook alt-teksten om de zichtbaarheid in zoekmachines verder te vergroten.",
   "FAQ": "Veelgestelde vragen",
-  "Article content and images": "Artikelinhoud en afbeeldingen"
+  "Article content and images": "Artikelinhoud en afbeeldingen",
+  "Online Store Theme": "Online winkelthema",
+  "Metafield": "Metaveld",
+  "Pages": "Pagina's",
+  "Collections": "Collecties",
+  "type": "type",
+  "Key": "Sleutel",
+  "translatableResources": "vertaalbare bronnen",
+  "Translate {{type}} images": "Vertaal {{type}} afbeeldingen",
+  "Translate article images": "Vertaal artikelafbeeldingen"
 }

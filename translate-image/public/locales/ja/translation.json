@@ -228,5 +228,14 @@
   "Does image translation help with SEO?": "画像翻訳は SEO に役立ちますか?",
   "Yes. Translated images improve SEO, and we also translate alt text to further enhance search visibility.": "はい。翻訳された画像はSEO効果を高め、代替テキストも翻訳することで検索での可視性をさらに高めます。",
   "FAQ": "よくある質問",
-  "Article content and images": "記事の内容と画像"
+  "Article content and images": "記事の内容と画像",
+  "Online Store Theme": "オンラインストアのテーマ",
+  "Metafield": "メタフィールド",
+  "Pages": "ページ",
+  "Collections": "コレクション",
+  "type": "タイプ",
+  "Key": "鍵",
+  "translatableResources": "翻訳可能なリソース",
+  "Translate {{type}} images": "{{type}} 画像を翻訳",
+  "Translate article images": "記事画像を翻訳する"
 }

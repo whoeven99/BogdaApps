@@ -404,7 +404,6 @@ export default function Index() {
     sessionStorage.removeItem("shopify_theme_all_data");
 
     if (type === "ALL") {
-      console.log("查询全部");
       dataFetcher.submit(
         {
           endCursor: JSON.stringify({
@@ -414,8 +413,6 @@ export default function Index() {
         { method: "POST" },
       );
     } else {
-      console.log("查询部分");
-
       dataFetcher.submit(
         {
           normalCursor: JSON.stringify({
@@ -430,28 +427,6 @@ export default function Index() {
   useEffect(() => {
     setSelectedItem(themeParam);
   }, [themeParam]);
-  // useEffect(() => {
-  //   setTableDataLoading(true);
-  //   const localThemeData = sessionStorage.getItem(
-  //     "shopify_theme_all_data",
-  //   ) as any;
-  //   const parse = localThemeData ? JSON.parse(localThemeData) : null;
-  //   if (!parse && theme === "") {
-  //     dataFetcher.submit(
-  //       {
-  //         endCursor: JSON.stringify({
-  //           cursor: "",
-  //         }),
-  //       },
-  //       {
-  //         method: "POST",
-  //       },
-  //     );
-  //   } else {
-  //     setArticleData(parse);
-  //     setTableDataLoading(false);
-  //   }
-  // }, [theme]);
   useEffect(() => {
     if (dataFetcher.data) {
       setTableDataLoading(false);

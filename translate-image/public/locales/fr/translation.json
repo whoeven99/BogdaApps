@@ -228,5 +228,14 @@
   "Does image translation help with SEO?": "La traduction d'images est-elle utile pour le référencement naturel ?",
   "Yes. Translated images improve SEO, and we also translate alt text to further enhance search visibility.": "Oui. Les images traduites améliorent le référencement naturel, et nous traduisons également le texte alternatif pour optimiser davantage la visibilité dans les résultats de recherche.",
   "FAQ": "FAQ",
-  "Article content and images": "Contenu et images de l'article"
+  "Article content and images": "Contenu et images de l'article",
+  "Online Store Theme": "Thème de boutique en ligne",
+  "Metafield": "Métachamp",
+  "Pages": "Pages",
+  "Collections": "Collections",
+  "type": "taper",
+  "Key": "Clé",
+  "translatableResources": "Ressources traduisibles",
+  "Translate {{type}} images": "Traduire les images {{type}}",
+  "Translate article images": "Traduire les images de l'article"
 }

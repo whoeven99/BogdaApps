@@ -228,5 +228,14 @@
   "Does image translation help with SEO?": "Hjälper bildöversättning med SEO?",
   "Yes. Translated images improve SEO, and we also translate alt text to further enhance search visibility.": "Ja. Översatta bilder förbättrar SEO, och vi översätter även alt-text för att ytterligare förbättra synligheten i sökresultaten.",
   "FAQ": "Vanliga frågor",
-  "Article content and images": "Artikelinnehåll och bilder"
+  "Article content and images": "Artikelinnehåll och bilder",
+  "Online Store Theme": "Tema för webbutik",
+  "Metafield": "Metafält",
+  "Pages": "Sidor",
+  "Collections": "Samlingar",
+  "type": "typ",
+  "Key": "Nyckel",
+  "translatableResources": "översättningsbara resurser",
+  "Translate {{type}} images": "Översätt {{type}} bilder",
+  "Translate article images": "Översätt artikelbilder"
 }

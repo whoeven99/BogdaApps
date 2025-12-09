@@ -333,50 +333,55 @@ const ImageAltTextPage = () => {
   const [initData, setInitData] = useState<any>(
     JSON.parse(sessionStorage.getItem("record") || "{}"),
   );
+  const [localRecord, setLocalRecord] = useState<any>({}); // 先空对象
+  useEffect(() => {
+    const record = JSON.parse(sessionStorage.getItem("record") || "{}");
+    console.log(record);
 
+    setLocalRecord(record);
+  }, []);
+  const TRANSLATABLE_TYPES = new Set([
+    "online_store_theme",
+    "metafield",
+    "page",
+    "article_image",
+    "all",
+    "collection",
+  ]);
   const currentImageId = useMemo(() => {
-    const localTranslationData = JSON.parse(
-      sessionStorage.getItem("record") || "{}",
-    );
+    if (!localRecord) return "";
+    console.log(localRecord);
+
     switch (type) {
-      case "online_store_theme":
-      case "metafield":
-      case "page":
-      case "article_image":
-      case "all":
-        return hashString(
-          `${localTranslationData?.value[localTranslationData?.index]}_${localTranslationData.resourceId}`,
-        );
       case "articles":
         return `gid://shopify/ArticleImage/${imageId}`;
       case "products":
         return `gid://shopify/ProductImage/${imageId}`;
       default:
+        // 在 default 里处理 Set 判断
+        if (TRANSLATABLE_TYPES.has(type as string)) {
+          return hashString(
+            `${localRecord?.value[localRecord?.index]}_${localRecord.resourceId}`,
+          );
+        }
         return "";
     }
-  }, [type, imageId]);
+  }, [type, imageId, localRecord]);
 
   const currentResourceId = useMemo(() => {
-    const localTranslationData = JSON.parse(
-      sessionStorage.getItem("record") || "{}",
-    );
+    if (!localRecord) return "";
     switch (type) {
-      case "online_store_theme":
-      case "metafield":
-      case "page":
-      case "article_image":
-      case "all":
-        return localTranslationData?.resourceId;
-
       case "articles":
         return `gid://shopify/Article/${productId}`;
-
       case "products":
         return `gid://shopify/Product/${productId}`;
       default:
+        if (TRANSLATABLE_TYPES.has(type as string)) {
+          return localRecord?.resourceId;
+        }
         return "";
     }
-  }, [type, productId]);
+  }, [type, productId, localRecord]);
 
   const [languageList, setLanguageList] = useState<any[]>([]);
   const [languageLoading, setLanguageLoading] = useState<boolean>(true);
@@ -425,6 +430,7 @@ const ImageAltTextPage = () => {
     { label: "标准版", value: "bassic" },
     { label: "pro大模型", value: "pro" },
   ];
+
   const allLanguageRenderCode = new Set([
     "ar",
     "af",
@@ -732,7 +738,8 @@ const ImageAltTextPage = () => {
         type === "online_store_theme" ||
         type === "metafield" ||
         type === "page" ||
-        type === "all"
+        type === "all" ||
+        type === "collection"
       ) {
         navigate(`/app/themes/${type}`);
       }
@@ -743,6 +750,8 @@ const ImageAltTextPage = () => {
     setPreviewVisible(false);
     setPreviewImage({ imgUrl: "", imgAlt: "" });
   };
+  // 页面加载后再读取 sessionStorage
+
   useEffect(() => {
     imageFetcher.submit(
       { imagesFetcher: JSON.stringify({ imageId: currentImageId }) },
@@ -783,16 +792,8 @@ const ImageAltTextPage = () => {
             };
           }
         });
-      } else if (
-        type === "online_store_theme" ||
-        type === "metafield" ||
-        type === "page" ||
-        type === "article_image" ||
-        type === "all"
-      ) {
-        const localTranslationData = JSON.parse(
-          sessionStorage.getItem("record") || "{}",
-        );
+      } else if (TRANSLATABLE_TYPES.has(type as string)) {
+        if (!localRecord) return;
         mergedList = languageList?.map((lang) => {
           // 看后端有没有返回
           const existing = fetchedList.find(
@@ -808,10 +809,9 @@ const ImageAltTextPage = () => {
           } else {
             return {
               imageId: hashString(
-                `${localTranslationData?.value[localTranslationData?.index]}_${localTranslationData.resourceId}`,
+                `${localRecord?.value[localRecord?.index]}_${localRecord.resourceId}`,
               ),
-              imageBeforeUrl:
-                localTranslationData?.value[localTranslationData?.index],
+              imageBeforeUrl: localRecord?.value[localRecord?.index],
               imageAfterUrl: "",
               altBeforeTranslation: "",
               altAfterTranslation: "",
@@ -1020,13 +1020,7 @@ const ImageAltTextPage = () => {
         replaceTranslateImageFetcher.submit(formData, {
           method: "post",
         });
-        if (
-          type === "online_store_theme" ||
-          type === "metafield" ||
-          type === "page" ||
-          type === "article_image" ||
-          type === "all"
-        ) {
+        if (TRANSLATABLE_TYPES.has(type as string)) {
           saveImageFetcher.submit(
             {
               saveImageToShopify: JSON.stringify({
@@ -1098,13 +1092,7 @@ const ImageAltTextPage = () => {
         imageUrl: imageUrl,
         languageCode: languageCode,
       });
-      if (
-        type === "online_store_theme" ||
-        type === "metafield" ||
-        type === "page" ||
-        type === "article_image" ||
-        type === "all"
-      ) {
+      if (TRANSLATABLE_TYPES.has(type as string)) {
         deleteImageFetcher.submit(
           {
             deleteImageInShopify: JSON.stringify({
@@ -1147,13 +1135,7 @@ const ImageAltTextPage = () => {
         imageUrl: imageUrl,
         languageCode: languageCode,
       });
-      if (
-        type === "online_store_theme" ||
-        type === "metafield" ||
-        type === "page" ||
-        type === "article_image" ||
-        type === "all"
-      ) {
+      if (TRANSLATABLE_TYPES.has(type as string)) {
         deleteImageFetcher.submit(
           {
             deleteImageInShopify: JSON.stringify({
@@ -1277,13 +1259,7 @@ const ImageAltTextPage = () => {
               : item,
           );
         });
-        if (
-          type === "online_store_theme" ||
-          type === "metafield" ||
-          type === "page" ||
-          type === "article_image" ||
-          type === "all"
-        ) {
+        if (TRANSLATABLE_TYPES.has(type as string)) {
           saveImageFetcher.submit(
             {
               saveImageToShopify: JSON.stringify({
@@ -1427,19 +1403,11 @@ const ImageAltTextPage = () => {
           method: "POST",
         },
       );
-    } else if (
-      type === "online_store_theme" ||
-      type === "metafield" ||
-      type === "page" ||
-      type === "article_image" ||
-      type === "all"
-    ) {
-      const localTranslationData = JSON.parse(
-        sessionStorage.getItem("record") || "{}",
-      );
-      if (localTranslationData) {
+    } else if (TRANSLATABLE_TYPES.has(type as string)) {
+      if (!localRecord) return;
+      if (localRecord) {
         setProductImageData({
-          imageUrl: localTranslationData?.value[localTranslationData?.index],
+          imageUrl: localRecord?.value[localRecord?.index],
           altText: "",
         });
       }
@@ -1936,11 +1904,7 @@ const ImageAltTextPage = () => {
                                       );
                                     });
                                     if (
-                                      type === "online_store_theme" ||
-                                      type === "metafield" ||
-                                      type === "page" ||
-                                      type === "article_image" ||
-                                      type === "all"
+                                      TRANSLATABLE_TYPES.has(type as string)
                                     ) {
                                       saveImageFetcher.submit(
                                         {
