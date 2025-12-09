@@ -239,5 +239,8 @@
     "page": "page",
     "collection": "collection",
     "metafield": "metafield"
-  }
+  },
+  "Article images":"Article images",
+  "Product images":"Product images",
+  "Theme images":"Theme images"
 }

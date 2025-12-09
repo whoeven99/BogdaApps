@@ -360,9 +360,9 @@ export default function App() {
             Home
           </Link>
           {/* <Link to="/app/management">Image Manage</Link> */}
-          <Link to="/app/article">{t("Article")}</Link>
-          <Link to="/app/product">{t("Product")}</Link>
-          <Link to="/app/theme">{t("Theme")}</Link>
+          <Link to="/app/article">{t("Article images")}</Link>
+          <Link to="/app/product">{t("Product images")}</Link>
+          <Link to="/app/theme">{t("Theme images")}</Link>
           {/* <Link to="/app/management">{t("Managements")}</Link> */}
           <Link to="/app/pricing">{t("Pricing")}</Link>
         </NavMenu>

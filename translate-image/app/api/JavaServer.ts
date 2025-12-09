@@ -1136,10 +1136,10 @@ export const updateManageTranslation = async ({
         target: updateData.languageCode,
       },
     });
-    console.log(`updateManageTranslation: `, response.data);
+    console.log(`${shop} updateManageTranslation: `, response.data);
     return response.data;
   } catch (error) {
-    console.error("Error updateManageTranslation:", error);
+    console.error(`${shop}Error updateManageTranslation:`, error);
   }
 };
 
@@ -1182,10 +1182,10 @@ export const deleteSaveInShopify = async ({
         },
       },
     });
-    console.log("delete image file in shopify", response.data);
+    console.log(`${shop}delete image file in shopify`, response.data);
     return response;
   } catch (error) {
-    console.log("delete image file error", error);
+    console.log(`${shop}delete image file error`, error);
   }
 };
 const IMAGE_TYPES = new Set([
@@ -1401,7 +1401,7 @@ const findImageSrc = async (admin: any, value: string) => {
 // 查询shopify数据
 export const queryShopifyThemeData = async ({
   admin,
-  nodes,  
+  nodes,
 }: {
   admin: any;
   nodes: any;

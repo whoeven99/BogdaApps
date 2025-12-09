@@ -375,7 +375,7 @@ export default function ProductDetailPage() {
   };
   return (
     <Page>
-      {/* <TitleBar title="产品详情" /> */}
+      <TitleBar title={t("Product images")}></TitleBar>
       <ScrollNotice
         text={t(
           "Welcome to our app! If you have any questions, feel free to email us at support@ciwi.ai, and we will respond as soon as possible.",

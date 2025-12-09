@@ -44,7 +44,16 @@ import { ActionFunctionArgs, json, LoaderFunctionArgs } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
 import SortPopover from "~/components/SortPopover";
 import { queryShopifyThemeData } from "~/api/JavaServer";
+import useReport from "scripts/eventReport";
+import ScrollNotice from "~/components/ScrollNotice";
 const { Text, Title } = Typography;
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const adminAuthResult = await authenticate.admin(request);
+  const { shop } = adminAuthResult.session;
+  return {
+    shop: shop,
+  };
+};
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const url = new URL(request.url);
@@ -289,7 +298,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function Index() {
+  const { reportClick, report } = useReport();
+  const { shop } = useLoaderData<typeof loader>();
   const dataFetcher = useFetcher<any>();
+  const logFetcher = useFetcher<any>();
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const themeParam = searchParams.get("themetype") || "all";
@@ -425,6 +437,13 @@ export default function Index() {
     }
   }, [themeParam]);
   useEffect(() => {
+    logFetcher.submit(
+      { log: `${shop} 目前在主题页面` },
+      { action: "/app/log", method: "POST" },
+    );
+  }, []);
+
+  useEffect(() => {
     setSelectedItem(themeParam);
   }, [themeParam]);
   useEffect(() => {
@@ -474,52 +493,31 @@ export default function Index() {
   // };
   const handleItemChange = (item: string) => {
     setSelectedItem(item);
-
+    report(
+      {
+        resourceType: item,
+      },
+      {
+        action: "/app",
+        method: "post",
+        eventType: "click",
+      },
+      "theme_select_resourceType",
+    );
     setTableDataLoading(true);
     navigate(`/app/theme?themetype=${item}`);
   };
   return (
     <Page>
-      {/* <TitleBar title={t("Article Image Translate")}></TitleBar> */}
-      <Affix offsetTop={0}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            zIndex: 10,
-            backgroundColor: "rgb(241, 241, 241)",
-            padding: "16px 0",
-          }}
-        >
-          <Flex
-            align="center"
-            justify="space-between"
-            style={{ width: "100%" }}
-          >
-            <Flex align="center" gap={8}>
-              {/* <Button
-                type="text"
-                variant="outlined"
-                onClick={handleNavigate}
-                style={{ padding: "4px" }}
-              >
-                <Icon source={ArrowLeftIcon} tone="base" />
-              </Button> */}
-              <Title
-                level={2}
-                style={{
-                  margin: "0",
-                  fontSize: "20px",
-                  fontWeight: 700,
-                }}
-              >
-                {t("translatableResources")}
-              </Title>
-            </Flex>
-          </Flex>
-        </div>
-      </Affix>
+      <TitleBar title={t("Theme images")}></TitleBar>
+      <ScrollNotice
+        text={t(
+          "Welcome to our app! If you have any questions, feel free to email us at support@ciwi.ai, and we will respond as soon as possible.",
+        )}
+      />
+      <Title level={1} style={{ fontSize: "1.25rem" }}>
+        {t("Theme images")}
+      </Title>
       <div
         style={{ display: "flex", justifyContent: "flex-end", width: "100%" }}
       >

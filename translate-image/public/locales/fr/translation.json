@@ -243,5 +243,8 @@
     "page": "page",
     "collection": "collection",
     "metafield": "métachamp"
-  }
+  },
+  "Article images": "Images de l'article",
+  "Product images": "Images du produit",
+  "Theme images": "Images thématiques"
 }

@@ -91,7 +91,7 @@ export default function ThemeModule() {
               justifyContent: "space-between",
               backgroundColor: "#fff",
               padding: "16px",
-              border: "1px solid black",
+              border: "0.5px solid rgba(204,204,204,1)",
               borderRadius: "5px",
             }}
           >

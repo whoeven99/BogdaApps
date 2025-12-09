@@ -6,6 +6,7 @@ import { ArrowLeftIcon } from "@shopify/polaris-icons";
 import { useEffect, useState } from "react";
 import { ActionFunctionArgs, json } from "@remix-run/node";
 import ScrollNotice from "../../components/ScrollNotice";
+import { TitleBar } from "@shopify/app-bridge-react";
 
 const { Text, Title } = Typography;
 
@@ -52,7 +53,7 @@ export default function ProductDetailPage() {
   };
   return (
     <Page>
-      {/* <TitleBar title="产品详情" /> */}
+      <TitleBar title={t("Theme images")}></TitleBar>
       <ScrollNotice
         text={t(
           "Welcome to our app! If you have any questions, feel free to email us at support@ciwi.ai, and we will respond as soon as possible.",

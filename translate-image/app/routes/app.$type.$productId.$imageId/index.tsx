@@ -334,7 +334,6 @@ const ImageAltTextPage = () => {
   const [localRecord, setLocalRecord] = useState<any>({}); // 先空对象
   useEffect(() => {
     const record = JSON.parse(sessionStorage.getItem("record") || "{}");
-    console.log(record);
     setInitData(record);
     setLocalRecord(record);
   }, []);
@@ -348,8 +347,6 @@ const ImageAltTextPage = () => {
   ]);
   const currentImageId = useMemo(() => {
     if (!localRecord) return "";
-    console.log(localRecord);
-
     switch (type) {
       case "articles":
         return `gid://shopify/ArticleImage/${imageId}`;
@@ -998,8 +995,6 @@ const ImageAltTextPage = () => {
   };
   useEffect(() => {
     if (translateImageFetcher.data) {
-      console.log(translateImageFetcher.data);
-
       setTranslateLoadingImages((pre) => ({
         ...pre,
         [`${currentTranslatingImage.imageId}_${currentTranslatingImage.languageCode}`]: false,
@@ -1516,6 +1511,7 @@ const ImageAltTextPage = () => {
   };
   return (
     <Page>
+      <TitleBar title={t("Manage image translations")}></TitleBar>
       <ScrollNotice
         text={t(
           "Welcome to our app! If you have any questions, feel free to email us at support@ciwi.ai, and we will respond as soon as possible.",
@@ -1906,8 +1902,6 @@ const ImageAltTextPage = () => {
                                     "string"
                                       ? response.response?.imageAfterUrl
                                       : "";
-                                  console.log("newUrl", newUrl);
-
                                   if (response?.success) {
                                     setImageDatas((prev: any[]) => {
                                       return prev.map((item) =>

@@ -20,7 +20,8 @@ import { ColumnsType } from "antd/es/table";
 import { ActionFunctionArgs, json } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
 import SortPopover from "~/components/SortPopover";
-const { Text } = Typography;
+import ScrollNotice from "~/components/ScrollNotice";
+const { Text, Title } = Typography;
 export const action = async ({ request }: ActionFunctionArgs) => {
   const adminAuthResult = await authenticate.admin(request);
   const { admin } = adminAuthResult;
@@ -327,7 +328,7 @@ export default function Index() {
   const lastPageCursorInfo = useSelector(
     (state: RootState) => state.article.lastPageCursorInfo,
   );
-  
+
   const panelColumns: ColumnsType<any> = [
     {
       // 不需要 dataIndex，用 render 直接取 item.node.title
@@ -461,7 +462,7 @@ export default function Index() {
   useEffect(() => {
     if (loadFetcher.data) {
       // console.log(loadFetcher.data);
-      
+
       setArticlesHasNextPage(loadFetcher.data.hasNextPage);
       setArticlesHasPreviousPage(loadFetcher.data.hasPreviousPage);
       setArticlesStartCursor(loadFetcher.data.startCursor);
@@ -474,7 +475,7 @@ export default function Index() {
   useEffect(() => {
     if (artilclesFetcher.data) {
       // console.log(artilclesFetcher.data);
-      
+
       dispatch(
         setLastPageCursorInfo({
           articlesHasNextPage: artilclesFetcher.data.hasNextPage,
@@ -623,7 +624,15 @@ export default function Index() {
   };
   return (
     <Page>
-      <TitleBar title={t("Article Image Translate")}></TitleBar>
+      <TitleBar title={t("Article images")}></TitleBar>
+      <ScrollNotice
+        text={t(
+          "Welcome to our app! If you have any questions, feel free to email us at support@ciwi.ai, and we will respond as soon as possible.",
+        )}
+      />
+      <Title level={1} style={{ fontSize: "1.25rem" }}>
+        {t("Article images")}
+      </Title>
       <Card styles={{ body: { padding: "12px 24px" } }}>
         <Flex align="center" justify="space-between">
           <Tabs

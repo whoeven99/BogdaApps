@@ -22,7 +22,8 @@ import useReport from "scripts/eventReport";
 import { ActionFunctionArgs, json } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
 import SortPopover from "~/components/SortPopover";
-
+import ScrollNotice from "~/components/ScrollNotice";
+const { Text, Title } = Typography;
 export const action = async ({ request }: ActionFunctionArgs) => {
   const adminAuthResult = await authenticate.admin(request);
   const { admin } = adminAuthResult;
@@ -729,6 +730,15 @@ export default function Index() {
   };
   return (
     <Page>
+      <TitleBar title={t("Product images")}></TitleBar>
+      <ScrollNotice
+        text={t(
+          "Welcome to our app! If you have any questions, feel free to email us at support@ciwi.ai, and we will respond as soon as possible.",
+        )}
+      />
+      <Title level={1} style={{ fontSize: "1.25rem" }}>
+        {t("Product images")}
+      </Title>
       <Layout>
         <Layout.Section>
           <div>
