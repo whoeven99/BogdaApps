@@ -203,8 +203,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
       case !!imagesFetcher:
         try {
-          console.log("dsdasd", imagesFetcher);
-
           const response = await getProductAllLanguageImagesData({
             shop,
             imageId: imagesFetcher.imageId,
@@ -359,7 +357,6 @@ const ImageAltTextPage = () => {
         if (!val || typeof idx !== "number") {
           return ""; // 或者 return null
         }
-
         // 在 default 里处理 Set 判断
         if (TRANSLATABLE_TYPES.has(type as string)) {
           return hashString(
@@ -762,15 +759,18 @@ const ImageAltTextPage = () => {
   // 页面加载后再读取 sessionStorage
 
   useEffect(() => {
+    if (!currentImageId) return; // currentImageId 为空时不请求
+
     imageFetcher.submit(
       { imagesFetcher: JSON.stringify({ imageId: currentImageId }) },
       { method: "POST" },
     );
-  }, []);
+  }, [currentImageId]);
   useEffect(() => {
     if (imageFetcher.data) {
       // 后端返回的数据数组
       const fetchedList = imageFetcher.data.response || [];
+
       // 处理不同模块之间的数据结构差异
       let mergedList = [];
 
