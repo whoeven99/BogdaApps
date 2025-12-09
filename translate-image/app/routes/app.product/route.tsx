@@ -63,20 +63,38 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     switch (true) {
       case !!languageLoading:
         try {
-          const mutationResponse = await admin.graphql(
-            `query MyQuery {
-              shopLocales{
+          const fetchWithRetry = async (maxRetries = 3) => {
+            for (let i = 0; i < maxRetries; i++) {
+              try {
+                const mutationResponse = await admin.graphql(
+                  `query MyQuery {
+              shopLocales {
                 locale
                 name
                 primary
                 published
               }
             }`,
-          );
-          const data = await mutationResponse.json();
+                );
+                const data = (await mutationResponse.json()) as any;
+
+                if (!data?.errors) {
+                  return data.data.shopLocales;
+                }
+              } catch (error) {
+                if (i === maxRetries - 1) throw error;
+                await new Promise((resolve) =>
+                  setTimeout(resolve, 1000 * (i + 1)),
+                );
+              }
+            }
+          };
+
+          const result = await fetchWithRetry();
+
           return {
             success: true,
-            response: data.data.shopLocales,
+            response: result,
           };
         } catch (error) {
           console.log("GraphQL Error: ", error);
