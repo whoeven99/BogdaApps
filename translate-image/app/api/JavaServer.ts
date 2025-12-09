@@ -1118,11 +1118,21 @@ export const updateManageTranslation = async ({
           parse.data.fileCreate.files[0].id,
         );
         if (translation.data.translatableResource.translations?.length > 0) {
+          let matched = false;
           for (const item of translation.data.translatableResource
             .translations) {
             if ((item?.dbKey ?? item?.key) === updateData.key) {
               transferValue = replaceImageUrl(
                 item.value,
+                updateData.value,
+                imageUrl,
+              );
+              matched = true;
+              break; // 找到就退出循环！
+            }
+            if (!matched) {
+              transferValue = replaceImageUrl(
+                updateData.originValue,
                 updateData.value,
                 imageUrl,
               );
@@ -1154,17 +1164,26 @@ export const updateManageTranslation = async ({
           parse.data.fileCreate.files[0].id,
         );
         if (translation.data.translatableResource.translations?.length > 0) {
-          translation.data.translatableResource.translations.forEach(
-            (item: any) => {
-              if ((item?.dbKey ?? item?.key) === updateData.key) {
-                transferValue = replaceRichTextImageUrl(
-                  item.value,
-                  updateData.value,
-                  richImageUrl,
-                );
-              }
-            },
-          );
+          let matched = false;
+          for (const item of translation.data.translatableResource
+            .translations) {
+            if ((item?.dbKey ?? item?.key) === updateData.key) {
+              transferValue = replaceRichTextImageUrl(
+                item.value,
+                updateData.value,
+                richImageUrl,
+              );
+              matched = true;
+              break; // 找到就退出循环！
+            }
+            if (!matched) {
+              transferValue = replaceImageUrl(
+                updateData.originValue,
+                updateData.value,
+                imageUrl,
+              );
+            }
+          }
         } else {
           transferValue = replaceRichTextImageUrl(
             updateData.originValue,
