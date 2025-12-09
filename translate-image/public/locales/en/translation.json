@@ -232,6 +232,12 @@
   "type": "type",
   "Key": "Key",
   "translatableResources": "translatableResources",
-  "Translate {{type}} images":"Translate {{type}} images",
-  "Translate article images":"Translate article images"
+  "Translate {{type}} images": "Translate {{type}} images",
+  "Translate article images": "Translate article images",
+  "imageTypes": {
+    "online_store_theme": "online_store_theme",
+    "page": "page",
+    "collection": "collection",
+    "metafield": "metafield"
+  }
 }

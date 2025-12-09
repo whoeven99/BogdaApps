@@ -237,5 +237,11 @@
   "Key": "鍵",
   "translatableResources": "翻訳可能なリソース",
   "Translate {{type}} images": "{{type}} 画像を翻訳",
-  "Translate article images": "記事画像を翻訳する"
+  "Translate article images": "記事画像を翻訳する",
+  "imageTypes": {
+    "online_store_theme": "オンラインストアのテーマ",
+    "page": "ページ",
+    "collection": "コレクション",
+    "metafield": "メタフィールド"
+  }
 }

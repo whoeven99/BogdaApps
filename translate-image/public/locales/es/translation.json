@@ -237,5 +237,11 @@
   "Key": "Llave",
   "translatableResources": "Recursos traducibles",
   "Translate {{type}} images": "Traducir imágenes de {{type}}",
-  "Translate article images": "Traducir imágenes de artículos"
+  "Translate article images": "Traducir imágenes de artículos",
+  "imageTypes": {
+    "online_store_theme": "tema de la tienda en línea",
+    "page": "página",
+    "collection": "recopilación",
+    "metafield": "metacampo"
+  }
 }

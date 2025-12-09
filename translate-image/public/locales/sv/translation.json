@@ -237,5 +237,11 @@
   "Key": "Nyckel",
   "translatableResources": "översättningsbara resurser",
   "Translate {{type}} images": "Översätt {{type}} bilder",
-  "Translate article images": "Översätt artikelbilder"
+  "Translate article images": "Översätt artikelbilder",
+  "imageTypes": {
+    "online_store_theme": "tema för webbutik",
+    "page": "sida",
+    "collection": "samling",
+    "metafield": "metafält"
+  }
 }

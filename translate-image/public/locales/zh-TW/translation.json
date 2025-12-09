@@ -231,11 +231,17 @@
   "Article content and images": "文章內容和圖片",
   "Online Store Theme": "線上商店主題",
   "Metafield": "元場",
-  "Pages": "頁",
+  "Pages": "頁面",
   "Collections": "收藏",
   "type": "類型",
   "Key": "鑰匙",
   "translatableResources": "可翻譯資源",
   "Translate {{type}} images": "翻譯 {{type}} 圖片",
-  "Translate article images": "翻譯文章圖片"
+  "Translate article images": "翻譯文章圖片",
+  "imageTypes": {
+    "online_store_theme": "線上商店主題",
+    "page": "頁面",
+    "collection": "收藏",
+    "metafield": "元場"
+  }
 }

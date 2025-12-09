@@ -237,5 +237,11 @@
   "Key": "Sleutel",
   "translatableResources": "vertaalbare bronnen",
   "Translate {{type}} images": "Vertaal {{type}} afbeeldingen",
-  "Translate article images": "Vertaal artikelafbeeldingen"
+  "Translate article images": "Vertaal artikelafbeeldingen",
+  "imageTypes": {
+    "online_store_theme": "online_winkel_thema",
+    "page": "pagina",
+    "collection": "verzameling",
+    "metafield": "metaveld"
+  }
 }

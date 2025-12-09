@@ -26,12 +26,12 @@ export default function ProductDetailPage() {
         dbKey: `${parsed.key}_${index}`,
       }));
     }
-    console.log('aaaaa',parsed);
-    
+    console.log("aaaaa", parsed);
+
     return parsed;
   });
   console.log(initData);
-  
+
   const navigate = useNavigate();
   const handleNavigate = () => {
     navigate(`/app/theme?themetype=${resource}`);
@@ -92,7 +92,13 @@ export default function ProductDetailPage() {
                 }}
               >
                 {t(`Translate {{type}} images`, {
-                  type: resource === "all" ? initData[0]?.resourceType.toLowerCase() : resource,
+                  type: t(
+                    `imageTypes.${
+                      resource === "all"
+                        ? initData[0]?.resourceType.toLowerCase()
+                        : resource
+                    }`,
+                  ),
                 })}
               </Title>
             </Flex>

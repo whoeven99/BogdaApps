@@ -237,5 +237,11 @@
   "Key": "열쇠",
   "translatableResources": "번역 가능한 리소스",
   "Translate {{type}} images": "{{type}} 이미지 번역",
-  "Translate article images": "기사 이미지 번역"
+  "Translate article images": "기사 이미지 번역",
+  "imageTypes": {
+    "online_store_theme": "온라인 스토어 테마",
+    "page": "페이지",
+    "collection": "수집",
+    "metafield": "메타필드"
+  }
 }

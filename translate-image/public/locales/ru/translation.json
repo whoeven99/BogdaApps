@@ -237,5 +237,11 @@
   "Key": "Ключ",
   "translatableResources": "переводимые ресурсы",
   "Translate {{type}} images": "Перевести {{type}} изображения",
-  "Translate article images": "Перевести изображения статей"
+  "Translate article images": "Перевести изображения статей",
+  "imageTypes": {
+    "online_store_theme": "тема_онлайн_магазина",
+    "page": "страница",
+    "collection": "коллекция",
+    "metafield": "метаполе"
+  }
 }

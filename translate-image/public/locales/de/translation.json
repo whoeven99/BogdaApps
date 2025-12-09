@@ -237,5 +237,11 @@
   "Key": "Schlüssel",
   "translatableResources": "übersetzbare Ressourcen",
   "Translate {{type}} images": "Übersetzen Sie {{type}} Bilder",
-  "Translate article images": "Artikelbilder übersetzen"
+  "Translate article images": "Artikelbilder übersetzen",
+  "imageTypes": {
+    "online_store_theme": "Online-Shop-Thema",
+    "page": "Seite",
+    "collection": "Sammlung",
+    "metafield": "Metafeld"
+  }
 }

@@ -237,5 +237,11 @@
   "Key": "Anahtar",
   "translatableResources": "çevrilebilirKaynaklar",
   "Translate {{type}} images": "{{type}} resimlerini çevir",
-  "Translate article images": "Makale resimlerini çevir"
+  "Translate article images": "Makale resimlerini çevir",
+  "imageTypes": {
+    "online_store_theme": "çevrimiçi_mağaza_teması",
+    "page": "sayfa",
+    "collection": "koleksiyon",
+    "metafield": "meta alan"
+  }
 }
