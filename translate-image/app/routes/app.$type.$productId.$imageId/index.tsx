@@ -330,14 +330,12 @@ const ImageAltTextPage = () => {
 
   const { t } = useTranslation();
   const { type, productId, imageId } = useParams();
-  const [initData, setInitData] = useState<any>(
-    JSON.parse(sessionStorage.getItem("record") || "{}"),
-  );
+  const [initData, setInitData] = useState<any>({});
   const [localRecord, setLocalRecord] = useState<any>({}); // 先空对象
   useEffect(() => {
     const record = JSON.parse(sessionStorage.getItem("record") || "{}");
     console.log(record);
-
+    setInitData(record);
     setLocalRecord(record);
   }, []);
   const TRANSLATABLE_TYPES = new Set([
@@ -358,6 +356,13 @@ const ImageAltTextPage = () => {
       case "products":
         return `gid://shopify/ProductImage/${imageId}`;
       default:
+        const val = localRecord?.value;
+        const idx = localRecord?.index;
+
+        if (!val || typeof idx !== "number") {
+          return ""; // 或者 return null
+        }
+
         // 在 default 里处理 Set 判断
         if (TRANSLATABLE_TYPES.has(type as string)) {
           return hashString(
@@ -376,6 +381,13 @@ const ImageAltTextPage = () => {
       case "products":
         return `gid://shopify/Product/${productId}`;
       default:
+        const val = localRecord?.value;
+        const idx = localRecord?.index;
+
+        if (!val || typeof idx !== "number") {
+          return ""; // 或者 return null
+        }
+
         if (TRANSLATABLE_TYPES.has(type as string)) {
           return localRecord?.resourceId;
         }
@@ -1405,6 +1417,13 @@ const ImageAltTextPage = () => {
       );
     } else if (TRANSLATABLE_TYPES.has(type as string)) {
       if (!localRecord) return;
+      const val = localRecord?.value;
+      const idx = localRecord?.index;
+
+      if (!val || typeof idx !== "number") {
+        return; // 或者 return null
+      }
+
       if (localRecord) {
         setProductImageData({
           imageUrl: localRecord?.value[localRecord?.index],
@@ -1413,7 +1432,7 @@ const ImageAltTextPage = () => {
       }
       setPageLoading(false);
     }
-  }, []);
+  }, [localRecord]);
   useEffect(() => {
     if (imageLoadingFetcher.data) {
       setProductImageData(imageLoadingFetcher.data.imageData);
