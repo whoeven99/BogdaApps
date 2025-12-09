@@ -450,7 +450,7 @@ export default function Index() {
     if (dataFetcher.data) {
       setTableDataLoading(false);
 
-      console.log(dataFetcher.data);
+      // console.log(dataFetcher.data);
       setHasNextPage(dataFetcher.data.hasNextPage);
       setHasPreviousPage(dataFetcher.data.hasPreviousPage);
       setStartCursor(dataFetcher.data.startCursor);

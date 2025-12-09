@@ -1,16 +1,8 @@
 import { Page } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import {
-  Button,
-  Card,
-  Col,
-  Flex,
-  Row,
-  Skeleton,
   Space,
-  Table,
   Typography,
-  Modal,
 } from "antd";
 import { Link, useFetcher, useLoaderData, useNavigate } from "@remix-run/react";
 import { useEffect, useMemo, useState } from "react";
@@ -18,11 +10,8 @@ import { useTranslation } from "react-i18next";
 import { LoaderFunctionArgs } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
 import WelcomeCard from "./components/welcomeCard";
-import { QuotaCard } from "./components/quotaCard";
-import ImageTable from "./components/ImageTable";
 import ScrollNotice from "~/components/ScrollNotice";
 import useReport from "scripts/eventReport";
-import ImageTranslatePanel from "./components/imageTranslatePanel";
 import ThemeModule from "./components/themeModule";
 import { FaqComponent } from "./components/faqComponent";
 const { Title, Text } = Typography;

@@ -166,7 +166,7 @@ export const FaqComponent = () => {
       <Collapse
         items={collapseData}
         onChange={() => {
-          reportClick("pricing_faq_click");
+          reportClick("dashboard_faq_button");
         }}
       />
     </div>

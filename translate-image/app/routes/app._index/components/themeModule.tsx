@@ -8,10 +8,13 @@ import {
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import { useNavigate } from "@remix-run/react";
+import useReport from "scripts/eventReport";
 
 const { Title } = Typography;
 
 export default function ThemeModule() {
+  const { reportClick, report } = useReport();
+
   const [isMobile, setIsMobile] = useState(false);
   const navigate = useNavigate();
   const { t } = useTranslation();
@@ -39,6 +42,17 @@ export default function ThemeModule() {
   ];
 
   const handleManage = (item: any) => {
+    report(
+      {
+        moduleType: item.key,
+      },
+      {
+        action: "/app",
+        method: "post",
+        eventType: "click",
+      },
+      "dashboard_manage_image",
+    );
     switch (item.key) {
       case "product":
         navigate("/app/product");
@@ -52,6 +66,17 @@ export default function ThemeModule() {
     }
   };
   const handleTranslate = (item: any) => {
+    report(
+      {
+        moduleType: item.key,
+      },
+      {
+        action: "/app",
+        method: "post",
+        eventType: "click",
+      },
+      "dashboard_translate_image",
+    );
     switch (item.key) {
       case "product":
         navigate("/app/product");
@@ -74,11 +99,7 @@ export default function ThemeModule() {
   return (
     <div>
       <Title level={4}>{t("Image Translation")}</Title>
-
-      <Flex
-        gap={8}
-        style={{ width: "100% ", flexWrap: "wrap" }}
-      >
+      <Flex gap={8} style={{ width: "100% ", flexWrap: "wrap" }}>
         {items.map((item) => (
           <div
             key={item.key}

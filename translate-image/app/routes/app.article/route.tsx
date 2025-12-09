@@ -21,6 +21,7 @@ import { ActionFunctionArgs, json } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
 import SortPopover from "~/components/SortPopover";
 import ScrollNotice from "~/components/ScrollNotice";
+import useReport from "scripts/eventReport";
 const { Text, Title } = Typography;
 export const action = async ({ request }: ActionFunctionArgs) => {
   const adminAuthResult = await authenticate.admin(request);
@@ -290,18 +291,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function Index() {
-  const languageFetcher = useFetcher<any>();
   const artilclesFetcher = useFetcher<any>();
-  const imageFetcher = useFetcher<any>();
-
+  const { reportClick, report } = useReport();
   const [articlesStartCursor, setArticlesStartCursor] = useState("");
   const [articlesEndCursor, setArticlesEndCursor] = useState("");
-  const [lastRequestCursor, setLastRequestCursor] = useState<any>(null);
-  const [productImageData, setProductImageData] = useState<any>([]);
   const [tableDataLoading, setTableDataLoading] = useState(true);
 
   const [articleData, setArticleData] = useState<any>([]);
-  const [selectedKey, setSelectedKey] = useState("");
 
   const [articlesHasNextPage, setArticlesHasNextPage] = useState(false);
   const [articlesHasPreviousPage, setArticlesHasPreviousPage] = useState(false);
@@ -317,7 +313,6 @@ export default function Index() {
   const [sortKey, setSortKey] = useState("UPDATED_AT");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const loadFetcher = useFetcher<any>();
-  const [blogsData, setBlogsData] = useState<any[]>([]);
   const sortOptions = [
     { label: "Title", value: "TITLE" },
     { label: "Author", value: "AUTHOR" },
@@ -551,33 +546,19 @@ export default function Index() {
     ); // 提交表单请求
   };
 
-  const handleChangeStatusTab = (key: string) => {
-    setActiveKey(key);
-    if (timeoutIdRef.current) {
-      clearTimeout(timeoutIdRef.current);
-    }
-
-    // 延迟 1s 再执行请求
-    timeoutIdRef.current = setTimeout(() => {
-      artilclesFetcher.submit(
-        {
-          articleEndCursor: JSON.stringify({
-            cursor: "",
-            query: searchText,
-            status: key,
-            sortKey,
-            reverse: sortOrder === "asc" ? false : true,
-          }),
-        },
-        {
-          method: "post",
-        },
-      );
-    }, 500);
-  };
   const handleSearch = (value: string) => {
     setSearchText(value);
-
+    report(
+      {
+        searchValue: value,
+      },
+      {
+        action: "/app",
+        method: "post",
+        eventType: "click",
+      },
+      "article_query_search",
+    );
     // 清除上一次的定时器
     if (timeoutIdRef.current) {
       clearTimeout(timeoutIdRef.current);
@@ -602,6 +583,18 @@ export default function Index() {
     }, 100);
   };
   const handleSortProduct = (key: string, order: "asc" | "desc") => {
+    report(
+      {
+        sortKey: key,
+        order: order,
+      },
+      {
+        action: "/app",
+        method: "post",
+        eventType: "click",
+      },
+      "article_sort_article",
+    );
     setSortKey(key);
     setSortOrder(order);
     // 延迟 1s 再执行请求
@@ -637,24 +630,11 @@ export default function Index() {
         <Flex align="center" justify="space-between">
           <Tabs
             activeKey={activeKey}
-            onChange={(key) => handleChangeStatusTab(key)}
             defaultActiveKey="all"
             type="line"
             // style={{ width: "40%" }}
             items={[
               { label: t("All"), key: "ALL" },
-              // {
-              //   label: t("Active"),
-              //   key: "ACTIVE",
-              // },
-              // {
-              //   label: t("Draft"),
-              //   key: "DRAFT",
-              // },
-              // {
-              //   label: t("Archived"),
-              //   key: "ARCHIVED",
-              // },
             ]}
           />
 

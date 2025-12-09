@@ -18,7 +18,7 @@ export default function ProductDetailPage() {
     if (!raw) return null;
 
     const parsed = JSON.parse(raw);
-    console.log(parsed);
+    // console.log(parsed);
     // 如果 value 是数组 → 拆分成多个对象
     if (Array.isArray(parsed.value)) {
       return parsed.value.map((v: string, index: number) => ({
@@ -27,11 +27,9 @@ export default function ProductDetailPage() {
         dbKey: `${parsed.key}_${index}`,
       }));
     }
-    console.log("aaaaa", parsed);
 
     return parsed;
   });
-  console.log(initData);
 
   const navigate = useNavigate();
   const handleNavigate = () => {

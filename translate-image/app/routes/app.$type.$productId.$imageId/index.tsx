@@ -938,7 +938,17 @@ const ImageAltTextPage = () => {
     }
   };
   const handleTranslate = async () => {
-    reportClick("manage_image_translate");
+    report(
+      {
+        imageType: type,
+      },
+      {
+        action: "/app",
+        method: "post",
+        eventType: "click",
+      },
+      "manage_image_translate",
+    );
     // 判断图片的格式
     const res = (await detectImageFormat(
       currentTranslatingImage.imageBeforeUrl,
@@ -1091,7 +1101,17 @@ const ImageAltTextPage = () => {
     languageCode: string,
   ) => {
     try {
-      reportClick("manage_image_delete");
+      report(
+        {
+          imageType: type,
+        },
+        {
+          action: "/app",
+          method: "post",
+          eventType: "click",
+        },
+        "manage_delete_image",
+      );
       const res = await DeleteProductImageData({
         server: globalStore?.server || "",
         shopName: globalStore?.shop || "",
@@ -1135,6 +1155,17 @@ const ImageAltTextPage = () => {
     languageCode: string,
   ) => {
     try {
+      report(
+        {
+          imageType: type,
+        },
+        {
+          action: "/app",
+          method: "post",
+          eventType: "click",
+        },
+        "manage_delete_image",
+      );
       const res = await DeleteSingleImage({
         server: globalStore?.server || "",
         shopName: globalStore?.shop || "",
@@ -1249,6 +1280,17 @@ const ImageAltTextPage = () => {
       [img.languageCode]: info.fileList, // ✅ 更新对应语言
     }));
     if (info.file.status === "done") {
+      report(
+        {
+          imageType: type,
+        },
+        {
+          action: "/app",
+          method: "post",
+          eventType: "click",
+        },
+        "manage_upload_image",
+      );
       const response = info.file.response; // 后端返回的数据
       const newUrl =
         typeof response?.response?.imageAfterUrl === "string"
@@ -1896,6 +1938,17 @@ const ImageAltTextPage = () => {
                                 if (info.file.status === "uploading") {
                                 }
                                 if (info.file.status === "done") {
+                                  report(
+                                    {
+                                      imageType: type,
+                                    },
+                                    {
+                                      action: "/app",
+                                      method: "post",
+                                      eventType: "click",
+                                    },
+                                    "manage_upload_image",
+                                  );
                                   const response = info.file.response; // 后端返回的数据
                                   const newUrl =
                                     typeof response?.response?.imageAfterUrl ===

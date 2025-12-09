@@ -573,7 +573,7 @@ export default function Index() {
         method: "post",
         eventType: "click",
       },
-      "dashboard_sort_product",
+      "product_sort_product",
     );
     // 延迟 1s 再执行请求
     timeoutIdRef.current = setTimeout(() => {
@@ -667,7 +667,7 @@ export default function Index() {
         method: "post",
         eventType: "click",
       },
-      "dashboard_query_search",
+      "product_query_search",
     );
     // 清除上一次的定时器
     if (timeoutIdRef.current) {
@@ -703,7 +703,7 @@ export default function Index() {
         method: "post",
         eventType: "click",
       },
-      "dashboard_filter_active_status",
+      "product_filter_active_status",
     );
     setActiveKey(key);
     if (timeoutIdRef.current) {
