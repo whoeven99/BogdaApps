@@ -21,7 +21,7 @@ async function fetchJson(url, options = {}) {
 export async function GetProductImageData({
   blockId,
   shopName,
-  productId,
+  id,
   languageCode,
 }) {
   try {
@@ -30,7 +30,7 @@ export async function GetProductImageData({
       {
         method: "POST",
         body: JSON.stringify({
-          productId: `gid://shopify/Product/${productId}`,
+          productId: id,
           languageCode,
         }),
       },

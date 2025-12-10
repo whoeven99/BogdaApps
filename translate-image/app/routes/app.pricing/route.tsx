@@ -45,7 +45,6 @@ import { handleContactSupport } from "../app._index/route";
 import { setPlan, setUpdateTime } from "~/store/modules/userConfig";
 import useReport from "scripts/eventReport";
 // import HasPayForFreePlanModal from "./components/hasPayForFreePlanModal";
-import { QuotaCard } from "../app._index/components/quotaCard";
 import { globalStore } from "~/globalStore";
 import HasPayForFreePlanModal from "./components/hasPayForFreePlanModal";
 const { Title, Text, Paragraph } = Typography;
@@ -153,157 +152,9 @@ const Index = () => {
   const { plan, updateTime, chars, totalChars, isNew } = useSelector(
     (state: any) => state.userConfig,
   );
+  
   const { shop } = useLoaderData<typeof loader>();
   const { reportClick, report } = useReport();
-  const creditOptions: OptionType[] = useMemo(
-    () => [
-      {
-        key: "option-1",
-        name: "500K",
-        Credits: 500000,
-        price: {
-          currentPrice: plan?.isInFreePlanTime
-            ? 3.99
-            : plan?.type === "Premium"
-              ? 1.99
-              : plan?.type === "Pro"
-                ? 2.99
-                : plan?.type === "Basic"
-                  ? 3.59
-                  : 3.99,
-          comparedPrice: 3.99,
-          currencyCode: "USD",
-        },
-      },
-      {
-        key: "option-2",
-        name: "1M",
-        Credits: 1000000,
-        price: {
-          currentPrice: plan?.isInFreePlanTime
-            ? 7.99
-            : plan?.type === "Premium"
-              ? 3.99
-              : plan?.type === "Pro"
-                ? 5.99
-                : plan?.type === "Basic"
-                  ? 7.19
-                  : 7.99,
-          comparedPrice: 7.99,
-          currencyCode: "USD",
-        },
-      },
-      {
-        key: "option-3",
-        name: "2M",
-        Credits: 2000000,
-        price: {
-          currentPrice: plan?.isInFreePlanTime
-            ? 15.99
-            : plan?.type === "Premium"
-              ? 7.99
-              : plan?.type === "Pro"
-                ? 11.99
-                : plan?.type === "Basic"
-                  ? 14.39
-                  : 15.99,
-          comparedPrice: 15.99,
-          currencyCode: "USD",
-        },
-      },
-      {
-        key: "option-4",
-        name: "3M",
-        Credits: 3000000,
-        price: {
-          currentPrice: plan?.isInFreePlanTime
-            ? 23.99
-            : plan?.type === "Premium"
-              ? 11.99
-              : plan?.type === "Pro"
-                ? 17.99
-                : plan?.type === "Basic"
-                  ? 21.79
-                  : 23.99,
-          comparedPrice: 23.99,
-          currencyCode: "USD",
-        },
-      },
-      {
-        key: "option-5",
-        name: "5M",
-        Credits: 5000000,
-        price: {
-          currentPrice: plan?.isInFreePlanTime
-            ? 39.99
-            : plan?.type === "Premium"
-              ? 19.99
-              : plan?.type === "Pro"
-                ? 29.99
-                : plan?.type === "Basic"
-                  ? 35.99
-                  : 39.99,
-          comparedPrice: 39.99,
-          currencyCode: "USD",
-        },
-      },
-      {
-        key: "option-6",
-        name: "10M",
-        Credits: 10000000,
-        price: {
-          currentPrice: plan?.isInFreePlanTime
-            ? 79.99
-            : plan?.type === "Premium"
-              ? 39.99
-              : plan?.type === "Pro"
-                ? 59.99
-                : plan?.type === "Basic"
-                  ? 71.99
-                  : 79.99,
-          comparedPrice: 79.99,
-          currencyCode: "USD",
-        },
-      },
-      {
-        key: "option-7",
-        name: "20M",
-        Credits: 20000000,
-        price: {
-          currentPrice: plan?.isInFreePlanTime
-            ? 159.99
-            : plan?.type === "Premium"
-              ? 79.99
-              : plan?.type === "Pro"
-                ? 119.99
-                : plan?.type === "Basic"
-                  ? 143.99
-                  : 159.99,
-          comparedPrice: 159.99,
-          currencyCode: "USD",
-        },
-      },
-      {
-        key: "option-8",
-        name: "30M",
-        Credits: 30000000,
-        price: {
-          currentPrice: plan?.isInFreePlanTime
-            ? 239.99
-            : plan?.type === "Premium"
-              ? 119.99
-              : plan?.type === "Pro"
-                ? 179.99
-                : plan?.type === "Basic"
-                  ? 215.99
-                  : 239.99,
-          comparedPrice: 239.99,
-          currencyCode: "USD",
-        },
-      },
-    ],
-    [plan],
-  );
   const [yearly, setYearly] = useState(false);
   const [openModal, setOpenModal] = useState<boolean>(false);
   const [selectedOptionKey, setSelectedOption] = useState<string>("option-1");

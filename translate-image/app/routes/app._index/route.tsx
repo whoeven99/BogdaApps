@@ -1,16 +1,8 @@
 import { Page } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import {
-  Button,
-  Card,
-  Col,
-  Flex,
-  Row,
-  Skeleton,
   Space,
-  Table,
   Typography,
-  Modal,
 } from "antd";
 import { Link, useFetcher, useLoaderData, useNavigate } from "@remix-run/react";
 import { useEffect, useMemo, useState } from "react";
@@ -18,10 +10,10 @@ import { useTranslation } from "react-i18next";
 import { LoaderFunctionArgs } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
 import WelcomeCard from "./components/welcomeCard";
-import { QuotaCard } from "./components/quotaCard";
-import ImageTable from "./components/ImageTable";
 import ScrollNotice from "~/components/ScrollNotice";
 import useReport from "scripts/eventReport";
+import ThemeModule from "./components/themeModule";
+import { FaqComponent } from "./components/faqComponent";
 const { Title, Text } = Typography;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -89,7 +81,9 @@ const Index = () => {
       const switcherData =
         themeFetcher?.data?.data?.nodes[0]?.files?.nodes[0]?.body?.content;
       const jsonString = switcherData?.replace(/\/\*[\s\S]*?\*\//g, "")?.trim();
-      const blocks = JSON.parse(jsonString).current?.blocks;
+      const blocks = jsonString
+        ? JSON.parse(jsonString).current?.blocks
+        : undefined;
       if (blocks) {
         const switcherJson: any = Object.values(blocks).find(
           (block: any) => block.type === ciwiSwitcherBlocksId,
@@ -129,13 +123,16 @@ const Index = () => {
         }}
       >
         <Space direction="vertical" size="middle" style={{ display: "flex" }}>
-          <QuotaCard />
+          {/* <QuotaCard /> */}
           <WelcomeCard
             switcherOpen={switcherOpen}
             blockUrl={blockUrl}
             shop={shop}
           />
-          <ImageTable shop={shop} />
+          <ThemeModule />
+          <FaqComponent />
+          {/* <ImageTable shop={shop} /> */}
+          {/* <ImageTranslatePanel images={[]} translatedImage={""} /> */}
         </Space>
       </Space>
       <Text

@@ -57,30 +57,30 @@ const WelcomeCard: React.FC<WelcomeCardProps> = ({
   }, []);
   return (
     <Card
-      title={
-        <Flex align="center" gap={10}>
-          <h2 style={{ margin: 0, fontSize: "20px", fontWeight: 600 }}>
-            {t("Image Translation Plugin")}
-          </h2>
-          {switcherOpen ? (
-            <Badge color="hsl(102, 53%, 61%)" />
-          ) : (
-            <Badge color="#f50" />
-          )}
-        </Flex>
-      }
       styles={{
         header: { borderBottom: "none" },
         body: {
-          padding: "0 24px 12px 24px",
+          padding: "12px 24px 12px 24px",
         },
       }}
     >
-      <Flex vertical align="center" gap={8}>
+      <Flex align="center" justify="space-between" gap={8}>
         <Flex
           gap={8}
-          style={{ width: "100%", justifyContent: "space-between" }}
+          vertical
+          // style={{ width: "100%", justifyContent: "space-between" }}
+          style={{ flex: 1 }}
         >
+          <Flex align="center" gap={10}>
+            <h4 style={{ margin: 0, fontSize: "20px", fontWeight: 600 }}>
+              {t("Image Translation Plugin")}
+            </h4>
+            {switcherOpen ? (
+              <Badge color="hsl(102, 53%, 61%)" />
+            ) : (
+              <Badge color="#f50" />
+            )}
+          </Flex>
           <Text style={{ fontSize: "14px" }}>
             {switcherOpen
               ? t(
@@ -94,7 +94,7 @@ const WelcomeCard: React.FC<WelcomeCardProps> = ({
         <Button
           onClick={handleSetting}
           type="default"
-          style={{ width: "auto", alignSelf: "flex-end" }}
+          style={{ width: "auto"}}
         >
           {switcherOpen ? t("Manage") : t("Enable")}
         </Button>

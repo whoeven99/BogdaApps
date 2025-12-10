@@ -290,7 +290,7 @@ export default function ProductDetailPage() {
   const productLoadingFetcher = useFetcher<any>();
   const fetcher = useFetcher();
   const handleNavigate = () => {
-    navigate("/app");
+    navigate("/app/product");
   };
   useEffect(() => {
     productLoadingFetcher.submit(
@@ -338,7 +338,6 @@ export default function ProductDetailPage() {
       },
       {
         method: "post",
-        action: "/app/management",
       },
     );
   };
@@ -356,7 +355,6 @@ export default function ProductDetailPage() {
       },
       {
         method: "post",
-        action: "/app/management",
       },
     );
   };
@@ -373,11 +371,11 @@ export default function ProductDetailPage() {
   }, [imageFetcher.data]);
   const handleSelect = (id: string) => {
     const imageId = id.split("/").pop();
-    navigate(`/app/images/${productId}/${imageId}`);
+    navigate(`/app/products/${productId}/${imageId}?type=product`);
   };
   return (
     <Page>
-      {/* <TitleBar title="产品详情" /> */}
+      <TitleBar title={t("Product images")}></TitleBar>
       <ScrollNotice
         text={t(
           "Welcome to our app! If you have any questions, feel free to email us at support@ciwi.ai, and we will respond as soon as possible.",

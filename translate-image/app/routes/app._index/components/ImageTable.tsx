@@ -13,13 +13,13 @@ import { Table, Button, Tabs, Tag, Input, Flex, Card, Typography } from "antd";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useFetcher, useLoaderData } from "@remix-run/react";
 
-import SortPopover from "~/routes/app.management/conponents/SortPopover";
 import { useDispatch, useSelector } from "react-redux";
 import { AppDispatch, RootState } from "~/store";
 import { setLastPageCursorInfo } from "~/store/modules/productSlice";
 import "../style.css";
 import { ColumnsType } from "antd/es/table";
 import useReport from "scripts/eventReport";
+import SortPopover from "~/components/SortPopover";
 export default function Index({ shop }: { shop: string }) {
   const { reportClick, report } = useReport();
   const loadFetcher = useFetcher<any>();
@@ -54,7 +54,16 @@ export default function Index({ shop }: { shop: string }) {
   const lastPageCursorInfo = useSelector(
     (state: RootState) => state.product.lastPageCursorInfo,
   );
-  const fetcher = useFetcher();
+  const sortOptions = [
+    { label: "Product Title", value: "TITLE" },
+    { label: "Creation time", value: "CREATED_AT" },
+    { label: "Update time", value: "UPDATED_AT" },
+    { label: "Inventory", value: "INVENTORY" },
+    { label: "Product Type", value: "PRODUCT_TYPE" },
+    // { label: "发布时间", value: "PUBLISHED_AT" },
+    { label: "Manufacturers", value: "VENDOR" },
+  ];
+
   const panelColumns: ColumnsType<any> = [
     {
       // 不需要 dataIndex，用 render 直接取 item.node.title
@@ -455,6 +464,7 @@ export default function Index({ shop }: { shop: string }) {
                   onChange={(key, order) => handleSortProduct(key, order)}
                   sortKeyProp={sortKey}
                   sortOrderProp={sortOrder}
+                  sortOptions={sortOptions}
                 />
                 {/* <Button onClick={() => console.log(lastPageCursorInfo)}>
                   输出store存储数据
