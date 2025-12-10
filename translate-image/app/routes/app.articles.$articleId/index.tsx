@@ -447,7 +447,7 @@ export default function ProductDetailPage() {
   }, [articleLoadingFetcher]);
   useEffect(() => {
     if (articleImageFetcher.data) {
-      console.log(articleImageFetcher.data.data);
+      // console.log(articleImageFetcher.data.data);
 
       const articleImages = articleImageFetcher.data.data;
       if (!Array.isArray(articleImages) || articleImages.length === 0) {
@@ -484,7 +484,6 @@ export default function ProductDetailPage() {
       );
       setImageLoading(false);
       setImageData(flat);
-      console.log("flat", flat);
     }
   }, [articleImageFetcher]);
   const handleSelect = (id: string) => {

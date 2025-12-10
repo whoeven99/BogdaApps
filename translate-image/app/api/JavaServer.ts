@@ -1401,6 +1401,7 @@ export const updateManageTranslation = async ({
           transferValue = matchedItem?.value ?? updateData.originValue;
           break;
         }
+        console.log("fajdsajid", parse.data.fileCreate.files[0].id);
 
         if (updateData.resourceId.includes("Metafield")) {
           transferValue = parse.data.fileCreate.files[0].id;
@@ -1652,16 +1653,18 @@ const fetchFileReferences = async (admin: any, nodes: any[]) => {
 
       // === 1) FILE_REFERENCE ===
       if (type === "FILE_REFERENCE") {
-        const src = await findImageSrc(admin, contentItem.value);
+        const img = await findImageSrc(admin, contentItem.value);
+        console.log("ewasdas", img);
 
-        if (!src) continue;
+        if (!img.src) continue;
 
         results.push({
           resourceId: node.resourceId,
           key: contentItem.key,
           type,
-          value: [{ src, alt: null }], // ❗单图也用数组统一格式
+          value: [{ src: img.src, alt: img.alt }], // ❗单图也用数组统一格式
           digest: contentItem.digest,
+          originValue: contentItem.value,
         });
       }
 
@@ -1701,7 +1704,7 @@ const fetchFileReferences = async (admin: any, nodes: any[]) => {
           resourceId: node.resourceId,
           key: contentItem.key,
           type,
-          value: urls.map((src: string) => ({ src, alt: null })), // ⭐统一结构
+          value: urls.map((item) => ({ src: item.src, alt: item.alt })), // ⭐统一结构
           digest: contentItem.digest,
           originValue: contentItem.value,
         });
@@ -1772,6 +1775,8 @@ const findImageSrc = async (admin: any, value: string) => {
               preview {
                 image {
                   src
+                  id
+                  altText
                 }
               }
             }
@@ -1781,7 +1786,12 @@ const findImageSrc = async (admin: any, value: string) => {
       { variables: { query: fileName } },
     );
     const parsed = await response.json();
-    return parsed?.data?.files?.edges?.[0]?.node?.preview?.image?.src ?? null;
+    console.log("sdaedqw",parsed?.data?.files?.edges?.[0]?.node?.preview?.image);
+    
+    return {
+      src: parsed?.data?.files?.edges?.[0]?.node?.preview?.image?.src ?? null,
+      alt: parsed?.data?.files?.edges?.[0]?.node?.preview?.image?.altText,
+    };
   } else {
     const response = await admin.graphql(
       `query {
@@ -1791,8 +1801,8 @@ const findImageSrc = async (admin: any, value: string) => {
               alt
               image {
                 url
-                width
-                height
+                altText
+                id
               }
             }
           }
@@ -1801,7 +1811,10 @@ const findImageSrc = async (admin: any, value: string) => {
     const parsed = await response.json();
     console.log("dadasda", parsed);
 
-    return parsed?.data?.node?.image?.url ?? null;
+    return {
+      src: parsed?.data?.node?.image?.url ?? null,
+      alt: parsed?.data?.node?.image?.altText ?? null,
+    };
   }
 };
 // 查询shopify数据

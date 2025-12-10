@@ -388,8 +388,21 @@ export default function Index() {
     },
   ];
   function handleView(record: any): void {
-    sessionStorage.setItem("record", JSON.stringify(record));
-    navigate(`/app/themes/${themeParam}`);
+    if (record.value.length === 1) {
+      sessionStorage.setItem(
+        "record",
+        JSON.stringify({
+          ...record,
+          index: 0,
+        }),
+      );
+      navigate(`/app/${themeParam}/${record?.digest}/${record.digest}`);
+    } else {
+      sessionStorage.setItem("record", JSON.stringify(record));
+      navigate(`/app/themes/${themeParam}`);
+    }
+    // sessionStorage.setItem("record", JSON.stringify(record));
+    // navigate(`/app/themes/${themeParam}`);
   }
   useEffect(() => {
     const theme = searchParams.get("themetype") || "all";
@@ -450,7 +463,7 @@ export default function Index() {
     if (dataFetcher.data) {
       setTableDataLoading(false);
 
-      console.log(dataFetcher.data);
+      // console.log("fafqwe", dataFetcher.data);
       setHasNextPage(dataFetcher.data.hasNextPage);
       setHasPreviousPage(dataFetcher.data.hasPreviousPage);
       setStartCursor(dataFetcher.data.startCursor);

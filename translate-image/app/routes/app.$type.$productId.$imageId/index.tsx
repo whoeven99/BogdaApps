@@ -772,7 +772,7 @@ const ImageAltTextPage = () => {
   }, [currentImageId]);
   useEffect(() => {
     if (imageFetcher.data) {
-      console.log(imageFetcher.data);
+      // console.log(imageFetcher.data);
 
       // 后端返回的数据数组
       const fetchedList = imageFetcher.data.response || [];
@@ -809,7 +809,6 @@ const ImageAltTextPage = () => {
         });
       } else if (TRANSLATABLE_TYPES.has(type as string)) {
         if (!localRecord) return;
-        console.log("dasda", localRecord);
 
         mergedList = languageList?.map((lang) => {
           // 看后端有没有返回
@@ -840,7 +839,6 @@ const ImageAltTextPage = () => {
           }
         });
       }
-      console.log(mergedList);
 
       setImageDatas(mergedList);
       setImageFetcherLoading(false);
@@ -1082,7 +1080,7 @@ const ImageAltTextPage = () => {
           ...initData,
           value: initData.value?.[initData.index].src,
           imageAfterUrl: "",
-          languageCode: "ja",
+          languageCode: "ko",
           altText: "翻译的图片替代文本",
           locale: defaultLanguageData.locale,
         }),
@@ -1092,15 +1090,15 @@ const ImageAltTextPage = () => {
   };
   useEffect(() => {
     if (saveImageFetcher.data) {
-      console.log("saveImageFetcher", saveImageFetcher.data);
+      // console.log("saveImageFetcher", saveImageFetcher.data);
     }
   }, [saveImageFetcher.data]);
   useEffect(() => {
     if (deleteImageFetcher.data) {
-      console.log(
-        "deleteImageFetcher",
-        deleteImageFetcher.data.response.data.translationsRemove.translations,
-      );
+      // console.log(
+      //   "deleteImageFetcher",
+      //   deleteImageFetcher.data.response.data.translationsRemove.translations,
+      // );
     }
   }, [deleteImageFetcher.data]);
   const handleDelete = async (
@@ -1239,21 +1237,6 @@ const ImageAltTextPage = () => {
             ];
           }
         });
-        // if (TRANSLATABLE_TYPES.has(type as string)) {
-        //   saveImageFetcher.submit(
-        //     {
-        //       saveImageToShopify: JSON.stringify({
-        //         ...initData,
-        //         value: initData.value?.[initData.index].src,
-        //         imageAfterUrl: "",
-        //         languageCode: currentTranslatingImage.languageCode,
-        //         altText: altTranslateFetcher.data.response.response,
-        //         locale: defaultLanguageData.locale,
-        //       }),
-        //     },
-        //     { method: "post" },
-        //   );
-        // }
         // dispatch(setChars({ chars: chars + 1000 }));
       } else if (
         !altTranslateFetcher.data.response.success &&
@@ -1369,8 +1352,6 @@ const ImageAltTextPage = () => {
     }
   };
   const handleConfirm = async () => {
-    console.log(confirmData);
-    // return;
     const uploading = Object.values(fileLists).some((list: any[]) =>
       list.some((f) => f.status !== "done"),
     );
@@ -1502,7 +1483,6 @@ const ImageAltTextPage = () => {
       if (!val || typeof idx !== "number") {
         return; // 或者 return null
       }
-      console.log("dqwdqw", localRecord);
 
       if (localRecord) {
         setProductImageData({
@@ -1515,7 +1495,7 @@ const ImageAltTextPage = () => {
   }, [localRecord]);
   useEffect(() => {
     if (imageLoadingFetcher.data) {
-      console.log(imageLoadingFetcher.data);
+      // console.log(imageLoadingFetcher.data);
 
       setProductImageData(imageLoadingFetcher.data.imageData);
       setPageLoading(false);
