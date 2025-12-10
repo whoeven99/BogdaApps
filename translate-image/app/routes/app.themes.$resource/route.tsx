@@ -13,23 +13,42 @@ const { Text, Title } = Typography;
 export default function ProductDetailPage() {
   const { t } = useTranslation();
   const { resource } = useParams();
-  const [initData, setInitData] = useState<any>(() => {
+  const [initData, setInitData] = useState<any[]>([]);
+  useEffect(() => {
     const raw = sessionStorage.getItem("record");
-    if (!raw) return null;
+    if (!raw) return;
 
     const parsed = JSON.parse(raw);
-    // console.log(parsed);
-    // 如果 value 是数组 → 拆分成多个对象
-    if (Array.isArray(parsed.value)) {
-      return parsed.value.map((v: string, index: number) => ({
-        ...parsed,
-        value: v,
-        dbKey: `${parsed.key}_${index}`,
-      }));
-    }
 
-    return parsed;
-  });
+    if (Array.isArray(parsed.value)) {
+      setInitData(
+        parsed.value.map((v: string, index: number) => ({
+          ...parsed,
+          value: v,
+          dbKey: `${parsed.key}_${index}`,
+        })),
+      );
+    } else {
+      setInitData([parsed]);
+    }
+  }, []);
+  // const [initData, setInitData] = useState<any>(() => {
+  //   const raw = sessionStorage.getItem("record");
+  //   if (!raw) return null;
+
+  //   const parsed = JSON.parse(raw);
+  //   // console.log(parsed);
+  //   // 如果 value 是数组 → 拆分成多个对象
+  //   if (Array.isArray(parsed.value)) {
+  //     return parsed.value.map((v: string, index: number) => ({
+  //       ...parsed,
+  //       value: v,
+  //       dbKey: `${parsed.key}_${index}`,
+  //     }));
+  //   }
+
+  //   return parsed;
+  // });
 
   const navigate = useNavigate();
   const handleNavigate = () => {
