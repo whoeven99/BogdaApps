@@ -935,8 +935,48 @@ export const GoogleAnalyticClickReport = async (params: any, name: string) => {
     return false;
   }
 };
-function replaceImageUrl(html: string, url: string, translateUrl: string) {
-  return html.split(url).join(translateUrl);
+// function replaceImageUrl(html: string, url: string, translateUrl: string) {
+//   return html.split(url).join(translateUrl);
+// }
+function replaceImageUrl(
+  html: string,
+  oldSrc: string,
+  newSrc?: string | null,
+  newAlt?: string | null,
+) {
+  const imgRegex = /<img\b[^>]*>/gi;
+
+  return html.replace(imgRegex, (imgTag) => {
+    // 是否匹配到 oldSrc
+    if (!imgTag.includes(oldSrc)) return imgTag;
+
+    let updatedTag = imgTag;
+
+    // --- 1. 替换 src ---
+    if (newSrc) {
+      updatedTag = updatedTag.replace(/src=["'][^"']*["']/, `src="${newSrc}"`);
+    }
+
+    // --- 2. 替换 / 添加 alt ---
+    if (newAlt !== undefined && newAlt !== null) {
+      if (/alt=["'][^"']*["']/.test(updatedTag)) {
+        updatedTag = updatedTag.replace(
+          /alt=["'][^"']*["']/,
+          `alt="${newAlt}"`,
+        );
+      } else {
+        // 在标签里末尾加入 alt
+        updatedTag = updatedTag.replace(/>$/, ` alt="${newAlt}">`);
+      }
+    }
+
+    return updatedTag;
+  });
+}
+
+// 用于转义正则特殊字符
+function escapeRegExp(str: string) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 async function waitForFileReady(admin: any, fileId: string, maxAttempts = 10) {
   for (let i = 0; i < maxAttempts; i++) {
@@ -975,7 +1015,8 @@ async function waitForFileReady(admin: any, fileId: string, maxAttempts = 10) {
 function replaceRichTextImageUrl(
   richTextJsonStr: string,
   fromUrl: string,
-  toUrl: string,
+  toUrl?: string | null,
+  newAlt?: string | null,
 ): string {
   if (!richTextJsonStr) return richTextJsonStr;
 
@@ -983,28 +1024,35 @@ function replaceRichTextImageUrl(
   try {
     data = JSON.parse(richTextJsonStr);
   } catch (err) {
-    console.error("rich_text JSON 解析失败：", err);
+    console.error("⚠ rich_text JSON 解析失败：", err);
     return richTextJsonStr;
   }
 
   function walk(node: any) {
     if (!node || typeof node !== "object") return;
 
-    // 1. image 节点（Shopify DraftJS / AST 格式）
-    if (node.type === "image" && node.src) {
-      if (node.src === fromUrl) {
+    // ================ 1. image 节点 ================
+    if (node.type === "image") {
+      // -------- 1.1 替换 src（仅当 toUrl 有值时） --------
+      if (toUrl && node.src === fromUrl) {
         node.src = toUrl;
+      }
+
+      // -------- 1.2 替换 alt（始终可替换） --------
+      if (newAlt !== undefined && newAlt !== null) {
+        node.alt = newAlt;
       }
     }
 
-    // 2. link 节点（Shopify rich_text 图片有可能放在 link.url）
-    if (node.type === "link" && node.url) {
-      if (node.url === fromUrl) {
+    // ================ 2. link 节点（rich_text 中 link.url 也可能是图片） ================
+    if (node.type === "link") {
+      // link.url 是图片 URL
+      if (toUrl && node.url === fromUrl) {
         node.url = toUrl;
       }
     }
 
-    // 3. 递归 children
+    // ================ 3. 遍历 children ================
     if (Array.isArray(node.children)) {
       node.children.forEach(walk);
     }
@@ -1014,6 +1062,7 @@ function replaceRichTextImageUrl(
 
   return JSON.stringify(data);
 }
+
 function extractImageKey(url: string) {
   if (!url) return null;
 
@@ -1031,6 +1080,201 @@ function extractImageKey(url: string) {
   // 普通路径 -> 只取最后文件名
   return pathOnly.split("/").pop() ?? null;
 }
+// export const updateManageTranslation = async ({
+//   shop,
+//   accessToken,
+//   updateData,
+//   admin,
+// }: {
+//   shop: string;
+//   accessToken: string;
+//   updateData: any;
+//   admin: any;
+// }) => {
+//   try {
+//     console.log("itemdsdadsad", updateData);
+//     // console.log("dasdas", transferValue);
+//     const queryTranslations = await admin.graphql(
+//       `#graphql
+//       query {
+//         translatableResource(resourceId: "${updateData.resourceId}") {
+//           resourceId
+//           translations(locale: "${updateData.languageCode}") {
+//             key
+//             value
+//           }
+//         }
+//       }`,
+//     );
+
+//     const translation = await queryTranslations.json();
+//     console.log("sadawdqw", translation);
+//     if (updateData.imageAfterUrl) {
+//     }
+//     const createFileRes = await admin.graphql(
+//       `#graphql
+//       mutation fileCreate($files: [FileCreateInput!]!) {
+//         fileCreate(files: $files) {
+//           files {
+//             id
+//             fileStatus
+//             alt
+//             createdAt
+//             ... on MediaImage {
+//               image {
+//                 width
+//                 height
+//               }
+//             }
+//             preview {
+//               status
+//               image {
+//                 altText
+//                 id
+//                 url
+//               }
+//             }
+//           }
+//           userErrors {
+//             field
+//             message
+//           }
+//         }
+//       }`,
+//       {
+//         variables: {
+//           files: [
+//             {
+//               alt: updateData.altText,
+//               contentType: "IMAGE",
+//               originalSource: updateData.imageAfterUrl,
+//             },
+//           ],
+//         },
+//       },
+//     );
+//     console.log(
+//       "321312321sd",
+//       translation.data.translatableResource.translations,
+//     );
+
+//     const parse = await createFileRes.json();
+//     console.log("dadadqw", parse.data.fileCreate);
+
+//     let transferValue = "";
+//     switch (updateData.type) {
+//       case "HTML":
+//         const imageUrl = await waitForFileReady(
+//           admin,
+//           parse.data.fileCreate.files[0].id,
+//         );
+//         if (translation.data.translatableResource.translations?.length > 0) {
+//           let matched = false;
+//           for (const item of translation.data.translatableResource
+//             .translations) {
+//             if ((item?.dbKey ?? item?.key) === updateData.key) {
+//               transferValue = replaceImageUrl(
+//                 item.value,
+//                 updateData.value,
+//                 imageUrl,
+//                 updateData.altText,
+//               );
+//               matched = true;
+//               break; // 找到就退出循环！
+//             }
+//             if (!matched) {
+//               transferValue = replaceImageUrl(
+//                 updateData.originValue,
+//                 updateData.value,
+//                 imageUrl,
+//                 updateData.altText,
+//               );
+//             }
+//           }
+//         } else {
+//           transferValue = replaceImageUrl(
+//             updateData.originValue,
+//             updateData.value,
+//             imageUrl,
+//             updateData.altText,
+//           );
+//         }
+//         break;
+//       case "FILE_REFERENCE":
+//         if (updateData.resourceId.includes("Metafield")) {
+//           transferValue = parse.data.fileCreate.files[0].id;
+//         } else {
+//           transferValue = `shopify://shop_images/${extractImageKey(updateData.imageAfterUrl)}`;
+//         }
+//         break;
+//       case "LIST_FILE_REFERENCE":
+//         const ids = JSON.parse(updateData.originValue);
+//         ids[updateData.index] = parse.data.fileCreate.files[0].id;
+//         transferValue = JSON.stringify(ids);
+//         break;
+//       case "RICH_TEXT_FIELD":
+//         const richImageUrl = await waitForFileReady(
+//           admin,
+//           parse.data.fileCreate.files[0].id,
+//         );
+//         if (translation.data.translatableResource.translations?.length > 0) {
+//           let matched = false;
+//           for (const item of translation.data.translatableResource
+//             .translations) {
+//             if ((item?.dbKey ?? item?.key) === updateData.key) {
+//               transferValue = replaceRichTextImageUrl(
+//                 item.value,
+//                 updateData.value,
+//                 richImageUrl,
+//                 updateData.altText,
+//               );
+//               matched = true;
+//               break; // 找到就退出循环！
+//             }
+//             if (!matched) {
+//               transferValue = replaceRichTextImageUrl(
+//                 updateData.originValue,
+//                 updateData.value,
+//                 richImageUrl,
+//                 updateData.altText,
+//               );
+//             }
+//           }
+//         } else {
+//           transferValue = replaceRichTextImageUrl(
+//             updateData.originValue,
+//             updateData.value,
+//             richImageUrl,
+//             updateData.altText,
+//           );
+//         }
+//         break;
+//     }
+//     console.log("sdasdasczxc", transferValue);
+
+//     const response = await axios({
+//       url: `${process.env.SERVER_URL}/shopify/updateShopifyDataByTranslateTextRequest`,
+//       method: "POST",
+//       timeout: 10000, // 添加超时设置
+//       data: {
+//         shopName: shop,
+//         accessToken: accessToken,
+//         locale: updateData.locale,
+//         key: updateData.key,
+//         value: transferValue,
+//         translatableContentDigest: updateData.digest,
+//         resourceId: updateData.resourceId,
+//         target: updateData.languageCode,
+//       },
+//     });
+//     console.log(`${shop} updateManageTranslation: `, response.data);
+//     return response.data;
+//   } catch (error) {
+//     console.error(`${shop}Error updateManageTranslation:`, error);
+//   }
+// };
+
+// 删除存储在shopify的文件
 export const updateManageTranslation = async ({
   shop,
   accessToken,
@@ -1043,8 +1287,9 @@ export const updateManageTranslation = async ({
   admin: any;
 }) => {
   try {
-    console.log("itemdsdadsad", updateData);
-    // console.log("dasdas", transferValue);
+    console.log("updateData ===>", updateData);
+
+    // 1. 查询原翻译内容
     const queryTranslations = await admin.graphql(
       `#graphql
       query {
@@ -1059,149 +1304,149 @@ export const updateManageTranslation = async ({
     );
 
     const translation = await queryTranslations.json();
-    console.log("sadawdqw", translation);
-    const createFileRes = await admin.graphql(
-      `#graphql
-      mutation fileCreate($files: [FileCreateInput!]!) {
-        fileCreate(files: $files) {
-          files {
-            id
-            fileStatus
-            alt
-            createdAt
-            ... on MediaImage {
-              image {
-                width
-                height
-              }
-            }
-            preview {
-              status
-              image {
-                altText
-                id
-                url
-              }
-            }
-          }
-          userErrors {
-            field
-            message
-          }
-        }
-      }`,
-      {
-        variables: {
-          files: [
-            {
-              alt: updateData.altText,
-              contentType: "IMAGE",
-              originalSource: updateData.imageAfterUrl,
-            },
-          ],
-        },
-      },
-    );
-    console.log(
-      "321312321sd",
-      translation.data.translatableResource.translations,
-    );
+    const translations = translation.data.translatableResource.translations;
 
-    const parse = await createFileRes.json();
-    console.log("dadadqw", parse.data.fileCreate);
+    // 寻找对应 key 的翻译
+    const findMatchedTranslation = () => {
+      if (!translations || translations.length === 0) return null;
+      return translations.find((item: any) => item?.key === updateData.key);
+    };
 
+    const matchedItem = findMatchedTranslation();
+    console.log("asdqqsd", matchedItem);
+
+    // 2. 初始化最终 value
     let transferValue = "";
-    switch (updateData.type) {
-      case "HTML":
-        const imageUrl = await waitForFileReady(
-          admin,
-          parse.data.fileCreate.files[0].id,
-        );
-        if (translation.data.translatableResource.translations?.length > 0) {
-          let matched = false;
-          for (const item of translation.data.translatableResource
-            .translations) {
-            if ((item?.dbKey ?? item?.key) === updateData.key) {
-              transferValue = replaceImageUrl(
-                item.value,
-                updateData.value,
-                imageUrl,
-              );
-              matched = true;
-              break; // 找到就退出循环！
+
+    // 如果 imageAfterUrl 存在，才创建文件
+    let finalImageUrl; // 默认先使用原图
+    let parse: any = null;
+    if (updateData.imageAfterUrl) {
+      const createFileRes = await admin.graphql(
+        `#graphql
+        mutation fileCreate($files: [FileCreateInput!]!) {
+          fileCreate(files: $files) {
+            files {
+              id
+              fileStatus
+              preview {
+                image {
+                  url
+                }
+              }
             }
-            if (!matched) {
-              transferValue = replaceImageUrl(
-                updateData.originValue,
-                updateData.value,
-                imageUrl,
-              );
+            userErrors {
+              field
+              message
             }
           }
-        } else {
-          transferValue = replaceImageUrl(
-            updateData.originValue,
-            updateData.value,
-            imageUrl,
-          );
+        }`,
+        {
+          variables: {
+            files: [
+              {
+                alt: updateData.altText,
+                contentType: "IMAGE",
+                originalSource: updateData.imageAfterUrl,
+              },
+            ],
+          },
+        },
+      );
+
+      parse = await createFileRes.json();
+      const imageId = parse.data.fileCreate.files[0].id;
+
+      // 等待文件 ready
+      finalImageUrl = await waitForFileReady(admin, imageId);
+    }
+
+    // ============================
+    // 3. 类型处理
+    // ============================
+
+    switch (updateData.type) {
+      case "HTML": {
+        const html = matchedItem ? matchedItem.value : updateData.originValue;
+
+        // 1. 解析出所有图片
+        const list = extractShopifyImages(html);
+        console.log("dasdqw", list);
+
+        // 2. 根据 index 找到对应老 src
+        const target = list[updateData.index];
+        console.log("faddsad", target);
+
+        if (!target) {
+          console.warn("找不到对应 index 的 img：", updateData.index);
+          transferValue = html;
+          break;
         }
+
+        const oldSrc = target.src;
+        console.log("oldsdasdqw", oldSrc);
+
+        transferValue = replaceImageUrl(
+          html,
+          oldSrc, // old src
+          updateData.value === "" ? target.src : finalImageUrl, // new src (若 imageAfterUrl 为空则保持不变)
+          updateData.altText || target.alt, // 新 alt
+        );
         break;
-      case "FILE_REFERENCE":
+      }
+
+      case "FILE_REFERENCE": {
+        if (!updateData.imageAfterUrl) {
+          // 没图，不替换
+          transferValue = matchedItem?.value ?? updateData.originValue;
+          break;
+        }
+
         if (updateData.resourceId.includes("Metafield")) {
           transferValue = parse.data.fileCreate.files[0].id;
         } else {
           transferValue = `shopify://shop_images/${extractImageKey(updateData.imageAfterUrl)}`;
         }
         break;
-      case "LIST_FILE_REFERENCE":
+      }
+
+      case "LIST_FILE_REFERENCE": {
+        if (!updateData.imageAfterUrl) {
+          transferValue = updateData.originValue;
+          break;
+        }
+
         const ids = JSON.parse(updateData.originValue);
         ids[updateData.index] = parse.data.fileCreate.files[0].id;
         transferValue = JSON.stringify(ids);
         break;
-      case "RICH_TEXT_FIELD":
-        const richImageUrl = await waitForFileReady(
-          admin,
-          parse.data.fileCreate.files[0].id,
-        );
-        if (translation.data.translatableResource.translations?.length > 0) {
-          let matched = false;
-          for (const item of translation.data.translatableResource
-            .translations) {
-            if ((item?.dbKey ?? item?.key) === updateData.key) {
-              transferValue = replaceRichTextImageUrl(
-                item.value,
-                updateData.value,
-                richImageUrl,
-              );
-              matched = true;
-              break; // 找到就退出循环！
-            }
-            if (!matched) {
-              transferValue = replaceImageUrl(
-                updateData.originValue,
-                updateData.value,
-                imageUrl,
-              );
-            }
-          }
-        } else {
-          transferValue = replaceRichTextImageUrl(
-            updateData.originValue,
-            updateData.value,
-            richImageUrl,
-          );
-        }
-        break;
-    }
-    console.log("sdasdasczxc", transferValue);
+      }
 
+      case "RICH_TEXT_FIELD": {
+        const originalRich = matchedItem
+          ? matchedItem.value
+          : updateData.originValue;
+
+        transferValue = replaceRichTextImageUrl(
+          originalRich,
+          updateData.value,
+          finalImageUrl,
+          updateData.altText,
+        );
+        break;
+      }
+    }
+
+    console.log("transferValue ===>", transferValue);
+
+    // 4. 调用你的服务器，更新 Shopify 数据
     const response = await axios({
       url: `${process.env.SERVER_URL}/shopify/updateShopifyDataByTranslateTextRequest`,
       method: "POST",
-      timeout: 10000, // 添加超时设置
+      timeout: 10000,
       data: {
         shopName: shop,
-        accessToken: accessToken,
+        accessToken,
         locale: updateData.locale,
         key: updateData.key,
         value: transferValue,
@@ -1210,6 +1455,7 @@ export const updateManageTranslation = async ({
         target: updateData.languageCode,
       },
     });
+
     console.log(`${shop} updateManageTranslation: `, response.data);
     return response.data;
   } catch (error) {
@@ -1217,7 +1463,6 @@ export const updateManageTranslation = async ({
   }
 };
 
-// 删除存储在shopify的文件
 export const deleteSaveInShopify = async ({
   shop,
   accessToken,
@@ -1270,27 +1515,34 @@ const IMAGE_TYPES = new Set([
 ]);
 
 // 从富文本递归提取图片
-const extractFromRichText = (nodes: any[]): string[] => {
-  const result: string[] = [];
+const extractFromRichText = (
+  nodes: any[],
+): { src: string; alt: string | null }[] => {
+  const result: { src: string; alt: string | null }[] = [];
   if (!Array.isArray(nodes)) return result;
 
   for (const node of nodes) {
-    // 可作为候选的 URL
     let possibleUrl: string | undefined;
+    let altText: string | null = null;
 
     // 1. image 节点
     if (node.type === "image" && node.src) {
       possibleUrl = node.src;
+
+      // Shopify 富文本 alt 可能在 node.alt 或 node.data.alt 或 node.attrs.alt
+      altText = node.alt ?? node?.data?.alt ?? node?.attrs?.alt ?? null;
     }
 
-    // 2. link 节点里的 URL（Rich text 中图片也可能存在这里）
+    // 2. link 节点
     if (node.type === "link" && node.url) {
       possibleUrl = node.url;
+      // link 节点不携带 alt
+      altText = null;
     }
 
-    // 🎯 只提取 Shopify CDN 图片
+    // === 只提取 CDN 图片 ===
     if (possibleUrl && possibleUrl.includes("cdn.shopify.com")) {
-      result.push(possibleUrl);
+      result.push({ src: possibleUrl, alt: altText });
     }
 
     // 递归 children
@@ -1303,17 +1555,92 @@ const extractFromRichText = (nodes: any[]): string[] => {
 };
 
 // 从 HTML 提取 <img src="">
-const extractFromHtml = (html: string): string[] => {
-  const result: string[] = [];
-  const regex = /<img[^>]+src=["']([^"']+)["']/g;
+// const extractFromHtml = (html: string): string[] => {
+//   const result: string[] = [];
+//   const regex = /<img[^>]+src=["']([^"']+)["']/g;
+
+//   let match;
+//   while ((match = regex.exec(html)) !== null) {
+//     result.push(match[1]);
+//   }
+
+//   return result;
+// };
+const extractFromHtml = (
+  html: string,
+): { src: string; alt: string | null }[] => {
+  const result: { src: string; alt: string | null }[] = [];
+
+  // 提取所有 <img>
+  const regex =
+    /<img[^>]*src=["']([^"']+)["'][^>]*alt=["']([^"']*)["'][^>]*>|<img[^>]*alt=["']([^"']*)["'][^>]*src=["']([^"']+)["'][^>]*|<img[^>]*src=["']([^"']+)["'][^>]*>/g;
 
   let match;
   while ((match = regex.exec(html)) !== null) {
-    result.push(match[1]);
+    let src = "";
+    let alt = null;
+
+    if (match[1] && match[2]) {
+      src = match[1];
+      alt = match[2];
+    } else if (match[4] && match[3]) {
+      src = match[4];
+      alt = match[3];
+    } else if (match[5]) {
+      src = match[5];
+    }
+
+    // ============================
+    // 🚫 各种过滤规则
+    // ============================
+
+    // 1) 非 http(s)
+    if (!/^https?:\/\//.test(src)) continue;
+
+    // 2) 不是 Shopify CDN
+    if (!src.includes("cdn.shopify.com")) continue;
+
+    // 3) 排除 svg、ico 等图标类型（一般是不可翻译的 icon）
+    if (/\.(svg|ico)$/i.test(src)) continue;
+
+    // 4) 排除过短 filename（一般是 icon）
+    const filename = src.split("/").pop() || "";
+    if (filename.length < 10) continue;
+
+    // 通过所有过滤条件后才加入结果
+    result.push({ src, alt });
   }
 
   return result;
 };
+export function extractShopifyImages(html: string) {
+  // 全局匹配所有 <img ...> 标签（跨行也能匹配）
+  const imgTagRegex = /<img[^>]*>/gi;
+
+  // 匹配 src 与 alt（顺序不固定）
+  const srcRegex = /src=["'](https:\/\/cdn\.shopify\.com\/[^"']+)["']/i;
+  const altRegex = /alt=["']([^"']*)["']/i;
+
+  const images: { src: string; alt: string }[] = [];
+
+  // 获取所有 <img> 标签
+  const tags = html.match(imgTagRegex);
+  if (!tags) return images;
+
+  for (const tag of tags) {
+    const srcMatch = tag.match(srcRegex);
+    if (!srcMatch) continue; // ✨ 非 Shopify CDN 直接跳过
+
+    const altMatch = tag.match(altRegex);
+
+    images.push({
+      src: srcMatch[1],
+      alt: altMatch ? altMatch[1] : "",
+    });
+  }
+
+  return images;
+}
 
 const fetchFileReferences = async (admin: any, nodes: any[]) => {
   const results: any[] = [];
@@ -1333,7 +1660,7 @@ const fetchFileReferences = async (admin: any, nodes: any[]) => {
           resourceId: node.resourceId,
           key: contentItem.key,
           type,
-          value: [src], // ❗单图也用数组统一格式
+          value: [{ src, alt: null }], // ❗单图也用数组统一格式
           digest: contentItem.digest,
         });
       }
@@ -1374,7 +1701,7 @@ const fetchFileReferences = async (admin: any, nodes: any[]) => {
           resourceId: node.resourceId,
           key: contentItem.key,
           type,
-          value: urls,
+          value: urls.map((src: string) => ({ src, alt: null })), // ⭐统一结构
           digest: contentItem.digest,
           originValue: contentItem.value,
         });
@@ -1382,14 +1709,19 @@ const fetchFileReferences = async (admin: any, nodes: any[]) => {
 
       // === 3) HTML ===
       if (type === "HTML") {
-        const urls = extractFromHtml(contentItem.value || "");
-        if (urls.length === 0) continue;
+        const extracted = extractShopifyImages(contentItem.value || "");
+        console.log("dsadadwq", extracted);
 
+        // if (urls.length === 0) continue;
+        if (extracted.length === 0) continue;
         results.push({
           resourceId: node.resourceId,
           key: contentItem.key,
           type,
-          value: urls, // ❗html 多图放一起
+          // value: urls, // ❗html 多图放一起
+          // value: extracted.map((i) => i.src), // ⭐只存 src，UI 不会报错
+          // altList: extracted.map((i) => i.alt), // 另存 alt
+          value: extracted,
           digest: contentItem.digest,
           originValue: contentItem.value,
         });

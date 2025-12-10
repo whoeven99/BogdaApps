@@ -360,7 +360,7 @@ const ImageAltTextPage = () => {
         // 在 default 里处理 Set 判断
         if (TRANSLATABLE_TYPES.has(type as string)) {
           return hashString(
-            `${localRecord?.value[localRecord?.index]}_${localRecord.resourceId}`,
+            `${localRecord?.value[localRecord?.index].src}_${localRecord.resourceId}`,
           );
         }
         return "";
@@ -747,7 +747,11 @@ const ImageAltTextPage = () => {
         type === "all" ||
         type === "collection"
       ) {
-        navigate(`/app/themes/${type}`);
+        if (initData.value.length === 1) {
+          navigate(`/app/theme?themetype=${type}`);
+        } else {
+          navigate(`/app/themes/${type}`);
+        }
       }
     }
   };
@@ -768,6 +772,8 @@ const ImageAltTextPage = () => {
   }, [currentImageId]);
   useEffect(() => {
     if (imageFetcher.data) {
+      console.log(imageFetcher.data);
+
       // 后端返回的数据数组
       const fetchedList = imageFetcher.data.response || [];
 
@@ -803,6 +809,8 @@ const ImageAltTextPage = () => {
         });
       } else if (TRANSLATABLE_TYPES.has(type as string)) {
         if (!localRecord) return;
+        console.log("dasda", localRecord);
+
         mergedList = languageList?.map((lang) => {
           // 看后端有没有返回
           const existing = fetchedList.find(
@@ -818,11 +826,11 @@ const ImageAltTextPage = () => {
           } else {
             return {
               imageId: hashString(
-                `${localRecord?.value[localRecord?.index]}_${localRecord.resourceId}`,
+                `${localRecord?.value[localRecord?.index].src}_${localRecord.resourceId}`,
               ),
-              imageBeforeUrl: localRecord?.value[localRecord?.index],
+              imageBeforeUrl: localRecord?.value[localRecord?.index]?.src,
               imageAfterUrl: "",
-              altBeforeTranslation: "",
+              altBeforeTranslation: localRecord?.value[localRecord?.index]?.alt,
               altAfterTranslation: "",
               languageCode: lang.value,
               language: lang.label, // 使用语言名
@@ -832,10 +840,12 @@ const ImageAltTextPage = () => {
           }
         });
       }
+      console.log(mergedList);
+
       setImageDatas(mergedList);
       setImageFetcherLoading(false);
     }
-  }, [imageFetcher.data,languageList]);
+  }, [imageFetcher.data, languageList, productImageData]);
   useEffect(() => {
     if (!languageLoading && !imageFetcherLoading) {
       setDataReady(true);
@@ -1042,12 +1052,11 @@ const ImageAltTextPage = () => {
             {
               saveImageToShopify: JSON.stringify({
                 ...initData,
-                value: initData.value?.[initData.index],
+                value: initData.value?.[initData.index].src,
                 imageAfterUrl: translateImageFetcher.data.response,
                 languageCode: currentTranslatingImage.languageCode,
-                altText: currentTranslatingImage.altAfterTranslation
-                  ? currentTranslatingImage.altAfterTranslation
-                  : currentTranslatingImage.altBeforeTranslation,
+                altText: "",
+                locale: defaultLanguageData.locale,
               }),
             },
             { method: "post" },
@@ -1071,11 +1080,10 @@ const ImageAltTextPage = () => {
       {
         saveImageToShopify: JSON.stringify({
           ...initData,
-          value: initData.value?.[initData.index],
-          imageAfterUrl:
-            "https://ciwi-us-1327177217.cos.na-ashburn.myqcloud.com/image-Translation/ciwishop.myshopify.com/63748991.jpg",
-          languageCode: "zh-CN",
-          altText: "",
+          value: initData.value?.[initData.index].src,
+          imageAfterUrl: "",
+          languageCode: "ja",
+          altText: "翻译的图片替代文本",
           locale: defaultLanguageData.locale,
         }),
       },
@@ -1231,6 +1239,21 @@ const ImageAltTextPage = () => {
             ];
           }
         });
+        // if (TRANSLATABLE_TYPES.has(type as string)) {
+        //   saveImageFetcher.submit(
+        //     {
+        //       saveImageToShopify: JSON.stringify({
+        //         ...initData,
+        //         value: initData.value?.[initData.index].src,
+        //         imageAfterUrl: "",
+        //         languageCode: currentTranslatingImage.languageCode,
+        //         altText: altTranslateFetcher.data.response.response,
+        //         locale: defaultLanguageData.locale,
+        //       }),
+        //     },
+        //     { method: "post" },
+        //   );
+        // }
         // dispatch(setChars({ chars: chars + 1000 }));
       } else if (
         !altTranslateFetcher.data.response.success &&
@@ -1313,10 +1336,10 @@ const ImageAltTextPage = () => {
             {
               saveImageToShopify: JSON.stringify({
                 ...initData,
-                value: initData.value?.[initData.index],
+                value: initData.value?.[initData.index].src,
                 imageAfterUrl: newUrl,
                 languageCode: img.languageCode,
-                altText: "",
+                altText: img.altAfterTranslation,
                 locale: defaultLanguageData.locale,
               }),
             },
@@ -1346,6 +1369,8 @@ const ImageAltTextPage = () => {
     }
   };
   const handleConfirm = async () => {
+    console.log(confirmData);
+    // return;
     const uploading = Object.values(fileLists).some((list: any[]) =>
       list.some((f) => f.status !== "done"),
     );
@@ -1353,6 +1378,7 @@ const ImageAltTextPage = () => {
       shopify.toast.show(t("Please wait until all images are uploaded"));
       return;
     }
+
     setSaveLoading(true);
     const promises = confirmData.map((item: any) =>
       UpdateProductImageAltData({
@@ -1366,7 +1392,23 @@ const ImageAltTextPage = () => {
         languageCode: item.languageCode,
       }),
     );
-
+    confirmData.map((item: any) => {
+      if (TRANSLATABLE_TYPES.has(type as string)) {
+        saveImageFetcher.submit(
+          {
+            saveImageToShopify: JSON.stringify({
+              ...initData,
+              value: item.imageUrl,
+              imageAfterUrl: "",
+              languageCode: item.languageCode,
+              altText: item.value,
+              locale: defaultLanguageData.locale,
+            }),
+          },
+          { method: "post" },
+        );
+      }
+    });
     // 并发执行所有请求
     try {
       let successCount = 0;
@@ -1460,11 +1502,12 @@ const ImageAltTextPage = () => {
       if (!val || typeof idx !== "number") {
         return; // 或者 return null
       }
+      console.log("dqwdqw", localRecord);
 
       if (localRecord) {
         setProductImageData({
-          imageUrl: localRecord?.value[localRecord?.index],
-          altText: "",
+          imageUrl: localRecord?.value[localRecord?.index].src,
+          altText: localRecord?.value[localRecord?.index].alt,
         });
       }
       setPageLoading(false);
@@ -1472,6 +1515,8 @@ const ImageAltTextPage = () => {
   }, [localRecord]);
   useEffect(() => {
     if (imageLoadingFetcher.data) {
+      console.log(imageLoadingFetcher.data);
+
       setProductImageData(imageLoadingFetcher.data.imageData);
       setPageLoading(false);
     }
@@ -1486,7 +1531,7 @@ const ImageAltTextPage = () => {
   }, []);
   useEffect(() => {
     if (languageFetcher.data) {
-      console.log(languageFetcher.data.response);
+      // console.log(languageFetcher.data.response);
       languageFetcher.data.response.forEach((lan: any) => {
         if (lan.primary) {
           setDefaultLanguageData(lan);
@@ -1684,7 +1729,7 @@ const ImageAltTextPage = () => {
             )}
           </Space>
         </Layout.Section>
-        {/* <Button onClick={handleSaveImage}>{t("Save Image")}</Button> */}
+        <Button onClick={handleSaveImage}>{t("Save Image")}</Button>
         <Layout.Section>
           <Space direction="vertical" size="large" style={{ width: "100%" }}>
             <div
@@ -1704,7 +1749,7 @@ const ImageAltTextPage = () => {
                     vertical
                     gap={8}
                   >
-                    <Text style={{ fontSize: "14px" }}>
+                    <Text style={{ fontSize: "16px" }}>
                       {img.language}
                       {img.published ? t("(Published)") : t("(Unpublished)")}
                     </Text>
@@ -1978,12 +2023,11 @@ const ImageAltTextPage = () => {
                                           saveImageToShopify: JSON.stringify({
                                             ...initData,
                                             value:
-                                              initData.value?.[initData.index],
+                                              initData.value?.[initData.index]
+                                                .src,
                                             imageAfterUrl: newUrl,
                                             languageCode: img.languageCode,
-                                            altText: img.altAfterTranslation
-                                              ? img.altAfterTranslation
-                                              : img.altBeforeTranslation,
+                                            altText: img.altAfterTranslation,
                                             locale: defaultLanguageData.locale,
                                           }),
                                         },

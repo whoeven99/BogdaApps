@@ -78,17 +78,65 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   };
 
   // 从 HTML 提取 <img src="">
-  const extractFromHtml = (html: string): string[] => {
-    const result: string[] = [];
-    const regex = /<img[^>]+src=["']([^"']+)["']/g;
+  // const extractFromHtml = (
+  //   html: string,
+  // ): { src: string; alt: string | null }[] => {
+  //   const result: { src: string; alt: string | null }[] = [];
+  //   // 匹配 <img ... src="xxx" ... alt="yyy" ...>
+  //   const regex =
+  //     /<img[^>]*src=["']([^"']+)["'][^>]*alt=["']([^"']*)["'][^>]*>|<img[^>]*alt=["']([^"']*)["'][^>]*src=["']([^"']+)["'][^>]*|<img[^>]*src=["']([^"']+)["'][^>]*>/g;
 
-    let match;
-    while ((match = regex.exec(html)) !== null) {
-      result.push(match[1]);
+  //   let match;
+  //   while ((match = regex.exec(html)) !== null) {
+  //     let src = "";
+  //     let alt = null;
+
+  //     if (match[1] && match[2]) {
+  //       // 情况 1：src 在前，alt 在后
+  //       src = match[1];
+  //       alt = match[2];
+  //     } else if (match[4] && match[3]) {
+  //       // 情况 2：alt 在前，src 在后
+  //       src = match[4];
+  //       alt = match[3];
+  //     } else if (match[5]) {
+  //       // 情况 3：只有 src
+  //       src = match[5];
+  //     }
+
+  //     result.push({ src, alt });
+  //   }
+
+  //   return result;
+  // };
+  function extractShopifyImages(html: string) {
+    // 全局匹配所有 <img ...> 标签（跨行也能匹配）
+    const imgTagRegex = /<img[^>]*>/gi;
+
+    // 匹配 src 与 alt（顺序不固定）
+    const srcRegex = /src=["'](https:\/\/cdn\.shopify\.com\/[^"']+)["']/i;
+    const altRegex = /alt=["']([^"']*)["']/i;
+
+    const images: { src: string; alt: string }[] = [];
+
+    // 获取所有 <img> 标签
+    const tags = html.match(imgTagRegex);
+    if (!tags) return images;
+
+    for (const tag of tags) {
+      const srcMatch = tag.match(srcRegex);
+      if (!srcMatch) continue; // ✨ 非 Shopify CDN 直接跳过
+
+      const altMatch = tag.match(altRegex);
+
+      images.push({
+        src: srcMatch[1],
+        alt: altMatch ? altMatch[1] : "",
+      });
     }
 
-    return result;
-  };
+    return images;
+  }
   const fetchFileReferences = async (admin: any, translatableResource: any) => {
     const results: any[] = [];
     const translatableContent = translatableResource.translatableContent;
@@ -155,14 +203,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
       // === 3) HTML ===
       if (type === "HTML") {
-        const urls = extractFromHtml(contentItem.value || "");
-        if (urls.length === 0) continue;
+        const extracted = extractShopifyImages(contentItem.value || "");
+        if (extracted.length === 0) continue;
 
         results.push({
           resourceId: translatableResource.resourceId,
           key: contentItem.key,
           type,
-          value: urls, // ❗html 多图放一起
+          value: extracted, // ❗html 多图放一起
           digest: contentItem.digest,
           originValue: contentItem.value,
         });
@@ -399,7 +447,7 @@ export default function ProductDetailPage() {
   }, [articleLoadingFetcher]);
   useEffect(() => {
     if (articleImageFetcher.data) {
-      // console.log(articleImageFetcher.data.data);
+      console.log(articleImageFetcher.data.data);
 
       const articleImages = articleImageFetcher.data.data;
       if (!Array.isArray(articleImages) || articleImages.length === 0) {
@@ -415,7 +463,7 @@ export default function ProductDetailPage() {
 
           return values
             .filter(Boolean) // 过滤掉空的 url
-            .map((url: string, innerIndex: number) => {
+            .map((image: any, innerIndex: number) => {
               // 尽量保留原始字段，覆盖 value 为单个 url
               // dbKey 使用 itemIndex + innerIndex 保证在整个 articleImages 中唯一且稳定（只要后端 item 顺序不变）
               return {
@@ -423,7 +471,8 @@ export default function ProductDetailPage() {
                 resourceId: item.resourceId,
                 key: item.key,
                 type: item.type,
-                value: url,
+                src: image.src,
+                alt: image.alt,
                 translations: item.translations || [],
                 digest: item.digest,
                 originValue: item.originValue,
@@ -435,6 +484,7 @@ export default function ProductDetailPage() {
       );
       setImageLoading(false);
       setImageData(flat);
+      console.log("flat", flat);
     }
   }, [articleImageFetcher]);
   const handleSelect = (id: string) => {
@@ -671,8 +721,8 @@ export default function ProductDetailPage() {
                       }}
                     >
                       <img
-                        src={item.value}
-                        alt={item.altText || "article image"}
+                        src={item.src}
+                        alt={item.alt || "article image"}
                         style={{
                           width: "100%",
                           height: "100%",

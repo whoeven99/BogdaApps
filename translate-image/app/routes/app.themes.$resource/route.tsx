@@ -158,8 +158,8 @@ export default function ProductDetailPage() {
                     }}
                   >
                     <img
-                      src={item.value}
-                      alt={item.altText || "article image"}
+                      src={item.value.src}
+                      alt={item?.value?.alt || "theme image"}
                       style={{
                         width: "100%",
                         height: "100%",

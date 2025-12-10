@@ -327,9 +327,9 @@ export default function Index() {
         // console.log("record", record);
         return record.value ? (
           <Thumbnail
-            source={record?.value[0]}
+            source={record?.value[0].src}
             size="large"
-            alt={record?.value[0]}
+            alt={record?.value[0]?.alt}
           />
         ) : (
           <Thumbnail source={ImageIcon} size="large" alt="Small document" />
@@ -450,7 +450,7 @@ export default function Index() {
     if (dataFetcher.data) {
       setTableDataLoading(false);
 
-      // console.log(dataFetcher.data);
+      console.log(dataFetcher.data);
       setHasNextPage(dataFetcher.data.hasNextPage);
       setHasPreviousPage(dataFetcher.data.hasPreviousPage);
       setStartCursor(dataFetcher.data.startCursor);
@@ -556,8 +556,21 @@ export default function Index() {
               onClick: (e) => {
                 // 排除点击按钮等交互元素
                 if ((e.target as HTMLElement).closest("button")) return;
-                sessionStorage.setItem("record", JSON.stringify(record));
-                navigate(`/app/themes/${themeParam}`);
+                if (record.value.length === 1) {
+                  sessionStorage.setItem(
+                    "record",
+                    JSON.stringify({
+                      ...record,
+                      index: 0,
+                    }),
+                  );
+                  navigate(
+                    `/app/${themeParam}/${record?.digest}/${record.digest}`,
+                  );
+                } else {
+                  sessionStorage.setItem("record", JSON.stringify(record));
+                  navigate(`/app/themes/${themeParam}`);
+                }
               },
               style: { cursor: "pointer" },
             })}
