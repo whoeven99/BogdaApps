@@ -327,6 +327,39 @@ export const storageTranslateImage = async ({
     };
   }
 };
+// 存储主题图片创建文件的mediaID
+export const storageMediaId = async ({
+  shop,
+  saveMediaId,
+}: {
+  shop: string;
+  saveMediaId: any;
+}) => {
+  try {
+    console.log("eweqweqweq", process.env.SERVER_URL, saveMediaId);
+
+    const response = await axios({
+      url: `${process.env.SERVER_URL}/pcUserPic/updateUserPic?shopName=${shop}`,
+      method: "POST",
+      data: {
+        productId: saveMediaId.productId,
+        imageId: saveMediaId.imageId,
+        languageCode: saveMediaId.languageCode,
+        mediaId: saveMediaId.mediaId,
+      },
+    });
+    console.log("storageMediaId response", response.data);
+    return response.data;
+  } catch (error) {
+    console.log(`${shop} 主题图片文件id保存失败`, error);
+    return {
+      success: false,
+      errorCode: 10001,
+      errorMsg: "SERVER_ERROR",
+      response: null,
+    };
+  }
+};
 
 // 删除翻译或者替换图片
 export const DeleteProductImageData = async ({
@@ -1064,215 +1097,19 @@ function replaceRichTextImageUrl(
 }
 
 function extractImageKey(url: string) {
-  if (!url) return null;
+  try {
+    // 1. 获取最后一个路径片段 files/xxx.jpg?v=123
+    const lastPart = url.split("/").pop();
+    if (!lastPart) return null;
 
-  // 去掉 protocol + domain
-  const withoutDomain = url.replace(/^https?:\/\/[^/]+\//, "");
+    // 2. 去掉 query 参数 ?v=xxxx
+    const fileName = lastPart.split("?")[0];
 
-  // 去掉 query string
-  const pathOnly = withoutDomain.split("?")[0];
-
-  // 如果包含编码后的 "%2F" -> 是 OSS 编码 key，直接返回
-  if (pathOnly.includes("%2F")) {
-    return pathOnly; // 保持原样
+    return fileName;
+  } catch (e) {
+    return null;
   }
-
-  // 普通路径 -> 只取最后文件名
-  return pathOnly.split("/").pop() ?? null;
 }
-// export const updateManageTranslation = async ({
-//   shop,
-//   accessToken,
-//   updateData,
-//   admin,
-// }: {
-//   shop: string;
-//   accessToken: string;
-//   updateData: any;
-//   admin: any;
-// }) => {
-//   try {
-//     console.log("itemdsdadsad", updateData);
-//     // console.log("dasdas", transferValue);
-//     const queryTranslations = await admin.graphql(
-//       `#graphql
-//       query {
-//         translatableResource(resourceId: "${updateData.resourceId}") {
-//           resourceId
-//           translations(locale: "${updateData.languageCode}") {
-//             key
-//             value
-//           }
-//         }
-//       }`,
-//     );
-
-//     const translation = await queryTranslations.json();
-//     console.log("sadawdqw", translation);
-//     if (updateData.imageAfterUrl) {
-//     }
-//     const createFileRes = await admin.graphql(
-//       `#graphql
-//       mutation fileCreate($files: [FileCreateInput!]!) {
-//         fileCreate(files: $files) {
-//           files {
-//             id
-//             fileStatus
-//             alt
-//             createdAt
-//             ... on MediaImage {
-//               image {
-//                 width
-//                 height
-//               }
-//             }
-//             preview {
-//               status
-//               image {
-//                 altText
-//                 id
-//                 url
-//               }
-//             }
-//           }
-//           userErrors {
-//             field
-//             message
-//           }
-//         }
-//       }`,
-//       {
-//         variables: {
-//           files: [
-//             {
-//               alt: updateData.altText,
-//               contentType: "IMAGE",
-//               originalSource: updateData.imageAfterUrl,
-//             },
-//           ],
-//         },
-//       },
-//     );
-//     console.log(
-//       "321312321sd",
-//       translation.data.translatableResource.translations,
-//     );
-
-//     const parse = await createFileRes.json();
-//     console.log("dadadqw", parse.data.fileCreate);
-
-//     let transferValue = "";
-//     switch (updateData.type) {
-//       case "HTML":
-//         const imageUrl = await waitForFileReady(
-//           admin,
-//           parse.data.fileCreate.files[0].id,
-//         );
-//         if (translation.data.translatableResource.translations?.length > 0) {
-//           let matched = false;
-//           for (const item of translation.data.translatableResource
-//             .translations) {
-//             if ((item?.dbKey ?? item?.key) === updateData.key) {
-//               transferValue = replaceImageUrl(
-//                 item.value,
-//                 updateData.value,
-//                 imageUrl,
-//                 updateData.altText,
-//               );
-//               matched = true;
-//               break; // 找到就退出循环！
-//             }
-//             if (!matched) {
-//               transferValue = replaceImageUrl(
-//                 updateData.originValue,
-//                 updateData.value,
-//                 imageUrl,
-//                 updateData.altText,
-//               );
-//             }
-//           }
-//         } else {
-//           transferValue = replaceImageUrl(
-//             updateData.originValue,
-//             updateData.value,
-//             imageUrl,
-//             updateData.altText,
-//           );
-//         }
-//         break;
-//       case "FILE_REFERENCE":
-//         if (updateData.resourceId.includes("Metafield")) {
-//           transferValue = parse.data.fileCreate.files[0].id;
-//         } else {
-//           transferValue = `shopify://shop_images/${extractImageKey(updateData.imageAfterUrl)}`;
-//         }
-//         break;
-//       case "LIST_FILE_REFERENCE":
-//         const ids = JSON.parse(updateData.originValue);
-//         ids[updateData.index] = parse.data.fileCreate.files[0].id;
-//         transferValue = JSON.stringify(ids);
-//         break;
-//       case "RICH_TEXT_FIELD":
-//         const richImageUrl = await waitForFileReady(
-//           admin,
-//           parse.data.fileCreate.files[0].id,
-//         );
-//         if (translation.data.translatableResource.translations?.length > 0) {
-//           let matched = false;
-//           for (const item of translation.data.translatableResource
-//             .translations) {
-//             if ((item?.dbKey ?? item?.key) === updateData.key) {
-//               transferValue = replaceRichTextImageUrl(
-//                 item.value,
-//                 updateData.value,
-//                 richImageUrl,
-//                 updateData.altText,
-//               );
-//               matched = true;
-//               break; // 找到就退出循环！
-//             }
-//             if (!matched) {
-//               transferValue = replaceRichTextImageUrl(
-//                 updateData.originValue,
-//                 updateData.value,
-//                 richImageUrl,
-//                 updateData.altText,
-//               );
-//             }
-//           }
-//         } else {
-//           transferValue = replaceRichTextImageUrl(
-//             updateData.originValue,
-//             updateData.value,
-//             richImageUrl,
-//             updateData.altText,
-//           );
-//         }
-//         break;
-//     }
-//     console.log("sdasdasczxc", transferValue);
-
-//     const response = await axios({
-//       url: `${process.env.SERVER_URL}/shopify/updateShopifyDataByTranslateTextRequest`,
-//       method: "POST",
-//       timeout: 10000, // 添加超时设置
-//       data: {
-//         shopName: shop,
-//         accessToken: accessToken,
-//         locale: updateData.locale,
-//         key: updateData.key,
-//         value: transferValue,
-//         translatableContentDigest: updateData.digest,
-//         resourceId: updateData.resourceId,
-//         target: updateData.languageCode,
-//       },
-//     });
-//     console.log(`${shop} updateManageTranslation: `, response.data);
-//     return response.data;
-//   } catch (error) {
-//     console.error(`${shop}Error updateManageTranslation:`, error);
-//   }
-// };
 
 // 删除存储在shopify的文件
 export const updateManageTranslation = async ({
@@ -1317,50 +1154,90 @@ export const updateManageTranslation = async ({
 
     // 2. 初始化最终 value
     let transferValue = "";
-
-    // 如果 imageAfterUrl 存在，才创建文件
+    // TODO 根据传值的filedID，判断创建文件或者更新文件信息
     let finalImageUrl; // 默认先使用原图
     let parse: any = null;
-    if (updateData.imageAfterUrl) {
-      const createFileRes = await admin.graphql(
-        `#graphql
-        mutation fileCreate($files: [FileCreateInput!]!) {
-          fileCreate(files: $files) {
-            files {
-              id
-              fileStatus
-              preview {
-                image {
-                  url
-                }
+    let imageId: string = "";
+    if (updateData?.mediaId) {
+      if (["LIST_FILE_REFERENCE", "FILE_REFERENCE"].includes(updateData.type)) {
+        const response = await admin.graphql(
+          `#graphql
+          mutation fileUpdate($files: [FileUpdateInput!]!) {
+            fileUpdate(files: $files) {
+              files {
+                id
+                alt
+                fileStatus
+              }
+              userErrors {
+                field
+                message
+                code
               }
             }
-            userErrors {
-              field
-              message
-            }
-          }
-        }`,
-        {
-          variables: {
-            files: [
-              {
-                alt: updateData.altText,
-                contentType: "IMAGE",
-                originalSource: updateData.imageAfterUrl,
-              },
-            ],
+          }`,
+          {
+            variables: {
+              files: [
+                {
+                  id: updateData?.mediaId,
+                  alt: updateData.altText,
+                  originalSource: updateData.imageAfterUrl || updateData.value,
+                },
+              ],
+            },
           },
-        },
-      );
+        );
+        const json = await response.json();
+        console.log("adwdasd", json);
+      } else {
+        finalImageUrl =
+          updateData?.imageAfterUrl === ""
+            ? await waitForFileReady(admin, updateData?.mediaId)
+            : updateData?.imageAfterUrl;
+      }
+    } else {
+      if (updateData.imageAfterUrl) {
+        const createFileRes = await admin.graphql(
+          `#graphql
+            mutation fileCreate($files: [FileCreateInput!]!) {
+              fileCreate(files: $files) {
+                files {
+                  id
+                  fileStatus
+                  preview {
+                    image {
+                      url
+                    }
+                  }
+                }
+                userErrors {
+                  field
+                  message
+                }
+              }
+            }`,
+          {
+            variables: {
+              files: [
+                {
+                  alt: updateData.altText,
+                  contentType: "IMAGE",
+                  originalSource: updateData.imageAfterUrl,
+                },
+              ],
+            },
+          },
+        );
+        parse = await createFileRes.json();
+        imageId = parse.data.fileCreate.files[0].id;
+        console.log("fsafasfa", imageId);
 
-      parse = await createFileRes.json();
-      const imageId = parse.data.fileCreate.files[0].id;
-
-      // 等待文件 ready
-      finalImageUrl = await waitForFileReady(admin, imageId);
+        // 等待文件 ready
+        finalImageUrl = await waitForFileReady(admin, imageId);
+      }
     }
-
+    // 如果 imageAfterUrl 存在，才创建文件
     // ============================
     // 3. 类型处理
     // ============================
@@ -1389,24 +1266,32 @@ export const updateManageTranslation = async ({
         transferValue = replaceImageUrl(
           html,
           oldSrc, // old src
-          updateData.value === "" ? target.src : finalImageUrl, // new src (若 imageAfterUrl 为空则保持不变)
+          updateData.imageAfterUrl === "" ? target.src : finalImageUrl, // new src (若 imageAfterUrl 为空则保持不变)
           updateData.altText || target.alt, // 新 alt
         );
         break;
       }
 
       case "FILE_REFERENCE": {
-        if (!updateData.imageAfterUrl) {
-          // 没图，不替换
-          transferValue = matchedItem?.value ?? updateData.originValue;
-          break;
-        }
         console.log("fajdsajid", parse.data.fileCreate.files[0].id);
 
         if (updateData.resourceId.includes("Metafield")) {
-          transferValue = parse.data.fileCreate.files[0].id;
+          transferValue =
+            parse.data.fileCreate.files[0].id || updateData?.mediaId;
         } else {
-          transferValue = `shopify://shop_images/${extractImageKey(updateData.imageAfterUrl)}`;
+          console.log(
+            "sdasdwqdads",
+            parse.data.fileCreate.files[0].id,
+            updateData?.mediaId,
+          );
+
+          const image = await findImageSrc(
+            admin,
+            parse.data.fileCreate.files[0].id || updateData?.mediaId,
+          );
+          console.log("imagesdjias", image);
+
+          transferValue = `shopify://shop_images/${extractImageKey(image.src)}`;
         }
         break;
       }
@@ -1418,7 +1303,8 @@ export const updateManageTranslation = async ({
         }
 
         const ids = JSON.parse(updateData.originValue);
-        ids[updateData.index] = parse.data.fileCreate.files[0].id;
+        ids[updateData.index] =
+          parse.data.fileCreate.files[0].id || updateData?.mediaId;
         transferValue = JSON.stringify(ids);
         break;
       }
@@ -1456,11 +1342,16 @@ export const updateManageTranslation = async ({
         target: updateData.languageCode,
       },
     });
+    console.log("adsadas", imageId, updateData.mediaId);
 
-    console.log(`${shop} updateManageTranslation: `, response.data);
-    return response.data;
+    console.log(`${shop} update translations: `, response.data);
+    return {
+      res: response.data,
+      ...updateData,
+      mediaId: imageId || updateData?.mediaId,
+    };
   } catch (error) {
-    console.error(`${shop}Error updateManageTranslation:`, error);
+    console.error(`${shop} Error updateManageTranslation:`, error);
   }
 };
 
@@ -1786,8 +1677,11 @@ const findImageSrc = async (admin: any, value: string) => {
       { variables: { query: fileName } },
     );
     const parsed = await response.json();
-    console.log("sdaedqw",parsed?.data?.files?.edges?.[0]?.node?.preview?.image);
-    
+    console.log(
+      "sdaedqw",
+      parsed?.data?.files?.edges?.[0]?.node?.preview?.image,
+    );
+
     return {
       src: parsed?.data?.files?.edges?.[0]?.node?.preview?.image?.src ?? null,
       alt: parsed?.data?.files?.edges?.[0]?.node?.preview?.image?.altText,
