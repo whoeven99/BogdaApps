@@ -49,7 +49,7 @@ const Index = () => {
     setIsLoading(false);
     fetcher.submit(
       {
-        log: `${shop} 目前在主页面, 页面语言为${language}`,
+        log: `${shop} 目前在主页面, 页面语言为${language}}`,
       },
       {
         method: "POST",
@@ -58,6 +58,8 @@ const Index = () => {
     );
   }, []);
   useEffect(() => {
+    if (switcherLoading) return;
+
     fetcher.submit(
       {
         log: `${shop} 当前插件状态为${switcherOpen ? "开启的" : "关闭的"}`,
@@ -67,7 +69,7 @@ const Index = () => {
         action: "/app/log",
       },
     );
-  }, [switcherOpen]);
+  }, [switcherLoading]);
   useEffect(() => {
     setIsLoading(false);
     themeFetcher.submit(
@@ -86,7 +88,7 @@ const Index = () => {
   }, []);
   useEffect(() => {
     if (themeFetcher.data) {
-      console.log(themeFetcher.data);
+      // console.log(themeFetcher.data);
       const switcherData =
         themeFetcher?.data?.data?.nodes[0]?.files?.nodes[0]?.body?.content;
       // console.log("switcherData",switcherData);
