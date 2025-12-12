@@ -255,5 +255,6 @@
   "UnPublished": "Неопубліковано",
   "Blog Title": "Назва блогу",
   "Published Time": "Час публікації",
-  "Updata Time": "Час оновлення"
+  "Updata Time": "Час оновлення",
+  "Image saving failed": "Не вдалося зберегти зображення"
 }

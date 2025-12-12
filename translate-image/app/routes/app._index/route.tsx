@@ -1,11 +1,8 @@
 import { Page } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
-import {
-  Space,
-  Typography,
-} from "antd";
+import { Space, Typography } from "antd";
 import { Link, useFetcher, useLoaderData, useNavigate } from "@remix-run/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LoaderFunctionArgs } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
@@ -48,11 +45,12 @@ const Index = () => {
 
   const fetcher = useFetcher<any>();
   const themeFetcher = useFetcher<any>();
+  const printedRef = useRef(false);
   useEffect(() => {
     setIsLoading(false);
     fetcher.submit(
       {
-        log: `${shop} 目前在主页面, 页面语言为${language}`,
+        log: `${shop} 目前在主页面, 页面语言为${language}}`,
       },
       {
         method: "POST",
@@ -60,6 +58,21 @@ const Index = () => {
       },
     );
   }, []);
+  useEffect(() => {
+    if (switcherLoading) return;
+    if (printedRef.current) return; // 防止重复打印
+
+    printedRef.current = true;
+    fetcher.submit(
+      {
+        log: `${shop} 当前插件状态为${switcherOpen ? "开启的" : "关闭的"}`,
+      },
+      {
+        method: "POST",
+        action: "/app/log",
+      },
+    );
+  }, [switcherLoading]);
   useEffect(() => {
     setIsLoading(false);
     themeFetcher.submit(
@@ -78,8 +91,11 @@ const Index = () => {
   }, []);
   useEffect(() => {
     if (themeFetcher.data) {
+      // console.log(themeFetcher.data);
       const switcherData =
         themeFetcher?.data?.data?.nodes[0]?.files?.nodes[0]?.body?.content;
+      // console.log("switcherData",switcherData);
+
       const jsonString = switcherData?.replace(/\/\*[\s\S]*?\*\//g, "")?.trim();
       const blocks = jsonString
         ? JSON.parse(jsonString).current?.blocks
@@ -129,7 +145,7 @@ const Index = () => {
             blockUrl={blockUrl}
             shop={shop}
           />
-          <ThemeModule />
+          <ThemeModule shop={shop} />
           <FaqComponent />
           {/* <ImageTable shop={shop} /> */}
           {/* <ImageTranslatePanel images={[]} translatedImage={""} /> */}

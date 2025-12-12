@@ -255,5 +255,6 @@
   "UnPublished": "Inédito",
   "Blog Title": "Título del blog",
   "Published Time": "Hora de publicación",
-  "Updata Time": "Tiempo de actualización"
+  "Updata Time": "Tiempo de actualización",
+  "Image saving failed": "Error al guardar la imagen"
 }

@@ -53,6 +53,7 @@ import {
   deleteSaveInShopify,
   DeleteSingleImage,
   getProductAllLanguageImagesData,
+  storageMediaId,
   storageTranslateImage,
   TranslateImage,
   updateManageTranslation,
@@ -94,9 +95,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const saveImageToShopify = JSON.parse(
     formData.get("saveImageToShopify") as string,
   );
+  const createFileToShopify = JSON.parse(
+    formData.get("createFileToShopify") as string,
+  );
   const deleteImageInShopify = JSON.parse(
     formData.get("deleteImageInShopify") as string,
   );
+  const saveMediaId = JSON.parse(formData.get("saveMediaId") as string);
+
   try {
     switch (true) {
       case !!imageLoading:
@@ -291,15 +297,109 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             response: [],
           };
         }
+      case !!saveMediaId: {
+        try {
+          const response = await storageMediaId({
+            shop,
+            saveMediaId,
+          });
+          return response;
+        } catch (error) {
+          console.log("error saveMediaId", error);
+          return {
+            success: false,
+            errorCode: 10001,
+            errorMsg: "SERVER_ERROR",
+            response: [],
+          };
+        }
+      }
+      case !!createFileToShopify:
+        try {
+          const createFileRes = await admin.graphql(
+            `#graphql
+              mutation fileCreate($files: [FileCreateInput!]!) {
+                fileCreate(files: $files) {
+                  files {
+                    id
+                    fileStatus
+                    preview {
+                      image {
+                        url
+                      }
+                    }
+                  }
+                  userErrors {
+                    field
+                    message
+                  }
+                }
+              }`,
+            {
+              variables: {
+                files: [
+                  {
+                    alt: "asdasodka",
+                    contentType: "IMAGE",
+                  },
+                ],
+              },
+            },
+          );
+
+          const parse = await createFileRes.json();
+          return json({ response: parse });
+        } catch (error) {
+          console.log("save image to shopify error action", error);
+          return {
+            success: false,
+            errorCode: 10001,
+            errorMsg: "SERVER_ERROR",
+            response: [],
+          };
+        }
       case !!deleteImageInShopify:
         try {
-          console.log("dasidas", deleteImageInShopify);
           // const { shop, accessToken } = adminAuthResult.session;
           const response = await deleteSaveInShopify({
             shop,
             accessToken: accessToken as string,
             item: deleteImageInShopify,
           });
+          // 删除创建的shopify文件以及清除当前图片的mediaId，解决因为数据库存储mediaId，导致shopify创建不了文件,仅限删除image和alt的删除操作
+          if (deleteImageInShopify.type === "deleteImage_Alt") {
+            const resDeleteFile = await admin.graphql(
+              `#graphql
+              mutation fileDelete($fileIds: [ID!]!) {
+                fileDelete(fileIds: $fileIds) {
+                  deletedFileIds
+                  userErrors {
+                    field
+                    message
+                    code
+                  }
+                }
+              }`,
+              {
+                variables: {
+                  fileIds: [deleteImageInShopify.mediaId],
+                },
+              },
+            );
+            const parse = await resDeleteFile.json();
+            // 删除mediaId
+            const resDeleteMediaId = await storageMediaId({
+              shop,
+              saveMediaId: {
+                productId: deleteImageInShopify.productId,
+                imageId: deleteImageInShopify.imageId,
+                languageCode: deleteImageInShopify.languageCode,
+                mediaId: "",
+                imageBeforeUrl: deleteImageInShopify.imageBeforeUrl,
+              },
+            });
+          }
+
           return json({ response: response?.data });
         } catch (error) {
           console.log("delete image file in shopify action error", error);
@@ -312,10 +412,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
     }
 
-    return {
+    return json({
       success: false,
       message: "Invalid data",
-    };
+    });
   } catch (error) {
     console.log("Error management action: ", error);
     return { error: "Error management action", status: 500, errorMsg: error };
@@ -398,8 +498,10 @@ const ImageAltTextPage = () => {
     useState<any>("");
   const translateImageFetcher = useFetcher<any>();
   const replaceTranslateImageFetcher = useFetcher<any>();
+  const saveMediaIDFetcher = useFetcher<any>();
   const imageLoadingFetcher = useFetcher<any>();
   const saveImageFetcher = useFetcher<any>();
+  const createFileFetcher = useFetcher<any>();
   const deleteImageFetcher = useFetcher<any>();
   const [pageLoading, setPageLoading] = useState<boolean>(true);
   const [confirmData, setConfirmData] = useState<any>([]);
@@ -732,7 +834,7 @@ const ImageAltTextPage = () => {
     return true;
   };
   const handleNavigate = () => {
-    if (confirmData.length > 0) {
+    if (confirmData?.length > 0) {
       shopify.saveBar.leaveConfirmation();
     } else {
       shopify.saveBar.hide("save-bar");
@@ -783,7 +885,7 @@ const ImageAltTextPage = () => {
       if (["articles", "products"].includes(type as string)) {
         mergedList = languageList?.map((lang) => {
           // 看后端有没有返回
-          const existing = fetchedList.find(
+          const existing = fetchedList?.find(
             (item: any) => item.languageCode === lang.value,
           );
 
@@ -804,6 +906,7 @@ const ImageAltTextPage = () => {
               language: lang.label, // 使用语言名
               isDelete: false,
               published: lang.published,
+              mediaId: "",
             };
           }
         });
@@ -835,6 +938,7 @@ const ImageAltTextPage = () => {
               language: lang.label, // 使用语言名
               isDelete: false,
               published: lang.published,
+              mediaId: "",
             };
           }
         });
@@ -930,6 +1034,8 @@ const ImageAltTextPage = () => {
       return;
     }
     setCurrentTranslatingImage(record);
+    // console.log("currentTranslatingImage", record);
+
     setTranslatrImageactive(true);
     setSourceLanguage(normalizeLocale(defaultLanguageData.locale));
     setTargetLanguage(normalizeLocale(languageCode));
@@ -985,15 +1091,29 @@ const ImageAltTextPage = () => {
       },
       { method: "post" },
     );
+    fetcher.submit(
+      {
+        log: `${loader.shop} 当前在${type}图像翻译页面，点击翻译图片${currentTranslatingImage?.imageId} 语言${currentTranslatingImage.languageCode}`,
+      },
+      {
+        method: "POST",
+        action: "/app/log",
+      },
+    );
     setTranslatrImageactive(false);
-    if (!currentTranslatingImage?.altBeforeTranslation) {
+    if (
+      !currentTranslatingImage?.altBeforeTranslation &&
+      !productImageData?.altText
+    ) {
       return;
     }
     const formData = new FormData();
     formData.append(
       "altTranslateFetcher",
       JSON.stringify({
-        alt: currentTranslatingImage.altBeforeTranslation,
+        alt:
+          currentTranslatingImage.altBeforeTranslation ||
+          productImageData?.altText,
         targetCode: targetLanguage,
       }),
     );
@@ -1011,13 +1131,24 @@ const ImageAltTextPage = () => {
       [`${currentTranslatingImage.imageId}_${currentTranslatingImage.languageCode}`]: true,
     }));
   };
+
   useEffect(() => {
-    if (translateImageFetcher.data) {
+    if (translateImageFetcher.data && altTranslateFetcher.data) {
       setTranslateLoadingImages((pre) => ({
         ...pre,
         [`${currentTranslatingImage.imageId}_${currentTranslatingImage.languageCode}`]: false,
       }));
+
       if (translateImageFetcher.data.success) {
+        fetcher.submit(
+          {
+            log: `${loader.shop}翻译成功，${currentTranslatingImage.imageId} 原图片${currentTranslatingImage?.imageBeforeUrl}，翻译成功，结果是${translateImageFetcher.data.response}`,
+          },
+          {
+            method: "POST",
+            action: "/app/log",
+          },
+        );
         shopify.toast.show(t("Image translated successfully"));
         setImageDatas(
           imageDatas.map((item: any) => {
@@ -1030,6 +1161,7 @@ const ImageAltTextPage = () => {
             return item;
           }),
         );
+
         const replaceTranslateImage = {
           productId: currentResourceId,
           imageAfterUrl: translateImageFetcher.data.response,
@@ -1053,8 +1185,9 @@ const ImageAltTextPage = () => {
                 value: initData.value?.[initData.index].src,
                 imageAfterUrl: translateImageFetcher.data.response,
                 languageCode: currentTranslatingImage.languageCode,
-                altText: "",
+                altText: altTranslateFetcher.data.response.response,
                 locale: defaultLanguageData.locale,
+                mediaId: currentTranslatingImage.mediaId,
               }),
             },
             { method: "post" },
@@ -1068,11 +1201,83 @@ const ImageAltTextPage = () => {
       ) {
         shopify.toast.show(t("Image translation failed"));
         setOpen(true);
+        fetcher.submit(
+          {
+            log: `${loader.shop} 翻译失败，额度不足`,
+          },
+          {
+            method: "POST",
+            action: "/app/log",
+          },
+        );
       } else {
         shopify.toast.show(t("Image translation failed"));
+        fetcher.submit(
+          {
+            log: `${loader.shop} 翻译失败 ${translateImageFetcher.data.errorMsg}`,
+          },
+          {
+            method: "POST",
+            action: "/app/log",
+          },
+        );
+      }
+      setTextareaLoading((pre) => ({
+        ...pre,
+        [`${currentTranslatingImage.imageId}_${currentTranslatingImage.languageCode}`]: false,
+      }));
+
+      if (altTranslateFetcher.data.response.success) {
+        setConfirmData((prev: any) => {
+          const exists = prev?.find(
+            (i: any) => i.languageCode === currentTranslatingImage.languageCode,
+          );
+          const imageItem = imageDatas.find(
+            (i: any) => i.languageCode === currentTranslatingImage.languageCode,
+          );
+
+          const finalImageUrl = imageItem?.imageAfterUrl || "";
+          if (exists) {
+            // 更新现有项
+            return prev.map((i: any) =>
+              i.languageCode === currentTranslatingImage.languageCode
+                ? {
+                    ...i,
+                    value: altTranslateFetcher.data.response.response,
+                    imageAfterUrl: finalImageUrl,
+                  }
+                : i,
+            );
+          } else {
+            // 添加新的
+            return [
+              ...prev,
+              {
+                key: currentTranslatingImage.imageId,
+                imageId: currentTranslatingImage.imageId,
+                languageCode: currentTranslatingImage.languageCode,
+                value: altTranslateFetcher.data.response.response,
+                imageUrl: currentTranslatingImage.imageBeforeUrl,
+                altText: currentTranslatingImage.altBeforeTranslation,
+                mediaId: currentTranslatingImage.mediaId,
+                imageAfterUrl: "",
+                type: "altAuto",
+              },
+            ];
+          }
+        });
+
+        // dispatch(setChars({ chars: chars + 1000 }));
+      } else if (
+        !altTranslateFetcher.data.response.success &&
+        altTranslateFetcher.data.response.errorMsg === "额度不够"
+      ) {
+        // setOpen(true);
+      } else {
+        shopify.toast.show(t("Alt text translation failed"));
       }
     }
-  }, [translateImageFetcher.data]);
+  }, [translateImageFetcher.data, altTranslateFetcher.data]);
   const handleSaveImage = () => {
     saveImageFetcher.submit(
       {
@@ -1083,21 +1288,93 @@ const ImageAltTextPage = () => {
           languageCode: "ko",
           altText: "翻译的图片替代文本",
           locale: defaultLanguageData.locale,
+          // mediaId: currentTranslatingImage.mediaId,
         }),
+      },
+      { method: "post" },
+    );
+  };
+  const handleCreateFile = () => {
+    createFileFetcher.submit(
+      {
+        createFileToShopify: JSON.stringify({}),
       },
       { method: "post" },
     );
   };
   useEffect(() => {
     if (saveImageFetcher.data) {
-      // console.log("saveImageFetcher", saveImageFetcher.data);
+      if (saveImageFetcher.data.response) {
+        const returnData = saveImageFetcher.data.response;
+        fetcher.submit(
+          {
+            log: `${loader.shop} 创建文件成功，media:${returnData.mediaId}`,
+          },
+          {
+            method: "POST",
+            action: "/app/log",
+          },
+        );
+        // 更新mediaId
+        setConfirmData((prev: any) => {
+          const exists = prev?.find(
+            (i: any) => i.languageCode === returnData.languageCode,
+          );
+          if (exists) {
+            // 更新现有项
+            return prev.map((i: any) =>
+              i.languageCode === returnData.languageCode
+                ? { ...i, mediaId: returnData.mediaId }
+                : i,
+            );
+          }
+          return prev;
+        });
+        setImageDatas(
+          imageDatas.map((item: any) => {
+            if (item.languageCode === returnData.languageCode) {
+              return {
+                ...item,
+                mediaId: returnData.mediaId,
+              };
+            }
+            return item;
+          }),
+        );
+        // 调用新增mediaID的方法，给文件数据新增mediaID
+        // if
+
+        const saveMediaId = {
+          productId: currentResourceId,
+          imageId: hashString(`${returnData.value}_${returnData.resourceId}`),
+          languageCode: returnData.languageCode,
+          mediaId: returnData.mediaId,
+          imageBeforeUrl: returnData.value,
+        };
+        const formData = new FormData();
+        formData.append("saveMediaId", JSON.stringify(saveMediaId));
+        saveMediaIDFetcher.submit(formData, {
+          method: "post",
+        });
+      } else {
+        shopify.toast.show(t("Image saving failed"));
+        fetcher.submit(
+          {
+            log: `${loader.shop} 图片保存到shopify失败`,
+          },
+          {
+            method: "POST",
+            action: "/app/log",
+          },
+        );
+      }
     }
   }, [saveImageFetcher.data]);
   useEffect(() => {
     if (deleteImageFetcher.data) {
       // console.log(
       //   "deleteImageFetcher",
-      //   deleteImageFetcher.data.response.data.translationsRemove.translations,
+      //   deleteImageFetcher.data.response.data?.translationsRemove.translations,
       // );
     }
   }, [deleteImageFetcher.data]);
@@ -1105,8 +1382,18 @@ const ImageAltTextPage = () => {
     imageId: string,
     imageUrl: string,
     languageCode: string,
+    mediaId: string,
   ) => {
     try {
+      fetcher.submit(
+        {
+          log: `${loader.shop} 当前在${type}图像翻译页面，删除${imageId} ${languageCode}图片`,
+        },
+        {
+          method: "POST",
+          action: "/app/log",
+        },
+      );
       report(
         {
           imageType: type,
@@ -1130,25 +1417,51 @@ const ImageAltTextPage = () => {
           {
             deleteImageInShopify: JSON.stringify({
               ...initData,
-              value: initData.value?.[initData.index],
+              value: initData.value?.[initData.index].src,
               languageCode,
+              mediaId,
+              productId: currentResourceId,
+              imageId: hashString(
+                `${initData.value?.[initData.index].src}_${initData.resourceId}`,
+              ),
+              imageBeforeUrl: imageUrl,
+              type: "deleteImage_Alt",
             }),
           },
           { method: "post" },
         );
       }
       if (res.success) {
+        fetcher.submit(
+          {
+            log: `${loader.shop} 当前在${type}图像翻译页面，删除${imageId} ${languageCode}图片成功`,
+          },
+          {
+            method: "POST",
+            action: "/app/log",
+          },
+        );
         setImageDatas(
           imageDatas.map((item: any) => {
             if (item.languageCode === languageCode) {
               item.imageAfterUrl = "";
               item.altAfterTranslation = "";
+              item.mediaId = "";
             }
             return item;
           }),
         );
         shopify.toast.show(t("Delete Success"));
       } else {
+        fetcher.submit(
+          {
+            log: `${loader.shop} 当前在${type}图像翻译页面，删除${imageId} ${languageCode}图片失败`,
+          },
+          {
+            method: "POST",
+            action: "/app/log",
+          },
+        );
         shopify.toast.show(t("Delete Failed"));
       }
     } catch (error) {
@@ -1159,8 +1472,18 @@ const ImageAltTextPage = () => {
     imageId: string,
     imageUrl: string,
     languageCode: string,
+    mediaId: string,
   ) => {
     try {
+      fetcher.submit(
+        {
+          log: `${loader.shop} 当前在${type}图像翻译页面，删除单张${imageId} ${languageCode}图片`,
+        },
+        {
+          method: "POST",
+          action: "/app/log",
+        },
+      );
       report(
         {
           imageType: type,
@@ -1179,13 +1502,30 @@ const ImageAltTextPage = () => {
         imageUrl: imageUrl,
         languageCode: languageCode,
       });
+      // if (TRANSLATABLE_TYPES.has(type as string)) {
+      //   deleteImageFetcher.submit(
+      //     {
+      //       deleteImageInShopify: JSON.stringify({
+      //         ...initData,
+      //         value: initData.value?.[initData.index].src,
+      //         languageCode,
+      //         type: "deleteSingle_image",
+      //       }),
+      //     },
+      //     { method: "post" },
+      //   );
+      // }
       if (TRANSLATABLE_TYPES.has(type as string)) {
-        deleteImageFetcher.submit(
+        saveImageFetcher.submit(
           {
-            deleteImageInShopify: JSON.stringify({
+            saveImageToShopify: JSON.stringify({
               ...initData,
-              value: initData.value?.[initData.index],
+              value: initData.value?.[initData.index].src,
+              imageAfterUrl: "",
               languageCode,
+              altText: "",
+              locale: defaultLanguageData.locale,
+              mediaId,
             }),
           },
           { method: "post" },
@@ -1208,50 +1548,6 @@ const ImageAltTextPage = () => {
       console.log("delete image error", error);
     }
   };
-  useEffect(() => {
-    if (altTranslateFetcher.data) {
-      if (altTranslateFetcher.data.response.success) {
-        setConfirmData((prev: any) => {
-          const exists = prev.find(
-            (i: any) => i.languageCode === currentTranslatingImage.languageCode,
-          );
-          if (exists) {
-            // 更新现有项
-            return prev.map((i: any) =>
-              i.languageCode === currentTranslatingImage.languageCode
-                ? { ...i, value: altTranslateFetcher.data.response.response }
-                : i,
-            );
-          } else {
-            // 添加新的
-            return [
-              ...prev,
-              {
-                key: currentTranslatingImage.imageId,
-                imageId: currentTranslatingImage.imageId,
-                languageCode: currentTranslatingImage.languageCode,
-                value: altTranslateFetcher.data.response.response,
-                imageUrl: currentTranslatingImage.imageBeforeUrl,
-                altText: currentTranslatingImage.altBeforeTranslation,
-              },
-            ];
-          }
-        });
-        // dispatch(setChars({ chars: chars + 1000 }));
-      } else if (
-        !altTranslateFetcher.data.response.success &&
-        altTranslateFetcher.data.response.errorMsg === "额度不够"
-      ) {
-        setOpen(true);
-      } else {
-        // shopify.toast.show(t("Alt text translation failed"));
-      }
-      setTextareaLoading((pre) => ({
-        ...pre,
-        [`${currentTranslatingImage.imageId}_${currentTranslatingImage.languageCode}`]: false,
-      }));
-    }
-  }, [altTranslateFetcher.data]);
   const handleInputChange = (
     key: string,
     imageId: string,
@@ -1259,6 +1555,8 @@ const ImageAltTextPage = () => {
     altText: string,
     languageCode: string,
     value: string,
+    mediaId: string,
+    imageAfterUrl: string,
   ) => {
     setConfirmData((prevData: any) => {
       const existingItemIndex = prevData.findIndex(
@@ -1269,12 +1567,23 @@ const ImageAltTextPage = () => {
         updatedConfirmData[existingItemIndex] = {
           ...updatedConfirmData[existingItemIndex],
           value: value,
+          type: "user",
         };
         return updatedConfirmData;
       } else {
         return [
           ...prevData,
-          { key, imageId, imageUrl, altText, languageCode, value },
+          {
+            key,
+            imageId,
+            imageUrl,
+            altText,
+            languageCode,
+            value,
+            mediaId,
+            imageAfterUrl,
+            type: "user",
+          },
         ];
       }
     });
@@ -1302,6 +1611,15 @@ const ImageAltTextPage = () => {
         typeof response?.response?.imageAfterUrl === "string"
           ? response.response?.imageAfterUrl
           : "";
+      fetcher.submit(
+        {
+          log: `${loader.shop} 当前在${type}图像翻译页面，点击了upload上传组价上传图片${newUrl}成功！`,
+        },
+        {
+          method: "POST",
+          action: "/app/log",
+        },
+      );
       if (response?.success) {
         setImageDatas((prev: any[]) => {
           return prev.map((item) =>
@@ -1324,6 +1642,7 @@ const ImageAltTextPage = () => {
                 languageCode: img.languageCode,
                 altText: img.altAfterTranslation,
                 locale: defaultLanguageData.locale,
+                mediaId: img.mediaId,
               }),
             },
             { method: "post" },
@@ -1375,19 +1694,22 @@ const ImageAltTextPage = () => {
     );
     confirmData.map((item: any) => {
       if (TRANSLATABLE_TYPES.has(type as string)) {
-        saveImageFetcher.submit(
-          {
-            saveImageToShopify: JSON.stringify({
-              ...initData,
-              value: item.imageUrl,
-              imageAfterUrl: "",
-              languageCode: item.languageCode,
-              altText: item.value,
-              locale: defaultLanguageData.locale,
-            }),
-          },
-          { method: "post" },
-        );
+        if (item.type === "user") {
+          saveImageFetcher.submit(
+            {
+              saveImageToShopify: JSON.stringify({
+                ...initData,
+                value: item.imageUrl,
+                imageAfterUrl: item.imageAfterUrl,
+                languageCode: item.languageCode,
+                altText: item.value,
+                locale: defaultLanguageData.locale,
+                mediaId: item.mediaId,
+              }),
+            },
+            { method: "post" },
+          );
+        }
       }
     });
     // 并发执行所有请求
@@ -1411,7 +1733,7 @@ const ImageAltTextPage = () => {
     } finally {
       setImageDatas((prev: any[]) =>
         prev.map((item: any) => {
-          const matched = confirmData.find(
+          const matched = confirmData?.find(
             (confirmItem: any) =>
               item.languageCode === confirmItem.languageCode,
           );
@@ -1435,7 +1757,7 @@ const ImageAltTextPage = () => {
     shopify.saveBar.hide("save-bar");
   };
   useEffect(() => {
-    if (confirmData.length > 0) {
+    if (confirmData?.length > 0) {
       shopify.saveBar.show("save-bar");
     } else {
       shopify.saveBar.hide("save-bar");
@@ -1710,6 +2032,7 @@ const ImageAltTextPage = () => {
           </Space>
         </Layout.Section>
         {/* <Button onClick={handleSaveImage}>{t("Save Image")}</Button> */}
+        {/* <Button onClick={handleCreateFile}>{t("create file")}</Button> */}
         <Layout.Section>
           <Space direction="vertical" size="large" style={{ width: "100%" }}>
             <div
@@ -1794,6 +2117,7 @@ const ImageAltTextPage = () => {
                                 img.imageId,
                                 img.imageBeforeUrl,
                                 img.languageCode,
+                                img.mediaId,
                               );
                             }}
                             maxCount={0}
@@ -1854,12 +2178,12 @@ const ImageAltTextPage = () => {
                             <TextArea
                               style={{ margin: "16px 0", width: "100%" }}
                               value={
-                                confirmData.find(
+                                (confirmData ?? []).find(
                                   (i: any) =>
                                     i.languageCode === img.languageCode,
                                 )?.value ?? img.altAfterTranslation
                               }
-                              onChange={(e) =>
+                              onChange={(e) => {
                                 handleInputChange(
                                   img.imageId,
                                   img.imageId,
@@ -1867,8 +2191,10 @@ const ImageAltTextPage = () => {
                                   img.altBeforeTranslation,
                                   img.languageCode,
                                   e.target.value,
-                                )
-                              }
+                                  img.mediaId,
+                                  img.imageAfterUrl,
+                                );
+                              }}
                               placeholder={t(
                                 "Enter the image to be modified (Alt)",
                               )}
@@ -1981,6 +2307,15 @@ const ImageAltTextPage = () => {
                                     "string"
                                       ? response.response?.imageAfterUrl
                                       : "";
+                                  fetcher.submit(
+                                    {
+                                      log: `${loader.shop} 当前在${type}图像翻译页面，点击了按钮上传组价上传图片${newUrl}成功！`,
+                                    },
+                                    {
+                                      method: "POST",
+                                      action: "/app/log",
+                                    },
+                                  );
                                   if (response?.success) {
                                     setImageDatas((prev: any[]) => {
                                       return prev.map((item) =>
@@ -2009,6 +2344,7 @@ const ImageAltTextPage = () => {
                                             languageCode: img.languageCode,
                                             altText: img.altAfterTranslation,
                                             locale: defaultLanguageData.locale,
+                                            mediaId: img.mediaId,
                                           }),
                                         },
                                         { method: "post" },
@@ -2043,6 +2379,7 @@ const ImageAltTextPage = () => {
                                   img.imageId,
                                   img.imageBeforeUrl,
                                   img.languageCode,
+                                  img.mediaId,
                                 );
                               }}
                               shape="circle"
