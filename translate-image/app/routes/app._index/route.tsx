@@ -2,7 +2,7 @@ import { Page } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { Space, Typography } from "antd";
 import { Link, useFetcher, useLoaderData, useNavigate } from "@remix-run/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LoaderFunctionArgs } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
@@ -45,6 +45,7 @@ const Index = () => {
 
   const fetcher = useFetcher<any>();
   const themeFetcher = useFetcher<any>();
+  const printedRef = useRef(false);
   useEffect(() => {
     setIsLoading(false);
     fetcher.submit(
@@ -59,7 +60,9 @@ const Index = () => {
   }, []);
   useEffect(() => {
     if (switcherLoading) return;
+    if (printedRef.current) return; // 防止重复打印
 
+    printedRef.current = true;
     fetcher.submit(
       {
         log: `${shop} 当前插件状态为${switcherOpen ? "开启的" : "关闭的"}`,
