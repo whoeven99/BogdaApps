@@ -49,7 +49,7 @@ const Index = () => {
     setIsLoading(false);
     fetcher.submit(
       {
-        log: `${shop} 目前在主页面, 页面语言为${language},当前插件状态为${switcherOpen ? "开启的" : "关闭的"}`,
+        log: `${shop} 目前在主页面, 页面语言为${language}`,
       },
       {
         method: "POST",
@@ -57,6 +57,17 @@ const Index = () => {
       },
     );
   }, []);
+  useEffect(() => {
+    fetcher.submit(
+      {
+        log: `${shop} 当前插件状态为${switcherOpen ? "开启的" : "关闭的"}`,
+      },
+      {
+        method: "POST",
+        action: "/app/log",
+      },
+    );
+  }, [switcherOpen]);
   useEffect(() => {
     setIsLoading(false);
     themeFetcher.submit(
@@ -75,8 +86,11 @@ const Index = () => {
   }, []);
   useEffect(() => {
     if (themeFetcher.data) {
+      console.log(themeFetcher.data);
       const switcherData =
         themeFetcher?.data?.data?.nodes[0]?.files?.nodes[0]?.body?.content;
+      // console.log("switcherData",switcherData);
+
       const jsonString = switcherData?.replace(/\/\*[\s\S]*?\*\//g, "")?.trim();
       const blocks = jsonString
         ? JSON.parse(jsonString).current?.blocks
