@@ -360,7 +360,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
       case !!deleteImageInShopify:
         try {
-          console.log("dasidas", deleteImageInShopify);
           // const { shop, accessToken } = adminAuthResult.session;
           const response = await deleteSaveInShopify({
             shop,
@@ -388,7 +387,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               },
             );
             const parse = await resDeleteFile.json();
-            console.log("sfdwqdasfd", parse);
             // 删除mediaId
             const resDeleteMediaId = await storageMediaId({
               shop,
@@ -400,7 +398,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 imageBeforeUrl: deleteImageInShopify.imageBeforeUrl,
               },
             });
-            console.log("dawqdas", resDeleteMediaId);
           }
 
           return json({ response: response?.data });
@@ -415,10 +412,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
     }
 
-    return {
+    return json({
       success: false,
       message: "Invalid data",
-    };
+    });
   } catch (error) {
     console.log("Error management action: ", error);
     return { error: "Error management action", status: 500, errorMsg: error };
@@ -877,7 +874,7 @@ const ImageAltTextPage = () => {
   }, [currentImageId]);
   useEffect(() => {
     if (imageFetcher.data) {
-      console.log(imageFetcher.data);
+      // console.log(imageFetcher.data);
 
       // 后端返回的数据数组
       const fetchedList = imageFetcher.data.response || [];
@@ -946,7 +943,6 @@ const ImageAltTextPage = () => {
           }
         });
       }
-      console.log("mergedList", mergedList);
 
       setImageDatas(mergedList);
       setImageFetcherLoading(false);
@@ -1038,7 +1034,7 @@ const ImageAltTextPage = () => {
       return;
     }
     setCurrentTranslatingImage(record);
-    console.log("setCurrentTranslatingImage", record);
+    // console.log("currentTranslatingImage", record);
 
     setTranslatrImageactive(true);
     setSourceLanguage(normalizeLocale(defaultLanguageData.locale));
@@ -1142,7 +1138,6 @@ const ImageAltTextPage = () => {
         ...pre,
         [`${currentTranslatingImage.imageId}_${currentTranslatingImage.languageCode}`]: false,
       }));
-      console.log(translateImageFetcher.data);
 
       if (translateImageFetcher.data.success) {
         fetcher.submit(
@@ -1231,7 +1226,6 @@ const ImageAltTextPage = () => {
         ...pre,
         [`${currentTranslatingImage.imageId}_${currentTranslatingImage.languageCode}`]: false,
       }));
-      console.log(altTranslateFetcher.data);
 
       if (altTranslateFetcher.data.response.success) {
         setConfirmData((prev: any) => {
@@ -1272,7 +1266,6 @@ const ImageAltTextPage = () => {
             ];
           }
         });
-        console.log("confirmData", confirmData);
 
         // dispatch(setChars({ chars: chars + 1000 }));
       } else if (
@@ -1285,9 +1278,6 @@ const ImageAltTextPage = () => {
       }
     }
   }, [translateImageFetcher.data, altTranslateFetcher.data]);
-  useEffect(() => {
-    console.log("confirmData updated:", confirmData);
-  }, [confirmData]);
   const handleSaveImage = () => {
     saveImageFetcher.submit(
       {
@@ -1314,7 +1304,6 @@ const ImageAltTextPage = () => {
   };
   useEffect(() => {
     if (saveImageFetcher.data) {
-      console.log("saveImageFetcher", saveImageFetcher.data);
       if (saveImageFetcher.data.response) {
         const returnData = saveImageFetcher.data.response;
         fetcher.submit(
@@ -1354,7 +1343,6 @@ const ImageAltTextPage = () => {
         );
         // 调用新增mediaID的方法，给文件数据新增mediaID
         // if
-        console.log("currentTranslatingImage", currentTranslatingImage);
 
         const saveMediaId = {
           productId: currentResourceId,
@@ -1383,16 +1371,11 @@ const ImageAltTextPage = () => {
     }
   }, [saveImageFetcher.data]);
   useEffect(() => {
-    if (createFileFetcher.data) {
-      console.log("createFileFetcher", createFileFetcher.data.response);
-    }
-  }, [createFileFetcher.data]);
-  useEffect(() => {
     if (deleteImageFetcher.data) {
-      console.log(
-        "deleteImageFetcher",
-        deleteImageFetcher.data.response.data?.translationsRemove.translations,
-      );
+      // console.log(
+      //   "deleteImageFetcher",
+      //   deleteImageFetcher.data.response.data?.translationsRemove.translations,
+      // );
     }
   }, [deleteImageFetcher.data]);
   const handleDelete = async (
@@ -1532,11 +1515,7 @@ const ImageAltTextPage = () => {
       //     { method: "post" },
       //   );
       // }
-      console.log("fsadwd", mediaId);
-
       if (TRANSLATABLE_TYPES.has(type as string)) {
-        console.log("执行清空操作");
-
         saveImageFetcher.submit(
           {
             saveImageToShopify: JSON.stringify({
@@ -1584,9 +1563,6 @@ const ImageAltTextPage = () => {
         (item: any) => item.languageCode === languageCode,
       );
       if (existingItemIndex !== -1) {
-        console.log(prevData);
-        console.log(mediaId);
-
         const updatedConfirmData = [...prevData];
         updatedConfirmData[existingItemIndex] = {
           ...updatedConfirmData[existingItemIndex],
@@ -1611,7 +1587,6 @@ const ImageAltTextPage = () => {
         ];
       }
     });
-    console.log("input aaddasid", confirmData);
   };
   // 上传或删除图片时更新 fileList
   const handleChangeImage = (info: any, img: any) => {
@@ -1719,11 +1694,7 @@ const ImageAltTextPage = () => {
     );
     confirmData.map((item: any) => {
       if (TRANSLATABLE_TYPES.has(type as string)) {
-        console.log("asfqweq", item);
-
         if (item.type === "user") {
-          console.log("触发了。。。。。。。。。。。。。。");
-
           saveImageFetcher.submit(
             {
               saveImageToShopify: JSON.stringify({
@@ -2223,7 +2194,6 @@ const ImageAltTextPage = () => {
                                   img.mediaId,
                                   img.imageAfterUrl,
                                 );
-                                console.log(img);
                               }}
                               placeholder={t(
                                 "Enter the image to be modified (Alt)",
