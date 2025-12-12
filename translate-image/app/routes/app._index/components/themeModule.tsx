@@ -7,13 +7,14 @@ import {
 } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
-import { useNavigate } from "@remix-run/react";
+import { useFetcher, useNavigate } from "@remix-run/react";
 import useReport from "scripts/eventReport";
 
 const { Title } = Typography;
 
-export default function ThemeModule() {
+export default function ThemeModule({ shop }: { shop: string }) {
   const { reportClick, report } = useReport();
+  const fetcher = useFetcher<any>();
 
   const [isMobile, setIsMobile] = useState(false);
   const navigate = useNavigate();
@@ -42,6 +43,15 @@ export default function ThemeModule() {
   ];
 
   const handleManage = (item: any) => {
+    fetcher.submit(
+      {
+        log: `${shop} 目前在主页面, 用户点击了管理按钮，进入到${item.key}模块}`,
+      },
+      {
+        method: "POST",
+        action: "/app/log",
+      },
+    );
     report(
       {
         moduleType: item.key,
@@ -66,6 +76,15 @@ export default function ThemeModule() {
     }
   };
   const handleTranslate = (item: any) => {
+    fetcher.submit(
+      {
+        log: `${shop} 目前在主页面, 用户点击了翻译按钮，进入到${item.key}模块}`,
+      },
+      {
+        method: "POST",
+        action: "/app/log",
+      },
+    );
     report(
       {
         moduleType: item.key,

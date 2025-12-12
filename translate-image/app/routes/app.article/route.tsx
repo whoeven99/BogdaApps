@@ -17,12 +17,19 @@ import { useDispatch, useSelector } from "react-redux";
 import { AppDispatch, RootState } from "~/store";
 import { setLastPageCursorInfo } from "~/store/modules/articleSlice";
 import { ColumnsType } from "antd/es/table";
-import { ActionFunctionArgs, json } from "@remix-run/node";
+import { ActionFunctionArgs, json, LoaderFunctionArgs } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
 import SortPopover from "~/components/SortPopover";
 import ScrollNotice from "~/components/ScrollNotice";
 import useReport from "scripts/eventReport";
 const { Text, Title } = Typography;
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const adminAuthResult = await authenticate.admin(request);
+  const { shop } = adminAuthResult.session;
+  return {
+    shop: shop,
+  };
+};
 export const action = async ({ request }: ActionFunctionArgs) => {
   const adminAuthResult = await authenticate.admin(request);
   const { admin } = adminAuthResult;
@@ -291,6 +298,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function Index() {
+  const { shop } = useLoaderData<{ shop: string }>();
   const artilclesFetcher = useFetcher<any>();
   const { reportClick, report } = useReport();
   const [articlesStartCursor, setArticlesStartCursor] = useState("");
@@ -313,6 +321,7 @@ export default function Index() {
   const [sortKey, setSortKey] = useState("UPDATED_AT");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const loadFetcher = useFetcher<any>();
+  const fetcher = useFetcher<any>();
   const sortOptions = [
     { label: "Title", value: "TITLE" },
     { label: "Author", value: "AUTHOR" },
@@ -415,6 +424,18 @@ export default function Index() {
     const articleId = record.id.split("/").pop();
     navigate(`/app/articles/${articleId}`);
   }
+  useEffect(() => {
+    fetcher.submit(
+      {
+        log: `${shop} 目前在文章页面}`,
+      },
+      {
+        method: "POST",
+        action: "/app/log",
+      },
+    );
+  }, []);
+
   useEffect(() => {
     const {
       lastRequestCursor,
@@ -633,9 +654,7 @@ export default function Index() {
             defaultActiveKey="all"
             type="line"
             // style={{ width: "40%" }}
-            items={[
-              { label: t("All"), key: "ALL" },
-            ]}
+            items={[{ label: t("All"), key: "ALL" }]}
           />
 
           <Flex align="center" justify="center" gap={20}>

@@ -19,11 +19,18 @@ import { setLastPageCursorInfo } from "~/store/modules/productSlice";
 import "./style.css";
 import { ColumnsType } from "antd/es/table";
 import useReport from "scripts/eventReport";
-import { ActionFunctionArgs, json } from "@remix-run/node";
+import { ActionFunctionArgs, json, LoaderFunctionArgs } from "@remix-run/node";
 import { authenticate } from "~/shopify.server";
 import SortPopover from "~/components/SortPopover";
 import ScrollNotice from "~/components/ScrollNotice";
 const { Text, Title } = Typography;
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const adminAuthResult = await authenticate.admin(request);
+  const { shop } = adminAuthResult.session;
+  return {
+    shop: shop,
+  };
+};
 export const action = async ({ request }: ActionFunctionArgs) => {
   const adminAuthResult = await authenticate.admin(request);
   const { admin } = adminAuthResult;
@@ -424,11 +431,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function Index() {
+  const { shop } = useLoaderData<{ shop: string }>();
   const { reportClick, report } = useReport();
   const loadFetcher = useFetcher<any>();
   const languageFetcher = useFetcher<any>();
   const productsFetcher = useFetcher<any>();
   const imageFetcher = useFetcher<any>();
+  const fetcher = useFetcher<any>();
 
   const [productsStartCursor, setProductsStartCursor] = useState("");
   const [productsEndCursor, setProductsEndCursor] = useState("");
@@ -555,6 +564,18 @@ export default function Index() {
       responsive: ["md", "lg", "xl", "xxl"], // ✅ 手机端隐藏
     },
   ];
+  useEffect(() => {
+    fetcher.submit(
+      {
+        log: `${shop} 目前在产品页面}`,
+      },
+      {
+        method: "POST",
+        action: "/app/log",
+      },
+    );
+  }, []);
+
   useEffect(() => {
     // console.log(lastPageCursorInfo);
     const {

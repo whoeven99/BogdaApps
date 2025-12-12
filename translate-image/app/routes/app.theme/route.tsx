@@ -388,6 +388,10 @@ export default function Index() {
     },
   ];
   function handleView(record: any): void {
+    logFetcher.submit(
+      { log: `${shop} 进入${themeParam}翻译模块` },
+      { action: "/app/log", method: "POST" },
+    );
     if (record.value.length === 1) {
       sessionStorage.setItem(
         "record",
@@ -569,6 +573,10 @@ export default function Index() {
               onClick: (e) => {
                 // 排除点击按钮等交互元素
                 if ((e.target as HTMLElement).closest("button")) return;
+                logFetcher.submit(
+                  { log: `${shop} 进入${themeParam}翻译模块` },
+                  { action: "/app/log", method: "POST" },
+                );
                 if (record.value.length === 1) {
                   sessionStorage.setItem(
                     "record",

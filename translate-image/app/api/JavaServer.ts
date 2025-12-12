@@ -248,16 +248,6 @@ export const TranslateImage = async ({
   modelType: number;
 }) => {
   try {
-    console.log(
-      "dqws: ",
-      shop,
-      imageUrl,
-      sourceCode,
-      targetCode,
-      accessToken,
-      modelType,
-    );
-
     const response = await axios({
       url: `${process.env.SERVER_URL}/pcUserPic/translatePic?shopName=${shop}`,
       method: "POST",
@@ -269,7 +259,6 @@ export const TranslateImage = async ({
         modelType,
       },
     });
-    // console.log();
 
     console.log(`${shop} imageTranslate Response`, response.data);
     return response;
@@ -278,7 +267,7 @@ export const TranslateImage = async ({
     return {
       success: false,
       errorCode: 10001,
-      errorMsg: "SERVER_ERROR",
+      errorMsg: error,
       response: [],
     };
   }
@@ -346,6 +335,7 @@ export const storageMediaId = async ({
         imageId: saveMediaId.imageId,
         languageCode: saveMediaId.languageCode,
         mediaId: saveMediaId.mediaId,
+        imageBeforeUrl: saveMediaId.imageBeforeUrl,
       },
     });
     console.log("storageMediaId response", response.data);
@@ -423,7 +413,7 @@ export const DeleteSingleImage = async ({
         languageCode: languageCode,
       },
     });
-    // console.log("DeleteProductImageData: ", response.data);
+    console.log("DeleteSingleImage: ", response.data);
     return response.data;
   } catch (error) {
     console.error(`${shopName}删除单张图片失败:`, error);
@@ -693,8 +683,6 @@ export const AltTranslate = async ({
   targetCode: string;
 }) => {
   try {
-    console.log("alt aaaa", process.env.server, shop);
-
     const response = await axios({
       url: `${process.env.SERVER_URL}/pcUserPic/altTranslate?shopName=${shop}`,
       method: "POST",
@@ -710,7 +698,7 @@ export const AltTranslate = async ({
     return {
       success: false,
       errorCode: 10001,
-      errorMsg: "SERVER_ERROR",
+      errorMsg: error,
       response: [],
     };
   }
@@ -1011,40 +999,94 @@ function replaceImageUrl(
 function escapeRegExp(str: string) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
-async function waitForFileReady(admin: any, fileId: string, maxAttempts = 10) {
+// async function waitForFileReady(admin: any, fileId: string, maxAttempts = 10) {
+//   for (let i = 0; i < maxAttempts; i++) {
+//     const response = await admin.graphql(`
+//       query {
+//         node(id: "${fileId}") {
+//           ... on MediaImage {
+//             id
+//             fileStatus
+//             image {
+//               url
+//             }
+//           }
+//         }
+//       }
+//     `);
+
+//     const parsed = await response.json();
+//     const node = parsed.data.node;
+//     console.log("ewcdsad", node);
+
+//     if (node.fileStatus === "READY" && node.image) {
+//       return node.image.url;
+//     }
+
+//     if (node.fileStatus === "FAILED") {
+//       throw new Error("File processing failed");
+//     }
+
+//     // 等待后重试
+//     await new Promise((resolve) => setTimeout(resolve, 1000));
+//   }
+
+//   throw new Error("File processing timeout");
+// }
+async function waitForFileReady(admin: any, fileId: string, maxAttempts = 30) {
   for (let i = 0; i < maxAttempts; i++) {
-    const response = await admin.graphql(`
-      query {
-        node(id: "${fileId}") {
-          ... on MediaImage {
-            id
-            fileStatus
-            image {
-              url
+    try {
+      const response = await admin.graphql(`
+        query {
+          node(id: "${fileId}") {
+            ... on MediaImage {
+              id
+              fileStatus
+              image {
+                url
+              }
+              fileErrors {
+                code
+                details
+                message
+              }
             }
           }
         }
+      `);
+
+      const parsed = await response.json();
+      const node = parsed.data?.node;
+
+      console.log(`Attempt ${i + 1}: fileStatus = ${node?.fileStatus}`, node);
+
+      // 检查是否成功
+      if (node?.fileStatus === "READY" && node?.image?.url) {
+        return node.image.url;
       }
-    `);
 
-    const parsed = await response.json();
-    const node = parsed.data.node;
-    console.log("ewcdsad", node);
+      // 检查是否失败
+      if (node?.fileStatus === "FAILED") {
+        const errorMsg =
+          node.fileErrors?.map((e: any) => e.message).join(", ") ||
+          "Unknown error";
+        throw new Error(`File processing failed: ${errorMsg}`);
+      }
 
-    if (node.fileStatus === "READY" && node.image) {
-      return node.image.url;
+      // 其他状态继续等待 (PROCESSING, UPLOADED, etc.)
+      // 使用递增的等待时间
+      const waitTime = Math.min(1000 * (i + 1), 5000); // 最多等5秒
+      await new Promise((resolve) => setTimeout(resolve, waitTime));
+    } catch (error) {
+      console.error(`Error checking file status (attempt ${i + 1}):`, error);
+      if (i === maxAttempts - 1) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 2000));
     }
-
-    if (node.fileStatus === "FAILED") {
-      throw new Error("File processing failed");
-    }
-
-    // 等待后重试
-    await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 
-  throw new Error("File processing timeout");
+  throw new Error(`File processing timeout after ${maxAttempts} attempts`);
 }
+
 function replaceRichTextImageUrl(
   richTextJsonStr: string,
   fromUrl: string,
@@ -1110,6 +1152,29 @@ function extractImageKey(url: string) {
     return null;
   }
 }
+export function getAltFromHtml(html: string, imageUrl: string): string | null {
+  const regex = new RegExp(
+    `<img[^>]*src=["']${imageUrl.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&")}["'][^>]*>`,
+    "i",
+  );
+
+  const match = html.match(regex);
+  if (!match) return null;
+
+  const altMatch = match[0].match(/alt=["']([^"']*)["']/i);
+  return altMatch ? altMatch[1] : null;
+}
+function getFileName(url: string) {
+  if (!url) return "";
+
+  try {
+    const pathname = new URL(url).pathname; // /s/files/.../71QCCuepSJL._AC_SX679.jpg
+    const parts = pathname.split("/");
+    return parts.pop(); // 71QCCuepSJL._AC_SX679.jpg
+  } catch {
+    return ""; // fallback
+  }
+}
 
 // 删除存储在shopify的文件
 export const updateManageTranslation = async ({
@@ -1159,9 +1224,26 @@ export const updateManageTranslation = async ({
     let parse: any = null;
     let imageId: string = "";
     if (updateData?.mediaId) {
-      if (["LIST_FILE_REFERENCE", "FILE_REFERENCE"].includes(updateData.type)) {
-        const response = await admin.graphql(
-          `#graphql
+      let currentAlt = updateData.altText;
+      if (updateData.altText === "") {
+        if (
+          updateData.type === "FILE_REFERENCE" ||
+          updateData.type === "LIST_FILE_REFERENCE"
+        ) {
+          let image;
+          if (updateData.type === "FILE_REFERENCE") {
+            image = await findImageSrc(admin, updateData.originValue);
+          } else {
+            const ids = JSON.parse(updateData.originValue);
+            image = await findImageSrc(admin, ids[updateData.index]);
+          }
+          currentAlt = image.alt;
+        } else {
+          currentAlt = getAltFromHtml(updateData.originValue, updateData.value);
+        }
+      }
+      const response = await admin.graphql(
+        `#graphql
           mutation fileUpdate($files: [FileUpdateInput!]!) {
             fileUpdate(files: $files) {
               files {
@@ -1176,27 +1258,40 @@ export const updateManageTranslation = async ({
               }
             }
           }`,
-          {
-            variables: {
-              files: [
-                {
-                  id: updateData?.mediaId,
-                  alt: updateData.altText,
-                  originalSource: updateData.imageAfterUrl || updateData.value,
-                },
-              ],
-            },
+        {
+          variables: {
+            files: [
+              {
+                id: updateData?.mediaId,
+                alt: currentAlt,
+                originalSource: updateData.imageAfterUrl || updateData.value,
+              },
+            ],
           },
-        );
-        const json = await response.json();
-        console.log("adwdasd", json);
-      } else {
-        finalImageUrl =
-          updateData?.imageAfterUrl === ""
-            ? await waitForFileReady(admin, updateData?.mediaId)
-            : updateData?.imageAfterUrl;
-      }
+        },
+      );
+      const json = await response.json();
+      console.log("dasdq3ds", json.data);
+
+      console.log("adwdasd", json.data.fileUpdate.files);
+      const file = json.data.fileUpdate.files;
+      imageId =
+        file !== null ? json.data.fileUpdate.files?.[0].id : updateData.mediaId;
+      // finalImageUrl =
+      //   updateData?.imageAfterUrl === ""
+      //     ? await waitForFileReady(admin, updateData?.mediaId)
+      //     : updateData?.imageAfterUrl;
+      finalImageUrl = await waitForFileReady(admin, imageId);
+      console.log("dasdaedwd", finalImageUrl);
+
+      // if (["LIST_FILE_REFERENCE", "FILE_REFERENCE"].includes(updateData.type)) {
+
+      // } else {
+
+      // }
     } else {
+      console.log("进到了创建文件步骤");
+
       if (updateData.imageAfterUrl) {
         const createFileRes = await admin.graphql(
           `#graphql
@@ -1221,7 +1316,9 @@ export const updateManageTranslation = async ({
             variables: {
               files: [
                 {
-                  alt: updateData.altText,
+                  alt:
+                    updateData.altText ||
+                    getAltFromHtml(updateData.originValue, updateData.value),
                   contentType: "IMAGE",
                   originalSource: updateData.imageAfterUrl,
                 },
@@ -1230,6 +1327,8 @@ export const updateManageTranslation = async ({
           },
         );
         parse = await createFileRes.json();
+        console.log("asdasdas", parse);
+
         imageId = parse.data.fileCreate.files[0].id;
         console.log("fsafasfa", imageId);
 
@@ -1245,6 +1344,7 @@ export const updateManageTranslation = async ({
     switch (updateData.type) {
       case "HTML": {
         const html = matchedItem ? matchedItem.value : updateData.originValue;
+        console.log("dasdsads", html);
 
         // 1. 解析出所有图片
         const list = extractShopifyImages(html);
@@ -1260,34 +1360,34 @@ export const updateManageTranslation = async ({
           break;
         }
 
-        const oldSrc = target.src;
-        console.log("oldsdasdqw", oldSrc);
+        let oldSrc = target.src;
 
+        // if (updateData.imageAfterUrl === "" && updateData.altText === "") {
+        //   oldSrc = updateData.value;
+        // }
+        console.log("oldsdasdqw", oldSrc);
         transferValue = replaceImageUrl(
           html,
           oldSrc, // old src
-          updateData.imageAfterUrl === "" ? target.src : finalImageUrl, // new src (若 imageAfterUrl 为空则保持不变)
-          updateData.altText || target.alt, // 新 alt
+          updateData.imageAfterUrl === "" && updateData.altText === ""
+            ? updateData.value
+            : finalImageUrl, // new src (若 imageAfterUrl 为空则保持不变)
+          updateData.altText ?? target.alt,
         );
         break;
       }
 
       case "FILE_REFERENCE": {
-        console.log("fajdsajid", parse.data.fileCreate.files[0].id);
+        // console.log("fajdsajid", parse.data.fileCreate.files[0].id);
 
         if (updateData.resourceId.includes("Metafield")) {
-          transferValue =
-            parse.data.fileCreate.files[0].id || updateData?.mediaId;
+          transferValue = imageId || updateData?.mediaId;
         } else {
-          console.log(
-            "sdasdwqdads",
-            parse.data.fileCreate.files[0].id,
-            updateData?.mediaId,
-          );
+          console.log("sdasdwqdads", imageId, updateData?.mediaId);
 
           const image = await findImageSrc(
             admin,
-            parse.data.fileCreate.files[0].id || updateData?.mediaId,
+            imageId || updateData?.mediaId,
           );
           console.log("imagesdjias", image);
 
@@ -1297,14 +1397,13 @@ export const updateManageTranslation = async ({
       }
 
       case "LIST_FILE_REFERENCE": {
-        if (!updateData.imageAfterUrl) {
-          transferValue = updateData.originValue;
-          break;
-        }
+        // if (!updateData.imageAfterUrl) {
+        //   transferValue = updateData.originValue;
+        //   break;
+        // }
 
         const ids = JSON.parse(updateData.originValue);
-        ids[updateData.index] =
-          parse.data.fileCreate.files[0].id || updateData?.mediaId;
+        ids[updateData.index] = imageId || updateData?.mediaId;
         transferValue = JSON.stringify(ids);
         break;
       }
@@ -1313,12 +1412,35 @@ export const updateManageTranslation = async ({
         const originalRich = matchedItem
           ? matchedItem.value
           : updateData.originValue;
+        console.log("dasdsads", originalRich);
+
+        // 1. 解析出所有图片
+        const list = extractRichTextImagesDetail(originalRich);
+        console.log("dasdqw", list);
+
+        // 2. 根据 index 找到对应老 src
+        const target = list[updateData.index];
+        console.log("faddsad", target);
+
+        if (!target) {
+          console.warn("找不到对应 index 的 img：", updateData.index);
+          transferValue = originalRich;
+          break;
+        }
+
+        let oldSrc = target.url;
+
+        // const originalRich = matchedItem
+        //   ? matchedItem.value
+        //   : updateData.originValue;
 
         transferValue = replaceRichTextImageUrl(
           originalRich,
-          updateData.value,
-          finalImageUrl,
-          updateData.altText,
+          oldSrc,
+          updateData.imageAfterUrl === "" && updateData.altText === ""
+            ? updateData.value
+            : finalImageUrl, // new src (若 imageAfterUrl 为空则保持不变)
+          updateData.altText ?? target.alt,
         );
         break;
       }
@@ -1352,6 +1474,10 @@ export const updateManageTranslation = async ({
     };
   } catch (error) {
     console.error(`${shop} Error updateManageTranslation:`, error);
+    return {
+      success: false,
+      error: error,
+    };
   }
 };
 
@@ -1532,6 +1658,33 @@ export function extractShopifyImages(html: string) {
   }
 
   return images;
+}
+function extractRichTextImagesDetail(node: any) {
+  const result: { url: string; alt: string }[] = [];
+
+  function traverse(n: any) {
+    if (!n) return;
+
+    if (
+      n.type === "link" &&
+      typeof n.url === "string" &&
+      /\.(png|jpg|jpeg|webp|gif|svg)(\?.*)?$/.test(n.url)
+    ) {
+      const alt =
+        Array.isArray(n.children) && n.children[0]?.type === "text"
+          ? n.children[0].value || ""
+          : "";
+
+      result.push({ url: n.url, alt });
+    }
+
+    if (Array.isArray(n.children)) {
+      n.children.forEach((child: any) => traverse(child));
+    }
+  }
+
+  traverse(node);
+  return result;
 }
 
 const fetchFileReferences = async (admin: any, nodes: any[]) => {

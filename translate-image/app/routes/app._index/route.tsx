@@ -1,9 +1,6 @@
 import { Page } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
-import {
-  Space,
-  Typography,
-} from "antd";
+import { Space, Typography } from "antd";
 import { Link, useFetcher, useLoaderData, useNavigate } from "@remix-run/react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -52,7 +49,7 @@ const Index = () => {
     setIsLoading(false);
     fetcher.submit(
       {
-        log: `${shop} 目前在主页面, 页面语言为${language}`,
+        log: `${shop} 目前在主页面, 页面语言为${language},当前插件状态为${switcherOpen ? "开启的" : "关闭的"}`,
       },
       {
         method: "POST",
@@ -129,7 +126,7 @@ const Index = () => {
             blockUrl={blockUrl}
             shop={shop}
           />
-          <ThemeModule />
+          <ThemeModule shop={shop} />
           <FaqComponent />
           {/* <ImageTable shop={shop} /> */}
           {/* <ImageTranslatePanel images={[]} translatedImage={""} /> */}
