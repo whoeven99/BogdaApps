@@ -10,6 +10,7 @@
     "vite": "^7.3.0"
   },
   "dependencies": {
+    "antd": "^6.1.1",
     "axios": "^1.13.2"
   },
   "scripts": {
