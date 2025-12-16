@@ -1,64 +1,111 @@
-/* DebugPrompt 页面样式 */
+/* DebugPrompt 页面样式（已迁移并扩展） */
+:root{
+  --bg:#ffffff;
+  --muted:#6b7280;
+  --card-bg:#ffffff;
+  --border:#e6e6e6;
+  --primary:#1677ff; /* antd primary */
+  --primary-dark:#0f5edc;
+  --danger:#f43f5e;
+  --font-sans: "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
 
 .debug-prompt-container {
-  display: flex;
-  flex-direction: row;
-  gap: 20px;
   padding: 20px;
-  font-family: Arial, sans-serif;
+  font-family: var(--font-sans);
+  color: #111827;
+  background: var(--bg);
 }
 
-.prompt-input {
-  flex: 1;
-  height: 300px;
-  padding: 10px;
-  font-size: 16px;
-  border: 1px solid #ccc;
-  border-radius: 5px;
-  resize: none;
-}
-
-.variables-container {
-  flex: 1;
+/* Card body wrapper used inside antd Card */
+.card-body {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  padding: 12px;
 }
 
-.variable-item {
+/* Prompt 输入框 */
+.prompt-input {
+  width: 100%;
+  min-height: 220px;
+  padding: 12px;
+  font-size: 15px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  resize: vertical;
+  box-sizing: border-box;
+  font-family: var(--font-sans);
+}
+
+/* 操作按钮区域 */
+.actions {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
 }
 
-.variable-item label {
-  font-weight: bold;
-}
-
-.call-ai-button {
-  align-self: flex-start;
-  padding: 10px 20px;
-  font-size: 16px;
-  color: #fff;
-  background-color: #007bff;
-  border: none;
-  border-radius: 5px;
+.btn-clear {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 6px 14px;
+  border-radius: 6px;
   cursor: pointer;
-  transition: background-color 0.3s;
 }
 
-.call-ai-button:hover {
-  background-color: #0056b3;
+.btn-clear:hover {
+  background: #fafafa;
 }
 
+.btn-primary {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  padding: 6px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(22,119,255,0.12);
+}
+
+.btn-primary:active { background: var(--primary-dark); }
+
+/* 变量编辑区域 */
+.variables-scroll {
+  max-height: 240px;
+  overflow: auto;
+  padding: 6px 0;
+}
+
+.variable-item { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+.variable-item label { font-weight:600; color:#374151; min-width:90px; }
+.variable-item input { flex:1; padding:8px 10px; border-radius:6px; border:1px solid var(--border); }
+
+.variables-empty { color: var(--muted); padding: 12px; }
+
+/* API 返回区域 */
+.api-card-body { padding: 12px; height:100%; display:flex; flex-direction:column; }
 .api-response {
-  flex: 1;
-  height: 300px;
-  padding: 10px;
-  font-size: 14px;
-  background-color: #f9f9f9;
-  border: 1px solid #ccc;
-  border-radius: 5px;
+  background: #0f1724;
+  color: #e6eef8;
+  font-family: "SFMono-Regular", Menlo, Monaco, "Roboto Mono", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.03);
   overflow: auto;
   white-space: pre-wrap;
+  word-break: break-word;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+/* Card title 微调 */
+.ant-card-head-title { font-weight:700; color: #111827; }
+
+/* 响应式 */
+@media (max-width: 991px) {
+  .debug-prompt-container { padding: 12px; }
+  .prompt-input { min-height: 180px; }
 }
