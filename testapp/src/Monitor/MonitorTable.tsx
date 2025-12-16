@@ -110,8 +110,8 @@ const MonitorTable: React.FC = () => {
     },
     {
       title: '初始化时间',
-      dataIndex: 'initiTime',
-      key: 'initiTime',
+      dataIndex: 'initTime',
+      key: 'initTime',
       render: (text: string) => text || '-',
     },
     {

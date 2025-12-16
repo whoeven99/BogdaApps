@@ -1,0 +1,64 @@
+/* DebugPrompt 页面样式 */
+
+.debug-prompt-container {
+  display: flex;
+  flex-direction: row;
+  gap: 20px;
+  padding: 20px;
+  font-family: Arial, sans-serif;
+}
+
+.prompt-input {
+  flex: 1;
+  height: 300px;
+  padding: 10px;
+  font-size: 16px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  resize: none;
+}
+
+.variables-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.variable-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.variable-item label {
+  font-weight: bold;
+}
+
+.call-ai-button {
+  align-self: flex-start;
+  padding: 10px 20px;
+  font-size: 16px;
+  color: #fff;
+  background-color: #007bff;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.call-ai-button:hover {
+  background-color: #0056b3;
+}
+
+.api-response {
+  flex: 1;
+  height: 300px;
+  padding: 10px;
+  font-size: 14px;
+  background-color: #f9f9f9;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
