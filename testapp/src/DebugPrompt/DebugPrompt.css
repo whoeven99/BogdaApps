@@ -15,27 +15,42 @@
   font-family: var(--font-sans);
   color: #111827;
   background: var(--bg);
+  /* 不再设置整体 min-height，交由左侧卡片控制视口高度 */
+}
+
+.debug-row { height: 100%; align-items: stretch; }
+
+/* 左侧卡片默认占满视口高度 */
+.left-card {
+  height: 100vh;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Card body wrapper used inside antd Card */
 .card-body {
-  display: flex;
-  flex-direction: column;
-  padding: 12px;
-}
+   display: flex;
+   flex-direction: column;
+   padding: 12px;
+   /* 取消 flex:1，避免阻止 textarea 调整高度 */
+   box-sizing: border-box;
+ }
 
-/* Prompt 输入框 */
-.prompt-input {
-  width: 100%;
-  min-height: 220px;
-  padding: 12px;
-  font-size: 15px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  resize: vertical;
-  box-sizing: border-box;
-  font-family: var(--font-sans);
-}
+ /* Prompt 输入框 */
+ .prompt-input {
+   width: 100%;
+   padding: 12px;
+   font-size: 15px;
+   border: 1px solid var(--border);
+   border-radius: 8px;
+   resize: vertical;
+   box-sizing: border-box;
+   font-family: var(--font-sans);
+   /* 初始高度默认为视口高度减去卡片头和按钮等，允许手动拖拽改变 */
+   min-height: calc(100vh - 180px);
+   overflow: auto;
+ }
 
 /* 操作按钮区域 */
 .actions {

@@ -55,9 +55,9 @@ const DebugPrompt: React.FC = () => {
 
   return (
     <div className="debug-prompt-container">
-      <Row gutter={[16, 16]}>
+      <Row gutter={[16, 16]} className="debug-row">
         <Col xs={24} lg={12}>
-          <Card title="输入你的 Prompt">
+          <Card title="输入你的 Prompt" className="left-card">
             <div className="card-body">
               <TextArea
                 className="prompt-input"
