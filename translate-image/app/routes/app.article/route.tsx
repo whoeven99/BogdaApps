@@ -34,78 +34,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const adminAuthResult = await authenticate.admin(request);
   const { admin } = adminAuthResult;
 
-  const { shop, accessToken } = adminAuthResult.session;
   const formData = await request.formData();
-  const loading = JSON.parse(formData.get("loading") as string);
   const articleStartCursor: any = JSON.parse(
     formData.get("articleStartCursor") as string,
   );
   const articleEndCursor: any = JSON.parse(
     formData.get("articleEndCursor") as string,
   );
-  const articleFetcher = JSON.parse(formData.get("articleFetcher") as string);
 
   try {
     switch (true) {
-      case !!loading:
-        try {
-          const loadData = await admin.graphql(
-            `query GetArticles {
-              articles(first: 10) {
-                nodes {
-                  id
-                  image {
-                    url
-                    id
-                    altText
-                  }
-                  title
-                  isPublished
-                  author {
-                    name
-                  }
-                  blog {
-                    title
-                  }
-                  publishedAt
-                  updatedAt
-                }
-                pageInfo {
-                  endCursor
-                  hasNextPage
-                  hasPreviousPage
-                  startCursor
-                }
-              }
-            }`,
-          );
-
-          const response = await loadData.json();
-          const articles = response?.data?.articles;
-          if (articles?.nodes?.length > 0) {
-            const data = articles?.nodes?.map((item: any) => item);
-            return json({
-              data,
-              endCursor: articles?.pageInfo?.endCursor,
-              hasNextPage: articles?.pageInfo?.hasNextPage,
-              hasPreviousPage: articles?.pageInfo?.hasPreviousPage,
-              startCursor: articles?.pageInfo?.startCursor,
-            });
-          } else {
-            return json({
-              data: [],
-              endCursor: "",
-              hasNextPage: "",
-              hasPreviousPage: "",
-              startCursor: "",
-            });
-          }
-        } catch (error) {
-          console.error("Error action loadData productImage:", error);
-          return json({
-            resonse: null,
-          });
-        }
       case !!articleStartCursor:
         try {
           const loadData = await admin.graphql(
@@ -255,34 +193,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             productEndCursor: "",
             productHasNextPage: "",
             productHasPreviousPage: "",
-          });
-        }
-      case !!articleFetcher:
-        try {
-          const response = await admin.graphql(
-            `#graphql
-              query ArticleShow($id: ID!) {
-                article(id: $id) {
-                  id
-                  author {
-                    name
-                  }
-                  createdAt
-                  handle
-                }
-              }`,
-            {
-              variables: {
-                id: articleFetcher.id,
-              },
-            },
-          );
-          const json = await response.json();
-          return json;
-        } catch (error) {
-          console.error("Error action loadData productImage:", error);
-          return json({
-            resonse: null,
           });
         }
     }
@@ -685,6 +595,11 @@ export default function Index() {
         {/* 表格主体区域（可滚动） */}
         <div style={{ flex: 1, overflow: "auto" }}>
           <Table
+            rowSelection={{
+              onChange: (selectedRowKeys, selectedRows) => {
+                console.log(selectedRowKeys, selectedRows);
+              },
+            }}
             dataSource={articleData}
             columns={panelColumns}
             pagination={false}

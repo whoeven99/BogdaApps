@@ -89,13 +89,35 @@ function observeVisibleImages(map, language) {
 // 产品图片翻译逻辑
 // =============================
 async function ProductImgTranslate(blockId, shop, ciwiBlock) {
-  const articleId = ciwiBlock.querySelector(
-    'input[name="image_article_id"]',
+  const image_resource_type = ciwiBlock.querySelector(
+    'input[name="image_resource_type"]',
   ).value;
-  const productId = ciwiBlock.querySelector(
-    'input[name="image_product_id"]',
-  ).value;
-  if (!productId && !articleId) return;
+  let idNum = ciwiBlock.querySelector('input[name="image_resource_id"]').value;
+  const resourceId = `gid://shopify/${image_resource_type}/${idNum}`;
+  // switch (image_resource_type) {
+  //   case "product":
+  //     resourceId = `gid://shopify/Product/${idNum}`;
+  //     break;
+  //   case "collection":
+  //     resourceId = `gid://shopify/Collection/${idNum}`;
+  //     break;
+  //   case "page":
+  //     resourceId = `gid://shopify/Page/${idNum}`;
+  //     break;
+  //   case "article":
+  //     resourceId = `gid://shopify/Article/${idNum}`;
+  //     break;
+  //   default:
+  //     console.log("没有匹配到图片类型......!!!!!!!");
+  //     break;
+  // }
+  // const articleId = ciwiBlock.querySelector(
+  //   'input[name="image_article_id"]',
+  // ).value;
+  // const productId = ciwiBlock.querySelector(
+  //   'input[name="image_product_id"]',
+  // ).value;
+  // if (!productId && !articleId) return;
 
   const language = ciwiBlock.querySelector(
     'input[name="image_language_code"]',
@@ -105,9 +127,7 @@ async function ProductImgTranslate(blockId, shop, ciwiBlock) {
 
   // 先检查缓存中是否存在该产品的图片信息
   const cacheKeys = Object.keys(localStorage).filter((k) =>
-    k.startsWith(
-      `${cachePrefix}${shop.value}_${productId || articleId}_${language}_`,
-    ),
+    k.startsWith(`${cachePrefix}${shop.value}_${idNum}_${language}_`),
   );
   let cacheMap = new Map();
   cacheKeys.forEach((key) => {
@@ -119,9 +139,7 @@ async function ProductImgTranslate(blockId, shop, ciwiBlock) {
   const data = await GetProductImageData({
     blockId,
     shopName: shop.value,
-    id: articleId
-      ? `gid://shopify/Article/${articleId}`
-      : `gid://shopify/Product/${productId}`,
+    id: resourceId,
     languageCode: language,
   });
   console.log("GetProductImageData", data);
@@ -131,12 +149,16 @@ async function ProductImgTranslate(blockId, shop, ciwiBlock) {
   const map = new Map();
 
   for (const item of response) {
-    const key = productId
-      ? item.imageBeforeUrl?.split("/files/")[2]
-      : item.imageBeforeUrl?.split("/articles/")[1];
-
+    let key;
+    if (item.imageBeforeUrl.includes("articles")) {
+      key = item.imageBeforeUrl?.split("/articles/")[1];
+      console.log("这俩步执行了", item.imageBeforeUrl, key);
+    } else {
+      key = item.imageBeforeUrl?.split("/files/")[2];
+      console.log("这一步执行了...", item.imageBeforeUrl, key);
+    }
     if (!key) continue;
-    const cacheKey = `${cachePrefix}${shop.value}_${productId}_${language}_${key}`;
+    const cacheKey = `${cachePrefix}${shop.value}_${idNum}_${language}_${key}`;
     const cachedItem = getCache(cacheKey);
 
     // 如果服务器返回了新的 URL 或更新时间不同 → 更新缓存
@@ -160,11 +182,12 @@ async function ProductImgTranslate(blockId, shop, ciwiBlock) {
 // 店铺主页图片翻译逻辑
 // =============================
 async function HomeImageTranslate(blockId, ciwiBlock) {
-  const productId = ciwiBlock.querySelector(
-    'input[name="image_product_id"]',
+  const resourceId = ciwiBlock.querySelector(
+    'input[name="image_resource_id"]',
   ).value;
-  // console.log("productId", productId);
-  if (!productId) {
+  if (resourceId) {
+    console.log("非主页不得调用这个替换函数");
+
     return;
   }
   const shop = document.querySelector("#image_queryCiwiId")?.value;

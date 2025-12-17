@@ -487,7 +487,7 @@ const ImageAltTextPage = () => {
         }
         return "";
     }
-  }, [type, productId, localRecord]);
+  }, [type,productId , localRecord]);
 
   const [languageList, setLanguageList] = useState<any[]>([]);
   const [languageLoading, setLanguageLoading] = useState<boolean>(true);
@@ -1177,22 +1177,22 @@ const ImageAltTextPage = () => {
         replaceTranslateImageFetcher.submit(formData, {
           method: "post",
         });
-        if (TRANSLATABLE_TYPES.has(type as string)) {
-          saveImageFetcher.submit(
-            {
-              saveImageToShopify: JSON.stringify({
-                ...initData,
-                value: initData.value?.[initData.index].src,
-                imageAfterUrl: translateImageFetcher.data.response,
-                languageCode: currentTranslatingImage.languageCode,
-                altText: altTranslateFetcher.data.response.response,
-                locale: defaultLanguageData.locale,
-                mediaId: currentTranslatingImage.mediaId,
-              }),
-            },
-            { method: "post" },
-          );
-        }
+        // if (TRANSLATABLE_TYPES.has(type as string)) {
+        //   saveImageFetcher.submit(
+        //     {
+        //       saveImageToShopify: JSON.stringify({
+        //         ...initData,
+        //         value: initData.value?.[initData.index].src,
+        //         imageAfterUrl: translateImageFetcher.data.response,
+        //         languageCode: currentTranslatingImage.languageCode,
+        //         altText: altTranslateFetcher.data.response.response,
+        //         locale: defaultLanguageData.locale,
+        //         mediaId: currentTranslatingImage.mediaId,
+        //       }),
+        //     },
+        //     { method: "post" },
+        //   );
+        // }
 
         dispatch(setChars({ chars: chars + 2000 }));
       } else if (
@@ -1372,10 +1372,10 @@ const ImageAltTextPage = () => {
   }, [saveImageFetcher.data]);
   useEffect(() => {
     if (deleteImageFetcher.data) {
-      // console.log(
-      //   "deleteImageFetcher",
-      //   deleteImageFetcher.data.response.data?.translationsRemove.translations,
-      // );
+      console.log(
+        "deleteImageFetcher",
+        deleteImageFetcher.data.response.data?.translationsRemove.translations,
+      );
     }
   }, [deleteImageFetcher.data]);
   const handleDelete = async (
@@ -1412,25 +1412,25 @@ const ImageAltTextPage = () => {
         imageUrl: imageUrl,
         languageCode: languageCode,
       });
-      if (TRANSLATABLE_TYPES.has(type as string)) {
-        deleteImageFetcher.submit(
-          {
-            deleteImageInShopify: JSON.stringify({
-              ...initData,
-              value: initData.value?.[initData.index].src,
-              languageCode,
-              mediaId,
-              productId: currentResourceId,
-              imageId: hashString(
-                `${initData.value?.[initData.index].src}_${initData.resourceId}`,
-              ),
-              imageBeforeUrl: imageUrl,
-              type: "deleteImage_Alt",
-            }),
-          },
-          { method: "post" },
-        );
-      }
+      // if (TRANSLATABLE_TYPES.has(type as string)) {
+      //   deleteImageFetcher.submit(
+      //     {
+      //       deleteImageInShopify: JSON.stringify({
+      //         ...initData,
+      //         value: initData.value?.[initData.index].src,
+      //         languageCode,
+      //         mediaId,
+      //         productId: currentResourceId,
+      //         imageId: hashString(
+      //           `${initData.value?.[initData.index].src}_${initData.resourceId}`,
+      //         ),
+      //         imageBeforeUrl: imageUrl,
+      //         type: "deleteImage_Alt",
+      //       }),
+      //     },
+      //     { method: "post" },
+      //   );
+      // }
       if (res.success) {
         fetcher.submit(
           {
@@ -1515,22 +1515,22 @@ const ImageAltTextPage = () => {
       //     { method: "post" },
       //   );
       // }
-      if (TRANSLATABLE_TYPES.has(type as string)) {
-        saveImageFetcher.submit(
-          {
-            saveImageToShopify: JSON.stringify({
-              ...initData,
-              value: initData.value?.[initData.index].src,
-              imageAfterUrl: "",
-              languageCode,
-              altText: "",
-              locale: defaultLanguageData.locale,
-              mediaId,
-            }),
-          },
-          { method: "post" },
-        );
-      }
+      // if (TRANSLATABLE_TYPES.has(type as string)) {
+      //   saveImageFetcher.submit(
+      //     {
+      //       saveImageToShopify: JSON.stringify({
+      //         ...initData,
+      //         value: initData.value?.[initData.index].src,
+      //         imageAfterUrl: "",
+      //         languageCode,
+      //         altText: "",
+      //         locale: defaultLanguageData.locale,
+      //         mediaId,
+      //       }),
+      //     },
+      //     { method: "post" },
+      //   );
+      // }
       if (res.success) {
         setImageDatas(
           imageDatas.map((item: any) => {
@@ -1632,22 +1632,22 @@ const ImageAltTextPage = () => {
               : item,
           );
         });
-        if (TRANSLATABLE_TYPES.has(type as string)) {
-          saveImageFetcher.submit(
-            {
-              saveImageToShopify: JSON.stringify({
-                ...initData,
-                value: initData.value?.[initData.index].src,
-                imageAfterUrl: newUrl,
-                languageCode: img.languageCode,
-                altText: img.altAfterTranslation,
-                locale: defaultLanguageData.locale,
-                mediaId: img.mediaId,
-              }),
-            },
-            { method: "post" },
-          );
-        }
+        // if (TRANSLATABLE_TYPES.has(type as string)) {
+        //   saveImageFetcher.submit(
+        //     {
+        //       saveImageToShopify: JSON.stringify({
+        //         ...initData,
+        //         value: initData.value?.[initData.index].src,
+        //         imageAfterUrl: newUrl,
+        //         languageCode: img.languageCode,
+        //         altText: img.altAfterTranslation,
+        //         locale: defaultLanguageData.locale,
+        //         mediaId: img.mediaId,
+        //       }),
+        //     },
+        //     { method: "post" },
+        //   );
+        // }
 
         shopify.toast.show(`${info.file.name} ${t("Upload Success")}`);
       } else {
@@ -1692,26 +1692,26 @@ const ImageAltTextPage = () => {
         languageCode: item.languageCode,
       }),
     );
-    confirmData.map((item: any) => {
-      if (TRANSLATABLE_TYPES.has(type as string)) {
-        if (item.type === "user") {
-          saveImageFetcher.submit(
-            {
-              saveImageToShopify: JSON.stringify({
-                ...initData,
-                value: item.imageUrl,
-                imageAfterUrl: item.imageAfterUrl,
-                languageCode: item.languageCode,
-                altText: item.value,
-                locale: defaultLanguageData.locale,
-                mediaId: item.mediaId,
-              }),
-            },
-            { method: "post" },
-          );
-        }
-      }
-    });
+    // confirmData.map((item: any) => {
+    //   if (TRANSLATABLE_TYPES.has(type as string)) {
+    //     if (item.type === "user") {
+    //       saveImageFetcher.submit(
+    //         {
+    //           saveImageToShopify: JSON.stringify({
+    //             ...initData,
+    //             value: item.imageUrl,
+    //             imageAfterUrl: item.imageAfterUrl,
+    //             languageCode: item.languageCode,
+    //             altText: item.value,
+    //             locale: defaultLanguageData.locale,
+    //             mediaId: item.mediaId,
+    //           }),
+    //         },
+    //         { method: "post" },
+    //       );
+    //     }
+    //   }
+    // });
     // 并发执行所有请求
     try {
       let successCount = 0;
@@ -2330,26 +2330,26 @@ const ImageAltTextPage = () => {
                                           : item,
                                       );
                                     });
-                                    if (
-                                      TRANSLATABLE_TYPES.has(type as string)
-                                    ) {
-                                      saveImageFetcher.submit(
-                                        {
-                                          saveImageToShopify: JSON.stringify({
-                                            ...initData,
-                                            value:
-                                              initData.value?.[initData.index]
-                                                .src,
-                                            imageAfterUrl: newUrl,
-                                            languageCode: img.languageCode,
-                                            altText: img.altAfterTranslation,
-                                            locale: defaultLanguageData.locale,
-                                            mediaId: img.mediaId,
-                                          }),
-                                        },
-                                        { method: "post" },
-                                      );
-                                    }
+                                    // if (
+                                    //   TRANSLATABLE_TYPES.has(type as string)
+                                    // ) {
+                                    //   saveImageFetcher.submit(
+                                    //     {
+                                    //       saveImageToShopify: JSON.stringify({
+                                    //         ...initData,
+                                    //         value:
+                                    //           initData.value?.[initData.index]
+                                    //             .src,
+                                    //         imageAfterUrl: newUrl,
+                                    //         languageCode: img.languageCode,
+                                    //         altText: img.altAfterTranslation,
+                                    //         locale: defaultLanguageData.locale,
+                                    //         mediaId: img.mediaId,
+                                    //       }),
+                                    //     },
+                                    //     { method: "post" },
+                                    //   );
+                                    // }
 
                                     shopify.toast.show(
                                       `${info.file.name} ${t("Upload Success")}`,

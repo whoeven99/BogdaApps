@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next";
 import { useEffect, useState } from "react";
 import { useFetcher, useNavigate } from "@remix-run/react";
 import useReport from "scripts/eventReport";
+import ImageTranslateModal from "./batchModal";
 
 const { Title } = Typography;
 
@@ -19,6 +20,7 @@ export default function ThemeModule({ shop }: { shop: string }) {
   const [isMobile, setIsMobile] = useState(false);
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
   const items = [
     {
       title: t("Product image"),
@@ -96,17 +98,18 @@ export default function ThemeModule({ shop }: { shop: string }) {
       },
       "dashboard_translate_image",
     );
-    switch (item.key) {
-      case "product":
-        navigate("/app/product");
-        break;
-      case "article":
-        navigate("/app/article");
-        break;
-      case "theme":
-        navigate("/app/theme");
-        break;
-    }
+    setOpen(true);
+    // switch (item.key) {
+    //   case "product":
+    //     navigate("/app/product");
+    //     break;
+    //   case "article":
+    //     navigate("/app/article");
+    //     break;
+    //   case "theme":
+    //     navigate("/app/theme");
+    //     break;
+    // }
   };
 
   useEffect(() => {
@@ -178,6 +181,13 @@ export default function ThemeModule({ shop }: { shop: string }) {
           </div>
         ))}
       </Flex>
+      <ImageTranslateModal
+        open={open}
+        onClose={() => setOpen(false)}
+        onSubmit={(data) => {
+          console.log("提交的数据：", data);
+        }}
+      />
     </div>
   );
 }

@@ -564,6 +564,11 @@ export default function Index() {
         {/* 表格主体区域（可滚动） */}
         <div style={{ flex: 1, overflow: "auto" }}>
           <Table
+            rowSelection={{
+              onChange: (selectedRowKeys, selectedRows) => {
+                console.log(selectedRowKeys, selectedRows);
+              },
+            }}
             dataSource={articleData}
             columns={panelColumns}
             pagination={false}

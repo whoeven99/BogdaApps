@@ -77,38 +77,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return result;
   };
 
-  // 从 HTML 提取 <img src="">
-  // const extractFromHtml = (
-  //   html: string,
-  // ): { src: string; alt: string | null }[] => {
-  //   const result: { src: string; alt: string | null }[] = [];
-  //   // 匹配 <img ... src="xxx" ... alt="yyy" ...>
-  //   const regex =
-  //     /<img[^>]*src=["']([^"']+)["'][^>]*alt=["']([^"']*)["'][^>]*>|<img[^>]*alt=["']([^"']*)["'][^>]*src=["']([^"']+)["'][^>]*|<img[^>]*src=["']([^"']+)["'][^>]*>/g;
-
-  //   let match;
-  //   while ((match = regex.exec(html)) !== null) {
-  //     let src = "";
-  //     let alt = null;
-
-  //     if (match[1] && match[2]) {
-  //       // 情况 1：src 在前，alt 在后
-  //       src = match[1];
-  //       alt = match[2];
-  //     } else if (match[4] && match[3]) {
-  //       // 情况 2：alt 在前，src 在后
-  //       src = match[4];
-  //       alt = match[3];
-  //     } else if (match[5]) {
-  //       // 情况 3：只有 src
-  //       src = match[5];
-  //     }
-
-  //     result.push({ src, alt });
-  //   }
-
-  //   return result;
-  // };
   function extractShopifyImages(html: string) {
     // 全局匹配所有 <img ...> 标签（跨行也能匹配）
     const imgTagRegex = /<img[^>]*>/gi;

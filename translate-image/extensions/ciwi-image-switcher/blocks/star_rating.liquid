@@ -4,11 +4,45 @@
 
 <input id="image_queryCiwiId" type="hidden" value="{{ shop.permanent_domain }}">
 <input type="hidden" name="image_language_code" value="{{ localization.language.iso_code }}">
-<input type="hidden" name="image_product_id" value="{{ product.id }}">
-<input type="hidden" name="image_article_id" value="{{ article.id }}">
+{% comment %} <input type="hidden" name="image_product_id" value="{{ product.id }}">
+<input type="hidden" name="image_article_id" value="{{ article.id }}"> {% endcomment %}
 <input type="hidden" name="image_block_id" value="{{ block.id }}">
 
+{% comment %} 动态获取当前页面的 resource ID {% endcomment %}
+{% if product %}
+  <input type="hidden" name="image_resource_id" value="{{ product.id }}">
+  <input type="hidden" name="image_resource_type" value="Product">
+  {% comment %} 如果产品有自定义 metafield {% endcomment %}
+  {% if product.metafields.custom.your_metafield_key %}
+    <input type="hidden" name="image_has_metafield" value="true">
+  {% endif %}
+{% elsif collection %}
+  <input type="hidden" name="image_resource_id" value="{{ collection.id }}">
+  <input type="hidden" name="image_resource_type" value="Collection">
+{% elsif page %}
+  <input type="hidden" name="image_resource_id" value="{{ page.id }}">
+  <input type="hidden" name="image_resource_type" value="Page">
+{% elsif article %}
+  <input type="hidden" name="image_resource_id" value="{{ article.id }}">
+  <input type="hidden" name="image_resource_type" value="Article">
+{% elsif blog %}
+  <input type="hidden" name="image_resource_id" value="{{ blog.id }}">
+  <input type="hidden" name="image_resource_type" value="blog">
+{% else %}
+  <input type="hidden" name="image_resource_id" value="">
+  <input type="hidden" name="image_resource_type" value="other">
+{% endif %}
+
+{% comment %} 主题信息（全局可用） {% endcomment %}
+<input type="hidden" name="image_theme_id" value="{{ theme.id }}">
+<input type="hidden" name="image_theme_name" value="{{ theme.name }}">
+
 <script type="module" src="{{ 'ciwi-main.js' | asset_url }}"></script>
+<script>
+  // 打印 page handle 到浏览器控制台
+  console.log('image_page_handle value:', '{{ page.handle }}');
+  console.log('image_page_handle value:', '{{ theme.id }}');
+</script>
 {% schema %}
 {
   "name": "Ciwi_Image_Switcher",

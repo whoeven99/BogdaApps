@@ -11,8 +11,10 @@ import ScrollNotice from "~/components/ScrollNotice";
 import useReport from "scripts/eventReport";
 import ThemeModule from "./components/themeModule";
 import { FaqComponent } from "./components/faqComponent";
+import { useDispatch, useSelector } from "react-redux";
+import { AppDispatch } from "~/store";
+import { setLanguageList } from "~/store/modules/languageSlice";
 const { Title, Text } = Typography;
-
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const adminAuthResult = await authenticate.admin(request);
   const { shop } = adminAuthResult.session;
@@ -30,6 +32,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 const Index = () => {
   const { language, server, shop, ciwiSwitcherBlocksId, ciwiSwitcherId } =
     useLoaderData<typeof loader>();
+  
+  const dispatch = useDispatch<AppDispatch>();
   const { reportClick, report } = useReport();
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -45,11 +49,12 @@ const Index = () => {
 
   const fetcher = useFetcher<any>();
   const themeFetcher = useFetcher<any>();
+  const languageFetcher = useFetcher<any>();
   const printedRef = useRef(false);
   useEffect(() => {
     setIsLoading(false);
     fetcher.submit(
-      {
+      { 
         log: `${shop} 目前在主页面, 页面语言为${language}}`,
       },
       {
@@ -57,7 +62,23 @@ const Index = () => {
         action: "/app/log",
       },
     );
+    languageFetcher.submit(
+      {
+        languageLoading: JSON.stringify({}),
+      },
+      {
+        action: "/app/product",
+        method: "POST",
+      },
+    );
   }, []);
+  useEffect(() => {
+    if (languageFetcher.data) {
+      console.log(languageFetcher.data.response);
+      
+      dispatch(setLanguageList(languageFetcher.data.response));
+    }
+  }, [languageFetcher.data]);
   useEffect(() => {
     if (switcherLoading) return;
     if (printedRef.current) return; // 防止重复打印

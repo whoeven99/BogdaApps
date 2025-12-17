@@ -69,51 +69,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     };
     switch (true) {
       case !!languageLoading:
-        // try {
-        //   const fetchWithRetry = async (maxRetries = 3) => {
-        //     for (let i = 0; i < maxRetries; i++) {
-        //       try {
-        //         const mutationResponse = await admin.graphql(
-        //           `query MyQuery {
-        //       shopLocales {
-        //         locale
-        //         name
-        //         primary
-        //         published
-        //       }
-        //     }`,
-        //         );
-        //         const data = (await mutationResponse.json()) as any;
-
-        //         if (!data?.errors) {
-        //           return data.data.shopLocales;
-        //         }
-        //       } catch (error) {
-        //         if (i === maxRetries - 1) throw error;
-        //         await new Promise((resolve) =>
-        //           setTimeout(resolve, 1000 * (i + 1)),
-        //         );
-        //       }
-        //     }
-        //   };
-
-        //   const result = await fetchWithRetry();
-
-        //   return {
-        //     success: true,
-        //     response: result,
-        //   };
-        // } catch (error) {
-        //   console.log("GraphQL Error: ", error);
-        //   return {
-        //     success: false,
-        //     response: null,
-        //   };
-        // }
         try {
           const fetchWithRetry = async (maxRetries = 3) => {
-            let lastError;
-
             for (let i = 0; i < maxRetries; i++) {
               try {
                 const mutationResponse = await admin.graphql(
@@ -126,47 +83,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                     }
                   }`,
                 );
-
-                // 检查 HTTP 状态
-                if (!mutationResponse.ok) {
-                  throw new Error(`HTTP ${mutationResponse.status}`);
-                }
-
                 const data = (await mutationResponse.json()) as any;
 
-                // 检查 GraphQL 错误
-                if (data?.errors) {
-                  console.log("GraphQL errors:", data.errors);
-                  lastError = new Error(
-                    data.errors[0]?.message || "GraphQL error",
-                  );
-                  // 如果是权限或查询错误,不需要重试
-                  if (data.errors[0]?.extensions?.code === "ACCESS_DENIED") {
-                    throw lastError;
-                  }
-                  continue; // 其他错误继续重试
+                if (!data?.errors) {
+                  return data.data.shopLocales;
                 }
-
-                // 检查数据是否存在
-                if (!data?.data?.shopLocales) {
-                  throw new Error("shopLocales data is missing");
-                }
-
-                return data.data.shopLocales;
               } catch (error) {
-                lastError = error;
-                console.log(`Attempt ${i + 1} failed:`, error);
-
-                if (i < maxRetries - 1) {
-                  await new Promise((resolve) =>
-                    setTimeout(resolve, 1000 * (i + 1)),
-                  );
-                }
+                if (i === maxRetries - 1) throw error;
+                await new Promise((resolve) =>
+                  setTimeout(resolve, 1000 * (i + 1)),
+                );
               }
             }
-
-            // 所有重试都失败
-            throw lastError || new Error("All retries failed");
           };
 
           const result = await fetchWithRetry();
@@ -175,12 +103,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             success: true,
             response: result,
           };
-        } catch (error: any) {
+        } catch (error) {
           console.log("GraphQL Error: ", error);
           return {
             success: false,
             response: null,
-            error: error.message, // 添加错误信息方便调试
           };
         }
 
@@ -236,7 +163,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
           const response = await loadData.json();
 
-          console.log("productStartCursor", response?.data?.products?.edges);
           if (response?.data?.products?.edges.length > 0) {
             const menuData = response?.data?.products?.edges.map(
               (item: any) => {
@@ -351,9 +277,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           );
 
           const response = await loadData.json();
-          console.log("sdasdasda: ", response);
 
-          console.log("productEndCursor11", response?.data?.products?.edges);
           if (response?.data?.products?.edges.length > 0) {
             const menuData = response?.data?.products?.edges.map(
               (item: any) => {
@@ -914,6 +838,11 @@ export default function Index() {
               {/* 表格主体区域（可滚动） */}
               <div style={{ flex: 1, overflow: "auto" }}>
                 <Table
+                  rowSelection={{
+                    onChange: (selectedRowKeys, selectedRows) => {
+                      console.log(selectedRowKeys, selectedRows);
+                    },
+                  }}
                   dataSource={menuData}
                   columns={panelColumns}
                   pagination={false}

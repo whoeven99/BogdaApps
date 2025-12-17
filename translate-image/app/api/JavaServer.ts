@@ -1757,7 +1757,7 @@ const fetchFileReferences = async (admin: any, nodes: any[]) => {
       // === 3) HTML ===
       if (type === "HTML") {
         const extracted = extractShopifyImages(contentItem.value || "");
-        console.log("dsadadwq", extracted);
+        // console.log("dsadadwq", extracted);
 
         // if (urls.length === 0) continue;
         if (extracted.length === 0) continue;
