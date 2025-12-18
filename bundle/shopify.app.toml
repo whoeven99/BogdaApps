@@ -1,0 +1,6 @@
+# 这里是shopify配置默认文件
+# 需要获取自己的配置文件，使用命令 shopify app config link
+# 选择自己的本地应用
+# 命名使用自己名称的首字母或英文名.eg
+# 回车后会生成对应的shopify.app.eg.toml配置文件
+# 后续运行项目需要加上 --c “shopify.app.eg.toml“
