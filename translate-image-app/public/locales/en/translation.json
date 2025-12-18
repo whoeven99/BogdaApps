@@ -1,0 +1,19 @@
+{
+  "Navigation": {
+    "home": "Home",
+    "translator": "Image Translator",
+    "pricing": "Pricing",
+    "login": "Login"
+  },
+  "home": {
+    "title": "AI Image Translator",
+    "description": "Translate text in images to over 100 languages, support batch processing, preserve original layout.",
+    "startButton": "Start Translating Now"
+  },
+  "Translator": {
+    "uploadHint": "Drag or click to upload images",
+    "selectLanguage": "Select target language",
+    "translating": "Translating..."
+  },
+  "AI Image Translator":"AI Image Translator"
+}
