@@ -70,21 +70,41 @@ export function cartLinesDiscountsGenerateRun(
 
       const unitPrice = Number(line.cost.amountPerQuantity.amount);
 
-      let rule = DEFAULT_RULE;
+      let rule: typeof DEFAULT_RULE | null = null;
 
-      const metafieldValue = line.merchandise.product?.metafield?.value;
+      // Variant
+      const variantRuleValue = line.merchandise.metafield?.value;
 
-      if (metafieldValue) {
+      console.log(`${line.merchandise.product.id}: `, variantRuleValue);
+
+      if (variantRuleValue) {
         try {
           rule = {
             ...DEFAULT_RULE,
-            ...JSON.parse(metafieldValue),
+            ...JSON.parse(variantRuleValue),
           };
         } catch {
-          // JSON 写错 → 静默回退默认规则
-          rule = DEFAULT_RULE;
+          rule = null;
         }
       }
+
+      // Product（可选）
+      if (!rule) {
+        const productRuleValue = line.merchandise.product?.metafield?.value;
+
+        if (productRuleValue) {
+          try {
+            rule = {
+              ...DEFAULT_RULE,
+              ...JSON.parse(productRuleValue),
+            };
+          } catch {
+            rule = null;
+          }
+        }
+      }
+
+      if (!rule) continue; // 👈 没规则直接跳过
 
       const originalTotal = unitPrice * quantity;
       const discountedTotal = calculateDiscountedTotal(

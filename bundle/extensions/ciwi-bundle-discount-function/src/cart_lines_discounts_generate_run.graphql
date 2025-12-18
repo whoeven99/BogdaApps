@@ -12,9 +12,12 @@ query CartInput {
         __typename
         ... on ProductVariant {
           id
+          metafield(namespace: "custom", key: "ciwi_variant_bundle_pricing_rule") {
+            value
+          }
           product {
             id
-            metafield(namespace: "bundle", key: "pricing") {
+            metafield(namespace: "custom", key: "ciwi_product_bundle_pricing_rule") {
               value
             }
           }
