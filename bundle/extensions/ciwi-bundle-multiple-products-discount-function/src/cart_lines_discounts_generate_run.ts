@@ -7,7 +7,6 @@ import {
 } from "../generated/api";
 
 //默认折扣规则
-
 interface RuleOption1Type {
   groupSize: number; //折扣组的元素数量
   groupDiscount: number; //满一组的折扣
@@ -15,7 +14,7 @@ interface RuleOption1Type {
 }
 interface ProductRuleOption1Type {
   applicateToAllVariants: boolean; //应用到所有变体
-  applicateVariantsArray: string[]; //应用变体数组
+  applicateVariantsArray: string[]; //一起计算quantity的变体数据数组
   quantityCalculateForAllSelectedArray: boolean;
   rule: RuleOption1Type;
 }
@@ -27,19 +26,24 @@ export function cartLinesDiscountsGenerateRun(
     return { operations: [] };
   }
 
+  //是否存在订单折扣（即使存在目前该方法也不使用）
   const hasOrderDiscountClass = input.discount.discountClasses.includes(
     DiscountClass.Order,
   );
+  //是否存在产品折扣
   const hasProductDiscountClass = input.discount.discountClasses.includes(
     DiscountClass.Product,
   );
 
+  //不存在相应折扣类型则直接跳过
   if (!hasOrderDiscountClass && !hasProductDiscountClass) {
     return { operations: [] };
   }
 
+  //定义折扣数组
   const operations: CartLinesDiscountsGenerateRunResult["operations"] = [];
 
+  //注释掉订单折扣相关代码
   // if (hasOrderDiscountClass) {
   //   operations.push({
   //     orderDiscountsAdd: {
@@ -66,30 +70,41 @@ export function cartLinesDiscountsGenerateRun(
   // }
 
   if (hasProductDiscountClass) {
+    //定义Map值类型
     type ProductGroup = {
       rule: RuleOption1Type;
       lines: typeof input.cart.lines;
     };
 
+    //定义后续需要用到的Map数据，用来存储产品中配置好的一起计算quantity的变体数据
     const productRuleGroups = new Map<string, ProductGroup>();
 
+    //轮询购物车每个item
     for (const line of input.cart.lines) {
       if (line.merchandise.__typename !== "ProductVariant") continue;
 
+      //该item的产品id
       const productId = line.merchandise.product.id;
+
+      //该item的变体id
       const variantId = line.merchandise.id;
 
+      //该item的加购数量
       const quantity = line.quantity;
 
       const unitPrice = Number(line.cost.amountPerQuantity.amount);
 
+      //应用到的折扣规则
       let appliedRule: RuleOption1Type | null = null;
+      //是否使用产品规则
       let useProductRule = false;
+      //是否需要统一计算quantity
       let mergeQuantity = false;
 
       //产品折扣规则
       const productRuleValue = line.merchandise.product?.metafield?.value;
 
+      //如果产品规则存在
       if (productRuleValue) {
         try {
           const productRuleJSON: ProductRuleOption1Type =
