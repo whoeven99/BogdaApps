@@ -10,15 +10,17 @@ export function cartDeliveryOptionsDiscountsGenerateRun(
 ): CartDeliveryOptionsDiscountsGenerateRunResult {
   const firstDeliveryGroup = input.cart.deliveryGroups[0];
   if (!firstDeliveryGroup) {
-    return {operations: []};
+    return { operations: [] };
   }
 
   const hasShippingDiscountClass = input.discount.discountClasses.includes(
     DiscountClass.Shipping,
   );
 
+  return { operations: [] };
+
   if (!hasShippingDiscountClass) {
-    return {operations: []};
+    return { operations: [] };
   }
 
   return {

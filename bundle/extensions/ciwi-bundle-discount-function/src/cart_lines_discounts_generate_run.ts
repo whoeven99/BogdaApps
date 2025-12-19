@@ -40,30 +40,30 @@ export function cartLinesDiscountsGenerateRun(
 
   const operations: CartLinesDiscountsGenerateRunResult["operations"] = [];
 
-  if (hasOrderDiscountClass) {
-    operations.push({
-      orderDiscountsAdd: {
-        candidates: [
-          {
-            message: "10% OFF ORDER",
-            targets: [
-              {
-                orderSubtotal: {
-                  excludedCartLineIds: [],
-                },
-              },
-            ],
-            value: {
-              percentage: {
-                value: 10,
-              },
-            },
-          },
-        ],
-        selectionStrategy: OrderDiscountSelectionStrategy.First,
-      },
-    });
-  }
+  // if (hasOrderDiscountClass) {
+  //   operations.push({
+  //     orderDiscountsAdd: {
+  //       candidates: [
+  //         {
+  //           message: "10% OFF ORDER",
+  //           targets: [
+  //             {
+  //               orderSubtotal: {
+  //                 excludedCartLineIds: [],
+  //               },
+  //             },
+  //           ],
+  //           value: {
+  //             percentage: {
+  //               value: 10,
+  //             },
+  //           },
+  //         },
+  //       ],
+  //       selectionStrategy: OrderDiscountSelectionStrategy.First,
+  //     },
+  //   });
+  // }
 
   if (hasProductDiscountClass) {
     type ProductGroup = {
