@@ -9,8 +9,11 @@ export function cartDeliveryOptionsDiscountsGenerateRun(
   input: DeliveryInput,
 ): CartDeliveryOptionsDiscountsGenerateRunResult {
   const firstDeliveryGroup = input.cart.deliveryGroups[0];
+
+  console.log("firstDeliveryGroup: ", firstDeliveryGroup);
+
   if (!firstDeliveryGroup) {
-    return {operations: []};
+    return { operations: [] };
   }
 
   const hasShippingDiscountClass = input.discount.discountClasses.includes(
@@ -18,7 +21,7 @@ export function cartDeliveryOptionsDiscountsGenerateRun(
   );
 
   if (!hasShippingDiscountClass) {
-    return {operations: []};
+    return { operations: [] };
   }
 
   return {

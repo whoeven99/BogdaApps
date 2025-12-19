@@ -1,89 +1,91 @@
-// import {
-//   DiscountClass,
-//   OrderDiscountSelectionStrategy,
-//   ProductDiscountSelectionStrategy,
-//   CartInput,
-//   CartLinesDiscountsGenerateRunResult,
-// } from '../generated/api';
+import {
+  DiscountClass,
+  OrderDiscountSelectionStrategy,
+  ProductDiscountSelectionStrategy,
+  CartInput,
+  CartLinesDiscountsGenerateRunResult,
+} from "../generated/api";
 
-// export function cartLinesDiscountsGenerateRun(
-//   input: CartInput,
-// ): CartLinesDiscountsGenerateRunResult {
-//   if (!input.cart.lines.length) {
-//     return {operations: []};
-//   }
+export function cartLinesDiscountsGenerateRun(
+  input: CartInput,
+): CartLinesDiscountsGenerateRunResult {
+  return { operations: [] };
 
-//   const hasOrderDiscountClass = input.discount.discountClasses.includes(
-//     DiscountClass.Order,
-//   );
-//   const hasProductDiscountClass = input.discount.discountClasses.includes(
-//     DiscountClass.Product,
-//   );
+  if (!input.cart.lines.length) {
+    return { operations: [] };
+  }
 
-//   if (!hasOrderDiscountClass && !hasProductDiscountClass) {
-//     return {operations: []};
-//   }
+  const hasOrderDiscountClass = input.discount.discountClasses.includes(
+    DiscountClass.Order,
+  );
+  const hasProductDiscountClass = input.discount.discountClasses.includes(
+    DiscountClass.Product,
+  );
 
-//   const maxCartLine = input.cart.lines.reduce((maxLine, line) => {
-//     if (line.cost.subtotalAmount.amount > maxLine.cost.subtotalAmount.amount) {
-//       return line;
-//     }
-//     return maxLine;
-//   }, input.cart.lines[0]);
+  if (!hasOrderDiscountClass && !hasProductDiscountClass) {
+    return { operations: [] };
+  }
 
-//   const operations = [];
+  const maxCartLine = input.cart.lines.reduce((maxLine, line) => {
+    if (line.cost.subtotalAmount.amount > maxLine.cost.subtotalAmount.amount) {
+      return line;
+    }
+    return maxLine;
+  }, input.cart.lines[0]);
 
-//   if (hasOrderDiscountClass) {
-//     operations.push({
-//       orderDiscountsAdd: {
-//         candidates: [
-//           {
-//             message: '10% OFF ORDER',
-//             targets: [
-//               {
-//                 orderSubtotal: {
-//                   excludedCartLineIds: [],
-//                 },
-//               },
-//             ],
-//             value: {
-//               percentage: {
-//                 value: 10,
-//               },
-//             },
-//           },
-//         ],
-//         selectionStrategy: OrderDiscountSelectionStrategy.First,
-//       },
-//     });
-//   }
+  const operations = [];
 
-//   if (hasProductDiscountClass) {
-//     operations.push({
-//       productDiscountsAdd: {
-//         candidates: [
-//           {
-//             message: '20% OFF PRODUCT',
-//             targets: [
-//               {
-//                 cartLine: {
-//                   id: maxCartLine.id,
-//                 },
-//               },
-//             ],
-//             value: {
-//               percentage: {
-//                 value: 20,
-//               },
-//             },
-//           },
-//         ],
-//         selectionStrategy: ProductDiscountSelectionStrategy.First,
-//       },
-//     });
-//   }
+  if (hasOrderDiscountClass) {
+    operations.push({
+      orderDiscountsAdd: {
+        candidates: [
+          {
+            message: "10% OFF ORDER",
+            targets: [
+              {
+                orderSubtotal: {
+                  excludedCartLineIds: [],
+                },
+              },
+            ],
+            value: {
+              percentage: {
+                value: 10,
+              },
+            },
+          },
+        ],
+        selectionStrategy: OrderDiscountSelectionStrategy.First,
+      },
+    });
+  }
 
-//   return {
-//     operations,
-//   };
-// }
+  if (hasProductDiscountClass) {
+    operations.push({
+      productDiscountsAdd: {
+        candidates: [
+          {
+            message: "20% OFF PRODUCT",
+            targets: [
+              {
+                cartLine: {
+                  id: maxCartLine.id,
+                },
+              },
+            ],
+            value: {
+              percentage: {
+                value: 20,
+              },
+            },
+          },
+        ],
+        selectionStrategy: ProductDiscountSelectionStrategy.First,
+      },
+    });
+  }
+
+  return {
+    operations,
+  };
+}
