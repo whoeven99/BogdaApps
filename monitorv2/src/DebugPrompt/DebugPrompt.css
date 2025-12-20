@@ -1,0 +1,126 @@
+/* DebugPrompt 页面样式（已迁移并扩展） */
+:root{
+  --bg:#ffffff;
+  --muted:#6b7280;
+  --card-bg:#ffffff;
+  --border:#e6e6e6;
+  --primary:#1677ff; /* antd primary */
+  --primary-dark:#0f5edc;
+  --danger:#f43f5e;
+  --font-sans: "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+.debug-prompt-container {
+  padding: 20px;
+  font-family: var(--font-sans);
+  color: #111827;
+  background: var(--bg);
+  /* 不再设置整体 min-height，交由左侧卡片控制视口高度 */
+}
+
+.debug-row { height: 100%; align-items: stretch; }
+
+/* 左侧卡片默认占满视口高度 */
+.left-card {
+  height: 100vh;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Card body wrapper used inside antd Card */
+.card-body {
+   display: flex;
+   flex-direction: column;
+   padding: 12px;
+   /* 取消 flex:1，避免阻止 textarea 调整高度 */
+   box-sizing: border-box;
+ }
+
+ /* Prompt 输入框 */
+ .prompt-input {
+   width: 100%;
+   padding: 12px;
+   font-size: 15px;
+   border: 1px solid var(--border);
+   border-radius: 8px;
+   resize: vertical;
+   box-sizing: border-box;
+   font-family: var(--font-sans);
+   /* 初始高度默认为视口高度减去卡片头和按钮等，允许手动拖拽改变 */
+   min-height: calc(100vh - 180px);
+   overflow: auto;
+ }
+
+/* 操作按钮区域 */
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.btn-clear {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.btn-clear:hover {
+  background: #fafafa;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  padding: 6px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(22,119,255,0.12);
+}
+
+.btn-primary:active { background: var(--primary-dark); }
+
+/* 变量编辑区域 */
+.variables-scroll {
+  max-height: 240px;
+  overflow: auto;
+  padding: 6px 0;
+}
+
+.variable-item { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+.variable-item label { font-weight:600; color:#374151; min-width:90px; }
+.variable-item input { flex:1; padding:8px 10px; border-radius:6px; border:1px solid var(--border); }
+
+.variables-empty { color: var(--muted); padding: 12px; }
+
+/* API 返回区域 */
+.api-card-body { padding: 12px; height:100%; display:flex; flex-direction:column; }
+.api-response {
+  background: #0f1724;
+  color: #e6eef8;
+  font-family: "SFMono-Regular", Menlo, Monaco, "Roboto Mono", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.03);
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+/* Card title 微调 */
+.ant-card-head-title { font-weight:700; color: #111827; }
+
+/* 响应式 */
+@media (max-width: 991px) {
+  .debug-prompt-container { padding: 12px; }
+  .prompt-input { min-height: 180px; }
+}

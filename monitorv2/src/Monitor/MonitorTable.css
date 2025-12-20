@@ -1,0 +1,22 @@
+.monitor-table-container {
+  margin: 40px auto;
+  max-width: 1400px;
+  padding: 20px;
+}
+
+.monitor-card {
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+  border-radius: 12px;
+}
+
+/* Ant Design overrides if needed */
+.ant-table-thead > tr > th {
+  font-weight: 600;
+}
+
+@media (max-width: 768px) {
+  .monitor-table-container {
+    padding: 10px;
+    margin: 10px;
+  }
+}
