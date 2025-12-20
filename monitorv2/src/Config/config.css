@@ -1,0 +1,91 @@
+.config-page {
+  padding: 16px;
+}
+
+.config-status {
+  margin-bottom: 8px;
+  color: #555;
+}
+
+.config-error {
+  margin: 8px 0;
+  color: #d93025;
+}
+
+.config-reload {
+  margin-bottom: 12px;
+}
+
+.config-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 16px;
+}
+
+.config-table th,
+.config-table td {
+  border: 1px solid #ddd;
+  padding: 8px;
+}
+
+.config-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.config-delete {
+  color: #fff;
+  background-color: #d93025;
+  border: none;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.config-actions {
+  text-align: right;
+}
+
+.config-save {
+  padding: 6px 12px;
+}
+
+.config-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.config-modal {
+  background: #fff;
+  padding: 16px 24px;
+  border-radius: 4px;
+  min-width: 320px;
+  max-width: 480px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.config-modal-field {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+}
+
+.config-modal-field label {
+  width: 60px;
+}
+
+.config-modal-field input {
+  flex: 1;
+  padding: 4px 8px;
+}
+
+.config-modal-actions {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
