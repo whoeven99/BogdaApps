@@ -1,6 +1,6 @@
 /* DebugPrompt 页面样式（已迁移并扩展） */
 :root{
-  --bg:#ffffff;
+  --bg: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
   --muted:#6b7280;
   --card-bg:#ffffff;
   --border:#e6e6e6;
@@ -8,13 +8,16 @@
   --primary-dark:#0f5edc;
   --danger:#f43f5e;
   --font-sans: "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-hover: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
 }
 
 .debug-prompt-container {
   padding: 20px;
-  font-family: var(--font-sans);
+  font-family: var(--font-sans), system-ui;
   color: #111827;
   background: var(--bg);
+  min-height: 100vh;
   /* 不再设置整体 min-height，交由左侧卡片控制视口高度 */
 }
 
@@ -46,10 +49,17 @@
    border-radius: 8px;
    resize: vertical;
    box-sizing: border-box;
-   font-family: var(--font-sans);
+   font-family: var(--font-sans), system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
    /* 初始高度默认为视口高度减去卡片头和按钮等，允许手动拖拽改变 */
    min-height: calc(100vh - 180px);
    overflow: auto;
+   transition: border-color 0.3s ease, box-shadow 0.3s ease;
+   min-width: 600px;
+ }
+
+ .prompt-input:focus {
+   border-color: var(--primary);
+   box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.2);
  }
 
 /* 操作按钮区域 */
@@ -67,10 +77,13 @@
   padding: 6px 14px;
   border-radius: 6px;
   cursor: pointer;
+  transition: all 0.3s ease;
 }
 
 .btn-clear:hover {
   background: #fafafa;
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 .btn-primary {
@@ -80,7 +93,14 @@
   padding: 6px 16px;
   border-radius: 6px;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(22,119,255,0.12);
+  box-shadow: var(--shadow);
+  transition: all 0.3s ease;
+}
+
+.btn-primary:hover {
+  background: var(--primary-dark);
+  box-shadow: var(--shadow-hover);
+  transform: translateY(-1px);
 }
 
 .btn-primary:active { background: var(--primary-dark); }
@@ -119,8 +139,139 @@
 /* Card title 微调 */
 .ant-card-head-title { font-weight:700; color: #111827; }
 
-/* 响应式 */
+/* 卡片样式改进 */
+.ant-card {
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  transition: box-shadow 0.3s ease;
+}
+
+.ant-card:hover {
+  box-shadow: var(--shadow-hover);
+}
+
+/* 目标语言输入框 */
+.target-language {
+  border-radius: 8px;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.target-language:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.2);
+}
+
+/* 翻译输入框 */
+.translation-input {
+  border-radius: 8px;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  min-width: 600px;
+}
+
+.translation-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.2);
+}
+
+/* HTML 转 JSON 按钮 */
+.btn-html-to-json {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  transition: all 0.3s ease;
+}
+
+.btn-html-to-json:hover {
+  box-shadow: var(--shadow-hover);
+  transform: translateY(-1px);
+}
+
+/* 对比按钮 */
+.ant-btn {
+  border-radius: 6px;
+  transition: all 0.3s ease;
+}
+
+.ant-btn:hover {
+  transform: translateY(-1px);
+}
+
+/* Drawer 样式 */
+.ant-drawer-content {
+  border-radius: 12px 0 0 12px;
+}
+
+.compare-panel {
+  padding: 16px;
+  background: #f9fafb;
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.compare-title {
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 8px;
+}
+
+.mono-block {
+  background: #0f1724;
+  color: #e6eef8;
+  font-family: "SFMono-Regular", Menlo, Monaco, "Roboto Mono", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.03);
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 模型选择下拉美化 */
+.model-select .ant-select-selector {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  border-radius: 10px;
+  padding: 0 10px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.9), rgba(250,250,252,0.9));
+  border: 1px solid rgba(16,24,40,0.06);
+  box-shadow: 0 2px 6px rgba(16,24,40,0.06);
+  transition: all 0.2s ease;
+}
+
+.model-select .ant-select-selection-item {
+  font-weight: 600;
+  color: #0f1724;
+}
+
+.model-select .ant-select-arrow {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.model-select:hover .ant-select-selector {
+  box-shadow: var(--shadow-hover);
+  border-color: var(--primary);
+}
+
+.model-select.ant-select-open .ant-select-selector,
+.model-select.ant-select-focused .ant-select-selector {
+  box-shadow: 0 0 0 6px rgba(22,119,255,0.06);
+  border-color: var(--primary);
+}
+
+/* 在小屏幕上限制宽度 */
+@media (max-width: 767px) {
+  .model-select { width: 100% !important; }
+}
+
 @media (max-width: 991px) {
   .debug-prompt-container { padding: 12px; }
   .prompt-input { min-height: 180px; }
+  .prompt-input { min-height: 200px; }
 }
