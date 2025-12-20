@@ -1,13 +1,12 @@
-import React, { useState } from 'react';
-import { Row, Col, Input, Form, Button, Card, Drawer, message } from 'antd';
+import React, {useState} from 'react';
+import {Button, Card, Col, Drawer, Input, message, Row, Select} from 'antd';
 import './DebugPrompt.css';
-import { httpPost } from "../utils/HttpUtils";
+import {httpPost} from "../utils/HttpUtils";
 
 const { TextArea } = Input;
 
 const DebugPrompt: React.FC = () => {
   const [prompt, setPrompt] = useState('');
-  const [variables, setVariables] = useState<Record<string, string>>({});
   const [apiResponse, setApiResponse] = useState('');
   const [loading, setLoading] = useState(false);
   const [translation, setTranslation] = useState('');
@@ -15,25 +14,11 @@ const DebugPrompt: React.FC = () => {
   const [htmlToJson, setHtmlToJson] = useState('');
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const [targetLanguage, setTargetLanguage] = useState(''); // 新增状态管理目标语言输入框的值
-
-  const extractVariables = (input: string) => {
-    const matches = input.match(/{{(.*?)}}/g);
-    if (matches) {
-      const vars = matches.reduce((acc, match) => {
-        const key = match.replace(/{{|}}/g, '');
-        acc[key] = '';
-        return acc;
-      }, {} as Record<string, string>);
-      setVariables(vars);
-    } else {
-      setVariables({});
-    }
-  };
+  const [model, setModel] = useState('AliYun'); // 模型选择，默认 AliYun
 
   const handlePromptChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     setPrompt(value);
-    extractVariables(value);
   };
 
   const callAiApi = async () => {
@@ -42,7 +27,7 @@ const DebugPrompt: React.FC = () => {
       return;
     }
     setLoading(true);
-    const response = await httpPost("production", '/promptTest', JSON.stringify({ prompt: prompt, target: targetLanguage, json: htmlToJson }));
+    const response = await httpPost("production", '/promptTest', JSON.stringify({ prompt: prompt, target: targetLanguage, json: htmlToJson, model }));
     setApiResponse(JSON.stringify(response, null, 2));
     setLoading(false);
   };
@@ -91,24 +76,29 @@ const DebugPrompt: React.FC = () => {
               />
 
               <div className="actions">
-                <Button
-                  type="default"
-                  className="btn-clear"
-                  onClick={() => {
-                    setPrompt('');
-                    setVariables({});
-                  }}
-                >
-                  清空
-                </Button>
-                <Button
-                  type="default"
-                  className="btn-primary"
-                  onClick={callAiApi}
-                  loading={loading}
-                >
-                  调用 AI 接口
-                </Button>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <label style={{ fontSize: 12, color: '#555' }}>模型选择</label>
+                    <Select
+                      value={model}
+                      onChange={(val) => setModel(String(val))}
+                      style={{ width: 140 }}
+                      options={[
+                        { value: 'AliYun', label: '阿里云' },
+                        { value: 'gpt', label: 'ChatGpt' },
+                        { value: 'DeepL', label: 'DeepL' },
+                      ]}
+                    />
+                  </div>
+                  <Button
+                    type="default"
+                    className="btn-primary"
+                    onClick={callAiApi}
+                    loading={loading}
+                  >
+                    调用 AI 接口
+                  </Button>
+                </div>
               </div>
             </div>
           </Card>
