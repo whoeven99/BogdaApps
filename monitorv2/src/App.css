@@ -1,0 +1,79 @@
+.app-container {
+  padding: 24px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  color: #0f172a;
+  background: #f8fafc;
+  min-height: 100vh;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.app-title {
+  font-size: 1.6rem;
+  margin: 0;
+  color: #0b1220;
+}
+
+.debug-prompt-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(90deg, #6366f1 0%, #06b6d4 100%);
+  color: #fff;
+  border: none;
+  padding: 10px 14px;
+  border-radius: 10px;
+  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.18), 0 1px 2px rgba(2,6,23,0.05);
+  cursor: pointer;
+  transition: transform 180ms ease, box-shadow 180ms ease, opacity 150ms ease;
+  font-weight: 600;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.debug-prompt-button:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 30px rgba(37, 99, 235, 0.2);
+}
+
+.debug-prompt-button:active {
+  transform: translateY(-1px) scale(0.995);
+}
+
+.debug-prompt-button:focus-visible {
+  outline: 3px solid rgba(99,102,241,0.18);
+  outline-offset: 3px;
+}
+
+.debug-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  fill: rgba(255,255,255,0.95);
+  opacity: 0.98;
+}
+
+.debug-label {
+  display: inline-block;
+  transform-origin: left center;
+}
+
+@media (max-width: 520px) {
+  .app-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .debug-prompt-button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
