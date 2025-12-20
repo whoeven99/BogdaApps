@@ -1,13 +1,13 @@
-import React, { useState } from 'react';
-import { Row, Col, Input, Form, Button, Card, Drawer, message } from 'antd';
+import React, {useState} from 'react';
+import {Button, Card, Col, Drawer, Input, message, Row, Select} from 'antd';
+import { RobotOutlined, Html5Outlined, DiffOutlined, CloudOutlined, GlobalOutlined } from '@ant-design/icons';
 import './DebugPrompt.css';
-import { httpPost } from "../utils/HttpUtils";
+import {httpPost} from "../utils/HttpUtils";
 
 const { TextArea } = Input;
 
 const DebugPrompt: React.FC = () => {
   const [prompt, setPrompt] = useState('');
-  const [variables, setVariables] = useState<Record<string, string>>({});
   const [apiResponse, setApiResponse] = useState('');
   const [loading, setLoading] = useState(false);
   const [translation, setTranslation] = useState('');
@@ -15,25 +15,11 @@ const DebugPrompt: React.FC = () => {
   const [htmlToJson, setHtmlToJson] = useState('');
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const [targetLanguage, setTargetLanguage] = useState(''); // 新增状态管理目标语言输入框的值
-
-  const extractVariables = (input: string) => {
-    const matches = input.match(/{{(.*?)}}/g);
-    if (matches) {
-      const vars = matches.reduce((acc, match) => {
-        const key = match.replace(/{{|}}/g, '');
-        acc[key] = '';
-        return acc;
-      }, {} as Record<string, string>);
-      setVariables(vars);
-    } else {
-      setVariables({});
-    }
-  };
+  const [model, setModel] = useState('AliYun'); // 模型选择，默认 AliYun
 
   const handlePromptChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     setPrompt(value);
-    extractVariables(value);
   };
 
   const callAiApi = async () => {
@@ -42,7 +28,7 @@ const DebugPrompt: React.FC = () => {
       return;
     }
     setLoading(true);
-    const response = await httpPost("production", '/promptTest', JSON.stringify({ prompt: prompt, target: targetLanguage, json: htmlToJson }));
+    const response = await httpPost("production", '/promptTest', JSON.stringify({ prompt: prompt, target: targetLanguage, json: htmlToJson, model }));
     setApiResponse(JSON.stringify(response, null, 2));
     setLoading(false);
   };
@@ -59,8 +45,6 @@ const DebugPrompt: React.FC = () => {
   };
 
   const showComparisonDrawer = () => {
-      console.log("click show drawer"); // 添加日志以确认点击事件触发
-      console.log("isDrawerVisible state:", isDrawerVisible); // 添加日志以确认状态更新
     setIsDrawerVisible(true);
   };
 
@@ -88,32 +72,50 @@ const DebugPrompt: React.FC = () => {
                 value={prompt}
                 onChange={handlePromptChange}
                 placeholder="输入你的 Prompt..."
+                autoSize={{ minRows: 8, maxRows: 30 }}
               />
 
               <div className="actions">
-                <Button
-                  type="default"
-                  className="btn-clear"
-                  onClick={() => {
-                    setPrompt('');
-                    setVariables({});
-                  }}
-                >
-                  清空
-                </Button>
-                <Button
-                  type="default"
-                  className="btn-primary"
-                  onClick={callAiApi}
-                  loading={loading}
-                >
-                  调用 AI 接口
-                </Button>
-              </div>
-            </div>
-          </Card>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', marginRight: 8 }}>
+                    <label style={{ fontSize: 12, color: '#555' }}>目标语言</label>
+                    <Input
+                      placeholder="目标语言"
+                      value={targetLanguage}
+                      onChange={(e) => setTargetLanguage(e.target.value)}
+                      style={{ width: 120 }}
+                      maxLength={10}
+                    />
+                  </div>
+                   <div style={{ display: 'flex', flexDirection: 'column' }}>
+                     <label style={{ fontSize: 12, color: '#555' }}>模型选择</label>
+                     <Select
+                       className="model-select"
+                       value={model}
+                       onChange={(val) => setModel(String(val))}
+                       style={{ width: 180 }}
+                       options={[
+                         { value: 'AliYun', label: ((<><CloudOutlined /><span>阿里云</span></>)) },
+                         { value: 'gpt', label: ((<><RobotOutlined /><span>ChatGpt</span></>)) },
+                         { value: 'DeepL', label: ((<><GlobalOutlined /><span>DeepL</span></>)) },
+                       ]}
+                     />
+                   </div>
+                   <Button
+                     type="default"
+                     className="btn-primary"
+                     onClick={callAiApi}
+                     loading={loading}
+                     icon={<RobotOutlined />}
+                   >
+                     调用 AI 接口
+                   </Button>
+                 </div>
+               </div>
+             </div>
+           </Card>
 
-          <Card title="API 返回内容">
+           <Card title="API 返回内容">
             <div className="api-card-body">
               <pre className="api-response">
                 {apiResponse || '等待调用...'}
@@ -122,6 +124,7 @@ const DebugPrompt: React.FC = () => {
                 type="default"
                 onClick={showComparisonDrawer}
                 style={{ marginTop: '10px' }}
+                icon={<DiffOutlined />}
               >
                 对比前后 JSON
               </Button>
@@ -130,21 +133,15 @@ const DebugPrompt: React.FC = () => {
         </Col>
 
         <Col xs={24} lg={12}>
-          <div style={{ marginBottom: '12px' }}>
-            <Input
-              placeholder="目标语言"
-              value={targetLanguage}
-              onChange={(e) => setTargetLanguage(e.target.value)}
-              maxLength={10}
-            />
-          </div>
-          <Card title="输入你的翻译内容">
+
+          <Card title="输入你的待翻译html">
             <div className="translation-card-body">
               <TextArea
                 className="translation-input"
                 value={translation}
                 onChange={(e) => setTranslation(e.target.value)}
-                placeholder="输入你的翻译内容..."
+                placeholder="输入你的待翻译html..."
+                autoSize={{ minRows: 6, maxRows: 20 }}
               />
               <Button
                 type="default"
@@ -152,8 +149,9 @@ const DebugPrompt: React.FC = () => {
                 onClick={handleHtmlToJson}
                 loading={htmlToJsonLoading}
                 style={{ marginTop: '10px' }}
+                icon={<Html5Outlined />}
               >
-                HTML -{" > " } JSON
+                HTML -{" > "} JSON
               </Button>
             </div>
           </Card>
@@ -163,7 +161,7 @@ const DebugPrompt: React.FC = () => {
               {htmlToJsonLoading ? (
                 <p>加载中...</p>
               ) : (
-                <pre style={{ whiteSpace: 'pre-wrap' }}>
+                <pre className="mono-block">
                   {htmlToJson || '暂无数据'}
                 </pre>
               )}
@@ -181,16 +179,16 @@ const DebugPrompt: React.FC = () => {
       >
         <Row gutter={16}>
           <Col span={12}>
-            <h3>HTML 转 JSON 结果</h3>
-            <pre style={{ whiteSpace: 'pre-wrap', border: '1px solid #ddd', padding: '10px' }}>
-              {htmlToJson || '暂无数据'}
-            </pre>
+            <div className="compare-panel">
+              <div className="compare-title">HTML 转 JSON 结果</div>
+              <pre className="mono-block">{htmlToJson || '暂无数据'}</pre>
+            </div>
           </Col>
           <Col span={12}>
-            <h3>API 返回内容</h3>
-            <pre style={{ whiteSpace: 'pre-wrap', border: '1px solid #ddd', padding: '10px' }}>
-              {getApiContent()}
-            </pre>
+            <div className="compare-panel">
+              <div className="compare-title">API 返回内容</div>
+              <pre className="mono-block">{getApiContent()}</pre>
+            </div>
           </Col>
         </Row>
       </Drawer>
