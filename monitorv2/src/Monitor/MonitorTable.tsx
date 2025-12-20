@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Table, Button, Tag, Input, Select, Progress, Space, Tooltip, Switch, Dropdown, Menu, message } from 'antd';
+import { Table, Button, Tag, Input, Select, Progress, Space, Tooltip, Switch, message } from 'antd';
 import { DownloadOutlined, SyncOutlined, FileExcelOutlined, CopyOutlined, PlayCircleOutlined, PauseCircleOutlined } from '@ant-design/icons';
 import { httpGet } from "../utils/HttpUtils";
 import './MonitorTable.css';
@@ -24,12 +24,31 @@ const MonitorTable: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const response = await httpGet(process.env.NODE_ENV, '/monitorv2?includeFinish=false');
+      const response = await httpGet("production", '/monitorv2?includeFinish=false');
       const formattedData = Object.entries(response || {}).map(([key, value]: [string, any]) => {
-        const initTime = value.initEndTime && value.initStartTime ? value.initEndTime - value.initStartTime : null;
-        const transTime = value.translateEndTime && value.initEndTime ? value.translateEndTime - value.initEndTime : null;
-        const saveTime = value.savingShopifyEndTime && value.translateEndTime ? value.savingShopifyEndTime - value.translateEndTime : null;
-        const lastUpdatedTime = value.savingShopifyEndTime ? Date.now() - value.savingShopifyEndTime : null;
+        // helper: normalize timestamp (allow strings and seconds)
+        const normalizeTs = (t: any) => {
+          if (t == null) return null;
+          const n = Number(t);
+          if (Number.isNaN(n)) return null;
+          // if looks like seconds (<= 10 digits), convert to ms
+          if (n < 1e11) return n * 1000;
+          return n;
+        };
+
+        const initStart = normalizeTs(value.initStartTime);
+        const initEnd = normalizeTs(value.initEndTime);
+        const translateStart = normalizeTs(value.translateStartTime ?? value.initEndTime); // fallback if provided
+        const translateEnd = normalizeTs(value.translateEndTime);
+        const saveEnd = normalizeTs(value.savingShopifyEndTime);
+
+        // 使用 != null 来判断是否存在（允许 0），避免因为 0 被当作 falsy 而丢失时间
+        const initTime = (initEnd != null && initStart != null) ? initEnd - initStart : null;
+        const transTime = (translateEnd != null && initEnd != null) ? translateEnd - initEnd : null;
+        const saveTime = (saveEnd != null && translateEnd != null) ? saveEnd - translateEnd : null;
+        // 如果 savingShopifyEndTime 缺失，则退回到 translateEndTime 或 initEndTime，尽量找到最近一次结束时间用于计算上次更新
+        const lastEnd = saveEnd ?? translateEnd ?? initEnd ?? null;
+        const lastUpdatedTime = lastEnd != null ? Date.now() - lastEnd : null;
 
         const shopName = value.shopName ? value.shopName.replace(/\.myshopify\.com$/, '') : '';
         const taskShort = `${key.split('-')[0]} - ${value.source} -> ${value.target}`;
@@ -75,12 +94,13 @@ const MonitorTable: React.FC = () => {
 
   const getStatusTag = (status: string | number) => {
     const statusMap: Record<string, string> = {
-      '0': '用户刚创建任务，读取shopify数据中',
-      '1': '读取shopify数据，存数据库结束，翻译中',
-      '2': '翻译结束，写入中',
-      '3': '写入shopify结束，待发送邮件，完成任务',
+      '0': '读取shopify数据中',
+      '1': '翻译中',
+      '2': '写入中',
+      '3': '待发送邮件',
       '4': '全部完成',
-      '5': '手动中断 or tokenLimit中断',
+      '5': '手动中断',
+        '6': 'Token Limit',
     };
 
     // 为不同状态指定颜色
@@ -91,6 +111,7 @@ const MonitorTable: React.FC = () => {
       '3': 'cyan',     // 写入结束，待邮件
       '4': 'green',    // 完成
       '5': 'red',      // 中断/异常
+        '6': 'red',      // 中断/异常
     };
 
     const key = String(status);
@@ -245,7 +266,7 @@ const MonitorTable: React.FC = () => {
     {
       title: '操作',
       key: 'actions',
-      fixed: 'right',
+      fixed: 'right' as 'right',
       width: 140,
       render: (_: any, record: any) => (
         <Space>
