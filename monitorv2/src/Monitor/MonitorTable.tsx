@@ -74,25 +74,32 @@ const MonitorTable: React.FC = () => {
   }, [autoRefresh, intervalSeconds]);
 
   const getStatusTag = (status: string | number) => {
-    const statusMap: Record<number, string> = {
-      0: '用户刚创建任务，读取shopify数据中',
-      1: '读取shopify数据，存数据库结束，翻译中',
-      2: '翻译结束，写入中',
-      3: '写入shopify结束，待发送邮件，完成任务',
-      4: '全部完成',
-      5: '手动中断 or tokenLimit中断',
+    const statusMap: Record<string, string> = {
+      '0': '用户刚创建任务，读取shopify数据中',
+      '1': '读取shopify数据，存数据库结束，翻译中',
+      '2': '翻译结束，写入中',
+      '3': '写入shopify结束，待发送邮件，完成任务',
+      '4': '全部完成',
+      '5': '手动中断 or tokenLimit中断',
     };
 
-    if (typeof status === 'number' && statusMap[status]) {
-      return <Tag color="blue">{statusMap[status]}</Tag>;
+    // 为不同状态指定颜色
+    const colorMap: Record<string, string> = {
+      '0': 'geekblue', // 刚创建，信息读取中
+      '1': 'blue',     // 翻译中
+      '2': 'orange',   // 写入中
+      '3': 'cyan',     // 写入结束，待邮件
+      '4': 'green',    // 完成
+      '5': 'red',      // 中断/异常
+    };
+
+    const key = String(status);
+    if (statusMap[key]) {
+      const color = colorMap[key] || 'blue';
+      return <Tag color={color}>{statusMap[key]}</Tag>;
     }
 
-    if (!status) return <Tag color="default">Unknown</Tag>;
-    const lowerStatus = status.toString().toLowerCase();
-    if (lowerStatus.includes('finish') || lowerStatus.includes('success') || lowerStatus.includes('done')) return <Tag color="green">{status}</Tag>;
-    if (lowerStatus.includes('error') || lowerStatus.includes('fail')) return <Tag color="red">{status}</Tag>;
-    if (lowerStatus.includes('process') || lowerStatus.includes('running')) return <Tag color="blue">{status}</Tag>;
-    return <Tag color="orange">任务异常</Tag>;
+    return <Tag color="volcano">任务异常</Tag>;
   };
 
   const statusOptions = [
@@ -331,4 +338,3 @@ const MonitorTable: React.FC = () => {
 };
 
 export default MonitorTable;
-
