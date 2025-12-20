@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Row, Col, Input, Form, Button, Card, Drawer } from 'antd';
+import { Row, Col, Input, Form, Button, Card, Drawer, message } from 'antd';
 import './DebugPrompt.css';
 import { httpPost } from "../utils/HttpUtils";
 
@@ -14,6 +14,7 @@ const DebugPrompt: React.FC = () => {
   const [htmlToJsonLoading, setHtmlToJsonLoading] = useState(false);
   const [htmlToJson, setHtmlToJson] = useState('');
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
+  const [targetLanguage, setTargetLanguage] = useState(''); // 新增状态管理目标语言输入框的值
 
   const extractVariables = (input: string) => {
     const matches = input.match(/{{(.*?)}}/g);
@@ -35,20 +36,24 @@ const DebugPrompt: React.FC = () => {
     extractVariables(value);
   };
 
-  const handleVariableChange = (key: string, value: string) => {
-    setVariables((prev) => ({ ...prev, [key]: value }));
-  };
-
   const callAiApi = async () => {
+    if (!prompt.trim() || !targetLanguage.trim()) {
+      message.error('Prompt 和目标语言不能为空！');
+      return;
+    }
     setLoading(true);
-    const response = await httpPost("production", '/promptTest', JSON.stringify({ prompt: prompt, target: "en", content: "" }));
+    const response = await httpPost("production", '/promptTest', JSON.stringify({ prompt: prompt, target: targetLanguage, json: htmlToJson }));
     setApiResponse(JSON.stringify(response, null, 2));
     setLoading(false);
   };
 
   const handleHtmlToJson = async () => {
+    if (!translation.trim()) {
+      message.error('翻译内容和目标语言不能为空！');
+      return;
+    }
     setHtmlToJsonLoading(true);
-    const response = await httpPost("production", '/htmlToJson', JSON.stringify({ html: translation, target: "en" }));
+    const response = await httpPost("production", '/htmlToJson', JSON.stringify({ html: translation }));
     setHtmlToJson(JSON.stringify(response, null, 2));
     setHtmlToJsonLoading(false);
   };
@@ -125,23 +130,14 @@ const DebugPrompt: React.FC = () => {
         </Col>
 
         <Col xs={24} lg={12}>
-          <Card title="变量编辑" style={{ marginBottom: 12 }}>
-            <div className="variables-scroll">
-              <Form layout="vertical">
-                {Object.keys(variables).length ? Object.keys(variables).map((key) => (
-                  <Form.Item label={key} key={key} className="variable-item">
-                    <Input
-                      value={variables[key]}
-                      onChange={(e) => handleVariableChange(key, e.target.value)}
-                    />
-                  </Form.Item>
-                )) : (
-                  <div className="variables-empty">没有检测到变量 — 使用 {"{{varName}}"} 格式</div>
-                )}
-              </Form>
-            </div>
-          </Card>
-
+          <div style={{ marginBottom: '12px' }}>
+            <Input
+              placeholder="目标语言"
+              value={targetLanguage}
+              onChange={(e) => setTargetLanguage(e.target.value)}
+              maxLength={10}
+            />
+          </div>
           <Card title="输入你的翻译内容">
             <div className="translation-card-body">
               <TextArea
