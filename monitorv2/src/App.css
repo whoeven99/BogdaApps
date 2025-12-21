@@ -9,7 +9,7 @@
 .app-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start; /* 由 space-between 改为 flex-start，让按钮左对齐 */
   gap: 16px;
   margin-bottom: 20px;
 }
@@ -20,7 +20,10 @@
   color: #0b1220;
 }
 
-.debug-prompt-button {
+.debug-prompt-button,
+.config-button,
+.increase-quota-button,
+.view-store-button {
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -37,16 +40,25 @@
   line-height: 1;
 }
 
-.debug-prompt-button:hover {
+.debug-prompt-button:hover,
+.config-button:hover,
+.increase-quota-button:hover,
+.view-store-button:hover {
   transform: translateY(-3px);
   box-shadow: 0 12px 30px rgba(37, 99, 235, 0.2);
 }
 
-.debug-prompt-button:active {
+.debug-prompt-button:active,
+.config-button:active,
+.increase-quota-button:active,
+.view-store-button:active {
   transform: translateY(-1px) scale(0.995);
 }
 
-.debug-prompt-button:focus-visible {
+.debug-prompt-button:focus-visible,
+.config-button:focus-visible,
+.increase-quota-button:focus-visible,
+.view-store-button:focus-visible {
   outline: 3px solid rgba(99,102,241,0.18);
   outline-offset: 3px;
 }
@@ -71,9 +83,11 @@
     gap: 10px;
   }
 
-  .debug-prompt-button {
+  .debug-prompt-button,
+  .config-button,
+  .increase-quota-button,
+  .view-store-button {
     width: 100%;
     justify-content: center;
   }
 }
-

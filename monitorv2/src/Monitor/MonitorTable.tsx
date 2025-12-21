@@ -47,8 +47,7 @@ const MonitorTable: React.FC = () => {
         const transTime = (translateEnd != null && initEnd != null) ? translateEnd - initEnd : null;
         const saveTime = (saveEnd != null && translateEnd != null) ? saveEnd - translateEnd : null;
         // 如果 savingShopifyEndTime 缺失，则退回到 translateEndTime 或 initEndTime，尽量找到最近一次结束时间用于计算上次更新
-        const lastEnd = saveEnd ?? translateEnd ?? initEnd ?? null;
-        const lastUpdatedTime = lastEnd != null ? Date.now() - lastEnd : null;
+        const lastUpdatedTime = value.lastUpdatedTime != null ? Date.now() - value.lastUpdatedTime : null;
 
         const shopName = value.shopName ? value.shopName.replace(/\.myshopify\.com$/, '') : '';
         const taskShort = `${key.split('-')[0]} - ${value.source} -> ${value.target}`;

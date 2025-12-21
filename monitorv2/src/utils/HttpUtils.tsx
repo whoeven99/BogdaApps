@@ -35,3 +35,40 @@ export const httpPost = async (env: any, url: string, data: any): Promise<any> =
     throw error;
   }
 };
+
+export const httpDelete = async (env: any, url: string, data?: any): Promise<any> => {
+  const domain = env === 'production'
+    ? 'https://springbackendprod.azurewebsites.net'
+    : 'https://springbackendservice-e3hgbjgqafb9cpdh.canadacentral-01.azurewebsites.net';
+
+  try {
+    const response = await axios.delete(`${domain}${url}`, {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      data,
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error performing HTTP DELETE request:', error);
+    throw error;
+  }
+};
+
+export const httpPut = async (env: any, url: string, data: any): Promise<any> => {
+  const domain = env === 'production'
+    ? 'https://springbackendprod.azurewebsites.net'
+    : 'https://springbackendservice-e3hgbjgqafb9cpdh.canadacentral-01.azurewebsites.net';
+
+  try {
+    const response = await axios.put(`${domain}${url}`, data, {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error performing HTTP PUT request:', error);
+    throw error;
+  }
+};
