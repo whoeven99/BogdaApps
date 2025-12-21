@@ -4,7 +4,6 @@ import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import App from './App';
 import DebugPrompt from "./DebugPrompt/DebugPrompt";
 import Config from "./Config/config";
-import Token from "./Token/token";
 import Shop from "./Shop/shop";
 
 const router = createBrowserRouter([
@@ -21,17 +20,13 @@ const router = createBrowserRouter([
     element: <Config />,
   },
   {
-    path: '/Token',
-    element: <Token />,
-  },
-  {
     path: '/Shop',
-    element: <Shop />,
-  },
+    element: <Shop />
+  }
 ]);
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <RouterProvider router={router} />,
+    <RouterProvider router={router} />
   </React.StrictMode>
 );
