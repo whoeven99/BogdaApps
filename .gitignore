@@ -1,3 +1,16 @@
+# IDE
 /.idea/
-/monitorv2/node_modules/
-/monitorv2/dist/
+
+# Dependencies (all levels)
+**/node_modules/
+
+# Build outputs
+**/dist/
+
+# Logs
+**/*.log
+
+# Vite/TS caches
+**/.vite/
+**/.turbo/
+**/.cache/
