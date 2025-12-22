@@ -1,3 +1,4 @@
+//运费折扣相关代码
 import {
   DeliveryDiscountSelectionStrategy,
   DiscountClass,
@@ -9,8 +10,6 @@ export function cartDeliveryOptionsDiscountsGenerateRun(
   input: DeliveryInput,
 ): CartDeliveryOptionsDiscountsGenerateRunResult {
   const firstDeliveryGroup = input.cart.deliveryGroups[0];
-
-  console.log("firstDeliveryGroup: ", firstDeliveryGroup);
 
   if (!firstDeliveryGroup) {
     return { operations: [] };

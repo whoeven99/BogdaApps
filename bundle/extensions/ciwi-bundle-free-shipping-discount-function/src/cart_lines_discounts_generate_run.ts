@@ -1,3 +1,4 @@
+//产品折扣和订单折扣相关代码，这里属于模板文件，代码没有用处
 import {
   DiscountClass,
   OrderDiscountSelectionStrategy,
@@ -9,7 +10,7 @@ import {
 export function cartLinesDiscountsGenerateRun(
   input: CartInput,
 ): CartLinesDiscountsGenerateRunResult {
-  return { operations: [] };
+  return { operations: [] }; //提前返回结束后续逻辑
 
   if (!input.cart.lines.length) {
     return { operations: [] };

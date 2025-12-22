@@ -1,3 +1,4 @@
+//产品折扣和订单折扣相关代码
 import {
   DiscountClass,
   OrderDiscountSelectionStrategy,
