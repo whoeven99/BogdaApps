@@ -1,10 +1,18 @@
 query DeliveryInput {
   cart {
+    cost {
+      subtotalAmount {
+        amount
+      }
+    }
     deliveryGroups {
       id
     }
   }
   discount {
     discountClasses
+    metafield(namespace: "ciwi_free_shipping_discount", key: "min_amount") {
+      value
+    }
   }
 }
