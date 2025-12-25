@@ -1,0 +1,47 @@
+query CartInput {
+  cart {
+    lines {
+      id
+      cost {
+        subtotalAmount {
+          amount
+        }
+      }
+    }
+    cost {
+      subtotalAmount {
+        amount
+      }
+    }
+  }
+  discount {
+    discountClasses
+    min_amount: metafield(namespace: "order_discount", key: "min_amount") {
+      value
+    }
+    discount_type: metafield(
+      namespace: "order_discount"
+      key: "discount_type"
+    ) {
+      value
+    }
+    discount_amount: metafield(
+      namespace: "order_discount"
+      key: "discount_amount"
+    ) {
+      value
+    }
+    discount_percentage: metafield(
+      namespace: "order_discount"
+      key: "discount_percentage"
+    ) {
+      value
+    }
+    max_discount_amount: metafield(
+      namespace: "order_discount"
+      key: "max_discount_amount"
+    ) {
+      value
+    }
+  }
+}

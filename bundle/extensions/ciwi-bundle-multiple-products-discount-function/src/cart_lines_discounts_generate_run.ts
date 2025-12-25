@@ -1,153 +1,153 @@
 import {
-  DiscountClass,
-  OrderDiscountSelectionStrategy,
-  ProductDiscountSelectionStrategy,
   CartInput,
   CartLinesDiscountsGenerateRunResult,
+  DiscountClass,
+  ProductDiscountSelectionStrategy,
 } from "../generated/api";
 
-//默认折扣规则
-const DEFAULT_RULE = {
-  groupSize: 3,
-  groupDiscount: 0.6,
-  remainder: {
-    "1": 1,
-    "2": 0.8,
-  },
-};
+// 默认折扣规则
+interface RuleOption1Type {
+  groupSize: number; //折扣组的元素数量
+  groupDiscount: number; //满一组的折扣（如 0.5 表示 50%）
+  remainder: any; //不满一组的各种情况的折扣，key 为数量，value 为折扣系数
+  calculateQuantityWithVariantsArray: string[]; //一起计算quantity的变体数据数组
+}
 
 export function cartLinesDiscountsGenerateRun(
   input: CartInput,
 ): CartLinesDiscountsGenerateRunResult {
-  if (!input.cart.lines.length) {
+  if (!checkValid(input)) {
     return { operations: [] };
   }
 
-  const hasOrderDiscountClass = input.discount.discountClasses.includes(
-    DiscountClass.Order,
-  );
-  const hasProductDiscountClass = input.discount.discountClasses.includes(
-    DiscountClass.Product,
-  );
+  const productCandidates: Array<any> = [];
 
-  if (!hasOrderDiscountClass && !hasProductDiscountClass) {
-    return { operations: [] };
-  }
+  const toCents = (amountStr: string) => {
+    return Math.round(Number(amountStr) * 100);
+  };
 
-  const operations: CartLinesDiscountsGenerateRunResult["operations"] = [];
+  // 最好挪到utils里，不过这种extension的代码也不多
+  const parseJSON = <T>(s?: string | null): T | null => {
+    if (!s) return null;
+    try {
+      return JSON.parse(s) as T;
+    } catch {
+      return null;
+    }
+  };
 
-  if (hasOrderDiscountClass) {
-    operations.push({
-      orderDiscountsAdd: {
-        candidates: [
-          {
-            message: "10% OFF ORDER",
-            targets: [
-              {
-                orderSubtotal: {
-                  excludedCartLineIds: [],
-                },
-              },
-            ],
-            value: {
-              percentage: {
-                value: 10,
-              },
-            },
-          },
-        ],
-        selectionStrategy: OrderDiscountSelectionStrategy.First,
+  const pushCandidate = (lineId: string, discountPerItemCents: number) => {
+    if (discountPerItemCents <= 0) return;
+    productCandidates.push({
+      message: "Bundle pricing applied",
+      targets: [{ cartLine: { id: lineId } }],
+      value: {
+        fixedAmount: {
+          amount: (discountPerItemCents / 100).toFixed(2),
+          appliesToEachItem: true,
+        },
       },
     });
+  };
+
+  //轮询购物车每个item
+  for (const line of input.cart.lines) {
+    if (line.merchandise.__typename !== "ProductVariant") continue;
+
+    let appliedRule: RuleOption1Type | null = null;
+
+    const variantRule = parseJSON<RuleOption1Type>(
+      line.merchandise.metafield?.value,
+    );
+    if (variantRule) appliedRule = variantRule;
+
+    if (!appliedRule) continue;
+
+    const lineQuantityMap = new Map(
+      input.cart.lines
+        .filter(
+          (
+            line,
+          ): line is typeof line & {
+            merchandise: { __typename: "ProductVariant"; id: string };
+          } => line.merchandise.__typename === "ProductVariant",
+        )
+        .map((line) => [line.merchandise.id, line.quantity]),
+    );
+
+    let quantity = line.quantity;
+
+    if (variantRule?.calculateQuantityWithVariantsArray?.length) {
+      for (const id of variantRule.calculateQuantityWithVariantsArray) {
+        quantity += lineQuantityMap.get(id) ?? 0;
+      }
+    }
+
+    if (quantity <= 0) continue;
+
+    // 单独按行计算
+    const unitPriceCents = toCents(line.cost.amountPerQuantity.amount);
+    const originalTotalCents = unitPriceCents * quantity;
+    const discountedTotalCents = calculateDiscountedTotalCents(
+      quantity,
+      unitPriceCents,
+      appliedRule,
+    );
+
+    const totalDiscountCents = originalTotalCents - discountedTotalCents;
+    if (totalDiscountCents <= 0) continue;
+
+    // 使用向下取整，避免累积四舍五入导致超额折扣
+    const discountPerItemCents = Math.floor(totalDiscountCents / quantity);
+    pushCandidate(line.id, discountPerItemCents);
   }
 
-  if (hasProductDiscountClass) {
-    for (const line of input.cart.lines) {
-      if (line.merchandise.__typename !== "ProductVariant") continue;
-
-      const quantity = line.quantity;
-      if (quantity < 2) continue;
-
-      const unitPrice = Number(line.cost.amountPerQuantity.amount);
-
-      let rule = DEFAULT_RULE;
-
-      const metafieldValue = line.merchandise.product?.metafield?.value;
-
-      if (metafieldValue) {
-        try {
-          rule = {
-            ...DEFAULT_RULE,
-            ...JSON.parse(metafieldValue),
-          };
-        } catch {
-          // JSON 写错 → 静默回退默认规则
-          rule = DEFAULT_RULE;
-        }
-      }
-
-      const originalTotal = unitPrice * quantity;
-      const discountedTotal = calculateDiscountedTotal(
-        quantity,
-        unitPrice,
-        rule,
-      );
-
-      const totalDiscount = originalTotal - discountedTotal;
-
-      if (totalDiscount <= 0) continue;
-
-      const discountPerItem = totalDiscount / quantity;
-
-      operations.push({
-        productDiscountsAdd: {
-          candidates: [
-            {
-              message: "Bundle pricing applied",
-              targets: [
-                {
-                  cartLine: {
-                    id: line.id,
-                  },
-                },
-              ],
-              value: {
-                fixedAmount: {
-                  amount: discountPerItem.toFixed(2),
-                  appliesToEachItem: true,
-                },
-              },
-            },
-          ],
-          selectionStrategy: ProductDiscountSelectionStrategy.First,
-        },
-      });
-    }
+  const operations = [];
+  if (productCandidates.length) {
+    operations.push({
+      productDiscountsAdd: {
+        candidates: productCandidates,
+        selectionStrategy: ProductDiscountSelectionStrategy.All,
+      },
+    });
   }
 
   return { operations };
 }
 
-//计算折扣方法
-function calculateDiscountedTotal(
+// 以分为单位计算折后总额
+function calculateDiscountedTotalCents(
   quantity: number,
-  unitPrice: number,
-  rule: {
-    groupSize: number;
-    groupDiscount: number;
-    remainder: Record<string, number>;
-  },
+  unitPriceCents: number,
+  rule: RuleOption1Type,
 ) {
   const groups = Math.floor(quantity / rule.groupSize);
   const remainderQty = quantity % rule.groupSize;
 
-  let total = groups * rule.groupSize * unitPrice * rule.groupDiscount;
+  const groupItemCount = groups * rule.groupSize;
+  // 对组折扣与零头折扣分别计算并四舍五入到分
+  let total = Math.round(groupItemCount * unitPriceCents * rule.groupDiscount);
 
   if (remainderQty > 0) {
-    const remainderDiscount = rule.remainder[String(remainderQty)] ?? 1;
-
-    total += remainderQty * unitPrice * remainderDiscount;
+    const remainderDiscount = rule.remainder?.[String(remainderQty)] ?? 1;
+    total += Math.round(remainderQty * unitPriceCents * remainderDiscount);
   }
 
   return total;
+}
+
+function checkValid(input: CartInput): boolean {
+  if (!input.cart.lines.length) {
+    return false;
+  }
+
+  const hasProductDiscountClass = input.discount.discountClasses.includes(
+    DiscountClass.Product,
+  );
+
+  if (!hasProductDiscountClass) {
+    return false;
+  }
+
+  return true;
 }
