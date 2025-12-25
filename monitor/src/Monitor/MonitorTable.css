@@ -1,9 +1,10 @@
 .monitor-table-container {
-  margin: 40px auto;
+  margin: 40px 0 40px 36px;
   max-width: 1400px;
   padding: 20px;
 }
 
+/* 其他样式保持不变 */
 .monitor-header {
   display: flex;
   align-items: center;

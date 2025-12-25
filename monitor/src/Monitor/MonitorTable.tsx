@@ -14,6 +14,7 @@ const MonitorTable: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string | number | undefined>(undefined);
   const [autoRefresh, setAutoRefresh] = useState<boolean>(false);
   const [intervalSeconds, setIntervalSeconds] = useState<number>(10);
+  const [includeFinish, setIncludeFinish] = useState<boolean>(false);
 
   const formatTime = (milliseconds: number): string => {
     const minutes = Math.floor(milliseconds / 60000);
@@ -24,7 +25,10 @@ const MonitorTable: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const response = await httpGet("production", '/monitorv2?includeFinish=false');
+      const response = await httpGet(
+        "production",
+        `/monitorv2?includeFinish=${includeFinish ? 'true' : 'false'}`,
+      );
       const formattedData = Object.entries(response || {}).map(([key, value]: [string, any]) => {
         // helper: normalize timestamp (allow strings and seconds)
         const normalizeTs = (t: any) => {
@@ -38,7 +42,6 @@ const MonitorTable: React.FC = () => {
 
         const initStart = normalizeTs(value.initStartTime);
         const initEnd = normalizeTs(value.initEndTime);
-        const translateStart = normalizeTs(value.translateStartTime ?? value.initEndTime); // fallback if provided
         const translateEnd = normalizeTs(value.translateEndTime);
         const saveEnd = normalizeTs(value.savingShopifyEndTime);
 
@@ -64,6 +67,7 @@ const MonitorTable: React.FC = () => {
           initTime: initTime !== null ? formatTime(initTime) : null,
           transTime: transTime !== null ? formatTime(transTime) : null,
           saveTime: saveTime !== null ? formatTime(saveTime) : null,
+          lastUpdatedMs: lastUpdatedTime,
           lastUpdatedTime: lastUpdatedTime !== null ? formatTime(lastUpdatedTime) : null,
           status: value.status,
           sendEmail: value.send_email == 1,
@@ -81,7 +85,7 @@ const MonitorTable: React.FC = () => {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [includeFinish]);
 
   useEffect(() => {
     let timer: any;
@@ -89,7 +93,7 @@ const MonitorTable: React.FC = () => {
       timer = setInterval(() => fetchData(), Math.max(2000, intervalSeconds * 1000));
     }
     return () => clearInterval(timer);
-  }, [autoRefresh, intervalSeconds]);
+  }, [autoRefresh, intervalSeconds, includeFinish]);
 
   const getStatusTag = (status: string | number) => {
     const statusMap: Record<string, string> = {
@@ -219,21 +223,21 @@ const MonitorTable: React.FC = () => {
       width: 120,
     },
     {
-      title: '初始化时间',
+      title: 'init时间',
       dataIndex: 'initTime',
       key: 'initTime',
       render: (text: string) => text || '-',
       width: 120,
     },
     {
-      title: '翻译时间',
+      title: 'trans时间',
       dataIndex: 'transTime',
       key: 'transTime',
       render: (text: string) => text || '-',
       width: 120,
     },
     {
-      title: '保存时间',
+      title: 'saving时间',
       dataIndex: 'saveTime',
       key: 'saveTime',
       render: (text: string) => text || '-',
@@ -243,7 +247,20 @@ const MonitorTable: React.FC = () => {
       title: '上次更新',
       dataIndex: 'lastUpdatedTime',
       key: 'lastUpdatedTime',
-      render: (text: string) => text || '-',
+      render: (_text: string, record: any) => {
+        const ms = Number(record.lastUpdatedMs);
+        const threshold = 10 * 60 * 1000; // 10 minutes
+        // 如果时间不可用或超过阈值，视为过期（红色）；否则视为新鲜（绿色）
+        const isFiniteMs = Number.isFinite(ms);
+        const isStale = !isFiniteMs || ms > threshold;
+        const text = record.lastUpdatedTime ? record.lastUpdatedTime + '前' : '-';
+        const style = { color: isStale ? '#cf1322' : '#389e0d', fontWeight: 600 };
+        return (
+          <span style={style}>
+            {text}
+          </span>
+        );
+      },
       width: 120,
     },
     {
@@ -335,6 +352,11 @@ const MonitorTable: React.FC = () => {
                 { value: '60', label: '60s' },
               ]}
             />
+          </div>
+
+          <div className="auto-refresh">
+            <span className="auto-label">查询已完成任务</span>
+            <Switch checked={includeFinish} onChange={setIncludeFinish} />
           </div>
 
           <Button icon={<DownloadOutlined />} onClick={() => exportCsv(filteredData)}>
