@@ -6,11 +6,21 @@ import {
 } from "../generated/api";
 
 // 默认折扣规则
-interface RuleOption1Type {
+interface WholeHouseRentalDiscountType {
+  typename: "WholeHouseRentalDiscountType";
   groupSize: number; //折扣组的元素数量
   groupDiscount: number; //满一组的折扣（如 0.5 表示 50%）
   remainder: any; //不满一组的各种情况的折扣，key 为数量，value 为折扣系数
-  calculateQuantityWithVariantsArray: string[]; //一起计算quantity的变体数据数组
+  calculateQuantityWithVariantsArray?: string[]; //一起计算quantity的变体数据数组
+}
+
+interface BundleDiscountType {
+  typename: "BundleDiscountType";
+  bundleItems: {
+    variantId: string;
+    quantity: number;
+    discountRate: number;
+  }[];
 }
 
 export function cartLinesDiscountsGenerateRun(
@@ -36,11 +46,21 @@ export function cartLinesDiscountsGenerateRun(
     }
   };
 
-  const pushCandidate = (lineId: string, discountPerItemCents: number) => {
+  const pushCandidate = ({
+    lineId,
+    discountPerItemCents,
+    isfree,
+    quantity,
+  }: {
+    lineId: string;
+    discountPerItemCents: number;
+    isfree?: boolean;
+    quantity?: number;
+  }) => {
     if (discountPerItemCents <= 0) return;
     productCandidates.push({
-      message: "Bundle pricing applied",
-      targets: [{ cartLine: { id: lineId } }],
+      message: isfree ? "Text IsFree" : "Bundle pricing applied",
+      targets: [{ cartLine: { id: lineId, quantity: quantity || null } }],
       value: {
         fixedAmount: {
           amount: (discountPerItemCents / 100).toFixed(2),
@@ -54,55 +74,143 @@ export function cartLinesDiscountsGenerateRun(
   for (const line of input.cart.lines) {
     if (line.merchandise.__typename !== "ProductVariant") continue;
 
-    let appliedRule: RuleOption1Type | null = null;
+    let appliedRule: any = null;
 
-    const variantRule = parseJSON<RuleOption1Type>(
-      line.merchandise.metafield?.value,
-    );
+    const variantRule = parseJSON<any>(line.merchandise.metafield?.value);
     if (variantRule) appliedRule = variantRule;
 
     if (!appliedRule) continue;
 
-    const lineQuantityMap = new Map(
-      input.cart.lines
-        .filter(
-          (
-            line,
-          ): line is typeof line & {
-            merchandise: { __typename: "ProductVariant"; id: string };
-          } => line.merchandise.__typename === "ProductVariant",
-        )
-        .map((line) => [line.merchandise.id, line.quantity]),
-    );
+    switch (true) {
+      case appliedRule?.typename == "WholeHouseRentalDiscountType":
+        try {
+          const lineQuantityMap = new Map(
+            input.cart.lines
+              .filter(
+                (
+                  line,
+                ): line is typeof line & {
+                  merchandise: { __typename: "ProductVariant"; id: string };
+                } => line.merchandise.__typename === "ProductVariant",
+              )
+              .map((line) => [line.merchandise.id, line.quantity]),
+          );
 
-    let quantity = line.quantity;
+          let quantity = line.quantity;
 
-    if (variantRule?.calculateQuantityWithVariantsArray?.length) {
-      for (const id of variantRule.calculateQuantityWithVariantsArray) {
-        quantity += lineQuantityMap.get(id) ?? 0;
-      }
+          if (variantRule?.calculateQuantityWithVariantsArray?.length) {
+            for (const id of variantRule.calculateQuantityWithVariantsArray) {
+              quantity += lineQuantityMap.get(id) ?? 0;
+            }
+          }
+
+          if (quantity <= 0) continue;
+
+          // 单独按行计算
+          const unitPriceCents = toCents(line.cost.amountPerQuantity.amount);
+          const originalTotalCents = unitPriceCents * quantity;
+          const discountedTotalCents = calculateDiscountedTotalCents(
+            quantity,
+            unitPriceCents,
+            appliedRule,
+          );
+
+          const totalDiscountCents = originalTotalCents - discountedTotalCents;
+          if (totalDiscountCents <= 0) continue;
+
+          // 使用向下取整，避免累积四舍五入导致超额折扣
+          const discountPerItemCents = Math.round(
+            totalDiscountCents / quantity,
+          );
+          pushCandidate({
+            lineId: line.id,
+            discountPerItemCents,
+          });
+          break;
+        } catch (error) {
+          break;
+        }
+      case appliedRule?.typename == "BundleDiscountType":
+        try {
+          // const lineQuantityMap = new Map(
+          //   input.cart.lines
+          //     .filter(
+          //       (
+          //         line,
+          //       ): line is typeof line & {
+          //         merchandise: { __typename: "ProductVariant"; id: string };
+          //       } => line.merchandise.__typename === "ProductVariant",
+          //     )
+          //     .map((line) => [line.merchandise.id, line.quantity]),
+          // );
+          const rule = appliedRule as BundleDiscountType;
+
+          // 1. 计算整车每个 variant 的数量
+          const lineQuantityMap = new Map<string, number>();
+          const lineMap = new Map<string, typeof line>();
+
+          for (const l of input.cart.lines) {
+            if (l.merchandise.__typename !== "ProductVariant") continue;
+            const id = l.merchandise.id;
+            lineQuantityMap.set(
+              id,
+              (lineQuantityMap.get(id) ?? 0) + l.quantity,
+            );
+            lineMap.set(id, l); // 用于后面拿价格
+          }
+
+          // 2. 计算 bundle 组数（全局）
+          const bundleGroups = calculateBundleGroups(rule, lineQuantityMap);
+
+          if (bundleGroups <= 0) break;
+
+          // 3. 对 bundle 中的每个 variant 分别算折扣
+
+          const variantId = line.merchandise.id;
+
+          const bundle = rule.bundleItems.find(
+            (item) => item.variantId === variantId,
+          );
+
+          if (!bundle) continue;
+
+          const targetLine = lineMap.get(variantId);
+
+          if (!targetLine) continue;
+
+          const discountQty = bundleGroups * bundle.quantity;
+
+          if (discountQty <= 0) continue;
+
+          const unitPriceCents = toCents(
+            targetLine.cost.amountPerQuantity.amount,
+          );
+
+          // 每一件应该优惠多少钱
+          const discountPerItemCents = Math.round(
+            unitPriceCents * (1 - bundle.discountRate),
+          );
+
+          if (discountPerItemCents <= 0) continue;
+
+          pushCandidate({
+            lineId: targetLine.id,
+            discountPerItemCents,
+            isfree: bundle.discountRate === 0,
+            quantity: discountQty,
+          });
+          break;
+        } catch (error) {
+          break;
+        }
+
+      default:
+        break;
     }
-
-    if (quantity <= 0) continue;
-
-    // 单独按行计算
-    const unitPriceCents = toCents(line.cost.amountPerQuantity.amount);
-    const originalTotalCents = unitPriceCents * quantity;
-    const discountedTotalCents = calculateDiscountedTotalCents(
-      quantity,
-      unitPriceCents,
-      appliedRule,
-    );
-
-    const totalDiscountCents = originalTotalCents - discountedTotalCents;
-    if (totalDiscountCents <= 0) continue;
-
-    // 使用向下取整，避免累积四舍五入导致超额折扣
-    const discountPerItemCents = Math.floor(totalDiscountCents / quantity);
-    pushCandidate(line.id, discountPerItemCents);
   }
 
   const operations = [];
+
   if (productCandidates.length) {
     operations.push({
       productDiscountsAdd: {
@@ -119,9 +227,9 @@ export function cartLinesDiscountsGenerateRun(
 function calculateDiscountedTotalCents(
   quantity: number,
   unitPriceCents: number,
-  rule: RuleOption1Type,
+  rule: WholeHouseRentalDiscountType,
 ) {
-  const groups = Math.floor(quantity / rule.groupSize);
+  const groups = Math.round(quantity / rule.groupSize);
   const remainderQty = quantity % rule.groupSize;
 
   const groupItemCount = groups * rule.groupSize;
@@ -134,6 +242,21 @@ function calculateDiscountedTotalCents(
   }
 
   return total;
+}
+
+function calculateBundleGroups(
+  rule: BundleDiscountType,
+  quantityMap: Map<string, number>,
+): number {
+  let groups = Infinity;
+
+  for (const item of rule.bundleItems) {
+    const cartQty = quantityMap.get(item.variantId) ?? 0;
+    const possibleGroups = Math.round(cartQty / item.quantity);
+    groups = Math.min(groups, possibleGroups);
+  }
+
+  return Number.isFinite(groups) ? groups : 0;
 }
 
 function checkValid(input: CartInput): boolean {
