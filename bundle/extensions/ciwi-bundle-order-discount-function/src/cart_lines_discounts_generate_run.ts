@@ -1,3 +1,4 @@
+import { toCents } from "extensions/utils/typescripts";
 import {
   DiscountClass,
   OrderDiscountSelectionStrategy,
@@ -45,10 +46,6 @@ export function cartLinesDiscountsGenerateRun(
     return { operations: [] };
   }
 
-  const toCents = (amountStr: string) => {
-    return Math.round(Number(amountStr) * 100);
-  };
-
   const subtotalCents = toCents(input.cart.cost.subtotalAmount.amount);
   const minAmountCents = toCents(minAmountStr);
 
@@ -64,80 +61,87 @@ export function cartLinesDiscountsGenerateRun(
 
   let message = "";
 
-  if (discountType === "fixed") {
-    // 固定折扣逻辑
-    if (!discountAmountStr) return { operations: [] };
+  switch (true) {
+    case discountType === "fixed":
+      // 固定折扣逻辑
+      if (!discountAmountStr) return { operations: [] };
 
-    const discountCents = toCents(discountAmountStr);
-    if (discountCents <= 0) return { operations: [] };
+      const discountCents = toCents(discountAmountStr);
+      if (discountCents <= 0) return { operations: [] };
 
-    value = {
-      fixedAmount: {
-        amount: (discountCents / 100).toFixed(2),
-      },
-    };
-
-    message = `Save ${discountAmountStr} on orders over ${minAmountStr}`;
-  } else if (discountType === "percentage") {
-    // 百分比折扣逻辑
-    if (!discountPercentageStr || !maxDiscountAmountStr) {
-      return { operations: [] };
-    }
-
-    const percentage = Number(discountPercentageStr);
-    const maxDiscountCents = toCents(maxDiscountAmountStr);
-
-    if (percentage <= 0 || maxDiscountCents <= 0) {
-      return { operations: [] };
-    }
-
-    // 计算理论折扣
-    const calculatedDiscountCents = Math.round(
-      (subtotalCents * percentage) / 100,
-    );
-
-    // 命中封顶 → 用 fixedAmount
-    if (calculatedDiscountCents >= maxDiscountCents) {
       value = {
         fixedAmount: {
-          amount: (maxDiscountCents / 100).toFixed(2),
+          amount: (discountCents / 100).toFixed(2),
         },
       };
-    } else {
-      value = {
-        percentage: {
-          value: percentage,
-        },
-      };
-    }
 
-    message = `${percentage}% off orders over ${minAmountStr}`;
-  } else {
-    // 当discountType数据不合法时结束逻辑
-    return { operations: [] };
+      message = `Save ${discountAmountStr} on orders over ${minAmountStr}`;
+      break;
+    case discountType === "percentage":
+      // 百分比折扣逻辑
+      if (!discountPercentageStr || !maxDiscountAmountStr) {
+        return { operations: [] };
+      }
+
+      const percentage = Number(discountPercentageStr);
+      const maxDiscountCents = toCents(maxDiscountAmountStr);
+
+      if (percentage <= 0 || maxDiscountCents <= 0) {
+        return { operations: [] };
+      }
+
+      // 计算理论折扣
+      const calculatedDiscountCents = Math.round(
+        (subtotalCents * percentage) / 100,
+      );
+
+      // 命中封顶 → 用 fixedAmount
+      if (calculatedDiscountCents >= maxDiscountCents) {
+        value = {
+          fixedAmount: {
+            amount: (maxDiscountCents / 100).toFixed(2),
+          },
+        };
+      } else {
+        value = {
+          percentage: {
+            value: percentage,
+          },
+        };
+      }
+
+      message = `${percentage}% off orders over ${minAmountStr}`;
+      break;
+    default:
+      // 当discountType数据不合法时结束逻辑
+      return { operations: [] };
+  }
+
+  const operations = [];
+
+  if (message && value) {
+    operations.push({
+      orderDiscountsAdd: {
+        candidates: [
+          {
+            message,
+            targets: [
+              {
+                orderSubtotal: {
+                  excludedCartLineIds: [],
+                },
+              },
+            ],
+            value,
+          },
+        ],
+        selectionStrategy: OrderDiscountSelectionStrategy.First,
+      },
+    });
   }
 
   return {
-    operations: [
-      {
-        orderDiscountsAdd: {
-          candidates: [
-            {
-              message,
-              targets: [
-                {
-                  orderSubtotal: {
-                    excludedCartLineIds: [],
-                  },
-                },
-              ],
-              value,
-            },
-          ],
-          selectionStrategy: OrderDiscountSelectionStrategy.First,
-        },
-      },
-    ],
+    operations,
   };
 }
 
