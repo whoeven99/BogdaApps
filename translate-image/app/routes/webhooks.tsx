@@ -6,6 +6,8 @@ import {
   AddCharsByShopNameAfterSubscribe,
   AddSubscriptionQuotaRecord,
   InsertOrUpdateOrder,
+  SendOneTimeBuySuccessEmail,
+  SendSubscribeSuccessEmail,
   Uninstall,
   UpdateUserPlan,
 } from "~/api/JavaServer";
@@ -55,6 +57,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           };
 
           const plan = priceMap[name];
+
+          InsertOrUpdateOrder({
+            shop: shop,
+            id: payload?.app_purchase_one_time.admin_graphql_api_id,
+            status: payload?.app_purchase_one_time.status,
+          });
+
           if (plan && status === "ACTIVE") {
             const addChars = await AddCharsByShopName({
               shop,
@@ -64,6 +73,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
             if (addChars?.success) {
               console.log(`✅ ${shop} 成功购买积分 ${plan.credits}`);
+              SendOneTimeBuySuccessEmail({
+                shop,
+                JSONData: JSON.stringify(payload),
+              });
             } else {
               console.log(`❌ ${shop} 购买积分失败`);
             }
@@ -113,6 +126,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               plan,
               feeType:
                 payload?.app_subscription?.interval == "every_30_days" ? 0 : 1,
+            });
+            SendSubscribeSuccessEmail({
+              shop,
+              JSONData: JSON.stringify(payload),
             });
           }
         }
