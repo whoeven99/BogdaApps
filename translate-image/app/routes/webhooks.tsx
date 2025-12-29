@@ -6,17 +6,15 @@ import {
   AddCharsByShopNameAfterSubscribe,
   AddSubscriptionQuotaRecord,
   InsertOrUpdateOrder,
+  SendOneTimeBuySuccessEmail,
   SendSubscribeSuccessEmail,
-  StartFreePlan,
   Uninstall,
-  UpdateStatus,
   UpdateUserPlan,
 } from "~/api/JavaServer";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { topic, admin, shop, session, payload } =
     await authenticate.webhook(request);
-  console.log("webhook topic: ", topic);
 
   if (!admin && topic !== "SHOP_REDACT") {
     // The admin context isn't returned if the webhook fired after a shop was uninstalled.
@@ -24,28 +22,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // Because of this, no admin context is available.
     throw new Response();
   }
-  try {
-    // 验证 webhook 签名
-    console.log("✅ Webhook received:", topic, shop);
 
-    switch (topic) {
-      case "APP_UNINSTALLED":
-        try {
-          await Uninstall({ shop });
-          console.log("webhook session", session);
+  console.log(`${shop} ${topic} webhooks: ${payload}`);
 
-          if (session) {
-            const res = await db.session.deleteMany({ where: { shop } });
-            console.log("delete session", res);
-          }
-          return new Response("OK", { status: 200 });
-        } catch (error) {
-          console.error("Error APP_UNINSTALLED:", error);
-          return new Response(null, { status: 200 });
+  switch (topic) {
+    case "APP_UNINSTALLED":
+      try {
+        await Uninstall({ shop });
+        if (session) {
+          await db.session.deleteMany({ where: { shop } });
         }
-      case "APP_PURCHASES_ONE_TIME_UPDATE": {
-        console.log("购买积分：", payload);
-
+        return new Response("OK", { status: 200 });
+      } catch (error) {
+        console.error("Error APP_UNINSTALLED:", error);
+        return new Response(null, { status: 200 });
+      }
+    case "APP_PURCHASES_ONE_TIME_UPDATE": {
+      try {
         if (payload?.app_purchase_one_time) {
           const purchase = payload.app_purchase_one_time;
           const name = purchase.name;
@@ -64,6 +57,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           };
 
           const plan = priceMap[name];
+
+          InsertOrUpdateOrder({
+            shop: shop,
+            id: payload?.app_purchase_one_time.admin_graphql_api_id,
+            status: payload?.app_purchase_one_time.status,
+          });
+
           if (plan && status === "ACTIVE") {
             const addChars = await AddCharsByShopName({
               shop,
@@ -73,101 +73,91 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
             if (addChars?.success) {
               console.log(`✅ ${shop} 成功购买积分 ${plan.credits}`);
+              SendOneTimeBuySuccessEmail({
+                shop,
+                JSONData: JSON.stringify(payload),
+              });
             } else {
               console.log(`❌ ${shop} 购买积分失败`);
             }
           }
         }
-
-        // ✅ 一定要返回 200，否则 Shopify 会重试或标记 410
         return new Response("OK", { status: 200 });
+      } catch (error) {
+        console.error("Error APP_PURCHASES_ONE_TIME_UPDATE:", error);
+        return new Response(null, { status: 200 });
       }
-      case "APP_SUBSCRIPTIONS_UPDATE":
-        try {
-          const purchase = payload.app_subscription;
-          const name = purchase.name;
-          const status = purchase.status;
-          let plan = 0;
-          console.log("payload:", payload);
+    }
+    case "APP_SUBSCRIPTIONS_UPDATE":
+      try {
+        const purchase = payload.app_subscription;
+        const status = purchase.status;
+        let plan = 0;
 
-          switch (payload?.app_subscription.name) {
-            case "Basic":
-              plan = 2;
-              break;
-            case "Pro":
-              plan = 3;
-              break;
-            case "Premium":
-              plan = 4;
-              break;
-          }
-          InsertOrUpdateOrder({
-            shop: shop,
-            id: payload?.app_subscription.admin_graphql_api_id,
-            status: payload?.app_subscription.status,
+        switch (payload?.app_subscription.name) {
+          case "Basic":
+            plan = 2;
+            break;
+          case "Pro":
+            plan = 3;
+            break;
+          case "Premium":
+            plan = 4;
+            break;
+        }
+        InsertOrUpdateOrder({
+          shop: shop,
+          id: payload?.app_subscription.admin_graphql_api_id,
+          status: payload?.app_subscription.status,
+        });
+        if (status === "ACTIVE") {
+          const addChars = await AddCharsByShopNameAfterSubscribe({
+            shop,
+            appSubscription: payload?.app_subscription.admin_graphql_api_id,
+            feeType:
+              payload?.app_subscription?.interval == "every_30_days" ? 0 : 1,
           });
-          if (status === "ACTIVE") {
-            const addChars = await AddCharsByShopNameAfterSubscribe({
-              shop,
-              appSubscription: payload?.app_subscription.admin_graphql_api_id,
-              feeType:
-                payload?.app_subscription?.interval == "every_30_days" ? 0 : 1,
+          if (addChars?.success) {
+            AddSubscriptionQuotaRecord({
+              subscriptionId: payload?.app_subscription.admin_graphql_api_id,
             });
-            if (addChars?.success) {
-              // StartFreePlan({ shop });
-              AddSubscriptionQuotaRecord({
-                subscriptionId: payload?.app_subscription.admin_graphql_api_id,
-              });
-              UpdateUserPlan({
-                shop,
-                plan,
-                feeType:
-                  payload?.app_subscription?.interval == "every_30_days"
-                    ? 0
-                    : 1,
-              });
-              // UpdateStatus({ shop });
-              // SendSubscribeSuccessEmail({
-              //   id: payload?.app_subscription.admin_graphql_api_id,
-              //   shopName: shop,
-              //   feeType:
-              //     payload?.app_subscription?.interval == "every_30_days"
-              //       ? 1
-              //       : 2,
-              // });
-            }
-          }
-          if (status === "CANCELLED") {
             UpdateUserPlan({
               shop,
-              plan: 1,
+              plan,
               feeType:
                 payload?.app_subscription?.interval == "every_30_days" ? 0 : 1,
             });
+            SendSubscribeSuccessEmail({
+              shop,
+              JSONData: JSON.stringify(payload),
+            });
           }
-          return new Response("OK", { status: 200 });
-        } catch (error) {
-          console.error("Error APP_SUBSCRIPTIONS_UPDATE:", error);
-          return new Response(null, { status: 200 });
         }
-      case "SHOP_REDACT":
-        try {
-          await Uninstall({ shop });
-          if (session) {
-            await db.session.deleteMany({ where: { shop } });
-          }
-          return new Response("OK", { status: 200 });
-        } catch (error) {
-          console.error("Error SHOP_REDACT:", error);
-          return new Response(null, { status: 200 });
+        if (status === "CANCELLED") {
+          UpdateUserPlan({
+            shop,
+            plan: 1,
+            feeType:
+              payload?.app_subscription?.interval == "every_30_days" ? 0 : 1,
+          });
         }
-
-      default:
-        console.warn(" 未处理的 webhook topic:", topic);
-        return new Response("Unhandled webhook topic", { status: 401 });
-    }
-  } catch (error: any) {
-    console.error("❌ Webhook 处理失败:", error);
-    return new Response();
+        return new Response("OK", { status: 200 });
+      } catch (error) {
+        console.error("Error APP_SUBSCRIPTIONS_UPDATE:", error);
+        return new Response(null, { status: 200 });
+      }
+    case "SHOP_REDACT":
+      try {
+        await Uninstall({ shop });
+        if (session) {
+          await db.session.deleteMany({ where: { shop } });
+        }
+        return new Response("OK", { status: 200 });
+      } catch (error) {
+        console.error("Error SHOP_REDACT:", error);
+        return new Response(null, { status: 200 });
+      }
+    default:
+      throw new Response("Unhandled webhook topic", { status: 404 });
   }
 };

@@ -1,11 +1,63 @@
 import axios from "axios";
-import { authenticate } from "~/shopify.server";
-// import { queryShop, queryShopLanguages } from "./admin";
-// import { ShopLocalesType } from "~/routes/app.language/route";
-import pLimit from "p-limit";
 import { queryShop } from "./admin";
-import { Progress } from "antd";
-// import { withRetry } from "~/utils/retry";
+
+// 一次性购买成功后发送邮件
+export const SendOneTimeBuySuccessEmail = async ({
+  shop,
+  JSONData,
+}: {
+  shop: string;
+  JSONData: string;
+}) => {
+  try {
+    const response = await axios({
+      method: "POST",
+      url: `${process.env.SERVER_URL}/pc/orders/sendOneTimeBuySuccessEmail?shopName=${shop}`,
+      data: {
+        oneTimePurchaseData: JSONData,
+      },
+    });
+    console.log(`${shop} SendOneTimeBuySuccessEmail`, response.data);
+    return response.data;
+  } catch (error) {
+    console.log("Error SendOneTimeBuySuccessEmail:", error);
+    return {
+      success: false,
+      errorCode: 10001,
+      errorMsg: "SERVER_ERROR",
+      response: undefined,
+    };
+  }
+};
+
+// 订阅成功后发送邮件
+export const SendSubscribeSuccessEmail = async ({
+  shop,
+  JSONData,
+}: {
+  shop: string;
+  JSONData: string;
+}) => {
+  try {
+    const response = await axios({
+      method: "POST",
+      url: `${process.env.SERVER_URL}/pc/orders/sendSubscribeSuccessEmail?shopName=${shop}`,
+      data: {
+        subscribeData: JSONData,
+      },
+    });
+    console.log(`${shop} SendSubscribeSuccessEmail`, response.data);
+    return response.data;
+  } catch (error) {
+    console.log("Error SendSubscribeSuccessEmail:", error);
+    return {
+      success: false,
+      errorCode: 10001,
+      errorMsg: "SERVER_ERROR",
+      response: undefined,
+    };
+  }
+};
 
 // 查询未翻译的字符数
 export const GetUnTranslatedWords = async ({
@@ -843,37 +895,6 @@ export const UpdateStatus = async ({ shop }: { shop: string }) => {
     console.log(`${shop} UpdateStatus: `, response.data);
   } catch (error) {
     console.error("Error UpdateStatus:", error);
-  }
-};
-
-export const SendSubscribeSuccessEmail = async ({
-  id,
-  shopName,
-  feeType,
-}: {
-  id: string;
-  shopName: string;
-  feeType: number;
-}) => {
-  console.log(`${shopName} SendSubscribeSuccessEmail Input: `, {
-    id,
-    shopName,
-    feeType,
-  });
-
-  try {
-    const response = await axios({
-      url: `${process.env.SERVER_URL}/orders/sendSubscribeSuccessEmail?shopName=${shopName}`,
-      method: "POST",
-      data: {
-        subGid: id,
-        shopName: shopName,
-        feeType: feeType,
-      },
-    });
-    console.log(`${shopName} SendSubscribeSuccessEmail: `, response.data);
-  } catch (error) {
-    console.error("Error SendSubscribeSuccessEmail:", error);
   }
 };
 
