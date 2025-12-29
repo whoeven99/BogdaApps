@@ -7,7 +7,16 @@ import {
   ProductDiscountSelectionStrategy,
 } from "../generated/api";
 
-// 默认折扣规则
+interface RangeDiscountsType {
+  typename: "RangeDiscountsType";
+  ranges: {
+    min: number; // 最小件数（包含）
+    max?: number; // 最大件数（包含），不填表示无限
+    discountRate: number;
+  }[];
+  calculateQuantityWithVariantsArray?: string[];
+}
+
 interface WholeHouseRentalDiscountType {
   typename: "WholeHouseRentalDiscountType";
   groupSize: number; //折扣组的元素数量
@@ -70,8 +79,8 @@ export function cartLinesDiscountsGenerateRun(
 
     //根据typename字段做不同的折扣处理
     switch (true) {
-      case appliedRule?.typename == "WholeHouseRentalDiscountType":
-        const candidate1 = ruleAsWholeHouseRentalDiscountTypeOperate({
+      case appliedRule?.typename == "RangeDiscountsType":
+        const candidate1 = ruleAsRangeDiscountsTypeOperate({
           lineQuantityMap,
           rule: appliedRule,
           quantity,
@@ -81,18 +90,30 @@ export function cartLinesDiscountsGenerateRun(
         if (!candidate1) continue;
         productCandidates.push(candidate1);
         break;
+
+      case appliedRule?.typename == "WholeHouseRentalDiscountType":
+        const candidate2 = ruleAsWholeHouseRentalDiscountTypeOperate({
+          lineQuantityMap,
+          rule: appliedRule,
+          quantity,
+          unitPriceCents,
+          lineId,
+        });
+        if (!candidate2) continue;
+        productCandidates.push(candidate2);
+        break;
       case appliedRule?.typename == "BundleDiscountType":
         const variantId = line.merchandise.id;
 
-        const candidate2 = ruleAsBundleDiscountTypeOperate({
+        const candidate3 = ruleAsBundleDiscountTypeOperate({
           lineQuantityMap,
           rule: appliedRule,
           unitPriceCents,
           lineId,
           variantId,
         });
-        if (!candidate2) continue;
-        productCandidates.push(candidate2);
+        if (!candidate3) continue;
+        productCandidates.push(candidate3);
         break;
 
       default:
@@ -179,6 +200,87 @@ const getCandidate = ({
       },
     },
   };
+};
+
+const findMatchedRange = (
+  quantity: number,
+  ranges: RangeDiscountsType["ranges"],
+) => {
+  return ranges.find((r) => {
+    if (quantity < r.min) return false;
+    if (r.max != null && quantity > r.max) return false;
+    return true;
+  });
+};
+
+const calculateRangeDiscountTotalCents = ({
+  quantity,
+  unitPriceCents,
+  rule,
+}: {
+  quantity: number;
+  unitPriceCents: number;
+  rule: RangeDiscountsType;
+}) => {
+  const matchedRange = findMatchedRange(quantity, rule.ranges);
+  if (!matchedRange) return null;
+
+  const discountedTotal = Math.round(
+    quantity * unitPriceCents * matchedRange.discountRate,
+  );
+
+  const originalTotal = quantity * unitPriceCents;
+
+  return originalTotal - discountedTotal;
+};
+
+const ruleAsRangeDiscountsTypeOperate = ({
+  lineQuantityMap,
+  rule,
+  quantity,
+  unitPriceCents,
+  lineId,
+}: {
+  lineQuantityMap: Map<string, number>;
+  rule: RangeDiscountsType;
+  quantity: number;
+  unitPriceCents: number;
+  lineId: string;
+}): ProductDiscountCandidate | null => {
+  try {
+    // 合并计算其他变体数量
+    if (rule.calculateQuantityWithVariantsArray?.length) {
+      for (const id of rule.calculateQuantityWithVariantsArray) {
+        quantity += lineQuantityMap.get(id) ?? 0;
+      }
+    }
+
+    if (quantity <= 0) return null;
+
+    console.log("quantity: ", quantity);
+
+    const totalDiscountCents = calculateRangeDiscountTotalCents({
+      quantity,
+      unitPriceCents,
+      rule,
+    });
+
+    if (!totalDiscountCents || totalDiscountCents <= 0) return null;
+
+    // ⚠️ Shopify 要 per-item 折扣
+    const discountPerItemCents = Math.floor(totalDiscountCents / quantity);
+
+    if (discountPerItemCents <= 0) return null;
+
+    const candidate = getCandidate({
+      lineId,
+      discountPerItemCents,
+    });
+    // 返回candidate
+    return candidate;
+  } catch {
+    return null;
+  }
 };
 
 const ruleAsWholeHouseRentalDiscountTypeOperate = ({
