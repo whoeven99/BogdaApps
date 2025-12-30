@@ -8,6 +8,7 @@ import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 import { authenticate } from "../shopify.server";
 import { useEffect, useState } from "react";
 import { Flex, Spin } from "antd";
+import { useTranslation } from "react-i18next";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
@@ -19,6 +20,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export default function App() {
   const { apiKey } = useLoaderData<typeof loader>();
+  const { t } = useTranslation();
 
   const [isClient, setIsClient] = useState(false);
 
@@ -32,6 +34,8 @@ export default function App() {
         <Link to="/app" rel="home">
           Home
         </Link>
+        <Link to="/app/offers">{t("All Offers")}</Link>
+        <Link to="/app/pricing">{t("Pricing")}</Link>
       </NavMenu>
       {isClient ? (
         <Outlet />
