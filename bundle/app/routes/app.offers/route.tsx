@@ -39,7 +39,7 @@ const Index = () => {
       {/* Back Button */}
       <button
         className="text-[#008060] font-['Inter'] font-medium text-[14px] leading-[21px] tracking-[-0.1504px] bg-transparent border-0 cursor-pointer hover:bg-[rgba(0,128,96,0.1)] px-[8px] py-[4px] rounded-[6px] mb-[12px] flex items-center gap-[4px]"
-        onClick={() => navigate('/')}
+        onClick={() => navigate('/app')}
       >
         ← Back to Dashboard
       </button>
@@ -67,7 +67,7 @@ const Index = () => {
           </button>
           <button
             className="bg-[#008060] text-white px-[16px] py-[8px] rounded-[6px] font-['Inter'] font-medium text-[14px] leading-[21px] tracking-[-0.1504px] border-0 cursor-pointer hover:bg-[#006e52] transition-colors"
-            onClick={() => navigate('/create')}
+            onClick={() => navigate('/app/create')}
           >
             Create New Offer
           </button>
@@ -196,7 +196,7 @@ const Index = () => {
                     </button>
                     <button
                       className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[4px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
-                      onClick={() => navigate('/create')}
+                      onClick={() => navigate('/app/create')}
                       title="Edit"
                     >
                       <Pencil size={16} />
