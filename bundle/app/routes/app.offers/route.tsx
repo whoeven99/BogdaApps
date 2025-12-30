@@ -21,7 +21,7 @@ const Index = () => {
         setShowPublishGuide(true);
       }, 100);
       // Clear the state to prevent showing on refresh
-      navigate('/offers', { replace: true, state: {} });
+      navigate('/app/offers', { replace: true, state: {} });
     }
   }, [location.state]);
 
@@ -189,7 +189,7 @@ const Index = () => {
                   <div className="flex items-center gap-[8px]">
                     <button
                       className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[4px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
-                      onClick={() => navigate(`/ab-test/${offer.id}`)}
+                      onClick={() => navigate(`/app/ABtest/${offer.id}`)}
                       title="Analytics"
                     >
                       <ChartBar size={16} />
