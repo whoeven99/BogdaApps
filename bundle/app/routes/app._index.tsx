@@ -812,7 +812,7 @@ const Index = () => {
         <div className="flex justify-center mt-[16px] sm:mt-[20px] pt-[16px] border-t border-[#dfe3e8]">
           <button
             className="text-[#008060] font-['Inter'] font-medium text-[14px] leading-[21px] tracking-[-0.1504px] bg-transparent border-0 cursor-pointer hover:bg-[rgba(0,128,96,0.1)] px-[16px] py-[8px] rounded-[6px]"
-            onClick={() => navigate("/ab-tests")}
+            onClick={() => navigate("/app/ABtests")}
           >
             View All A/B Tests
           </button>
