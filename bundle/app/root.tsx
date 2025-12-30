@@ -6,6 +6,7 @@ import {
   ScrollRestoration,
 } from "@remix-run/react";
 import { createHead } from "remix-island";
+import "./styles/index.css";
 
 export default function App() {
   return (
