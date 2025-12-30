@@ -95,7 +95,7 @@ const Index = () => {
             </h2>
             <button
               className="text-[#008060] font-['Inter'] font-medium text-[14px] leading-[21px] tracking-[-0.1504px] bg-transparent border-0 cursor-pointer hover:bg-[rgba(0,128,96,0.1)] px-[12px] py-[6px] rounded-[6px] flex items-center gap-[6px]"
-              onClick={() => navigate("/analytics")}
+              onClick={() => navigate("/app/analytics")}
             >
               View Details
               <svg
@@ -193,8 +193,8 @@ const Index = () => {
                 setIsThemeExtensionEnabled(!isThemeExtensionEnabled)
               }
               className={`px-[16px] py-[8px] rounded-[6px] font-['Inter'] font-medium text-[14px] leading-[21px] tracking-[-0.1504px] cursor-pointer transition-colors w-full border-0 ${isThemeExtensionEnabled
-                  ? "bg-white border border-[#dfe3e8] text-[#d72c0d] hover:bg-[#fef3f2]"
-                  : "bg-[#008060] text-white hover:bg-[#006e52]"
+                ? "bg-white border border-[#dfe3e8] text-[#d72c0d] hover:bg-[#fef3f2]"
+                : "bg-[#008060] text-white hover:bg-[#006e52]"
                 }`}
             >
               {isThemeExtensionEnabled ? "Disable" : "Enable"}
