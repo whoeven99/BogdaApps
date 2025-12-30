@@ -1915,7 +1915,7 @@ const Index = () => {
                 )}
                 <button
                     className="polaris-button"
-                    onClick={() => step < 4 ? setStep(step + 1) : navigate('/offers', { state: { showPublishGuide: true } })}
+                    onClick={() => step < 4 ? setStep(step + 1) : navigate('/app/offers', { state: { showPublishGuide: true } })}
                 >
                     {step === 4 ? 'Create Offer' : 'Next'}
                 </button>

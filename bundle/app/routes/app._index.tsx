@@ -348,7 +348,7 @@ const Index = () => {
                   <div className="flex items-center gap-[8px]">
                     <button
                       className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[4px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
-                      onClick={() => navigate(`/ab-test/${offer.id}`)}
+                      onClick={() => navigate(`/app/ABtest/${offer.id}`)}
                       title="Analytics"
                     >
                       <ChartBar size={16} />
@@ -470,7 +470,7 @@ const Index = () => {
               <div className="flex items-center gap-[8px] pt-[12px] border-t border-[#dfe3e8]">
                 <button
                   className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[8px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
-                  onClick={() => navigate(`/ab-test/${offer.id}`)}
+                  onClick={() => navigate(`/app/ABtest/${offer.id}`)}
                   title="Analytics"
                 >
                   <ChartBar size={18} />
@@ -502,7 +502,7 @@ const Index = () => {
         <div className="flex justify-center mt-[16px] sm:mt-[20px] pt-[16px] border-t border-[#dfe3e8]">
           <button
             className="text-[#008060] font-['Inter'] font-medium text-[14px] leading-[21px] tracking-[-0.1504px] bg-transparent border-0 cursor-pointer hover:bg-[rgba(0,128,96,0.1)] px-[16px] py-[8px] rounded-[6px]"
-            onClick={() => navigate("/offers")}
+            onClick={() => navigate("/app/offers")}
           >
             View All Offers
           </button>
@@ -517,7 +517,7 @@ const Index = () => {
           </h2>
           <button
             className="w-full sm:w-auto bg-[#008060] text-white px-[16px] py-[8px] rounded-[6px] font-['Inter'] font-medium text-[14px] leading-[21px] tracking-[-0.1504px] border-0 cursor-pointer hover:bg-[#006e52] transition-colors"
-            onClick={() => navigate("/ab-test/1")}
+            onClick={() => navigate("/app/ABtest/1")}
           >
             Create A/B Test
           </button>
@@ -667,7 +667,7 @@ const Index = () => {
                   <div className="flex items-center gap-[8px]">
                     <button
                       className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[4px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
-                      onClick={() => navigate(`/ab-test/${test.id}`)}
+                      onClick={() => navigate(`/app/ABtest/${test.id}`)}
                       title="View Details"
                     >
                       <ChartBar size={16} />
@@ -786,7 +786,7 @@ const Index = () => {
               <div className="flex items-center gap-[8px] pt-[12px] border-t border-[#dfe3e8]">
                 <button
                   className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[8px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
-                  onClick={() => navigate(`/ab-test/${test.id}`)}
+                  onClick={() => navigate(`/app/ABtest/${test.id}`)}
                   title="View Details"
                 >
                   <ChartBar size={18} />
