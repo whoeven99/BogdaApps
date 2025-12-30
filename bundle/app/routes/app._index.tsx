@@ -192,11 +192,10 @@ const Index = () => {
               onClick={() =>
                 setIsThemeExtensionEnabled(!isThemeExtensionEnabled)
               }
-              className={`px-[16px] py-[8px] rounded-[6px] font-['Inter'] font-medium text-[14px] leading-[21px] tracking-[-0.1504px] cursor-pointer transition-colors w-full border-0 ${
-                isThemeExtensionEnabled
+              className={`px-[16px] py-[8px] rounded-[6px] font-['Inter'] font-medium text-[14px] leading-[21px] tracking-[-0.1504px] cursor-pointer transition-colors w-full border-0 ${isThemeExtensionEnabled
                   ? "bg-white border border-[#dfe3e8] text-[#d72c0d] hover:bg-[#fef3f2]"
                   : "bg-[#008060] text-white hover:bg-[#006e52]"
-              }`}
+                }`}
             >
               {isThemeExtensionEnabled ? "Disable" : "Enable"}
             </button>
@@ -215,7 +214,7 @@ const Index = () => {
           </h2>
           <button
             className="w-full sm:w-auto bg-[#008060] text-white px-[16px] py-[8px] rounded-[6px] font-['Inter'] font-medium text-[14px] leading-[21px] tracking-[-0.1504px] border-0 cursor-pointer hover:bg-[#006e52] transition-colors"
-            onClick={() => navigate("/create")}
+            onClick={() => navigate("/app/create")}
           >
             Create New Offer
           </button>

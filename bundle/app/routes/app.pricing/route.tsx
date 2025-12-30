@@ -31,7 +31,7 @@ const Index = () => {
     <div className="polaris-page">
       <div className="polaris-page__header">
         <div>
-          <button className="polaris-button polaris-button--plain" onClick={() => navigate('/')}>
+          <button className="polaris-button polaris-button--plain" onClick={() => navigate('/app')}>
             ← Back
           </button>
           <h1 className="polaris-page__title">Pricing Plans</h1>
