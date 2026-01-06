@@ -7,7 +7,7 @@ import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 
 import { authenticate } from "../shopify.server";
 import { useEffect, useState } from "react";
-import { Flex, Spin } from "antd";
+import { ConfigProvider, Flex, Spin } from "antd";
 import { useTranslation } from "react-i18next";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
@@ -30,26 +30,34 @@ export default function App() {
 
   return (
     <AppProvider isEmbeddedApp apiKey={apiKey}>
-      <NavMenu>
-        <Link to="/app" rel="home">
-          Home
-        </Link>
-        <Link to="/app/offers">{t("All Offers")}</Link>
-        <Link to="/app/pricing">{t("Pricing")}</Link>
-      </NavMenu>
-      {isClient ? (
-        <Outlet />
-      ) : (
-        <Flex
-          align="center"
-          justify="center"
-          style={{
-            height: "100vh",
-          }}
-        >
-          <Spin />
-        </Flex>
-      )}
+      <ConfigProvider
+        theme={{
+          token: {
+            colorPrimary: "rgb(0, 128, 96)",
+          },
+        }}
+      >
+        <NavMenu>
+          <Link to="/app" rel="home">
+            Home
+          </Link>
+          <Link to="/app/offers">{t("All Offers")}</Link>
+          <Link to="/app/pricing">{t("Pricing")}</Link>
+        </NavMenu>
+        {isClient ? (
+          <Outlet />
+        ) : (
+          <Flex
+            align="center"
+            justify="center"
+            style={{
+              height: "100vh",
+            }}
+          >
+            <Spin />
+          </Flex>
+        )}
+      </ConfigProvider>
     </AppProvider>
   );
 }

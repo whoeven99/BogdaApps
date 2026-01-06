@@ -1,71 +1,670 @@
-import { useNavigate } from "@remix-run/react";
+import { ActionFunctionArgs } from "@remix-run/node";
+import { useFetcher, useNavigate } from "@remix-run/react";
+import { Typography, Button, Checkbox, CheckboxProps, Col, Divider, Flex, Input, InputNumber, Radio, Row, Select, Space, Statistic, DatePicker } from 'antd';
+import { mutationDiscountAutomaticAppCreate, queryCustomers, queryMarkets, queryProductVariants, querySegments } from "app/api/admin";
+import { authenticate } from "app/shopify.server";
 import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, Copy, Trash2, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import dayjs from 'dayjs';
 
+const { Timer } = Statistic;
+const { Text } = Typography
+
+type OfferType =
+    | "quantity-breaks-same"
+    | "bogo"
+    | "quantity-breaks-different"
+    | "complete-bundle"
+    | "subscription"
+    | "progressive-gifts";
+
+interface productModalDataType {
+    id: string;
+    name: string;
+    price: string;
+    image: string
+}
+
+interface WholeHouseRentalDiscountRuleType {
+    id: number;
+    isExpanded: boolean;
+    title: string;
+    buyQty: number;
+    discountRate: number;
+    subtitle: string;
+    labelText: string;
+    badgeText: string;
+    selectedByDefault: boolean;
+    upsellProducts: {
+        id: number;
+        variantid: string;
+        upsellText: string;
+        discountType: "default" | "percentage" | "amount" | "specific";
+        discountValue: {
+            percentage: number;
+            amount: number;
+            specific: number;
+        }
+        selectedByDefault: boolean;
+        visibleWithoutCheck: boolean;
+    }[];
+    freegiftProducts: {
+        id: number;
+        variantid: string;
+        freegiftText: string;
+        showOriginalPrice: boolean;
+    }[];
+    showAsSoldOut: boolean;
+}
+
+interface RangeDiscountsType {
+    typename: "RangeDiscountsType";
+    ranges: {
+        min: number; // 最小件数（包含）
+        max?: number; // 最大件数（包含），不填表示无限
+        discountRate: number;
+    }[];
+    calculateQuantityWithVariantsArray?: string[];
+}
+
+interface WholeHouseRentalDiscountType {
+    typename: "WholeHouseRentalDiscountType";
+    groupSize: number; //折扣组的元素数量
+    groupDiscount: number; //满一组的折扣（如 0.5 表示 50%）
+    remainder: any; //不满一组的各种情况的折扣，key 为数量，value 为折扣系数
+    calculateQuantityWithVariantsArray?: string[]; //一起计算quantity的变体数据数组
+}
+
+interface BundleDiscountType {
+    typename: "BundleDiscountType";
+    bundleItems: {
+        variantId: string;
+        quantity: number;
+        discountRate: number;
+    }[];
+}
+
+interface BasicInformationType {
+    offerName: string;
+    offerType: string;
+}
+
+interface StyleConfigType {
+    base_style: "vertical_stack" | "horizontal_grid" | "card_grid" | "compact_list";
+    card_background_color: string;
+    card_label_color: string;
+    card_border_color: string;
+    card_title_text: string;
+    card_title_text_fontSize: string;
+    card_title_text_fontStyle: "bold" | "normal" | "300";
+    card_title_color: string;
+    card_button_text: string;
+    card_button_primaryColor: string;
+    enable_countdown_timer: boolean;
+    countdown_timer_config: {
+        timer_duration: number;
+        // timer_style: "minimal" | "modern" | "compact";
+        timer_color: string;
+    };
+}
+
+interface TargetingSettingsType {
+    eligibilityType: "all" | "segments" | "customers";
+    eligibilityRadioData: any;
+    marketVisibilitySettingData: string[];
+    startTime: Date | null;
+    endTime: Date | null;
+    totalBudget: number | null;
+    dailyBudget: number | null;
+    timesLimitForPercustomer: number | null;
+    hideOfferAfterExpiration: boolean;
+    showOfferToBots: boolean;
+}
+
+export const action = async ({ request }: ActionFunctionArgs) => {
+    const adminAuthResult = await authenticate.admin(request);
+    const { shop, accessToken } = adminAuthResult.session;
+
+    const formData = await request.formData();
+
+    const productVariantRequestBody = JSON.parse(
+        formData.get("productVariantRequestBody") as string,
+    );
+    const customerSegmentsRequestBody = JSON.parse(
+        formData.get("customerSegmentsRequestBody") as string,
+    );
+    const customersRequestBody = JSON.parse(
+        formData.get("customersRequestBody") as string,
+    );
+    const shopMarketsRequestBody = JSON.parse(
+        formData.get("shopMarketsRequestBody") as string,
+    );
+    const discountAutomaticAppCreateRequestBody = JSON.parse(
+        formData.get("discountAutomaticAppCreateRequestBody") as string,
+    );
+
+    switch (true) {
+        case !!productVariantRequestBody:
+            try {
+                const productVariantData = await queryProductVariants({
+                    ...productVariantRequestBody,
+                    shop,
+                    accessToken,
+                });
+
+                if (productVariantData) {
+                    return {
+                        success: true,
+                        errorCode: 0,
+                        errorMsg: "",
+                        response: productVariantData,
+                    }
+                }
+
+                return {
+                    success: false,
+                    errorCode: 10001,
+                    errorMsg: "SERVER_ERROR",
+                    response: null,
+                }
+            } catch (error) {
+                console.error(`${shop} productVariantRequestBody Error: `, error);
+                return {
+                    success: false,
+                    errorCode: 10001,
+                    errorMsg: "SERVER_ERROR",
+                    response: null,
+                }
+            }
+        case !!customerSegmentsRequestBody:
+            try {
+                const customerSegmentsData = await querySegments({
+                    ...customerSegmentsRequestBody,
+                    shop,
+                    accessToken,
+                });
+
+                if (customerSegmentsData) {
+                    return {
+                        success: true,
+                        errorCode: 0,
+                        errorMsg: "",
+                        response: customerSegmentsData,
+                    }
+                }
+
+                return {
+                    success: false,
+                    errorCode: 10001,
+                    errorMsg: "SERVER_ERROR",
+                    response: null,
+                }
+            } catch (error) {
+                console.error(`${shop} customerSegmentsRequestBody Error: `, error);
+                return {
+                    success: false,
+                    errorCode: 10001,
+                    errorMsg: "SERVER_ERROR",
+                    response: null,
+                }
+            }
+        case !!customersRequestBody:
+            try {
+                const customersData = await queryCustomers({
+                    ...customersRequestBody,
+                    shop,
+                    accessToken,
+                });
+
+                if (customersData) {
+                    return {
+                        success: true,
+                        errorCode: 0,
+                        errorMsg: "",
+                        response: customersData,
+                    }
+                }
+
+                return {
+                    success: false,
+                    errorCode: 10001,
+                    errorMsg: "SERVER_ERROR",
+                    response: null,
+                }
+            } catch (error) {
+                console.error(`${shop} customersRequestBody Error: `, error);
+                return {
+                    success: false,
+                    errorCode: 10001,
+                    errorMsg: "SERVER_ERROR",
+                    response: null,
+                }
+            }
+        case !!shopMarketsRequestBody:
+            try {
+                const shopMarketsData = await queryMarkets({
+                    ...shopMarketsRequestBody,
+                    shop,
+                    accessToken,
+                });
+
+                if (shopMarketsData) {
+                    return {
+                        success: true,
+                        errorCode: 0,
+                        errorMsg: "",
+                        response: shopMarketsData,
+                    }
+                }
+
+                return {
+                    success: false,
+                    errorCode: 10001,
+                    errorMsg: "SERVER_ERROR",
+                    response: null,
+                }
+            } catch (error) {
+                console.error(`${shop} shopMarketsRequestBody Error: `, error);
+                return {
+                    success: false,
+                    errorCode: 10001,
+                    errorMsg: "SERVER_ERROR",
+                    response: null,
+                }
+            }
+        case !!discountAutomaticAppCreateRequestBody:
+            try {
+                const discountAutomaticAppCreateData = await mutationDiscountAutomaticAppCreate({
+                    shop,
+                    accessToken: accessToken || "",
+                    variables: discountAutomaticAppCreateRequestBody,
+                });
+
+                if (discountAutomaticAppCreateData) {
+                    return {
+                        success: true,
+                        errorCode: 0,
+                        errorMsg: "",
+                        response: discountAutomaticAppCreateData,
+                    }
+                }
+
+                return {
+                    success: false,
+                    errorCode: 10001,
+                    errorMsg: "SERVER_ERROR",
+                    response: null,
+                }
+            } catch (error) {
+                console.error(`${shop} shopMarketsRequestBody Error: `, error);
+                return {
+                    success: false,
+                    errorCode: 10001,
+                    errorMsg: "SERVER_ERROR",
+                    response: null,
+                }
+            }
+
+        default:
+            console.error(`${shop} Request with unrecognized key: `, formData);
+            return {
+                success: false,
+                errorCode: 10001,
+                errorMsg: "SERVER_ERROR",
+                response: null,
+            }
+    }
+};
 
 const Index = () => {
     const navigate = useNavigate();
-    const [step, setStep] = useState(1);
-    const [offerType, setOfferType] = useState('quantity-breaks-same');
-    const [productSelection, setProductSelection] = useState('specific-selected');
-    const [showProductModal, setShowProductModal] = useState(false);
-    const [selectedProducts, setSelectedProducts] = useState<any[]>([]);
-    const [discountRules, setDiscountRules] = useState([
-        {
-            id: 1,
-            isExpanded: true,
-            title: 'Buy 1, get 1 free',
-            buyQty: 1,
-            getQty: 1,
-            priceType: 'default',
-            subtitle: '',
-            badgeText: '',
-            badgeStyle: 'simple',
-            label: 'SAVE {{saved_percentage}}',
-            selectedByDefault: true,
-            showAsSoldOut: false
-        }
-    ]);
+    const { t } = useTranslation();
+
 
     const steps = [
-        'Basic Information',
-        'Products & Discounts',
-        'Style Design',
-        'Schedule & Budget'
+        t('Basic Information'),
+        t('Products & Discounts'),
+        t('Style Design'),
+        t('Schedule & Budget')
     ];
 
-    const offerTypes = [
+    const offerTypes: {
+        id: string;
+        name: string;
+        description: string;
+        defaultRules?: RangeDiscountsType | WholeHouseRentalDiscountType | BundleDiscountType;
+    }[] = [
+            {
+                id: 'quantity-breaks-same',
+                name: t('Quantity breaks for the same product'),
+                description: t('Offer discounts when customers buy multiple quantities of the same product'),
+                defaultRules: {
+                    typename: "RangeDiscountsType",
+                    ranges: [
+                        {
+                            min: 1,
+                            max: 3,
+                            discountRate: 0.9
+                        },
+                        {
+                            min: 4,
+                            max: 6,
+                            discountRate: 0.8
+                        },
+                        {
+                            min: 7,
+                            max: 9,
+                            discountRate: 0.6
+                        }
+                    ]
+                }
+            },
+            {
+                id: 'bogo',
+                name: t('Buy X, get Y free (BOGO) deal'),
+                description: t('Create buy-one-get-one or buy-X-get-Y-free promotions')
+            },
+            {
+                id: 'quantity-breaks-different',
+                name: t('Quantity breaks for different products'),
+                description: t('Offer discounts when customers buy multiple different products together')
+            },
+            {
+                id: 'complete-bundle',
+                name: t('Complete the bundle'),
+                description: t('Encourage customers to complete a bundle by adding recommended products')
+            },
+            {
+                id: 'subscription',
+                name: t('Subscription'),
+                description: t('Offer recurring subscription discounts for regular deliveries')
+            },
+            {
+                id: 'progressive-gifts',
+                name: t('Progressive gifts'),
+                description: t('Unlock free gifts as customers add more items to their cart')
+            }
+        ];
+
+    const [step, setStep] = useState(1);
+
+    // const [productSelection, setProductSelection] = useState('specific-selected');
+
+    const [showProductModal, setShowProductModal] = useState(false);
+    const [productModalData, setProductModalData] = useState<productModalDataType[]>([]);
+    const [customersData, setCustomersData] = useState<productModalDataType[]>([]);
+    const [customerSegmentsData, setCustomerSegmentsData] = useState<productModalDataType[]>([]);
+
+    const [basicInformation, setBasicInformation] = useState<BasicInformationType>({
+        offerName: `#Bundle ${Date.now()}`,
+        offerType: 'quantity-breaks-same',
+    });
+
+    const [selectedProducts, setSelectedProducts] = useState<productModalDataType[]>([]);
+
+    const [discountRules, setDiscountRules] = useState<WholeHouseRentalDiscountRuleType[]>([
         {
-            id: 'quantity-breaks-same',
-            name: 'Quantity breaks for the same product',
-            description: 'Offer discounts when customers buy multiple quantities of the same product'
+            id: 0,
+            isExpanded: true,
+            buyQty: 1,
+            discountRate: 0.9,
+            title: 'Item Title',
+            subtitle: 'Item Subtitle',
+            labelText: 'SAVE {{saved_percentage}}',
+            badgeText: 'Badge Text',
+            selectedByDefault: true,
+            upsellProducts: [],
+            freegiftProducts: [],
+            showAsSoldOut: false,
         },
-        {
-            id: 'bogo',
-            name: 'Buy X, get Y free (BOGO) deal',
-            description: 'Create buy-one-get-one or buy-X-get-Y-free promotions'
+    ]);
+    const [styleConfigData, setStyleConfigData] = useState<StyleConfigType>({
+        base_style: "vertical_stack",
+        card_background_color: '#FFFFFF',
+        card_label_color: '#000000',
+        card_border_color: '#E5E5E5',
+        card_title_text: 'Item Title',
+        card_title_text_fontSize: '16px',
+        card_title_text_fontStyle: "normal",
+        card_title_color: '#000000',
+        card_button_text: 'Button Text',
+        card_button_primaryColor: '#000000',
+        enable_countdown_timer: false,
+        countdown_timer_config: {
+            timer_duration: 1,
+            timer_color: "#d82c0d",
         },
-        {
-            id: 'quantity-breaks-different',
-            name: 'Quantity breaks for different products',
-            description: 'Offer discounts when customers buy multiple different products together'
-        },
-        {
-            id: 'complete-bundle',
-            name: 'Complete the bundle',
-            description: 'Encourage customers to complete a bundle by adding recommended products'
-        },
-        {
-            id: 'subscription',
-            name: 'Subscription',
-            description: 'Offer recurring subscription discounts for regular deliveries'
-        },
-        {
-            id: 'progressive-gifts',
-            name: 'Progressive gifts',
-            description: 'Unlock free gifts as customers add more items to their cart'
+    })
+    const [targetingSettingsData, setTargetingSettingsData] = useState<TargetingSettingsType>({
+        eligibilityType: "all",
+        eligibilityRadioData: [],
+        marketVisibilitySettingData: [],
+        startTime: null,
+        endTime: null,
+        totalBudget: null,
+        dailyBudget: null,
+        timesLimitForPercustomer: null,
+        hideOfferAfterExpiration: true,
+        showOfferToBots: false,
+    })
+
+    const [marketVisibilitySettingData, setMarketVisibilitySettingData] = useState<{
+        value: string;
+        label: string;
+    }[]>([])
+    const [mainModalType, setMainModalType] = useState<"CustomerSegments" | "Customer" | null>(null)
+
+    const indeterminate = useMemo(() => {
+        if (marketVisibilitySettingData.length)
+            return targetingSettingsData.marketVisibilitySettingData.length > 0 && targetingSettingsData.marketVisibilitySettingData.length < marketVisibilitySettingData.length;
+    }, [targetingSettingsData.marketVisibilitySettingData]);
+
+    const checkAll = useMemo(() => {
+        if (marketVisibilitySettingData.length)
+            return targetingSettingsData.marketVisibilitySettingData.length == marketVisibilitySettingData.length;
+    }, [targetingSettingsData.marketVisibilitySettingData]);
+
+    const productModalDataFetcher = useFetcher<any>();
+    const customerSegmentsDataFetcher = useFetcher<any>();
+    const customersDataFetcher = useFetcher<any>();
+    const shopMarketsDataFetcher = useFetcher<any>();
+    const confirmFetcher = useFetcher<any>();
+
+    useEffect(() => {
+        productModalDataFetcher.submit({
+            productVariantRequestBody: JSON.stringify({
+                query: '',
+            })
+        }, { method: 'POST' })
+        shopMarketsDataFetcher.submit({
+            shopMarketsRequestBody: JSON.stringify({})
+        }, { method: 'POST' })
+    }, [])
+
+    useEffect(() => {
+        switch (true) {
+            case mainModalType == "Customer":
+                customersDataFetcher.submit({
+                    customersRequestBody: JSON.stringify({
+                        query: '',
+                    })
+                }, { method: 'POST' })
+                break;
+            case mainModalType == "CustomerSegments":
+                customerSegmentsDataFetcher.submit({
+                    customerSegmentsRequestBody: JSON.stringify({
+                        query: '',
+                    })
+                }, { method: 'POST' })
+                break;
+            default:
+                break;
         }
-    ];
+    }, [mainModalType])
+
+    useEffect(() => {
+        if (productModalDataFetcher.data) {
+            if (productModalDataFetcher.data.success) {
+                const productVariantsData = productModalDataFetcher.data.response?.productVariants?.nodes;
+                if (productVariantsData?.length) {
+                    const data = productVariantsData.map((variant: any) => {
+                        return {
+                            id: variant.id,
+                            name: `${variant.product?.title} - ${variant.title}`,
+                            price: variant.price,
+                            image: variant.media?.edges[0]?.node?.preview?.image?.url,
+                        }
+                    })
+                    setProductModalData(data);
+                }
+            }
+        }
+    }, [productModalDataFetcher.data])
+
+    useEffect(() => {
+        if (customerSegmentsDataFetcher.data) {
+            if (customerSegmentsDataFetcher.data.success) {
+                const customerSegmentsData = customerSegmentsDataFetcher.data.response?.segments?.nodes;
+                if (customerSegmentsData?.length) {
+                    const data = customerSegmentsData.map((segment: any) => {
+                        return {
+                            label: segment.name,
+                            value: segment.id,
+                        }
+                    })
+                    setCustomerSegmentsData(data);
+                }
+            }
+        }
+    }, [customerSegmentsDataFetcher.data])
+
+    useEffect(() => {
+        if (customersDataFetcher.data) {
+            if (customersDataFetcher.data.success) {
+                const customersData = customersDataFetcher.data.response?.customers?.nodes;
+                if (customersData?.length) {
+                    const data = customersData.map((customer: any) => {
+                        return {
+                            label: customer.firstName + ' ' + customer.lastName,
+                            value: customer.id,
+                        }
+                    })
+                    setCustomersData(data);
+                }
+            }
+        }
+    }, [customersDataFetcher.data])
+
+    useEffect(() => {
+        if (shopMarketsDataFetcher.data) {
+            if (shopMarketsDataFetcher.data.success) {
+                const marketsData = shopMarketsDataFetcher.data.response?.markets?.nodes;
+                if (marketsData?.length) {
+                    const data = marketsData.map((market: any) => {
+                        return {
+                            label: market?.name,
+                            value: market?.id,
+                        }
+                    })
+                    setMarketVisibilitySettingData(data);
+                }
+            }
+        }
+    }, [shopMarketsDataFetcher.data])
+
+    const switchDefaultSelectedItem = (e: number) => {
+        const data = discountRules.map((rule) => {
+            if (rule?.id == e) {
+                rule.selectedByDefault = true;
+            } else {
+                rule.selectedByDefault = false;
+            }
+            return rule;
+        })
+
+        setDiscountRules(data);
+    };
+
+    const onCheckAllChange: CheckboxProps['onChange'] = (e) => {
+        const data = marketVisibilitySettingData.map((market) =>
+            market?.value,
+        )
+
+        setTargetingSettingsData({
+            ...targetingSettingsData,
+            marketVisibilitySettingData: e.target.checked ? data : [],
+        });
+    };
+
+    const eligibilityBrowse = () => {
+        if (targetingSettingsData?.eligibilityType == "segments")
+            setMainModalType("CustomerSegments")
+        if (targetingSettingsData?.eligibilityType == "customers")
+            setMainModalType("Customer")
+    }
+
+    const isOfferType = (v: string): v is OfferType => {
+        return ["quantity-breaks-same", "bogo", "quantity-breaks-different", "complete-bundle", "subscription", "progressive-gifts"].includes(v);
+    };
+
+    const handleConfirm = () => {
+        const selectedProductVariantIds = selectedProducts.map((product) => product.id);
+
+        let jsondata = {
+            automaticAppDiscount: {
+                title: basicInformation?.offerName,
+                functionHandle: "ciwi-bundle-multiple-products-discount-function",
+                startsAt: dayjs(targetingSettingsData?.startTime).toISOString(),
+                endsAt: targetingSettingsData?.endTime ? dayjs(targetingSettingsData?.endTime).toISOString() : null,
+                combinesWith: {
+                    orderDiscounts: true,
+                    productDiscounts: true,
+                    shippingDiscounts: true
+                },
+                metafields: [
+                    {
+                        namespace: "basic_information",
+                        key: "basic_information",
+                        type: "json",
+                        value: JSON.stringify(basicInformation)
+                    },
+                    {
+                        namespace: "discount_rules",
+                        key: "discount_rules",
+                        type: "json",
+                        value: JSON.stringify(discountRules)
+                    },
+                    {
+                        namespace: "style_config_data",
+                        key: "style_config_data",
+                        type: "json",
+                        value: JSON.stringify(styleConfigData)
+                    },
+                    {
+                        namespace: "targeting_settings_data",
+                        key: "targeting_settings_data",
+                        type: "json",
+                        value: JSON.stringify(targetingSettingsData)
+                    },
+                    {
+                        namespace: "selected_product_variant_ids",
+                        key: "selected_product_variant_ids",
+                        type: "json",
+                        value: JSON.stringify(selectedProductVariantIds)
+                    }
+                ],
+                discountClasses: [
+                    "PRODUCT",
+                ]
+            }
+        }
+
+        console.log("jsondata: ", jsondata);
+        confirmFetcher.submit({
+            discountAutomaticAppCreateRequestBody: JSON.stringify(jsondata)
+        }, { method: "POST" });
+    }
 
     return (
         <div className="polaris-page">
@@ -79,27 +678,47 @@ const Index = () => {
             </div>
 
             <div className="polaris-card" style={{ marginBottom: '80px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', marginBottom: '24px' }} className="sm:flex sm:gap-[12px]">
-                    {steps.map((stepName, index) => (
-                        <div
-                            key={index}
-                            style={{
-                                flex: 1,
-                                padding: '10px 8px',
-                                background: step === index + 1 ? '#008060' : '#f4f6f8',
-                                color: step === index + 1 ? 'white' : '#6d7175',
-                                borderRadius: '6px',
-                                textAlign: 'center',
-                                fontSize: '13px',
-                                fontWeight: 500,
-                                cursor: 'pointer'
-                            }}
-                            className="sm:text-[14px] sm:p-[12px]"
-                            onClick={() => setStep(index + 1)}
-                        >
-                            <span className="hidden sm:inline">{index + 1}. </span>{stepName}
-                        </div>
-                    ))}
+                <div
+                    style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(2, 1fr)',
+                        gap: '8px',
+                        marginBottom: '24px',
+                    }}
+                    className="sm:flex sm:gap-[12px]"
+                >
+                    {steps.map((stepName, index) => {
+                        const stepNumber = index + 1;
+                        const isActive = step === stepNumber;
+                        const isClickable = stepNumber <= step + 1;
+
+                        return (
+                            <div
+                                key={index}
+                                onClick={() => {
+                                    if (isClickable) {
+                                        setStep(stepNumber);
+                                    }
+                                }}
+                                style={{
+                                    flex: 1,
+                                    padding: '10px 8px',
+                                    background: isActive ? '#008060' : '#f4f6f8',
+                                    color: isActive ? 'white' : '#6d7175',
+                                    borderRadius: '6px',
+                                    textAlign: 'center',
+                                    fontSize: '13px',
+                                    fontWeight: 500,
+                                    cursor: isClickable ? 'pointer' : 'not-allowed',
+                                    opacity: isClickable ? 1 : 0.5,
+                                }}
+                                className="sm:text-[14px] sm:p-[12px]"
+                            >
+                                <span className="hidden sm:inline">{stepNumber}. </span>
+                                {stepName}
+                            </div>
+                        );
+                    })}
                 </div>
 
                 <div className="polaris-layout">
@@ -109,44 +728,61 @@ const Index = () => {
                             <div>
                                 <h2 className="polaris-text-heading-md" style={{ marginBottom: '16px' }}>Basic Information</h2>
                                 <div className="polaris-stack polaris-stack--vertical">
-                                    <label style={{ fontSize: '14px', fontWeight: 500 }}>
-                                        Offer Name
-                                        <input
-                                            type="text"
-                                            placeholder="e.g., Summer Bundle Deal"
+                                    <Flex
+                                        align="left"
+                                        vertical
+                                        gap={8}
+                                        style={{
+                                            fontSize: '14px',
+                                            fontWeight: 500
+                                        }}
+                                    >
+                                        <Text>{t("Offer Name")}</Text>
+                                        <Input
                                             style={{
                                                 width: '100%',
-                                                padding: '8px 12px',
-                                                marginTop: '8px',
-                                                border: '1px solid #dfe3e8',
-                                                borderRadius: '6px',
-                                                fontSize: '14px'
+                                            }}
+                                            placeholder="e.g., Summer Bundle Deal"
+                                            onChange={(e) => {
+                                                setBasicInformation({
+                                                    ...basicInformation,
+                                                    offerName: e.target.value
+                                                })
+                                            }}
+                                            value={basicInformation.offerName}
+                                        />
+                                    </Flex>
+
+                                    <Flex
+                                        align="left"
+                                        vertical
+                                        gap={8}
+                                        style={{
+                                            fontSize: '14px',
+                                            fontWeight: 500,
+                                            marginTop: '16px'
+                                        }}
+                                    >
+                                        <Text>{t("Offer Type")}</Text>
+                                        <Select
+                                            style={{
+                                                width: '100%',
+                                            }}
+                                            options={offerTypes.map(type => (
+                                                {
+                                                    value: type.id,
+                                                    label: type.name
+                                                }
+                                            ))}
+                                            value={basicInformation.offerType}
+                                            onChange={(value) => {
+                                                setBasicInformation({
+                                                    ...basicInformation,
+                                                    offerType: value
+                                                })
                                             }}
                                         />
-                                    </label>
-
-                                    <label style={{ fontSize: '14px', fontWeight: 500, marginTop: '16px' }}>
-                                        Offer Type
-                                        <select
-                                            value={offerType}
-                                            onChange={(e) => setOfferType(e.target.value)}
-                                            style={{
-                                                width: '100%',
-                                                padding: '8px 12px',
-                                                marginTop: '8px',
-                                                border: '1px solid #dfe3e8',
-                                                borderRadius: '6px',
-                                                fontSize: '14px',
-                                                cursor: 'pointer'
-                                            }}
-                                        >
-                                            {offerTypes.map(type => (
-                                                <option key={type.id} value={type.id}>
-                                                    {type.name}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </label>
+                                    </Flex>
                                 </div>
                             </div>
 
@@ -154,7 +790,7 @@ const Index = () => {
                             <div style={{ position: 'sticky', top: '24px' }}>
                                 <h3 style={{ fontSize: '14px', fontWeight: 500, marginBottom: '12px' }}>Preview</h3>
                                 <p className="polaris-text-subdued" style={{ fontSize: '13px', marginBottom: '12px' }}>
-                                    {offerTypes.find(type => type.id === offerType)?.description}
+                                    {offerTypes.find(type => type.id === basicInformation.offerType)?.description}
                                 </p>
 
                                 {/* Preview Card */}
@@ -168,7 +804,7 @@ const Index = () => {
                                     display: 'flex',
                                     flexDirection: 'column'
                                 }}>
-                                    {offerType === 'quantity-breaks-same' && (
+                                    {basicInformation.offerType === 'quantity-breaks-same' && (
                                         <>
                                             <div style={{ border: '1px solid #e0e0e0', borderRadius: '8px', padding: '12px', marginBottom: '12px', background: '#f9fafb' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -205,7 +841,7 @@ const Index = () => {
                                         </>
                                     )}
 
-                                    {offerType === 'bogo' && (
+                                    {basicInformation.offerType === 'bogo' && (
                                         <>
                                             <div style={{ border: '2px solid #000', borderRadius: '8px', padding: '10px 12px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                 <input type="radio" readOnly checked style={{ width: '16px', height: '16px' }} />
@@ -255,7 +891,7 @@ const Index = () => {
                                         </>
                                     )}
 
-                                    {offerType === 'quantity-breaks-different' && (
+                                    {basicInformation.offerType === 'quantity-breaks-different' && (
                                         <>
                                             <div style={{ border: '1px solid #e0e0e0', borderRadius: '8px', padding: '12px', marginBottom: '8px', background: '#f9fafb' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -300,7 +936,7 @@ const Index = () => {
                                         </>
                                     )}
 
-                                    {offerType === 'complete-bundle' && (
+                                    {basicInformation.offerType === 'complete-bundle' && (
                                         <>
                                             <div style={{ border: '1px solid #e0e0e0', borderRadius: '8px', padding: '10px', marginBottom: '10px' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
@@ -341,7 +977,7 @@ const Index = () => {
                                         </>
                                     )}
 
-                                    {offerType === 'subscription' && (
+                                    {basicInformation.offerType === 'subscription' && (
                                         <>
                                             <div style={{ border: '2px solid #000', borderRadius: '8px', padding: '10px 12px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                 <input type="radio" readOnly checked style={{ width: '16px', height: '16px' }} />
@@ -398,7 +1034,7 @@ const Index = () => {
                                         </>
                                     )}
 
-                                    {offerType === 'progressive-gifts' && (
+                                    {basicInformation.offerType === 'progressive-gifts' && (
                                         <>
                                             <div style={{ border: '1px solid #e0e0e0', borderRadius: '8px', padding: '12px', marginBottom: '8px', background: '#f9fafb' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -494,7 +1130,6 @@ const Index = () => {
                                                 <X size={24} />
                                             </button>
                                         </div>
-
                                         <input
                                             type="text"
                                             placeholder="Search products..."
@@ -510,11 +1145,7 @@ const Index = () => {
 
                                         {/* Mock product list */}
                                         <div style={{ display: 'grid', gap: '12px', marginBottom: '20px' }}>
-                                            {[
-                                                { id: 1, name: 'Product A', price: '€65.00', image: 'https://via.placeholder.com/60' },
-                                                { id: 2, name: 'Product B', price: '€75.00', image: 'https://via.placeholder.com/60' },
-                                                { id: 3, name: 'Product C', price: '€85.00', image: 'https://via.placeholder.com/60' }
-                                            ].map(product => (
+                                            {productModalData.map(product => (
                                                 <div key={product.id} style={{
                                                     display: 'flex',
                                                     gap: '12px',
@@ -633,13 +1264,12 @@ const Index = () => {
                                         <h3 style={{ fontSize: '14px', fontWeight: 500, marginBottom: '12px' }}>Discount rules</h3>
 
                                         {discountRules.map((rule, index) => (
-                                            <div key={rule.id} style={{
+                                            <div key={index} style={{
                                                 border: '1px solid #dfe3e8',
                                                 borderRadius: '8px',
                                                 marginBottom: '16px',
                                                 overflow: 'hidden'
                                             }}>
-                                                {/* Rule Header */}
                                                 <div style={{
                                                     display: 'flex',
                                                     alignItems: 'center',
@@ -720,17 +1350,15 @@ const Index = () => {
                                                     {rule.isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                                                 </div>
 
-                                                {/* Rule Content */}
                                                 {rule.isExpanded && (
                                                     <div style={{ padding: '16px' }}>
-                                                        {/* Buy/Get quantities */}
-                                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+                                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
                                                             <div>
                                                                 <label style={{ fontSize: '13px', fontWeight: 500, display: 'block', marginBottom: '8px' }}>
                                                                     Quantity
                                                                 </label>
                                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                                    <span style={{ fontSize: '14px', fontWeight: 500 }}>Buy</span>
+                                                                    {/* <span style={{ fontSize: '14px', fontWeight: 500 }}>Buy</span> */}
                                                                     <input
                                                                         type="number"
                                                                         value={rule.buyQty}
@@ -751,17 +1379,25 @@ const Index = () => {
                                                             </div>
 
                                                             <div>
-                                                                <label style={{ fontSize: '13px', fontWeight: 500, display: 'block', marginBottom: '8px' }}>
-                                                                    Quantity
+                                                                <label style={{ fontSize: '13px', fontWeight: 500, display: 'block', marginBottom: '8px', color: '#a0a0a0' }}>
+                                                                    DiscountRate
                                                                 </label>
                                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                                    <span style={{ fontSize: '14px', fontWeight: 500 }}>, get</span>
                                                                     <input
                                                                         type="number"
-                                                                        value={rule.getQty}
+                                                                        min={0}
+                                                                        max={1}
+                                                                        step={0.01}
+                                                                        value={rule.discountRate}
                                                                         onChange={(e) => {
+                                                                            let value = Number(e.target.value);
+
+                                                                            if (isNaN(value)) value = 0;
+                                                                            if (value < 0) value = 0;
+                                                                            if (value > 1) value = 1;
+
                                                                             const newRules = [...discountRules];
-                                                                            newRules[index].getQty = parseInt(e.target.value) || 0;
+                                                                            newRules[index].discountRate = value;
                                                                             setDiscountRules(newRules);
                                                                         }}
                                                                         style={{
@@ -769,45 +1405,17 @@ const Index = () => {
                                                                             padding: '8px 12px',
                                                                             border: '1px solid #dfe3e8',
                                                                             borderRadius: '6px',
-                                                                            fontSize: '14px'
+                                                                            fontSize: '14px',
                                                                         }}
                                                                     />
-                                                                    <span style={{ fontSize: '14px', fontWeight: 500 }}>free!</span>
                                                                 </div>
-                                                            </div>
-
-                                                            <div>
-                                                                <label style={{ fontSize: '13px', fontWeight: 500, display: 'block', marginBottom: '8px', color: '#a0a0a0' }}>
-                                                                    Price
-                                                                </label>
-                                                                <select
-                                                                    value={rule.priceType}
-                                                                    onChange={(e) => {
-                                                                        const newRules = [...discountRules];
-                                                                        newRules[index].priceType = e.target.value;
-                                                                        setDiscountRules(newRules);
-                                                                    }}
-                                                                    style={{
-                                                                        width: '100%',
-                                                                        padding: '8px 12px',
-                                                                        border: '1px solid #dfe3e8',
-                                                                        borderRadius: '6px',
-                                                                        fontSize: '14px',
-                                                                        color: '#a0a0a0'
-                                                                    }}
-                                                                >
-                                                                    <option value="default">Default</option>
-                                                                    <option value="custom">Custom</option>
-                                                                </select>
                                                             </div>
                                                         </div>
 
-                                                        {/* Title and Subtitle */}
                                                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
                                                             <div>
                                                                 <label style={{ fontSize: '13px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '8px' }}>
                                                                     Title
-                                                                    <span style={{ fontSize: '12px', color: '#6d7175' }}>{'{}'}</span>
                                                                 </label>
                                                                 <input
                                                                     type="text"
@@ -830,7 +1438,6 @@ const Index = () => {
                                                             <div>
                                                                 <label style={{ fontSize: '13px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '8px' }}>
                                                                     Subtitle
-                                                                    <span style={{ fontSize: '12px', color: '#6d7175' }}>{'{}'}</span>
                                                                 </label>
                                                                 <input
                                                                     type="text"
@@ -851,12 +1458,10 @@ const Index = () => {
                                                             </div>
                                                         </div>
 
-                                                        {/* Badge text and style */}
                                                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
                                                             <div>
                                                                 <label style={{ fontSize: '13px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '8px' }}>
                                                                     Badge text
-                                                                    <span style={{ fontSize: '12px', color: '#6d7175' }}>{'{}'}</span>
                                                                 </label>
                                                                 <input
                                                                     type="text"
@@ -876,10 +1481,9 @@ const Index = () => {
                                                                 />
                                                             </div>
 
-                                                            <div>
+                                                            {/* <div>
                                                                 <label style={{ fontSize: '13px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '8px' }}>
                                                                     Badge style
-                                                                    <span style={{ fontSize: '12px', color: '#6d7175' }}>{'{}'}</span>
                                                                 </label>
                                                                 <select
                                                                     value={rule.badgeStyle}
@@ -900,21 +1504,19 @@ const Index = () => {
                                                                     <option value="bold">Bold</option>
                                                                     <option value="outline">Outline</option>
                                                                 </select>
-                                                            </div>
+                                                            </div> */}
                                                         </div>
 
-                                                        {/* Label */}
                                                         <div style={{ marginBottom: '16px' }}>
                                                             <label style={{ fontSize: '13px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '8px' }}>
                                                                 Label
-                                                                <span style={{ fontSize: '12px', color: '#6d7175' }}>{'{}'}</span>
                                                             </label>
                                                             <input
                                                                 type="text"
-                                                                value={rule.label}
+                                                                value={rule.labelText}
                                                                 onChange={(e) => {
                                                                     const newRules = [...discountRules];
-                                                                    newRules[index].label = e.target.value;
+                                                                    newRules[index].labelText = e.target.value;
                                                                     setDiscountRules(newRules);
                                                                 }}
                                                                 style={{
@@ -927,29 +1529,22 @@ const Index = () => {
                                                             />
                                                         </div>
 
-                                                        {/* Selected by default */}
                                                         <div style={{ marginBottom: '16px' }}>
                                                             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                                                                <input
-                                                                    type="checkbox"
+                                                                <Checkbox
                                                                     checked={rule.selectedByDefault}
-                                                                    onChange={(e) => {
-                                                                        const newRules = [...discountRules];
-                                                                        newRules[index].selectedByDefault = e.target.checked;
-                                                                        setDiscountRules(newRules);
-                                                                    }}
-                                                                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                                                                    onChange={() => switchDefaultSelectedItem(rule.id)}
                                                                 />
                                                                 <span style={{ fontSize: '14px' }}>Selected by default</span>
                                                             </label>
                                                         </div>
 
-                                                        {/* Action buttons */}
                                                         <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
-                                                            <button style={{
+                                                            {/* TODO: Add image upload */}
+                                                            {/* <button style={{
                                                                 flex: 1,
                                                                 padding: '10px',
-                                                                border: '1px solid #dfe3e8',
+                                                                border: '1px solid rgba(223, 227, 232, 1)',
                                                                 borderRadius: '6px',
                                                                 background: '#fff',
                                                                 cursor: 'pointer',
@@ -960,90 +1555,374 @@ const Index = () => {
                                                                 gap: '6px'
                                                             }}>
                                                                 🖼️ Add image
-                                                            </button>
-                                                            <button style={{
-                                                                flex: 1,
-                                                                padding: '10px',
-                                                                border: '1px solid #dfe3e8',
-                                                                borderRadius: '6px',
-                                                                background: '#fff',
-                                                                cursor: 'pointer',
-                                                                fontSize: '13px',
-                                                                display: 'flex',
-                                                                alignItems: 'center',
-                                                                justifyContent: 'center',
-                                                                gap: '6px'
-                                                            }}>
-                                                                📈 Add upsell
-                                                            </button>
-                                                            <button style={{
-                                                                flex: 1,
-                                                                padding: '10px',
-                                                                border: '1px solid #dfe3e8',
-                                                                borderRadius: '6px',
-                                                                background: '#fff',
-                                                                cursor: 'pointer',
-                                                                fontSize: '13px',
-                                                                display: 'flex',
-                                                                alignItems: 'center',
-                                                                justifyContent: 'center',
-                                                                gap: '6px'
-                                                            }}>
-                                                                🎁 Add free gift
-                                                            </button>
+                                                            </button> */}
+                                                            {/* {!rule.upsellProducts.length &&
+                                                                <Button
+                                                                    onClick={() => {
+                                                                        const newRule = [...discountRules];
+                                                                        newRule[index].upsellProducts.push({
+                                                                            id: Date.now(),
+                                                                            variantid: '',
+                                                                            upsellText: '+ Add at 20% discount',
+                                                                            discountType: 'percentage',
+                                                                            discountValue: {
+                                                                                percentage: 20,
+                                                                                amount: 0,
+                                                                                specific: 0,
+                                                                            },
+                                                                            selectedByDefault: false,
+                                                                            visibleWithoutCheck: false,
+                                                                        });
+                                                                        setDiscountRules(newRule);
+                                                                    }}
+                                                                    style={{
+                                                                        flex: 1,
+                                                                        padding: '10px',
+                                                                        border: '1px solid #dfe3e8',
+                                                                        borderRadius: '6px',
+                                                                        background: '#fff',
+                                                                        cursor: 'pointer',
+                                                                        fontSize: '13px',
+                                                                        display: 'flex',
+                                                                        alignItems: 'center',
+                                                                        justifyContent: 'center',
+                                                                    }}
+                                                                >
+                                                                    📈 {t("Add upsell")}
+                                                                </Button>
+                                                            } */}
+                                                            {/* {!rule.freegiftProducts.length &&
+                                                                <Button
+                                                                    onClick={() => {
+                                                                        const newRule = [...discountRules];
+                                                                        newRule[index].freegiftProducts.push({
+                                                                            id: Date.now(),
+                                                                            variantid: '',
+                                                                            freegiftText: '+ FREE Gift',
+                                                                            showOriginalPrice: false
+                                                                        });
+                                                                        setDiscountRules(newRule);
+                                                                    }}
+                                                                    style={{
+                                                                        flex: 1,
+                                                                        padding: '10px',
+                                                                        border: '1px solid #dfe3e8',
+                                                                        borderRadius: '6px',
+                                                                        background: '#fff',
+                                                                        cursor: 'pointer',
+                                                                        fontSize: '13px',
+                                                                        display: 'flex',
+                                                                        alignItems: 'center',
+                                                                        justifyContent: 'center',
+                                                                    }}
+                                                                >
+                                                                    🎁 {t("Add free gift")}
+                                                                </Button>
+                                                            } */}
                                                         </div>
 
-                                                        {/* Show as Sold out toggle */}
-                                                        <div style={{
+                                                        {/* {rule.upsellProducts.length > 0 &&
+                                                            <div style={{ marginBottom: '16px' }}>
+                                                                {rule.upsellProducts.map((upsell, upsellIndex) => (
+                                                                    <Space
+                                                                        key={upsellIndex}
+                                                                        orientation="vertical"
+                                                                        style={{
+                                                                            width: '100%',
+                                                                            padding: '16px',
+                                                                            border: '1px solid #dfe3e8',
+                                                                            borderRadius: '6px',
+                                                                            marginBottom: '16px',
+                                                                        }}
+                                                                    >
+                                                                        <Flex justify="space-between" align="center" gap={16}>
+                                                                            <Text>{t("Upsell")}</Text>
+                                                                            <Button
+                                                                                type="link"
+                                                                                onClick={() => {
+                                                                                    setDiscountRules((prev) => {
+                                                                                        const newRules = [...prev];
+                                                                                        newRules[index].upsellProducts =
+                                                                                            newRules[index].upsellProducts.filter(
+                                                                                                (x) => x.id !== upsell.id
+                                                                                            );
+                                                                                        return newRules;
+                                                                                    });
+                                                                                }}
+                                                                            >
+                                                                                {t("Remove upsell")}
+                                                                            </Button>
+                                                                        </Flex>
+
+                                                                        <Button
+                                                                            type="primary"
+                                                                            style={{
+                                                                                width: '100%'
+                                                                            }}
+                                                                        >
+                                                                            {t("Select a product")}
+                                                                        </Button>
+
+                                                                        <Flex justify="space-between" gap={16}>
+                                                                            <Flex
+                                                                                align="left"
+                                                                                vertical
+                                                                                flex={1}
+                                                                            >
+                                                                                <Text>{t("Price")}</Text>
+                                                                                <Select
+                                                                                    style={{
+                                                                                        width: '100%',
+                                                                                    }}
+                                                                                    options={[
+                                                                                        { value: 'default', label: t('Default') },
+                                                                                        { value: 'percentage', label: t('Discounted % (e.g. 25% off)') },
+                                                                                        { value: 'amount', label: t('Discounted CA$ (e.g. CA$10 off)') },
+                                                                                        { value: 'specific', label: t('Specific (e.g. CA$29)') },
+                                                                                    ]}
+                                                                                    value={upsell.discountType}
+                                                                                    onChange={(value) => {
+                                                                                        const newRules = [...discountRules];
+                                                                                        newRules[index].upsellProducts[upsellIndex].discountType = value;
+                                                                                        setDiscountRules(newRules);
+                                                                                    }}
+                                                                                    dropdownMatchSelectWidth
+                                                                                    className="ellipsis-select"
+                                                                                />
+                                                                            </Flex>
+                                                                            {upsell.discountType != "default"
+                                                                                &&
+                                                                                <Flex
+                                                                                    align="left"
+                                                                                    vertical
+                                                                                    flex={1}
+                                                                                >
+                                                                                    <Text>{t(upsell.discountType != "specific" ? "Discount per item" : "Total price")}</Text>
+                                                                                    <InputNumber
+                                                                                        style={{
+                                                                                            width: '100%',
+                                                                                        }}
+                                                                                        onChange={(value) => {
+                                                                                            const newRules = [...discountRules];
+                                                                                            const discountType = newRules[index].upsellProducts[upsellIndex].discountType;
+                                                                                            if (typeof value === "number" && value) {
+                                                                                                if (discountType === 'percentage') {
+                                                                                                    newRules[index].upsellProducts[upsellIndex].discountValue.percentage = value;
+                                                                                                } else if (discountType === 'amount') {
+                                                                                                    newRules[index].upsellProducts[upsellIndex].discountValue.amount = value;
+                                                                                                } else if (discountType === 'specific') {
+                                                                                                    newRules[index].upsellProducts[upsellIndex].discountValue.specific = value;
+                                                                                                }
+                                                                                            }
+                                                                                            setDiscountRules(newRules);
+                                                                                        }}
+                                                                                        value={upsell.discountValue[upsell.discountType as "percentage" | "amount" | "specific"]}
+                                                                                    />
+                                                                                </Flex>
+                                                                            }
+                                                                        </Flex>
+
+                                                                        <Flex align="left" vertical>
+                                                                            <Text>{t("Text")}</Text>
+                                                                            <Input
+                                                                                style={{
+                                                                                    width: '100%',
+                                                                                }}
+                                                                                onChange={(e) => {
+                                                                                    const newRules = [...discountRules];
+                                                                                    newRules[index].upsellProducts[upsellIndex].upsellText = e.target.value;
+                                                                                    setDiscountRules(newRules);
+                                                                                }}
+                                                                                value={upsell.upsellText}
+                                                                            />
+                                                                        </Flex>
+
+                                                                        <Flex align="center" wrap gap={16}>
+                                                                            <Checkbox
+                                                                                onChange={(e) => {
+                                                                                    setDiscountRules((prev) => {
+                                                                                        const newRules = [...prev];
+                                                                                        newRules[index].upsellProducts[upsellIndex].selectedByDefault = e.target.checked;
+                                                                                        return newRules;
+                                                                                    });
+                                                                                }}
+                                                                                checked={upsell.selectedByDefault}
+                                                                            >
+                                                                                {t("Selected by default")}
+                                                                            </Checkbox>
+                                                                            <Checkbox
+                                                                                onChange={(e) => {
+                                                                                    setDiscountRules((prev) => {
+                                                                                        const newRules = [...prev];
+                                                                                        newRules[index].upsellProducts[upsellIndex].visibleWithoutCheck = e.target.checked;
+                                                                                        return newRules;
+                                                                                    });
+                                                                                }}
+                                                                                checked={upsell.visibleWithoutCheck}
+                                                                            >
+                                                                                {t("Visible only when bar is selected")}
+                                                                            </Checkbox>
+                                                                        </Flex>
+                                                                    </Space>
+                                                                ))}
+                                                                <Button
+                                                                    onClick={() => {
+                                                                        const newRules = [...discountRules];
+                                                                        newRules[index].upsellProducts.push({
+                                                                            id: Date.now(),
+                                                                            variantid: '',
+                                                                            upsellText: '+ Add at 20% discount',
+                                                                            discountType: 'percentage',
+                                                                            discountValue: {
+                                                                                percentage: 20,
+                                                                                amount: 0,
+                                                                                specific: 0,
+                                                                            },
+                                                                            selectedByDefault: false,
+                                                                            visibleWithoutCheck: false,
+                                                                        });
+                                                                        setDiscountRules(newRules);
+                                                                    }}
+                                                                    style={{
+                                                                        width: '100%',
+                                                                        padding: '10px',
+                                                                        border: '1px solid #dfe3e8',
+                                                                        borderRadius: '6px',
+                                                                        background: '#fff',
+                                                                        cursor: 'pointer',
+                                                                        fontSize: '13px',
+                                                                        display: 'flex',
+                                                                        alignItems: 'center',
+                                                                        justifyContent: 'center',
+                                                                    }}
+                                                                >
+                                                                    📈 {t("Add upsell")}
+                                                                </Button>
+                                                            </div>
+                                                        } */}
+
+                                                        {/* {rule.freegiftProducts.length > 0 &&
+                                                            <div style={{ marginBottom: '16px' }}>
+                                                                {rule.freegiftProducts.map((freegift, freegiftIndex) => (
+                                                                    <Space
+                                                                        key={freegiftIndex}
+                                                                        orientation="vertical"
+                                                                        style={{
+                                                                            width: '100%',
+                                                                            padding: '16px',
+                                                                            border: '1px solid #dfe3e8',
+                                                                            borderRadius: '6px',
+                                                                            marginBottom: '16px',
+                                                                        }}
+                                                                    >
+                                                                        <Flex justify="space-between" align="center" gap={16}>
+                                                                            <Text>{t("Free gift")}</Text>
+                                                                            <Button
+                                                                                type="link"
+                                                                                onClick={() => {
+                                                                                    setDiscountRules((prev) => {
+                                                                                        const newRules = [...prev];
+                                                                                        newRules[index].freegiftProducts =
+                                                                                            newRules[index].freegiftProducts.filter(
+                                                                                                (x) => x.id !== freegift.id
+                                                                                            );
+                                                                                        return newRules;
+                                                                                    });
+                                                                                }}
+                                                                            >
+                                                                                {t("Remove free gift")}
+                                                                            </Button>
+                                                                        </Flex>
+
+                                                                        <Button
+                                                                            type="primary"
+                                                                            style={{
+                                                                                width: '100%'
+                                                                            }}
+                                                                        >
+                                                                            {t("Select a product")}
+                                                                        </Button>
+
+                                                                        <Flex align="left" vertical>
+                                                                            <Text>{t("Text")}</Text>
+                                                                            <Input
+                                                                                style={{
+                                                                                    width: '100%',
+                                                                                }}
+                                                                                onChange={(e) => {
+                                                                                    const newRules = [...discountRules];
+                                                                                    newRules[index].freegiftProducts[freegiftIndex].freegiftText = e.target.value;
+                                                                                    setDiscountRules(newRules);
+                                                                                }}
+                                                                                value={freegift.freegiftText}
+                                                                            />
+                                                                        </Flex>
+
+                                                                        <Flex align="center" wrap gap={16}>
+                                                                            <Checkbox
+                                                                                onChange={(e) => {
+                                                                                    setDiscountRules((prev) => {
+                                                                                        const newRules = [...prev];
+                                                                                        newRules[index].freegiftProducts[freegiftIndex].showOriginalPrice = e.target.checked;
+                                                                                        return newRules;
+                                                                                    });
+                                                                                }}
+                                                                                checked={freegift.showOriginalPrice}
+                                                                            >
+                                                                                {t("Show original price")}
+                                                                            </Checkbox>
+                                                                        </Flex>
+                                                                    </Space>
+                                                                ))}
+                                                                <Button
+                                                                    onClick={() => {
+                                                                        const newRule = [...discountRules];
+                                                                        newRule[index].freegiftProducts.push({
+                                                                            id: Date.now(),
+                                                                            variantid: '',
+                                                                            freegiftText: '+ FREE Gift',
+                                                                            showOriginalPrice: false
+                                                                        });
+                                                                        setDiscountRules(newRule);
+                                                                    }}
+                                                                    style={{
+                                                                        width: '100%',
+                                                                        padding: '10px',
+                                                                        border: '1px solid #dfe3e8',
+                                                                        borderRadius: '6px',
+                                                                        background: '#fff',
+                                                                        cursor: 'pointer',
+                                                                        fontSize: '13px',
+                                                                        display: 'flex',
+                                                                        alignItems: 'center',
+                                                                        justifyContent: 'center',
+                                                                    }}
+                                                                >
+                                                                    🎁 {t("Add free gift")}
+                                                                </Button>
+                                                            </div>
+                                                        } */}
+
+                                                        {/* <div style={{
                                                             display: 'flex',
                                                             justifyContent: 'space-between',
                                                             alignItems: 'center',
                                                             paddingTop: '16px',
                                                             borderTop: '1px solid #dfe3e8'
                                                         }}>
-                                                            <span style={{ fontSize: '14px' }}>Show as Sold out</span>
-                                                            <label style={{
-                                                                position: 'relative',
-                                                                display: 'inline-block',
-                                                                width: '48px',
-                                                                height: '24px',
-                                                                cursor: 'pointer'
-                                                            }}>
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={rule.showAsSoldOut}
-                                                                    onChange={(e) => {
+                                                            <Checkbox
+                                                                onChange={(e) => {
+                                                                    setDiscountRules(() => {
                                                                         const newRules = [...discountRules];
                                                                         newRules[index].showAsSoldOut = e.target.checked;
-                                                                        setDiscountRules(newRules);
-                                                                    }}
-                                                                    style={{ opacity: 0, width: 0, height: 0 }}
-                                                                />
-                                                                <span style={{
-                                                                    position: 'absolute',
-                                                                    cursor: 'pointer',
-                                                                    top: 0,
-                                                                    left: 0,
-                                                                    right: 0,
-                                                                    bottom: 0,
-                                                                    background: rule.showAsSoldOut ? '#008060' : '#dfe3e8',
-                                                                    borderRadius: '24px',
-                                                                    transition: '0.3s'
-                                                                }}>
-                                                                    <span style={{
-                                                                        position: 'absolute',
-                                                                        content: '',
-                                                                        height: '18px',
-                                                                        width: '18px',
-                                                                        left: rule.showAsSoldOut ? '26px' : '3px',
-                                                                        bottom: '3px',
-                                                                        background: 'white',
-                                                                        borderRadius: '50%',
-                                                                        transition: '0.3s'
-                                                                    }} />
-                                                                </span>
-                                                            </label>
-                                                        </div>
+                                                                        return newRules;
+                                                                    });
+                                                                }}
+                                                                checked={rule.showAsSoldOut}
+                                                            >
+                                                                {t("Show as sold out")}
+                                                            </Checkbox>
+                                                        </div> */}
                                                     </div>
                                                 )}
                                             </div>
@@ -1055,15 +1934,15 @@ const Index = () => {
                                                 setDiscountRules([...discountRules, {
                                                     id: Date.now(),
                                                     isExpanded: true,
-                                                    title: `Buy ${discountRules.length + 1}, get ${discountRules.length + 1} free`,
                                                     buyQty: discountRules.length + 1,
-                                                    getQty: discountRules.length + 1,
-                                                    priceType: 'default',
-                                                    subtitle: '',
-                                                    badgeText: '',
-                                                    badgeStyle: 'simple',
-                                                    label: 'SAVE {{saved_percentage}}',
+                                                    discountRate: 0.9,
+                                                    title: 'Item Title',
+                                                    subtitle: 'Item Subtitle',
+                                                    labelText: 'Save {{saved_percentage}}',
+                                                    badgeText: 'Badge Text',
                                                     selectedByDefault: false,
+                                                    upsellProducts: [],
+                                                    freegiftProducts: [],
                                                     showAsSoldOut: false
                                                 }]);
                                             }}
@@ -1088,51 +1967,72 @@ const Index = () => {
                                 <div style={{ position: 'sticky', top: '24px' }}>
                                     <h3 style={{ fontSize: '14px', fontWeight: 500, marginBottom: '12px' }}>Preview</h3>
                                     <p className="polaris-text-subdued" style={{ fontSize: '13px', marginBottom: '12px' }}>
-                                        {offerTypes.find(type => type.id === offerType)?.description}
+                                        {offerTypes.find(type => type.id === basicInformation.offerType)?.description}
                                     </p>
 
-                                    {/* Preview Card - Same as Step 1 */}
+                                    {/* Preview Card */}
                                     <div style={{
                                         width: '100%',
-                                        minHeight: '300px',
                                         border: '1px solid #dfe3e8',
                                         borderRadius: '8px',
                                         padding: '16px',
-                                        background: '#ffffff',
                                         display: 'flex',
                                         flexDirection: 'column'
                                     }}>
-                                        {offerType === 'quantity-breaks-same' && (
+                                        {basicInformation.offerType === 'quantity-breaks-same' && (
                                             <>
-                                                <div style={{ border: '1px solid #e0e0e0', borderRadius: '8px', padding: '12px', marginBottom: '12px', background: '#f9fafb' }}>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                        <input type="radio" readOnly style={{ width: '16px', height: '16px' }} />
-                                                        <div style={{ flex: 1 }}>
-                                                            <strong style={{ fontSize: '14px' }}>Single</strong>
-                                                            <div style={{ fontSize: '12px', color: '#6d7175' }}>Standard price</div>
-                                                        </div>
-                                                        <strong style={{ fontSize: '16px' }}>€65,00</strong>
-                                                    </div>
-                                                </div>
-                                                <div style={{ border: '2px solid #000', borderRadius: '8px', padding: '12px', position: 'relative', background: '#ffffff' }}>
-                                                    <div style={{ position: 'absolute', top: '-8px', right: '12px', background: '#000', color: '#fff', padding: '2px 12px', borderRadius: '12px', fontSize: '10px', fontWeight: 600 }}>
-                                                        Most Popular
-                                                    </div>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                        <input type="radio" readOnly checked style={{ width: '16px', height: '16px' }} />
-                                                        <div style={{ flex: 1 }}>
-                                                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                                                                <strong style={{ fontSize: '14px' }}>Duo</strong>
-                                                                <span style={{ background: '#f0f0f0', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>SAVE €19,50</span>
+                                                {discountRules.map((rule, index) => {
+                                                    return (
+                                                        <div key={index} style={{ border: '1px solid #e0e0e0', borderRadius: '8px', padding: '12px', marginBottom: '12px', position: 'relative', background: rule.badgeText ? '#ffffff' : '#f9fafb' }}>
+                                                            {rule.badgeText && <div style={{ position: 'absolute', top: '-8px', right: '12px', background: '#000', color: '#fff', padding: '2px 12px', borderRadius: '12px', fontSize: '10px', fontWeight: 600, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                                {rule.badgeText}
+                                                            </div>}
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                <Radio style={{ width: '16px', height: '16px' }} />
+                                                                <div style={{ flex: 1 }}>
+                                                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                                                        <strong style={{ fontSize: '14px' }}>{rule.title}</strong>
+                                                                        {rule.discountRate < 1 &&
+                                                                            <span style={{
+                                                                                background: '#f0f0f0',
+                                                                                padding: '2px 6px',
+                                                                                borderRadius: '4px',
+                                                                                fontSize: '10px'
+                                                                            }}
+                                                                            >
+                                                                                {rule.labelText}
+                                                                            </span>
+                                                                        }
+                                                                    </div>
+                                                                    <div style={{ fontSize: '12px', color: '#6d7175' }}>{rule.subtitle}</div>
+                                                                </div>
+                                                                {
+                                                                    rule.discountRate === 1 && (
+                                                                        <div style={{ textAlign: 'right' }}>
+                                                                            <strong style={{ fontSize: '16px' }}>€{Number(rule.buyQty * 65).toFixed(2)}</strong>
+                                                                        </div>
+                                                                    )
+                                                                }
+                                                                {
+                                                                    rule.discountRate === 0 && (
+                                                                        <div style={{ textAlign: 'right' }}>
+                                                                            <strong style={{ fontSize: '16px' }}>Free</strong>
+                                                                        </div>
+                                                                    )
+                                                                }
+                                                                {
+                                                                    (rule.discountRate > 0 && rule.discountRate < 1
+                                                                    ) && (
+                                                                        <div style={{ textAlign: 'right' }}>
+                                                                            <strong style={{ fontSize: '16px' }}>€{Number(rule.buyQty * 65 * rule.discountRate).toFixed(2)}</strong>
+                                                                            <div style={{ fontSize: '12px', color: '#6d7175', textDecoration: 'line-through' }}>€{Number(rule.buyQty * 65).toFixed(2)}</div>
+                                                                        </div>
+                                                                    )
+                                                                }
                                                             </div>
-                                                            <div style={{ fontSize: '12px', color: '#6d7175' }}>You save 15%</div>
                                                         </div>
-                                                        <div style={{ textAlign: 'right' }}>
-                                                            <strong style={{ fontSize: '16px' }}>€110,50</strong>
-                                                            <div style={{ fontSize: '12px', color: '#6d7175', textDecoration: 'line-through' }}>€130,00</div>
-                                                        </div>
-                                                    </div>
-                                                </div>
+                                                    )
+                                                })}
                                                 <div style={{ marginTop: 'auto', padding: '12px 0' }}>
                                                     <strong style={{ fontSize: '13px' }}>Quantity breaks for the same product</strong>
                                                 </div>
@@ -1157,43 +2057,52 @@ const Index = () => {
                                         Layout Format
                                     </label>
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
-                                        <div style={{
-                                            border: '2px solid #dfe3e8',
-                                            borderRadius: '8px',
-                                            padding: '16px',
-                                            cursor: 'pointer',
-                                            transition: 'all 0.2s'
-                                        }}>
+                                        <div
+                                            onClick={() => setStyleConfigData({ ...styleConfigData, base_style: 'vertical_stack' })}
+                                            style={{
+                                                border: styleConfigData.base_style === 'vertical_stack' ? '2px solid #008060' : '2px solid #dfe3e8',
+                                                borderRadius: '8px',
+                                                padding: '16px',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.2s'
+
+                                            }}>
                                             <div style={{ fontWeight: 500, marginBottom: '4px' }}>Vertical Stack</div>
                                             <div style={{ fontSize: '12px', color: '#6d7175' }}>Products stacked vertically</div>
                                         </div>
-                                        <div style={{
-                                            border: '2px solid #dfe3e8',
-                                            borderRadius: '8px',
-                                            padding: '16px',
-                                            cursor: 'pointer',
-                                            transition: 'all 0.2s'
-                                        }}>
+                                        <div
+                                            onClick={() => setStyleConfigData({ ...styleConfigData, base_style: 'horizontal_grid' })}
+                                            style={{
+                                                border: styleConfigData.base_style === 'horizontal_grid' ? '2px solid #008060' : '2px solid #dfe3e8',
+                                                borderRadius: '8px',
+                                                padding: '16px',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.2s'
+                                            }}>
                                             <div style={{ fontWeight: 500, marginBottom: '4px' }}>Horizontal Grid</div>
                                             <div style={{ fontSize: '12px', color: '#6d7175' }}>Products in a row</div>
                                         </div>
-                                        <div style={{
-                                            border: '2px solid #dfe3e8',
-                                            borderRadius: '8px',
-                                            padding: '16px',
-                                            cursor: 'pointer',
-                                            transition: 'all 0.2s'
-                                        }}>
+                                        <div
+                                            onClick={() => setStyleConfigData({ ...styleConfigData, base_style: 'card_grid' })}
+                                            style={{
+                                                border: styleConfigData.base_style === 'card_grid' ? '2px solid #008060' : '2px solid #dfe3e8',
+                                                borderRadius: '8px',
+                                                padding: '16px',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.2s'
+                                            }}>
                                             <div style={{ fontWeight: 500, marginBottom: '4px' }}>Card Grid</div>
                                             <div style={{ fontSize: '12px', color: '#6d7175' }}>2x2 grid layout</div>
                                         </div>
-                                        <div style={{
-                                            border: '2px solid #dfe3e8',
-                                            borderRadius: '8px',
-                                            padding: '16px',
-                                            cursor: 'pointer',
-                                            transition: 'all 0.2s'
-                                        }}>
+                                        <div
+                                            onClick={() => setStyleConfigData({ ...styleConfigData, base_style: 'compact_list' })}
+                                            style={{
+                                                border: styleConfigData.base_style === 'compact_list' ? '2px solid #008060' : '2px solid #dfe3e8',
+                                                borderRadius: '8px',
+                                                padding: '16px',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.2s'
+                                            }}>
                                             <div style={{ fontWeight: 500, marginBottom: '4px' }}>Compact List</div>
                                             <div style={{ fontSize: '12px', color: '#6d7175' }}>Condensed view</div>
                                         </div>
@@ -1208,7 +2117,13 @@ const Index = () => {
                                             Card Background Color
                                             <input
                                                 type="color"
-                                                defaultValue="#ffffff"
+                                                value={styleConfigData?.card_background_color}
+                                                onChange={(e) => {
+                                                    setStyleConfigData({
+                                                        ...styleConfigData,
+                                                        card_background_color: e.target.value
+                                                    })
+                                                }}
                                                 style={{
                                                     width: '100%',
                                                     height: '40px',
@@ -1222,7 +2137,13 @@ const Index = () => {
                                             Card Label Color
                                             <input
                                                 type="color"
-                                                defaultValue="#008060"
+                                                value={styleConfigData?.card_label_color}
+                                                onChange={(e) => {
+                                                    setStyleConfigData({
+                                                        ...styleConfigData,
+                                                        card_label_color: e.target.value
+                                                    })
+                                                }}
                                                 style={{
                                                     width: '100%',
                                                     height: '40px',
@@ -1232,7 +2153,7 @@ const Index = () => {
                                                 }}
                                             />
                                         </label>
-                                        <label style={{ fontSize: '14px', fontWeight: 500 }}>
+                                        {/* <label style={{ fontSize: '14px', fontWeight: 500 }}>
                                             Border Style
                                             <select
                                                 defaultValue="solid"
@@ -1250,12 +2171,18 @@ const Index = () => {
                                                 <option value="dotted">Dotted</option>
                                                 <option value="none">None</option>
                                             </select>
-                                        </label>
+                                        </label> */}
                                         <label style={{ fontSize: '14px', fontWeight: 500 }}>
                                             Border Color
                                             <input
                                                 type="color"
-                                                defaultValue="#dfe3e8"
+                                                value={styleConfigData?.card_border_color}
+                                                onChange={(e) => {
+                                                    setStyleConfigData({
+                                                        ...styleConfigData,
+                                                        card_border_color: e.target.value
+                                                    })
+                                                }}
                                                 style={{
                                                     width: '100%',
                                                     height: '40px',
@@ -1276,7 +2203,13 @@ const Index = () => {
                                             Title Text
                                             <input
                                                 type="text"
-                                                defaultValue="Bundle & Save"
+                                                value={styleConfigData?.card_title_text}
+                                                onChange={(e) => {
+                                                    setStyleConfigData({
+                                                        ...styleConfigData,
+                                                        card_title_text: e.target.value
+                                                    })
+                                                }}
                                                 style={{
                                                     width: '100%',
                                                     padding: '8px 12px',
@@ -1290,7 +2223,13 @@ const Index = () => {
                                         <label style={{ fontSize: '14px', fontWeight: 500 }}>
                                             Font Size
                                             <select
-                                                defaultValue="16"
+                                                value={styleConfigData?.card_title_text_fontSize}
+                                                onChange={(e) => {
+                                                    setStyleConfigData({
+                                                        ...styleConfigData,
+                                                        card_title_text_fontSize: e.target.value
+                                                    })
+                                                }}
                                                 style={{
                                                     width: '100%',
                                                     padding: '8px 12px',
@@ -1300,19 +2239,25 @@ const Index = () => {
                                                     fontSize: '14px'
                                                 }}
                                             >
-                                                <option value="12">12px</option>
-                                                <option value="14">14px</option>
-                                                <option value="16">16px</option>
-                                                <option value="18">18px</option>
-                                                <option value="20">20px</option>
-                                                <option value="24">24px</option>
-                                                <option value="28">28px</option>
+                                                <option value="12px">12px</option>
+                                                <option value="14px">14px</option>
+                                                <option value="16px">16px</option>
+                                                <option value="18px">18px</option>
+                                                <option value="20px">20px</option>
+                                                <option value="24px">24px</option>
+                                                <option value="28px">28px</option>
                                             </select>
                                         </label>
                                         <label style={{ fontSize: '14px', fontWeight: 500 }}>
                                             Font Style
                                             <select
-                                                defaultValue="bold"
+                                                value={styleConfigData?.card_title_text_fontStyle}
+                                                onChange={(e) => {
+                                                    setStyleConfigData({
+                                                        ...styleConfigData,
+                                                        card_title_text_fontStyle: e.target.value as "normal" | "bold" | "300"
+                                                    })
+                                                }}
                                                 style={{
                                                     width: '100%',
                                                     padding: '8px 12px',
@@ -1324,7 +2269,7 @@ const Index = () => {
                                             >
                                                 <option value="normal">Normal</option>
                                                 <option value="bold">Bold</option>
-                                                <option value="600">Semi Bold</option>
+                                                {/* <option value="600">Semi Bold</option> */}
                                                 <option value="300">Light</option>
                                             </select>
                                         </label>
@@ -1332,7 +2277,13 @@ const Index = () => {
                                             Title Color
                                             <input
                                                 type="color"
-                                                defaultValue="#202223"
+                                                value={styleConfigData?.card_title_color}
+                                                onChange={(e) => {
+                                                    setStyleConfigData({
+                                                        ...styleConfigData,
+                                                        card_title_color: e.target.value
+                                                    })
+                                                }}
                                                 style={{
                                                     width: '100%',
                                                     height: '40px',
@@ -1353,7 +2304,13 @@ const Index = () => {
                                             Primary Color
                                             <input
                                                 type="color"
-                                                defaultValue="#008060"
+                                                value={styleConfigData?.card_button_primaryColor}
+                                                onChange={(e) => {
+                                                    setStyleConfigData({
+                                                        ...styleConfigData,
+                                                        card_button_primaryColor: e.target.value
+                                                    })
+                                                }}
                                                 style={{
                                                     width: '100%',
                                                     height: '40px',
@@ -1367,7 +2324,13 @@ const Index = () => {
                                             Button Text
                                             <input
                                                 type="text"
-                                                defaultValue="Add to Cart"
+                                                value={styleConfigData?.card_button_text}
+                                                onChange={(e) => {
+                                                    setStyleConfigData({
+                                                        ...styleConfigData,
+                                                        card_button_text: e.target.value
+                                                    })
+                                                }}
                                                 style={{
                                                     width: '100%',
                                                     padding: '8px 12px',
@@ -1385,7 +2348,7 @@ const Index = () => {
                                 <div style={{ marginTop: '24px' }}>
                                     <h3 style={{ fontSize: '14px', fontWeight: 500, marginBottom: '12px' }}>Promotional Features</h3>
 
-                                    <div style={{
+                                    {/* <div style={{
                                         border: '1px solid #dfe3e8',
                                         borderRadius: '8px',
                                         padding: '16px',
@@ -1402,21 +2365,21 @@ const Index = () => {
                                         <p style={{ fontSize: '12px', color: '#6d7175', marginTop: '8px', marginLeft: '24px' }}>
                                             Display original price with strikethrough to highlight savings
                                         </p>
-                                    </div>
+                                    </div> */}
 
                                     <div style={{
                                         border: '1px solid #dfe3e8',
                                         borderRadius: '8px',
                                         padding: '16px'
                                     }}>
-                                        <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                                            <input
-                                                type="checkbox"
-                                                defaultChecked={false}
-                                                style={{ marginRight: '8px', width: '16px', height: '16px' }}
-                                            />
+                                        <Checkbox
+                                            checked={styleConfigData?.enable_countdown_timer}
+                                            onChange={(e) =>
+                                                setStyleConfigData({ ...styleConfigData, enable_countdown_timer: !styleConfigData?.enable_countdown_timer })
+                                            }
+                                        >
                                             <span style={{ fontSize: '14px', fontWeight: 500 }}>Enable Countdown Timer</span>
-                                        </label>
+                                        </Checkbox>
                                         <p style={{ fontSize: '12px', color: '#6d7175', marginTop: '8px', marginLeft: '24px' }}>
                                             Add urgency with a countdown timer
                                         </p>
@@ -1425,7 +2388,8 @@ const Index = () => {
                                             <label style={{ fontSize: '13px', fontWeight: 500 }}>
                                                 Timer Duration
                                                 <select
-                                                    defaultValue="24"
+                                                    value={styleConfigData?.countdown_timer_config?.timer_duration}
+                                                    onChange={(e) => setStyleConfigData({ ...styleConfigData, countdown_timer_config: { ...styleConfigData?.countdown_timer_config, timer_duration: Number(e.target.value) } })}
                                                     style={{
                                                         width: '100%',
                                                         padding: '8px 12px',
@@ -1444,7 +2408,7 @@ const Index = () => {
                                                 </select>
                                             </label>
 
-                                            <label style={{ fontSize: '13px', fontWeight: 500, display: 'block', marginTop: '12px' }}>
+                                            {/* <label style={{ fontSize: '13px', fontWeight: 500, display: 'block', marginTop: '12px' }}>
                                                 Timer Style
                                                 <select
                                                     defaultValue="minimal"
@@ -1461,13 +2425,14 @@ const Index = () => {
                                                     <option value="badge">Badge Style</option>
                                                     <option value="boxed">Boxed Numbers</option>
                                                 </select>
-                                            </label>
+                                            </label> */}
 
                                             <label style={{ fontSize: '13px', fontWeight: 500, display: 'block', marginTop: '12px' }}>
                                                 Timer Color
                                                 <input
                                                     type="color"
-                                                    defaultValue="#d82c0d"
+                                                    value={styleConfigData?.countdown_timer_config?.timer_color}
+                                                    onChange={(e) => setStyleConfigData({ ...styleConfigData, countdown_timer_config: { ...styleConfigData?.countdown_timer_config, timer_color: e.target.value } })}
                                                     style={{
                                                         width: '100%',
                                                         height: '40px',
@@ -1490,116 +2455,125 @@ const Index = () => {
                                 <div style={{
                                     width: '100%',
                                     border: '1px solid #dfe3e8',
-                                    borderRadius: '12px',
-                                    padding: '20px',
-                                    background: '#ffffff'
+                                    borderRadius: '8px',
+                                    padding: '16px',
+                                    background: '#ffffff',
+                                    display: 'flex',
+                                    flexDirection: 'column'
                                 }}>
                                     {/* Card Title */}
                                     <h3 style={{
-                                        fontSize: '16px',
-                                        fontWeight: 'bold',
-                                        color: '#202223',
+                                        fontSize: styleConfigData?.card_title_text_fontSize,
+                                        fontWeight: styleConfigData?.card_title_text_fontStyle,
+                                        color: styleConfigData?.card_title_color,
                                         marginBottom: '16px'
                                     }}>
-                                        Bundle & Save
+                                        {styleConfigData?.card_title_text}
                                     </h3>
 
                                     {/* Countdown Timer (when enabled) */}
-                                    <div style={{
-                                        background: '#fff8f0',
-                                        border: '1px solid #ffd700',
-                                        borderRadius: '6px',
-                                        padding: '8px 12px',
-                                        marginBottom: '16px',
-                                        textAlign: 'center'
-                                    }}>
-                                        <div style={{ fontSize: '11px', color: '#6d7175', marginBottom: '4px' }}>
-                                            ⏱️ Limited time offer ends in
-                                        </div>
-                                        <div style={{
-                                            fontSize: '18px',
-                                            fontWeight: 600,
-                                            color: '#d82c0d',
-                                            fontFamily: 'monospace'
-                                        }}>
-                                            23:45:12
-                                        </div>
-                                    </div>
+                                    {
+                                        styleConfigData?.enable_countdown_timer && (
+                                            <div style={{
+                                                background: '#fff8f0',
+                                                border: '1px solid #ffd700',
+                                                borderRadius: '6px',
+                                                padding: '8px 12px',
+                                                marginBottom: '16px',
+                                                textAlign: 'center'
+                                            }}>
+                                                <div style={{ fontSize: '11px', color: '#6d7175', marginBottom: '4px' }}>
+                                                    ⏱️ Limited time offer ends in
+                                                </div>
+                                                <Timer
+                                                    type="countdown"
+                                                    value={Date.now() + 1000 * 60 * 60 * styleConfigData?.countdown_timer_config.timer_duration}
+                                                    styles={{
+                                                        content: {
+                                                            fontSize: '18px',
+                                                            fontWeight: 600,
+                                                            color: styleConfigData?.countdown_timer_config.timer_color,
+                                                            fontFamily: 'monospace'
+                                                        }
+                                                    }}
+                                                />
+                                            </div>
+                                        )}
 
                                     {/* Product Items */}
-                                    <div style={{
-                                        border: '1px solid #e0e0e0',
-                                        borderRadius: '8px',
-                                        padding: '12px',
-                                        marginBottom: '10px',
-                                        background: '#f9fafb'
-                                    }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <input type="radio" readOnly style={{ width: '16px', height: '16px' }} />
-                                            <div style={{ flex: 1 }}>
-                                                <strong style={{ fontSize: '13px' }}>Single Item</strong>
-                                                <div style={{ fontSize: '11px', color: '#6d7175' }}>Standard price</div>
-                                            </div>
-                                            <strong style={{ fontSize: '14px' }}>€65,00</strong>
-                                        </div>
-                                    </div>
+                                    {basicInformation.offerType === 'quantity-breaks-same' && (
+                                        <>
+                                            {discountRules.map((rule, index) => {
+                                                return (
+                                                    <div
+                                                        key={index}
+                                                        style={{
+                                                            border: rule.badgeText ? '2px solid #000' : `1px solid ${styleConfigData?.card_border_color}`,
+                                                            borderRadius: '8px',
+                                                            padding: '12px',
+                                                            marginBottom: '12px',
+                                                            position: 'relative',
+                                                            background: styleConfigData?.card_background_color
+                                                        }}
+                                                    >
+                                                        {rule.badgeText && <div style={{ position: 'absolute', top: '-8px', right: '12px', background: '#000', color: '#fff', padding: '2px 12px', borderRadius: '12px', fontSize: '10px', fontWeight: 600, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                            {rule.badgeText}
+                                                        </div>}
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                            <Radio style={{ width: '16px', height: '16px' }} />
+                                                            <div style={{ flex: 1 }}>
+                                                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                                                    <strong style={{ fontSize: '14px' }}>{rule.title}</strong>
+                                                                    {rule.discountRate < 1 &&
+                                                                        <span
+                                                                            style={{
+                                                                                background: styleConfigData?.card_label_color,
+                                                                                padding: '2px 6px',
+                                                                                borderRadius: '4px',
+                                                                                fontSize: '10px'
+                                                                            }}
 
-                                    <div style={{
-                                        border: '2px solid #008060',
-                                        borderRadius: '8px',
-                                        padding: '12px',
-                                        position: 'relative',
-                                        background: '#ffffff',
-                                        marginBottom: '10px'
-                                    }}>
-                                        <div style={{
-                                            position: 'absolute',
-                                            top: '-8px',
-                                            right: '12px',
-                                            background: '#008060',
-                                            color: '#fff',
-                                            padding: '2px 10px',
-                                            borderRadius: '12px',
-                                            fontSize: '10px',
-                                            fontWeight: 600
-                                        }}>
-                                            BEST VALUE
-                                        </div>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <input type="radio" readOnly checked style={{ width: '16px', height: '16px' }} />
-                                            <div style={{ flex: 1 }}>
-                                                <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-                                                    <strong style={{ fontSize: '13px' }}>Bundle Deal</strong>
-                                                    <span style={{
-                                                        background: '#008060',
-                                                        color: '#fff',
-                                                        padding: '2px 6px',
-                                                        borderRadius: '4px',
-                                                        fontSize: '10px',
-                                                        fontWeight: 600
-                                                    }}>
-                                                        SAVE 20%
-                                                    </span>
-                                                </div>
-                                                <div style={{ fontSize: '11px', color: '#6d7175' }}>You save €26,00</div>
-                                            </div>
-                                            <div style={{ textAlign: 'right' }}>
-                                                <strong style={{ fontSize: '14px' }}>€104,00</strong>
-                                                <div style={{
-                                                    fontSize: '11px',
-                                                    color: '#6d7175',
-                                                    textDecoration: 'line-through'
-                                                }}>
-                                                    €130,00
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
+                                                                        >
+                                                                            {rule.labelText}
+                                                                        </span>
+                                                                    }
+                                                                </div>
+                                                                <div style={{ fontSize: '12px', color: '#6d7175' }}>{rule.subtitle}</div>
+                                                            </div>
+                                                            {
+                                                                rule.discountRate === 1 && (
+                                                                    <div style={{ textAlign: 'right' }}>
+                                                                        <strong style={{ fontSize: '16px' }}>€{Number(rule.buyQty * 65).toFixed(2)}</strong>
+                                                                    </div>
+                                                                )
+                                                            }
+                                                            {
+                                                                rule.discountRate === 0 && (
+                                                                    <div style={{ textAlign: 'right' }}>
+                                                                        <strong style={{ fontSize: '16px' }}>Free</strong>
+                                                                    </div>
+                                                                )
+                                                            }
+                                                            {
+                                                                (rule.discountRate > 0 && rule.discountRate < 1
+                                                                ) && (
+                                                                    <div style={{ textAlign: 'right' }}>
+                                                                        <strong style={{ fontSize: '16px' }}>€{Number(rule.buyQty * 65 * rule.discountRate).toFixed(2)}</strong>
+                                                                        <div style={{ fontSize: '12px', color: '#6d7175', textDecoration: 'line-through' }}>€{Number(rule.buyQty * 65).toFixed(2)}</div>
+                                                                    </div>
+                                                                )
+                                                            }
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })}
+                                        </>
+                                    )}
 
                                     {/* Add to Cart Button */}
                                     <button style={{
                                         width: '100%',
-                                        background: '#008060',
+                                        background: styleConfigData?.card_button_primaryColor,
                                         color: '#fff',
                                         border: 'none',
                                         borderRadius: '6px',
@@ -1609,7 +2583,7 @@ const Index = () => {
                                         cursor: 'pointer',
                                         marginTop: '12px'
                                     }}>
-                                        Add to Cart
+                                        {styleConfigData?.card_button_text}
                                     </button>
 
                                     {/* Features/Benefits */}
@@ -1639,48 +2613,58 @@ const Index = () => {
 
                             {/* Target Audience */}
                             <div style={{ marginBottom: '32px' }}>
-                                <h3 style={{ fontSize: '14px', fontWeight: 500, marginBottom: '12px' }}>Target Audience</h3>
+                                <h3 style={{ fontSize: '14px', fontWeight: 500, marginBottom: '12px' }}>Eligibility</h3>
                                 <div className="polaris-stack polaris-stack--vertical">
                                     <label style={{ fontSize: '14px', fontWeight: 500 }}>
-                                        Customer Segments
+                                        Available on all sales channels
                                         <div style={{
                                             marginTop: '8px',
                                             border: '1px solid #dfe3e8',
                                             borderRadius: '6px',
                                             padding: '12px',
-                                            display: 'grid',
-                                            gridTemplateColumns: 'repeat(2, 1fr)',
-                                            gap: '12px'
+                                            display: "flex",
+                                            flexDirection: "column",
+                                            gap: "8px"
                                         }}>
-                                            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                                                <input type="checkbox" defaultChecked style={{ marginRight: '8px', width: '16px', height: '16px' }} />
-                                                <span style={{ fontSize: '14px' }}>All Customers</span>
-                                            </label>
-                                            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                                                <input type="checkbox" style={{ marginRight: '8px', width: '16px', height: '16px' }} />
-                                                <span style={{ fontSize: '14px' }}>VIP Customers</span>
-                                            </label>
-                                            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                                                <input type="checkbox" style={{ marginRight: '8px', width: '16px', height: '16px' }} />
-                                                <span style={{ fontSize: '14px' }}>New Customers</span>
-                                            </label>
-                                            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                                                <input type="checkbox" style={{ marginRight: '8px', width: '16px', height: '16px' }} />
-                                                <span style={{ fontSize: '14px' }}>Returning Customers</span>
-                                            </label>
-                                            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                                                <input type="checkbox" style={{ marginRight: '8px', width: '16px', height: '16px' }} />
-                                                <span style={{ fontSize: '14px' }}>High-Value Customers</span>
-                                            </label>
-                                            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                                                <input type="checkbox" style={{ marginRight: '8px', width: '16px', height: '16px' }} />
-                                                <span style={{ fontSize: '14px' }}>At-Risk Customers</span>
-                                            </label>
+                                            <Radio.Group
+                                                style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
+                                                value={targetingSettingsData?.eligibilityType}
+                                                onChange={(e) =>
+                                                    setTargetingSettingsData({
+                                                        ...targetingSettingsData,
+                                                        eligibilityType: e.target.value
+                                                    })
+                                                }
+                                                options={[
+                                                    { value: "all", label: t('All customers') },
+                                                    { value: "segments", label: t('Specific customer segments') },
+                                                    { value: "customers", label: t('Specific customers') },
+                                                ]}
+                                            />
+                                            {targetingSettingsData?.eligibilityType !== "all" && (
+                                                <Space.Compact style={{ width: '100%' }}>
+                                                    <Input
+                                                        placeholder={t(
+                                                            targetingSettingsData?.eligibilityType === "customers"
+                                                                ? 'Search customers'
+                                                                : 'Search customer segments'
+                                                        )}
+                                                    />
+                                                    <Button
+                                                        type="primary"
+                                                        style={{ boxShadow: undefined }}
+                                                        onClick={() => eligibilityBrowse()}
+                                                    >
+                                                        {t('Browse')}
+                                                    </Button>
+                                                </Space.Compact>
+                                            )}
                                         </div>
                                         <p style={{ fontSize: '12px', color: '#6d7175', marginTop: '4px' }}>
                                             Select one or more customer segments to target
                                         </p>
                                     </label>
+
 
                                     <label style={{ fontSize: '14px', fontWeight: 500, marginTop: '16px' }}>
                                         Market Visibility
@@ -1689,38 +2673,39 @@ const Index = () => {
                                             border: '1px solid #dfe3e8',
                                             borderRadius: '6px',
                                             padding: '12px',
-                                            display: 'grid',
-                                            gridTemplateColumns: 'repeat(2, 1fr)',
-                                            gap: '12px'
                                         }}>
-                                            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                                                <input type="checkbox" defaultChecked style={{ marginRight: '8px', width: '16px', height: '16px' }} />
-                                                <span style={{ fontSize: '14px' }}>All Markets</span>
-                                            </label>
-                                            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                                                <input type="checkbox" style={{ marginRight: '8px', width: '16px', height: '16px' }} />
-                                                <span style={{ fontSize: '14px' }}>United States</span>
-                                            </label>
-                                            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                                                <input type="checkbox" style={{ marginRight: '8px', width: '16px', height: '16px' }} />
-                                                <span style={{ fontSize: '14px' }}>Europe</span>
-                                            </label>
-                                            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                                                <input type="checkbox" style={{ marginRight: '8px', width: '16px', height: '16px' }} />
-                                                <span style={{ fontSize: '14px' }}>United Kingdom</span>
-                                            </label>
-                                            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                                                <input type="checkbox" style={{ marginRight: '8px', width: '16px', height: '16px' }} />
-                                                <span style={{ fontSize: '14px' }}>Canada</span>
-                                            </label>
-                                            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                                                <input type="checkbox" style={{ marginRight: '8px', width: '16px', height: '16px' }} />
-                                                <span style={{ fontSize: '14px' }}>Australia</span>
-                                            </label>
-                                            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                                                <input type="checkbox" style={{ marginRight: '8px', width: '16px', height: '16px' }} />
-                                                <span style={{ fontSize: '14px' }}>Asia Pacific</span>
-                                            </label>
+                                            <Checkbox indeterminate={indeterminate} onChange={onCheckAllChange} checked={checkAll}>
+                                                Check all
+                                            </Checkbox>
+                                            <Divider style={{ margin: '10px 0' }} />
+                                            <Row>
+                                                {
+                                                    marketVisibilitySettingData.map((item, index) => (
+                                                        <Col span={12} key={index}>
+                                                            <Checkbox
+                                                                value={item.value}
+                                                                onChange={(e) => {
+                                                                    const checked = e.target.checked;
+                                                                    if (checked) {
+                                                                        setTargetingSettingsData({
+                                                                            ...targetingSettingsData,
+                                                                            marketVisibilitySettingData: [...targetingSettingsData.marketVisibilitySettingData, e.target.value]
+                                                                        })
+                                                                    } else {
+                                                                        setTargetingSettingsData({
+                                                                            ...targetingSettingsData,
+                                                                            marketVisibilitySettingData: targetingSettingsData.marketVisibilitySettingData.filter((item) => item !== e.target.value)
+                                                                        })
+                                                                    }
+                                                                }}
+                                                                checked={targetingSettingsData?.marketVisibilitySettingData?.includes(item.value)}
+                                                            >
+                                                                {item.label}
+                                                            </Checkbox>
+                                                        </Col>
+                                                    ))
+                                                }
+                                            </Row>
                                         </div>
                                         <p style={{ fontSize: '12px', color: '#6d7175', marginTop: '4px' }}>
                                             Select which markets can see this offer
@@ -1733,42 +2718,57 @@ const Index = () => {
                             <div style={{ marginBottom: '32px' }}>
                                 <h3 style={{ fontSize: '14px', fontWeight: 500, marginBottom: '12px' }}>Schedule</h3>
                                 <div className="polaris-grid">
-                                    <label style={{ fontSize: '14px', fontWeight: 500 }}>
-                                        Start Time
-                                        <input
-                                            type="datetime-local"
-                                            step="1"
-                                            style={{
-                                                width: '100%',
-                                                padding: '8px 12px',
-                                                marginTop: '8px',
-                                                border: '1px solid #dfe3e8',
-                                                borderRadius: '6px',
-                                                fontSize: '14px'
+                                    <Flex
+                                        align="left"
+                                        vertical
+                                        flex={1}
+                                        style={{
+                                            fontSize: '14px',
+                                            fontWeight: 500
+                                        }}
+                                        gap={8}
+                                    >
+                                        <Text>{t("Start Time")}</Text>
+                                        <DatePicker
+                                            showTime
+                                            needConfirm={false}
+                                            value={targetingSettingsData.startTime}
+                                            onChange={(value) => {
+                                                if (value)
+                                                    setTargetingSettingsData({
+                                                        ...targetingSettingsData,
+                                                        startTime: value
+                                                    })
                                             }}
                                         />
-                                        <p style={{ fontSize: '12px', color: '#6d7175', marginTop: '4px' }}>
+                                        <Text style={{ fontSize: '12px', color: '#6d7175' }}>
                                             When the offer becomes active
-                                        </p>
-                                    </label>
-                                    <label style={{ fontSize: '14px', fontWeight: 500 }}>
-                                        End Time
-                                        <input
-                                            type="datetime-local"
-                                            step="1"
-                                            style={{
-                                                width: '100%',
-                                                padding: '8px 12px',
-                                                marginTop: '8px',
-                                                border: '1px solid #dfe3e8',
-                                                borderRadius: '6px',
-                                                fontSize: '14px'
+                                        </Text>
+                                    </Flex>
+                                    <Flex
+                                        align="left"
+                                        vertical
+                                        flex={1}
+                                        gap={8}
+                                        style={{ fontSize: '14px', fontWeight: 500 }}
+                                    >
+                                        <Text>{t("End Time")}</Text>
+                                        <DatePicker
+                                            showTime
+                                            needConfirm={false}
+                                            value={targetingSettingsData.endTime}
+                                            onChange={(value) => {
+                                                if (value)
+                                                    setTargetingSettingsData({
+                                                        ...targetingSettingsData,
+                                                        endTime: value
+                                                    })
                                             }}
                                         />
-                                        <p style={{ fontSize: '12px', color: '#6d7175', marginTop: '4px' }}>
+                                        <Text style={{ fontSize: '12px', color: '#6d7175' }}>
                                             When the offer expires
-                                        </p>
-                                    </label>
+                                        </Text>
+                                    </Flex>
                                 </div>
                             </div>
 
@@ -1776,42 +2776,64 @@ const Index = () => {
                             <div style={{ marginBottom: '32px' }}>
                                 <h3 style={{ fontSize: '14px', fontWeight: 500, marginBottom: '12px' }}>Budget</h3>
                                 <div className="polaris-grid">
-                                    <label style={{ fontSize: '14px', fontWeight: 500 }}>
-                                        Total Budget (Optional)
-                                        <input
-                                            type="number"
-                                            placeholder="$0.00"
+                                    <Flex
+                                        align="left"
+                                        vertical
+                                        flex={1}
+                                        gap={8}
+                                        style={{
+                                            fontSize: '14px',
+                                            fontWeight: 500
+                                        }}
+                                    >
+                                        <Text>{t("Total Budget (Optional)")}</Text>
+                                        <InputNumber
                                             style={{
                                                 width: '100%',
-                                                padding: '8px 12px',
-                                                marginTop: '8px',
-                                                border: '1px solid #dfe3e8',
-                                                borderRadius: '6px',
-                                                fontSize: '14px'
+                                            }}
+                                            placeholder="$0.00"
+                                            value={targetingSettingsData.totalBudget}
+                                            onChange={(value) => {
+                                                if (typeof value === 'number' && value > 0)
+                                                    setTargetingSettingsData({
+                                                        ...targetingSettingsData,
+                                                        totalBudget: value
+                                                    })
                                             }}
                                         />
-                                        <p style={{ fontSize: '12px', color: '#6d7175', marginTop: '4px' }}>
-                                            Maximum total spend for this offer
-                                        </p>
-                                    </label>
-                                    <label style={{ fontSize: '14px', fontWeight: 500 }}>
-                                        Daily Budget (Optional)
-                                        <input
-                                            type="number"
-                                            placeholder="$0.00"
+                                        <Text style={{ fontSize: '12px', color: '#6d7175' }}>
+                                            {t("Maximum total spend for this offer")}
+                                        </Text>
+                                    </Flex>
+                                    <Flex
+                                        align="left"
+                                        vertical
+                                        flex={1}
+                                        gap={8}
+                                        style={{
+                                            fontSize: '14px',
+                                            fontWeight: 500
+                                        }}
+                                    >
+                                        <Text>{t("Daily Budget (Optional)")}</Text>
+                                        <InputNumber
                                             style={{
                                                 width: '100%',
-                                                padding: '8px 12px',
-                                                marginTop: '8px',
-                                                border: '1px solid #dfe3e8',
-                                                borderRadius: '6px',
-                                                fontSize: '14px'
+                                            }}
+                                            placeholder="$0.00"
+                                            value={targetingSettingsData.dailyBudget}
+                                            onChange={(value) => {
+                                                if (typeof value === 'number' && value > 0)
+                                                    setTargetingSettingsData({
+                                                        ...targetingSettingsData,
+                                                        dailyBudget: value
+                                                    })
                                             }}
                                         />
-                                        <p style={{ fontSize: '12px', color: '#6d7175', marginTop: '4px' }}>
-                                            Maximum spend per day
-                                        </p>
-                                    </label>
+                                        <Text style={{ fontSize: '12px', color: '#6d7175' }}>
+                                            {t("Maximum spend per day")}
+                                        </Text>
+                                    </Flex>
                                 </div>
                             </div>
 
@@ -1819,69 +2841,93 @@ const Index = () => {
                             <div style={{ marginBottom: '32px' }}>
                                 <h3 style={{ fontSize: '14px', fontWeight: 500, marginBottom: '12px' }}>Risk Control</h3>
                                 <div className="polaris-stack polaris-stack--vertical">
-                                    <label style={{ fontSize: '14px', fontWeight: 500 }}>
-                                        Usage Limit Per Customer
-                                        <select
-                                            defaultValue="unlimited"
+                                    <Flex
+                                        align="left"
+                                        vertical
+                                        flex={1}
+                                        gap={8}
+                                    >
+                                        <Text>{t("Usage Limit Per Customer")}</Text>
+                                        <Select
                                             style={{
                                                 width: '100%',
-                                                padding: '8px 12px',
-                                                marginTop: '8px',
-                                                border: '1px solid #dfe3e8',
-                                                borderRadius: '6px',
-                                                fontSize: '14px'
+                                            }}
+                                            options={[
+                                                { value: null, label: t('Unlimited') },
+                                                { value: 1, label: t('1 time only') },
+                                                { value: 2, label: t('2 times') },
+                                                { value: 3, label: t('3 times') },
+                                                { value: 5, label: t('5 times') },
+                                                { value: 10, label: t('10 times') },
+                                            ]}
+                                            value={targetingSettingsData.timesLimitForPercustomer}
+                                            onChange={(value) => {
+                                                setTargetingSettingsData({
+                                                    ...targetingSettingsData,
+                                                    timesLimitForPercustomer: value,
+                                                });
+                                            }}
+                                        />
+                                        <Text style={{ fontSize: '12px', color: '#6d7175' }}>
+                                            {t("How many times each customer can use this offer")}
+                                        </Text>
+                                    </Flex>
+
+                                    <Flex
+                                        style={{
+                                            marginTop: '16px',
+                                            border: '1px solid #dfe3e8',
+                                            borderRadius: '8px',
+                                            padding: '16px',
+                                            flexDirection: 'column',
+                                        }}
+                                    >
+                                        <Checkbox
+                                            defaultChecked={true}
+                                            checked={targetingSettingsData.hideOfferAfterExpiration}
+                                            onChange={() => {
+                                                setTargetingSettingsData({
+                                                    ...targetingSettingsData,
+                                                    hideOfferAfterExpiration: !targetingSettingsData.hideOfferAfterExpiration,
+                                                });
                                             }}
                                         >
-                                            <option value="unlimited">Unlimited</option>
-                                            <option value="1">1 time only</option>
-                                            <option value="2">2 times</option>
-                                            <option value="3">3 times</option>
-                                            <option value="5">5 times</option>
-                                            <option value="10">10 times</option>
-                                            <option value="custom">Custom...</option>
-                                        </select>
-                                        <p style={{ fontSize: '12px', color: '#6d7175', marginTop: '4px' }}>
-                                            How many times each customer can use this offer
-                                        </p>
-                                    </label>
+                                            <Text style={{ fontSize: '14px', fontWeight: 500 }}>
+                                                {t("Hide offer after expiration")}
+                                            </Text>
+                                        </Checkbox>
+                                        <Text style={{ fontSize: '12px', color: '#6d7175', marginTop: '8px', marginLeft: '24px' }}>
+                                            {t("Don't display the offer widget after the end date")}
+                                        </Text>
+                                    </Flex>
 
-                                    <div style={{
-                                        marginTop: '16px',
-                                        border: '1px solid #dfe3e8',
-                                        borderRadius: '8px',
-                                        padding: '16px'
-                                    }}>
-                                        <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                                            <input
-                                                type="checkbox"
-                                                defaultChecked={true}
-                                                style={{ marginRight: '8px', width: '16px', height: '16px' }}
-                                            />
-                                            <span style={{ fontSize: '14px', fontWeight: 500 }}>Hide offer after expiration</span>
-                                        </label>
-                                        <p style={{ fontSize: '12px', color: '#6d7175', marginTop: '8px', marginLeft: '24px' }}>
-                                            Don't display the offer widget after the end date
-                                        </p>
-                                    </div>
-
-                                    <div style={{
-                                        marginTop: '16px',
-                                        border: '1px solid #dfe3e8',
-                                        borderRadius: '8px',
-                                        padding: '16px'
-                                    }}>
-                                        <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                                            <input
-                                                type="checkbox"
-                                                defaultChecked={false}
-                                                style={{ marginRight: '8px', width: '16px', height: '16px' }}
-                                            />
-                                            <span style={{ fontSize: '14px', fontWeight: 500 }}>Show offer to bots/crawlers</span>
-                                        </label>
-                                        <p style={{ fontSize: '12px', color: '#6d7175', marginTop: '8px', marginLeft: '24px' }}>
-                                            Display offer information to search engine crawlers and bots
-                                        </p>
-                                    </div>
+                                    <Flex
+                                        style={{
+                                            marginTop: '16px',
+                                            border: '1px solid #dfe3e8',
+                                            borderRadius: '8px',
+                                            padding: '16px',
+                                            flexDirection: 'column',
+                                        }}
+                                    >
+                                        <Checkbox
+                                            defaultChecked={true}
+                                            checked={targetingSettingsData.showOfferToBots}
+                                            onChange={() => {
+                                                setTargetingSettingsData({
+                                                    ...targetingSettingsData,
+                                                    showOfferToBots: !targetingSettingsData.showOfferToBots,
+                                                });
+                                            }}
+                                        >
+                                            <Text style={{ fontSize: '14px', fontWeight: 500 }}>
+                                                {t("Show offer to bots/crawlers")}
+                                            </Text>
+                                        </Checkbox>
+                                        <Text style={{ fontSize: '12px', color: '#6d7175', marginTop: '8px', marginLeft: '24px' }}>
+                                            {t("Display offer information to search engine crawlers and bots")}
+                                        </Text>
+                                    </Flex>
                                 </div>
                             </div>
                         </div>
@@ -1915,7 +2961,11 @@ const Index = () => {
                 )}
                 <button
                     className="polaris-button"
-                    onClick={() => step < 4 ? setStep(step + 1) : navigate('/app/offers', { state: { showPublishGuide: true } })}
+                    onClick={
+                        () => {
+                            step < 4 ? setStep(step + 1) : handleConfirm()
+                        }
+                    }
                 >
                     {step === 4 ? 'Create Offer' : 'Next'}
                 </button>
