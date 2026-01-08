@@ -1,7 +1,7 @@
 import { ActionFunctionArgs } from "@remix-run/node";
 import { useFetcher, useNavigate } from "@remix-run/react";
 import { Typography, Button, Checkbox, CheckboxProps, Col, Divider, Flex, Input, InputNumber, Radio, Row, Select, Space, Statistic, DatePicker } from 'antd';
-import { mutationDiscountAutomaticAppCreate, queryCustomers, queryMarkets, queryProductVariants, querySegments } from "app/api/admin";
+import { mutationDiscountAutomaticAppCreateAndMetafieldsSet, queryCustomers, queryMarkets, queryProductVariants, querySegments } from "app/api/admin";
 import { authenticate } from "app/shopify.server";
 import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, Copy, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -113,8 +113,8 @@ interface TargetingSettingsType {
     eligibilityType: "all" | "segments" | "customers";
     eligibilityRadioData: any;
     marketVisibilitySettingData: string[];
-    startTime: Date | null;
-    endTime: Date | null;
+    startsAt: Date | null;
+    endsAt: Date | null;
     totalBudget: number | null;
     dailyBudget: number | null;
     timesLimitForPercustomer: number | null;
@@ -140,8 +140,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const shopMarketsRequestBody = JSON.parse(
         formData.get("shopMarketsRequestBody") as string,
     );
-    const discountAutomaticAppCreateRequestBody = JSON.parse(
-        formData.get("discountAutomaticAppCreateRequestBody") as string,
+    const discountAutomaticAppCreateAndMetafieldsSetRequestBody = JSON.parse(
+        formData.get("discountAutomaticAppCreateAndMetafieldsSetRequestBody") as string,
     );
 
     switch (true) {
@@ -273,20 +273,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                     response: null,
                 }
             }
-        case !!discountAutomaticAppCreateRequestBody:
+        case !!discountAutomaticAppCreateAndMetafieldsSetRequestBody:
             try {
-                const discountAutomaticAppCreateData = await mutationDiscountAutomaticAppCreate({
+                const discountAutomaticAppCreateAndMetafieldsSetData = await mutationDiscountAutomaticAppCreateAndMetafieldsSet({
                     shop,
                     accessToken: accessToken || "",
-                    variables: discountAutomaticAppCreateRequestBody,
+                    variables: discountAutomaticAppCreateAndMetafieldsSetRequestBody,
                 });
 
-                if (discountAutomaticAppCreateData) {
+                if (discountAutomaticAppCreateAndMetafieldsSetData) {
                     return {
                         success: true,
                         errorCode: 0,
                         errorMsg: "",
-                        response: discountAutomaticAppCreateData,
+                        response: discountAutomaticAppCreateAndMetafieldsSetData,
                     }
                 }
 
@@ -402,33 +402,49 @@ const Index = () => {
     });
 
     const [selectedProducts, setSelectedProducts] = useState<productModalDataType[]>([]);
+    const [selectedRule, setSelectedRule] = useState<WholeHouseRentalDiscountRuleType | null>(null);
 
     const [discountRules, setDiscountRules] = useState<WholeHouseRentalDiscountRuleType[]>([
         {
-            id: 0,
+            id: Date.now(),
             isExpanded: true,
             buyQty: 1,
-            discountRate: 0.9,
-            title: 'Item Title',
-            subtitle: 'Item Subtitle',
-            labelText: 'SAVE {{saved_percentage}}',
-            badgeText: 'Badge Text',
+            discountRate: 1,
+            title: 'Single',
+            subtitle: 'single',
+            labelText: '',
+            badgeText: '',
+            selectedByDefault: false,
+            upsellProducts: [],
+            freegiftProducts: [],
+            showAsSoldOut: false,
+        },
+        {
+            id: Date.now() + 1,
+            isExpanded: true,
+            buyQty: 2,
+            discountRate: 0.8,
+            title: 'Duo',
+            subtitle: 'duo',
+            labelText: 'SAVE 20%',
+            badgeText: 'Popular',
             selectedByDefault: true,
             upsellProducts: [],
             freegiftProducts: [],
             showAsSoldOut: false,
         },
     ]);
+
     const [styleConfigData, setStyleConfigData] = useState<StyleConfigType>({
         base_style: "vertical_stack",
         card_background_color: '#FFFFFF',
-        card_label_color: '#000000',
+        card_label_color: '#10f32eff',
         card_border_color: '#E5E5E5',
-        card_title_text: 'Item Title',
+        card_title_text: 'BUNDLE & SAVE',
         card_title_text_fontSize: '16px',
         card_title_text_fontStyle: "normal",
         card_title_color: '#000000',
-        card_button_text: 'Button Text',
+        card_button_text: 'Add to cart',
         card_button_primaryColor: '#000000',
         enable_countdown_timer: false,
         countdown_timer_config: {
@@ -436,12 +452,13 @@ const Index = () => {
             timer_color: "#d82c0d",
         },
     })
+
     const [targetingSettingsData, setTargetingSettingsData] = useState<TargetingSettingsType>({
         eligibilityType: "all",
         eligibilityRadioData: [],
         marketVisibilitySettingData: [],
-        startTime: null,
-        endTime: null,
+        startsAt: null,
+        endsAt: null,
         totalBudget: null,
         dailyBudget: null,
         timesLimitForPercustomer: null,
@@ -611,58 +628,51 @@ const Index = () => {
     const handleConfirm = () => {
         const selectedProductVariantIds = selectedProducts.map((product) => product.id);
 
-        let jsondata = {
+        const metafieldValue = {
+            ...{ basicInformation },
+            ...{ discountRules },
+            ...{ styleConfigData },
+            ...{
+                targetingSettingsData: {
+                    ...targetingSettingsData,
+                    startsAt: dayjs(targetingSettingsData?.startsAt).toISOString(),
+                    endsAt: targetingSettingsData?.endsAt ? dayjs(targetingSettingsData?.endsAt).toISOString() : null,
+                }
+            },
+            selectedProductVariantIds,
+        }
+
+        const discountAutomaticAppCreateAndMetafieldsSetRequestJsondata = {
             automaticAppDiscount: {
                 title: basicInformation?.offerName,
                 functionHandle: "ciwi-bundle-multiple-products-discount-function",
-                startsAt: dayjs(targetingSettingsData?.startTime).toISOString(),
-                endsAt: targetingSettingsData?.endTime ? dayjs(targetingSettingsData?.endTime).toISOString() : null,
+                startsAt: dayjs(targetingSettingsData?.startsAt).toISOString(),
+                endsAt: targetingSettingsData?.endsAt ? dayjs(targetingSettingsData?.endsAt).toISOString() : null,
                 combinesWith: {
                     orderDiscounts: true,
                     productDiscounts: true,
                     shippingDiscounts: true
                 },
-                metafields: [
-                    {
-                        namespace: "basic_information",
-                        key: "basic_information",
-                        type: "json",
-                        value: JSON.stringify(basicInformation)
-                    },
-                    {
-                        namespace: "discount_rules",
-                        key: "discount_rules",
-                        type: "json",
-                        value: JSON.stringify(discountRules)
-                    },
-                    {
-                        namespace: "style_config_data",
-                        key: "style_config_data",
-                        type: "json",
-                        value: JSON.stringify(styleConfigData)
-                    },
-                    {
-                        namespace: "targeting_settings_data",
-                        key: "targeting_settings_data",
-                        type: "json",
-                        value: JSON.stringify(targetingSettingsData)
-                    },
-                    {
-                        namespace: "selected_product_variant_ids",
-                        key: "selected_product_variant_ids",
-                        type: "json",
-                        value: JSON.stringify(selectedProductVariantIds)
-                    }
-                ],
                 discountClasses: [
                     "PRODUCT",
                 ]
-            }
+            },
+            metafields: [
+                {
+                    key: `ciwi_bundles_config_${Date.now()}`,
+                    namespace: "ciwi_bundles_config",
+                    ownerId: "gid://shopify/Shop/72809480215",
+                    type: "json",
+                    value: JSON.stringify(metafieldValue)
+                },
+            ],
         }
 
-        console.log("jsondata: ", jsondata);
         confirmFetcher.submit({
-            discountAutomaticAppCreateRequestBody: JSON.stringify(jsondata)
+            discountAutomaticAppCreateAndMetafieldsSetRequestBody:
+                JSON.stringify(
+                    discountAutomaticAppCreateAndMetafieldsSetRequestJsondata
+                ),
         }, { method: "POST" });
     }
 
@@ -1979,65 +1989,79 @@ const Index = () => {
                                         display: 'flex',
                                         flexDirection: 'column'
                                     }}>
-                                        {basicInformation.offerType === 'quantity-breaks-same' && (
-                                            <>
-                                                {discountRules.map((rule, index) => {
-                                                    return (
-                                                        <div key={index} style={{ border: '1px solid #e0e0e0', borderRadius: '8px', padding: '12px', marginBottom: '12px', position: 'relative', background: rule.badgeText ? '#ffffff' : '#f9fafb' }}>
-                                                            {rule.badgeText && <div style={{ position: 'absolute', top: '-8px', right: '12px', background: '#000', color: '#fff', padding: '2px 12px', borderRadius: '12px', fontSize: '10px', fontWeight: 600, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                                                {rule.badgeText}
-                                                            </div>}
-                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                                <Radio style={{ width: '16px', height: '16px' }} />
-                                                                <div style={{ flex: 1 }}>
-                                                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                                                                        <strong style={{ fontSize: '14px' }}>{rule.title}</strong>
-                                                                        {rule.discountRate < 1 &&
-                                                                            <span style={{
-                                                                                background: '#f0f0f0',
-                                                                                padding: '2px 6px',
-                                                                                borderRadius: '4px',
-                                                                                fontSize: '10px'
-                                                                            }}
-                                                                            >
-                                                                                {rule.labelText}
-                                                                            </span>
-                                                                        }
-                                                                    </div>
-                                                                    <div style={{ fontSize: '12px', color: '#6d7175' }}>{rule.subtitle}</div>
+                                        {basicInformation.offerType === 'quantity-breaks-same' &&
+                                            discountRules.map((rule, index) => {
+                                                return (
+                                                    <div
+                                                        key={index}
+                                                        style={{
+                                                            border: rule.id === selectedRule?.id ? '1px solid #000' : `1px solid ${styleConfigData?.card_border_color}`,
+                                                            borderRadius: '8px',
+                                                            padding: '12px',
+                                                            marginBottom: '12px',
+                                                            position: 'relative',
+                                                            background: rule.badgeText ? '#ffffff' : '#f9fafb',
+                                                            cursor: 'pointer'
+                                                        }}
+                                                        onClick={() => setSelectedRule(rule)}
+                                                    >
+                                                        {rule.badgeText && <div style={{ position: 'absolute', top: '-8px', right: '12px', background: '#000', color: '#fff', padding: '2px 12px', borderRadius: '12px', fontSize: '10px', fontWeight: 600, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                            {rule.badgeText}
+                                                        </div>}
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                            <input
+                                                                type="radio"
+                                                                name="discount-rule-group"
+                                                                value={rule.buyQty}
+                                                                readOnly
+                                                                checked={selectedRule ? rule.id === selectedRule?.id : rule.selectedByDefault}
+                                                                style={{ width: '16px', height: '16px' }}
+                                                            />
+                                                            <div style={{ flex: 1 }}>
+                                                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                                                    <strong style={{ fontSize: '14px' }}>{rule.title}</strong>
+                                                                    {rule.discountRate < 1 &&
+                                                                        <span style={{
+                                                                            background: '#f0f0f0',
+                                                                            padding: '2px 6px',
+                                                                            borderRadius: '4px',
+                                                                            fontSize: '10px'
+                                                                        }}
+                                                                        >
+                                                                            {rule.labelText}
+                                                                        </span>
+                                                                    }
                                                                 </div>
-                                                                {
-                                                                    rule.discountRate === 1 && (
-                                                                        <div style={{ textAlign: 'right' }}>
-                                                                            <strong style={{ fontSize: '16px' }}>€{Number(rule.buyQty * 65).toFixed(2)}</strong>
-                                                                        </div>
-                                                                    )
-                                                                }
-                                                                {
-                                                                    rule.discountRate === 0 && (
-                                                                        <div style={{ textAlign: 'right' }}>
-                                                                            <strong style={{ fontSize: '16px' }}>Free</strong>
-                                                                        </div>
-                                                                    )
-                                                                }
-                                                                {
-                                                                    (rule.discountRate > 0 && rule.discountRate < 1
-                                                                    ) && (
-                                                                        <div style={{ textAlign: 'right' }}>
-                                                                            <strong style={{ fontSize: '16px' }}>€{Number(rule.buyQty * 65 * rule.discountRate).toFixed(2)}</strong>
-                                                                            <div style={{ fontSize: '12px', color: '#6d7175', textDecoration: 'line-through' }}>€{Number(rule.buyQty * 65).toFixed(2)}</div>
-                                                                        </div>
-                                                                    )
-                                                                }
+                                                                <div style={{ fontSize: '12px', color: '#6d7175' }}>{rule.subtitle}</div>
                                                             </div>
+                                                            {
+                                                                rule.discountRate === 1 && (
+                                                                    <div style={{ textAlign: 'right' }}>
+                                                                        <strong style={{ fontSize: '16px' }}>€{Number(rule.buyQty * 65).toFixed(2)}</strong>
+                                                                    </div>
+                                                                )
+                                                            }
+                                                            {
+                                                                rule.discountRate === 0 && (
+                                                                    <div style={{ textAlign: 'right' }}>
+                                                                        <strong style={{ fontSize: '16px' }}>Free</strong>
+                                                                    </div>
+                                                                )
+                                                            }
+                                                            {
+                                                                (rule.discountRate > 0 && rule.discountRate < 1
+                                                                ) && (
+                                                                    <div style={{ textAlign: 'right' }}>
+                                                                        <strong style={{ fontSize: '16px' }}>€{Number(rule.buyQty * 65 * rule.discountRate).toFixed(2)}</strong>
+                                                                        <div style={{ fontSize: '12px', color: '#6d7175', textDecoration: 'line-through' }}>€{Number(rule.buyQty * 65).toFixed(2)}</div>
+                                                                    </div>
+                                                                )
+                                                            }
                                                         </div>
-                                                    )
-                                                })}
-                                                <div style={{ marginTop: 'auto', padding: '12px 0' }}>
-                                                    <strong style={{ fontSize: '13px' }}>Quantity breaks for the same product</strong>
-                                                </div>
-                                            </>
-                                        )}
+                                                    </div>
+                                                )
+                                            })
+                                        }
                                     </div>
                                 </div>
                             </div>
@@ -2508,19 +2532,28 @@ const Index = () => {
                                                     <div
                                                         key={index}
                                                         style={{
-                                                            border: rule.badgeText ? '2px solid #000' : `1px solid ${styleConfigData?.card_border_color}`,
+                                                            border: rule.id === selectedRule?.id ? '1px solid #000' : `1px solid ${styleConfigData?.card_border_color}`,
                                                             borderRadius: '8px',
                                                             padding: '12px',
                                                             marginBottom: '12px',
                                                             position: 'relative',
-                                                            background: styleConfigData?.card_background_color
+                                                            background: rule.badgeText ? '#ffffff' : '#f9fafb',
+                                                            cursor: 'pointer'
                                                         }}
+                                                        onClick={() => setSelectedRule(rule)}
                                                     >
                                                         {rule.badgeText && <div style={{ position: 'absolute', top: '-8px', right: '12px', background: '#000', color: '#fff', padding: '2px 12px', borderRadius: '12px', fontSize: '10px', fontWeight: 600, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                                             {rule.badgeText}
                                                         </div>}
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                            <Radio style={{ width: '16px', height: '16px' }} />
+                                                            <input
+                                                                type="radio"
+                                                                name="discount-rule-group"
+                                                                value={rule.buyQty}
+                                                                readOnly
+                                                                checked={selectedRule ? rule.id === selectedRule?.id : rule.selectedByDefault}
+                                                                style={{ width: '16px', height: '16px' }}
+                                                            />
                                                             <div style={{ flex: 1 }}>
                                                                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                                                                     <strong style={{ fontSize: '14px' }}>{rule.title}</strong>
@@ -2732,12 +2765,12 @@ const Index = () => {
                                         <DatePicker
                                             showTime
                                             needConfirm={false}
-                                            value={targetingSettingsData.startTime}
+                                            value={targetingSettingsData.startsAt}
                                             onChange={(value) => {
                                                 if (value)
                                                     setTargetingSettingsData({
                                                         ...targetingSettingsData,
-                                                        startTime: value
+                                                        startsAt: value
                                                     })
                                             }}
                                         />
@@ -2756,12 +2789,12 @@ const Index = () => {
                                         <DatePicker
                                             showTime
                                             needConfirm={false}
-                                            value={targetingSettingsData.endTime}
+                                            value={targetingSettingsData.endsAt}
                                             onChange={(value) => {
                                                 if (value)
                                                     setTargetingSettingsData({
                                                         ...targetingSettingsData,
-                                                        endTime: value
+                                                        endsAt: value
                                                     })
                                             }}
                                         />

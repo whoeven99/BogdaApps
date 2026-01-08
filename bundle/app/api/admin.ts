@@ -236,7 +236,7 @@ export const queryCustomers = async ({
 };
 
 //创建折扣计划
-export const mutationDiscountAutomaticAppCreate = async ({
+export const mutationDiscountAutomaticAppCreateAndMetafieldsSet = async ({
     shop,
     accessToken,
     variables
@@ -247,7 +247,7 @@ export const mutationDiscountAutomaticAppCreate = async ({
 }) => {
     try {
         const gql = `
-            mutation discountAutomaticAppCreate($automaticAppDiscount: DiscountAutomaticAppInput!) {
+            mutation discountAutomaticAppCreateAndMetafieldsSet($automaticAppDiscount: DiscountAutomaticAppInput!, $metafields: [MetafieldsSetInput!]!) {
                 discountAutomaticAppCreate(automaticAppDiscount: $automaticAppDiscount) {
                     userErrors {
                         field
@@ -267,10 +267,24 @@ export const mutationDiscountAutomaticAppCreate = async ({
                         discountClasses
                     }
                 }
+                metafieldsSet(metafields: $metafields) {
+                    userErrors {
+                        field
+                        message
+                        code
+                    } 
+                    metafields {
+                        key
+                        namespace
+                        value
+                        createdAt
+                        updatedAt
+                    }  
+                }
             }
             `;
 
-        console.log(`${shop} mutationDiscountAutomaticAppCreate gql:`, gql);
+        console.log(`${shop} mutationDiscountAutomaticAppCreateAndMetafieldsSet gql:`, gql);
 
         const { data } = await axios.post(
             `https://${shop}/admin/api/${process.env.GRAPHQL_VERSION}/graphql.json`,
@@ -284,16 +298,21 @@ export const mutationDiscountAutomaticAppCreate = async ({
 
         const res = data?.data;
 
+        console.log(`${shop} mutationDiscountAutomaticAppCreateAndMetafieldsSet:`, data);
+
         if (res?.discountAutomaticAppCreate?.userErrors?.length > 0) {
             console.error(`${shop} Error mutationDiscountAutomaticAppCreate:`, res?.discountAutomaticAppCreate?.userErrors);
             return null;
         }
 
-        console.log(`${shop} mutationDiscountAutomaticAppCreate:`, res);
+        if (res?.metafieldsSet?.userErrors?.length > 0) {
+            console.error(`${shop} Error mutationMetafieldsSet:`, res?.metafieldsSet?.userErrors);
+            return null;
+        }
 
         return res;
     } catch (error: any) {
-        console.error(`${shop} Error mutationDiscountAutomaticAppCreate error: `, error?.response?.data);
+        console.error(`${shop} Error mutationDiscountAutomaticAppCreateAndMetafieldsSet error: `, error?.response?.data);
         return null;
     }
 }
