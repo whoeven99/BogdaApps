@@ -88,6 +88,11 @@ export function cartLinesDiscountsGenerateRun(
     const targetingSettings = productDiscountData.targetingSettings?.value;
     const selectedProductVariantIds = productDiscountData.selectedProductVariantIds?.value;
 
+    console.log(basicInformation);
+    console.log(discountRules);
+    console.log(styleConfig);
+    console.log(targetingSettings);
+    console.log(selectedProductVariantIds);
 
     const discountRulesJSON = parseJSON<any>(discountRules);
     const selectedProductVariantIdsArray = parseJSON<any>(selectedProductVariantIds);
@@ -106,7 +111,6 @@ export function cartLinesDiscountsGenerateRun(
         }),
       }
     }
-
 
     //购物车此行产品数量quantity数据
     const quantity = line.quantity;
@@ -129,6 +133,9 @@ export function cartLinesDiscountsGenerateRun(
           unitPriceCents,
           lineId,
         });
+
+        console.log("candidate1: ", candidate1);
+
         if (!candidate1) continue;
         productCandidates.push(candidate1);
         break;
@@ -251,7 +258,7 @@ const findMatchedRange = (
 ) => {
   return ranges.find((r) => {
     if (quantity < r.min) return false;
-    if (r.max != null && quantity > r.max) return false;
+    if (r.max != null && quantity >= r.max) return false;
     return true;
   });
 };
@@ -292,7 +299,7 @@ const ruleAsRangeDiscountsTypeOperate = ({
 }): ProductDiscountCandidate | null => {
   try {
     // 合并计算其他变体数量
-    if (rule.calculateQuantityWithVariantsArray?.length) {
+    if (rule?.calculateQuantityWithVariantsArray?.length) {
       for (const id of rule.calculateQuantityWithVariantsArray) {
         quantity += lineQuantityMap.get(id) ?? 0;
       }

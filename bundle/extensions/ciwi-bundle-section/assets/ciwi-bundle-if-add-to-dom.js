@@ -188,20 +188,26 @@
 
         ${rulesHtml}
 
-        <button style="
-            width: 100%;
-            background: ${styleConfigData?.card_button_primaryColor};
-            color: #fff;
-            border: none;
-            border-radius: 6px;
-            padding: 12px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            margin: 12px 0;
-        ">
-            ${styleConfigData?.card_button_text}
-        </button>
+        ${
+          styleConfigData?.card_button_text
+            ? `<button
+              style="
+                width: 100%;
+                background: ${styleConfigData?.card_button_primaryColor};
+                color: #fff;
+                border: none;
+                border-radius: 6px;
+                padding: 12px;
+                font-size: 14px;
+                font-weight: 600;
+                cursor: pointer;
+                margin: 12px 0;
+            "
+            >
+              ${styleConfigData?.card_button_text}
+            </button>`
+            : ""
+        }
     `;
 
     // 插入到 form 前
