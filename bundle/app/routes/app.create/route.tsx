@@ -653,6 +653,38 @@ const Index = () => {
                     productDiscounts: true,
                     shippingDiscounts: true
                 },
+                metafields: [
+                    {
+                        key: `basic_information`,
+                        namespace: "ciwi_bundles_config",
+                        type: "json",
+                        value: JSON.stringify(basicInformation)
+                    },
+                    {
+                        key: `discount_rules`,
+                        namespace: "ciwi_bundles_config",
+                        type: "json",
+                        value: JSON.stringify(discountRules)
+                    },
+                    {
+                        key: `style_config`,
+                        namespace: "ciwi_bundles_config",
+                        type: "json",
+                        value: JSON.stringify(styleConfigData)
+                    },
+                    {
+                        key: `targeting_settings`,
+                        namespace: "ciwi_bundles_config",
+                        type: "json",
+                        value: JSON.stringify(targetingSettingsData)
+                    },
+                    {
+                        key: `selected_product_variant_ids`,
+                        namespace: "ciwi_bundles_config",
+                        type: "json",
+                        value: JSON.stringify(selectedProductVariantIds)
+                    },
+                ],
                 discountClasses: [
                     "PRODUCT",
                 ]
