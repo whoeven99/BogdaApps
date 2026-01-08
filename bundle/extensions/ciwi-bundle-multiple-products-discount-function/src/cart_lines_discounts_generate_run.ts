@@ -47,11 +47,11 @@ export function cartLinesDiscountsGenerateRun(
   //定义每行购物车item ID与Quantity的映射关系
   const lineQuantityMap = new Map<string, number>();
 
-  for (const l of input.cart.lines) {
-    if (l.merchandise.__typename !== "ProductVariant") continue;
-    const id = l.merchandise.id;
-    lineQuantityMap.set(id, (lineQuantityMap.get(id) ?? 0) + l.quantity);
-  }
+  // for (const l of input.cart.lines) {
+  //   if (l.merchandise.__typename !== "ProductVariant") continue;
+  //   const id = l.merchandise.id;
+  //   lineQuantityMap.set(id, (lineQuantityMap.get(id) ?? 0) + l.quantity);
+  // }
 
   //轮询购物车每个item
   for (const line of input.cart.lines) {
@@ -61,8 +61,11 @@ export function cartLinesDiscountsGenerateRun(
     let appliedRule: any = null;
 
     //获取变体折扣规则并赋值给appliedRule
-    const variantRule = parseJSON<any>(line.merchandise.metafield?.value);
-    if (variantRule) appliedRule = variantRule;
+    // const shopBundleConfig = parseJSON<any>(input.shop.metafields);
+
+    // if (shopBundleConfig) appliedRule = shopBundleConfig;
+
+
 
     if (!appliedRule) continue;
 
