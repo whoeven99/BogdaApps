@@ -1,0 +1,23 @@
+{% if request.page_type == 'product' %}
+  <script id="ciwi-bundles-config" type="application/json">
+    {
+      "shopifyDomain": "{{ shop.domain }}",
+      "productId": {{ product.id }},
+      "storefrontAccessToken": "{{ app.metafields.tokens.storefront }}",
+      "variantId": {{ product.variants[0].id }},
+      "marketId": {{ localization.market.id }},
+      "config": {{ shop.metafields.ciwi_bundles_config | json }},
+      "compareAtPrice": {{ product.variants[0].compare_at_price | json }},
+      "price": {{ product.variants[0].price | json }}
+    }
+  </script>
+  <script src="{{ 'ciwi-bundle-if-add-to-dom.js' | asset_url }}" defer></script>
+  <script src="{{ 'ciwi-bundle-dom-style.js' | asset_url }}" defer></script>
+{% endif %}
+
+{% schema %}
+  {
+    "name": "Ciwi Bundle(LocalW)",
+    "target": "compliance_head"
+  }
+{% endschema %}
