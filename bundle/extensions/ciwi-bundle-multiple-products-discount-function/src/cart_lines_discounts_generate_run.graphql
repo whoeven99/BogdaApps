@@ -18,7 +18,34 @@ query CartInput {
   }
   discount {
     discountClasses
-    metafield(namespace: "ciwi_bundles_config", key: "discount_rules") {
+    basic_information: metafield(
+      namespace: "ciwi_bundles_config"
+      key: "basic_information"
+    ) {
+      value
+    }
+    discount_rules: metafield(
+      namespace: "ciwi_bundles_config"
+      key: "discount_rules"
+    ) {
+      value
+    }
+    style_config: metafield(
+      namespace: "ciwi_bundles_config"
+      key: "style_config"
+    ) {
+      value
+    }
+    targeting_settings: metafield(
+      namespace: "ciwi_bundles_config"
+      key: "targeting_settings"
+    ) {
+      value
+    }
+    selected_product_variant_ids: metafield(
+      namespace: "ciwi_bundles_config"
+      key: "selected_product_variant_ids"
+    ) {
       value
     }
   }

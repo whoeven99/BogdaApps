@@ -34,6 +34,25 @@ interface BundleDiscountType {
   }[];
 }
 
+type productDiscountDataType = {
+  discountClasses: ["PRODUCT"];
+  basicInformation: {
+    value: string;
+  } | null;
+  discountRules: {
+    value: string;
+  } | null;
+  styleConfig: {
+    value: string;
+  } | null;
+  targetingSettings: {
+    value: string;
+  } | null;
+  selectedProductVariantIds: {
+    value: string;
+  } | null;
+};
+
 export function cartLinesDiscountsGenerateRun(
   input: CartInput,
 ): CartLinesDiscountsGenerateRunResult {
@@ -47,11 +66,11 @@ export function cartLinesDiscountsGenerateRun(
   //定义每行购物车item ID与Quantity的映射关系
   const lineQuantityMap = new Map<string, number>();
 
-  // for (const l of input.cart.lines) {
-  //   if (l.merchandise.__typename !== "ProductVariant") continue;
-  //   const id = l.merchandise.id;
-  //   lineQuantityMap.set(id, (lineQuantityMap.get(id) ?? 0) + l.quantity);
-  // }
+  for (const l of input.cart.lines) {
+    if (l.merchandise.__typename !== "ProductVariant") continue;
+    const id = l.merchandise.id;
+    lineQuantityMap.set(id, (lineQuantityMap.get(id) ?? 0) + l.quantity);
+  }
 
   //轮询购物车每个item
   for (const line of input.cart.lines) {
@@ -60,14 +79,34 @@ export function cartLinesDiscountsGenerateRun(
     //初始化折扣规则数据
     let appliedRule: any = null;
 
-    //获取变体折扣规则并赋值给appliedRule
-    // const shopBundleConfig = parseJSON<any>(input.shop.metafields);
+    const productDiscountData: productDiscountDataType =
+      input.discount as productDiscountDataType;
 
-    // if (shopBundleConfig) appliedRule = shopBundleConfig;
+    const basicInformation = productDiscountData.basicInformation?.value;
+    const discountRules = productDiscountData.discountRules?.value;
+    const styleConfig = productDiscountData.styleConfig?.value;
+    const targetingSettings = productDiscountData.targetingSettings?.value;
+    const selectedProductVariantIds = productDiscountData.selectedProductVariantIds?.value;
 
 
+    const discountRulesJSON = parseJSON<any>(discountRules);
+    const selectedProductVariantIdsArray = parseJSON<any>(selectedProductVariantIds);
 
-    if (!appliedRule) continue;
+    if (!discountRulesJSON) continue;
+
+    if (!selectedProductVariantIdsArray.length || selectedProductVariantIdsArray?.includes(line.merchandise.id)) {
+      appliedRule = {
+        typename: "RangeDiscountsType",
+        ranges: discountRulesJSON.map((rule: any, index: number) => {
+          return {
+            min: rule.buyQty,
+            max: discountRulesJSON[index + 1]?.buyQty ? discountRulesJSON[index + 1]?.buyQty : undefined,
+            discountRate: rule.discountRate,
+          }
+        }),
+      }
+    }
+
 
     //购物车此行产品数量quantity数据
     const quantity = line.quantity;
@@ -105,6 +144,7 @@ export function cartLinesDiscountsGenerateRun(
         if (!candidate2) continue;
         productCandidates.push(candidate2);
         break;
+
       case appliedRule?.typename == "BundleDiscountType":
         const variantId = line.merchandise.id;
 
