@@ -88,6 +88,10 @@ export const queryProductVariants = async ({
                             title
                         }
                     }
+                    pageInfo {
+                        hasNextPage
+                        endCursor
+                    }
                 }
             }
             `;
