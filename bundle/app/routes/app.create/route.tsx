@@ -491,11 +491,6 @@ const Index = () => {
     // }, [customersDataFetcher.data])
 
     useEffect(() => {
-        console.log(targetingSettingsData);
-
-    }, [targetingSettingsData])
-
-    useEffect(() => {
         if (confirmFetcher.data) {
             if (confirmFetcher.data.success) {
                 shopify.toast.show(t("Offer created successfully"))
@@ -505,7 +500,7 @@ const Index = () => {
     }, [confirmFetcher.data])
 
     const handleConfirm = () => {
-        const selectedProductVariantIds = selectedProducts.map((product) => product.id);
+        const selectedProductVariantIds = selectedProducts.map((product) => product.id.split("gid://shopify/ProductVariant/")[1]);
 
         const metafieldValue = {
             ...{ basicInformation },
@@ -556,7 +551,12 @@ const Index = () => {
                         key: `targeting_settings`,
                         namespace: "ciwi_bundles_config",
                         type: "json",
-                        value: JSON.stringify(targetingSettingsData)
+                        value: JSON.stringify({
+                            ...targetingSettingsData,
+                            startsAt: dayjs(targetingSettingsData?.startsAt).toISOString(),
+                            endsAt: targetingSettingsData?.endsAt ? dayjs(targetingSettingsData?.endsAt).toISOString() : null,
+                            segmentData: targetingSettingsData?.segmentData?.map((segment: any) => segment.value),
+                        })
                     },
                     {
                         key: `selected_product_variant_ids`,
