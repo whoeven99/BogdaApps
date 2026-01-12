@@ -32,6 +32,23 @@
 
     const styleConfigData = bundleData.styleConfigData || {};
 
+    const targetingSettingsData = bundleData.targetingSettingsData || {};
+
+    const selectedProductVariantIds =
+      bundleData.selectedProductVariantIds || {};
+
+    const isInTargetMarketArray =
+      targetingSettingsData?.marketVisibilitySettingData?.find((market) =>
+        market?.includes(configElJson?.marketId),
+      );
+
+    if (!isInTargetMarketArray) return;
+
+    const isInSelectedProductVariantIdsArray =
+      selectedProductVariantIds?.includes(configElJson?.variantId?.toString());
+
+    if (!isInSelectedProductVariantIdsArray) return;
+
     /* -----------------------
        确保 form 里有 quantity
     ----------------------- */
@@ -63,6 +80,9 @@
 
     const wrapper = document.createElement("div");
     wrapper.className = "ciwi-bundle-wrapper";
+    wrapper.style.display = "flex";
+    wrapper.style.flexDirection = "column";
+    wrapper.style.marginTop = "12px";
 
     const rulesHtml = discountRules
       .map((rule, index) => {

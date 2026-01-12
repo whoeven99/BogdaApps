@@ -573,7 +573,7 @@ const Index = () => {
                 {
                     key: `ciwi_bundles_config_${Date.now()}`,
                     namespace: "ciwi_bundles_config",
-                    ownerId: "gid://shopify/Shop/72809480215",
+                    ownerId: "gid://shopify/Shop/71469596922",
                     type: "json",
                     value: JSON.stringify(metafieldValue)
                 },
