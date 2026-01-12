@@ -1,34 +1,42 @@
 import { X } from "lucide-react";
-import { ProductVariantsDataType } from "../route";
 import { useFetcher } from "@remix-run/react";
 import { useEffect, useRef, useState } from "react";
+import { Button, Space } from "antd";
 import { useTranslation } from "react-i18next";
+import { TargetingSettingsType } from "../route";
 
-interface productModalDataType {
-    data: ProductVariantsDataType[];
+interface segmentModalDataType {
+    data: {
+        label: string;
+        value: string
+    }[];
     pageInfo: {
         endCursor: string;
         hasNextPage: boolean
     }
 }
 
-interface ProductModalProps {
+interface SegmentModalProps {
     mainModalType: "ProductVariants" | "CustomerSegments" | "Customer" | null;
     setMainModalType: (modalType: "ProductVariants" | "CustomerSegments" | "Customer" | null) => void;
-    selectedProducts: ProductVariantsDataType[];
-    setSelectedProducts: (products: ProductVariantsDataType[]) => void;
+    targetingSettingsData: TargetingSettingsType;
+    setTargetingSettingsData: (targetingSettingsData: TargetingSettingsType) => void;
 }
 
-const ProductModal: React.FC<ProductModalProps> = ({
+const SegmentModal: React.FC<SegmentModalProps> = ({
     mainModalType,
     setMainModalType,
-    selectedProducts,
-    setSelectedProducts,
+    targetingSettingsData,
+    setTargetingSettingsData,
 }) => {
     const { t } = useTranslation();
-    const productModalDataFetcher = useFetcher<any>();
+    const segmentModalDataFetcher = useFetcher<any>();
 
-    const [productModalData, setProductModalData] = useState<productModalDataType>({
+    const [selectedSegments, setSelectedSegments] = useState<{
+        label: string;
+        value: string
+    }[]>(targetingSettingsData.segmentData);
+    const [segmentModalData, setSegmentModalData] = useState<segmentModalDataType>({
         data: [],
         pageInfo: {
             endCursor: "",
@@ -45,33 +53,35 @@ const ProductModal: React.FC<ProductModalProps> = ({
     const listRef = useRef<HTMLDivElement | null>(null);
 
     useEffect(() => {
-        if (productModalDataFetcher.data) {
-            if (productModalDataFetcher.data.success) {
-                const productVariantsData = productModalDataFetcher.data.response?.productVariants?.nodes;
-                const pageInfo = productModalDataFetcher.data.response?.productVariants?.pageInfo;
-                if (productVariantsData?.length) {
-                    const data: ProductVariantsDataType[] = productVariantsData.map((variant: any) => {
+        if (segmentModalDataFetcher.data) {
+            if (segmentModalDataFetcher.data.success) {
+                console.log("segmentModalDataFetcher.data", segmentModalDataFetcher.data);
+                const segmentsData = segmentModalDataFetcher.data.response?.segments?.nodes;
+                const pageInfo = segmentModalDataFetcher.data.response?.segments?.pageInfo;
+                if (segmentsData?.length) {
+                    const data: {
+                        label: string;
+                        value: string
+                    }[] = segmentsData.map((segment: any) => {
                         return {
-                            id: variant.id,
-                            name: `${variant.product?.title} - ${variant.title}`,
-                            price: variant.price,
-                            image: variant.media?.edges[0]?.node?.preview?.image?.url,
+                            label: segment.name,
+                            value: segment.id,
                         }
                     })
                     if (loadMoreLoading) {
-                        setProductModalData({ data: [...productModalData.data, ...data], pageInfo });
+                        setSegmentModalData({ data: [...segmentModalData.data, ...data], pageInfo });
                         setLoadMoreLoading(false);
                     } else {
-                        setProductModalData({ data, pageInfo });
+                        setSegmentModalData({ data, pageInfo });
                         setSearchLoading(false);
                     }
                 }
             }
         }
-    }, [productModalDataFetcher.data])
+    }, [segmentModalDataFetcher.data])
 
     useEffect(() => {
-        if (mainModalType !== "ProductVariants") return;
+        if (mainModalType !== "CustomerSegments") return;
 
         const timer = setTimeout(() => {
             setDebouncedQuery(searchQuery);
@@ -84,8 +94,8 @@ const ProductModal: React.FC<ProductModalProps> = ({
 
     useEffect(() => {
         if (searchLoading) {
-            productModalDataFetcher.submit({
-                productVariantRequestBody: JSON.stringify({
+            segmentModalDataFetcher.submit({
+                customerSegmentsRequestBody: JSON.stringify({
                     query: debouncedQuery,
                 })
             }, {
@@ -93,10 +103,10 @@ const ProductModal: React.FC<ProductModalProps> = ({
             });
         }
         if (loadMoreLoading) {
-            productModalDataFetcher.submit({
-                productVariantRequestBody: JSON.stringify({
+            segmentModalDataFetcher.submit({
+                customerSegmentsRequestBody: JSON.stringify({
                     query: debouncedQuery,
-                    endCursor: productModalData.pageInfo.endCursor,
+                    endCursor: segmentModalData.pageInfo.endCursor,
                 })
             }, {
                 method: "POST",
@@ -106,7 +116,7 @@ const ProductModal: React.FC<ProductModalProps> = ({
 
     const handleScroll = () => {
         const el = listRef.current;
-        if (mainModalType !== "ProductVariants" || !el || productModalDataFetcher.state === "submitting" || productModalData.pageInfo.hasNextPage === false) return;
+        if (mainModalType !== "CustomerSegments" || !el || segmentModalDataFetcher.state === "submitting" || segmentModalData.pageInfo.hasNextPage === false) return;
 
         const { scrollTop, scrollHeight, clientHeight } = el;
 
@@ -123,7 +133,8 @@ const ProductModal: React.FC<ProductModalProps> = ({
         setDebouncedQuery("");
         setSearchLoading(false);
         setLoadMoreLoading(false);
-        setProductModalData({
+        setSelectedSegments([]);
+        setSegmentModalData({
             data: [],
             pageInfo: {
                 endCursor: "",
@@ -132,6 +143,13 @@ const ProductModal: React.FC<ProductModalProps> = ({
         });
     };
 
+    const onConfirm = () => {
+        setTargetingSettingsData({
+            ...targetingSettingsData,
+            segmentData: selectedSegments,
+        });
+        onClose();
+    };
 
     return (
         <div
@@ -142,7 +160,7 @@ const ProductModal: React.FC<ProductModalProps> = ({
                 right: 0,
                 bottom: 0,
                 background: "rgba(0,0,0,0.5)",
-                display: mainModalType === "ProductVariants" ? "flex" : "none",
+                display: mainModalType === "CustomerSegments" ? "flex" : "none",
                 alignItems: "center",
                 justifyContent: "center",
                 zIndex: 1000,
@@ -170,7 +188,7 @@ const ProductModal: React.FC<ProductModalProps> = ({
                     }}
                 >
                     <h2 style={{ fontSize: "18px", fontWeight: 600 }}>
-                        {t("Select Products")}
+                        {t("Select Customer Segments")}
                     </h2>
                     <button
                         onClick={onClose}
@@ -183,7 +201,7 @@ const ProductModal: React.FC<ProductModalProps> = ({
                 {/* Search */}
                 <input
                     type="text"
-                    placeholder={t("Search products...")}
+                    placeholder={t("Search customer segments...")}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     style={{
@@ -210,11 +228,12 @@ const ProductModal: React.FC<ProductModalProps> = ({
                         gap: "12px",
                         overflowY: "auto",
                         flex: 1,
+                        marginBottom: 8
                     }}
                 >
-                    {productModalData.data.map((product) => (
+                    {segmentModalData.data.map((segment) => (
                         <div
-                            key={product.id}
+                            key={segment.value}
                             style={{
                                 display: "flex",
                                 gap: "12px",
@@ -224,31 +243,20 @@ const ProductModal: React.FC<ProductModalProps> = ({
                                 cursor: "pointer",
                             }}
                             onClick={() => {
-                                if (!selectedProducts.find((p) => p.id === product.id)) {
-                                    setSelectedProducts([...selectedProducts, product]);
+                                if (!selectedSegments.find((s) => s.value === segment.value)) {
+                                    setSelectedSegments([...selectedSegments, segment]);
                                 } else {
-                                    setSelectedProducts(selectedProducts.filter((p) => p.id !== product.id));
+                                    setSelectedSegments(selectedSegments.filter((s) => s.value !== segment.value));
                                 }
                             }}
                         >
-                            <img
-                                src={product.image}
-                                alt={product.name}
-                                style={{
-                                    width: "60px",
-                                    height: "60px",
-                                    borderRadius: "6px",
-                                }}
-                            />
                             <div style={{ flex: 1 }}>
-                                <div style={{ fontWeight: 500 }}>{product.name}</div>
-                                <div style={{ color: "#6d7175", fontSize: "14px" }}>
-                                    {product.price}
-                                </div>
+                                <div style={{ fontWeight: 500 }}>{segment.label}</div>
                             </div>
                             <input
                                 type="checkbox"
-                                checked={selectedProducts.some((p) => p.id === product.id)}
+                                checked={selectedSegments.some((s) => s.value === segment.value)}
+                                disabled={segmentModalDataFetcher.state === "submitting" || (selectedSegments.length >= 5 && !selectedSegments.some((s) => s.value === segment.value))}
                                 readOnly
                                 style={{ width: "20px", height: "20px" }}
                             />
@@ -261,9 +269,27 @@ const ProductModal: React.FC<ProductModalProps> = ({
                         </div>
                     )}
                 </div>
-            </div>
-        </div>
+
+                <div
+                    style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                    }}
+                >
+                    <span style={{ color: "#6d7175", fontSize: 12 }}>
+                        {selectedSegments.length}/5 {t("customer segments selected")}
+                    </span>
+                    <Button
+                        type="primary"
+                        onClick={onConfirm}
+                    >
+                        {t("Done")}
+                    </Button>
+                </div>
+            </div >
+        </div >
     );
 };
 
-export default ProductModal;
+export default SegmentModal;

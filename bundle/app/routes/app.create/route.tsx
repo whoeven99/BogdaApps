@@ -12,6 +12,7 @@ import StyleDesignSetting from "./components/styleDesignSetting";
 import ScheduleAndBudgetSetting from "./components/scheduleAndBudgetSetting";
 import ProductModal from "./components/productModal";
 import { Button } from "antd";
+import SegmentModal from "./components/segmentModal";
 
 export interface ProductVariantsDataType {
     id: string;
@@ -78,7 +79,14 @@ export interface StyleConfigType {
 
 export interface TargetingSettingsType {
     eligibilityType: "all" | "segments" | "customers";
-    eligibilityRadioData: any;
+    customersData: {
+        label: string;
+        value: string;
+    }[];
+    segmentData: {
+        label: string;
+        value: string;
+    }[];
     marketVisibilitySettingData: string[];
     startsAt: Date | null;
     endsAt: Date | null;
@@ -334,13 +342,13 @@ const Index = () => {
 
     const [step, setStep] = useState(1);
 
-    const [customersData, setCustomersData] = useState<{ label: string; value: string; }[]>([]);
-    const [customerSegmentsData, setCustomerSegmentsData] = useState<{ label: string; value: string; }[]>([]);
+    const [selectedProducts, setSelectedProducts] = useState<ProductVariantsDataType[]>([]);
+    // const [customersData, setCustomersData] = useState<{ label: string; value: string; }[]>([]);
+    // const [customerSegmentsData, setCustomerSegmentsData] = useState<{ label: string; value: string; }[]>([]);
     const [marketVisibilitySettingData, setMarketVisibilitySettingData] = useState<{
         value: string;
         label: string;
     }[]>([])
-    const [selectedProducts, setSelectedProducts] = useState<ProductVariantsDataType[]>([]);
     const [selectedRuleIndex, setSelectedRuleIndex] = useState<number>(1);
 
     const [basicInformation, setBasicInformation] = useState<BasicInformationType>({
@@ -398,7 +406,8 @@ const Index = () => {
 
     const [targetingSettingsData, setTargetingSettingsData] = useState<TargetingSettingsType>({
         eligibilityType: "all",
-        eligibilityRadioData: [],
+        customersData: [],
+        segmentData: [],
         marketVisibilitySettingData: [],
         startsAt: null,
         endsAt: null,
@@ -410,8 +419,6 @@ const Index = () => {
     })
 
     const [mainModalType, setMainModalType] = useState<"ProductVariants" | "CustomerSegments" | "Customer" | null>(null)
-
-
 
     const selectedOfferType = useMemo(() => {
         return offerTypes.find(type => type.id == basicInformation.offerType) || offerTypes[0]
@@ -427,6 +434,7 @@ const Index = () => {
             shopMarketsRequestBody: JSON.stringify({})
         }, { method: 'POST' })
     }, [])
+
     useEffect(() => {
         if (shopMarketsDataFetcher.data) {
             if (shopMarketsDataFetcher.data.success) {
@@ -465,39 +473,27 @@ const Index = () => {
         }
     }, [mainModalType])
 
-    useEffect(() => {
-        if (customerSegmentsDataFetcher.data) {
-            if (customerSegmentsDataFetcher.data.success) {
-                const customerSegmentsData = customerSegmentsDataFetcher.data.response?.segments?.nodes;
-                if (customerSegmentsData?.length) {
-                    const data = customerSegmentsData.map((segment: any) => {
-                        return {
-                            label: segment.name,
-                            value: segment.id,
-                        }
-                    })
-                    setCustomerSegmentsData(data);
-                }
-            }
-        }
-    }, [customerSegmentsDataFetcher.data])
+    // useEffect(() => {
+    //     if (customersDataFetcher.data) {
+    //         if (customersDataFetcher.data.success) {
+    //             const customersData = customersDataFetcher.data.response?.customers?.nodes;
+    //             if (customersData?.length) {
+    //                 const data = customersData.map((customer: any) => {
+    //                     return {
+    //                         label: customer.firstName + ' ' + customer.lastName,
+    //                         value: customer.id,
+    //                     }
+    //                 })
+    //                 setCustomersData(data);
+    //             }
+    //         }
+    //     }
+    // }, [customersDataFetcher.data])
 
     useEffect(() => {
-        if (customersDataFetcher.data) {
-            if (customersDataFetcher.data.success) {
-                const customersData = customersDataFetcher.data.response?.customers?.nodes;
-                if (customersData?.length) {
-                    const data = customersData.map((customer: any) => {
-                        return {
-                            label: customer.firstName + ' ' + customer.lastName,
-                            value: customer.id,
-                        }
-                    })
-                    setCustomersData(data);
-                }
-            }
-        }
-    }, [customersDataFetcher.data])
+        console.log(targetingSettingsData);
+
+    }, [targetingSettingsData])
 
     useEffect(() => {
         if (confirmFetcher.data) {
@@ -520,6 +516,7 @@ const Index = () => {
                     ...targetingSettingsData,
                     startsAt: dayjs(targetingSettingsData?.startsAt).toISOString(),
                     endsAt: targetingSettingsData?.endsAt ? dayjs(targetingSettingsData?.endsAt).toISOString() : null,
+                    segmentData: targetingSettingsData?.segmentData?.map((segment: any) => segment.value),
                 }
             },
             selectedProductVariantIds,
@@ -677,12 +674,21 @@ const Index = () => {
                     )}
 
                     {step === 4 && (
-                        <ScheduleAndBudgetSetting
-                            targetingSettingsData={targetingSettingsData}
-                            setTargetingSettingsData={setTargetingSettingsData}
-                            setMainModalType={setMainModalType}
-                            marketVisibilitySettingData={marketVisibilitySettingData}
-                        />
+                        <>
+                            <SegmentModal
+                                mainModalType={mainModalType}
+                                setMainModalType={setMainModalType}
+                                targetingSettingsData={targetingSettingsData}
+                                setTargetingSettingsData={setTargetingSettingsData}
+                            />
+
+                            <ScheduleAndBudgetSetting
+                                targetingSettingsData={targetingSettingsData}
+                                setTargetingSettingsData={setTargetingSettingsData}
+                                setMainModalType={setMainModalType}
+                                marketVisibilitySettingData={marketVisibilitySettingData}
+                            />
+                        </>
                     )}
                 </div>
             </div>

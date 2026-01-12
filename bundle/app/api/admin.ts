@@ -57,10 +57,10 @@ export const queryProductVariants = async ({
 }) => {
     try {
         const pagination = endCursor
-            ? `first: 20, after: "${endCursor}"`
+            ? `first: 50, after: "${endCursor}"`
             : startCursor
-                ? `last: 20, before: "${startCursor}"`
-                : `first: 20`;
+                ? `last: 50, before: "${startCursor}"`
+                : `first: 50`;
 
         const gql = `
             {
@@ -133,10 +133,10 @@ export const querySegments = async ({
 }) => {
     try {
         const pagination = endCursor
-            ? `first: 20, after: "${endCursor}"`
+            ? `first: 50, after: "${endCursor}"`
             : startCursor
-                ? `last: 20, before: "${startCursor}"`
-                : `first: 20`;
+                ? `last: 50, before: "${startCursor}"`
+                : `first: 50`;
 
         const gql = `
             {
@@ -150,6 +150,10 @@ export const querySegments = async ({
                         lastEditDate
                         name
                         query
+                    }
+                    pageInfo {
+                        hasNextPage
+                        endCursor
                     }
                 }
             }
