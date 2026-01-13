@@ -7,7 +7,7 @@ application_url = "https://bundletest.onrender.com"
 embedded = true
 
 [webhooks]
-api_version = "2025-04"
+api_version = "2025-10"
 
   [[webhooks.subscriptions]]
   topics = [

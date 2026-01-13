@@ -6,7 +6,7 @@ application_url = "https://2c971c469ed8.ngrok.app"
 embedded = true
 
 [webhooks]
-api_version = "2025-04"
+api_version = "2025-10"
 
   [[webhooks.subscriptions]]
   topics = [
