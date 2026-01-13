@@ -9,22 +9,28 @@ import { authenticate } from "../shopify.server";
 import { useEffect, useState } from "react";
 import { ConfigProvider, Flex, Spin } from "antd";
 import { useTranslation } from "react-i18next";
+import { globalStore } from "app/globalStore";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+  const adminAuthResult = await authenticate.admin(request);
+  const { shop } = adminAuthResult.session;
 
-  return { apiKey: process.env.SHOPIFY_API_KEY || "" };
+  return {
+    shop,
+    apiKey: process.env.SHOPIFY_API_KEY || "",
+  };
 };
 
 export default function App() {
-  const { apiKey } = useLoaderData<typeof loader>();
+  const { apiKey, shop } = useLoaderData<typeof loader>();
   const { t } = useTranslation();
 
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
+    globalStore.shop = shop;
     setIsClient(true);
   }, []);
 
@@ -41,8 +47,8 @@ export default function App() {
           <Link to="/app" rel="home">
             Home
           </Link>
-          <Link to="/app/offers">{t("All Offers")}</Link>
-          <Link to="/app/pricing">{t("Pricing")}</Link>
+          {/* <Link to="/app/offers">{t("All Offers")}</Link>
+          <Link to="/app/pricing">{t("Pricing")}</Link> */}
         </NavMenu>
         {isClient ? (
           <Outlet />

@@ -60,9 +60,9 @@ const ScheduleAndBudgetSetting: React.FC<ScheduleAndBudgetSettingProps> = ({
 
             {/* Target Audience */}
             <div style={{ marginBottom: '32px' }}>
-                <h3 style={{ fontSize: '14px', fontWeight: 500, marginBottom: '12px' }}>Eligibility</h3>
+                {/* <h3 style={{ fontSize: '14px', fontWeight: 500, marginBottom: '12px' }}>Eligibility</h3> */}
                 <div className="polaris-stack polaris-stack--vertical">
-                    <div style={{ fontSize: '14px', fontWeight: 500 }}>
+                    {/* <div style={{ fontSize: '14px', fontWeight: 500 }}>
                         <Text>Available on all sales channels</Text>
                         <div style={{
                             marginTop: '8px',
@@ -166,11 +166,11 @@ const ScheduleAndBudgetSetting: React.FC<ScheduleAndBudgetSettingProps> = ({
                         <p style={{ fontSize: '12px', color: '#6d7175', marginTop: '4px' }}>
                             Select one or more customer segments to target
                         </p>
-                    </div>
+                    </div> */}
 
 
                     <div style={{ fontSize: '14px', fontWeight: 500, marginTop: '16px' }}>
-                        <Text>Market Visibility</Text>
+                        Market Visibility
                         <div style={{
                             marginTop: '8px',
                             border: '1px solid #dfe3e8',

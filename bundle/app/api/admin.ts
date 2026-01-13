@@ -1,5 +1,52 @@
 import axios from "axios";
 
+//查询已发布主题数据
+export const queryThemes = async ({
+    shop,
+    accessToken,
+}: {
+    shop: string;
+    accessToken: string;
+}) => {
+    try {
+        const gql = `{
+            themes(roles: MAIN, first: 1) {
+                nodes {
+                    files(filenames: "config/settings_data.json") {
+                        nodes {
+                            body {
+                                ... on OnlineStoreThemeFileBodyText {
+                                __typename
+                                content
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }`;
+
+        const { data } = await axios.post(
+            `https://${shop}/admin/api/${process.env.GRAPHQL_VERSION}/graphql.json`,
+            { query: gql },
+            {
+                headers: {
+                    "X-Shopify-Access-Token": accessToken,
+                },
+            }
+        );
+
+        const res = data?.data;
+
+        console.log(`${shop} queryThemes: `, res);
+
+        return res;
+    } catch (error) {
+        console.error(`${shop} Error queryThemes: `, error);
+        return null;
+    }
+};
+
 //查询markets数据
 export const queryMarkets = async ({
     shop,

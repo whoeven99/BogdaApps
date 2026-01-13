@@ -494,7 +494,7 @@ const Index = () => {
         if (confirmFetcher.data) {
             if (confirmFetcher.data.success) {
                 shopify.toast.show(t("Offer created successfully"))
-                navigate('/app/offers');
+                navigate('/app');
             }
         }
     }, [confirmFetcher.data])
@@ -591,7 +591,7 @@ const Index = () => {
     return (
         <div className="polaris-page">
 
-            <Header backUrl="/app/offers" title="Create New Offer" />
+            <Header backUrl="/app" title="Create New Offer" />
 
             <div className="polaris-card" style={{ marginBottom: '80px' }}>
                 <div

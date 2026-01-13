@@ -1,7 +1,7 @@
-import { LoaderFunctionArgs } from "@remix-run/node";
-import { useNavigate } from "@remix-run/react";
+import { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
+import { useFetcher, useLoaderData, useNavigate } from "@remix-run/react";
 import { authenticate } from "app/shopify.server";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Copy,
   Trash2,
@@ -10,16 +10,84 @@ import {
   ArrowUp,
   ArrowDown,
 } from "lucide-react";
+import { queryThemes } from "app/api/admin";
+import { globalStore } from "app/globalStore";
 
-export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
-
-  return null;
+export const loader = async () => {
+  return {
+    ciwiBundleExtensionId: process.env.SHOPIFY_CIWI_BUNDLE_EXTENSION_ID as string,
+    ciwiBundleExtensionType: process.env.SHOPIFY_CIWI_BUNDLE_EXTENSION_TYPE as string,
+  };
 };
+
+export const action = async ({ request }: ActionFunctionArgs) => {
+  const adminAuthResult = await authenticate.admin(request);
+  const { shop, accessToken } = adminAuthResult.session;
+
+  const formData = await request.formData();
+
+  const themesRequestBody = JSON.parse(
+    formData.get("themesRequestBody") as string,
+  );
+
+  switch (true) {
+    case !!themesRequestBody:
+      try {
+        const themesData = await queryThemes({
+          ...themesRequestBody,
+          shop,
+          accessToken,
+        });
+
+        if (themesData) {
+          return {
+            success: true,
+            errorCode: 0,
+            errorMsg: "",
+            response: themesData,
+          }
+        }
+
+        return {
+          success: false,
+          errorCode: 10001,
+          errorMsg: "SERVER_ERROR",
+          response: null,
+        }
+      } catch (error) {
+        console.error(`${shop} themesRequestBody Error: `, error);
+        return {
+          success: false,
+          errorCode: 10001,
+          errorMsg: "SERVER_ERROR",
+          response: null,
+        }
+      }
+    default:
+      console.error(`${shop} Request with unrecognized key: `, formData);
+      return {
+        success: false,
+        errorCode: 10001,
+        errorMsg: "SERVER_ERROR",
+        response: null,
+      }
+  };
+}
 
 const Index = () => {
   const navigate = useNavigate();
+
+  const themeFetcher = useFetcher<any>();
+
+  const { ciwiBundleExtensionId, ciwiBundleExtensionType } = useLoaderData<typeof loader>();
+
   const [isThemeExtensionEnabled, setIsThemeExtensionEnabled] = useState(true);
+
+  const blockUrl = useMemo(
+    () =>
+      `https://${globalStore.shop}/admin/themes/current/editor?context=apps&activateAppId=${ciwiBundleExtensionId}/ciwi_bundle_main`,
+    [globalStore.shop, ciwiBundleExtensionId]
+  );
 
   const offers = [
     {
@@ -75,6 +143,46 @@ const Index = () => {
       confidence: 78,
     },
   ];
+
+  useEffect(() => {
+    themeFetcher.submit(
+      {
+        themesRequestBody: JSON.stringify({})
+      },
+      {
+        method: "POST",
+      },
+    );
+    const themeExtensionEnabled = localStorage.getItem("themeExtensionEnabled");
+    if (themeExtensionEnabled) {
+      setIsThemeExtensionEnabled(themeExtensionEnabled === "true");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (themeFetcher.data) {
+      if (themeFetcher.data.success) {
+        const extensionsData =
+          themeFetcher.data.response?.themes?.nodes[0]?.files?.nodes[0]?.body?.content || "{}";
+        const jsonString = extensionsData.replace(/\/\*[\s\S]*?\*\//g, "").trim();
+        const blocks = JSON.parse(jsonString)?.current?.blocks;
+        if (blocks) {
+          const extensionJson: any = Object.values(blocks).find(
+            (block: any) => block.type === ciwiBundleExtensionType,
+          );
+          if (extensionJson) {
+            if (!extensionJson.disabled) {
+              setIsThemeExtensionEnabled(false);
+              localStorage.setItem("themeExtensionEnabled", "false");
+            } else {
+              setIsThemeExtensionEnabled(true);
+              localStorage.setItem("themeExtensionEnabled", "true");
+            }
+          }
+        }
+      }
+    }
+  }, [themeFetcher.data]);
 
   return (
     <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px]">
@@ -159,49 +267,56 @@ const Index = () => {
         </div>
 
         {/* Theme Extension Widget */}
-        <div className="bg-white rounded-[8px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] p-[20px]">
+        <div
+          className="bg-white rounded-[8px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] p-[20px]"
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "space-between"
+          }}
+        >
           {/* Header with Active Status */}
-          <div className="flex items-center justify-between mb-[16px]">
-            <h2 className="font-['Inter'] font-semibold text-[20px] leading-[30px] text-[#202223] tracking-[-0.4492px] m-0">
-              Theme extension
-            </h2>
-            <div
-              className={`flex items-center gap-[6px] px-[8px] py-[4px] rounded-[4px] ${isThemeExtensionEnabled ? "bg-[#d1f7c4]" : "bg-[#f4f6f8]"}`}
-            >
+          <div>
+            <div className="flex items-center justify-between mb-[16px]">
+              <h2 className="font-['Inter'] font-semibold text-[20px] leading-[30px] text-[#202223] tracking-[-0.4492px] m-0">
+                Theme extension
+              </h2>
               <div
-                className={`w-[8px] h-[8px] rounded-full ${isThemeExtensionEnabled ? "bg-[#108043]" : "bg-[#6d7175]"}`}
-              ></div>
-              <span
-                className={`font-['Inter'] font-medium text-[14px] leading-[21px] tracking-[-0.1504px] ${isThemeExtensionEnabled ? "text-[#108043]" : "text-[#6d7175]"}`}
+                className={`flex items-center gap-[6px] px-[8px] py-[4px] rounded-[4px] ${isThemeExtensionEnabled ? "bg-[#f4f6f8]" : "bg-[#d1f7c4]"}`}
               >
-                {isThemeExtensionEnabled ? "Active" : "Inactive"}
-              </span>
+                <div
+                  className={`w-[8px] h-[8px] rounded-full ${isThemeExtensionEnabled ? "bg-[#6d7175]" : "bg-[#108043]"}`}
+                ></div>
+                <span
+                  className={`font-['Inter'] font-medium text-[14px] leading-[21px] tracking-[-0.1504px] ${isThemeExtensionEnabled ? "text-[#6d7175]" : "text-[#108043]"}`}
+                >
+                  {isThemeExtensionEnabled ? "Inactive" : "Active"}
+                </span>
+              </div>
             </div>
-          </div>
 
-          {/* Description */}
-          <p className="font-['Inter'] font-normal text-[16px] leading-[25.6px] text-[#202223] tracking-[-0.3125px] mb-[20px]">
-            {isThemeExtensionEnabled
-              ? "Bundles widget is visible in product pages."
-              : "Bundles widget is currently disabled."}
-          </p>
+            {/* Description */}
+            <p className="font-['Inter'] font-normal text-[16px] leading-[25.6px] text-[#202223] tracking-[-0.3125px] mb-[20px]">
+              {isThemeExtensionEnabled
+                ? "Bundles widget is currently disabled."
+                : "Bundles widget is visible in product pages."}
+            </p>
+          </div>
 
           {/* Enable/Disable and Need help buttons */}
           <div className="flex flex-col gap-[12px]">
             <button
-              onClick={() =>
-                setIsThemeExtensionEnabled(!isThemeExtensionEnabled)
-              }
+              onClick={() => open(blockUrl, "_blank")}
               className={`px-[16px] py-[8px] rounded-[6px] font-['Inter'] font-medium text-[14px] leading-[21px] tracking-[-0.1504px] cursor-pointer transition-colors w-full border-0 ${isThemeExtensionEnabled
-                ? "bg-white border border-[#dfe3e8] text-[#d72c0d] hover:bg-[#fef3f2]"
-                : "bg-[#008060] text-white hover:bg-[#006e52]"
+                ? "bg-[#008060] text-white hover:bg-[#006e52]"
+                : "bg-white border border-[#dfe3e8] text-[#d72c0d] hover:bg-[#fef3f2]"
                 }`}
             >
-              {isThemeExtensionEnabled ? "Disable" : "Enable"}
+              {isThemeExtensionEnabled ? "Enable" : "Disable"}
             </button>
-            <button className="bg-white border border-[#dfe3e8] px-[16px] py-[8px] rounded-[6px] font-['Inter'] font-medium text-[14px] leading-[21px] text-[#202223] tracking-[-0.1504px] cursor-pointer hover:bg-[#f4f6f8] transition-colors w-full">
+            {/* <button className="bg-white border border-[#dfe3e8] px-[16px] py-[8px] rounded-[6px] font-['Inter'] font-medium text-[14px] leading-[21px] text-[#202223] tracking-[-0.1504px] cursor-pointer hover:bg-[#f4f6f8] transition-colors w-full">
               Need help?
-            </button>
+            </button> */}
           </div>
         </div>
       </div>
@@ -346,25 +461,25 @@ const Index = () => {
                 </td>
                 <td className="p-[12px] border-b border-[#dfe3e8]">
                   <div className="flex items-center gap-[8px]">
-                    <button
+                    {/* <button
                       className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[4px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
                       onClick={() => navigate(`/app/ABtest/${offer.id}`)}
                       title="Analytics"
                     >
                       <ChartBar size={16} />
-                    </button>
+                    </button> */}
                     <button
                       className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[4px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
                       title="Edit"
                     >
                       <Pencil size={16} />
                     </button>
-                    <button
+                    {/* <button
                       className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[4px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
                       title="Copy"
                     >
                       <Copy size={16} />
-                    </button>
+                    </button> */}
                     <button
                       className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#d72c0d] p-[4px] rounded-[4px] hover:bg-[rgba(215,44,13,0.1)] transition-colors"
                       title="Delete"
@@ -499,18 +614,18 @@ const Index = () => {
         </div>
 
         {/* View All Button at Bottom */}
-        <div className="flex justify-center mt-[16px] sm:mt-[20px] pt-[16px] border-t border-[#dfe3e8]">
+        {/* <div className="flex justify-center mt-[16px] sm:mt-[20px] pt-[16px] border-t border-[#dfe3e8]">
           <button
             className="text-[#008060] font-['Inter'] font-medium text-[14px] leading-[21px] tracking-[-0.1504px] bg-transparent border-0 cursor-pointer hover:bg-[rgba(0,128,96,0.1)] px-[16px] py-[8px] rounded-[6px]"
             onClick={() => navigate("/app/offers")}
           >
             View All Offers
           </button>
-        </div>
+        </div> */}
       </div>
 
       {/* A/B Tests Card - Full Width */}
-      <div className="bg-white rounded-[8px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] p-[16px] sm:p-[20px]">
+      {/* <div className="bg-white rounded-[8px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] p-[16px] sm:p-[20px]">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-[12px] sm:gap-0 mb-[16px]">
           <h2 className="font-['Inter'] font-semibold text-[18px] sm:text-[20px] leading-[27px] sm:leading-[30px] text-[#202223] tracking-[-0.4492px] m-0">
             A/B Tests
@@ -523,7 +638,6 @@ const Index = () => {
           </button>
         </div>
 
-        {/* Desktop Table */}
         <table className="hidden md:table w-full border-collapse">
           <thead>
             <tr>
@@ -691,7 +805,6 @@ const Index = () => {
           </tbody>
         </table>
 
-        {/* Mobile Cards */}
         <div className="md:hidden space-y-[12px]">
           {abTests.map((test) => (
             <div
@@ -808,7 +921,6 @@ const Index = () => {
           ))}
         </div>
 
-        {/* View All Button at Bottom */}
         <div className="flex justify-center mt-[16px] sm:mt-[20px] pt-[16px] border-t border-[#dfe3e8]">
           <button
             className="text-[#008060] font-['Inter'] font-medium text-[14px] leading-[21px] tracking-[-0.1504px] bg-transparent border-0 cursor-pointer hover:bg-[rgba(0,128,96,0.1)] px-[16px] py-[8px] rounded-[6px]"
@@ -817,7 +929,7 @@ const Index = () => {
             View All A/B Tests
           </button>
         </div>
-      </div>
+      </div> */}
     </div>
   );
 };
