@@ -1,0 +1,38 @@
+#正式环境还没生成暂时使用本地配置
+
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+client_id = "8fb76a03c5a927bd8551572d7190ea8f"
+name = "Ciwi.ai:Bundle(Test)"
+application_url = "https://bundletest.onrender.com"
+embedded = true
+
+[webhooks]
+api_version = "2025-04"
+
+  [[webhooks.subscriptions]]
+  topics = [
+  "app_subscriptions/update",
+  "app/uninstalled",
+  "app_purchases_one_time/update"
+]
+  uri = "/webhooks"
+  compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "write_discounts,write_products,read_customers,write_customers,read_markets,read_themes"
+
+[auth]
+redirect_urls = [
+  "https://bundletest.onrender.com/auth/callback",
+  "https://bundletest.onrender.com/auth/shopify/callback",
+  "https://bundletest.onrender.com/api/auth/callback"
+]
+
+[pos]
+embedded = false
+
+[build]
+automatically_update_urls_on_dev = true
+dev_store_url = "quickstart-0f992326.myshopify.com"
+
