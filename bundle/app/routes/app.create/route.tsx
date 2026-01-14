@@ -343,8 +343,6 @@ const Index = () => {
     const [step, setStep] = useState(1);
 
     const [selectedProducts, setSelectedProducts] = useState<ProductVariantsDataType[]>([]);
-    // const [customersData, setCustomersData] = useState<{ label: string; value: string; }[]>([]);
-    // const [customerSegmentsData, setCustomerSegmentsData] = useState<{ label: string; value: string; }[]>([]);
     const [marketVisibilitySettingData, setMarketVisibilitySettingData] = useState<{
         value: string;
         label: string;
@@ -493,11 +491,58 @@ const Index = () => {
     useEffect(() => {
         if (confirmFetcher.data) {
             if (confirmFetcher.data.success) {
+                const discountId = confirmFetcher.data.response?.discountAutomaticAppCreate?.automaticAppDiscount?.discountId
+                console.log("discountId: ", discountId);
+                if (discountId)
+                    localStorage.setItem("ciwi_new_offer_id", discountId)
                 shopify.toast.show(t("Offer created successfully"))
                 navigate('/app');
             }
         }
     }, [confirmFetcher.data])
+
+    const nextStepCheckAndConfirm = () => {
+        switch (true) {
+            case step == 1:
+                if (!basicInformation?.offerName) {
+                    shopify.toast.show(t("Offer Name can't be empty"))
+                    break;
+                }
+                setStep(step + 1)
+                break;
+            case step == 2:
+                if (!selectedProducts?.length) {
+                    shopify.toast.show(t("Please select at least one product"))
+                    break;
+                }
+                if (!discountRules?.length) {
+                    shopify.toast.show(t("Please select at least one discount rule"))
+                    break;
+                }
+                if (discountRules.some(rule => rule.buyQty == 0)) {
+                    shopify.toast.show(t("Buy quantity can't be 0"))
+                    break;
+                }
+                setStep(step + 1)
+                break;
+            case step == 3:
+                setStep(step + 1)
+                break;
+            case step == 4:
+                if (!targetingSettingsData?.marketVisibilitySettingData.length) {
+                    shopify.toast.show(t("Please select at least one market"))
+                    break;
+                }
+                if (!targetingSettingsData?.startsAt) {
+                    shopify.toast.show(t("Please select start date"))
+                    break;
+                }
+                handleConfirm();
+                break;
+            default:
+                break;
+        }
+    }
 
     const handleConfirm = () => {
         const selectedProductVariantIds = selectedProducts.map((product) => product.id.split("gid://shopify/ProductVariant/")[1]);
@@ -606,7 +651,7 @@ const Index = () => {
                     {steps.map((stepName, index) => {
                         const stepNumber = index + 1;
                         const isActive = step === stepNumber;
-                        const isClickable = stepNumber <= step + 1;
+                        const isClickable = stepNumber <= step;
 
                         return (
                             <div
@@ -638,7 +683,13 @@ const Index = () => {
                 </div>
 
                 <div className="polaris-layout">
-                    {step === 1 && <BasicInformationSetting offerTypes={offerTypes} basicInformation={basicInformation} setBasicInformation={setBasicInformation} />}
+                    {step === 1 &&
+                        <BasicInformationSetting
+                            offerTypes={offerTypes}
+                            basicInformation={basicInformation}
+                            setBasicInformation={setBasicInformation}
+                        />
+                    }
 
                     {step === 2 && (
                         <>
@@ -674,21 +725,12 @@ const Index = () => {
                     )}
 
                     {step === 4 && (
-                        <>
-                            <SegmentModal
-                                mainModalType={mainModalType}
-                                setMainModalType={setMainModalType}
-                                targetingSettingsData={targetingSettingsData}
-                                setTargetingSettingsData={setTargetingSettingsData}
-                            />
-
-                            <ScheduleAndBudgetSetting
-                                targetingSettingsData={targetingSettingsData}
-                                setTargetingSettingsData={setTargetingSettingsData}
-                                setMainModalType={setMainModalType}
-                                marketVisibilitySettingData={marketVisibilitySettingData}
-                            />
-                        </>
+                        <ScheduleAndBudgetSetting
+                            targetingSettingsData={targetingSettingsData}
+                            setTargetingSettingsData={setTargetingSettingsData}
+                            setMainModalType={setMainModalType}
+                            marketVisibilitySettingData={marketVisibilitySettingData}
+                        />
                     )}
                 </div>
             </div>
@@ -710,20 +752,17 @@ const Index = () => {
                 boxShadow: '0 -2px 8px rgba(0, 0, 0, 0.1)'
             }}>
                 {step > 1 && (
-                    <button
-                        className="polaris-button polaris-button--plain"
+                    <Button
                         onClick={() => setStep(step - 1)}
                     >
                         Previous
-                    </button>
+                    </Button>
                 )}
                 <Button
                     className="polaris-button"
                     loading={confirmFetcher.state === "submitting"}
                     onClick={
-                        () => {
-                            step < 4 ? setStep(step + 1) : handleConfirm()
-                        }
+                        () => nextStepCheckAndConfirm()
                     }
                 >
                     {step === 4 ? 'Create Offer' : 'Next'}

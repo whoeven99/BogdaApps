@@ -10,8 +10,20 @@ import {
   ArrowUp,
   ArrowDown,
 } from "lucide-react";
-import { queryThemes } from "app/api/admin";
+import { mutationDiscountAutomaticActivate, mutationDiscountAutomaticDeactivate, queryDiscountNodes, queryThemes } from "app/api/admin";
 import { globalStore } from "app/globalStore";
+import { useTranslation } from "react-i18next";
+import { Switch } from "antd";
+
+interface OfferType {
+  id: number;
+  name: string;
+  status: string;
+  gmv: string;
+  conversion: string;
+  exposurePV: string;
+  addToCartPV: string;
+}
 
 export const loader = async () => {
   return {
@@ -28,6 +40,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   const themesRequestBody = JSON.parse(
     formData.get("themesRequestBody") as string,
+  );
+  const discountNodeRequestBody = JSON.parse(
+    formData.get("discountNodeRequestBody") as string,
+  );
+  const discountNodeStatusRequestBody = JSON.parse(
+    formData.get("discountNodeStatusRequestBody") as string,
   );
 
   switch (true) {
@@ -63,6 +81,85 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           response: null,
         }
       }
+    case !!discountNodeRequestBody:
+      try {
+        const discountNodeData = await queryDiscountNodes({
+          ...discountNodeRequestBody,
+          shop,
+          accessToken,
+        });
+
+        if (discountNodeData) {
+          return {
+            success: true,
+            errorCode: 0,
+            errorMsg: "",
+            response: discountNodeData,
+          }
+        }
+
+        return {
+          success: false,
+          errorCode: 10001,
+          errorMsg: "SERVER_ERROR",
+          response: null,
+        }
+      } catch (error) {
+        console.error(`${shop} discountNodeRequestBody Error: `, error);
+        return {
+          success: false,
+          errorCode: 10001,
+          errorMsg: "SERVER_ERROR",
+          response: null,
+        }
+      }
+    case !!discountNodeStatusRequestBody:
+      try {
+        let discountNodeStatusData = null;
+
+        if (discountNodeStatusRequestBody.status) {
+          discountNodeStatusData = await mutationDiscountAutomaticActivate({
+            shop,
+            accessToken: accessToken || "",
+            variables: {
+              id: discountNodeStatusRequestBody.id,
+            }
+          });
+        } else {
+          discountNodeStatusData = await mutationDiscountAutomaticDeactivate({
+            shop,
+            accessToken: accessToken || "",
+            variables: {
+              id: discountNodeStatusRequestBody.id,
+            }
+          });
+        }
+
+
+        if (discountNodeStatusData) {
+          return {
+            success: true,
+            errorCode: 0,
+            errorMsg: "",
+            response: discountNodeStatusData,
+          }
+        }
+
+        return {
+          success: false,
+          errorCode: 10001,
+          errorMsg: "SERVER_ERROR",
+          response: null,
+        }
+      } catch (error) {
+        console.error(`${shop} discountNodeStatusRequestBody Error: `, error);
+        return {
+          success: false,
+          errorCode: 10001,
+          errorMsg: "SERVER_ERROR",
+          response: null,
+        }
+      }
     default:
       console.error(`${shop} Request with unrecognized key: `, formData);
       return {
@@ -76,12 +173,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 const Index = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
+  const discountNodeFetcher = useFetcher<any>();
+  const discountNodeStatusFetcher = useFetcher<any>();
   const themeFetcher = useFetcher<any>();
 
   const { ciwiBundleExtensionId, ciwiBundleExtensionType } = useLoaderData<typeof loader>();
 
   const [isThemeExtensionEnabled, setIsThemeExtensionEnabled] = useState(true);
+
+  const [offers, setOffers] = useState<OfferType[]>([]);
 
   const blockUrl = useMemo(
     () =>
@@ -89,60 +191,65 @@ const Index = () => {
     [globalStore.shop, ciwiBundleExtensionId]
   );
 
-  const offers = [
-    {
-      id: 1,
-      name: "Summer Bundle",
-      status: "Active",
-      gmv: "$12,430",
-      conversion: "3.2%",
-      exposurePV: "45,230",
-      addToCartPV: "8,920",
-    },
-    {
-      id: 2,
-      name: "Winter Sale Pack",
-      status: "Active",
-      gmv: "$8,920",
-      conversion: "2.8%",
-      exposurePV: "38,150",
-      addToCartPV: "7,200",
-    },
-    {
-      id: 3,
-      name: "Spring Collection",
-      status: "Paused",
-      gmv: "$5,640",
-      conversion: "1.9%",
-      exposurePV: "22,600",
-      addToCartPV: "4,100",
-    },
-  ];
+  const newOffer = useMemo(
+    () =>
+      localStorage.getItem("ciwi_new_offer_id") || ""
+    , [])
 
-  const abTests = [
-    {
-      id: 1,
-      name: "Summer Bundle Test",
-      status: "Running",
-      variant: "A vs B",
-      pv: "45,230",
-      extraGMV: "$1,240",
-      improvement: 15.3,
-      daysRunning: 14,
-      confidence: 95,
-    },
-    {
-      id: 2,
-      name: "Winter Promotion Test",
-      status: "Paused",
-      variant: "A vs B vs C",
-      pv: "38,150",
-      extraGMV: "$890",
-      improvement: -8.2,
-      daysRunning: 21,
-      confidence: 78,
-    },
-  ];
+  // const offers = [
+  //   {
+  //     id: 1,
+  //     name: "Summer Bundle",
+  //     status: "ACTIVE",
+  //     gmv: "$12,430",
+  //     conversion: "3.2%",
+  //     exposurePV: "45,230",
+  //     addToCartPV: "8,920",
+  //   },
+  //   {
+  //     id: 2,
+  //     name: "Winter Sale Pack",
+  //     status: "ACTIVE",
+  //     gmv: "$8,920",
+  //     conversion: "2.8%",
+  //     exposurePV: "38,150",
+  //     addToCartPV: "7,200",
+  //   },
+  //   {
+  //     id: 3,
+  //     name: "Spring Collection",
+  //     status: "Paused",
+  //     gmv: "$5,640",
+  //     conversion: "1.9%",
+  //     exposurePV: "22,600",
+  //     addToCartPV: "4,100",
+  //   },
+  // ];
+
+  // const abTests = [
+  //   {
+  //     id: 1,
+  //     name: "Summer Bundle Test",
+  //     status: "Running",
+  //     variant: "A vs B",
+  //     pv: "45,230",
+  //     extraGMV: "$1,240",
+  //     improvement: 15.3,
+  //     daysRunning: 14,
+  //     confidence: 95,
+  //   },
+  //   {
+  //     id: 2,
+  //     name: "Winter Promotion Test",
+  //     status: "Paused",
+  //     variant: "A vs B vs C",
+  //     pv: "38,150",
+  //     extraGMV: "$890",
+  //     improvement: -8.2,
+  //     daysRunning: 21,
+  //     confidence: 78,
+  //   },
+  // ];
 
   useEffect(() => {
     themeFetcher.submit(
@@ -153,9 +260,21 @@ const Index = () => {
         method: "POST",
       },
     );
-    const themeExtensionEnabled = localStorage.getItem("themeExtensionEnabled");
+    discountNodeFetcher.submit(
+      {
+        discountNodeRequestBody: JSON.stringify({})
+      },
+      {
+        method: "POST",
+      },
+    );
+    const themeExtensionEnabled = localStorage.getItem("ciwi_theme_extension_enabled");
+    const newOfferId = localStorage.getItem("ciwi_new_offer_id")
     if (themeExtensionEnabled) {
       setIsThemeExtensionEnabled(themeExtensionEnabled === "true");
+    }
+    if (newOfferId) {
+      localStorage.removeItem("ciwi_new_offer_id")
     }
   }, []);
 
@@ -171,18 +290,83 @@ const Index = () => {
             (block: any) => block.type === ciwiBundleExtensionType,
           );
           if (extensionJson) {
-            if (!extensionJson.disabled) {
+            if (extensionJson.disabled) {
               setIsThemeExtensionEnabled(false);
-              localStorage.setItem("themeExtensionEnabled", "false");
+              localStorage.setItem("ciwi_theme_extension_enabled", "false");
             } else {
               setIsThemeExtensionEnabled(true);
-              localStorage.setItem("themeExtensionEnabled", "true");
+              localStorage.setItem("ciwi_theme_extension_enabled", "true");
             }
           }
         }
       }
     }
   }, [themeFetcher.data]);
+
+  useEffect(() => {
+    if (discountNodeFetcher.data) {
+      if (discountNodeFetcher.data.success) {
+        const discountNodesData = discountNodeFetcher.data.response?.discountNodes?.nodes || [];
+        console.log("discountNodesData", discountNodesData);
+        const data = discountNodesData?.map((discountNode: any) => {
+          return {
+            id: discountNode?.id,
+            name: discountNode?.discount?.title,
+            status: discountNode?.discount?.status,
+            gmv: "",
+            conversion: "",
+            exposurePV: "",
+            addToCartPV: "",
+          };
+        }) ?? [];
+        setOffers(data);
+      }
+    }
+  }, [discountNodeFetcher.data]);
+
+  useEffect(() => {
+    if (discountNodeStatusFetcher.data) {
+      if (discountNodeStatusFetcher.data.success) {
+        console.log("discountNodeStatusFetcher.data", discountNodeStatusFetcher.data);
+        const id = discountNodeStatusFetcher.data.response?.automaticDiscountNode?.id;
+        const status = discountNodeStatusFetcher.data.response?.automaticDiscountNode?.automaticDiscount?.status;
+
+        const newOffers = offers.map(offer => {
+          if (offer.id === id) {
+            return {
+              ...offer,
+              status,
+            }
+          }
+          return offer;
+        })
+        setOffers(newOffers);
+      }
+    }
+  }, [discountNodeStatusFetcher.data]);
+
+  const switchDiscountStatus = (
+    {
+      id,
+      status,
+    }:
+      {
+        id: number,
+        status: boolean,
+      }
+  ) => {
+    discountNodeStatusFetcher.submit(
+      {
+        discountNodeStatusRequestBody: JSON.stringify({
+          id,
+          status,
+        })
+      },
+      {
+        method: "POST",
+      },
+    );
+  }
 
   return (
     <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px]">
@@ -282,15 +466,15 @@ const Index = () => {
                 Theme extension
               </h2>
               <div
-                className={`flex items-center gap-[6px] px-[8px] py-[4px] rounded-[4px] ${isThemeExtensionEnabled ? "bg-[#f4f6f8]" : "bg-[#d1f7c4]"}`}
+                className={`flex items-center gap-[6px] px-[8px] py-[4px] rounded-[4px] ${isThemeExtensionEnabled ? "bg-[#d1f7c4]" : "bg-[#f4f6f8]"}`}
               >
                 <div
-                  className={`w-[8px] h-[8px] rounded-full ${isThemeExtensionEnabled ? "bg-[#6d7175]" : "bg-[#108043]"}`}
+                  className={`w-[8px] h-[8px] rounded-full ${isThemeExtensionEnabled ? "bg-[#108043]" : "bg-[#6d7175]"}`}
                 ></div>
                 <span
-                  className={`font-['Inter'] font-medium text-[14px] leading-[21px] tracking-[-0.1504px] ${isThemeExtensionEnabled ? "text-[#6d7175]" : "text-[#108043]"}`}
+                  className={`font-['Inter'] font-medium text-[14px] leading-[21px] tracking-[-0.1504px] ${isThemeExtensionEnabled ? "text-[#108043]" : "text-[#6d7175]"}`}
                 >
-                  {isThemeExtensionEnabled ? "Inactive" : "Active"}
+                  {isThemeExtensionEnabled ? "Active" : "Inactive"}
                 </span>
               </div>
             </div>
@@ -298,8 +482,8 @@ const Index = () => {
             {/* Description */}
             <p className="font-['Inter'] font-normal text-[16px] leading-[25.6px] text-[#202223] tracking-[-0.3125px] mb-[20px]">
               {isThemeExtensionEnabled
-                ? "Bundles widget is currently disabled."
-                : "Bundles widget is visible in product pages."}
+                ? "Bundles widget is visible in product pages."
+                : "Bundles widget is currently disabled."}
             </p>
           </div>
 
@@ -308,11 +492,11 @@ const Index = () => {
             <button
               onClick={() => open(blockUrl, "_blank")}
               className={`px-[16px] py-[8px] rounded-[6px] font-['Inter'] font-medium text-[14px] leading-[21px] tracking-[-0.1504px] cursor-pointer transition-colors w-full border-0 ${isThemeExtensionEnabled
-                ? "bg-[#008060] text-white hover:bg-[#006e52]"
-                : "bg-white border border-[#dfe3e8] text-[#d72c0d] hover:bg-[#fef3f2]"
+                ? "bg-white border border-[#dfe3e8] text-[#d72c0d] hover:bg-[#fef3f2]"
+                : "bg-[#008060] text-white hover:bg-[#006e52]"
                 }`}
             >
-              {isThemeExtensionEnabled ? "Enable" : "Disable"}
+              {isThemeExtensionEnabled ? "Disable" : "Enable"}
             </button>
             {/* <button className="bg-white border border-[#dfe3e8] px-[16px] py-[8px] rounded-[6px] font-['Inter'] font-medium text-[14px] leading-[21px] text-[#202223] tracking-[-0.1504px] cursor-pointer hover:bg-[#f4f6f8] transition-colors w-full">
               Need help?
@@ -334,46 +518,165 @@ const Index = () => {
             Create New Offer
           </button>
         </div>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            height: "100%",
+          }}
+        >
+          {offers.length === 0 && <span className="font-['Inter'] font-normal text-[14px] text-[#6d7175]">{t("No offers found")}</span>}
+        </div>
 
         {/* Desktop Table */}
-        <table className="hidden md:table w-full border-collapse">
-          <thead>
-            <tr>
-              <th className="text-left p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-semibold text-[13px] leading-[20.8px] text-[#6d7175] tracking-[-0.0762px]">
-                Offer Name
-              </th>
-              <th className="text-left p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-semibold text-[13px] leading-[20.8px] text-[#6d7175] tracking-[-0.0762px]">
-                Status
-              </th>
-              <th className="text-left p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-semibold text-[13px] leading-[20.8px] text-[#6d7175] tracking-[-0.0762px]">
-                Exposure PV
-              </th>
-              <th className="text-left p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-semibold text-[13px] leading-[20.8px] text-[#6d7175] tracking-[-0.0762px]">
-                Add to Cart PV
-              </th>
-              <th className="text-left p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-semibold text-[13px] leading-[20.8px] text-[#6d7175] tracking-[-0.0762px]">
-                GMV
-              </th>
-              <th className="text-left p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-semibold text-[13px] leading-[20.8px] text-[#6d7175] tracking-[-0.0762px]">
-                Conversion
-              </th>
-              <th className="text-left p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-semibold text-[13px] leading-[20.8px] text-[#6d7175] tracking-[-0.0762px]">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody>
+        {offers.length > 0 &&
+          <table className="hidden md:table w-full border-collapse">
+            <thead>
+              <tr>
+                <th className="text-left p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-semibold text-[13px] leading-[20.8px] text-[#6d7175] tracking-[-0.0762px]">
+                  Offer Name
+                </th>
+                <th className="text-left p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-semibold text-[13px] leading-[20.8px] text-[#6d7175] tracking-[-0.0762px]">
+                  Status
+                </th>
+                <th className="text-left p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-semibold text-[13px] leading-[20.8px] text-[#6d7175] tracking-[-0.0762px]">
+                  Exposure PV
+                </th>
+                <th className="text-left p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-semibold text-[13px] leading-[20.8px] text-[#6d7175] tracking-[-0.0762px]">
+                  Add to Cart PV
+                </th>
+                <th className="text-left p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-semibold text-[13px] leading-[20.8px] text-[#6d7175] tracking-[-0.0762px]">
+                  GMV
+                </th>
+                <th className="text-left p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-semibold text-[13px] leading-[20.8px] text-[#6d7175] tracking-[-0.0762px]">
+                  Conversion
+                </th>
+                <th className="text-left p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-semibold text-[13px] leading-[20.8px] text-[#6d7175] tracking-[-0.0762px]">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {offers.map((offer) => (
+                <tr key={offer.id}>
+                  <td className="p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-normal text-[14px] leading-[22.4px] text-[#202223] tracking-[-0.1504px]">
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                      }}
+                    >
+                      {offer.name}
+                      {newOffer === offer.id.toString() && <span
+                        style={{
+                          backgroundColor: "#00A47C",
+                          color: "white",
+                          fontSize: "10px",
+                          fontWeight: 600,
+                          padding: "2px 6px",
+                          borderRadius: "4px",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.5px",
+                        }}
+                      >
+                        NEW
+                      </span>}
+                    </div>
+                  </td>
+                  <td className="p-[12px] border-b border-[#dfe3e8]">
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                      }}
+                    >
+                      <Switch
+                        checked={offer.status === "ACTIVE"}
+                        loading={discountNodeStatusFetcher.state === "submitting"}
+                        onChange={(e) => {
+                          switchDiscountStatus(
+                            {
+                              id: offer.id,
+                              status: e,
+                            }
+                          );
+                        }}
+                      />
+                      <span
+                        style={{
+                          fontSize: "14px",
+                          color:
+                            offer.status === "ACTIVE" ? "#108043" : "#6d7175",
+                          fontWeight: 500,
+                        }}
+                      >
+                        {offer.status}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-normal text-[14px] leading-[22.4px] text-[#202223] tracking-[-0.1504px]">
+                    {offer.exposurePV}
+                  </td>
+                  <td className="p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-normal text-[14px] leading-[22.4px] text-[#202223] tracking-[-0.1504px]">
+                    {offer.addToCartPV}
+                  </td>
+                  <td className="p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-normal text-[14px] leading-[22.4px] text-[#202223] tracking-[-0.1504px]">
+                    {offer.gmv}
+                  </td>
+                  <td className="p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-normal text-[14px] leading-[22.4px] text-[#202223] tracking-[-0.1504px]">
+                    {offer.conversion}
+                  </td>
+                  <td className="p-[12px] border-b border-[#dfe3e8]">
+                    <div className="flex items-center gap-[8px]">
+                      {/* <button
+                      className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[4px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
+                      onClick={() => navigate(`/app/ABtest/${offer.id}`)}
+                      title="Analytics"
+                    >
+                      <ChartBar size={16} />
+                    </button> */}
+                      <button
+                        className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[4px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
+                        title="Edit"
+                      >
+                        <Pencil size={16} />
+                      </button>
+                      {/* <button
+                      className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[4px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
+                      title="Copy"
+                    >
+                      <Copy size={16} />
+                    </button> */}
+                      <button
+                        className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#d72c0d] p-[4px] rounded-[4px] hover:bg-[rgba(215,44,13,0.1)] transition-colors"
+                        title="Delete"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        }
+
+        {/* Mobile Cards */}
+        {offers.length > 0 &&
+          <div className="md:hidden space-y-[12px]">
             {offers.map((offer) => (
-              <tr key={offer.id}>
-                <td className="p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-normal text-[14px] leading-[22.4px] text-[#202223] tracking-[-0.1504px]">
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                    }}
-                  >
-                    {offer.name}
+              <div
+                key={offer.id}
+                className="border border-[#dfe3e8] rounded-[8px] p-[16px]"
+              >
+                <div className="flex items-start justify-between mb-[12px]">
+                  <div className="flex items-center gap-[8px] flex-wrap">
+                    <span className="font-['Inter'] font-medium text-[16px] text-[#202223]">
+                      {offer.name}
+                    </span>
                     <span
                       style={{
                         backgroundColor: "#00A47C",
@@ -389,229 +692,80 @@ const Index = () => {
                       NEW
                     </span>
                   </div>
-                </td>
-                <td className="p-[12px] border-b border-[#dfe3e8]">
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                    }}
-                  >
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        // Toggle status logic here
-                      }}
-                      style={{
-                        position: "relative",
-                        width: "44px",
-                        height: "24px",
-                        backgroundColor:
-                          offer.status === "Active" ? "#008060" : "#c4cdd5",
-                        border: "none",
-                        borderRadius: "12px",
-                        cursor: "pointer",
-                        transition: "background-color 0.2s",
-                        padding: 0,
-                      }}
-                      title={
-                        offer.status === "Active"
-                          ? "Click to deactivate"
-                          : "Click to activate"
-                      }
-                    >
-                      <span
-                        style={{
-                          position: "absolute",
-                          top: "2px",
-                          left: offer.status === "Active" ? "22px" : "2px",
-                          width: "20px",
-                          height: "20px",
-                          backgroundColor: "white",
-                          borderRadius: "50%",
-                          transition: "left 0.2s",
-                          boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
-                        }}
-                      />
-                    </button>
-                    <span
-                      style={{
-                        fontSize: "14px",
-                        color:
-                          offer.status === "Active" ? "#108043" : "#6d7175",
-                        fontWeight: 500,
-                      }}
-                    >
-                      {offer.status}
-                    </span>
-                  </div>
-                </td>
-                <td className="p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-normal text-[14px] leading-[22.4px] text-[#202223] tracking-[-0.1504px]">
-                  {offer.exposurePV}
-                </td>
-                <td className="p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-normal text-[14px] leading-[22.4px] text-[#202223] tracking-[-0.1504px]">
-                  {offer.addToCartPV}
-                </td>
-                <td className="p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-normal text-[14px] leading-[22.4px] text-[#202223] tracking-[-0.1504px]">
-                  {offer.gmv}
-                </td>
-                <td className="p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-normal text-[14px] leading-[22.4px] text-[#202223] tracking-[-0.1504px]">
-                  {offer.conversion}
-                </td>
-                <td className="p-[12px] border-b border-[#dfe3e8]">
-                  <div className="flex items-center gap-[8px]">
-                    {/* <button
-                      className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[4px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
-                      onClick={() => navigate(`/app/ABtest/${offer.id}`)}
-                      title="Analytics"
-                    >
-                      <ChartBar size={16} />
-                    </button> */}
-                    <button
-                      className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[4px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
-                      title="Edit"
-                    >
-                      <Pencil size={16} />
-                    </button>
-                    {/* <button
-                      className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[4px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
-                      title="Copy"
-                    >
-                      <Copy size={16} />
-                    </button> */}
-                    <button
-                      className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#d72c0d] p-[4px] rounded-[4px] hover:bg-[rgba(215,44,13,0.1)] transition-colors"
-                      title="Delete"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        {/* Mobile Cards */}
-        <div className="md:hidden space-y-[12px]">
-          {offers.map((offer) => (
-            <div
-              key={offer.id}
-              className="border border-[#dfe3e8] rounded-[8px] p-[16px]"
-            >
-              <div className="flex items-start justify-between mb-[12px]">
-                <div className="flex items-center gap-[8px] flex-wrap">
-                  <span className="font-['Inter'] font-medium text-[16px] text-[#202223]">
-                    {offer.name}
-                  </span>
-                  <span
-                    style={{
-                      backgroundColor: "#00A47C",
-                      color: "white",
-                      fontSize: "10px",
-                      fontWeight: 600,
-                      padding: "2px 6px",
-                      borderRadius: "4px",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.5px",
-                    }}
-                  >
-                    NEW
-                  </span>
                 </div>
-              </div>
 
-              <div className="flex items-center gap-[8px] mb-[12px]">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                  }}
-                  style={{
-                    position: "relative",
-                    width: "44px",
-                    height: "24px",
-                    backgroundColor:
-                      offer.status === "Active" ? "#008060" : "#c4cdd5",
-                    border: "none",
-                    borderRadius: "12px",
-                    cursor: "pointer",
-                    transition: "background-color 0.2s",
-                    padding: 0,
-                  }}
-                >
-                  <span
-                    style={{
-                      position: "absolute",
-                      top: "2px",
-                      left: offer.status === "Active" ? "22px" : "2px",
-                      width: "20px",
-                      height: "20px",
-                      backgroundColor: "white",
-                      borderRadius: "50%",
-                      transition: "left 0.2s",
-                      boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                <div className="flex items-center gap-[8px] mb-[12px]">
+                  <Switch
+                    checked={offer.status === "ACTIVE"}
+                    loading={discountNodeStatusFetcher.state === "submitting"}
+                    onChange={(e) => {
+                      switchDiscountStatus(
+                        {
+                          id: offer.id,
+                          status: e,
+                        }
+                      );
                     }}
                   />
-                </button>
-                <span
-                  style={{
-                    fontSize: "14px",
-                    color: offer.status === "Active" ? "#108043" : "#6d7175",
-                    fontWeight: 500,
-                  }}
-                >
-                  {offer.status}
-                </span>
-              </div>
+                  <span
+                    style={{
+                      fontSize: "14px",
+                      color: offer.status === "ACTIVE" ? "#108043" : "#6d7175",
+                      fontWeight: 500,
+                    }}
+                  >
+                    {offer.status}
+                  </span>
+                </div>
 
-              <div className="grid grid-cols-2 gap-[12px] mb-[12px]">
-                <div>
-                  <div className="text-[12px] text-[#6d7175] mb-[4px]">GMV</div>
-                  <div className="text-[14px] font-medium text-[#202223]">
-                    {offer.gmv}
+                <div className="grid grid-cols-2 gap-[12px] mb-[12px]">
+                  <div>
+                    <div className="text-[12px] text-[#6d7175] mb-[4px]">GMV</div>
+                    <div className="text-[14px] font-medium text-[#202223]">
+                      {offer.gmv}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[12px] text-[#6d7175] mb-[4px]">
+                      Conversion
+                    </div>
+                    <div className="text-[14px] font-medium text-[#202223]">
+                      {offer.conversion}
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <div className="text-[12px] text-[#6d7175] mb-[4px]">
-                    Conversion
-                  </div>
-                  <div className="text-[14px] font-medium text-[#202223]">
-                    {offer.conversion}
-                  </div>
+
+                <div className="flex items-center gap-[8px] pt-[12px] border-t border-[#dfe3e8]">
+                  <button
+                    className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[8px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
+                    onClick={() => navigate(`/app/ABtest/${offer.id}`)}
+                    title="Analytics"
+                  >
+                    <ChartBar size={18} />
+                  </button>
+                  <button
+                    className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[8px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
+                    title="Edit"
+                  >
+                    <Pencil size={18} />
+                  </button>
+                  <button
+                    className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[8px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
+                    title="Copy"
+                  >
+                    <Copy size={18} />
+                  </button>
+                  <button
+                    className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#d72c0d] p-[8px] rounded-[4px] hover:bg-[rgba(215,44,13,0.1)] transition-colors"
+                    title="Delete"
+                  >
+                    <Trash2 size={18} />
+                  </button>
                 </div>
               </div>
-
-              <div className="flex items-center gap-[8px] pt-[12px] border-t border-[#dfe3e8]">
-                <button
-                  className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[8px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
-                  onClick={() => navigate(`/app/ABtest/${offer.id}`)}
-                  title="Analytics"
-                >
-                  <ChartBar size={18} />
-                </button>
-                <button
-                  className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[8px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
-                  title="Edit"
-                >
-                  <Pencil size={18} />
-                </button>
-                <button
-                  className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[8px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
-                  title="Copy"
-                >
-                  <Copy size={18} />
-                </button>
-                <button
-                  className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#d72c0d] p-[8px] rounded-[4px] hover:bg-[rgba(215,44,13,0.1)] transition-colors"
-                  title="Delete"
-                >
-                  <Trash2 size={18} />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        }
 
         {/* View All Button at Bottom */}
         {/* <div className="flex justify-center mt-[16px] sm:mt-[20px] pt-[16px] border-t border-[#dfe3e8]">
