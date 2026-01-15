@@ -38,9 +38,9 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                     </label>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
                         <div
-                            onClick={() => setStyleConfigData({ ...styleConfigData, base_style: 'vertical_stack' })}
+                            onClick={() => setStyleConfigData({ ...styleConfigData, layout: { base_style: 'vertical_stack' } })}
                             style={{
-                                border: styleConfigData.base_style === 'vertical_stack' ? '2px solid #008060' : '2px solid #dfe3e8',
+                                border: styleConfigData.layout.base_style === 'vertical_stack' ? '2px solid #008060' : '2px solid #dfe3e8',
                                 borderRadius: '8px',
                                 padding: '16px',
                                 cursor: 'pointer',
@@ -51,9 +51,9 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                             <div style={{ fontSize: '12px', color: '#6d7175' }}>Products stacked vertically</div>
                         </div>
                         <div
-                            onClick={() => setStyleConfigData({ ...styleConfigData, base_style: 'horizontal_grid' })}
+                            onClick={() => setStyleConfigData({ ...styleConfigData, layout: { base_style: 'horizontal_grid' } })}
                             style={{
-                                border: styleConfigData.base_style === 'horizontal_grid' ? '2px solid #008060' : '2px solid #dfe3e8',
+                                border: styleConfigData.layout.base_style === 'horizontal_grid' ? '2px solid #008060' : '2px solid #dfe3e8',
                                 borderRadius: '8px',
                                 padding: '16px',
                                 cursor: 'pointer',
@@ -63,9 +63,9 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                             <div style={{ fontSize: '12px', color: '#6d7175' }}>Products in a row</div>
                         </div>
                         <div
-                            onClick={() => setStyleConfigData({ ...styleConfigData, base_style: 'card_grid' })}
+                            onClick={() => setStyleConfigData({ ...styleConfigData, layout: { base_style: 'card_grid' } })}
                             style={{
-                                border: styleConfigData.base_style === 'card_grid' ? '2px solid #008060' : '2px solid #dfe3e8',
+                                border: styleConfigData.layout.base_style === 'card_grid' ? '2px solid #008060' : '2px solid #dfe3e8',
                                 borderRadius: '8px',
                                 padding: '16px',
                                 cursor: 'pointer',
@@ -75,9 +75,9 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                             <div style={{ fontSize: '12px', color: '#6d7175' }}>2x2 grid layout</div>
                         </div>
                         <div
-                            onClick={() => setStyleConfigData({ ...styleConfigData, base_style: 'compact_list' })}
+                            onClick={() => setStyleConfigData({ ...styleConfigData, layout: { base_style: 'compact_list' } })}
                             style={{
-                                border: styleConfigData.base_style === 'compact_list' ? '2px solid #008060' : '2px solid #dfe3e8',
+                                border: styleConfigData.layout.base_style === 'compact_list' ? '2px solid #008060' : '2px solid #dfe3e8',
                                 borderRadius: '8px',
                                 padding: '16px',
                                 cursor: 'pointer',
@@ -97,11 +97,14 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                             Card Background Color
                             <input
                                 type="color"
-                                value={styleConfigData?.card_background_color}
+                                value={styleConfigData?.card.background_color}
                                 onChange={(e) => {
                                     setStyleConfigData({
                                         ...styleConfigData,
-                                        card_background_color: e.target.value
+                                        card: {
+                                            ...styleConfigData.card,
+                                            background_color: e.target.value
+                                        }
                                     })
                                 }}
                                 style={{
@@ -117,11 +120,14 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                             Card Label Color
                             <input
                                 type="color"
-                                value={styleConfigData?.card_label_color}
+                                value={styleConfigData?.card.label_color}
                                 onChange={(e) => {
                                     setStyleConfigData({
                                         ...styleConfigData,
-                                        card_label_color: e.target.value
+                                        card: {
+                                            ...styleConfigData.card,
+                                            label_color: e.target.value
+                                        }
                                     })
                                 }}
                                 style={{
@@ -156,11 +162,14 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                             Border Color
                             <input
                                 type="color"
-                                value={styleConfigData?.card_border_color}
+                                value={styleConfigData?.card?.border_color}
                                 onChange={(e) => {
                                     setStyleConfigData({
                                         ...styleConfigData,
-                                        card_border_color: e.target.value
+                                        card: {
+                                            ...styleConfigData.card,
+                                            border_color: e.target.value
+                                        }
                                     })
                                 }}
                                 style={{
@@ -183,11 +192,14 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                             Title Text
                             <input
                                 type="text"
-                                value={styleConfigData?.card_title_text}
+                                value={styleConfigData?.title.text}
                                 onChange={(e) => {
                                     setStyleConfigData({
                                         ...styleConfigData,
-                                        card_title_text: e.target.value
+                                        title: {
+                                            ...styleConfigData.title,
+                                            text: e.target.value
+                                        }
                                     })
                                 }}
                                 style={{
@@ -203,11 +215,14 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                         <label style={{ fontSize: '14px', fontWeight: 500 }}>
                             Font Size
                             <select
-                                value={styleConfigData?.card_title_text_fontSize}
+                                value={styleConfigData?.title.fontSize}
                                 onChange={(e) => {
                                     setStyleConfigData({
                                         ...styleConfigData,
-                                        card_title_text_fontSize: e.target.value
+                                        title: {
+                                            ...styleConfigData.title,
+                                            fontSize: e.target.value
+                                        }
                                     })
                                 }}
                                 style={{
@@ -231,11 +246,14 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                         <label style={{ fontSize: '14px', fontWeight: 500 }}>
                             Font Style
                             <select
-                                value={styleConfigData?.card_title_text_fontStyle}
+                                value={styleConfigData?.title?.fontWeight}
                                 onChange={(e) => {
                                     setStyleConfigData({
                                         ...styleConfigData,
-                                        card_title_text_fontStyle: e.target.value as "normal" | "bold" | "300"
+                                        title: {
+                                            ...styleConfigData.title,
+                                            fontWeight: e.target.value as "normal" | "bold" | "300"
+                                        }
                                     })
                                 }}
                                 style={{
@@ -257,11 +275,14 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                             Title Color
                             <input
                                 type="color"
-                                value={styleConfigData?.card_title_color}
+                                value={styleConfigData?.title?.color}
                                 onChange={(e) => {
                                     setStyleConfigData({
                                         ...styleConfigData,
-                                        card_title_color: e.target.value
+                                        title: {
+                                            ...styleConfigData.title,
+                                            color: e.target.value
+                                        }
                                     })
                                 }}
                                 style={{
@@ -284,11 +305,14 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                             Primary Color
                             <input
                                 type="color"
-                                value={styleConfigData?.card_button_primaryColor}
+                                value={styleConfigData?.button?.primaryColor}
                                 onChange={(e) => {
                                     setStyleConfigData({
                                         ...styleConfigData,
-                                        card_button_primaryColor: e.target.value
+                                        button: {
+                                            ...styleConfigData.button,
+                                            primaryColor: e.target.value
+                                        }
                                     })
                                 }}
                                 style={{
@@ -304,11 +328,14 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                             Button Text
                             <input
                                 type="text"
-                                value={styleConfigData?.card_button_text}
+                                value={styleConfigData?.button?.text}
                                 onChange={(e) => {
                                     setStyleConfigData({
                                         ...styleConfigData,
-                                        card_button_text: e.target.value
+                                        button: {
+                                            ...styleConfigData.button,
+                                            text: e.target.value
+                                        }
                                     })
                                 }}
                                 style={{
@@ -353,9 +380,16 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                         padding: '16px'
                     }}>
                         <Checkbox
-                            checked={styleConfigData?.enable_countdown_timer}
+                            checked={styleConfigData?.countdown?.enabled}
                             onChange={(e) =>
-                                setStyleConfigData({ ...styleConfigData, enable_countdown_timer: !styleConfigData?.enable_countdown_timer })
+                                setStyleConfigData(
+                                    {
+                                        ...styleConfigData,
+                                        countdown: {
+                                            ...styleConfigData.countdown,
+                                            enabled: !styleConfigData?.countdown?.enabled
+                                        }
+                                    })
                             }
                         >
                             <span style={{ fontSize: '14px', fontWeight: 500 }}>Enable Countdown Timer</span>
@@ -368,8 +402,8 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                             <label style={{ fontSize: '13px', fontWeight: 500 }}>
                                 Timer Duration
                                 <select
-                                    value={styleConfigData?.countdown_timer_config?.timer_duration}
-                                    onChange={(e) => setStyleConfigData({ ...styleConfigData, countdown_timer_config: { ...styleConfigData?.countdown_timer_config, timer_duration: Number(e.target.value) } })}
+                                    value={styleConfigData?.countdown?.duration}
+                                    onChange={(e) => setStyleConfigData({ ...styleConfigData, countdown: { ...styleConfigData?.countdown, duration: Number(e.target.value) } })}
                                     style={{
                                         width: '100%',
                                         padding: '8px 12px',
@@ -411,8 +445,8 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                                 Timer Color
                                 <input
                                     type="color"
-                                    value={styleConfigData?.countdown_timer_config?.timer_color}
-                                    onChange={(e) => setStyleConfigData({ ...styleConfigData, countdown_timer_config: { ...styleConfigData?.countdown_timer_config, timer_color: e.target.value } })}
+                                    value={styleConfigData?.countdown?.color}
+                                    onChange={(e) => setStyleConfigData({ ...styleConfigData, countdown: { ...styleConfigData?.countdown, color: e.target.value } })}
                                     style={{
                                         width: '100%',
                                         height: '40px',
@@ -443,17 +477,17 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                 }}>
                     {/* Card Title */}
                     <h3 style={{
-                        fontSize: styleConfigData?.card_title_text_fontSize,
-                        fontWeight: styleConfigData?.card_title_text_fontStyle,
-                        color: styleConfigData?.card_title_color,
+                        fontSize: styleConfigData?.title?.fontSize,
+                        fontWeight: styleConfigData?.title?.fontWeight,
+                        color: styleConfigData?.title?.color,
                         marginBottom: '16px'
                     }}>
-                        {styleConfigData?.card_title_text}
+                        {styleConfigData?.title?.text}
                     </h3>
 
                     {/* Countdown Timer (when enabled) */}
                     {
-                        styleConfigData?.enable_countdown_timer && (
+                        styleConfigData?.countdown?.enabled && (
                             <div style={{
                                 background: '#fff8f0',
                                 border: '1px solid #ffd700',
@@ -467,12 +501,12 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                                 </div>
                                 <Timer
                                     type="countdown"
-                                    value={Date.now() + 1000 * 60 * 60 * styleConfigData?.countdown_timer_config.timer_duration}
+                                    value={Date.now() + 1000 * 60 * 60 * styleConfigData?.countdown.duration}
                                     styles={{
                                         content: {
                                             fontSize: '18px',
                                             fontWeight: 600,
-                                            color: styleConfigData?.countdown_timer_config.timer_color,
+                                            color: styleConfigData?.countdown.color,
                                             fontFamily: 'monospace'
                                         }
                                     }}
@@ -488,7 +522,7 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                                     <div
                                         key={index}
                                         style={{
-                                            border: selectedRuleIndex === index ? '1px solid #000' : `1px solid ${styleConfigData?.card_border_color}`,
+                                            border: selectedRuleIndex === index ? '1px solid #000' : `1px solid ${styleConfigData?.card?.border_color}`,
                                             borderRadius: '8px',
                                             padding: '12px',
                                             marginBottom: '12px',
@@ -505,7 +539,7 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                                             <input
                                                 type="radio"
                                                 name="discount-rule-group"
-                                                value={rule.buyQty}
+                                                value={rule.trigger_scope.min_quantity}
                                                 readOnly
                                                 checked={selectedRuleIndex === index}
                                                 style={{ width: '16px', height: '16px' }}
@@ -513,10 +547,10 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                                             <div style={{ flex: 1 }}>
                                                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                                                     <strong style={{ fontSize: '14px' }}>{rule.title}</strong>
-                                                    {rule.discountRate < 1 &&
+                                                    {rule.discount.value < 1 &&
                                                         <span
                                                             style={{
-                                                                background: styleConfigData?.card_label_color,
+                                                                background: styleConfigData?.card?.label_color,
                                                                 padding: '2px 6px',
                                                                 borderRadius: '4px',
                                                                 fontSize: '10px'
@@ -530,25 +564,25 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                                                 <div style={{ fontSize: '12px', color: '#6d7175' }}>{rule.subtitle}</div>
                                             </div>
                                             {
-                                                rule.discountRate === 1 && (
+                                                rule.discount.value === 1 && (
                                                     <div style={{ textAlign: 'right' }}>
-                                                        <strong style={{ fontSize: '16px' }}>€{Number(rule.buyQty * 65).toFixed(2)}</strong>
+                                                        <strong style={{ fontSize: '16px' }}>€{Number(rule.trigger_scope.min_quantity * 65).toFixed(2)}</strong>
                                                     </div>
                                                 )
                                             }
                                             {
-                                                rule.discountRate === 0 && (
+                                                rule.discount.value === 0 && (
                                                     <div style={{ textAlign: 'right' }}>
                                                         <strong style={{ fontSize: '16px' }}>Free</strong>
                                                     </div>
                                                 )
                                             }
                                             {
-                                                (rule.discountRate > 0 && rule.discountRate < 1
+                                                (rule.discount.value > 0 && rule.discount.value < 1
                                                 ) && (
                                                     <div style={{ textAlign: 'right' }}>
-                                                        <strong style={{ fontSize: '16px' }}>€{Number(rule.buyQty * 65 * rule.discountRate).toFixed(2)}</strong>
-                                                        <div style={{ fontSize: '12px', color: '#6d7175', textDecoration: 'line-through' }}>€{Number(rule.buyQty * 65).toFixed(2)}</div>
+                                                        <strong style={{ fontSize: '16px' }}>€{Number(rule.trigger_scope.min_quantity * 65 * rule.discount.value).toFixed(2)}</strong>
+                                                        <div style={{ fontSize: '12px', color: '#6d7175', textDecoration: 'line-through' }}>€{Number(rule.trigger_scope.min_quantity * 65).toFixed(2)}</div>
                                                     </div>
                                                 )
                                             }
@@ -562,7 +596,7 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                     {/* Add to Cart Button */}
                     <button style={{
                         width: '100%',
-                        background: styleConfigData?.card_button_primaryColor,
+                        background: styleConfigData?.button?.primaryColor,
                         color: '#fff',
                         border: 'none',
                         borderRadius: '6px',
@@ -572,7 +606,7 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                         cursor: 'pointer',
                         marginTop: '12px'
                     }}>
-                        {styleConfigData?.card_button_text}
+                        {styleConfigData?.button?.text}
                     </button>
 
                     {/* Features/Benefits */}

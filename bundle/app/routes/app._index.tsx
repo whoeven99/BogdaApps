@@ -1,7 +1,7 @@
 import { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { useFetcher, useLoaderData, useNavigate } from "@remix-run/react";
 import { authenticate } from "app/shopify.server";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Copy,
   Trash2,
@@ -10,15 +10,17 @@ import {
   ArrowUp,
   ArrowDown,
 } from "lucide-react";
-import { mutationDiscountAutomaticActivate, mutationDiscountAutomaticDeactivate, queryDiscountNodes, queryThemes } from "app/api/admin";
+import { mutationDiscountAutomaticActivate, mutationDiscountAutomaticDeactivate, mutationDiscountAutomaticDeleteAndMetafieldsDelete, queryDiscountNodes, queryThemes } from "app/api/admin";
 import { globalStore } from "app/globalStore";
 import { useTranslation } from "react-i18next";
-import { Switch } from "antd";
+import { Spin, Switch } from "antd";
+import { BatchQueryUserDiscount, DeleteUserDiscount, UpdateUserDiscountStatus } from "app/api/javaServer";
 
 interface OfferType {
-  id: number;
+  id: string;
   name: string;
   status: string;
+  metafields: any;
   gmv: string;
   conversion: string;
   exposurePV: string;
@@ -46,6 +48,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   );
   const discountNodeStatusRequestBody = JSON.parse(
     formData.get("discountNodeStatusRequestBody") as string,
+  );
+  const discountNodeDeleteRequestBody = JSON.parse(
+    formData.get("discountNodeDeleteRequestBody") as string,
   );
 
   switch (true) {
@@ -135,14 +140,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           });
         }
 
-
         if (discountNodeStatusData) {
-          return {
-            success: true,
-            errorCode: 0,
-            errorMsg: "",
-            response: discountNodeStatusData,
-          }
+          const updateUserDiscountStatusData = await UpdateUserDiscountStatus({
+            shopName: shop,
+            discountGid: discountNodeStatusRequestBody.id,
+            status: discountNodeStatusData?.automaticDiscountNode?.automaticDiscount?.status,
+          });
+
+          return updateUserDiscountStatusData
         }
 
         return {
@@ -150,6 +155,40 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           errorCode: 10001,
           errorMsg: "SERVER_ERROR",
           response: null,
+        }
+      } catch (error) {
+        console.error(`${shop} discountNodeStatusRequestBody Error: `, error);
+        return {
+          success: false,
+          errorCode: 10001,
+          errorMsg: "SERVER_ERROR",
+          response: null,
+        }
+      }
+    case !!discountNodeDeleteRequestBody:
+      try {
+        const discountNodeDeleteData = await mutationDiscountAutomaticDeleteAndMetafieldsDelete({
+          shop,
+          accessToken: accessToken || "",
+          variables: discountNodeDeleteRequestBody
+        });
+
+        if (discountNodeDeleteData) {
+          const deleteUserDiscountData = await DeleteUserDiscount({
+            shopName: shop,
+            discountGid: discountNodeDeleteRequestBody.id,
+          });
+
+          if (deleteUserDiscountData) {
+            return deleteUserDiscountData
+          }
+
+          return {
+            success: false,
+            errorCode: 10001,
+            errorMsg: "SERVER_ERROR",
+            response: null,
+          }
         }
       } catch (error) {
         console.error(`${shop} discountNodeStatusRequestBody Error: `, error);
@@ -175,7 +214,7 @@ const Index = () => {
   const navigate = useNavigate();
   const { t } = useTranslation();
 
-  const discountNodeFetcher = useFetcher<any>();
+  const discountNodeDeleteFetcher = useFetcher<any>();
   const discountNodeStatusFetcher = useFetcher<any>();
   const themeFetcher = useFetcher<any>();
 
@@ -183,7 +222,7 @@ const Index = () => {
 
   const [isThemeExtensionEnabled, setIsThemeExtensionEnabled] = useState(true);
 
-  const [offers, setOffers] = useState<OfferType[]>([]);
+  const [offers, setOffers] = useState<OfferType[] | null>(null);
 
   const blockUrl = useMemo(
     () =>
@@ -260,14 +299,9 @@ const Index = () => {
         method: "POST",
       },
     );
-    discountNodeFetcher.submit(
-      {
-        discountNodeRequestBody: JSON.stringify({})
-      },
-      {
-        method: "POST",
-      },
-    );
+    setTimeout(() => {
+      batchQueryUserDiscount();
+    }, 2000);
     const themeExtensionEnabled = localStorage.getItem("ciwi_theme_extension_enabled");
     const newOfferId = localStorage.getItem("ciwi_new_offer_id")
     if (themeExtensionEnabled) {
@@ -303,35 +337,34 @@ const Index = () => {
     }
   }, [themeFetcher.data]);
 
-  useEffect(() => {
-    if (discountNodeFetcher.data) {
-      if (discountNodeFetcher.data.success) {
-        const discountNodesData = discountNodeFetcher.data.response?.discountNodes?.nodes || [];
-        console.log("discountNodesData", discountNodesData);
-        const data = discountNodesData?.map((discountNode: any) => {
-          return {
-            id: discountNode?.id,
-            name: discountNode?.discount?.title,
-            status: discountNode?.discount?.status,
-            gmv: "",
-            conversion: "",
-            exposurePV: "",
-            addToCartPV: "",
-          };
-        }) ?? [];
-        setOffers(data);
-      }
-    }
-  }, [discountNodeFetcher.data]);
+  // useEffect(() => {
+  //   if (discountNodeFetcher.data) {
+  //     if (discountNodeFetcher.data.success) {
+  //       const discountNodesData = discountNodeFetcher.data.response?.discountNodes?.nodes || [];
+  //       console.log("discountNodesData", discountNodesData);
+  //       const data = discountNodesData?.map((discountNode: any) => {
+  //         return {
+  //           id: discountNode?.id,
+  //           name: discountNode?.discount?.title,
+  //           status: discountNode?.discount?.status,
+  //           gmv: "",
+  //           conversion: "",
+  //           exposurePV: "",
+  //           addToCartPV: "",
+  //         };
+  //       }) ?? [];
+  //       setOffers(data);
+  //     }
+  //   }
+  // }, [discountNodeFetcher.data]);
 
   useEffect(() => {
     if (discountNodeStatusFetcher.data) {
       if (discountNodeStatusFetcher.data.success) {
-        console.log("discountNodeStatusFetcher.data", discountNodeStatusFetcher.data);
-        const id = discountNodeStatusFetcher.data.response?.automaticDiscountNode?.id;
-        const status = discountNodeStatusFetcher.data.response?.automaticDiscountNode?.automaticDiscount?.status;
+        const id = discountNodeStatusFetcher.data.response?.first;
+        const status = discountNodeStatusFetcher.data.response?.second;
 
-        const newOffers = offers.map(offer => {
+        const newOffers = Array.isArray(offers) ? offers.map(offer => {
           if (offer.id === id) {
             return {
               ...offer,
@@ -339,11 +372,31 @@ const Index = () => {
             }
           }
           return offer;
-        })
+        }) : [];
         setOffers(newOffers);
       }
     }
   }, [discountNodeStatusFetcher.data]);
+
+  useEffect(() => {
+    if (discountNodeDeleteFetcher.data) {
+      console.log("discountNodeDeleteFetcher.data", discountNodeDeleteFetcher.data);
+
+      if (discountNodeDeleteFetcher.data.success) {
+        console.log("discountNodeDeleteFetcher.data", discountNodeDeleteFetcher.data);
+
+        const deleteDiscountGid = discountNodeDeleteFetcher.data.response;
+
+        if (!offers || !deleteDiscountGid) return;
+
+        console.log("offers: ", offers);
+
+        const newOffer = offers.filter((offer) => offer.id !== deleteDiscountGid);
+
+        setOffers(newOffer);
+      }
+    }
+  }, [discountNodeDeleteFetcher.data]);
 
   const switchDiscountStatus = (
     {
@@ -351,7 +404,7 @@ const Index = () => {
       status,
     }:
       {
-        id: number,
+        id: string,
         status: boolean,
       }
   ) => {
@@ -360,6 +413,54 @@ const Index = () => {
         discountNodeStatusRequestBody: JSON.stringify({
           id,
           status,
+        })
+      },
+      {
+        method: "POST",
+      },
+    );
+  }
+
+  const batchQueryUserDiscount = useCallback(async () => {
+    const batchQueryUserDiscountData = await BatchQueryUserDiscount({
+      shopName: globalStore.shop,
+      server: globalStore.server,
+    });
+
+    if (batchQueryUserDiscountData.success) {
+      const data = batchQueryUserDiscountData.response?.map((item: any) => (
+        {
+          id: item?.discountGid,
+          name: item?.basic_information?.offerName,
+          status: item?.status,
+          metafields: item?.metafields,
+          gmv: "",
+          conversion: "",
+          exposurePV: "",
+          addToCartPV: "",
+        }
+      ))
+      setOffers(data);
+    }
+
+  }, [globalStore.shop, globalStore.server]);
+
+  const deleteOffer = async ({
+    id,
+    metafields
+  }: {
+    id: string,
+    metafields: {
+      ownerId: string,
+      namespace: string,
+      key: string
+    }[]
+  }) => {
+    discountNodeDeleteFetcher.submit(
+      {
+        discountNodeDeleteRequestBody: JSON.stringify({
+          id,
+          metafields,
         })
       },
       {
@@ -526,11 +627,12 @@ const Index = () => {
             height: "100%",
           }}
         >
-          {offers.length === 0 && <span className="font-['Inter'] font-normal text-[14px] text-[#6d7175]">{t("No offers found")}</span>}
+          {!offers && <Spin />}
+          {offers?.length === 0 && <span className="font-['Inter'] font-normal text-[14px] text-[#6d7175]">{t("No offers found")}</span>}
         </div>
 
         {/* Desktop Table */}
-        {offers.length > 0 &&
+        {(Array.isArray(offers) && offers?.length > 0) &&
           <table className="hidden md:table w-full border-collapse">
             <thead>
               <tr>
@@ -641,6 +743,7 @@ const Index = () => {
                       <button
                         className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[4px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
                         title="Edit"
+                        onClick={() => navigate(`/app/create?discountGid=${offer.id}`)}
                       >
                         <Pencil size={16} />
                       </button>
@@ -653,6 +756,16 @@ const Index = () => {
                       <button
                         className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#d72c0d] p-[4px] rounded-[4px] hover:bg-[rgba(215,44,13,0.1)] transition-colors"
                         title="Delete"
+                        onClick={() => deleteOffer({
+                          id: offer.id,
+                          metafields: [
+                            {
+                              ownerId: offer.metafields.ownerId,
+                              namespace: offer.metafields.namespace,
+                              key: offer.metafields.key,
+                            }
+                          ],
+                        })}
                       >
                         <Trash2 size={16} />
                       </button>
@@ -665,7 +778,7 @@ const Index = () => {
         }
 
         {/* Mobile Cards */}
-        {offers.length > 0 &&
+        {(Array.isArray(offers) && offers?.length > 0) &&
           <div className="md:hidden space-y-[12px]">
             {offers.map((offer) => (
               <div
@@ -758,6 +871,16 @@ const Index = () => {
                   <button
                     className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#d72c0d] p-[8px] rounded-[4px] hover:bg-[rgba(215,44,13,0.1)] transition-colors"
                     title="Delete"
+                    onClick={() => deleteOffer({
+                      id: offer.id,
+                      metafields: [
+                        {
+                          ownerId: offer.metafields.ownerId,
+                          namespace: offer.metafields.namespace,
+                          key: offer.metafields.key,
+                        }
+                      ],
+                    })}
                   >
                     <Trash2 size={18} />
                   </button>

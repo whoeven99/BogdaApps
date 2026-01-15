@@ -1,5 +1,103 @@
 import axios from "axios";
 
+//查询前三个指定产品信息
+export const queryThreeProductVariants = async ({
+    shop,
+    accessToken,
+    ids
+}: {
+    shop: string;
+    accessToken: string;
+    ids: string[];
+}) => {
+    try {
+        const gql = `
+        {
+            ${ids.map((id: string, index: number) => `
+                productVariant${index + 1}: productVariant(id: "${id}") {
+                    id
+                    title
+                    price
+                    media(first: 1) {
+                        edges {
+                            node {
+                                preview {
+                                    image {
+                                        url
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    product {
+                        title
+                    }
+                }
+                `
+        ).join("\n")}
+        }
+        `;
+        const { data } = await axios.post(
+            `https://${shop}/admin/api/${process.env.GRAPHQL_VERSION}/graphql.json`,
+            { query: gql },
+            {
+                headers: {
+                    "X-Shopify-Access-Token": accessToken,
+                },
+            }
+        );
+
+        const res = data?.data;
+
+        console.log(`${shop} queryThreeProductVariants:`, res);
+
+        return res;
+    } catch (error: any) {
+        console.error(`${shop} Error queryThreeProductVariants:`, error?.response?.data);
+        return null;
+    }
+};
+
+//查询当前商店数据
+export const queryShop = async ({
+    shop,
+    accessToken,
+}: {
+    shop: string;
+    accessToken: string;
+}) => {
+    try {
+        const gql = `{
+            shop {
+                id
+                name
+                shopOwnerName
+                email
+                myshopifyDomain
+            }
+        }`;
+
+        const { data } = await axios.post(
+            `https://${shop}/admin/api/${process.env.GRAPHQL_VERSION}/graphql.json`,
+            { query: gql },
+            {
+                headers: {
+                    "X-Shopify-Access-Token": accessToken,
+                },
+            }
+        );
+
+        const res = data?.data;
+
+        console.log(`${shop} queryShop: `, res);
+
+        return res;
+    } catch (error) {
+        console.error(`${shop} Error queryShop: `, error);
+        return null;
+    }
+};
+
 //查询当前商店的折扣
 export const queryDiscountNodes = async ({
     shop,
@@ -420,6 +518,88 @@ export const mutationDiscountAutomaticAppCreateAndMetafieldsSet = async ({
     }
 }
 
+//更新折扣计划
+export const mutationDiscountAutomaticAppUpdateAndMetafieldsSet = async ({
+    shop,
+    accessToken,
+    variables
+}: {
+    shop: string;
+    accessToken: string;
+    variables: any;
+}) => {
+    try {
+        const gql = `
+            mutation discountAutomaticAppUpdateAndMetafieldsSet($id: ID!, $automaticAppDiscount: DiscountAutomaticAppInput!, $metafields: [MetafieldsSetInput!]!) {
+                discountAutomaticAppUpdate(id: $id, automaticAppDiscount: $automaticAppDiscount) {
+                    userErrors {
+                        field
+                        message
+                    }
+                    automaticAppDiscount {
+                        discountId
+                        title
+                        startsAt
+                        endsAt
+                        status
+                        combinesWith {
+                            orderDiscounts
+                            productDiscounts
+                            shippingDiscounts
+                        }
+                        discountClasses
+                    }
+                }
+                metafieldsSet(metafields: $metafields) {
+                    userErrors {
+                        field
+                        message
+                        code
+                    } 
+                    metafields {
+                        key
+                        namespace
+                        value
+                        createdAt
+                        updatedAt
+                    }  
+                }
+            }
+            `;
+
+        console.log(`${shop} mutationDiscountAutomaticAppUpdateAndMetafieldsSet gql:`, gql);
+
+        const { data } = await axios.post(
+            `https://${shop}/admin/api/${process.env.GRAPHQL_VERSION}/graphql.json`,
+            { query: gql, variables },
+            {
+                headers: {
+                    "X-Shopify-Access-Token": accessToken,
+                },
+            }
+        );
+
+        const res = data?.data;
+
+        console.log(`${shop} mutationDiscountAutomaticAppUpdateAndMetafieldsSet:`, data);
+
+        if (res?.discountAutomaticAppUpdate?.userErrors?.length > 0) {
+            console.error(`${shop} Error mutationDiscountAutomaticAppUpdate:`, res?.discountAutomaticAppUpdate?.userErrors);
+            return null;
+        }
+
+        if (res?.metafieldsSet?.userErrors?.length > 0) {
+            console.error(`${shop} Error mutationMetafieldsSet:`, res?.metafieldsSet?.userErrors);
+            return null;
+        }
+
+        return res;
+    } catch (error: any) {
+        console.error(`${shop} Error mutationDiscountAutomaticAppUpdateAndMetafieldsSet error: `, error?.response?.data);
+        return null;
+    }
+}
+
 //删除折扣计划
 export const mutationDiscountAutomaticDeleteAndMetafieldsDelete = async ({
     shop,
@@ -431,8 +611,10 @@ export const mutationDiscountAutomaticDeleteAndMetafieldsDelete = async ({
     variables: any;
 }) => {
     try {
+        console.log("variables: ", variables);
+
         const gql = `
-            mutation discountAutomaticDeleteAndMetafieldsDelete($id: ID!, $metafields: [MetafieldsSetInput!]!) {
+            mutation discountAutomaticDeleteAndMetafieldsDelete($id: ID!, $metafields: [MetafieldIdentifierInput!]!) {
                 discountAutomaticDelete(id: $id) {
                     deletedAutomaticDiscountId
                     userErrors {
@@ -607,3 +789,4 @@ export const mutationDiscountAutomaticDeactivate = async ({
         return null;
     }
 }
+

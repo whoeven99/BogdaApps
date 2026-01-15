@@ -205,10 +205,10 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                                                 {/* <span style={{ fontSize: '14px', fontWeight: 500 }}>Buy</span> */}
                                                 <input
                                                     type="number"
-                                                    value={rule.buyQty}
+                                                    value={rule.trigger_scope.min_quantity}
                                                     onChange={(e) => {
                                                         const newRules = [...discountRules];
-                                                        newRules[index].buyQty = parseInt(e.target.value) || 0;
+                                                        newRules[index].trigger_scope.min_quantity = parseInt(e.target.value) || 0;
                                                         setDiscountRules(newRules);
                                                     }}
                                                     style={{
@@ -232,7 +232,7 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                                                     min={0}
                                                     max={1}
                                                     step={0.01}
-                                                    value={rule.discountRate}
+                                                    value={rule.discount.value}
                                                     onChange={(e) => {
                                                         let value = Number(e.target.value);
 
@@ -241,7 +241,7 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                                                         if (value > 1) value = 1;
 
                                                         const newRules = [...discountRules];
-                                                        newRules[index].discountRate = value;
+                                                        newRules[index].discount.value = value;
                                                         setDiscountRules(newRules);
                                                     }}
                                                     style={{
@@ -777,16 +777,24 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                         onClick={() => {
                             setDiscountRules([...discountRules, {
                                 id: Date.now(),
+                                enabled: true,
                                 isExpanded: true,
-                                buyQty: discountRules.length + 1,
-                                discountRate: 0.9,
+                                trigger_scope: {
+                                    quantity_scope: "same_variant",
+                                    min_quantity: discountRules.length + 1,
+                                },
+                                discount: {
+                                    type: "percentage",
+                                    value: 0.9,
+                                    maxDiscount: 100,
+                                },
+                                discount_reward: [],
                                 title: 'Item Title',
                                 subtitle: 'Item Subtitle',
                                 labelText: 'Save {{saved_percentage}}',
                                 badgeText: 'Badge Text',
                                 selectedByDefault: false,
-                                upsellProducts: [],
-                                freegiftProducts: [],
+                                reward: [],
                                 showAsSoldOut: false
                             }]);
                         }}
@@ -846,7 +854,7 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                                         <input
                                             type="radio"
                                             name="discount-rule-group"
-                                            value={rule.buyQty}
+                                            value={rule.trigger_scope.min_quantity}
                                             readOnly
                                             checked={selectedRuleIndex === index}
                                             style={{ width: '16px', height: '16px' }}
@@ -854,7 +862,7 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                                         <div style={{ flex: 1 }}>
                                             <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                                                 <strong style={{ fontSize: '14px' }}>{rule.title}</strong>
-                                                {rule.discountRate < 1 &&
+                                                {rule.discount.value < 1 &&
                                                     <span style={{
                                                         background: '#f0f0f0',
                                                         padding: '2px 6px',
@@ -869,25 +877,25 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                                             <div style={{ fontSize: '12px', color: '#6d7175' }}>{rule.subtitle}</div>
                                         </div>
                                         {
-                                            rule.discountRate === 1 && (
+                                            rule.discount.value === 1 && (
                                                 <div style={{ textAlign: 'right' }}>
-                                                    <strong style={{ fontSize: '16px' }}>€{Number(rule.buyQty * 65).toFixed(2)}</strong>
+                                                    <strong style={{ fontSize: '16px' }}>€{Number(rule.trigger_scope.min_quantity * 65).toFixed(2)}</strong>
                                                 </div>
                                             )
                                         }
                                         {
-                                            rule.discountRate === 0 && (
+                                            rule.discount.value === 0 && (
                                                 <div style={{ textAlign: 'right' }}>
                                                     <strong style={{ fontSize: '16px' }}>Free</strong>
                                                 </div>
                                             )
                                         }
                                         {
-                                            (rule.discountRate > 0 && rule.discountRate < 1
+                                            (rule.discount.value > 0 && rule.discount.value < 1
                                             ) && (
                                                 <div style={{ textAlign: 'right' }}>
-                                                    <strong style={{ fontSize: '16px' }}>€{Number(rule.buyQty * 65 * rule.discountRate).toFixed(2)}</strong>
-                                                    <div style={{ fontSize: '12px', color: '#6d7175', textDecoration: 'line-through' }}>€{Number(rule.buyQty * 65).toFixed(2)}</div>
+                                                    <strong style={{ fontSize: '16px' }}>€{Number(rule.trigger_scope.min_quantity * 65 * rule.discount.value).toFixed(2)}</strong>
+                                                    <div style={{ fontSize: '12px', color: '#6d7175', textDecoration: 'line-through' }}>€{Number(rule.trigger_scope.min_quantity * 65).toFixed(2)}</div>
                                                 </div>
                                             )
                                         }

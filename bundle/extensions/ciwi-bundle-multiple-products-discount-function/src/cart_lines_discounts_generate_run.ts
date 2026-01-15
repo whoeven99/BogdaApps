@@ -48,7 +48,7 @@ type productDiscountDataType = {
   targetingSettings: {
     value: string;
   } | null;
-  selectedProductVariantIds: {
+  productPool: {
     value: string;
   } | null;
 };
@@ -86,31 +86,30 @@ export function cartLinesDiscountsGenerateRun(
     const discountRules = productDiscountData.discountRules?.value;
     const styleConfig = productDiscountData.styleConfig?.value;
     const targetingSettings = productDiscountData.targetingSettings?.value;
-    const selectedProductVariantIds = productDiscountData.selectedProductVariantIds?.value;
-
-    console.log(basicInformation);
-    console.log(discountRules);
-    console.log(styleConfig);
-    console.log(targetingSettings);
-    console.log(selectedProductVariantIds);
+    const productPool = productDiscountData.productPool?.value;
 
     const discountRulesJSON = parseJSON<any>(discountRules);
-    const selectedProductVariantIdsArray = parseJSON<any>(selectedProductVariantIds);
+    const basicInformationJSON = parseJSON<any>(basicInformation);
+    const productPoolJSON = parseJSON<any>(productPool);
 
     if (!discountRulesJSON) continue;
 
-    if (!selectedProductVariantIdsArray.length || selectedProductVariantIdsArray?.includes(line.merchandise.id)) {
+    const variantIdStr = line.merchandise.id.split("gid://shopify/ProductVariant/")[1].toString();
+
+    if (Array.isArray(productPoolJSON?.include_variant_ids) && productPoolJSON?.include_variant_ids?.includes(variantIdStr)) {
       appliedRule = {
         typename: "RangeDiscountsType",
         ranges: discountRulesJSON.map((rule: any, index: number) => {
           return {
-            min: rule.buyQty,
-            max: discountRulesJSON[index + 1]?.buyQty ? discountRulesJSON[index + 1]?.buyQty : undefined,
-            discountRate: rule.discountRate,
+            min: rule.trigger_scope.min_quantity,
+            max: discountRulesJSON[index + 1]?.trigger_scope?.min_quantity ? discountRulesJSON[index + 1]?.trigger_scope?.min_quantity : undefined,
+            discountRate: rule.discount.value,
           }
         }),
       }
     }
+
+    console.log("appliedRule: ", appliedRule);
 
     //购物车此行产品数量quantity数据
     const quantity = line.quantity;
@@ -132,6 +131,7 @@ export function cartLinesDiscountsGenerateRun(
           quantity,
           unitPriceCents,
           lineId,
+          message: basicInformationJSON.offerName,
         });
 
         console.log("candidate1: ", candidate1);
@@ -161,6 +161,7 @@ export function cartLinesDiscountsGenerateRun(
           unitPriceCents,
           lineId,
           variantId,
+          message: basicInformationJSON.offerName,
         });
         if (!candidate3) continue;
         productCandidates.push(candidate3);
@@ -290,12 +291,14 @@ const ruleAsRangeDiscountsTypeOperate = ({
   quantity,
   unitPriceCents,
   lineId,
+  message,
 }: {
   lineQuantityMap: Map<string, number>;
   rule: RangeDiscountsType;
   quantity: number;
   unitPriceCents: number;
   lineId: string;
+  message: string;
 }): ProductDiscountCandidate | null => {
   try {
     // 合并计算其他变体数量
@@ -325,6 +328,7 @@ const ruleAsRangeDiscountsTypeOperate = ({
     const candidate = getCandidate({
       lineId,
       discountPerItemCents,
+      message,
     });
     // 返回candidate
     return candidate;
@@ -386,12 +390,14 @@ const ruleAsBundleDiscountTypeOperate = ({
   unitPriceCents,
   lineId,
   variantId,
+  message,
 }: {
   lineQuantityMap: Map<string, number>;
   rule: BundleDiscountType;
   unitPriceCents: number; //产品总价格分级数据
   lineId: string; //购物车id
   variantId: string; // 当前变体id
+  message: string;
 }): ProductDiscountCandidate | null => {
   try {
     // 计算 bundle 组数（全局）
@@ -425,7 +431,7 @@ const ruleAsBundleDiscountTypeOperate = ({
       lineId,
       discountPerItemCents,
       message:
-        bundle.discountRate === 0 ? "isFree Text" : "Bundle discount applied",
+        bundle.discountRate === 0 ? "isFree Text" : message,
       quantity: discountQty,
     });
     // 返回candidate

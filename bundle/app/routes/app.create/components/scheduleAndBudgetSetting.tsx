@@ -31,12 +31,12 @@ const ScheduleAndBudgetSetting: React.FC<ScheduleAndBudgetSettingProps> = ({
             return targetingSettingsData.marketVisibilitySettingData.length == marketVisibilitySettingData.length;
     }, [targetingSettingsData.marketVisibilitySettingData]);
 
-    const eligibilityBrowse = () => {
-        if (targetingSettingsData?.eligibilityType == "segments")
-            setMainModalType("CustomerSegments")
-        if (targetingSettingsData?.eligibilityType == "customers")
-            setMainModalType("Customer")
-    }
+    // const eligibilityBrowse = () => {
+    //     if (targetingSettingsData?.eligibilityType == "segments")
+    //         setMainModalType("CustomerSegments")
+    //     if (targetingSettingsData?.eligibilityType == "customers")
+    //         setMainModalType("Customer")
+    // }
 
     const onAllCheckClick = () => {
         if (checkAll) {
@@ -239,12 +239,15 @@ const ScheduleAndBudgetSetting: React.FC<ScheduleAndBudgetSettingProps> = ({
                         <DatePicker
                             showTime
                             needConfirm={false}
-                            value={targetingSettingsData.startsAt}
+                            value={targetingSettingsData.schedule.startsAt}
                             onChange={(value) => {
                                 if (value)
                                     setTargetingSettingsData({
                                         ...targetingSettingsData,
-                                        startsAt: value
+                                        schedule: {
+                                            ...targetingSettingsData.schedule,
+                                            startsAt: value
+                                        }
                                     })
                             }}
                         />
@@ -263,12 +266,15 @@ const ScheduleAndBudgetSetting: React.FC<ScheduleAndBudgetSettingProps> = ({
                         <DatePicker
                             showTime
                             needConfirm={false}
-                            value={targetingSettingsData.endsAt}
+                            value={targetingSettingsData.schedule.endsAt}
                             onChange={(value) => {
                                 if (value)
                                     setTargetingSettingsData({
                                         ...targetingSettingsData,
-                                        endsAt: value
+                                        schedule: {
+                                            ...targetingSettingsData.schedule,
+                                            endsAt: value
+                                        }
                                     })
                             }}
                         />
@@ -299,12 +305,15 @@ const ScheduleAndBudgetSetting: React.FC<ScheduleAndBudgetSettingProps> = ({
                                 width: '100%',
                             }}
                             placeholder="$0.00"
-                            value={targetingSettingsData.totalBudget}
+                            value={targetingSettingsData.budget.totalBudget}
                             onChange={(value) => {
                                 if (typeof value === 'number' && value > 0)
                                     setTargetingSettingsData({
                                         ...targetingSettingsData,
-                                        totalBudget: value
+                                        budget: {
+                                            ...targetingSettingsData.budget,
+                                            totalBudget: value
+                                        }
                                     })
                             }}
                         />
@@ -328,12 +337,15 @@ const ScheduleAndBudgetSetting: React.FC<ScheduleAndBudgetSettingProps> = ({
                                 width: '100%',
                             }}
                             placeholder="$0.00"
-                            value={targetingSettingsData.dailyBudget}
+                            value={targetingSettingsData.budget.dailyBudget}
                             onChange={(value) => {
                                 if (typeof value === 'number' && value > 0)
                                     setTargetingSettingsData({
                                         ...targetingSettingsData,
-                                        dailyBudget: value
+                                        budget: {
+                                            ...targetingSettingsData.budget,
+                                            dailyBudget: value
+                                        }
                                     })
                             }}
                         />
@@ -367,11 +379,14 @@ const ScheduleAndBudgetSetting: React.FC<ScheduleAndBudgetSettingProps> = ({
                                 { value: 5, label: t('5 times') },
                                 { value: 10, label: t('10 times') },
                             ]}
-                            value={targetingSettingsData.timesLimitForPercustomer}
+                            value={targetingSettingsData.usage_limit.per_customer}
                             onChange={(value) => {
                                 setTargetingSettingsData({
                                     ...targetingSettingsData,
-                                    timesLimitForPercustomer: value,
+                                    usage_limit: {
+                                        ...targetingSettingsData.usage_limit,
+                                        per_customer: value,
+                                    },
                                 });
                             }}
                         />
@@ -391,11 +406,14 @@ const ScheduleAndBudgetSetting: React.FC<ScheduleAndBudgetSettingProps> = ({
                     >
                         <Checkbox
                             defaultChecked={true}
-                            checked={targetingSettingsData.hideOfferAfterExpiration}
+                            checked={targetingSettingsData.schedule.hideAfterExpiration}
                             onChange={() => {
                                 setTargetingSettingsData({
                                     ...targetingSettingsData,
-                                    hideOfferAfterExpiration: !targetingSettingsData.hideOfferAfterExpiration,
+                                    schedule: {
+                                        ...targetingSettingsData.schedule,
+                                        hideAfterExpiration: !targetingSettingsData.schedule.hideAfterExpiration,
+                                    },
                                 });
                             }}
                         >

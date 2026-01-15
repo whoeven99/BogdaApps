@@ -1,8 +1,8 @@
-import { ActionFunctionArgs } from "@remix-run/node";
-import { useFetcher, useNavigate } from "@remix-run/react";
-import { mutationDiscountAutomaticAppCreateAndMetafieldsSet, queryCustomers, queryMarkets, queryProductVariants, querySegments } from "app/api/admin";
+import { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
+import { useFetcher, useLoaderData, useNavigate } from "@remix-run/react";
+import { mutationDiscountAutomaticAppCreateAndMetafieldsSet, mutationDiscountAutomaticAppUpdateAndMetafieldsSet, queryCustomers, queryMarkets, queryProductVariants, querySegments, queryShop, queryThreeProductVariants } from "app/api/admin";
 import { authenticate } from "app/shopify.server";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import dayjs from 'dayjs';
 import BasicInformationSetting from "./components/basicInformationSetting";
@@ -11,8 +11,9 @@ import Header from "app/components/header";
 import StyleDesignSetting from "./components/styleDesignSetting";
 import ScheduleAndBudgetSetting from "./components/scheduleAndBudgetSetting";
 import ProductModal from "./components/productModal";
-import { Button } from "antd";
-import SegmentModal from "./components/segmentModal";
+import { Button, Flex, Spin } from "antd";
+import { globalStore } from "app/globalStore";
+import { GetUserDiscount, SaveUserDiscount, UpdateUserDiscount } from "app/api/javaServer";
 
 export interface ProductVariantsDataType {
     id: string;
@@ -23,79 +24,128 @@ export interface ProductVariantsDataType {
 
 export interface BasicInformationType {
     offerName: string;
-    offerType: string;
+    offerType: {
+        category: string;
+        subtype:
+        | "quantity-breaks-same"
+        | "bogo"
+        | "quantity-breaks-different"
+        | "complete-bundle"
+        | "subscription"
+        | "progressive-gifts"
+        ;
+    };
 }
 
 export interface DiscountRulesType {
     id: number;
+    enabled: boolean;
     isExpanded: boolean;
     title: string;
-    buyQty: number;
-    discountRate: number;
+    trigger_scope: {
+        quantity_scope:
+        | "same_variant"     // 同商品同变体
+        | "same_product"     // 同商品不同变体
+        | "cross_products";  // 跨商品
+        min_quantity: number;
+    };
+    discount: {
+        type: "percentage" | "amount"
+        value: number;
+        maxDiscount: number;
+    };
+    discount_reward: {
+        reward_item: string[] //奖品池，可以选择商品享受 discount 优惠
+        reward_discount: {
+            type: "percentage" | "amount"
+            value: number;
+            maxDiscount: number;
+        };
+    }[];
     subtitle: string;
     labelText: string;
     badgeText: string;
     selectedByDefault: boolean;
-    upsellProducts: {
-        id: number;
-        variantid: string;
-        upsellText: string;
-        discountType: "default" | "percentage" | "amount" | "specific";
-        discountValue: {
-            percentage: number;
-            amount: number;
-            specific: number;
-        }
-        selectedByDefault: boolean;
-        visibleWithoutCheck: boolean;
-    }[];
-    freegiftProducts: {
-        id: number;
-        variantid: string;
-        freegiftText: string;
-        showOriginalPrice: boolean;
+    reward: {
+        type: "discount" | "upsell" | "freegift" | "bundle";
+        products: {
+            variantId: string;
+            quantity: number;
+        }[];
+        discount?: {
+            type: "percentage" | "amount"
+            value: number;
+            maxDiscount: number;
+        };
+        display: {
+            text: string;
+            showOriginalPrice: boolean;
+            visibleWithoutCheck: boolean;
+        };
     }[];
     showAsSoldOut: boolean;
 }
 
 export interface StyleConfigType {
-    base_style: "vertical_stack" | "horizontal_grid" | "card_grid" | "compact_list";
-    card_background_color: string;
-    card_label_color: string;
-    card_border_color: string;
-    card_title_text: string;
-    card_title_text_fontSize: string;
-    card_title_text_fontStyle: "bold" | "normal" | "300";
-    card_title_color: string;
-    card_button_text: string;
-    card_button_primaryColor: string;
-    enable_countdown_timer: boolean;
-    countdown_timer_config: {
-        timer_duration: number;
-        // timer_style: "minimal" | "modern" | "compact";
-        timer_color: string;
-    };
+    layout: {
+        base_style:
+        | "vertical_stack"
+        | "horizontal_grid"
+        | "card_grid"
+        | "compact_list";
+    }; //布局类型    card_background_color: string;
+    card: {
+        background_color: string;
+        border_color: string;
+        label_color: string;
+    }; //卡片基础样式
+    title: {
+        text: string;
+        fontSize: string;
+        fontWeight: "bold" | "normal" | "300";
+        color: string;
+    }; //标题样式
+    button: {
+        text: string;
+        primaryColor: string;
+    }; //行为按钮样式
+    countdown: {
+        enabled: boolean;
+        duration: number;
+        color: string;
+    }; //倒计时组件配置
 }
 
 export interface TargetingSettingsType {
-    eligibilityType: "all" | "segments" | "customers";
-    customersData: {
-        label: string;
-        value: string;
-    }[];
-    segmentData: {
-        label: string;
-        value: string;
-    }[];
     marketVisibilitySettingData: string[];
-    startsAt: Date | null;
-    endsAt: Date | null;
-    totalBudget: number | null;
-    dailyBudget: number | null;
-    timesLimitForPercustomer: number | null;
-    hideOfferAfterExpiration: boolean;
+    visibilityConstraints: {
+        maxDiscountAmount: number;
+        maxUsageCount: number;
+    };
+    schedule: {
+        startsAt: Date | null;
+        endsAt: Date | null;
+        hideAfterExpiration: boolean;
+    };
+    budget: {
+        totalBudget: number | null;
+        dailyBudget: number | null;
+    };
+    usage_limit: {
+        per_customer: number | null;
+        per_product: number | null;
+    };
     showOfferToBots: boolean;
 }
+
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+    const url = new URL(request.url);
+    const discountGid = url.searchParams.get("discountGid");
+
+    return {
+        discountGid,
+    };
+};
 
 export const action = async ({ request }: ActionFunctionArgs) => {
     const adminAuthResult = await authenticate.admin(request);
@@ -114,6 +164,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
     const shopMarketsRequestBody = JSON.parse(
         formData.get("shopMarketsRequestBody") as string,
+    );
+    const productPoolRequestBody = JSON.parse(
+        formData.get("productPoolRequestBody") as string,
+    );
+    const discountAutomaticAppUpdateAndMetafieldsSetRequestBody = JSON.parse(
+        formData.get("discountAutomaticAppUpdateAndMetafieldsSetRequestBody") as string,
     );
     const discountAutomaticAppCreateAndMetafieldsSetRequestBody = JSON.parse(
         formData.get("discountAutomaticAppCreateAndMetafieldsSetRequestBody") as string,
@@ -248,20 +304,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                     response: null,
                 }
             }
-        case !!discountAutomaticAppCreateAndMetafieldsSetRequestBody:
+        case !!productPoolRequestBody:
             try {
-                const discountAutomaticAppCreateAndMetafieldsSetData = await mutationDiscountAutomaticAppCreateAndMetafieldsSet({
+                const productPoolData = await queryThreeProductVariants({
+                    ...productPoolRequestBody,
                     shop,
-                    accessToken: accessToken || "",
-                    variables: discountAutomaticAppCreateAndMetafieldsSetRequestBody,
+                    accessToken,
                 });
 
-                if (discountAutomaticAppCreateAndMetafieldsSetData) {
+                if (productPoolData) {
                     return {
                         success: true,
                         errorCode: 0,
                         errorMsg: "",
-                        response: discountAutomaticAppCreateAndMetafieldsSetData,
+                        response: productPoolData,
                     }
                 }
 
@@ -272,7 +328,141 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                     response: null,
                 }
             } catch (error) {
+                console.error(`${shop} productPoolRequestBody Error: `, error);
+                return {
+                    success: false,
+                    errorCode: 10001,
+                    errorMsg: "SERVER_ERROR",
+                    response: null,
+                }
+            }
+        case !!discountAutomaticAppCreateAndMetafieldsSetRequestBody:
+            try {
+                const variables = discountAutomaticAppCreateAndMetafieldsSetRequestBody?.discountAutomaticAppCreateAndMetafieldsSetRequestJsondata
+
+                const shopData = await queryShop({
+                    shop,
+                    accessToken: accessToken || "",
+                });
+
+                const shopId = shopData?.shop?.id;
+
+                if (!shopId) {
+                    return {
+                        success: false,
+                        errorCode: 10001,
+                        errorMsg: "SERVER_ERROR",
+                        response: null,
+                    }
+                }
+
+                variables.metafields[0].ownerId = shopId;
+
+                const discountAutomaticAppCreateAndMetafieldsSetData = await mutationDiscountAutomaticAppCreateAndMetafieldsSet({
+                    shop,
+                    accessToken: accessToken || "",
+                    variables,
+                });
+
+                if (discountAutomaticAppCreateAndMetafieldsSetData) {
+                    const basic_information = discountAutomaticAppCreateAndMetafieldsSetRequestBody?.basic_information
+                    const discount_rules = discountAutomaticAppCreateAndMetafieldsSetRequestBody?.discount_rules
+                    const style_config = discountAutomaticAppCreateAndMetafieldsSetRequestBody?.style_config
+                    const targeting_settings = discountAutomaticAppCreateAndMetafieldsSetRequestBody?.targeting_settings
+                    const product_pool = discountAutomaticAppCreateAndMetafieldsSetRequestBody?.product_pool
+                    const metafields = {
+                        ...discountAutomaticAppCreateAndMetafieldsSetRequestBody?.metafields,
+                        ownerId: shopId,
+                    }
+
+                    const data = {
+                        shopName: shop,
+                        discountGid: discountAutomaticAppCreateAndMetafieldsSetData?.discountAutomaticAppCreate?.automaticAppDiscount?.discountId,
+                        status: "ACTIVE",
+                        discountData: {
+                            basic_information,
+                            discount_rules,
+                            style_config,
+                            targeting_settings,
+                            product_pool,
+                            metafields
+                        },
+                    }
+
+                    const saveUserDiscount = await SaveUserDiscount({
+                        shopName: shop,
+                        data
+                    })
+
+                    return saveUserDiscount
+                }
+
+                return {
+                    success: false,
+                    errorCode: 10001,
+                    errorMsg: "SERVER_ERROR",
+                    response: null,
+                }
+            } catch (error) {
                 console.error(`${shop} shopMarketsRequestBody Error: `, error);
+                return {
+                    success: false,
+                    errorCode: 10001,
+                    errorMsg: "SERVER_ERROR",
+                    response: null,
+                }
+            }
+        case !!discountAutomaticAppUpdateAndMetafieldsSetRequestBody:
+            try {
+                const variables = discountAutomaticAppUpdateAndMetafieldsSetRequestBody?.discountAutomaticAppUpdateAndMetafieldsSetRequestJsondata
+
+                const discountAutomaticAppUpdateAndMetafieldsSetData = await mutationDiscountAutomaticAppUpdateAndMetafieldsSet({
+                    shop,
+                    accessToken: accessToken || "",
+                    variables,
+                })
+
+                if (discountAutomaticAppUpdateAndMetafieldsSetData) {
+                    const basic_information = discountAutomaticAppUpdateAndMetafieldsSetRequestBody?.basic_information
+                    const discount_rules = discountAutomaticAppUpdateAndMetafieldsSetRequestBody?.discount_rules
+                    const style_config = discountAutomaticAppUpdateAndMetafieldsSetRequestBody?.style_config
+                    const targeting_settings = discountAutomaticAppUpdateAndMetafieldsSetRequestBody?.targeting_settings
+                    const product_pool = discountAutomaticAppUpdateAndMetafieldsSetRequestBody?.product_pool
+                    const metafields = {
+                        ...discountAutomaticAppUpdateAndMetafieldsSetRequestBody?.metafields,
+                    }
+
+                    const data = {
+                        shopName: shop,
+                        discountGid: discountAutomaticAppUpdateAndMetafieldsSetData?.discountAutomaticAppUpdate?.automaticAppDiscount?.discountId,
+                        discountData: {
+                            basic_information,
+                            discount_rules,
+                            style_config,
+                            targeting_settings,
+                            product_pool,
+                            metafields
+                        },
+                    }
+
+                    console.log(data);
+
+                    const updateUserDiscount = await UpdateUserDiscount({
+                        shopName: shop,
+                        data
+                    })
+
+                    return updateUserDiscount
+                }
+
+                return {
+                    success: false,
+                    errorCode: 10001,
+                    errorMsg: "SERVER_ERROR",
+                    response: null,
+                }
+            } catch (error) {
+                console.error(`${shop} discountAutomaticAppUpdateAndMetafieldsSetRequestBody Error: `, error);
                 return {
                     success: false,
                     errorCode: 10001,
@@ -293,8 +483,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 const Index = () => {
+    const { discountGid } = useLoaderData<typeof loader>();
     const navigate = useNavigate();
     const { t } = useTranslation();
+
+    const metafieldsRef = useRef<any>(null);
+
+    const productPoolDataFetcher = useFetcher<any>();
+    const shopMarketsDataFetcher = useFetcher<any>();
+    const customerSegmentsDataFetcher = useFetcher<any>();
+    const customersDataFetcher = useFetcher<any>();
+    const confirmFetcher = useFetcher<any>();
 
     const steps = [
         t('Basic Information'),
@@ -340,6 +539,7 @@ const Index = () => {
             }
         ];
 
+    const [loading, setLoading] = useState(true);
     const [step, setStep] = useState(1);
 
     const [selectedProducts, setSelectedProducts] = useState<ProductVariantsDataType[]>([]);
@@ -351,86 +551,121 @@ const Index = () => {
 
     const [basicInformation, setBasicInformation] = useState<BasicInformationType>({
         offerName: `#Bundle ${Date.now()}`,
-        offerType: 'quantity-breaks-same',
+        offerType: {
+            category: "product",
+            subtype: "quantity-breaks-same"
+        },
     });
+
     const [discountRules, setDiscountRules] = useState<DiscountRulesType[]>([
         {
             id: Date.now(),
+            enabled: true,
             isExpanded: true,
-            buyQty: 1,
-            discountRate: 1,
+            trigger_scope: {
+                quantity_scope: "same_variant",
+                min_quantity: 1,
+            },
+            discount: {
+                type: "percentage",
+                value: 1,
+                maxDiscount: 1,
+            },
+            discount_reward: [],
             title: 'Single',
             subtitle: 'single',
             labelText: '',
             badgeText: '',
             selectedByDefault: false,
-            upsellProducts: [],
-            freegiftProducts: [],
+            reward: [],
             showAsSoldOut: false,
         },
         {
             id: Date.now() + 1,
+            enabled: true,
             isExpanded: true,
-            buyQty: 2,
-            discountRate: 0.8,
+            trigger_scope: {
+                quantity_scope: "same_variant",
+                min_quantity: 2,
+            },
+            discount: {
+                type: "percentage",
+                value: 0.8,
+                maxDiscount: 100,
+            },
+            discount_reward: [],
             title: 'Duo',
             subtitle: 'duo',
             labelText: 'SAVE 20%',
             badgeText: 'Popular',
             selectedByDefault: true,
-            upsellProducts: [],
-            freegiftProducts: [],
+            reward: [],
             showAsSoldOut: false,
         },
     ]);
 
     const [styleConfigData, setStyleConfigData] = useState<StyleConfigType>({
-        base_style: "vertical_stack",
-        card_background_color: '#FFFFFF',
-        card_label_color: '#10f32eff',
-        card_border_color: '#E5E5E5',
-        card_title_text: 'BUNDLE & SAVE',
-        card_title_text_fontSize: '16px',
-        card_title_text_fontStyle: "normal",
-        card_title_color: '#000000',
-        card_button_text: 'Add to cart',
-        card_button_primaryColor: '#000000',
-        enable_countdown_timer: false,
-        countdown_timer_config: {
-            timer_duration: 1,
-            timer_color: "#d82c0d",
+        layout: {
+            base_style: "vertical_stack",
+        },
+        card: {
+            background_color: '#FFFFFF',
+            border_color: '#E5E5E5',
+            label_color: '#10f32eff',
+        },
+        title: {
+            text: 'BUNDLE & SAVE',
+            fontSize: '16px',
+            fontWeight: "normal",
+            color: '#000000',
+        },
+        button: {
+            text: 'Add to cart',
+            primaryColor: '#000000',
+        },
+        countdown: {
+            enabled: false,
+            duration: 1,
+            color: "#d82c0d",
         },
     })
 
     const [targetingSettingsData, setTargetingSettingsData] = useState<TargetingSettingsType>({
-        eligibilityType: "all",
-        customersData: [],
-        segmentData: [],
         marketVisibilitySettingData: [],
-        startsAt: null,
-        endsAt: null,
-        totalBudget: null,
-        dailyBudget: null,
-        timesLimitForPercustomer: null,
-        hideOfferAfterExpiration: true,
+        visibilityConstraints: {
+            maxDiscountAmount: 100,
+            maxUsageCount: 2
+        },
+        schedule: {
+            startsAt: null,
+            endsAt: null,
+            hideAfterExpiration: true,
+        },
+        budget: {
+            totalBudget: null,
+            dailyBudget: null,
+        },
+        usage_limit: {
+            per_customer: null,
+            per_product: null,
+        },
         showOfferToBots: false,
     })
 
     const [mainModalType, setMainModalType] = useState<"ProductVariants" | "CustomerSegments" | "Customer" | null>(null)
 
     const selectedOfferType = useMemo(() => {
-        return offerTypes.find(type => type.id == basicInformation.offerType) || offerTypes[0]
+        return offerTypes.find(type => type.id == basicInformation.offerType?.subtype) || offerTypes[0]
     }, [basicInformation])
-
-    const shopMarketsDataFetcher = useFetcher<any>();
-    const customerSegmentsDataFetcher = useFetcher<any>();
-    const customersDataFetcher = useFetcher<any>();
-    const confirmFetcher = useFetcher<any>();
 
     useEffect(() => {
         shopMarketsDataFetcher.submit({
             shopMarketsRequestBody: JSON.stringify({})
         }, { method: 'POST' })
+        if (discountGid) {
+            getUserDiscount(discountGid)
+        }
+        setLoading(false)
     }, [])
 
     useEffect(() => {
@@ -471,35 +706,75 @@ const Index = () => {
         }
     }, [mainModalType])
 
-    // useEffect(() => {
-    //     if (customersDataFetcher.data) {
-    //         if (customersDataFetcher.data.success) {
-    //             const customersData = customersDataFetcher.data.response?.customers?.nodes;
-    //             if (customersData?.length) {
-    //                 const data = customersData.map((customer: any) => {
-    //                     return {
-    //                         label: customer.firstName + ' ' + customer.lastName,
-    //                         value: customer.id,
-    //                     }
-    //                 })
-    //                 setCustomersData(data);
-    //             }
-    //         }
-    //     }
-    // }, [customersDataFetcher.data])
-
     useEffect(() => {
         if (confirmFetcher.data) {
             if (confirmFetcher.data.success) {
-                const discountId = confirmFetcher.data.response?.discountAutomaticAppCreate?.automaticAppDiscount?.discountId
-                console.log("discountId: ", discountId);
-                if (discountId)
-                    localStorage.setItem("ciwi_new_offer_id", discountId)
-                shopify.toast.show(t("Offer created successfully"))
+                const discountGid = confirmFetcher.data.response?.discountGid
+                if (discountGid) {
+                    localStorage.setItem("ciwi_new_offer_id", discountGid)
+                }
+                shopify.toast.show(t(discountGid ? "Offer updated successfully" : "Offer created successfully"))
                 navigate('/app');
             }
         }
     }, [confirmFetcher.data])
+
+    useEffect(() => {
+        if (productPoolDataFetcher.data) {
+            if (productPoolDataFetcher.data.success) {
+                const data = productPoolDataFetcher.data.response
+                const productPoolData = Object.values(data).map((variant: any) => {
+                    return {
+                        id: variant.id,
+                        name: `${variant.product?.title} - ${variant.title}`,
+                        price: variant.price,
+                        image: variant.media?.edges[0]?.node?.preview?.image?.url,
+                    }
+                })
+                setSelectedProducts(productPoolData)
+            }
+        }
+    }, [productPoolDataFetcher.data])
+
+    const getUserDiscount = useCallback(async (discountGid: string) => {
+        const getUserDiscountData = await GetUserDiscount({
+            shopName: globalStore.shop,
+            server: globalStore.server,
+            discountGid: discountGid,
+        })
+
+        if (getUserDiscountData.success) {
+            const basic_information = getUserDiscountData.response?.discountData?.basic_information;
+            const discount_rules = getUserDiscountData.response?.discountData?.discount_rules;
+            const style_config = getUserDiscountData.response?.discountData?.style_config;
+            const targeting_settings = {
+                ...getUserDiscountData.response?.discountData?.targeting_settings,
+                schedule: {
+                    startsAt: dayjs(getUserDiscountData.response?.discountData?.targeting_settings?.schedule?.startsAt),
+                    endsAt: getUserDiscountData.response?.discountData?.targeting_settings?.schedule?.endsAt ? dayjs(getUserDiscountData.response?.discountData?.targeting_settings?.schedule?.endsAt) : null,
+                    hideAfterExpiration: !!getUserDiscountData.response?.discountData?.targeting_settings?.schedule?.hideAfterExpiration,
+                }
+            };
+
+            console.log("getUserDiscountData.response?.discountData?.targeting_settings: ", getUserDiscountData.response?.discountData?.targeting_settings);
+            console.log("targeting_settings: ", targeting_settings);
+
+            const product_pool =
+                getUserDiscountData.response?.discountData?.product_pool?.include_variant_ids?.map((item: string) => `gid://shopify/ProductVariant/${item}`);
+
+            productPoolDataFetcher.submit({
+                productPoolRequestBody: JSON.stringify({
+                    ids: product_pool
+                })
+            }, { method: 'POST' })
+            setBasicInformation(basic_information)
+            setDiscountRules(discount_rules)
+            setStyleConfigData(style_config)
+            setTargetingSettingsData(targeting_settings)
+
+            metafieldsRef.current = getUserDiscountData.response?.discountData?.metafields;
+        }
+    }, [globalStore.shop, globalStore.server])
 
     const nextStepCheckAndConfirm = () => {
         switch (true) {
@@ -519,7 +794,7 @@ const Index = () => {
                     shopify.toast.show(t("Please select at least one discount rule"))
                     break;
                 }
-                if (discountRules.some(rule => rule.buyQty == 0)) {
+                if (discountRules.some(rule => rule.trigger_scope.min_quantity == 0)) {
                     shopify.toast.show(t("Buy quantity can't be 0"))
                     break;
                 }
@@ -533,7 +808,7 @@ const Index = () => {
                     shopify.toast.show(t("Please select at least one market"))
                     break;
                 }
-                if (!targetingSettingsData?.startsAt) {
+                if (!targetingSettingsData?.schedule?.startsAt) {
                     shopify.toast.show(t("Please select start date"))
                     break;
                 }
@@ -548,228 +823,363 @@ const Index = () => {
         const selectedProductVariantIds = selectedProducts.map((product) => product.id.split("gid://shopify/ProductVariant/")[1]);
 
         const metafieldValue = {
-            ...{ basicInformation },
-            ...{ discountRules },
-            ...{ styleConfigData },
-            ...{
-                targetingSettingsData: {
-                    ...targetingSettingsData,
-                    startsAt: dayjs(targetingSettingsData?.startsAt).toISOString(),
-                    endsAt: targetingSettingsData?.endsAt ? dayjs(targetingSettingsData?.endsAt).toISOString() : null,
-                    segmentData: targetingSettingsData?.segmentData?.map((segment: any) => segment.value),
+            basic_information: basicInformation,
+            discount_rules: discountRules,
+            style_config: styleConfigData,
+            targeting_settings: {
+                ...targetingSettingsData,
+                schedule: {
+                    ...targetingSettingsData?.schedule,
+                    startsAt: new Date(targetingSettingsData?.schedule?.startsAt as Date).toISOString(),
+                    endsAt: targetingSettingsData?.schedule?.endsAt ? new Date(targetingSettingsData?.schedule?.endsAt).toISOString() : null,
                 }
             },
-            selectedProductVariantIds,
+            product_pool: {
+                include_product_ids: null,
+                include_variant_ids: selectedProductVariantIds,
+                include_collection_ids: null,
+            }
         }
 
-        const discountAutomaticAppCreateAndMetafieldsSetRequestJsondata = {
-            automaticAppDiscount: {
-                title: basicInformation?.offerName,
-                functionHandle: "ciwi-bundle-multiple-products-discount-function",
-                startsAt: dayjs(targetingSettingsData?.startsAt).toISOString(),
-                endsAt: targetingSettingsData?.endsAt ? dayjs(targetingSettingsData?.endsAt).toISOString() : null,
-                combinesWith: {
-                    orderDiscounts: true,
-                    productDiscounts: true,
-                    shippingDiscounts: true
+        if (discountGid) {
+            const discountAutomaticAppUpdateAndMetafieldsSetRequestJsondata = {
+                id: discountGid,
+                automaticAppDiscount: {
+                    title: basicInformation?.offerName,
+                    functionHandle: "ciwi-bundle-multiple-products-discount-function",
+                    startsAt: dayjs(targetingSettingsData?.schedule?.startsAt).toISOString(),
+                    endsAt: targetingSettingsData?.schedule?.endsAt ? dayjs(targetingSettingsData?.schedule?.endsAt).toISOString() : null,
+                    combinesWith: {
+                        orderDiscounts: true,
+                        productDiscounts: true,
+                        shippingDiscounts: true
+                    },
+                    discountClasses: [
+                        "PRODUCT",
+                    ]
                 },
                 metafields: [
                     {
                         key: `basic_information`,
                         namespace: "ciwi_bundles_config",
+                        ownerId: discountGid,
                         type: "json",
                         value: JSON.stringify(basicInformation)
                     },
                     {
                         key: `discount_rules`,
                         namespace: "ciwi_bundles_config",
+                        ownerId: discountGid,
                         type: "json",
                         value: JSON.stringify(discountRules)
                     },
                     {
                         key: `style_config`,
                         namespace: "ciwi_bundles_config",
+                        ownerId: discountGid,
                         type: "json",
                         value: JSON.stringify(styleConfigData)
                     },
                     {
                         key: `targeting_settings`,
                         namespace: "ciwi_bundles_config",
+                        ownerId: discountGid,
                         type: "json",
                         value: JSON.stringify({
                             ...targetingSettingsData,
-                            startsAt: dayjs(targetingSettingsData?.startsAt).toISOString(),
-                            endsAt: targetingSettingsData?.endsAt ? dayjs(targetingSettingsData?.endsAt).toISOString() : null,
-                            segmentData: targetingSettingsData?.segmentData?.map((segment: any) => segment.value),
+                            startsAt: dayjs(targetingSettingsData?.schedule?.startsAt).toISOString(),
+                            endsAt: targetingSettingsData?.schedule?.endsAt ? dayjs(targetingSettingsData?.schedule?.endsAt).toISOString() : null,
                         })
                     },
                     {
-                        key: `selected_product_variant_ids`,
+                        key: `product_pool`,
                         namespace: "ciwi_bundles_config",
+                        ownerId: discountGid,
                         type: "json",
-                        value: JSON.stringify(selectedProductVariantIds)
+                        value: JSON.stringify({
+                            include_product_ids: null,
+                            include_variant_ids: selectedProductVariantIds,
+                            include_collection_ids: null,
+                        })
+                    },
+                    {
+                        ...metafieldsRef.current,
+                        type: "json",
+                        value: JSON.stringify(metafieldValue)
                     },
                 ],
-                discountClasses: [
-                    "PRODUCT",
-                ]
-            },
-            metafields: [
-                {
-                    key: `ciwi_bundles_config_${Date.now()}`,
-                    namespace: "ciwi_bundles_config",
-                    ownerId: "gid://shopify/Shop/71469596922",
-                    type: "json",
-                    value: JSON.stringify(metafieldValue)
-                },
-            ],
-        }
+            }
 
-        confirmFetcher.submit({
-            discountAutomaticAppCreateAndMetafieldsSetRequestBody:
-                JSON.stringify(
-                    discountAutomaticAppCreateAndMetafieldsSetRequestJsondata
-                ),
-        }, { method: "POST" });
+            confirmFetcher.submit({
+                discountAutomaticAppUpdateAndMetafieldsSetRequestBody:
+                    JSON.stringify({
+                        discountAutomaticAppUpdateAndMetafieldsSetRequestJsondata,
+                        basic_information: basicInformation,
+                        discount_rules: discountRules,
+                        style_config: styleConfigData,
+                        targeting_settings: {
+                            ...targetingSettingsData,
+                            startsAt: dayjs(targetingSettingsData?.schedule?.startsAt).toISOString(),
+                            endsAt: targetingSettingsData?.schedule?.endsAt ? dayjs(targetingSettingsData?.schedule?.endsAt).toISOString() : null,
+                        },
+                        product_pool: {
+                            include_product_ids: null,
+                            include_variant_ids: selectedProductVariantIds,
+                            include_collection_ids: null,
+                        },
+                        metafields: {
+                            ...metafieldsRef.current,
+                            type: "json",
+                            value: JSON.stringify(metafieldValue)
+                        },
+                    }),
+            }, { method: "POST" });
+        } else {
+            const discountAutomaticAppCreateAndMetafieldsSetRequestJsondata = {
+                automaticAppDiscount: {
+                    title: basicInformation?.offerName,
+                    functionHandle: "ciwi-bundle-multiple-products-discount-function",
+                    startsAt: dayjs(targetingSettingsData?.schedule?.startsAt).toISOString(),
+                    endsAt: targetingSettingsData?.schedule?.endsAt ? dayjs(targetingSettingsData?.schedule?.endsAt).toISOString() : null,
+                    combinesWith: {
+                        orderDiscounts: true,
+                        productDiscounts: true,
+                        shippingDiscounts: true
+                    },
+                    metafields: [
+                        {
+                            key: `basic_information`,
+                            namespace: "ciwi_bundles_config",
+                            type: "json",
+                            value: JSON.stringify(basicInformation)
+                        },
+                        {
+                            key: `discount_rules`,
+                            namespace: "ciwi_bundles_config",
+                            type: "json",
+                            value: JSON.stringify(discountRules)
+                        },
+                        {
+                            key: `style_config`,
+                            namespace: "ciwi_bundles_config",
+                            type: "json",
+                            value: JSON.stringify(styleConfigData)
+                        },
+                        {
+                            key: `targeting_settings`,
+                            namespace: "ciwi_bundles_config",
+                            type: "json",
+                            value: JSON.stringify({
+                                ...targetingSettingsData,
+                                startsAt: dayjs(targetingSettingsData?.schedule?.startsAt).toISOString(),
+                                endsAt: targetingSettingsData?.schedule?.endsAt ? dayjs(targetingSettingsData?.schedule?.endsAt).toISOString() : null,
+                            })
+                        },
+                        {
+                            key: `product_pool`,
+                            namespace: "ciwi_bundles_config",
+                            type: "json",
+                            value: JSON.stringify({
+                                include_product_ids: null,
+                                include_variant_ids: selectedProductVariantIds,
+                                include_collection_ids: null,
+                            })
+                        },
+                    ],
+                    discountClasses: [
+                        "PRODUCT",
+                    ]
+                },
+                metafields: [
+                    {
+                        key: `ciwi_bundles_config_${Date.now()}`,
+                        namespace: "ciwi_bundles_config",
+                        ownerId: "",
+                        type: "json",
+                        value: JSON.stringify(metafieldValue)
+                    },
+                ],
+            }
+
+            confirmFetcher.submit({
+                discountAutomaticAppCreateAndMetafieldsSetRequestBody:
+                    JSON.stringify({
+                        discountAutomaticAppCreateAndMetafieldsSetRequestJsondata,
+                        basic_information: basicInformation,
+                        discount_rules: discountRules,
+                        style_config: styleConfigData,
+                        targeting_settings: {
+                            ...targetingSettingsData,
+                            startsAt: dayjs(targetingSettingsData?.schedule?.startsAt).toISOString(),
+                            endsAt: targetingSettingsData?.schedule?.endsAt ? dayjs(targetingSettingsData?.schedule?.endsAt).toISOString() : null,
+                        },
+                        product_pool: {
+                            include_product_ids: null,
+                            include_variant_ids: selectedProductVariantIds,
+                            include_collection_ids: null,
+                        },
+                        metafields: {
+                            key: `ciwi_bundles_config_${Date.now()}`,
+                            namespace: "ciwi_bundles_config",
+                            ownerId: "",
+                        },
+                    }),
+            }, { method: "POST" });
+        }
     }
 
-    return (
-        <div className="polaris-page">
+    return loading ? (
+        <Flex
+            align="center"
+            justify="center"
+            style={{
+                height: '100%',
+                width: '100%',
+            }
+            }
+        >
+            <Spin />
+        </Flex >
+    )
+        :
+        (
+            <div className="polaris-page">
 
-            <Header backUrl="/app" title="Create New Offer" />
+                <Header backUrl="/app" title={t(discountGid ? "Edit Offer" : "Create New Offer")} />
 
-            <div className="polaris-card" style={{ marginBottom: '80px' }}>
-                <div
-                    style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(2, 1fr)',
-                        gap: '8px',
-                        marginBottom: '24px',
-                    }}
-                    className="sm:flex sm:gap-[12px]"
-                >
-                    {steps.map((stepName, index) => {
-                        const stepNumber = index + 1;
-                        const isActive = step === stepNumber;
-                        const isClickable = stepNumber <= step;
+                <div className="polaris-card" style={{ marginBottom: '80px' }}>
+                    <div
+                        style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(2, 1fr)',
+                            gap: '8px',
+                            marginBottom: '24px',
+                        }}
+                        className="sm:flex sm:gap-[12px]"
+                    >
+                        {steps.map((stepName, index) => {
+                            const stepNumber = index + 1;
+                            const isActive = step === stepNumber;
+                            const isClickable = stepNumber <= step;
 
-                        return (
-                            <div
-                                key={index}
-                                onClick={() => {
-                                    if (isClickable) {
-                                        setStep(stepNumber);
-                                    }
-                                }}
-                                style={{
-                                    flex: 1,
-                                    padding: '10px 8px',
-                                    background: isActive ? '#008060' : '#f4f6f8',
-                                    color: isActive ? 'white' : '#6d7175',
-                                    borderRadius: '6px',
-                                    textAlign: 'center',
-                                    fontSize: '13px',
-                                    fontWeight: 500,
-                                    cursor: isClickable ? 'pointer' : 'not-allowed',
-                                    opacity: isClickable ? 1 : 0.5,
-                                }}
-                                className="sm:text-[14px] sm:p-[12px]"
-                            >
-                                <span className="hidden sm:inline">{stepNumber}. </span>
-                                {stepName}
-                            </div>
-                        );
-                    })}
-                </div>
+                            return (
+                                <div
+                                    key={index}
+                                    onClick={() => {
+                                        if (isClickable) {
+                                            setStep(stepNumber);
+                                        }
+                                    }}
+                                    style={{
+                                        flex: 1,
+                                        padding: '10px 8px',
+                                        background: isActive ? '#008060' : '#f4f6f8',
+                                        color: isActive ? 'white' : '#6d7175',
+                                        borderRadius: '6px',
+                                        textAlign: 'center',
+                                        fontSize: '13px',
+                                        fontWeight: 500,
+                                        cursor: isClickable ? 'pointer' : 'not-allowed',
+                                        opacity: isClickable ? 1 : 0.5,
+                                    }}
+                                    className="sm:text-[14px] sm:p-[12px]"
+                                >
+                                    <span className="hidden sm:inline">{stepNumber}. </span>
+                                    {stepName}
+                                </div>
+                            );
+                        })}
+                    </div>
 
-                <div className="polaris-layout">
-                    {step === 1 &&
-                        <BasicInformationSetting
-                            offerTypes={offerTypes}
-                            basicInformation={basicInformation}
-                            setBasicInformation={setBasicInformation}
-                        />
-                    }
-
-                    {step === 2 && (
-                        <>
-                            {/* Product Modal */}
-                            <ProductModal
-                                mainModalType={mainModalType}
-                                setMainModalType={setMainModalType}
-                                selectedProducts={selectedProducts}
-                                setSelectedProducts={setSelectedProducts}
+                    <div className="polaris-layout">
+                        {step === 1 &&
+                            <BasicInformationSetting
+                                offerTypes={offerTypes}
+                                basicInformation={basicInformation}
+                                setBasicInformation={setBasicInformation}
                             />
+                        }
 
-                            <ProductsAndDiscountsSetting
-                                selectedProducts={selectedProducts}
-                                setMainModalType={setMainModalType}
+                        {step === 2 && (
+                            <>
+                                {/* Product Modal */}
+                                <ProductModal
+                                    mainModalType={mainModalType}
+                                    setMainModalType={setMainModalType}
+                                    selectedProducts={selectedProducts}
+                                    setSelectedProducts={setSelectedProducts}
+                                />
+
+                                <ProductsAndDiscountsSetting
+                                    selectedProducts={selectedProducts}
+                                    setMainModalType={setMainModalType}
+                                    discountRules={discountRules}
+                                    setDiscountRules={setDiscountRules}
+                                    selectedRuleIndex={selectedRuleIndex}
+                                    setSelectedRuleIndex={setSelectedRuleIndex}
+                                    selectedOfferType={selectedOfferType}
+                                />
+                            </>
+                        )}
+
+                        {step === 3 && (
+                            <StyleDesignSetting
+                                styleConfigData={styleConfigData}
+                                setStyleConfigData={setStyleConfigData}
                                 discountRules={discountRules}
-                                setDiscountRules={setDiscountRules}
+                                selectedOfferType={selectedOfferType}
                                 selectedRuleIndex={selectedRuleIndex}
                                 setSelectedRuleIndex={setSelectedRuleIndex}
-                                selectedOfferType={selectedOfferType}
                             />
-                        </>
-                    )}
+                        )}
 
-                    {step === 3 && (
-                        <StyleDesignSetting
-                            styleConfigData={styleConfigData}
-                            setStyleConfigData={setStyleConfigData}
-                            discountRules={discountRules}
-                            selectedOfferType={selectedOfferType}
-                            selectedRuleIndex={selectedRuleIndex}
-                            setSelectedRuleIndex={setSelectedRuleIndex}
-                        />
-                    )}
+                        {step === 4 && (
+                            <ScheduleAndBudgetSetting
+                                targetingSettingsData={targetingSettingsData}
+                                setTargetingSettingsData={setTargetingSettingsData}
+                                setMainModalType={setMainModalType}
+                                marketVisibilitySettingData={marketVisibilitySettingData}
+                            />
+                        )}
+                    </div>
+                </div>
 
-                    {step === 4 && (
-                        <ScheduleAndBudgetSetting
-                            targetingSettingsData={targetingSettingsData}
-                            setTargetingSettingsData={setTargetingSettingsData}
-                            setMainModalType={setMainModalType}
-                            marketVisibilitySettingData={marketVisibilitySettingData}
-                        />
+
+                {/* Fixed Bottom Action Bar */}
+                <div style={{
+                    position: 'fixed',
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    background: '#ffffff',
+                    borderTop: '1px solid #dfe3e8',
+                    padding: '16px 24px',
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    gap: '12px',
+                    zIndex: 100,
+                    boxShadow: '0 -2px 8px rgba(0, 0, 0, 0.1)'
+                }}>
+                    {step > 1 && (
+                        <Button
+                            onClick={() => setStep(step - 1)}
+                        >
+                            Previous
+                        </Button>
                     )}
+                    <Button
+                        className="polaris-button"
+                        loading={confirmFetcher.state === "submitting"}
+                        onClick={
+                            () => nextStepCheckAndConfirm()
+                        }
+                    >
+                        {step === 4 ? t(discountGid ? "Save Offer" : "Create Offer") : 'Next'}
+                    </Button>
                 </div>
             </div>
-
-            {/* Fixed Bottom Action Bar */}
-            <div style={{
-                position: 'fixed',
-                bottom: 0,
-                left: 0,
-                right: 0,
-                background: '#ffffff',
-                borderTop: '1px solid #dfe3e8',
-                padding: '16px 24px',
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                gap: '12px',
-                zIndex: 100,
-                boxShadow: '0 -2px 8px rgba(0, 0, 0, 0.1)'
-            }}>
-                {step > 1 && (
-                    <Button
-                        onClick={() => setStep(step - 1)}
-                    >
-                        Previous
-                    </Button>
-                )}
-                <Button
-                    className="polaris-button"
-                    loading={confirmFetcher.state === "submitting"}
-                    onClick={
-                        () => nextStepCheckAndConfirm()
-                    }
-                >
-                    {step === 4 ? 'Create Offer' : 'Next'}
-                </Button>
-            </div>
-        </div>
-    );
+        )
 };
 
 export default Index;

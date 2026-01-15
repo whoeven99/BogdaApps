@@ -42,9 +42,9 @@ query CartInput {
     ) {
       value
     }
-    selectedProductVariantIds: metafield(
+    productPool: metafield(
       namespace: "ciwi_bundles_config"
-      key: "selected_product_variant_ids"
+      key: "product_pool"
     ) {
       value
     }

@@ -8,7 +8,8 @@
       "marketId": {{ localization.market.id }},
       "config": {{ shop.metafields.ciwi_bundles_config | json }},
       "compareAtPrice": {{ product.variants[0].compare_at_price | json }},
-      "price": {{ product.variants[0].price | json }}
+      "price": {{ product.variants[0].price | json }},
+      "currencySymbol": "{{ localization.country.currency.symbol }}"
     }
   </script>
   <script src="{{ 'ciwi-bundle-if-add-to-dom.js' | asset_url }}" defer></script>

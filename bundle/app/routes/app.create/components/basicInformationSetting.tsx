@@ -73,11 +73,14 @@ const BasicInformationSetting: React.FC<BasicInformationSettingProps> = ({
                                     label: type.name
                                 }
                             ))}
-                            value={basicInformation.offerType}
+                            value={basicInformation.offerType.subtype}
                             onChange={(value) => {
                                 setBasicInformation({
                                     ...basicInformation,
-                                    offerType: value
+                                    offerType: {
+                                        ...basicInformation.offerType,
+                                        subtype: value
+                                    }
                                 })
                             }}
                         />
@@ -89,7 +92,7 @@ const BasicInformationSetting: React.FC<BasicInformationSettingProps> = ({
             <div style={{ position: 'sticky', top: '24px' }}>
                 <h3 style={{ fontSize: '14px', fontWeight: 500, marginBottom: '12px' }}>Preview</h3>
                 <p className="polaris-text-subdued" style={{ fontSize: '13px', marginBottom: '12px' }}>
-                    {offerTypes.find(type => type.id === basicInformation.offerType)?.description}
+                    {offerTypes.find(type => type.id === basicInformation.offerType?.subtype)?.description}
                 </p>
 
                 {/* Preview Card */}
@@ -103,7 +106,7 @@ const BasicInformationSetting: React.FC<BasicInformationSettingProps> = ({
                     display: 'flex',
                     flexDirection: 'column'
                 }}>
-                    {basicInformation.offerType === 'quantity-breaks-same' && (
+                    {basicInformation.offerType?.subtype === 'quantity-breaks-same' && (
                         <>
                             <div style={{ border: '1px solid #e0e0e0', borderRadius: '8px', padding: '12px', marginBottom: '12px', background: '#f9fafb' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -140,7 +143,7 @@ const BasicInformationSetting: React.FC<BasicInformationSettingProps> = ({
                         </>
                     )}
 
-                    {basicInformation.offerType === 'bogo' && (
+                    {basicInformation.offerType?.subtype === 'bogo' && (
                         <>
                             <div style={{ border: '2px solid #000', borderRadius: '8px', padding: '10px 12px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <input type="radio" readOnly checked style={{ width: '16px', height: '16px' }} />
@@ -190,7 +193,7 @@ const BasicInformationSetting: React.FC<BasicInformationSettingProps> = ({
                         </>
                     )}
 
-                    {basicInformation.offerType === 'quantity-breaks-different' && (
+                    {basicInformation.offerType?.subtype === 'quantity-breaks-different' && (
                         <>
                             <div style={{ border: '1px solid #e0e0e0', borderRadius: '8px', padding: '12px', marginBottom: '8px', background: '#f9fafb' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -235,7 +238,7 @@ const BasicInformationSetting: React.FC<BasicInformationSettingProps> = ({
                         </>
                     )}
 
-                    {basicInformation.offerType === 'complete-bundle' && (
+                    {basicInformation.offerType?.subtype === 'complete-bundle' && (
                         <>
                             <div style={{ border: '1px solid #e0e0e0', borderRadius: '8px', padding: '10px', marginBottom: '10px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
@@ -276,7 +279,7 @@ const BasicInformationSetting: React.FC<BasicInformationSettingProps> = ({
                         </>
                     )}
 
-                    {basicInformation.offerType === 'subscription' && (
+                    {basicInformation.offerType?.subtype === 'subscription' && (
                         <>
                             <div style={{ border: '2px solid #000', borderRadius: '8px', padding: '10px 12px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <input type="radio" readOnly checked style={{ width: '16px', height: '16px' }} />
@@ -333,7 +336,7 @@ const BasicInformationSetting: React.FC<BasicInformationSettingProps> = ({
                         </>
                     )}
 
-                    {basicInformation.offerType === 'progressive-gifts' && (
+                    {basicInformation.offerType?.subtype === 'progressive-gifts' && (
                         <>
                             <div style={{ border: '1px solid #e0e0e0', borderRadius: '8px', padding: '12px', marginBottom: '8px', background: '#f9fafb' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

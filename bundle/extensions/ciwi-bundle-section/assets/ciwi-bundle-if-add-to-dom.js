@@ -28,14 +28,14 @@
 
     const bundleData = Object.values(ciwiBundleconfig)[0] || {};
 
-    const discountRules = bundleData.discountRules || [];
+    const discountRules = bundleData.discount_rules || [];
 
-    const styleConfigData = bundleData.styleConfigData || {};
+    const styleConfigData = bundleData.style_config || {};
 
-    const targetingSettingsData = bundleData.targetingSettingsData || {};
+    const targetingSettingsData = bundleData.targeting_settings || {};
 
     const selectedProductVariantIds =
-      bundleData.selectedProductVariantIds || {};
+      bundleData.product_pool.include_variant_ids || [];
 
     const isInTargetMarketArray =
       targetingSettingsData?.marketVisibilitySettingData?.find((market) =>
@@ -88,23 +88,28 @@
       .map((rule, index) => {
         let priceHtml = "";
 
-        if (rule.discountRate === 1) {
+        console.log("rule: ", rule);
+
+        if (rule.discount.value === 1) {
           priceHtml = `
             <strong style="font-size:16px">
-              €${Number((rule.buyQty * configElJson.price) / 100).toFixed(2)}
+              ${configElJson.currencySymbol} ${Number((rule.trigger_scope.min_quantity * configElJson.price) / 100).toFixed(2)}
             </strong>
           `;
-        } else if (rule.discountRate === 0) {
+        } else if (rule.discount.value === 0) {
           priceHtml = `<strong style="font-size:16px">Free</strong>`;
-        } else if (rule.discountRate > 0 && rule.discountRate < 1) {
+        } else if (rule.discount.value > 0 && rule.discount.value < 1) {
           priceHtml = `
             <strong style="font-size:16px">
-              €${Number(
-                (rule.buyQty * configElJson.price * rule.discountRate) / 100,
-              ).toFixed(2)}
+               ${configElJson.currencySymbol} ${Number(
+                 (rule.trigger_scope.min_quantity *
+                   configElJson.price *
+                   rule.discount.value) /
+                   100,
+               ).toFixed(2)}
             </strong>
             <div style="font-size:12px;color:#6d7175;text-decoration:line-through">
-              €${Number((rule.buyQty * configElJson.price) / 100).toFixed(2)}
+              ${configElJson.currencySymbol} ${Number((rule.trigger_scope.min_quantity * configElJson.price) / 100).toFixed(2)}
             </div>
           `;
         }
@@ -113,9 +118,9 @@
           <div
             class="ciwi-rule"
             data-index="${index}"
-            data-qty="${rule.buyQty}"
+            data-qty="${rule.trigger_scope.min_quantity}"
             style="
-              border: 1px solid ${rule.selectedByDefault ? "#000" : styleConfigData.card_border_color};
+              border: 1px solid ${rule.selectedByDefault ? "#000" : styleConfigData.card.border_color};
               border-radius: 8px;
               padding: 12px;
               margin-bottom: 12px;
@@ -153,7 +158,7 @@
               <input
                 type="radio"
                 name="discount-rule-group"
-                value="${rule.buyQty}"
+                value="${rule.discount.value}"
                 checked=${rule.selectedByDefault}
                 style="width:16px;height:16px"
               />
@@ -163,11 +168,11 @@
                   <strong style="font-size:14px">${rule.title}</strong>
 
                   ${
-                    rule.discountRate < 1
+                    rule.discount.value < 1
                       ? `
                         <span
                           style="
-                            background:${styleConfigData.card_label_color || "#f0f0f0"};
+                            background:${styleConfigData.card.label_color || "#f0f0f0"};
                             padding:2px 6px;
                             border-radius:4px;
                             font-size:10px;
@@ -197,23 +202,23 @@
     wrapper.innerHTML = `
         <h3
             style="
-            font-size:${styleConfigData.card_title_text_fontSize || "16px"};
-            font-weight:${styleConfigData.card_title_text_fontStyle || 600};
-            color:${styleConfigData.card_title_color || "#000"};
+            font-size:${styleConfigData.title.fontSize || "16px"};
+            font-weight:${styleConfigData.title.fontWeight || 600};
+            color:${styleConfigData.title.color || "#000"};
             margin-bottom:16px;
             "
         >
-            ${styleConfigData.card_title_text || ""}
+            ${styleConfigData.title.text || ""}
         </h3>
 
         ${rulesHtml}
 
         ${
-          styleConfigData?.card_button_text
+          styleConfigData?.button?.text
             ? `<button
               style="
                 width: 100%;
-                background: ${styleConfigData?.card_button_primaryColor};
+                background: ${styleConfigData?.button?.primaryColor};
                 color: #fff;
                 border: none;
                 border-radius: 6px;
@@ -224,7 +229,7 @@
                 margin: 12px 0;
             "
             >
-              ${styleConfigData?.card_button_text}
+              ${styleConfigData?.button?.text}
             </button>`
             : ""
         }
@@ -247,7 +252,7 @@
 
       // UI 状态同步
       wrapper.querySelectorAll(".ciwi-rule").forEach((el) => {
-        el.style.border = `1px solid ${styleConfigData.card_border_color}`;
+        el.style.border = `1px solid ${styleConfigData.card.border_color}`;
         el.querySelector('input[type="radio"]').checked = false;
       });
 
