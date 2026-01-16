@@ -279,6 +279,17 @@ export const queryProductVariants = async ({
                         }
                         product {
                             title
+                            media(first: 1) {
+                                edges {
+                                    node {
+                                        preview {
+                                            image {
+                                                url
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                     pageInfo {

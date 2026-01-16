@@ -55,7 +55,7 @@ const ProductModal: React.FC<ProductModalProps> = ({
                             id: variant.id,
                             name: `${variant.product?.title} - ${variant.title}`,
                             price: variant.price,
-                            image: variant.media?.edges[0]?.node?.preview?.image?.url,
+                            image: variant.media?.edges[0]?.node?.preview?.image?.url || variant.product?.media?.edges[0]?.node?.preview?.image?.url || "",
                         }
                     })
                     if (loadMoreLoading) {
