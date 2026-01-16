@@ -611,7 +611,7 @@ const Index = () => {
         card: {
             background_color: '#FFFFFF',
             border_color: '#E5E5E5',
-            label_color: '#10f32eff',
+            label_color: '#10f32e',
         },
         title: {
             text: 'BUNDLE & SAVE',

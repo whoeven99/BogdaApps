@@ -182,13 +182,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           if (deleteUserDiscountData) {
             return deleteUserDiscountData
           }
-
-          return {
-            success: false,
-            errorCode: 10001,
-            errorMsg: "SERVER_ERROR",
-            response: null,
-          }
+        }
+        return {
+          success: false,
+          errorCode: 10001,
+          errorMsg: "SERVER_ERROR",
+          response: null,
         }
       } catch (error) {
         console.error(`${shop} discountNodeStatusRequestBody Error: `, error);

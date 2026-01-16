@@ -86,7 +86,7 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                                 {selectedProducts.length} product{selectedProducts.length > 1 ? 's' : ''} selected
                             </div>
                             <button
-                                onClick={() => setMainModalType(null)}
+                                onClick={() => setMainModalType("ProductVariants")}
                                 style={{
                                     background: 'none',
                                     border: 'none',

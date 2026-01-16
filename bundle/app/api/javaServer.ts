@@ -182,7 +182,7 @@ export const GetUserDiscount = async ({
     }
 };
 
-// 获取用户特定折扣信息
+// 初始化用户数据
 export const InitUser = async ({
     shopName,
     server,
