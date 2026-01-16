@@ -26,6 +26,14 @@
 
     if (!form) return;
 
+    // const parent = form.closest("product-form") ?? form.parentElement;
+    const parent = form.parentElement;
+
+    if (!parent) return;
+
+    // 防止重复插入
+    if (parent.querySelector(".ciwi-bundle-wrapper")) return;
+
     const bundleData = Object.values(ciwiBundleconfig)[0] || {};
 
     const discountRules = bundleData.discount_rules || [];
@@ -70,19 +78,11 @@
     let selectedIndex = discountRules.findIndex((r) => r.selectedByDefault);
     if (selectedIndex === -1) selectedIndex = 0;
 
-    qtyInput.value = discountRules[selectedIndex]?.buyQty || 1;
-
-    const parent = form.parentElement;
-    if (!parent) return;
-
-    // 防止重复插入
-    if (parent.querySelector(".ciwi-bundle-wrapper")) return;
+    qtyInput.value =
+      discountRules[selectedIndex].trigger_scope.min_quantity || 1;
 
     const wrapper = document.createElement("div");
     wrapper.className = "ciwi-bundle-wrapper";
-    wrapper.style.display = "flex";
-    wrapper.style.flexDirection = "column";
-    wrapper.style.marginTop = "12px";
 
     const rulesHtml = discountRules
       .map((rule, index) => {
@@ -154,7 +154,7 @@
                 : ""
             }
 
-            <div style="display:flex;align-items:center;gap:8px">
+            <div class="ciwi-rule__content">
               <input
                 type="radio"
                 name="discount-rule-group"
