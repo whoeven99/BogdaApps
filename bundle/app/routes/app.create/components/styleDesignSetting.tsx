@@ -298,7 +298,7 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                 </div>
 
                 {/* Button Styles */}
-                <div style={{ marginTop: '24px' }}>
+                {/* <div style={{ marginTop: '24px' }}>
                     <h3 style={{ fontSize: '14px', fontWeight: 500, marginBottom: '12px' }}>Button Styles</h3>
                     <div className="polaris-grid">
                         <label style={{ fontSize: '14px', fontWeight: 500 }}>
@@ -349,7 +349,7 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                             />
                         </label>
                     </div>
-                </div>
+                </div> */}
 
                 {/* Promotional Features */}
                 <div style={{ marginTop: '24px' }}>
@@ -594,7 +594,7 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                     )}
 
                     {/* Add to Cart Button */}
-                    <button style={{
+                    {/* <button style={{
                         width: '100%',
                         background: styleConfigData?.button?.primaryColor,
                         color: '#fff',
@@ -607,10 +607,10 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                         marginTop: '12px'
                     }}>
                         {styleConfigData?.button?.text}
-                    </button>
+                    </button> */}
 
                     {/* Features/Benefits */}
-                    <div style={{
+                    {/* <div style={{
                         marginTop: '12px',
                         paddingTop: '12px',
                         borderTop: '1px solid #e0e0e0',
@@ -620,7 +620,7 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                         <div style={{ marginBottom: '6px' }}>✓ Free shipping on bundles</div>
                         <div style={{ marginBottom: '6px' }}>✓ 30-day money-back guarantee</div>
                         <div>✓ Exclusive bundle pricing</div>
-                    </div>
+                    </div> */}
                 </div>
 
                 <p style={{ fontSize: '12px', color: '#6d7175', marginTop: '12px', fontStyle: 'italic' }}>
