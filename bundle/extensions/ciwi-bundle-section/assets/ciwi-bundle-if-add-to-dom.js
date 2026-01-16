@@ -26,13 +26,27 @@
 
     if (!form) return;
 
-    // const parent = form.closest("product-form") ?? form.parentElement;
-    const parent = form.parentElement;
+    /* --------------------------------------------------
+       插入位置策略（主路径 + 保底路径）
+    -------------------------------------------------- */
+    let insertTarget = null;
+    let insertBeforeNode = null;
 
-    if (!parent) return;
+    const productForm = form.closest("product-form");
+    if (productForm && productForm.parentElement) {
+      // ✅ 主路径：插在 product-form 外
+      insertTarget = productForm.parentElement;
+      insertBeforeNode = productForm;
+    } else if (form.parentElement) {
+      // ✅ 保底：插在 form 前
+      insertTarget = form.parentElement;
+      insertBeforeNode = form;
+    }
 
-    // 防止重复插入
-    if (parent.querySelector(".ciwi-bundle-wrapper")) return;
+    if (!insertTarget || !insertBeforeNode) return;
+
+    // 防止重复插入（在最终容器判断）
+    if (insertTarget.querySelector(".ciwi-bundle-wrapper")) return;
 
     const bundleData = Object.values(ciwiBundleconfig)[0] || {};
 
@@ -43,7 +57,7 @@
     const targetingSettingsData = bundleData.targeting_settings || {};
 
     const selectedProductVariantIds =
-      bundleData.product_pool.include_variant_ids || [];
+      bundleData.product_pool?.include_variant_ids || [];
 
     const isInTargetMarketArray =
       targetingSettingsData?.marketVisibilitySettingData?.find((market) =>
@@ -79,7 +93,7 @@
     if (selectedIndex === -1) selectedIndex = 0;
 
     qtyInput.value =
-      discountRules[selectedIndex].trigger_scope.min_quantity || 1;
+      discountRules[selectedIndex]?.trigger_scope?.min_quantity || 1;
 
     const wrapper = document.createElement("div");
     wrapper.className = "ciwi-bundle-wrapper";
@@ -88,28 +102,33 @@
       .map((rule, index) => {
         let priceHtml = "";
 
-        console.log("rule: ", rule);
-
         if (rule.discount.value === 1) {
           priceHtml = `
             <strong style="font-size:16px">
-              ${configElJson.currencySymbol} ${Number((rule.trigger_scope.min_quantity * configElJson.price) / 100).toFixed(2)}
+              ${configElJson.currencySymbol}
+              ${Number(
+                (rule.trigger_scope.min_quantity * configElJson.price) / 100,
+              ).toFixed(2)}
             </strong>
           `;
         } else if (rule.discount.value === 0) {
           priceHtml = `<strong style="font-size:16px">Free</strong>`;
-        } else if (rule.discount.value > 0 && rule.discount.value < 1) {
+        } else {
           priceHtml = `
             <strong style="font-size:16px">
-               ${configElJson.currencySymbol} ${Number(
-                 (rule.trigger_scope.min_quantity *
-                   configElJson.price *
-                   rule.discount.value) /
-                   100,
-               ).toFixed(2)}
+              ${configElJson.currencySymbol}
+              ${Number(
+                (rule.trigger_scope.min_quantity *
+                  configElJson.price *
+                  rule.discount.value) /
+                  100,
+              ).toFixed(2)}
             </strong>
             <div style="font-size:12px;color:#6d7175;text-decoration:line-through">
-              ${configElJson.currencySymbol} ${Number((rule.trigger_scope.min_quantity * configElJson.price) / 100).toFixed(2)}
+              ${configElJson.currencySymbol}
+              ${Number(
+                (rule.trigger_scope.min_quantity * configElJson.price) / 100,
+              ).toFixed(2)}
             </div>
           `;
         }
@@ -236,7 +255,7 @@
     `;
 
     // 插入到 form 前
-    parent.insertBefore(wrapper, form);
+    insertTarget.insertBefore(wrapper, insertBeforeNode);
 
     /* -----------------------
        交互逻辑（最关键）
