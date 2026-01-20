@@ -1,7 +1,7 @@
 import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, Copy, Trash2 } from "lucide-react";
 import { DiscountRulesType, ProductVariantsDataType } from "../route";
 import { Checkbox, Input, InputNumber } from "antd";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 interface ProductsAndDiscountsSettingProps {
     previewPrice: number;
@@ -28,6 +28,9 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
     setSelectedRuleIndex,
     selectedOfferType
 }) => {
+    const ruleContainerRefs = useRef<Record<number, HTMLDivElement | null>>({});
+    const prevLengthRef = useRef(discountRules.length);
+
     const switchDefaultSelectedItem = (e: number) => {
         const data = discountRules.map((rule) => {
             if (rule?.id == e) {
@@ -42,8 +45,20 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
     };
 
     useEffect(() => {
-        console.log("selectedProducts: ", selectedProducts);
-    }, [selectedProducts])
+        if (discountRules.length > prevLengthRef.current) {
+            const lastRule = discountRules[discountRules.length - 1];
+            const el = ruleContainerRefs.current[lastRule.id];
+
+            if (el) {
+                el.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start', // 或 'center'
+                });
+            }
+        }
+
+        prevLengthRef.current = discountRules.length;
+    }, [discountRules.length]);
 
     return (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 400px', gap: '24px', alignItems: 'start' }}>
@@ -115,12 +130,17 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                     <h3 style={{ fontSize: '14px', fontWeight: 500, marginBottom: '12px' }}>Discount rules</h3>
 
                     {discountRules.map((rule, index) => (
-                        <div key={index} style={{
-                            border: '1px solid #dfe3e8',
-                            borderRadius: '8px',
-                            marginBottom: '16px',
-                            overflow: 'hidden'
-                        }}>
+                        <div
+                            key={rule.id}
+                            ref={(el) => {
+                                ruleContainerRefs.current[rule.id] = el;
+                            }}
+                            style={{
+                                border: '1px solid #dfe3e8',
+                                borderRadius: '8px',
+                                marginBottom: '16px',
+                                overflow: 'hidden'
+                            }}>
                             <div style={{
                                 display: 'flex',
                                 alignItems: 'center',

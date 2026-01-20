@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button, Checkbox, Divider, Flex, Input, Popover, Radio } from "antd";
 import { EllipsisOutlined, SearchOutlined } from "@ant-design/icons";
+import { Pagination } from "@shopify/polaris";
 
 interface productModalItemType {
     productId: string;
@@ -53,7 +54,7 @@ const ProductModal: React.FC<ProductModalProps> = ({
     const [debouncedQuery, setDebouncedQuery] = useState<string>("");
 
     const [searchLoading, setSearchLoading] = useState<boolean>(false);
-    const [loadMoreLoading, setLoadMoreLoading] = useState<boolean>(false);
+    // const [loadMoreLoading, setLoadMoreLoading] = useState<boolean>(false);
     const [sortKey, setSortKey] = useState<string>("CREATED_AT");
     const [reverse, setReverse] = useState<boolean>(true);
 
@@ -80,13 +81,8 @@ const ProductModal: React.FC<ProductModalProps> = ({
                             }) ?? []
                         }
                     })
-                    if (loadMoreLoading) {
-                        setProductModalData({ data: [...productModalData.data, ...data], pageInfo });
-                        setLoadMoreLoading(false);
-                    } else {
-                        setProductModalData({ data, pageInfo });
-                        setSearchLoading(false);
-                    }
+                    setProductModalData({ data, pageInfo });
+                    setSearchLoading(false);
                 }
             }
         }
@@ -116,39 +112,40 @@ const ProductModal: React.FC<ProductModalProps> = ({
                 method: "POST",
             });
         }
-        if (loadMoreLoading) {
-            productModalDataFetcher.submit({
-                productRequestBody: JSON.stringify({
-                    query: debouncedQuery,
-                    endCursor: productModalData.pageInfo.endCursor,
-                    sortKey,
-                    reverse,
-                })
-            }, {
-                method: "POST",
-            });
-        }
-    }, [searchLoading, loadMoreLoading])
+    }, [searchLoading])
 
-    const handleScroll = () => {
-        const el = listRef.current;
-        if (mainModalType !== "ProductVariants" || !el || productModalDataFetcher.state === "submitting" || productModalData.pageInfo.hasNextPage === false) return;
+    const onPrevious = () => {
+        productModalDataFetcher.submit({
+            productRequestBody: JSON.stringify({
+                query: debouncedQuery,
+                startCursor: productModalData.pageInfo.startCursor,
+                sortKey,
+                reverse,
+            })
+        }, {
+            method: "POST",
+        });
+    }
 
-        const { scrollTop, scrollHeight, clientHeight } = el;
-
-        if (scrollTop + clientHeight >= scrollHeight - 50) {
-            // 触发加载更多（先不写）
-            console.log("⬇️ load more");
-            setLoadMoreLoading(true);
-        }
-    };
+    const onNext = () => {
+        productModalDataFetcher.submit({
+            productRequestBody: JSON.stringify({
+                query: debouncedQuery,
+                endCursor: productModalData.pageInfo.endCursor,
+                sortKey,
+                reverse,
+            })
+        }, {
+            method: "POST",
+        });
+    }
 
     const onClose = () => {
         setMainModalType(null);
         setSearchQuery("");
         setDebouncedQuery("");
         setSearchLoading(false);
-        setLoadMoreLoading(false);
+        // setLoadMoreLoading(false);
         setProductModalData({
             data: [],
             pageInfo: {
@@ -222,6 +219,7 @@ const ProductModal: React.FC<ProductModalProps> = ({
                 </div>
 
                 {/* Search */}
+
                 <Flex
                     justify="space-between"
                     align="center"
@@ -297,7 +295,6 @@ const ProductModal: React.FC<ProductModalProps> = ({
                     </Popover>
                 </Flex>
 
-
                 {searchLoading && (
                     <div style={{ fontSize: 12, color: "#999", marginBottom: 8 }}>
                         {t("Searching...")}
@@ -306,12 +303,12 @@ const ProductModal: React.FC<ProductModalProps> = ({
 
                 <div
                     ref={listRef}
-                    onScroll={handleScroll}
                     style={{
                         display: "grid",
                         gap: "12px",
                         overflowY: "auto",
                         flex: 1,
+                        marginBottom: "12px",
                     }}
                 >
                     {productModalData.data.map((product) => (
@@ -463,13 +460,19 @@ const ProductModal: React.FC<ProductModalProps> = ({
                             }
                         </Flex>
                     ))}
-
-                    {loadMoreLoading && (
-                        <div style={{ textAlign: "center", fontSize: 12, color: "#999" }}>
-                            {t("Loading more...")}
-                        </div>
-                    )}
                 </div>
+
+                <Flex
+                    justify="center"
+                    align="center"
+                >
+                    <Pagination
+                        hasPrevious={productModalData.pageInfo.hasPreviousPage}
+                        onPrevious={onPrevious}
+                        hasNext={productModalData.pageInfo.hasNextPage}
+                        onNext={onNext}
+                    />
+                </Flex>
             </div>
         </div >
     );
