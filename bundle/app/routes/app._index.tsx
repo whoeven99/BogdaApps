@@ -848,25 +848,25 @@ const Index = () => {
                 </div>
 
                 <div className="flex items-center gap-[8px] pt-[12px] border-t border-[#dfe3e8]">
-                  <button
+                  {/* <button
                     className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[8px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
                     onClick={() => navigate(`/app/ABtest/${offer.id}`)}
                     title="Analytics"
                   >
                     <ChartBar size={18} />
-                  </button>
+                  </button> */}
                   <button
                     className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[8px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
                     title="Edit"
                   >
                     <Pencil size={18} />
                   </button>
-                  <button
+                  {/* <button
                     className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[8px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
                     title="Copy"
                   >
                     <Copy size={18} />
-                  </button>
+                  </button> */}
                   <button
                     className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#d72c0d] p-[8px] rounded-[4px] hover:bg-[rgba(215,44,13,0.1)] transition-colors"
                     title="Delete"

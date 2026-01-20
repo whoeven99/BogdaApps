@@ -1,8 +1,10 @@
 import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, Copy, Trash2 } from "lucide-react";
 import { DiscountRulesType, ProductVariantsDataType } from "../route";
-import { Checkbox } from "antd";
+import { Checkbox, Input, InputNumber } from "antd";
+import { useEffect, useMemo } from "react";
 
 interface ProductsAndDiscountsSettingProps {
+    previewPrice: number;
     selectedProducts: ProductVariantsDataType[];
     setMainModalType: (modalType: "ProductVariants" | "CustomerSegments" | "Customer" | null) => void;
     discountRules: DiscountRulesType[];
@@ -17,6 +19,7 @@ interface ProductsAndDiscountsSettingProps {
 }
 
 const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = ({
+    previewPrice,
     selectedProducts,
     setMainModalType,
     discountRules,
@@ -37,6 +40,10 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
 
         setDiscountRules(data);
     };
+
+    useEffect(() => {
+        console.log("selectedProducts: ", selectedProducts);
+    }, [selectedProducts])
 
     return (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 400px', gap: '24px', alignItems: 'start' }}>
@@ -203,20 +210,19 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                                             </label>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                 {/* <span style={{ fontSize: '14px', fontWeight: 500 }}>Buy</span> */}
-                                                <input
-                                                    type="number"
+                                                <InputNumber
+                                                    min={1}
                                                     value={rule.trigger_scope.min_quantity}
-                                                    onChange={(e) => {
+                                                    onChange={(value) => {
                                                         const newRules = [...discountRules];
-                                                        newRules[index].trigger_scope.min_quantity = parseInt(e.target.value) || 0;
+                                                        newRules[index].trigger_scope.min_quantity = value || 0;
                                                         setDiscountRules(newRules);
                                                     }}
                                                     style={{
                                                         flex: 1,
-                                                        padding: '8px 12px',
                                                         border: '1px solid #dfe3e8',
                                                         borderRadius: '6px',
-                                                        fontSize: '14px'
+                                                        fontSize: '14px',
                                                     }}
                                                 />
                                             </div>
@@ -227,26 +233,28 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                                                 DiscountRate
                                             </label>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                <input
-                                                    type="number"
+                                                <InputNumber
                                                     min={0}
                                                     max={1}
                                                     step={0.01}
                                                     value={rule.discount.value}
-                                                    onChange={(e) => {
-                                                        let value = Number(e.target.value);
-
-                                                        if (isNaN(value)) value = 0;
-                                                        if (value < 0) value = 0;
-                                                        if (value > 1) value = 1;
-
+                                                    onChange={(value) => {
                                                         const newRules = [...discountRules];
-                                                        newRules[index].discount.value = value;
+                                                        newRules[index].discount.value = value ?? 0;
                                                         setDiscountRules(newRules);
+                                                    }}
+                                                    formatter={(value) => {
+                                                        if (value === undefined || value === null) return '';
+                                                        return String(value).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
+                                                    }}
+                                                    parser={(value) => {
+                                                        if (value === '' || value === undefined || value === null) {
+                                                            return 0;
+                                                        }
+                                                        return Number(value);
                                                     }}
                                                     style={{
                                                         flex: 1,
-                                                        padding: '8px 12px',
                                                         border: '1px solid #dfe3e8',
                                                         borderRadius: '6px',
                                                         fontSize: '14px',
@@ -261,8 +269,7 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                                             <label style={{ fontSize: '13px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '8px' }}>
                                                 Title
                                             </label>
-                                            <input
-                                                type="text"
+                                            <Input
                                                 value={rule.title}
                                                 onChange={(e) => {
                                                     const newRules = [...discountRules];
@@ -271,7 +278,6 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                                                 }}
                                                 style={{
                                                     width: '100%',
-                                                    padding: '8px 12px',
                                                     border: '1px solid #dfe3e8',
                                                     borderRadius: '6px',
                                                     fontSize: '14px'
@@ -283,8 +289,7 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                                             <label style={{ fontSize: '13px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '8px' }}>
                                                 Subtitle
                                             </label>
-                                            <input
-                                                type="text"
+                                            <Input
                                                 value={rule.subtitle}
                                                 onChange={(e) => {
                                                     const newRules = [...discountRules];
@@ -293,7 +298,6 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                                                 }}
                                                 style={{
                                                     width: '100%',
-                                                    padding: '8px 12px',
                                                     border: '1px solid #dfe3e8',
                                                     borderRadius: '6px',
                                                     fontSize: '14px'
@@ -307,8 +311,7 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                                             <label style={{ fontSize: '13px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '8px' }}>
                                                 Badge text
                                             </label>
-                                            <input
-                                                type="text"
+                                            <Input
                                                 value={rule.badgeText}
                                                 onChange={(e) => {
                                                     const newRules = [...discountRules];
@@ -317,7 +320,6 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                                                 }}
                                                 style={{
                                                     width: '100%',
-                                                    padding: '8px 12px',
                                                     border: '1px solid #dfe3e8',
                                                     borderRadius: '6px',
                                                     fontSize: '14px'
@@ -355,8 +357,7 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                                         <label style={{ fontSize: '13px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '8px' }}>
                                             Label
                                         </label>
-                                        <input
-                                            type="text"
+                                        <Input
                                             value={rule.labelText}
                                             onChange={(e) => {
                                                 const newRules = [...discountRules];
@@ -365,7 +366,6 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                                             }}
                                             style={{
                                                 width: '100%',
-                                                padding: '8px 12px',
                                                 border: '1px solid #dfe3e8',
                                                 borderRadius: '6px',
                                                 fontSize: '14px'
@@ -855,14 +855,14 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                                             type="radio"
                                             name="discount-rule-group"
                                             value={rule.trigger_scope.min_quantity}
-                                            readOnly
                                             checked={selectedRuleIndex === index}
+                                            readOnly
                                             style={{ width: '16px', height: '16px' }}
                                         />
                                         <div style={{ flex: 1 }}>
                                             <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                                                 <strong style={{ fontSize: '14px' }}>{rule.title}</strong>
-                                                {rule.discount.value < 1 &&
+                                                {!!rule.labelText &&
                                                     <span style={{
                                                         background: '#f0f0f0',
                                                         padding: '2px 6px',
@@ -879,7 +879,7 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                                         {
                                             rule.discount.value === 1 && (
                                                 <div style={{ textAlign: 'right' }}>
-                                                    <strong style={{ fontSize: '16px' }}>€{Number(rule.trigger_scope.min_quantity * 65).toFixed(2)}</strong>
+                                                    <strong style={{ fontSize: '16px' }}>€{Number(rule.trigger_scope.min_quantity * previewPrice).toFixed(2)}</strong>
                                                 </div>
                                             )
                                         }
@@ -894,8 +894,8 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                                             (rule.discount.value > 0 && rule.discount.value < 1
                                             ) && (
                                                 <div style={{ textAlign: 'right' }}>
-                                                    <strong style={{ fontSize: '16px' }}>€{Number(rule.trigger_scope.min_quantity * 65 * rule.discount.value).toFixed(2)}</strong>
-                                                    <div style={{ fontSize: '12px', color: '#6d7175', textDecoration: 'line-through' }}>€{Number(rule.trigger_scope.min_quantity * 65).toFixed(2)}</div>
+                                                    <strong style={{ fontSize: '16px' }}>€{Number(rule.trigger_scope.min_quantity * previewPrice * rule.discount.value).toFixed(2)}</strong>
+                                                    <div style={{ fontSize: '12px', color: '#6d7175', textDecoration: 'line-through' }}>€{Number(rule.trigger_scope.min_quantity * previewPrice).toFixed(2)}</div>
                                                 </div>
                                             )
                                         }

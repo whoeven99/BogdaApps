@@ -110,7 +110,16 @@ const BasicInformationSetting: React.FC<BasicInformationSettingProps> = ({
                         <>
                             <div style={{ border: '1px solid #e0e0e0', borderRadius: '8px', padding: '12px', marginBottom: '12px', background: '#f9fafb' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <input type="radio" readOnly style={{ width: '16px', height: '16px' }} />
+                                    <input
+                                        type="radio"
+                                        checked={false}
+                                        readOnly
+                                        style={{
+                                            width: 16,
+                                            height: 16,
+                                            pointerEvents: 'none', // 关键
+                                        }}
+                                    />
                                     <div style={{ flex: 1 }}>
                                         <strong style={{ fontSize: '14px' }}>Single</strong>
                                         <div style={{ fontSize: '12px', color: '#6d7175' }}>Standard price</div>
@@ -123,7 +132,15 @@ const BasicInformationSetting: React.FC<BasicInformationSettingProps> = ({
                                     Most Popular
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <input type="radio" readOnly checked style={{ width: '16px', height: '16px' }} />
+                                    <input
+                                        type="radio"
+                                        checked
+                                        readOnly
+                                        style={{
+                                            width: '16px',
+                                            height: '16px'
+                                        }}
+                                    />
                                     <div style={{ flex: 1 }}>
                                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                                             <strong style={{ fontSize: '14px' }}>Duo</strong>
@@ -146,7 +163,15 @@ const BasicInformationSetting: React.FC<BasicInformationSettingProps> = ({
                     {basicInformation.offerType?.subtype === 'bogo' && (
                         <>
                             <div style={{ border: '2px solid #000', borderRadius: '8px', padding: '10px 12px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <input type="radio" readOnly checked style={{ width: '16px', height: '16px' }} />
+                                <input
+                                    type="radio"
+                                    checked
+                                    readOnly
+                                    style={{
+                                        width: '16px',
+                                        height: '16px'
+                                    }}
+                                />
                                 <div style={{ flex: 1 }}>
                                     <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
                                         <strong style={{ fontSize: '13px' }}>Buy 1, get 1 free</strong>
@@ -159,8 +184,16 @@ const BasicInformationSetting: React.FC<BasicInformationSettingProps> = ({
                                 </div>
                             </div>
                             <div style={{ border: '1px solid #e0e0e0', borderRadius: '8px', padding: '10px 12px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <input type="radio" readOnly style={{ width: '16px', height: '16px' }} />
-                                <div style={{ flex: 1 }}>
+                                <input
+                                    type="radio"
+                                    checked={false}
+                                    readOnly
+                                    style={{
+                                        width: 16,
+                                        height: 16,
+                                        pointerEvents: 'none', // 关键
+                                    }}
+                                />                                <div style={{ flex: 1 }}>
                                     <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
                                         <strong style={{ fontSize: '13px' }}>Buy 2, get 3 free</strong>
                                         <span style={{ background: '#f0f0f0', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>SAVE 60%</span>
@@ -172,8 +205,16 @@ const BasicInformationSetting: React.FC<BasicInformationSettingProps> = ({
                                 </div>
                             </div>
                             <div style={{ border: '1px solid #e0e0e0', borderRadius: '8px', padding: '10px 12px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <input type="radio" readOnly style={{ width: '16px', height: '16px' }} />
-                                <div style={{ flex: 1 }}>
+                                <input
+                                    type="radio"
+                                    checked={false}
+                                    readOnly
+                                    style={{
+                                        width: 16,
+                                        height: 16,
+                                        pointerEvents: 'none', // 关键
+                                    }}
+                                />                                <div style={{ flex: 1 }}>
                                     <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
                                         <strong style={{ fontSize: '13px' }}>Buy 3, get 6 free</strong>
                                         <span style={{ background: '#f0f0f0', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>SAVE 67%</span>
@@ -197,8 +238,16 @@ const BasicInformationSetting: React.FC<BasicInformationSettingProps> = ({
                         <>
                             <div style={{ border: '1px solid #e0e0e0', borderRadius: '8px', padding: '12px', marginBottom: '8px', background: '#f9fafb' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <input type="radio" readOnly style={{ width: '16px', height: '16px' }} />
-                                    <div style={{ flex: 1 }}>
+                                    <input
+                                        type="radio"
+                                        checked={false}
+                                        readOnly
+                                        style={{
+                                            width: 16,
+                                            height: 16,
+                                            pointerEvents: 'none', // 关键
+                                        }}
+                                    />                                    <div style={{ flex: 1 }}>
                                         <strong style={{ fontSize: '14px' }}>1 pack</strong>
                                         <div style={{ fontSize: '12px', color: '#6d7175' }}>Standard price</div>
                                     </div>
@@ -210,8 +259,15 @@ const BasicInformationSetting: React.FC<BasicInformationSettingProps> = ({
                                     MOST POPULAR
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                                    <input type="radio" readOnly checked style={{ width: '16px', height: '16px' }} />
-                                    <div style={{ flex: 1 }}>
+                                    <input
+                                        type="radio"
+                                        checked
+                                        readOnly
+                                        style={{
+                                            width: '16px',
+                                            height: '16px'
+                                        }}
+                                    />                                    <div style={{ flex: 1 }}>
                                         <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
                                             <strong style={{ fontSize: '14px' }}>2 pack</strong>
                                             <span style={{ background: '#f0f0f0', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>SAVE 15%</span>
@@ -242,8 +298,15 @@ const BasicInformationSetting: React.FC<BasicInformationSettingProps> = ({
                         <>
                             <div style={{ border: '1px solid #e0e0e0', borderRadius: '8px', padding: '10px', marginBottom: '10px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                                    <input type="radio" readOnly style={{ width: '16px', height: '16px' }} />
-                                    <div style={{ flex: 1 }}>
+                                    <input
+                                        type="radio"
+                                        checked
+                                        readOnly
+                                        style={{
+                                            width: '16px',
+                                            height: '16px'
+                                        }}
+                                    />                                    <div style={{ flex: 1 }}>
                                         <strong style={{ fontSize: '13px' }}>FetchLink C10 GPS</strong>
                                         <div style={{ fontSize: '11px', color: '#6d7175' }}>Standard price</div>
                                     </div>
@@ -252,7 +315,15 @@ const BasicInformationSetting: React.FC<BasicInformationSettingProps> = ({
                             </div>
                             <div style={{ border: '1px solid #e0e0e0', borderRadius: '8px', padding: '10px', marginBottom: '10px', opacity: 0.6 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                                    <input type="radio" readOnly disabled style={{ width: '16px', height: '16px' }} />
+                                    <input
+                                        type="radio"
+                                        disabled
+                                        readOnly
+                                        style={{
+                                            width: '16px',
+                                            height: '16px'
+                                        }}
+                                    />
                                     <div style={{ flex: 1 }}>
                                         <strong style={{ fontSize: '13px', color: '#6d7175' }}>Complete the bundle</strong>
                                         <div style={{ fontSize: '11px', color: '#6d7175' }}>Save €14,50!</div>
@@ -282,8 +353,15 @@ const BasicInformationSetting: React.FC<BasicInformationSettingProps> = ({
                     {basicInformation.offerType?.subtype === 'subscription' && (
                         <>
                             <div style={{ border: '2px solid #000', borderRadius: '8px', padding: '10px 12px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <input type="radio" readOnly checked style={{ width: '16px', height: '16px' }} />
-                                <div style={{ flex: 1 }}>
+                                <input
+                                    type="radio"
+                                    checked
+                                    readOnly
+                                    style={{
+                                        width: '16px',
+                                        height: '16px'
+                                    }}
+                                />                                <div style={{ flex: 1 }}>
                                     <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
                                         <strong style={{ fontSize: '13px' }}>Buy 1, get 1 free</strong>
                                         <span style={{ background: '#f0f0f0', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>SAVE 50%</span>
@@ -295,8 +373,16 @@ const BasicInformationSetting: React.FC<BasicInformationSettingProps> = ({
                                 </div>
                             </div>
                             <div style={{ border: '1px solid #e0e0e0', borderRadius: '8px', padding: '10px 12px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <input type="radio" readOnly style={{ width: '16px', height: '16px' }} />
-                                <div style={{ flex: 1 }}>
+                                <input
+                                    type="radio"
+                                    checked={false}
+                                    readOnly
+                                    style={{
+                                        width: 16,
+                                        height: 16,
+                                        pointerEvents: 'none', // 关键
+                                    }}
+                                />                                <div style={{ flex: 1 }}>
                                     <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
                                         <strong style={{ fontSize: '13px' }}>Buy 2, get 3 free</strong>
                                         <span style={{ background: '#f0f0f0', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>SAVE 60%</span>
@@ -308,8 +394,16 @@ const BasicInformationSetting: React.FC<BasicInformationSettingProps> = ({
                                 </div>
                             </div>
                             <div style={{ border: '1px solid #e0e0e0', borderRadius: '8px', padding: '10px 12px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <input type="radio" readOnly style={{ width: '16px', height: '16px' }} />
-                                <div style={{ flex: 1 }}>
+                                <input
+                                    type="radio"
+                                    checked={false}
+                                    readOnly
+                                    style={{
+                                        width: 16,
+                                        height: 16,
+                                        pointerEvents: 'none', // 关键
+                                    }}
+                                />                                <div style={{ flex: 1 }}>
                                     <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
                                         <strong style={{ fontSize: '13px' }}>Buy 3, get 6 free</strong>
                                         <span style={{ background: '#f0f0f0', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>SAVE 67%</span>
@@ -324,7 +418,15 @@ const BasicInformationSetting: React.FC<BasicInformationSettingProps> = ({
                                 + FREE special gift!
                             </div>
                             <div style={{ border: '1px dashed #000', borderRadius: '8px', padding: '8px 12px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <input type="checkbox" readOnly style={{ width: '16px', height: '16px' }} />
+                                <input
+                                    type="checkbox"
+                                    defaultChecked={false}
+                                    readOnly
+                                    style={{
+                                        width: '16px',
+                                        height: '16px'
+                                    }}
+                                />
                                 <div style={{ flex: 1 }}>
                                     <strong style={{ fontSize: '12px' }}>Subscribe & Save 20%</strong>
                                     <div style={{ fontSize: '10px', color: '#6d7175' }}>Delivered weekly</div>
@@ -340,7 +442,16 @@ const BasicInformationSetting: React.FC<BasicInformationSettingProps> = ({
                         <>
                             <div style={{ border: '1px solid #e0e0e0', borderRadius: '8px', padding: '12px', marginBottom: '8px', background: '#f9fafb' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <input type="radio" readOnly style={{ width: '16px', height: '16px' }} />
+                                    <input
+                                        type="radio"
+                                        checked={false}
+                                        readOnly
+                                        style={{
+                                            width: 16,
+                                            height: 16,
+                                            pointerEvents: 'none', // 关键
+                                        }}
+                                    />
                                     <div style={{ flex: 1 }}>
                                         <strong style={{ fontSize: '14px' }}>1 pack</strong>
                                     </div>
@@ -349,8 +460,15 @@ const BasicInformationSetting: React.FC<BasicInformationSettingProps> = ({
                             </div>
                             <div style={{ border: '2px solid #000', borderRadius: '8px', padding: '12px', marginBottom: '8px', background: '#ffffff' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <input type="radio" readOnly checked style={{ width: '16px', height: '16px' }} />
-                                    <div style={{ flex: 1 }}>
+                                    <input
+                                        type="radio"
+                                        checked
+                                        readOnly
+                                        style={{
+                                            width: '16px',
+                                            height: '16px'
+                                        }}
+                                    />                                    <div style={{ flex: 1 }}>
                                         <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
                                             <strong style={{ fontSize: '14px' }}>2 pack</strong>
                                             <span style={{ background: '#f0f0f0', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>SAVE 15%</span>
@@ -364,8 +482,16 @@ const BasicInformationSetting: React.FC<BasicInformationSettingProps> = ({
                             </div>
                             <div style={{ border: '1px solid #e0e0e0', borderRadius: '8px', padding: '12px', marginBottom: '10px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <input type="radio" readOnly style={{ width: '16px', height: '16px' }} />
-                                    <div style={{ flex: 1 }}>
+                                    <input
+                                        type="radio"
+                                        checked={false}
+                                        readOnly
+                                        style={{
+                                            width: 16,
+                                            height: 16,
+                                            pointerEvents: 'none', // 关键
+                                        }}
+                                    />                                    <div style={{ flex: 1 }}>
                                         <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
                                             <strong style={{ fontSize: '14px' }}>3 pack</strong>
                                             <span style={{ background: '#f0f0f0', padding: '2px 6px', borderRadius: '4px', fontSize: '10px' }}>SAVE 15%</span>

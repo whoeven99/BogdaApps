@@ -321,6 +321,107 @@ export const queryProductVariants = async ({
     }
 };
 
+//查询products数据
+export const queryProducts = async ({
+    shop,
+    accessToken,
+    query,
+    startCursor,
+    endCursor,
+    sortKey,
+    reverse,
+}: {
+    shop: string;
+    accessToken: string;
+    query: string;
+    startCursor?: string;
+    endCursor?: string;
+    sortKey?: string;
+    reverse?: boolean;
+}) => {
+    try {
+        const pagination = endCursor
+            ? `first: 20, after: "${endCursor}"`
+            : startCursor
+                ? `last: 20, before: "${startCursor}"`
+                : `first: 20`;
+
+        console.log(`${shop} queryProducts:`, sortKey, reverse);
+
+        const gql = `
+            {
+                products(
+                    sortKey: ${sortKey},
+                    reverse: ${reverse},
+                    query: "${query}",
+                    ${pagination}
+                ) {
+                    nodes {
+                        id
+                        title
+                        media(first: 1) {
+                            edges {
+                                node {
+                                    preview {
+                                        image {
+                                            url
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        variants(first: 250) {
+                            edges {
+                                node {
+                                    id
+                                    title
+                                    price
+                                    media(first: 1) {
+                                        edges {
+                                            node {
+                                                preview {
+                                                    image {
+                                                        url
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    pageInfo {
+                        endCursor
+                        hasNextPage
+                        hasPreviousPage
+                        startCursor
+                    }
+                }
+            }
+            `;
+
+        const { data } = await axios.post(
+            `https://${shop}/admin/api/${process.env.GRAPHQL_VERSION}/graphql.json`,
+            { query: gql },
+            {
+                headers: {
+                    "X-Shopify-Access-Token": accessToken,
+                },
+            }
+        );
+
+        const res = data?.data;
+
+        console.log(`${shop} queryProducts:`, res);
+
+        return res;
+    } catch (error: any) {
+        console.error(`${shop} Error queryProducts:`, error?.response?.data);
+        return null;
+    }
+};
+
 //查询customer segments数据
 export const querySegments = async ({
     shop,

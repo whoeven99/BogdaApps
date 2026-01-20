@@ -1,4 +1,7 @@
 import { useNavigate } from "@remix-run/react";
+import { Button, Flex, Typography } from "antd";
+
+const { Title } = Typography;
 
 interface HeaderProps {
     backUrl?: string; //回退url
@@ -10,14 +13,25 @@ const Header: React.FC<HeaderProps> = (
 ) => {
     const navigate = useNavigate();
     return (
-        <div className="polaris-page__header">
+        <Flex
+            justify="space-between"
+            align="center"
+            style={{
+                backgroundColor: "rgb(241, 241, 241)",
+            }}
+        >
             <div>
-                {backUrl && <button className="polaris-button polaris-button--plain" onClick={() => navigate(backUrl)}>
-                    ← Back
-                </button>}
-                <h1 className="polaris-page__title">{title}</h1>
+                {backUrl &&
+                    <Button
+                        className="polaris-button polaris-button--plain"
+                        type="text"
+                        onClick={() => navigate(backUrl)}
+                    >
+                        ← Back
+                    </Button>}
+                <Title level={3} className="polaris-page__title">{title}</Title>
             </div>
-        </div>
+        </Flex>
     );
 };
 

@@ -1,6 +1,6 @@
 import { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { useFetcher, useLoaderData, useNavigate } from "@remix-run/react";
-import { mutationDiscountAutomaticAppCreateAndMetafieldsSet, mutationDiscountAutomaticAppUpdateAndMetafieldsSet, queryCustomers, queryMarkets, queryProductVariants, querySegments, queryShop, queryThreeProductVariants } from "app/api/admin";
+import { mutationDiscountAutomaticAppCreateAndMetafieldsSet, mutationDiscountAutomaticAppUpdateAndMetafieldsSet, queryCustomers, queryMarkets, queryProducts, queryProductVariants, querySegments, queryShop, queryThreeProductVariants } from "app/api/admin";
 import { authenticate } from "app/shopify.server";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -11,14 +11,14 @@ import Header from "app/components/header";
 import StyleDesignSetting from "./components/styleDesignSetting";
 import ScheduleAndBudgetSetting from "./components/scheduleAndBudgetSetting";
 import ProductModal from "./components/productModal";
-import { Button, Flex, Spin } from "antd";
+import { Affix, Button, Flex, Spin } from "antd";
 import { globalStore } from "app/globalStore";
 import { GetUserDiscount, SaveUserDiscount, UpdateUserDiscount } from "app/api/javaServer";
 
 export interface ProductVariantsDataType {
     id: string;
     name: string;
-    price: string;
+    price: number;
     image: string
 }
 
@@ -156,6 +156,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const productVariantRequestBody = JSON.parse(
         formData.get("productVariantRequestBody") as string,
     );
+    const productRequestBody = JSON.parse(
+        formData.get("productRequestBody") as string,
+    );
     const customerSegmentsRequestBody = JSON.parse(
         formData.get("customerSegmentsRequestBody") as string,
     );
@@ -201,6 +204,38 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 }
             } catch (error) {
                 console.error(`${shop} productVariantRequestBody Error: `, error);
+                return {
+                    success: false,
+                    errorCode: 10001,
+                    errorMsg: "SERVER_ERROR",
+                    response: null,
+                }
+            }
+        case !!productRequestBody:
+            try {
+                const productData = await queryProducts({
+                    ...productRequestBody,
+                    shop,
+                    accessToken,
+                });
+
+                if (productData) {
+                    return {
+                        success: true,
+                        errorCode: 0,
+                        errorMsg: "",
+                        response: productData,
+                    }
+                }
+
+                return {
+                    success: false,
+                    errorCode: 10001,
+                    errorMsg: "SERVER_ERROR",
+                    response: null,
+                }
+            } catch (error) {
+                console.error(`${shop} productRequestBody Error: `, error);
                 return {
                     success: false,
                     errorCode: 10001,
@@ -658,6 +693,13 @@ const Index = () => {
         return offerTypes.find(type => type.id == basicInformation.offerType?.subtype) || offerTypes[0]
     }, [basicInformation])
 
+    const previewPrice: number = useMemo(() => {
+        if (selectedProducts.length > 0) {
+            return selectedProducts[0].price;
+        }
+        return 65;
+    }, [selectedProducts])
+
     useEffect(() => {
         shopMarketsDataFetcher.submit({
             shopMarketsRequestBody: JSON.stringify({})
@@ -667,6 +709,13 @@ const Index = () => {
         }
         setLoading(false)
     }, [])
+
+    useEffect(() => {
+        window.scrollTo({
+            top: 0,
+            behavior: 'smooth',
+        });
+    }, [step]);
 
     useEffect(() => {
         if (shopMarketsDataFetcher.data) {
@@ -1044,8 +1093,9 @@ const Index = () => {
         :
         (
             <div className="polaris-page">
-
-                <Header backUrl="/app" title={t(discountGid ? "Edit Offer" : "Create New Offer")} />
+                <Affix offsetTop={0}>
+                    <Header backUrl="/app" title={t(discountGid ? "Edit Offer" : "Create New Offer")} />
+                </Affix>
 
                 <div className="polaris-card" style={{ marginBottom: '80px' }}>
                     <div
@@ -1111,6 +1161,7 @@ const Index = () => {
                                 />
 
                                 <ProductsAndDiscountsSetting
+                                    previewPrice={previewPrice}
                                     selectedProducts={selectedProducts}
                                     setMainModalType={setMainModalType}
                                     discountRules={discountRules}
@@ -1124,6 +1175,7 @@ const Index = () => {
 
                         {step === 3 && (
                             <StyleDesignSetting
+                                previewPrice={previewPrice}
                                 styleConfigData={styleConfigData}
                                 setStyleConfigData={setStyleConfigData}
                                 discountRules={discountRules}

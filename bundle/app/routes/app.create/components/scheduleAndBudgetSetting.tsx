@@ -304,7 +304,10 @@ const ScheduleAndBudgetSetting: React.FC<ScheduleAndBudgetSettingProps> = ({
                             style={{
                                 width: '100%',
                             }}
-                            placeholder="$0.00"
+                            min={0}
+                            prefix="$"
+                            suffix="USD"
+                            placeholder="0.00"
                             value={targetingSettingsData.budget.totalBudget}
                             onChange={(value) => {
                                 if (typeof value === 'number' && value > 0)
@@ -336,6 +339,9 @@ const ScheduleAndBudgetSetting: React.FC<ScheduleAndBudgetSettingProps> = ({
                             style={{
                                 width: '100%',
                             }}
+                            min={0}
+                            prefix="$"
+                            suffix="USD"
                             placeholder="$0.00"
                             value={targetingSettingsData.budget.dailyBudget}
                             onChange={(value) => {

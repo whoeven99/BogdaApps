@@ -1,9 +1,11 @@
-import { Checkbox, Statistic } from "antd";
+import { Button, Checkbox, ColorPicker, Flex, Statistic, Typography } from "antd";
 import { DiscountRulesType, StyleConfigType } from "../route";
 
 const { Timer } = Statistic;
+const { Text } = Typography;
 
 interface StyleConfigDataProps {
+    previewPrice: number;
     styleConfigData: StyleConfigType;
     setStyleConfigData: (styleConfigData: StyleConfigType) => void;
     discountRules: DiscountRulesType[];
@@ -17,6 +19,7 @@ interface StyleConfigDataProps {
 }
 
 const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
+    previewPrice,
     styleConfigData,
     setStyleConfigData,
     discountRules,
@@ -32,7 +35,7 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                 <p className="polaris-text-subdued">Customize the appearance of your bundle widget</p>
 
                 {/* Layout Format */}
-                <div style={{ marginTop: '24px' }}>
+                {/* <div style={{ marginTop: '24px' }}>
                     <label style={{ fontSize: '14px', fontWeight: 500, display: 'block', marginBottom: '12px' }}>
                         Layout Format
                     </label>
@@ -87,58 +90,80 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                             <div style={{ fontSize: '12px', color: '#6d7175' }}>Condensed view</div>
                         </div>
                     </div>
-                </div>
+                </div> */}
 
                 {/* Card Colors */}
                 <div style={{ marginTop: '24px' }}>
                     <h3 style={{ fontSize: '14px', fontWeight: 500, marginBottom: '12px' }}>Card Colors</h3>
                     <div className="polaris-grid">
-                        <label style={{ fontSize: '14px', fontWeight: 500 }}>
+                        <Flex
+                            justify="space-between"
+                            align="left"
+                            orientation="vertical"
+                            style={{
+                                fontSize: '14px',
+                                fontWeight: 500
+                            }}
+                            gap={8}
+                        >
                             Card Background Color
-                            <input
-                                type="color"
+                            <ColorPicker
                                 value={styleConfigData?.card.background_color}
-                                onChange={(e) => {
+                                onChange={(value) => {
                                     setStyleConfigData({
                                         ...styleConfigData,
                                         card: {
                                             ...styleConfigData.card,
-                                            background_color: e.target.value
+                                            background_color: value.toHexString()
                                         }
                                     })
                                 }}
-                                style={{
-                                    width: '100%',
-                                    height: '40px',
-                                    marginTop: '8px',
-                                    border: '1px solid #dfe3e8',
-                                    borderRadius: '6px'
-                                }}
-                            />
-                        </label>
-                        <label style={{ fontSize: '14px', fontWeight: 500 }}>
+                            >
+                                <Button
+                                    type="primary"
+                                    style={{
+                                        background: styleConfigData?.card.background_color,
+                                        width: '100%',
+                                        border: '1px solid #dfe3e8',
+                                        boxShadow: 'none'
+                                    }}>
+                                </Button>
+                            </ColorPicker>
+                        </Flex>
+                        <Flex
+                            justify="space-between"
+                            align="left"
+                            orientation="vertical"
+                            style={{
+                                fontSize: '14px',
+                                fontWeight: 500
+                            }}
+                            gap={8}
+                        >
                             Card Label Color
-                            <input
-                                type="color"
+                            <ColorPicker
                                 value={styleConfigData?.card.label_color}
-                                onChange={(e) => {
+                                onChange={(value) => {
                                     setStyleConfigData({
                                         ...styleConfigData,
                                         card: {
                                             ...styleConfigData.card,
-                                            label_color: e.target.value
+                                            label_color: value.toHexString()
                                         }
                                     })
                                 }}
-                                style={{
-                                    width: '100%',
-                                    height: '40px',
-                                    marginTop: '8px',
-                                    border: '1px solid #dfe3e8',
-                                    borderRadius: '6px'
-                                }}
-                            />
-                        </label>
+                            >
+                                <Button
+                                    type="primary"
+                                    style={{
+                                        background: styleConfigData?.card.label_color,
+                                        width: '100%',
+                                        border: '1px solid #dfe3e8',
+                                        boxShadow: 'none'
+                                    }}>
+                                </Button>
+                            </ColorPicker>
+                        </Flex>
                         {/* <label style={{ fontSize: '14px', fontWeight: 500 }}>
                                             Border Style
                                             <select
@@ -158,29 +183,40 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                                                 <option value="none">None</option>
                                             </select>
                                         </label> */}
-                        <label style={{ fontSize: '14px', fontWeight: 500 }}>
+                        <Flex
+                            justify="space-between"
+                            align="left"
+                            orientation="vertical"
+                            style={{
+                                fontSize: '14px',
+                                fontWeight: 500
+                            }}
+                            gap={8}
+                        >
                             Border Color
-                            <input
-                                type="color"
+                            <ColorPicker
                                 value={styleConfigData?.card?.border_color}
-                                onChange={(e) => {
+                                onChange={(value) => {
                                     setStyleConfigData({
                                         ...styleConfigData,
                                         card: {
                                             ...styleConfigData.card,
-                                            border_color: e.target.value
+                                            border_color: value.toHexString()
                                         }
                                     })
                                 }}
-                                style={{
-                                    width: '100%',
-                                    height: '40px',
-                                    marginTop: '8px',
-                                    border: '1px solid #dfe3e8',
-                                    borderRadius: '6px'
-                                }}
-                            />
-                        </label>
+                            >
+                                <Button
+                                    type="primary"
+                                    style={{
+                                        background: styleConfigData?.card.border_color,
+                                        width: '100%',
+                                        border: '1px solid #dfe3e8',
+                                        boxShadow: 'none'
+                                    }}>
+                                </Button>
+                            </ColorPicker>
+                        </Flex>
                     </div>
                 </div>
 
@@ -271,29 +307,40 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                                 <option value="300">Light</option>
                             </select>
                         </label>
-                        <label style={{ fontSize: '14px', fontWeight: 500 }}>
+                        <Flex
+                            justify="space-between"
+                            align="left"
+                            orientation="vertical"
+                            style={{
+                                fontSize: '14px',
+                                fontWeight: 500
+                            }}
+                            gap={8}
+                        >
                             Title Color
-                            <input
-                                type="color"
+                            <ColorPicker
                                 value={styleConfigData?.title?.color}
-                                onChange={(e) => {
+                                onChange={(value) => {
                                     setStyleConfigData({
                                         ...styleConfigData,
                                         title: {
                                             ...styleConfigData.title,
-                                            color: e.target.value
+                                            color: value.toHexString()
                                         }
                                     })
                                 }}
-                                style={{
-                                    width: '100%',
-                                    height: '40px',
-                                    marginTop: '8px',
-                                    border: '1px solid #dfe3e8',
-                                    borderRadius: '6px'
-                                }}
-                            />
-                        </label>
+                            >
+                                <Button
+                                    type="primary"
+                                    style={{
+                                        background: styleConfigData?.title?.color,
+                                        width: '100%',
+                                        border: '1px solid #dfe3e8',
+                                        boxShadow: 'none'
+                                    }}>
+                                </Button>
+                            </ColorPicker>
+                        </Flex>
                     </div>
                 </div>
 
@@ -440,22 +487,40 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                                                     <option value="boxed">Boxed Numbers</option>
                                                 </select>
                                             </label> */}
-
-                            <label style={{ fontSize: '13px', fontWeight: 500, display: 'block', marginTop: '12px' }}>
+                            <Flex
+                                justify="space-between"
+                                align="left"
+                                orientation="vertical"
+                                style={{
+                                    fontSize: '14px',
+                                    fontWeight: 500
+                                }}
+                                gap={8}
+                            >
                                 Timer Color
-                                <input
-                                    type="color"
+                                <ColorPicker
                                     value={styleConfigData?.countdown?.color}
-                                    onChange={(e) => setStyleConfigData({ ...styleConfigData, countdown: { ...styleConfigData?.countdown, color: e.target.value } })}
-                                    style={{
-                                        width: '100%',
-                                        height: '40px',
-                                        marginTop: '8px',
-                                        border: '1px solid #dfe3e8',
-                                        borderRadius: '6px'
+                                    onChange={(value) => {
+                                        setStyleConfigData({
+                                            ...styleConfigData,
+                                            countdown: {
+                                                ...styleConfigData.countdown,
+                                                color: value.toHexString()
+                                            }
+                                        })
                                     }}
-                                />
-                            </label>
+                                >
+                                    <Button
+                                        type="primary"
+                                        style={{
+                                            background: styleConfigData?.countdown.color,
+                                            width: '100%',
+                                            border: '1px solid #dfe3e8',
+                                            boxShadow: 'none'
+                                        }}>
+                                    </Button>
+                                </ColorPicker>
+                            </Flex>
                         </div>
                     </div>
                 </div>
@@ -527,7 +592,7 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                                             padding: '12px',
                                             marginBottom: '12px',
                                             position: 'relative',
-                                            background: rule.badgeText ? '#ffffff' : '#f9fafb',
+                                            background: styleConfigData?.card.background_color,
                                             cursor: 'pointer'
                                         }}
                                         onClick={() => setSelectedRuleIndex(index)}
@@ -540,14 +605,14 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                                                 type="radio"
                                                 name="discount-rule-group"
                                                 value={rule.trigger_scope.min_quantity}
-                                                readOnly
                                                 checked={selectedRuleIndex === index}
+                                                readOnly
                                                 style={{ width: '16px', height: '16px' }}
                                             />
                                             <div style={{ flex: 1 }}>
                                                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                                                     <strong style={{ fontSize: '14px' }}>{rule.title}</strong>
-                                                    {rule.discount.value < 1 &&
+                                                    {!!rule.labelText &&
                                                         <span
                                                             style={{
                                                                 background: styleConfigData?.card?.label_color,
@@ -566,7 +631,7 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                                             {
                                                 rule.discount.value === 1 && (
                                                     <div style={{ textAlign: 'right' }}>
-                                                        <strong style={{ fontSize: '16px' }}>€{Number(rule.trigger_scope.min_quantity * 65).toFixed(2)}</strong>
+                                                        <strong style={{ fontSize: '16px' }}>€{Number(rule.trigger_scope.min_quantity * previewPrice).toFixed(2)}</strong>
                                                     </div>
                                                 )
                                             }
@@ -581,8 +646,8 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                                                 (rule.discount.value > 0 && rule.discount.value < 1
                                                 ) && (
                                                     <div style={{ textAlign: 'right' }}>
-                                                        <strong style={{ fontSize: '16px' }}>€{Number(rule.trigger_scope.min_quantity * 65 * rule.discount.value).toFixed(2)}</strong>
-                                                        <div style={{ fontSize: '12px', color: '#6d7175', textDecoration: 'line-through' }}>€{Number(rule.trigger_scope.min_quantity * 65).toFixed(2)}</div>
+                                                        <strong style={{ fontSize: '16px' }}>€{Number(rule.trigger_scope.min_quantity * previewPrice * rule.discount.value).toFixed(2)}</strong>
+                                                        <div style={{ fontSize: '12px', color: '#6d7175', textDecoration: 'line-through' }}>€{Number(rule.trigger_scope.min_quantity * previewPrice).toFixed(2)}</div>
                                                     </div>
                                                 )
                                             }
@@ -627,7 +692,7 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                     Note: This is a live preview. Changes will update in real-time when state is connected.
                 </p>
             </div>
-        </div>
+        </div >
     );
 };
 

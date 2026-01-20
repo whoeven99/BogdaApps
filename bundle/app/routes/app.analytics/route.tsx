@@ -1,9 +1,13 @@
+import Header from "app/components/header";
 import { HelpCircle } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 
 const Index = () => {
+    const { t } = useTranslation();
+
     const [timeRange, setTimeRange] = useState('Last 30d');
     const [filterOpen, setFilterOpen] = useState(false);
 
@@ -32,11 +36,7 @@ const Index = () => {
     return (
         <div className="max-w-[1280px] mx-auto px-[24px] pt-[24px]">
             {/* Header */}
-            <div className="mb-[24px]">
-                <h1 className="font-['Inter'] font-semibold text-[24px] leading-[36px] text-[#202223] tracking-[0.0703px] m-0">
-                    Analytics
-                </h1>
-            </div>
+            <Header backUrl="/app" title={t("Analytics")} />
 
             {/* Filters Bar */}
             <div className="flex items-center gap-[12px] mb-[24px]">

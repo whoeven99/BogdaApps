@@ -257,7 +257,6 @@
 //                                 type="checkbox"
 //                                 checked={selectedSegments.some((s) => s.value === segment.value)}
 //                                 disabled={segmentModalDataFetcher.state === "submitting" || (selectedSegments.length >= 5 && !selectedSegments.some((s) => s.value === segment.value))}
-//                                 readOnly
 //                                 style={{ width: "20px", height: "20px" }}
 //                             />
 //                         </div>
