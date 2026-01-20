@@ -13,8 +13,10 @@ import {
 import { mutationDiscountAutomaticActivate, mutationDiscountAutomaticDeactivate, mutationDiscountAutomaticDeleteAndMetafieldsDelete, queryDiscountNodes, queryThemes } from "app/api/admin";
 import { globalStore } from "app/globalStore";
 import { useTranslation } from "react-i18next";
-import { Spin, Switch } from "antd";
+import { Button, Modal, Space, Spin, Switch, Typography } from "antd";
 import { BatchQueryUserDiscount, DeleteUserDiscount, UpdateUserDiscountStatus } from "app/api/javaServer";
+
+const { Text } = Typography;
 
 interface OfferType {
   id: string;
@@ -223,6 +225,8 @@ const Index = () => {
 
   const [offers, setOffers] = useState<OfferType[] | null>(null);
 
+  const [deleteOfferInfo, setDeleteOfferInfo] = useState<any>(null);
+
   const blockUrl = useMemo(
     () =>
       `https://${globalStore.shop}/admin/themes/current/editor?context=apps&activateAppId=${ciwiBundleExtensionId}/ciwi_bundle_main`,
@@ -379,20 +383,15 @@ const Index = () => {
 
   useEffect(() => {
     if (discountNodeDeleteFetcher.data) {
-      console.log("discountNodeDeleteFetcher.data", discountNodeDeleteFetcher.data);
-
       if (discountNodeDeleteFetcher.data.success) {
-        console.log("discountNodeDeleteFetcher.data", discountNodeDeleteFetcher.data);
-
         const deleteDiscountGid = discountNodeDeleteFetcher.data.response;
 
         if (!offers || !deleteDiscountGid) return;
 
-        console.log("offers: ", offers);
-
         const newOffer = offers.filter((offer) => offer.id !== deleteDiscountGid);
 
         setOffers(newOffer);
+        setDeleteOfferInfo(null);
       }
     }
   }, [discountNodeDeleteFetcher.data]);
@@ -755,8 +754,9 @@ const Index = () => {
                       <button
                         className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#d72c0d] p-[4px] rounded-[4px] hover:bg-[rgba(215,44,13,0.1)] transition-colors"
                         title="Delete"
-                        onClick={() => deleteOffer({
+                        onClick={() => setDeleteOfferInfo({
                           id: offer.id,
+                          name: offer.name,
                           metafields: [
                             {
                               ownerId: offer.metafields.ownerId,
@@ -870,8 +870,9 @@ const Index = () => {
                   <button
                     className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#d72c0d] p-[8px] rounded-[4px] hover:bg-[rgba(215,44,13,0.1)] transition-colors"
                     title="Delete"
-                    onClick={() => deleteOffer({
+                    onClick={() => setDeleteOfferInfo({
                       id: offer.id,
+                      name: offer.name,
                       metafields: [
                         {
                           ownerId: offer.metafields.ownerId,
@@ -1206,7 +1207,33 @@ const Index = () => {
           </button>
         </div>
       </div> */}
-    </div>
+      <Modal
+        centered
+        open={deleteOfferInfo !== null}
+        onCancel={() => setDeleteOfferInfo(null)}
+        footer={
+          <Space>
+            <Button
+              onClick={() => setDeleteOfferInfo(null)}
+            >
+              {t("Cancel")}
+            </Button>
+            <Button
+              type="primary"
+              onClick={() => deleteOffer(deleteOfferInfo)}
+              loading={discountNodeDeleteFetcher.state === "submitting"}
+            >
+              {t("Delete")}
+            </Button>
+          </Space>
+        }
+        title={t("Delete Offer")}
+      >
+        <Text>
+          Are you sure you want to delete this offer {deleteOfferInfo?.name}?
+        </Text>
+      </Modal>
+    </div >
   );
 };
 

@@ -1196,7 +1196,6 @@ const Index = () => {
                     </div>
                 </div>
 
-
                 {/* Fixed Bottom Action Bar */}
                 <div style={{
                     position: 'fixed',
