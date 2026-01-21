@@ -104,7 +104,7 @@
 
         if (rule.discount.value === 1) {
           priceHtml = `
-            <strong style="font-size:16px">
+            <strong class="ciwi-ciwi-money" style="font-size:16px">
               ${configElJson.currencySymbol}
               ${Number(
                 (rule.trigger_scope.min_quantity * configElJson.price) / 100,
@@ -115,7 +115,7 @@
           priceHtml = `<strong style="font-size:16px">Free</strong>`;
         } else {
           priceHtml = `
-            <strong style="font-size:16px">
+            <strong class="ciwi-ciwi-money" style="font-size:16px">
               ${configElJson.currencySymbol}
               ${Number(
                 (rule.trigger_scope.min_quantity *
@@ -124,7 +124,7 @@
                   100,
               ).toFixed(2)}
             </strong>
-            <div style="font-size:12px;color:#6d7175;text-decoration:line-through">
+            <div class="ciwi-ciwi-money" style="font-size:12px;color:#6d7175;text-decoration:line-through">
               ${configElJson.currencySymbol}
               ${Number(
                 (rule.trigger_scope.min_quantity * configElJson.price) / 100,
