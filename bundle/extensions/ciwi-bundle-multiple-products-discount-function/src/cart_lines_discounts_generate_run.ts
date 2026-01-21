@@ -109,8 +109,6 @@ export function cartLinesDiscountsGenerateRun(
       }
     }
 
-    console.log("appliedRule: ", appliedRule);
-
     //购物车此行产品数量quantity数据
     const quantity = line.quantity;
     if (!quantity) continue;
