@@ -1,22 +1,19 @@
-import { queryShoopMetafields } from "./shopifyQuery.js";
-
 (function () {
   async function insertHtmlNextToCartForms() {
-    const metafields = await queryShoopMetafields(
-      ["ciwi_bundles_config_1768965927853"],
-      "2372f942e7c7cd28118899361b57fe84",
-      "ciwishop.myshopify.com",
-    );
-
-    console.log("metafields: ", metafields);
-
     const configEl = document.getElementById("ciwi-bundles-config");
     if (!configEl) return;
 
     const configElJson = JSON.parse(configEl.textContent || "{}");
-    const ciwiBundleconfig = configElJson?.config;
+    const ciwiBundleconfig = Object.keys(configElJson)
+      .filter((key) => key.startsWith("ciwi_bundles_config_"))
+      .map((key) => ({
+        bundleKey: key,
+        ...configElJson[key],
+      }));
 
-    if (!ciwiBundleconfig) return;
+    console.log("ciwiBundleconfig: ", ciwiBundleconfig);
+
+    if (ciwiBundleconfig.length === 0) return;
 
     let form = null;
     const cartAddforms = document.querySelectorAll('form[action*="/cart/add"]');
@@ -58,28 +55,51 @@ import { queryShoopMetafields } from "./shopifyQuery.js";
     // 防止重复插入（在最终容器判断）
     if (insertTarget.querySelector(".ciwi-bundle-wrapper")) return;
 
-    const bundleData = Object.values(ciwiBundleconfig)[0] || {};
+    const bundleEntries = ciwiBundleconfig || [];
 
-    const discountRules = bundleData.discount_rules || [];
+    let bundleData = null;
 
-    const styleConfigData = bundleData.style_config || {};
+    for (const bundle of bundleEntries) {
+      console.log("bundle: ", bundle);
 
-    const targetingSettingsData = bundleData.targeting_settings || {};
+      const discountRules = bundle?.discount_rules || [];
+      console.log("discountRules: ", discountRules);
+      const targetingSettingsData = bundle?.targeting_settings || {};
+      console.log("targetingSettingsData: ", targetingSettingsData);
+      const selectedProductVariantIds =
+        bundle?.product_pool?.include_variant_ids || [];
+      console.log("selectedProductVariantIds: ", selectedProductVariantIds);
 
-    const selectedProductVariantIds =
-      bundleData.product_pool?.include_variant_ids || [];
+      /* ---------- 1️⃣ market 校验 ---------- */
+      const isInTargetMarketArray =
+        targetingSettingsData?.marketVisibilitySettingData?.some((market) =>
+          market?.includes(configElJson?.marketId),
+        );
+      console.log("isInTargetMarketArray: ", isInTargetMarketArray);
 
-    const isInTargetMarketArray =
-      targetingSettingsData?.marketVisibilitySettingData?.find((market) =>
-        market?.includes(configElJson?.marketId),
+      if (!isInTargetMarketArray) continue;
+
+      /* ---------- 2️⃣ variant 校验 ---------- */
+      const isInSelectedProductVariantIdsArray =
+        selectedProductVariantIds?.includes(String(configElJson?.variantId));
+      console.log(
+        "isInSelectedProductVariantIdsArray: ",
+        isInSelectedProductVariantIdsArray,
       );
 
-    if (!isInTargetMarketArray) return;
+      if (!isInSelectedProductVariantIdsArray) continue;
 
-    const isInSelectedProductVariantIdsArray =
-      selectedProductVariantIds?.includes(configElJson?.variantId?.toString());
+      /* ---------- 3️⃣ 折扣规则有效 ---------- */
+      console.log("discountRules: ", discountRules);
 
-    if (!isInSelectedProductVariantIdsArray) return;
+      if (!Array.isArray(discountRules) || discountRules.length === 0) continue;
+
+      // ✅ 命中第一个符合的 bundle
+      bundleData = bundle;
+      break;
+    }
+
+    if (!bundleData) return;
 
     /* -----------------------
        确保 form 里有 quantity
@@ -99,16 +119,19 @@ import { queryShoopMetafields } from "./shopifyQuery.js";
       form.appendChild(qtyInput);
     }
 
-    let selectedIndex = discountRules.findIndex((r) => r.selectedByDefault);
+    let selectedIndex = bundleData.discount_rules.findIndex(
+      (r) => r.selectedByDefault,
+    );
     if (selectedIndex === -1) selectedIndex = 0;
 
     qtyInput.value =
-      discountRules[selectedIndex]?.trigger_scope?.min_quantity || 1;
+      bundleData.discount_rules[selectedIndex]?.trigger_scope?.min_quantity ||
+      1;
 
     const wrapper = document.createElement("div");
     wrapper.className = "ciwi-bundle-wrapper";
 
-    const rulesHtml = discountRules
+    const rulesHtml = bundleData.discount_rules
       .map((rule, index) => {
         let priceHtml = "";
 
@@ -149,7 +172,7 @@ import { queryShoopMetafields } from "./shopifyQuery.js";
             data-index="${index}"
             data-qty="${rule.trigger_scope.min_quantity}"
             style="
-              border: 1px solid ${rule.selectedByDefault ? "#000" : styleConfigData.card.border_color};
+              border: 1px solid ${rule.selectedByDefault ? "#000" : bundleData.style_config.card.border_color};
               border-radius: 8px;
               padding: 12px;
               margin-bottom: 12px;
@@ -201,7 +224,7 @@ import { queryShoopMetafields } from "./shopifyQuery.js";
                       ? `
                         <span
                           style="
-                            background:${styleConfigData.card.label_color || "#f0f0f0"};
+                            background:${bundleData.style_config.card.label_color || "#f0f0f0"};
                             padding:2px 6px;
                             border-radius:4px;
                             font-size:10px;
@@ -231,13 +254,13 @@ import { queryShoopMetafields } from "./shopifyQuery.js";
     wrapper.innerHTML = `
         <h3
             style="
-            font-size:${styleConfigData.title.fontSize || "16px"};
-            font-weight:${styleConfigData.title.fontWeight || 600};
-            color:${styleConfigData.title.color || "#000"};
+            font-size:${bundleData.style_config.title.fontSize || "16px"};
+            font-weight:${bundleData.style_config.title.fontWeight || 600};
+            color:${bundleData.style_config.title.color || "#000"};
             margin-bottom:16px;
             "
         >
-            ${styleConfigData.title.text || ""}
+            ${bundleData.style_config.title.text || ""}
         </h3>
 
         ${rulesHtml}
@@ -260,7 +283,7 @@ import { queryShoopMetafields } from "./shopifyQuery.js";
 
       // UI 状态同步
       wrapper.querySelectorAll(".ciwi-rule").forEach((el) => {
-        el.style.border = `1px solid ${styleConfigData.card.border_color}`;
+        el.style.border = `1px solid ${bundleData.style_config.card.border_color}`;
         el.querySelector('input[type="radio"]').checked = false;
       });
 
