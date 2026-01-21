@@ -25,8 +25,8 @@ interface productModalDataType {
 }
 
 interface ProductModalProps {
-    mainModalType: "ProductVariants" | "CustomerSegments" | "Customer" | null;
-    setMainModalType: (modalType: "ProductVariants" | "CustomerSegments" | "Customer" | null) => void;
+    mainModalType: "ProductVariants" | "EditProductVariants" | null;
+    setMainModalType: (modalType: "ProductVariants" | "EditProductVariants" | null) => void;
     selectedProducts: ProductVariantsDataType[];
     setSelectedProducts: (products: ProductVariantsDataType[]) => void;
 }

@@ -1,5 +1,15 @@
+import { queryShoopMetafields } from "./shopifyQuery.js";
+
 (function () {
-  function insertHtmlNextToCartForms() {
+  async function insertHtmlNextToCartForms() {
+    const metafields = await queryShoopMetafields(
+      ["ciwi_bundles_config_1768965927853"],
+      "2372f942e7c7cd28118899361b57fe84",
+      "ciwishop.myshopify.com",
+    );
+
+    console.log("metafields: ", metafields);
+
     const configEl = document.getElementById("ciwi-bundles-config");
     if (!configEl) return;
 

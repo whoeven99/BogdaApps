@@ -1,12 +1,12 @@
 import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, Copy, Trash2 } from "lucide-react";
 import { DiscountRulesType, ProductVariantsDataType } from "../route";
-import { Checkbox, Input, InputNumber } from "antd";
+import { Button, Checkbox, Flex, Input, InputNumber } from "antd";
 import { useEffect, useMemo, useRef } from "react";
 
 interface ProductsAndDiscountsSettingProps {
     previewPrice: number;
     selectedProducts: ProductVariantsDataType[];
-    setMainModalType: (modalType: "ProductVariants" | "CustomerSegments" | "Customer" | null) => void;
+    setMainModalType: (modalType: "ProductVariants" | "EditProductVariants" | null) => void;
     discountRules: DiscountRulesType[];
     setDiscountRules: (rules: DiscountRulesType[]) => void;
     selectedRuleIndex: number;
@@ -70,59 +70,46 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                 <div style={{ marginBottom: '32px' }}>
                     <h3 style={{ fontSize: '14px', fontWeight: 500, marginBottom: '12px' }}>Products eligible for offer</h3>
 
-                    {selectedProducts.length === 0 ? (
-                        <button
-                            onClick={() => setMainModalType("ProductVariants")}
-                            style={{
-                                width: '100%',
-                                background: '#ffffff',
-                                color: '#202223',
-                                padding: '14px 20px',
-                                fontSize: '14px',
-                                fontWeight: 500,
+                    <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
+                        {selectedProducts.slice(0, 3).map(product => (
+                            <div key={product.id} style={{
                                 border: '1px solid #dfe3e8',
                                 borderRadius: '8px',
-                                cursor: 'pointer'
+                                padding: '8px',
+                                textAlign: 'center',
+                                flex: 1
+                            }}>
+                                <img src={product.image} alt={product.name} style={{ width: '60px', height: '60px', borderRadius: '6px', marginBottom: '8px' }} />
+                                <div style={{ fontSize: '12px', fontWeight: 500 }}>{product.name}</div>
+                                <div style={{ fontSize: '11px', color: '#6d7175' }}>{product.price}</div>
+                            </div>
+                        ))}
+                    </div>
+                    <Flex
+                        justify="space-between"
+                        align="center"
+                        gap={8}
+                        style={{
+                            width: '100%',
+                        }}
+                    >
+                        <Button
+                            style={{
+                                width: '100%',
                             }}
+                            onClick={() => setMainModalType("ProductVariants")}
                         >
-                            Add products eligible for offer
-                        </button>
-                    ) : (
-                        <div>
-                            <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
-                                {selectedProducts.slice(0, 3).map(product => (
-                                    <div key={product.id} style={{
-                                        border: '1px solid #dfe3e8',
-                                        borderRadius: '8px',
-                                        padding: '8px',
-                                        textAlign: 'center',
-                                        flex: 1
-                                    }}>
-                                        <img src={product.image} alt={product.name} style={{ width: '60px', height: '60px', borderRadius: '6px', marginBottom: '8px' }} />
-                                        <div style={{ fontSize: '12px', fontWeight: 500 }}>{product.name}</div>
-                                        <div style={{ fontSize: '11px', color: '#6d7175' }}>{product.price}</div>
-                                    </div>
-                                ))}
-                            </div>
-                            <div style={{ fontSize: '13px', color: '#6d7175', marginBottom: '12px' }}>
-                                {selectedProducts.length} product{selectedProducts.length > 1 ? 's' : ''} selected
-                            </div>
-                            <button
-                                onClick={() => setMainModalType("ProductVariants")}
-                                style={{
-                                    background: 'none',
-                                    border: 'none',
-                                    color: '#008060',
-                                    cursor: 'pointer',
-                                    fontSize: '14px',
-                                    fontWeight: 500,
-                                    padding: 0
-                                }}
-                            >
-                                Edit products
-                            </button>
-                        </div>
-                    )}
+                            Select products
+                        </Button>
+                        {!!selectedProducts.length && <Button
+                            style={{
+                                width: '100%',
+                            }}
+                            onClick={() => setMainModalType("EditProductVariants")}
+                        >
+                            View selected({selectedProducts.length})
+                        </Button>}
+                    </Flex>
                 </div>
 
                 {/* Discount Rules Section */}

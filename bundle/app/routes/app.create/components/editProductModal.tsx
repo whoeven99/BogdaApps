@@ -29,7 +29,7 @@ const EditProductModal: React.FC<ProductModalProps> = ({
 }) => {
     const { t } = useTranslation();
 
-    const productModalData = useMemo(() => selectedProducts, [selectedProducts, mainModalType]);
+    const productModalData = useMemo(() => selectedProducts, [mainModalType]);
 
     const [searchQuery, setSearchQuery] = useState<string>("");
 
@@ -130,7 +130,7 @@ const EditProductModal: React.FC<ProductModalProps> = ({
                         marginBottom: "12px",
                     }}
                 >
-                    {productModalData.map((variant) => (
+                    {filteredVariants.map((variant) => (
                         <Flex
                             key={variant.id}
                             justify="space-between"

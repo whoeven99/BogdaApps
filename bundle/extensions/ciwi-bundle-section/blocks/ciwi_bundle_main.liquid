@@ -6,13 +6,15 @@
       "storefrontAccessToken": "{{ app.metafields.tokens.storefront }}",
       "variantId": {{ product.variants[0].id }},
       "marketId": {{ localization.market.id }},
-      "config": {{ shop.metafields.ciwi_bundles_config | json }},
+      "metafields": [{% for item in shop.metafields.ciwi_bundles_config %}
+          "{{ item[0] }}"{% unless forloop.last %},{% endunless %}
+        {% endfor %}],
       "compareAtPrice": {{ product.variants[0].compare_at_price | json }},
       "price": {{ product.variants[0].price | json }},
       "currencySymbol": "{{ localization.country.currency.symbol }}"
     }
   </script>
-  <script src="{{ 'ciwi-bundle-if-add-to-dom.js' | asset_url }}" defer></script>
+  <script type="module" src="{{ 'ciwi-bundle-if-add-to-dom.js' | asset_url }}"></script>
   <link rel="stylesheet" href="{{ 'ciwi-bundle-if-add-to-dom.css' | asset_url }}">
 {% endif %}
 

@@ -9,7 +9,7 @@ const { Text } = Typography
 interface ScheduleAndBudgetSettingProps {
     targetingSettingsData: TargetingSettingsType;
     setTargetingSettingsData: (targetingSettingsData: TargetingSettingsType) => void;
-    setMainModalType: (e: "ProductVariants" | "CustomerSegments" | "Customer" | null) => void
+    setMainModalType: (e: "ProductVariants" | "EditProductVariants" | null) => void
     marketVisibilitySettingData: { label: string; value: string; }[]
 }
 

@@ -1,5 +1,71 @@
 import axios from "axios";
 
+//指定查询多个产品信息
+export const querySpecialProductVariants = async ({
+    shop,
+    accessToken,
+    ids,
+}: {
+    shop: string;
+    accessToken: string;
+    ids: string[];
+}) => {
+    if (!ids || ids.length === 0) return [];
+
+    try {
+        // Shopify GraphQL query 搜索语法
+        const idsQuery = ids.map((id) => `id:${id}`).join(" OR ");
+
+        const gql = `
+        query GetProductVariants {
+            productVariants(first: ${ids.length}, query: "${idsQuery}") {
+                edges {
+                    node {
+                        id
+                        title
+                        price
+                        media(first: 1) {
+                            edges {
+                                node {
+                                    preview {
+                                        image {
+                                            url
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        product {
+                            title
+                        }
+                    }
+                }
+            }
+        }
+        `;
+
+        const { data } = await axios.post(
+            `https://${shop}/admin/api/${process.env.GRAPHQL_VERSION}/graphql.json`,
+            { query: gql },
+            {
+                headers: {
+                    "X-Shopify-Access-Token": accessToken,
+                    "Content-Type": "application/json",
+                },
+            }
+        );
+
+        const res = data?.data;
+
+        console.log(`${shop} querySpecialProductVariants:`, res);
+
+        return res;
+    } catch (error: any) {
+        console.error(`${shop} Error querySpecialProductVariants:`, error?.response?.data);
+        return null;
+    }
+};
+
 //查询前三个指定产品信息
 export const queryThreeProductVariants = async ({
     shop,

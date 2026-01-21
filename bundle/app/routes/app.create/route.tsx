@@ -14,6 +14,7 @@ import ProductModal from "./components/productModal";
 import { Affix, Button, Flex, Spin } from "antd";
 import { globalStore } from "app/globalStore";
 import { GetUserDiscount, SaveUserDiscount, UpdateUserDiscount } from "app/api/javaServer";
+import EditProductModal from "./components/editProductModal";
 
 export interface ProductVariantsDataType {
     id: string;
@@ -687,7 +688,7 @@ const Index = () => {
         showOfferToBots: false,
     })
 
-    const [mainModalType, setMainModalType] = useState<"ProductVariants" | "CustomerSegments" | "Customer" | null>(null)
+    const [mainModalType, setMainModalType] = useState<"ProductVariants" | "EditProductVariants" | null>(null)
 
     const selectedOfferType = useMemo(() => {
         return offerTypes.find(type => type.id == basicInformation.offerType?.subtype) || offerTypes[0]
@@ -734,26 +735,26 @@ const Index = () => {
         }
     }, [shopMarketsDataFetcher.data])
 
-    useEffect(() => {
-        switch (true) {
-            case mainModalType == "Customer":
-                customersDataFetcher.submit({
-                    customersRequestBody: JSON.stringify({
-                        query: '',
-                    })
-                }, { method: 'POST' })
-                break;
-            case mainModalType == "CustomerSegments":
-                customerSegmentsDataFetcher.submit({
-                    customerSegmentsRequestBody: JSON.stringify({
-                        query: '',
-                    })
-                }, { method: 'POST' })
-                break;
-            default:
-                break;
-        }
-    }, [mainModalType])
+    // useEffect(() => {
+    //     switch (true) {
+    //         case mainModalType == "Customer":
+    //             customersDataFetcher.submit({
+    //                 customersRequestBody: JSON.stringify({
+    //                     query: '',
+    //                 })
+    //             }, { method: 'POST' })
+    //             break;
+    //         case mainModalType == "CustomerSegments":
+    //             customerSegmentsDataFetcher.submit({
+    //                 customerSegmentsRequestBody: JSON.stringify({
+    //                     query: '',
+    //                 })
+    //             }, { method: 'POST' })
+    //             break;
+    //         default:
+    //             break;
+    //     }
+    // }, [mainModalType])
 
     useEffect(() => {
         if (confirmFetcher.data) {
@@ -1154,6 +1155,14 @@ const Index = () => {
                             <>
                                 {/* Product Modal */}
                                 <ProductModal
+                                    mainModalType={mainModalType}
+                                    setMainModalType={setMainModalType}
+                                    selectedProducts={selectedProducts}
+                                    setSelectedProducts={setSelectedProducts}
+                                />
+
+                                {/* EditProduct Modal */}
+                                <EditProductModal
                                     mainModalType={mainModalType}
                                     setMainModalType={setMainModalType}
                                     selectedProducts={selectedProducts}
