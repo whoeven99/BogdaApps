@@ -11,19 +11,11 @@ import { globalStore } from "app/globalStore";
 import { useTranslation } from "react-i18next";
 import { Button, Modal, Space, Spin, Switch, Typography } from "antd";
 import { BatchQueryUserDiscount, DeleteUserDiscount, UpdateUserDiscountStatus } from "app/api/javaServer";
+import { useDispatch, useSelector } from "react-redux";
+import { OfferType } from "app/types";
+import { setOffersData } from "app/store/modules/offersData";
 
 const { Text } = Typography;
-
-interface OfferType {
-    id: string;
-    name: string;
-    status: string;
-    metafields: any;
-    gmv: string;
-    conversion: string;
-    exposurePV: string;
-    addToCartPV: string;
-}
 
 export const loader = async () => {
     return {
@@ -209,7 +201,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 const Index = () => {
     const navigate = useNavigate();
+    const dispatch = useDispatch();
     const { t } = useTranslation();
+
+    const offersData: OfferType[] = useSelector((state: any) => state.offersData);
 
     const discountNodeDeleteFetcher = useFetcher<any>();
     const discountNodeStatusFetcher = useFetcher<any>();
@@ -219,9 +214,9 @@ const Index = () => {
 
     const [isThemeExtensionEnabled, setIsThemeExtensionEnabled] = useState(true);
 
-    const [offers, setOffers] = useState<OfferType[] | null>(null);
-
     const [deleteOfferInfo, setDeleteOfferInfo] = useState<any>(null);
+
+    const [pageLoadingArr, setPageLoadingArr] = useState<string[]>(["offersData"]);
 
     const blockUrl = useMemo(
         () =>
@@ -342,7 +337,7 @@ const Index = () => {
                 const id = discountNodeStatusFetcher.data.response?.first;
                 const status = discountNodeStatusFetcher.data.response?.second;
 
-                const newOffers = Array.isArray(offers) ? offers.map(offer => {
+                const newOffers = Array.isArray(offersData) ? offersData.map(offer => {
                     if (offer.id === id) {
                         return {
                             ...offer,
@@ -351,7 +346,7 @@ const Index = () => {
                     }
                     return offer;
                 }) : [];
-                setOffers(newOffers);
+                dispatch(setOffersData(newOffers));
             }
         }
     }, [discountNodeStatusFetcher.data]);
@@ -361,11 +356,11 @@ const Index = () => {
             if (discountNodeDeleteFetcher.data.success) {
                 const deleteDiscountGid = discountNodeDeleteFetcher.data.response;
 
-                if (!offers || !deleteDiscountGid) return;
+                if (!offersData || !deleteDiscountGid) return;
 
-                const newOffer = offers.filter((offer) => offer.id !== deleteDiscountGid);
+                const newOffer = offersData.filter((offer) => offer.id !== deleteDiscountGid);
 
-                setOffers(newOffer);
+                dispatch(setOffersData(newOffer));
                 setDeleteOfferInfo(null);
             }
         }
@@ -413,9 +408,9 @@ const Index = () => {
                     addToCartPV: "",
                 }
             ))
-            setOffers(data);
+            dispatch(setOffersData(data));
         }
-
+        setPageLoadingArr([]);
     }, [globalStore.shop, globalStore.server]);
 
     const deleteOffer = async ({
@@ -600,13 +595,13 @@ const Index = () => {
                         height: "100%",
                     }}
                 >
-                    {!offers && <Spin />}
-                    {offers?.length === 0 && <span className="!font-['Inter'] !font-normal !text-[14px] !text-[#6d7175]">{t("No offers found")}</span>}
+                    {pageLoadingArr.includes("offersData") && <Spin />}
+                    {!pageLoadingArr.includes("offersData") && offersData?.length === 0 && <span className="!font-['Inter'] !font-normal !text-[14px] !text-[#6d7175]">{t("No offers found")}</span>}
                 </div>
 
                 {/* Desktop Table */}
-                {(Array.isArray(offers) && offers?.length > 0) &&
-                    <table className="!hidden md:!table !w-full !border-collapse">
+                {(!pageLoadingArr.includes("offersData") && Array.isArray(offersData) && offersData?.length > 0) &&
+                    <table className="hidden md:table w-full border-collapse">
                         <thead>
                             <tr>
                                 <th className="!text-left !p-[12px] !border-b !border-[#dfe3e8] !font-['Inter'] !font-semibold !text-[13px] !leading-[20.8px] !text-[#6d7175] !tracking-[-0.0762px]">
@@ -633,7 +628,7 @@ const Index = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {offers.map((offer) => (
+                            {offersData.map((offer) => (
                                 <tr key={offer.id}>
                                     <td className="!p-[12px] !border-b !border-[#dfe3e8] !font-['Inter'] !font-normal !text-[14px] !leading-[22.4px] !text-[#202223] !tracking-[-0.1504px]">
                                         <div
@@ -752,9 +747,9 @@ const Index = () => {
                 }
 
                 {/* Mobile Cards */}
-                {(Array.isArray(offers) && offers?.length > 0) &&
-                    <div className="!md:hidden !space-y-[12px]">
-                        {offers.map((offer) => (
+                {(!pageLoadingArr.includes("offersData") && Array.isArray(offersData) && offersData?.length > 0) &&
+                    <div className="md:hidden space-y-[12px]">
+                        {offersData.map((offer) => (
                             <div
                                 key={offer.id}
                                 className="!border !border-[#dfe3e8] !rounded-[8px] !p-[16px]"
@@ -866,14 +861,14 @@ const Index = () => {
                 }
 
                 {/* View All Button at Bottom */}
-                {/* <div className="flex justify-center mt-[16px] sm:mt-[20px] pt-[16px] border-t border-[#dfe3e8]">
-          <button
-            className="text-[#008060] font-['Inter'] font-medium text-[14px] leading-[21px] tracking-[-0.1504px] bg-transparent border-0 cursor-pointer hover:bg-[rgba(0,128,96,0.1)] px-[16px] py-[8px] rounded-[6px]"
-            onClick={() => navigate("/app/offers")}
-          >
-            View All Offers
-          </button>
-        </div> */}
+                <div className="flex !justify-center !mt-[16px] !sm:mt-[20px] !pt-[16px] !border-t !border-[#dfe3e8]">
+                    <button
+                        className="!text-[#008060] !font-['Inter'] !font-medium !text-[14px] !leading-[21px] !tracking-[-0.1504px] !bg-transparent !border-0 !cursor-pointer !hover:!bg-[rgba(0,128,96,0.1)] !px-[16px] !py-[8px] !rounded-[6px]"
+                        onClick={() => navigate("/app/offers")}
+                    >
+                        {t("View All Offers")}
+                    </button>
+                </div>
             </div>
 
             {/* A/B Tests Card - Full Width */}

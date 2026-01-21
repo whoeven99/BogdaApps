@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "@remix-run/node";
-import { Link, Outlet, useFetcher, useLoaderData, useRouteError } from "@remix-run/react";
+import { Link, Outlet, useFetcher, useLoaderData, useLocation, useRouteError } from "@remix-run/react";
 import { boundary } from "@shopify/shopify-app-remix/server";
 import { AppProvider } from "@shopify/shopify-app-remix/react";
 import { NavMenu } from "@shopify/app-bridge-react";
@@ -96,6 +96,8 @@ export default function App() {
     setIsClient(true);
   }, []);
 
+
+
   return (
     <AppProvider isEmbeddedApp apiKey={apiKey}>
       <ConfigProvider
@@ -113,7 +115,10 @@ export default function App() {
           <Link to="/app/pricing">{t("Pricing")}</Link> */}
         </NavMenu>
         {isClient ? (
-          <Outlet />
+          <>
+            <Navigation />
+            <Outlet />
+          </>
         ) : (
           <Flex
             align="center"
@@ -127,6 +132,33 @@ export default function App() {
         )}
       </ConfigProvider>
     </AppProvider>
+  );
+}
+
+function Navigation() {
+  const location = useLocation();
+
+  return (
+    <nav className="bg-white flex flex-col sm:flex-row gap-[8px] sm:gap-[16px] items-stretch sm:items-start pb-0 px-[16px] pt-[16px] rounded-[8px] mb-[16px] sm:mb-[24px]">
+      <Link
+        to="/app"
+        className={`rounded-[4px] px-[12px] py-[7px] no-underline text-center sm:text-left ${location.pathname === '/app' ? '!bg-[#f4f6f8]' : ''
+          }`}
+      >
+        <span className="font-['Inter'] font-normal leading-[25.6px] text-[#202223] text-[16px] tracking-[-0.3125px]">
+          Dashboard
+        </span>
+      </Link>
+      <Link
+        to="/app/offers"
+        className={`rounded-[4px] px-[12px] py-[7px] no-underline text-center sm:text-left ${location.pathname === '/app/offers' ? '!bg-[#f4f6f8]' : ''
+          }`}
+      >
+        <span className="font-['Inter'] font-normal leading-[25.6px] text-[#202223] text-[#202223] text-[16px] tracking-[-0.3125px]">
+          All Offers
+        </span>
+      </Link>
+    </nav>
   );
 }
 
