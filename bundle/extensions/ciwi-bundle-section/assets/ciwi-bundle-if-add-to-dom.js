@@ -20,65 +20,49 @@
 
     for (const cartAddform of cartAddforms) {
       const children = Array.from(cartAddform.children);
+      console.log(configElJson.variantIds);
+
       for (const child of children) {
+        console.log(child.tagName === "INPUT");
+        console.log(child.value);
+        console.log(configElJson.variantIds.includes(Number(child.value)));
         if (
           child.tagName === "INPUT" &&
           child.name === "id" &&
-          String(child.value) === String(configElJson?.variantId)
+          configElJson.variantIds.includes(Number(child.value))
         ) {
           form = cartAddform;
+          break;
         }
       }
     }
 
+    console.log("form: ", form);
+
     if (!form) return;
 
-    const variantInput =
-      form.querySelector < HTMLInputElement > 'input[type="hidden"][name="id"]';
+    const variantInput = form.querySelector('input[name="id"]');
+
+    console.log("variantInput: ", variantInput);
 
     if (!variantInput) return;
 
-    // 4. 监听 value 变化（关键）
-    const observer = new MutationObserver(() => {
-      const variantId = String(variantInput.value);
-
-      const inventory = configElJson?.[variantId];
-
-      if (inventory === 0) {
-        console.log("Variant out of stock:", variantId);
-      }
-    });
-
-    // 只监听 value 属性变化
-    observer.observe(variantInput, {
-      attributes: true,
-      attributeFilter: ["value"],
-    });
-
-    /* --------------------------------------------------
-       插入位置策略（主路径 + 保底路径）
-    -------------------------------------------------- */
     let insertTarget = null;
     let insertBeforeNode = null;
 
     const productForm = form.closest("product-form");
     if (productForm && productForm.parentElement) {
-      // ✅ 主路径：插在 product-form 外
       insertTarget = productForm.parentElement;
       insertBeforeNode = productForm;
     } else if (form.parentElement) {
-      // ✅ 保底：插在 form 前
       insertTarget = form.parentElement;
       insertBeforeNode = form;
     }
 
     if (!insertTarget || !insertBeforeNode) return;
-
-    // 防止重复插入（在最终容器判断）
     if (insertTarget.querySelector(".ciwi-bundle-wrapper")) return;
 
     const bundleEntries = ciwiBundleconfig || [];
-
     let bundleData = null;
 
     for (const bundle of bundleEntries) {
@@ -92,7 +76,6 @@
         bundle?.product_pool?.include_variant_ids || [];
       console.log("selectedProductVariantIds: ", selectedProductVariantIds);
 
-      /* ---------- 1️⃣ market 校验 ---------- */
       const isInTargetMarketArray =
         targetingSettingsData?.marketVisibilitySettingData?.some((market) =>
           market?.includes(configElJson?.marketId),
@@ -101,9 +84,8 @@
 
       if (!isInTargetMarketArray) continue;
 
-      /* ---------- 2️⃣ variant 校验 ---------- */
       const isInSelectedProductVariantIdsArray =
-        selectedProductVariantIds?.includes(String(configElJson?.variantId));
+        selectedProductVariantIds?.includes(String(variantInput?.value));
       console.log(
         "isInSelectedProductVariantIdsArray: ",
         isInSelectedProductVariantIdsArray,
@@ -111,21 +93,18 @@
 
       if (!isInSelectedProductVariantIdsArray) continue;
 
-      /* ---------- 3️⃣ 折扣规则有效 ---------- */
       console.log("discountRules: ", discountRules);
 
       if (!Array.isArray(discountRules) || discountRules.length === 0) continue;
 
-      // ✅ 命中第一个符合的 bundle
       bundleData = bundle;
       break;
     }
 
+    console.log("bundleData: ", bundleData);
+
     if (!bundleData) return;
 
-    /* -----------------------
-       确保 form 里有 quantity
-    ----------------------- */
     let qtyInput = null;
 
     Array.from(form.children).forEach((child) => {
@@ -263,7 +242,6 @@
                   ${rule.subtitle || ""}
                 </div>
               </div>
-
               <div style="text-align:right">
                 ${priceHtml}
               </div>
@@ -288,22 +266,42 @@
         ${rulesHtml}
     `;
 
-    // 插入到 form 前
+    console.log("wrapper: ", wrapper);
+
     insertTarget.insertBefore(wrapper, insertBeforeNode);
 
-    /* -----------------------
-       交互逻辑（最关键）
-    ----------------------- */
+    function syncBundleDisabled() {
+      const variantId = String(variantInput.value);
+      const inventory = Number(configElJson?.[variantId]);
+      const disabled = inventory === 0;
+
+      wrapper.querySelectorAll(".ciwi-rule").forEach((ruleEl) => {
+        ruleEl.style.opacity = disabled ? "0.5" : "1";
+        ruleEl.style.cursor = disabled ? "not-allowed" : "pointer";
+        const radio = ruleEl.querySelector('input[type="radio"]');
+        if (radio) {
+          radio.disabled = disabled;
+          if (disabled) radio.checked = false;
+        }
+      });
+    }
+
+    const observer = new MutationObserver(syncBundleDisabled);
+    observer.observe(variantInput, {
+      attributes: true,
+      attributeFilter: ["value"],
+    });
+    syncBundleDisabled();
+
     wrapper.addEventListener("click", (e) => {
+      if (Number(configElJson?.[String(variantInput.value)]) === 0) return;
+
       const ruleEl = e.target.closest(".ciwi-rule");
       if (!ruleEl) return;
 
       const qty = ruleEl.dataset.qty;
-
-      // 更新 quantity
       qtyInput.value = qty;
 
-      // UI 状态同步
       wrapper.querySelectorAll(".ciwi-rule").forEach((el) => {
         el.style.border = `1px solid ${bundleData.style_config.card.border_color}`;
         el.querySelector('input[type="radio"]').checked = false;

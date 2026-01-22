@@ -3,19 +3,20 @@
     {
       "shopifyDomain": "{{ shop.domain }}",
       "productId": {{ product.id }},
-      "variantId": {{ product.variants[0].id }},
+      "variantIds": [{% for item in product.variants %}
+          {{ item.id }}{% unless forloop.last %},{% endunless %}
+        {% endfor %}],
       "marketId": {{ localization.market.id }},
-      "variantInventoryQuantity": {{ product.variants[0].inventory_quantity }},
       {% for item in product.variants %}
-        "{{ item.id }}": {{ item.inventory_quantity }},
-      {% endfor %}
-      {% for item in shop.metafields.ciwi_bundles_config %}
-        "{{ item[0] }}": {{ item[1].value | json }},
-      {% endfor %}
-      "compareAtPrice": {{ product.variants[0].compare_at_price | json }},
-      "price": {{ product.variants[0].price | json }},
-      "currencySymbol": "{{ localization.country.currency.symbol }}"
-    }
+        "{{ item.id }}": {{ item.inventory_quantity | default: 0 }},
+        {% endfor %}
+        {% for item in shop.metafields.ciwi_bundles_config %}
+          "{{ item[0] }}": {{ item[1].value | json }},
+          {% endfor %}
+          "compareAtPrice": {{ product.variants[0].compare_at_price | json }},
+          "price": {{ product.variants[0].price | json }},
+          "currencySymbol": "{{ localization.country.currency.symbol }}"
+        }
   </script>
   <script src="{{ 'ciwi-bundle-if-add-to-dom.js' | asset_url }}" defer></script>
   <link rel="stylesheet" href="{{ 'ciwi-bundle-if-add-to-dom.css' | asset_url }}">
