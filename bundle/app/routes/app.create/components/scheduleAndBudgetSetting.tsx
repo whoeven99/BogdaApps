@@ -1,22 +1,22 @@
 import { Button, Checkbox, Col, DatePicker, Divider, Flex, Input, InputNumber, Radio, Row, Select, Space, Typography } from "antd";
 import { TargetingSettingsType } from "../route";
 import { useTranslation } from "react-i18next";
-import { useMemo, } from "react";
-import { CloseOutlined } from "@ant-design/icons";
+import { useEffect, useMemo, } from "react";
+import dayjs from 'dayjs';
 
 const { Text } = Typography
 
 interface ScheduleAndBudgetSettingProps {
     targetingSettingsData: TargetingSettingsType;
     setTargetingSettingsData: (targetingSettingsData: TargetingSettingsType) => void;
-    setMainModalType: (e: "ProductVariants" | "EditProductVariants" | null) => void
+    dailyBudgetError: boolean;
     marketVisibilitySettingData: { label: string; value: string; }[]
 }
 
 const ScheduleAndBudgetSetting: React.FC<ScheduleAndBudgetSettingProps> = ({
     targetingSettingsData,
     setTargetingSettingsData,
-    setMainModalType,
+    dailyBudgetError,
     marketVisibilitySettingData,
 }) => {
     const { t } = useTranslation()
@@ -60,115 +60,7 @@ const ScheduleAndBudgetSetting: React.FC<ScheduleAndBudgetSettingProps> = ({
 
             {/* Target Audience */}
             <div style={{ marginBottom: '32px' }}>
-                {/* <h3 style={{ fontSize: '14px', fontWeight: 500, marginBottom: '12px' }}>Eligibility</h3> */}
                 <div className="polaris-stack polaris-stack--vertical">
-                    {/* <div style={{ fontSize: '14px', fontWeight: 500 }}>
-                        <Text>Available on all sales channels</Text>
-                        <div style={{
-                            marginTop: '8px',
-                            border: '1px solid #dfe3e8',
-                            borderRadius: '6px',
-                            padding: '12px',
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "8px"
-                        }}>
-                            <Radio.Group
-                                style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
-                                value={targetingSettingsData?.eligibilityType}
-                                onChange={(e) =>
-                                    setTargetingSettingsData({
-                                        ...targetingSettingsData,
-                                        eligibilityType: e.target.value
-                                    })
-                                }
-                                options={[
-                                    { value: "all", label: t('All customers') },
-                                    { value: "segments", label: t('Specific customer segments') },
-                                    { value: "customers", label: t('Specific customers') },
-                                ]}
-                            />
-                            {targetingSettingsData?.eligibilityType !== "all" && (
-                                <Space.Compact style={{ width: '100%' }}>
-                                    <Input
-                                        placeholder={t(
-                                            targetingSettingsData?.eligibilityType === "customers"
-                                                ? 'Search customers'
-                                                : 'Search customer segments'
-                                        )}
-                                    />
-                                    <Button
-                                        type="primary"
-                                        style={{ boxShadow: undefined }}
-                                        onClick={() => eligibilityBrowse()}
-                                    >
-                                        {t('Browse')}
-                                    </Button>
-                                </Space.Compact>
-                            )}
-                            {targetingSettingsData?.eligibilityType === "customers" &&
-                                targetingSettingsData.customersData.map((customer) => (
-                                    <Flex
-                                        key={customer.value}
-                                        justify="space-between"
-                                        align="center"
-                                        style={{
-                                            borderRadius: '8px',
-                                            padding: '8px',
-                                            border: '1px solid #dfe3e8',
-                                        }}
-                                    >
-                                        <Text>{customer.label}</Text>
-
-                                        <Button
-                                            type="dashed"
-                                            onClick={() =>
-                                                setTargetingSettingsData({
-                                                    ...targetingSettingsData,
-                                                    customersData: targetingSettingsData.customersData.filter((c) => c.value !== customer.value)
-                                                })
-                                            }
-                                        >
-                                            <CloseOutlined />
-                                        </Button>
-                                    </Flex>
-                                ))
-                            }
-                            {targetingSettingsData?.eligibilityType === "segments" &&
-                                targetingSettingsData.segmentData.map((segment) => (
-                                    <Flex
-                                        key={segment.value}
-                                        justify="space-between"
-                                        align="center"
-                                        style={{
-                                            borderRadius: '8px',
-                                            padding: '8px',
-                                            border: '1px solid #dfe3e8',
-                                        }}
-                                    >
-                                        <Text>{segment.label}</Text>
-
-                                        <Button
-                                            type="text"
-                                            onClick={() =>
-                                                setTargetingSettingsData({
-                                                    ...targetingSettingsData,
-                                                    segmentData: targetingSettingsData.segmentData.filter((s) => s.value !== segment.value)
-                                                })
-                                            }
-                                        >
-                                            <CloseOutlined />
-                                        </Button>
-                                    </Flex>
-                                ))
-                            }
-                        </div>
-                        <p style={{ fontSize: '12px', color: '#6d7175', marginTop: '4px' }}>
-                            Select one or more customer segments to target
-                        </p>
-                    </div> */}
-
-
                     <div style={{ fontSize: '14px', fontWeight: 500, marginTop: '16px' }}>
                         Market Visibility
                         <div style={{
@@ -240,15 +132,24 @@ const ScheduleAndBudgetSetting: React.FC<ScheduleAndBudgetSettingProps> = ({
                             showTime
                             needConfirm={false}
                             value={targetingSettingsData.schedule.startsAt}
+                            minDate={dayjs().startOf("day")}
                             onChange={(value) => {
-                                if (value)
-                                    setTargetingSettingsData({
-                                        ...targetingSettingsData,
-                                        schedule: {
-                                            ...targetingSettingsData.schedule,
-                                            startsAt: value
-                                        }
-                                    })
+                                if (!value) return;
+
+                                const nextStartsAt = value;
+                                const currentEndsAt = targetingSettingsData.schedule.endsAt;
+
+                                setTargetingSettingsData({
+                                    ...targetingSettingsData,
+                                    schedule: {
+                                        ...targetingSettingsData.schedule,
+                                        startsAt: nextStartsAt,
+                                        endsAt:
+                                            currentEndsAt && dayjs(currentEndsAt).isBefore(nextStartsAt)
+                                                ? nextStartsAt
+                                                : currentEndsAt
+                                    }
+                                });
                             }}
                         />
                         <Text style={{ fontSize: '12px', color: '#6d7175' }}>
@@ -267,6 +168,7 @@ const ScheduleAndBudgetSetting: React.FC<ScheduleAndBudgetSettingProps> = ({
                             showTime
                             needConfirm={false}
                             value={targetingSettingsData.schedule.endsAt}
+                            minDate={dayjs(targetingSettingsData.schedule.startsAt) || dayjs().startOf("day")}
                             onChange={(value) => {
                                 if (value)
                                     setTargetingSettingsData({
@@ -301,23 +203,33 @@ const ScheduleAndBudgetSetting: React.FC<ScheduleAndBudgetSettingProps> = ({
                     >
                         <Text>{t("Total Budget (Optional)")}</Text>
                         <InputNumber
-                            style={{
-                                width: '100%',
-                            }}
+                            style={{ width: '100%' }}
                             min={0}
                             prefix="$"
                             suffix="USD"
                             placeholder="0.00"
                             value={targetingSettingsData.budget.totalBudget}
                             onChange={(value) => {
-                                if (typeof value === 'number' && value > 0)
+                                if (value === null) {
+                                    setTargetingSettingsData({
+                                        ...targetingSettingsData,
+                                        budget: {
+                                            ...targetingSettingsData.budget,
+                                            totalBudget: null
+                                        }
+                                    });
+                                    return;
+                                }
+
+                                if (typeof value === 'number' && value >= 0) {
                                     setTargetingSettingsData({
                                         ...targetingSettingsData,
                                         budget: {
                                             ...targetingSettingsData.budget,
                                             totalBudget: value
                                         }
-                                    })
+                                    });
+                                }
                             }}
                         />
                         <Text style={{ fontSize: '12px', color: '#6d7175' }}>
@@ -336,23 +248,34 @@ const ScheduleAndBudgetSetting: React.FC<ScheduleAndBudgetSettingProps> = ({
                     >
                         <Text>{t("Daily Budget (Optional)")}</Text>
                         <InputNumber
-                            style={{
-                                width: '100%',
-                            }}
+                            style={{ width: '100%' }}
                             min={0}
                             prefix="$"
                             suffix="USD"
                             placeholder="$0.00"
+                            status={dailyBudgetError ? "error" : undefined}
                             value={targetingSettingsData.budget.dailyBudget}
                             onChange={(value) => {
-                                if (typeof value === 'number' && value > 0)
+                                if (value === null) {
+                                    setTargetingSettingsData({
+                                        ...targetingSettingsData,
+                                        budget: {
+                                            ...targetingSettingsData.budget,
+                                            dailyBudget: null
+                                        }
+                                    });
+                                    return;
+                                }
+
+                                if (typeof value === 'number' && value >= 0) {
                                     setTargetingSettingsData({
                                         ...targetingSettingsData,
                                         budget: {
                                             ...targetingSettingsData.budget,
                                             dailyBudget: value
                                         }
-                                    })
+                                    });
+                                }
                             }}
                         />
                         <Text style={{ fontSize: '12px', color: '#6d7175' }}>

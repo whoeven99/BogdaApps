@@ -701,6 +701,29 @@ const Index = () => {
         return 65;
     }, [selectedProducts])
 
+    const durationDays = useMemo(() => {
+        const { startsAt, endsAt } = targetingSettingsData.schedule;
+        if (!startsAt || !endsAt) return 0;
+
+        const start = dayjs(startsAt).startOf("day");
+        const end = dayjs(endsAt).startOf("day");
+
+        return end.diff(start, "day") + 1;
+    }, [
+        targetingSettingsData.schedule.startsAt,
+        targetingSettingsData.schedule.endsAt
+    ]);
+
+    const maxDailyBudget = useMemo(() => {
+        const total = targetingSettingsData.budget.totalBudget;
+        if (!total) return 0;
+        if (!durationDays) return total;
+        return total / durationDays;
+    }, [targetingSettingsData.budget.totalBudget, durationDays]);
+
+    const dailyBudgetError = useMemo(() => !!targetingSettingsData.budget.dailyBudget && maxDailyBudget > 0 &&
+        targetingSettingsData.budget.dailyBudget > maxDailyBudget, [targetingSettingsData, maxDailyBudget])
+
     useEffect(() => {
         shopMarketsDataFetcher.submit({
             shopMarketsRequestBody: JSON.stringify({})
@@ -770,8 +793,6 @@ const Index = () => {
     }, [confirmFetcher.data])
 
     useEffect(() => {
-        console.log("productPoolDataFetcher.data: ", productPoolDataFetcher.data);
-
         if (productPoolDataFetcher.data) {
             if (productPoolDataFetcher.data.success) {
                 const data = productPoolDataFetcher.data.response
@@ -858,6 +879,10 @@ const Index = () => {
                 }
                 if (!targetingSettingsData?.schedule?.startsAt) {
                     shopify.toast.show(t("Please select start date"))
+                    break;
+                }
+                if (dailyBudgetError) {
+                    shopify.toast.show(t("Daily Budget Exceeding"))
                     break;
                 }
                 handleConfirm();
@@ -1197,7 +1222,7 @@ const Index = () => {
                             <ScheduleAndBudgetSetting
                                 targetingSettingsData={targetingSettingsData}
                                 setTargetingSettingsData={setTargetingSettingsData}
-                                setMainModalType={setMainModalType}
+                                dailyBudgetError={dailyBudgetError}
                                 marketVisibilitySettingData={marketVisibilitySettingData}
                             />
                         )}

@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChartBar, Pencil, Copy, Trash2 } from 'lucide-react';
-import { useNavigate, useLocation } from '@remix-run/react';
+import { useNavigate, useLocation, useFetcher } from '@remix-run/react';
 import { OfferType } from 'app/types';
 import { useDispatch, useSelector } from 'react-redux';
 import { Spin } from 'antd';
@@ -17,9 +17,20 @@ const Index = () => {
   const location = useLocation();
   const offersData: OfferType[] = useSelector((state: any) => state.offersData);
 
+  const discountNodeDeleteFetcher = useFetcher<any>();
+  const discountNodeStatusFetcher = useFetcher<any>();
+
   const [pageLoadingArr, setPageLoadingArr] = useState<string[]>(["offersData"]);
 
+  const [deleteOfferInfo, setDeleteOfferInfo] = useState<any>(null);
+
   const [showPublishGuide, setShowPublishGuide] = useState(false);
+
+
+  const newOffer = useMemo(
+    () =>
+      localStorage.getItem("ciwi_new_offer_id") || ""
+    , [])
 
   // Check if we came from create offer page
   useEffect(() => {
@@ -38,6 +49,40 @@ const Index = () => {
     }, 2000);
   }, [location.state]);
 
+  useEffect(() => {
+    if (discountNodeStatusFetcher.data) {
+      if (discountNodeStatusFetcher.data.success) {
+        const id = discountNodeStatusFetcher.data.response?.first;
+        const status = discountNodeStatusFetcher.data.response?.second;
+
+        const newOffers = Array.isArray(offersData) ? offersData.map(offer => {
+          if (offer.id === id) {
+            return {
+              ...offer,
+              status,
+            }
+          }
+          return offer;
+        }) : [];
+        dispatch(setOffersData(newOffers));
+      }
+    }
+  }, [discountNodeStatusFetcher.data]);
+
+  useEffect(() => {
+    if (discountNodeDeleteFetcher.data) {
+      if (discountNodeDeleteFetcher.data.success) {
+        const deleteDiscountGid = discountNodeDeleteFetcher.data.response;
+
+        if (!offersData || !deleteDiscountGid) return;
+
+        const newOffer = offersData.filter((offer) => offer.id !== deleteDiscountGid);
+
+        dispatch(setOffersData(newOffer));
+        setDeleteOfferInfo(null);
+      }
+    }
+  }, [discountNodeDeleteFetcher.data]);
 
   const batchQueryUserDiscount = useCallback(async () => {
     const batchQueryUserDiscountData = await BatchQueryUserDiscount({
@@ -62,6 +107,53 @@ const Index = () => {
     }
     setPageLoadingArr([]);
   }, [globalStore.shop, globalStore.server]);
+
+  const switchDiscountStatus = (
+    {
+      id,
+      status,
+    }:
+      {
+        id: string,
+        status: boolean,
+      }
+  ) => {
+    discountNodeStatusFetcher.submit(
+      {
+        discountNodeStatusRequestBody: JSON.stringify({
+          id,
+          status,
+        })
+      },
+      {
+        method: "POST",
+      },
+    );
+  }
+
+  const deleteOffer = async ({
+    id,
+    metafields
+  }: {
+    id: string,
+    metafields: {
+      ownerId: string,
+      namespace: string,
+      key: string
+    }[]
+  }) => {
+    discountNodeDeleteFetcher.submit(
+      {
+        discountNodeDeleteRequestBody: JSON.stringify({
+          id,
+          metafields,
+        })
+      },
+      {
+        method: "POST",
+      },
+    );
+  }
 
   return (
     <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px]">
@@ -140,9 +232,6 @@ const Index = () => {
                   Conversion
                 </th>
                 <th className="text-left p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-semibold text-[13px] leading-[20.8px] text-[#6d7175] tracking-[-0.0762px]">
-                  Created
-                </th>
-                <th className="text-left p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-semibold text-[13px] leading-[20.8px] text-[#6d7175] tracking-[-0.0762px]">
                   Actions
                 </th>
               </tr>
@@ -153,20 +242,20 @@ const Index = () => {
                   <td className="p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-normal text-[14px] leading-[22.4px] text-[#202223] tracking-[-0.1504px]">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       {offer.name}
-                      {/* {offer.id <= 2 && (
-                      <span style={{
-                        backgroundColor: '#00A47C',
-                        color: 'white',
-                        fontSize: '10px',
-                        fontWeight: 600,
-                        padding: '2px 6px',
-                        borderRadius: '4px',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.5px'
-                      }}>
+                      {newOffer === offer.id.toString() && <span
+                        style={{
+                          backgroundColor: "#00A47C",
+                          color: "white",
+                          fontSize: "10px",
+                          fontWeight: 600,
+                          padding: "2px 6px",
+                          borderRadius: "4px",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.5px",
+                        }}
+                      >
                         NEW
-                      </span>
-                    )} */}
+                      </span>}
                     </div>
                   </td>
                   <td className="p-[12px] border-b border-[#dfe3e8]">
@@ -228,23 +317,10 @@ const Index = () => {
                     <div className="flex items-center gap-[8px]">
                       <button
                         className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[4px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
-                        onClick={() => navigate(`/app/ABtest/${offer.id}`)}
-                        title="Analytics"
-                      >
-                        <ChartBar size={16} />
-                      </button>
-                      <button
-                        className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[4px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
                         onClick={() => navigate('/app/create')}
                         title="Edit"
                       >
                         <Pencil size={16} />
-                      </button>
-                      <button
-                        className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[4px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
-                        title="Copy"
-                      >
-                        <Copy size={16} />
                       </button>
                       <button
                         className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#d72c0d] p-[4px] rounded-[4px] hover:bg-[rgba(215,44,13,0.1)] transition-colors"
