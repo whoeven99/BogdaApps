@@ -1,16 +1,19 @@
 import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, Copy, Trash2 } from "lucide-react";
-import { DiscountRulesType, ProductVariantsDataType } from "../route";
-import { Button, Checkbox, Flex, Input, InputNumber } from "antd";
+import { DiscountRulesType, ProductVariantsDataType, StyleConfigType } from "../route";
+import { Button, Checkbox, Flex, Input, InputNumber, Statistic } from "antd";
 import { useEffect, useMemo, useRef } from "react";
+
+const { Timer } = Statistic;
 
 interface ProductsAndDiscountsSettingProps {
     previewPrice: number;
     selectedProducts: ProductVariantsDataType[];
     setMainModalType: (modalType: "ProductVariants" | "EditProductVariants" | null) => void;
     discountRules: DiscountRulesType[];
+    styleConfigData: StyleConfigType;
     setDiscountRules: (rules: DiscountRulesType[]) => void;
-    selectedRuleIndex: number;
-    setSelectedRuleIndex: (rule: number) => void;
+    selectedRuleIndex: number | null;
+    setSelectedRuleIndex: (rule: number | null) => void;
     selectedOfferType: {
         id: string;
         name: string;
@@ -23,6 +26,7 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
     selectedProducts,
     setMainModalType,
     discountRules,
+    styleConfigData,
     setDiscountRules,
     selectedRuleIndex,
     setSelectedRuleIndex,
@@ -43,6 +47,11 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
 
         setDiscountRules(data);
     };
+
+    useEffect(() => {
+        console.log(selectedRuleIndex);
+
+    }, [selectedRuleIndex]);
 
     useEffect(() => {
         if (discountRules.length > prevLengthRef.current) {
@@ -384,396 +393,14 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                                         <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
                                             <Checkbox
                                                 checked={rule.selectedByDefault}
-                                                onChange={() => switchDefaultSelectedItem(rule.id)}
+                                                onChange={() => {
+                                                    switchDefaultSelectedItem(rule.id)
+                                                    setSelectedRuleIndex(null)
+                                                }}
                                             />
                                             <span style={{ fontSize: '14px' }}>Selected by default</span>
                                         </label>
                                     </div>
-
-                                    <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
-                                        {/* TODO: Add image upload */}
-                                        {/* <button style={{
-                                                                flex: 1,
-                                                                padding: '10px',
-                                                                border: '1px solid rgba(223, 227, 232, 1)',
-                                                                borderRadius: '6px',
-                                                                background: '#fff',
-                                                                cursor: 'pointer',
-                                                                fontSize: '13px',
-                                                                display: 'flex',
-                                                                alignItems: 'center',
-                                                                justifyContent: 'center',
-                                                                gap: '6px'
-                                                            }}>
-                                                                🖼️ Add image
-                                                            </button> */}
-                                        {/* {!rule.upsellProducts.length &&
-                                                                <Button
-                                                                    onClick={() => {
-                                                                        const newRule = [...discountRules];
-                                                                        newRule[index].upsellProducts.push({
-                                                                            id: Date.now(),
-                                                                            variantid: '',
-                                                                            upsellText: '+ Add at 20% discount',
-                                                                            discountType: 'percentage',
-                                                                            discountValue: {
-                                                                                percentage: 20,
-                                                                                amount: 0,
-                                                                                specific: 0,
-                                                                            },
-                                                                            selectedByDefault: false,
-                                                                            visibleWithoutCheck: false,
-                                                                        });
-                                                                        setDiscountRules(newRule);
-                                                                    }}
-                                                                    style={{
-                                                                        flex: 1,
-                                                                        padding: '10px',
-                                                                        border: '1px solid #dfe3e8',
-                                                                        borderRadius: '6px',
-                                                                        background: '#fff',
-                                                                        cursor: 'pointer',
-                                                                        fontSize: '13px',
-                                                                        display: 'flex',
-                                                                        alignItems: 'center',
-                                                                        justifyContent: 'center',
-                                                                    }}
-                                                                >
-                                                                    📈 {t("Add upsell")}
-                                                                </Button>
-                                                            } */}
-                                        {/* {!rule.freegiftProducts.length &&
-                                                                <Button
-                                                                    onClick={() => {
-                                                                        const newRule = [...discountRules];
-                                                                        newRule[index].freegiftProducts.push({
-                                                                            id: Date.now(),
-                                                                            variantid: '',
-                                                                            freegiftText: '+ FREE Gift',
-                                                                            showOriginalPrice: false
-                                                                        });
-                                                                        setDiscountRules(newRule);
-                                                                    }}
-                                                                    style={{
-                                                                        flex: 1,
-                                                                        padding: '10px',
-                                                                        border: '1px solid #dfe3e8',
-                                                                        borderRadius: '6px',
-                                                                        background: '#fff',
-                                                                        cursor: 'pointer',
-                                                                        fontSize: '13px',
-                                                                        display: 'flex',
-                                                                        alignItems: 'center',
-                                                                        justifyContent: 'center',
-                                                                    }}
-                                                                >
-                                                                    🎁 {t("Add free gift")}
-                                                                </Button>
-                                                            } */}
-                                    </div>
-
-                                    {/* {rule.upsellProducts.length > 0 &&
-                                                            <div style={{ marginBottom: '16px' }}>
-                                                                {rule.upsellProducts.map((upsell, upsellIndex) => (
-                                                                    <Space
-                                                                        key={upsellIndex}
-                                                                        orientation="vertical"
-                                                                        style={{
-                                                                            width: '100%',
-                                                                            padding: '16px',
-                                                                            border: '1px solid #dfe3e8',
-                                                                            borderRadius: '6px',
-                                                                            marginBottom: '16px',
-                                                                        }}
-                                                                    >
-                                                                        <Flex justify="space-between" align="center" gap={16}>
-                                                                            <Text>{t("Upsell")}</Text>
-                                                                            <Button
-                                                                                type="link"
-                                                                                onClick={() => {
-                                                                                    setDiscountRules((prev) => {
-                                                                                        const newRules = [...prev];
-                                                                                        newRules[index].upsellProducts =
-                                                                                            newRules[index].upsellProducts.filter(
-                                                                                                (x) => x.id !== upsell.id
-                                                                                            );
-                                                                                        return newRules;
-                                                                                    });
-                                                                                }}
-                                                                            >
-                                                                                {t("Remove upsell")}
-                                                                            </Button>
-                                                                        </Flex>
-
-                                                                        <Button
-                                                                            type="primary"
-                                                                            style={{
-                                                                                width: '100%'
-                                                                            }}
-                                                                        >
-                                                                            {t("Select a product")}
-                                                                        </Button>
-
-                                                                        <Flex justify="space-between" gap={16}>
-                                                                            <Flex
-                                                                                align="left"
-                                                                                vertical
-                                                                                flex={1}
-                                                                            >
-                                                                                <Text>{t("Price")}</Text>
-                                                                                <Select
-                                                                                    style={{
-                                                                                        width: '100%',
-                                                                                    }}
-                                                                                    options={[
-                                                                                        { value: 'default', label: t('Default') },
-                                                                                        { value: 'percentage', label: t('Discounted % (e.g. 25% off)') },
-                                                                                        { value: 'amount', label: t('Discounted CA$ (e.g. CA$10 off)') },
-                                                                                        { value: 'specific', label: t('Specific (e.g. CA$29)') },
-                                                                                    ]}
-                                                                                    value={upsell.discountType}
-                                                                                    onChange={(value) => {
-                                                                                        const newRules = [...discountRules];
-                                                                                        newRules[index].upsellProducts[upsellIndex].discountType = value;
-                                                                                        setDiscountRules(newRules);
-                                                                                    }}
-                                                                                    dropdownMatchSelectWidth
-                                                                                    className="ellipsis-select"
-                                                                                />
-                                                                            </Flex>
-                                                                            {upsell.discountType != "default"
-                                                                                &&
-                                                                                <Flex
-                                                                                    align="left"
-                                                                                    vertical
-                                                                                    flex={1}
-                                                                                >
-                                                                                    <Text>{t(upsell.discountType != "specific" ? "Discount per item" : "Total price")}</Text>
-                                                                                    <InputNumber
-                                                                                        style={{
-                                                                                            width: '100%',
-                                                                                        }}
-                                                                                        onChange={(value) => {
-                                                                                            const newRules = [...discountRules];
-                                                                                            const discountType = newRules[index].upsellProducts[upsellIndex].discountType;
-                                                                                            if (typeof value === "number" && value) {
-                                                                                                if (discountType === 'percentage') {
-                                                                                                    newRules[index].upsellProducts[upsellIndex].discountValue.percentage = value;
-                                                                                                } else if (discountType === 'amount') {
-                                                                                                    newRules[index].upsellProducts[upsellIndex].discountValue.amount = value;
-                                                                                                } else if (discountType === 'specific') {
-                                                                                                    newRules[index].upsellProducts[upsellIndex].discountValue.specific = value;
-                                                                                                }
-                                                                                            }
-                                                                                            setDiscountRules(newRules);
-                                                                                        }}
-                                                                                        value={upsell.discountValue[upsell.discountType as "percentage" | "amount" | "specific"]}
-                                                                                    />
-                                                                                </Flex>
-                                                                            }
-                                                                        </Flex>
-
-                                                                        <Flex align="left" vertical>
-                                                                            <Text>{t("Text")}</Text>
-                                                                            <Input
-                                                                                style={{
-                                                                                    width: '100%',
-                                                                                }}
-                                                                                onChange={(e) => {
-                                                                                    const newRules = [...discountRules];
-                                                                                    newRules[index].upsellProducts[upsellIndex].upsellText = e.target.value;
-                                                                                    setDiscountRules(newRules);
-                                                                                }}
-                                                                                value={upsell.upsellText}
-                                                                            />
-                                                                        </Flex>
-
-                                                                        <Flex align="center" wrap gap={16}>
-                                                                            <Checkbox
-                                                                                onChange={(e) => {
-                                                                                    setDiscountRules((prev) => {
-                                                                                        const newRules = [...prev];
-                                                                                        newRules[index].upsellProducts[upsellIndex].selectedByDefault = e.target.checked;
-                                                                                        return newRules;
-                                                                                    });
-                                                                                }}
-                                                                                checked={upsell.selectedByDefault}
-                                                                            >
-                                                                                {t("Selected by default")}
-                                                                            </Checkbox>
-                                                                            <Checkbox
-                                                                                onChange={(e) => {
-                                                                                    setDiscountRules((prev) => {
-                                                                                        const newRules = [...prev];
-                                                                                        newRules[index].upsellProducts[upsellIndex].visibleWithoutCheck = e.target.checked;
-                                                                                        return newRules;
-                                                                                    });
-                                                                                }}
-                                                                                checked={upsell.visibleWithoutCheck}
-                                                                            >
-                                                                                {t("Visible only when bar is selected")}
-                                                                            </Checkbox>
-                                                                        </Flex>
-                                                                    </Space>
-                                                                ))}
-                                                                <Button
-                                                                    onClick={() => {
-                                                                        const newRules = [...discountRules];
-                                                                        newRules[index].upsellProducts.push({
-                                                                            id: Date.now(),
-                                                                            variantid: '',
-                                                                            upsellText: '+ Add at 20% discount',
-                                                                            discountType: 'percentage',
-                                                                            discountValue: {
-                                                                                percentage: 20,
-                                                                                amount: 0,
-                                                                                specific: 0,
-                                                                            },
-                                                                            selectedByDefault: false,
-                                                                            visibleWithoutCheck: false,
-                                                                        });
-                                                                        setDiscountRules(newRules);
-                                                                    }}
-                                                                    style={{
-                                                                        width: '100%',
-                                                                        padding: '10px',
-                                                                        border: '1px solid #dfe3e8',
-                                                                        borderRadius: '6px',
-                                                                        background: '#fff',
-                                                                        cursor: 'pointer',
-                                                                        fontSize: '13px',
-                                                                        display: 'flex',
-                                                                        alignItems: 'center',
-                                                                        justifyContent: 'center',
-                                                                    }}
-                                                                >
-                                                                    📈 {t("Add upsell")}
-                                                                </Button>
-                                                            </div>
-                                                        } */}
-
-                                    {/* {rule.freegiftProducts.length > 0 &&
-                                                            <div style={{ marginBottom: '16px' }}>
-                                                                {rule.freegiftProducts.map((freegift, freegiftIndex) => (
-                                                                    <Space
-                                                                        key={freegiftIndex}
-                                                                        orientation="vertical"
-                                                                        style={{
-                                                                            width: '100%',
-                                                                            padding: '16px',
-                                                                            border: '1px solid #dfe3e8',
-                                                                            borderRadius: '6px',
-                                                                            marginBottom: '16px',
-                                                                        }}
-                                                                    >
-                                                                        <Flex justify="space-between" align="center" gap={16}>
-                                                                            <Text>{t("Free gift")}</Text>
-                                                                            <Button
-                                                                                type="link"
-                                                                                onClick={() => {
-                                                                                    setDiscountRules((prev) => {
-                                                                                        const newRules = [...prev];
-                                                                                        newRules[index].freegiftProducts =
-                                                                                            newRules[index].freegiftProducts.filter(
-                                                                                                (x) => x.id !== freegift.id
-                                                                                            );
-                                                                                        return newRules;
-                                                                                    });
-                                                                                }}
-                                                                            >
-                                                                                {t("Remove free gift")}
-                                                                            </Button>
-                                                                        </Flex>
-
-                                                                        <Button
-                                                                            type="primary"
-                                                                            style={{
-                                                                                width: '100%'
-                                                                            }}
-                                                                        >
-                                                                            {t("Select a product")}
-                                                                        </Button>
-
-                                                                        <Flex align="left" vertical>
-                                                                            <Text>{t("Text")}</Text>
-                                                                            <Input
-                                                                                style={{
-                                                                                    width: '100%',
-                                                                                }}
-                                                                                onChange={(e) => {
-                                                                                    const newRules = [...discountRules];
-                                                                                    newRules[index].freegiftProducts[freegiftIndex].freegiftText = e.target.value;
-                                                                                    setDiscountRules(newRules);
-                                                                                }}
-                                                                                value={freegift.freegiftText}
-                                                                            />
-                                                                        </Flex>
-
-                                                                        <Flex align="center" wrap gap={16}>
-                                                                            <Checkbox
-                                                                                onChange={(e) => {
-                                                                                    setDiscountRules((prev) => {
-                                                                                        const newRules = [...prev];
-                                                                                        newRules[index].freegiftProducts[freegiftIndex].showOriginalPrice = e.target.checked;
-                                                                                        return newRules;
-                                                                                    });
-                                                                                }}
-                                                                                checked={freegift.showOriginalPrice}
-                                                                            >
-                                                                                {t("Show original price")}
-                                                                            </Checkbox>
-                                                                        </Flex>
-                                                                    </Space>
-                                                                ))}
-                                                                <Button
-                                                                    onClick={() => {
-                                                                        const newRule = [...discountRules];
-                                                                        newRule[index].freegiftProducts.push({
-                                                                            id: Date.now(),
-                                                                            variantid: '',
-                                                                            freegiftText: '+ FREE Gift',
-                                                                            showOriginalPrice: false
-                                                                        });
-                                                                        setDiscountRules(newRule);
-                                                                    }}
-                                                                    style={{
-                                                                        width: '100%',
-                                                                        padding: '10px',
-                                                                        border: '1px solid #dfe3e8',
-                                                                        borderRadius: '6px',
-                                                                        background: '#fff',
-                                                                        cursor: 'pointer',
-                                                                        fontSize: '13px',
-                                                                        display: 'flex',
-                                                                        alignItems: 'center',
-                                                                        justifyContent: 'center',
-                                                                    }}
-                                                                >
-                                                                    🎁 {t("Add free gift")}
-                                                                </Button>
-                                                            </div>
-                                                        } */}
-
-                                    {/* <div style={{
-                                                            display: 'flex',
-                                                            justifyContent: 'space-between',
-                                                            alignItems: 'center',
-                                                            paddingTop: '16px',
-                                                            borderTop: '1px solid #dfe3e8'
-                                                        }}>
-                                                            <Checkbox
-                                                                onChange={(e) => {
-                                                                    setDiscountRules(() => {
-                                                                        const newRules = [...discountRules];
-                                                                        newRules[index].showAsSoldOut = e.target.checked;
-                                                                        return newRules;
-                                                                    });
-                                                                }}
-                                                                checked={rule.showAsSoldOut}
-                                                            >
-                                                                {t("Show as sold out")}
-                                                            </Checkbox>
-                                                        </div> */}
                                 </div>
                             )}
                         </div>
@@ -824,10 +451,7 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
 
             {/* Right Column - Preview */}
             <div style={{ position: 'sticky', top: '24px' }}>
-                <h3 style={{ fontSize: '14px', fontWeight: 500, marginBottom: '12px' }}>Preview</h3>
-                <p className="polaris-text-subdued" style={{ fontSize: '13px', marginBottom: '12px' }}>
-                    {selectedOfferType.description}
-                </p>
+                <h3 style={{ fontSize: '14px', fontWeight: 500, marginBottom: '12px' }}>Live Preview</h3>
 
                 {/* Preview Card */}
                 <div style={{
@@ -835,83 +459,132 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                     border: '1px solid #dfe3e8',
                     borderRadius: '8px',
                     padding: '16px',
+                    background: '#ffffff',
                     display: 'flex',
                     flexDirection: 'column'
                 }}>
-                    {selectedOfferType.id === 'quantity-breaks-same' &&
-                        discountRules.map((rule, index) => {
-                            return (
-                                <div
-                                    key={index}
-                                    style={{
-                                        border: selectedRuleIndex === index ? '1px solid #000' : `1px solid #E5E5E5`,
-                                        borderRadius: '8px',
-                                        padding: '12px',
-                                        marginBottom: '12px',
-                                        position: 'relative',
-                                        background: rule.badgeText ? '#ffffff' : '#f9fafb',
-                                        cursor: 'pointer'
-                                    }}
-                                    onClick={() => setSelectedRuleIndex(index)}
-                                >
-                                    {rule.badgeText && <div style={{ position: 'absolute', top: '-8px', right: '12px', background: '#000', color: '#fff', padding: '2px 12px', borderRadius: '12px', fontSize: '10px', fontWeight: 600, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                        {rule.badgeText}
-                                    </div>}
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <input
-                                            type="radio"
-                                            name="discount-rule-group"
-                                            value={rule.trigger_scope.min_quantity}
-                                            checked={selectedRuleIndex === index}
-                                            readOnly
-                                            style={{ width: '16px', height: '16px' }}
-                                        />
-                                        <div style={{ flex: 1 }}>
-                                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                                                <strong style={{ fontSize: '14px' }}>{rule.title}</strong>
-                                                {!!rule.labelText &&
-                                                    <span style={{
-                                                        background: '#f0f0f0',
-                                                        padding: '2px 6px',
-                                                        borderRadius: '4px',
-                                                        fontSize: '10px'
-                                                    }}
-                                                    >
-                                                        {rule.labelText}
-                                                    </span>
-                                                }
-                                            </div>
-                                            <div style={{ fontSize: '12px', color: '#6d7175' }}>{rule.subtitle}</div>
-                                        </div>
-                                        {
-                                            rule.discount.value === 1 && (
-                                                <div style={{ textAlign: 'right' }}>
-                                                    <strong style={{ fontSize: '16px' }}>€{Number(rule.trigger_scope.min_quantity * previewPrice).toFixed(2)}</strong>
-                                                </div>
-                                            )
-                                        }
-                                        {
-                                            rule.discount.value === 0 && (
-                                                <div style={{ textAlign: 'right' }}>
-                                                    <strong style={{ fontSize: '16px' }}>Free</strong>
-                                                </div>
-                                            )
-                                        }
-                                        {
-                                            (rule.discount.value > 0 && rule.discount.value < 1
-                                            ) && (
-                                                <div style={{ textAlign: 'right' }}>
-                                                    <strong style={{ fontSize: '16px' }}>€{Number(rule.trigger_scope.min_quantity * previewPrice * rule.discount.value).toFixed(2)}</strong>
-                                                    <div style={{ fontSize: '12px', color: '#6d7175', textDecoration: 'line-through' }}>€{Number(rule.trigger_scope.min_quantity * previewPrice).toFixed(2)}</div>
-                                                </div>
-                                            )
-                                        }
-                                    </div>
+                    {/* Card Title */}
+                    <h3 style={{
+                        fontSize: styleConfigData?.title?.fontSize,
+                        fontWeight: styleConfigData?.title?.fontWeight,
+                        color: styleConfigData?.title?.color,
+                        marginBottom: '16px'
+                    }}>
+                        {styleConfigData?.title?.text}
+                    </h3>
+
+                    {/* Countdown Timer (when enabled) */}
+                    {
+                        styleConfigData?.countdown?.enabled && (
+                            <div style={{
+                                background: '#fff8f0',
+                                border: '1px solid #ffd700',
+                                borderRadius: '6px',
+                                padding: '8px 12px',
+                                marginBottom: '16px',
+                                textAlign: 'center'
+                            }}>
+                                <div style={{ fontSize: '11px', color: '#6d7175', marginBottom: '4px' }}>
+                                    ⏱️ Limited time offer ends in
                                 </div>
-                            )
-                        })
-                    }
+                                <Timer
+                                    type="countdown"
+                                    value={Date.now() + 1000 * 60 * 60 * styleConfigData?.countdown.duration}
+                                    styles={{
+                                        content: {
+                                            fontSize: '18px',
+                                            fontWeight: 600,
+                                            color: styleConfigData?.countdown.color,
+                                            fontFamily: 'monospace'
+                                        }
+                                    }}
+                                />
+                            </div>
+                        )}
+
+                    {/* Product Items */}
+                    {selectedOfferType.id === 'quantity-breaks-same' && (
+                        <>
+                            {discountRules.map((rule, index) => {
+                                return (
+                                    <div
+                                        key={index}
+                                        style={{
+                                            border: (selectedRuleIndex === null ? rule.selectedByDefault : selectedRuleIndex === index) ? '1px solid #000' : `1px solid ${styleConfigData?.card?.border_color}`,
+                                            borderRadius: '8px',
+                                            padding: '12px',
+                                            marginBottom: '12px',
+                                            position: 'relative',
+                                            background: styleConfigData?.card.background_color,
+                                            cursor: 'pointer'
+                                        }}
+                                        onClick={() => setSelectedRuleIndex(index)}
+                                    >
+                                        {rule.badgeText && <div style={{ position: 'absolute', top: '-8px', right: '12px', background: '#000', color: '#fff', padding: '2px 12px', borderRadius: '12px', fontSize: '10px', fontWeight: 600, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                            {rule.badgeText}
+                                        </div>}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <input
+                                                type="radio"
+                                                name="discount-rule-group"
+                                                value={rule.trigger_scope.min_quantity}
+                                                checked={selectedRuleIndex === null ? rule.selectedByDefault : selectedRuleIndex === index}
+                                                readOnly
+                                                style={{ width: '16px', height: '16px' }}
+                                            />
+                                            <div style={{ flex: 1 }}>
+                                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                                    <strong style={{ fontSize: '14px' }}>{rule.title}</strong>
+                                                    {!!rule.labelText &&
+                                                        <span
+                                                            style={{
+                                                                background: styleConfigData?.card?.label_color,
+                                                                padding: '2px 6px',
+                                                                borderRadius: '4px',
+                                                                fontSize: '10px'
+                                                            }}
+
+                                                        >
+                                                            {rule.labelText}
+                                                        </span>
+                                                    }
+                                                </div>
+                                                <div style={{ fontSize: '12px', color: '#6d7175' }}>{rule.subtitle}</div>
+                                            </div>
+                                            {
+                                                rule.discount.value === 1 && (
+                                                    <div style={{ textAlign: 'right' }}>
+                                                        <strong style={{ fontSize: '16px' }}>€{Number(rule.trigger_scope.min_quantity * previewPrice).toFixed(2)}</strong>
+                                                    </div>
+                                                )
+                                            }
+                                            {
+                                                rule.discount.value === 0 && (
+                                                    <div style={{ textAlign: 'right' }}>
+                                                        <strong style={{ fontSize: '16px' }}>Free</strong>
+                                                    </div>
+                                                )
+                                            }
+                                            {
+                                                (rule.discount.value > 0 && rule.discount.value < 1
+                                                ) && (
+                                                    <div style={{ textAlign: 'right' }}>
+                                                        <strong style={{ fontSize: '16px' }}>€{Number(rule.trigger_scope.min_quantity * previewPrice * rule.discount.value).toFixed(2)}</strong>
+                                                        <div style={{ fontSize: '12px', color: '#6d7175', textDecoration: 'line-through' }}>€{Number(rule.trigger_scope.min_quantity * previewPrice).toFixed(2)}</div>
+                                                    </div>
+                                                )
+                                            }
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        </>
+                    )}
                 </div>
+
+                <p style={{ fontSize: '12px', color: '#6d7175', marginTop: '12px', fontStyle: 'italic' }}>
+                    Note: This is a live preview. Changes will update in real-time when state is connected.
+                </p>
             </div>
         </div>
     )

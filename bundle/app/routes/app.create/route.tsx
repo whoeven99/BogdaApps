@@ -1,6 +1,6 @@
 import { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { useFetcher, useLoaderData, useNavigate } from "@remix-run/react";
-import { mutationDiscountAutomaticAppCreateAndMetafieldsSet, mutationDiscountAutomaticAppUpdateAndMetafieldsSet, queryCustomers, queryMarkets, queryProducts, queryProductVariants, querySegments, queryShop, queryThreeProductVariants } from "app/api/admin";
+import { mutationDiscountAutomaticAppCreateAndMetafieldsSet, mutationDiscountAutomaticAppUpdateAndMetafieldsSet, queryCustomers, queryMarkets, queryProducts, queryProductVariants, querySegments, queryShop, querySpecialProductVariants, queryThreeProductVariants } from "app/api/admin";
 import { authenticate } from "app/shopify.server";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -342,7 +342,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             }
         case !!productPoolRequestBody:
             try {
-                const productPoolData = await queryThreeProductVariants({
+                const productPoolData = await querySpecialProductVariants({
                     ...productPoolRequestBody,
                     shop,
                     accessToken,
@@ -583,7 +583,7 @@ const Index = () => {
         value: string;
         label: string;
     }[]>([])
-    const [selectedRuleIndex, setSelectedRuleIndex] = useState<number>(1);
+    const [selectedRuleIndex, setSelectedRuleIndex] = useState<number | null>(null);
 
     const [basicInformation, setBasicInformation] = useState<BasicInformationType>({
         offerName: `#Bundle ${Date.now()}`,
@@ -770,15 +770,17 @@ const Index = () => {
     }, [confirmFetcher.data])
 
     useEffect(() => {
+        console.log("productPoolDataFetcher.data: ", productPoolDataFetcher.data);
+
         if (productPoolDataFetcher.data) {
             if (productPoolDataFetcher.data.success) {
                 const data = productPoolDataFetcher.data.response
-                const productPoolData = Object.values(data).map((variant: any) => {
+                const productPoolData = data?.nodes?.map((variant: any) => {
                     return {
-                        id: variant.id,
-                        name: `${variant.product?.title} - ${variant.title}`,
-                        price: variant.price,
-                        image: variant.media?.edges[0]?.node?.preview?.image?.url,
+                        id: variant?.id,
+                        name: `${variant?.product?.title} - ${variant?.title}`,
+                        price: variant?.price,
+                        image: variant?.media?.edges[0]?.node?.preview?.image?.url,
                     }
                 })
                 setSelectedProducts(productPoolData)
@@ -805,10 +807,6 @@ const Index = () => {
                     hideAfterExpiration: !!getUserDiscountData.response?.discountData?.targeting_settings?.schedule?.hideAfterExpiration,
                 }
             };
-
-            console.log("getUserDiscountData.response?.discountData?.targeting_settings: ", getUserDiscountData.response?.discountData?.targeting_settings);
-            console.log("targeting_settings: ", targeting_settings);
-
             const product_pool =
                 getUserDiscountData.response?.discountData?.product_pool?.include_variant_ids?.map((item: string) => `gid://shopify/ProductVariant/${item}`);
 
@@ -1174,6 +1172,7 @@ const Index = () => {
                                     selectedProducts={selectedProducts}
                                     setMainModalType={setMainModalType}
                                     discountRules={discountRules}
+                                    styleConfigData={styleConfigData}
                                     setDiscountRules={setDiscountRules}
                                     selectedRuleIndex={selectedRuleIndex}
                                     setSelectedRuleIndex={setSelectedRuleIndex}

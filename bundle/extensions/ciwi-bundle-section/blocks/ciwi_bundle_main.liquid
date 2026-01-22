@@ -5,11 +5,13 @@
       "productId": {{ product.id }},
       "variantId": {{ product.variants[0].id }},
       "marketId": {{ localization.market.id }},
-
+      "variantInventoryQuantity": {{ product.variants[0].inventory_quantity }},
+      {% for item in product.variants %}
+        "{{ item.id }}": {{ item.inventory_quantity }},
+      {% endfor %}
       {% for item in shop.metafields.ciwi_bundles_config %}
         "{{ item[0] }}": {{ item[1].value | json }},
       {% endfor %}
-
       "compareAtPrice": {{ product.variants[0].compare_at_price | json }},
       "price": {{ product.variants[0].price | json }},
       "currencySymbol": "{{ localization.country.currency.symbol }}"

@@ -33,6 +33,28 @@
 
     if (!form) return;
 
+    const variantInput =
+      form.querySelector < HTMLInputElement > 'input[type="hidden"][name="id"]';
+
+    if (!variantInput) return;
+
+    // 4. 监听 value 变化（关键）
+    const observer = new MutationObserver(() => {
+      const variantId = String(variantInput.value);
+
+      const inventory = configElJson?.[variantId];
+
+      if (inventory === 0) {
+        console.log("Variant out of stock:", variantId);
+      }
+    });
+
+    // 只监听 value 属性变化
+    observer.observe(variantInput, {
+      attributes: true,
+      attributeFilter: ["value"],
+    });
+
     /* --------------------------------------------------
        插入位置策略（主路径 + 保底路径）
     -------------------------------------------------- */
@@ -177,7 +199,7 @@
               padding: 12px;
               margin-bottom: 12px;
               position: relative;
-              background: ${rule.badgeText ? "#ffffff" : "#f9fafb"};
+              background: ${bundleData.style_config.card.background_color};
               cursor: pointer;
             "
           >

@@ -14,7 +14,7 @@ interface StyleConfigDataProps {
         name: string;
         description: string;
     };
-    selectedRuleIndex: number;
+    selectedRuleIndex: number | null;
     setSelectedRuleIndex: (selectedRuleIndex: number) => void;
 }
 
@@ -587,7 +587,7 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                                     <div
                                         key={index}
                                         style={{
-                                            border: selectedRuleIndex === index ? '1px solid #000' : `1px solid ${styleConfigData?.card?.border_color}`,
+                                            border: (selectedRuleIndex === null ? rule.selectedByDefault : selectedRuleIndex === index) ? '1px solid #000' : `1px solid ${styleConfigData?.card?.border_color}`,
                                             borderRadius: '8px',
                                             padding: '12px',
                                             marginBottom: '12px',
@@ -605,7 +605,7 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                                                 type="radio"
                                                 name="discount-rule-group"
                                                 value={rule.trigger_scope.min_quantity}
-                                                checked={selectedRuleIndex === index}
+                                                checked={selectedRuleIndex === null ? rule.selectedByDefault : selectedRuleIndex === index}
                                                 readOnly
                                                 style={{ width: '16px', height: '16px' }}
                                             />
@@ -657,35 +657,6 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                             })}
                         </>
                     )}
-
-                    {/* Add to Cart Button */}
-                    {/* <button style={{
-                        width: '100%',
-                        background: styleConfigData?.button?.primaryColor,
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '6px',
-                        padding: '12px',
-                        fontSize: '14px',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        marginTop: '12px'
-                    }}>
-                        {styleConfigData?.button?.text}
-                    </button> */}
-
-                    {/* Features/Benefits */}
-                    {/* <div style={{
-                        marginTop: '12px',
-                        paddingTop: '12px',
-                        borderTop: '1px solid #e0e0e0',
-                        fontSize: '12px',
-                        color: '#6d7175'
-                    }}>
-                        <div style={{ marginBottom: '6px' }}>✓ Free shipping on bundles</div>
-                        <div style={{ marginBottom: '6px' }}>✓ 30-day money-back guarantee</div>
-                        <div>✓ Exclusive bundle pricing</div>
-                    </div> */}
                 </div>
 
                 <p style={{ fontSize: '12px', color: '#6d7175', marginTop: '12px', fontStyle: 'italic' }}>

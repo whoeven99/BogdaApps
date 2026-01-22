@@ -13,17 +13,16 @@ export const querySpecialProductVariants = async ({
     if (!ids || ids.length === 0) return [];
 
     try {
-        // Shopify GraphQL query 搜索语法
-        const idsQuery = ids.map((id) => `id:${id}`).join(" OR ");
-
         const gql = `
-        query GetProductVariants {
-            productVariants(first: ${ids.length}, query: "${idsQuery}") {
-                edges {
-                    node {
+            query GetProductVariants($ids: [ID!]!) {
+                nodes(ids: $ids) {
+                    ... on ProductVariant {
                         id
                         title
                         price
+                        product {
+                            title
+                        }
                         media(first: 1) {
                             edges {
                                 node {
@@ -35,22 +34,20 @@ export const querySpecialProductVariants = async ({
                                 }
                             }
                         }
-                        product {
-                            title
-                        }
                     }
                 }
             }
-        }
         `;
 
         const { data } = await axios.post(
             `https://${shop}/admin/api/${process.env.GRAPHQL_VERSION}/graphql.json`,
-            { query: gql },
+            {
+                query: gql,
+                variables: { ids },
+            },
             {
                 headers: {
                     "X-Shopify-Access-Token": accessToken,
-                    "Content-Type": "application/json",
                 },
             }
         );

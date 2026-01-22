@@ -212,7 +212,7 @@ const Index = () => {
 
     const { ciwiBundleExtensionId, ciwiBundleExtensionType } = useLoaderData<typeof loader>();
 
-    const [isThemeExtensionEnabled, setIsThemeExtensionEnabled] = useState(true);
+    const [isThemeExtensionEnabled, setIsThemeExtensionEnabled] = useState(false);
 
     const [deleteOfferInfo, setDeleteOfferInfo] = useState<any>(null);
 
@@ -479,7 +479,7 @@ const Index = () => {
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-[16px] sm:gap-[20px]">
                         {/* Total GMV */}
-                        <div className="!flex !flex-col !gap-[12px] !sm:gap-[16px]">
+                        <div className="!flex !flex-col !gap-[16px]">
                             <span className="!font-['Inter'] !font-normal !text-[14px] !leading-[22.4px] !text-[#6d7175] !tracking-[-0.1504px]">
                                 Total GMV
                             </span>

@@ -46,6 +46,8 @@ const EditProductModal: React.FC<ProductModalProps> = ({
         );
     }, [searchQuery, productModalData]);
 
+    console.log("filteredVariants: ", filteredVariants);
+
     const onPrevious = () => {
 
     }
@@ -58,9 +60,6 @@ const EditProductModal: React.FC<ProductModalProps> = ({
         setMainModalType(null);
         setSearchQuery("");
     };
-
-    console.log("productModalData:", productModalData);
-
 
     return (
         <div
