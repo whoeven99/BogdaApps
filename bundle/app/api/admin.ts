@@ -22,6 +22,17 @@ export const querySpecialProductVariants = async ({
                         price
                         product {
                             title
+                            media(first: 1) {
+                                edges {
+                                    node {
+                                        preview {
+                                            image {
+                                                url
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                         media(first: 1) {
                             edges {

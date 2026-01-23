@@ -272,8 +272,14 @@
 
     function syncBundleDisabled() {
       const variantId = String(variantInput.value);
-      const inventory = Number(configElJson?.[variantId]);
-      const disabled = inventory === 0;
+      const inventoryData = configElJson?.[variantId];
+      const inventoryQuantity = Number(inventoryData?.inventoryQuantity);
+      const inventoryPolicy = inventoryData?.inventoryPolicy;
+      const inventoryAvailable = inventoryData?.available;
+      const disabled =
+        inventoryQuantity === 0 &&
+        inventoryPolicy === "deny" &&
+        inventoryAvailable === false;
 
       wrapper.querySelectorAll(".ciwi-rule").forEach((ruleEl) => {
         ruleEl.style.opacity = disabled ? "0.5" : "1";

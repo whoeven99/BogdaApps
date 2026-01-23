@@ -548,31 +548,31 @@ const Index = () => {
                 name: t('Quantity breaks for the same product'),
                 description: t('Offer discounts when customers buy multiple quantities of the same product'),
             },
-            {
-                id: 'bogo',
-                name: t('Buy X, get Y free (BOGO) deal'),
-                description: t('Create buy-one-get-one or buy-X-get-Y-free promotions')
-            },
-            {
-                id: 'quantity-breaks-different',
-                name: t('Quantity breaks for different products'),
-                description: t('Offer discounts when customers buy multiple different products together')
-            },
-            {
-                id: 'complete-bundle',
-                name: t('Complete the bundle'),
-                description: t('Encourage customers to complete a bundle by adding recommended products')
-            },
-            {
-                id: 'subscription',
-                name: t('Subscription'),
-                description: t('Offer recurring subscription discounts for regular deliveries')
-            },
-            {
-                id: 'progressive-gifts',
-                name: t('Progressive gifts'),
-                description: t('Unlock free gifts as customers add more items to their cart')
-            }
+            // {
+            //     id: 'bogo',
+            //     name: t('Buy X, get Y free (BOGO) deal'),
+            //     description: t('Create buy-one-get-one or buy-X-get-Y-free promotions')
+            // },
+            // {
+            //     id: 'quantity-breaks-different',
+            //     name: t('Quantity breaks for different products'),
+            //     description: t('Offer discounts when customers buy multiple different products together')
+            // },
+            // {
+            //     id: 'complete-bundle',
+            //     name: t('Complete the bundle'),
+            //     description: t('Encourage customers to complete a bundle by adding recommended products')
+            // },
+            // {
+            //     id: 'subscription',
+            //     name: t('Subscription'),
+            //     description: t('Offer recurring subscription discounts for regular deliveries')
+            // },
+            // {
+            //     id: 'progressive-gifts',
+            //     name: t('Progressive gifts'),
+            //     description: t('Unlock free gifts as customers add more items to their cart')
+            // }
         ];
 
     const [loading, setLoading] = useState(true);
@@ -801,7 +801,7 @@ const Index = () => {
                         id: variant?.id,
                         name: `${variant?.product?.title} - ${variant?.title}`,
                         price: variant?.price,
-                        image: variant?.media?.edges[0]?.node?.preview?.image?.url,
+                        image: variant?.media?.edges[0]?.node?.preview?.image?.url || variant?.product?.media?.edges[0]?.node?.preview?.image?.url || "",
                     }
                 })
                 setSelectedProducts(productPoolData)
@@ -1169,7 +1169,13 @@ const Index = () => {
                         {step === 1 &&
                             <BasicInformationSetting
                                 offerTypes={offerTypes}
+                                selectedOfferType={selectedOfferType}
+                                previewPrice={previewPrice}
                                 basicInformation={basicInformation}
+                                discountRules={discountRules}
+                                styleConfigData={styleConfigData}
+                                selectedRuleIndex={selectedRuleIndex}
+                                setSelectedRuleIndex={setSelectedRuleIndex}
                                 setBasicInformation={setBasicInformation}
                             />
                         }
