@@ -4,6 +4,8 @@
     if (!configEl) return;
 
     const configElJson = JSON.parse(configEl.textContent || "{}");
+    console.log("configElJson: ", configElJson);
+
     const ciwiBundleconfig = Object.keys(configElJson)
       .filter((key) => key.startsWith("ciwi_bundles_config_"))
       .map((key) => ({
@@ -269,6 +271,8 @@
     console.log("wrapper: ", wrapper);
 
     insertTarget.insertBefore(wrapper, insertBeforeNode);
+
+    localStorage.setItem("current-ciwi-bundle-rule", bundleData.bundleKey);
 
     function syncBundleDisabled() {
       const variantId = String(variantInput.value);
