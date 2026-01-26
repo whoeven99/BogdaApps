@@ -1,37 +1,78 @@
+import { Button } from "antd";
+import { GetAYTData } from "app/api/javaServer";
+import BasicLineChart from "app/components/basicLineChart";
+import DonutChart from "app/components/donutChart";
 import Header from "app/components/header";
+import { globalStore } from "app/globalStore";
 import { HelpCircle } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
+interface AnalyticsDataType {
+    visitors: number;
+    bundleOrders: number;
+    conversionRate: number;
+    addedRevenue: number;
+}
 
 const Index = () => {
     const { t } = useTranslation();
 
+    const [analyticsData, setAnalyticsData] = useState<AnalyticsDataType>({
+        visitors: 0,
+        bundleOrders: 0,
+        conversionRate: 0,
+        addedRevenue: 0,
+    });
+    const [convertData, setConvertData] = useState(
+        {
+            converted: 0,
+            notConverted: 1,
+        }
+    )
+    const [dountChartData, setDountChartData] = useState(
+        {
+            Xdata: [],
+            Ydata: [],
+        }
+    )
     const [timeRange, setTimeRange] = useState('Last 30d');
     const [filterOpen, setFilterOpen] = useState(false);
 
-    // Daily revenue data
-    const dailyRevenueData = [
-        { date: 'Nov 29', value: 0 },
-        { date: 'Dec 2', value: 0 },
-        { date: 'Dec 5', value: 0 },
-        { date: 'Dec 8', value: 0 },
-        { date: 'Dec 11', value: 0 },
-        { date: 'Dec 14', value: 0 },
-        { date: 'Dec 17', value: 0 },
-        { date: 'Dec 20', value: 0 },
-        { date: 'Dec 23', value: 0 },
-        { date: 'Dec 26', value: 0 },
-    ];
+    useEffect(() => {
+        setTimeout(() => {
+            getAYTData()
+        }, 500)
+    }, [])
 
-    // Bundle conversion data for pie chart
-    const conversionData = [
-        { name: 'Converted', value: 0 },
-        { name: 'Not Converted', value: 100 },
-    ];
+    const getAYTData = useCallback(async () => {
+        const getAYTData = await GetAYTData({
+            shopName: globalStore.shop,
+            server: globalStore.server,
+        });
 
-    const COLORS = ['#008060', '#e3e5e7'];
+        if (getAYTData.success) {
+            const data = JSON.parse(getAYTData.response)
+            const a = {
+                visitors: data?.visitors,
+                bundleOrders: data?.bundleOrders,
+                conversionRate: data?.conversionRate,
+                addedRevenue: data?.addedRevenue,
+            }
+            const c = {
+                converted: data?.bundleConversion?.converted,
+                notConverted: data?.bundleConversion?.notConverted,
+            }
+            const d = {
+                Xdata: data?.dailyAddedRevenue?.map((item: any) => item?.date),
+                Ydata: data?.dailyAddedRevenue?.map((item: any) => item?.amount),
+            }
+            setAnalyticsData(a);
+            setConvertData(c);
+            setDountChartData(d);
+        }
+    }, [globalStore.shop, globalStore.server]);
 
     return (
         <div className="max-w-[1280px] mx-auto px-[24px] pt-[24px]">
@@ -40,8 +81,9 @@ const Index = () => {
 
             {/* Filters Bar */}
             <div className="flex items-center gap-[12px] mb-[24px]">
-                <button
-                    className="bg-white text-[#202223] px-[12px] py-[8px] rounded-[6px] font-['Inter'] font-normal text-[14px] leading-[21px] border border-[#c4cdd5] cursor-pointer hover:bg-[#f6f6f7] transition-colors flex items-center gap-[8px]"
+                <Button
+                    type="default"
+                    className="!font-['Inter'] !font-medium !text-[14px]"
                     onClick={() => setTimeRange(timeRange === 'Last 30d' ? 'Last 7d' : 'Last 30d')}
                 >
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -50,18 +92,19 @@ const Index = () => {
                         <path d="M5 2v2M11 2v2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                     </svg>
                     {timeRange}
-                </button>
+                </Button>
 
                 <div style={{ position: 'relative' }}>
-                    <button
-                        className="bg-white text-[#202223] px-[12px] py-[8px] rounded-[6px] font-['Inter'] font-normal text-[14px] leading-[21px] border border-[#c4cdd5] cursor-pointer hover:bg-[#f6f6f7] transition-colors flex items-center gap-[8px]"
+                    <Button
+                        type="default"
+                        className="!font-['Inter'] !font-medium !text-[14px]"
                         onClick={() => setFilterOpen(!filterOpen)}
                     >
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                         </svg>
                         All bundle deals
-                    </button>
+                    </Button>
                 </div>
             </div>
 
@@ -76,7 +119,7 @@ const Index = () => {
                         <HelpCircle size={16} className="text-[#6d7175]" />
                     </div>
                     <h3 className="font-['Inter'] font-semibold text-[24px] leading-[36px] text-[#202223] tracking-[0.3828px] m-0">
-                        33
+                        {analyticsData.visitors}
                     </h3>
                 </div>
 
@@ -89,7 +132,7 @@ const Index = () => {
                         <HelpCircle size={16} className="text-[#6d7175]" />
                     </div>
                     <h3 className="font-['Inter'] font-semibold text-[24px] leading-[36px] text-[#202223] tracking-[0.3828px] m-0">
-                        0
+                        {analyticsData.bundleOrders}
                     </h3>
                 </div>
 
@@ -102,7 +145,7 @@ const Index = () => {
                         <HelpCircle size={16} className="text-[#6d7175]" />
                     </div>
                     <h3 className="font-['Inter'] font-semibold text-[24px] leading-[36px] text-[#202223] tracking-[0.3828px] m-0">
-                        0%
+                        {analyticsData.conversionRate}%
                     </h3>
                 </div>
 
@@ -115,13 +158,18 @@ const Index = () => {
                         <HelpCircle size={16} className="text-[#6d7175]" />
                     </div>
                     <h3 className="font-['Inter'] font-semibold text-[24px] leading-[36px] text-[#202223] tracking-[0.3828px] m-0">
-                        €0
+                        €{analyticsData.addedRevenue}
                     </h3>
                 </div>
             </div>
 
             {/* Charts Section */}
-            <div className="grid grid-cols-[340px_1fr] gap-[16px]">
+            <div
+                className="grid grid-cols-[340px_1fr] gap-[16px]"
+                style={{
+                    paddingBottom: '24px'
+                }}
+            >
                 {/* Bundle conversion - Pie Chart */}
                 <div className="bg-white rounded-[8px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] p-[20px]">
                     <h3 className="font-['Inter'] font-semibold text-[16px] leading-[24px] text-[#202223] tracking-[-0.3203px] m-0 mb-[8px]">
@@ -131,54 +179,28 @@ const Index = () => {
                         See how many customers are converting to bundles.
                     </p>
 
+
                     <div style={{ width: '100%', height: '240px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                                <Pie
-                                    data={conversionData}
-                                    cx="50%"
-                                    cy="50%"
-                                    innerRadius={60}
-                                    outerRadius={80}
-                                    fill="#8884d8"
-                                    paddingAngle={0}
-                                    dataKey="value"
-                                >
-                                    {conversionData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                    ))}
-                                </Pie>
-                            </PieChart>
-                        </ResponsiveContainer>
-                        <div style={{
-                            position: 'absolute',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            justifyContent: 'center'
-                        }}>
-                            <span style={{
-                                fontSize: '32px',
-                                fontWeight: 600,
-                                color: '#202223',
-                                fontFamily: 'Inter'
-                            }}>
-                                0
-                            </span>
-                        </div>
+                        <DonutChart value={convertData.converted} total={convertData.notConverted + convertData.converted} />
                     </div>
                 </div>
 
                 {/* Daily added revenue - Line Chart */}
-                <div className="bg-white rounded-[8px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] p-[20px]">
+                <div
+                    className="bg-white rounded-[8px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] p-[20px]"
+                >
                     <h3 className="font-['Inter'] font-semibold text-[16px] leading-[24px] text-[#202223] tracking-[-0.3203px] m-0 mb-[8px]">
                         Daily added revenue
                     </h3>
                     <p className="font-['Inter'] font-normal text-[13px] leading-[20.8px] text-[#6d7175] tracking-[-0.0762px] mb-[24px]">
                         See how much additional revenue you're making with this app every day.
                     </p>
+                    <BasicLineChart
+                        Xdata={dountChartData.Xdata}
+                        Ydata={dountChartData.Ydata}
+                    />
 
-                    <ResponsiveContainer width="100%" height={240}>
+                    {/* <ResponsiveContainer width="100%" height={240}>
                         <LineChart data={dailyRevenueData}>
                             <CartesianGrid strokeDasharray="0" stroke="#e3e5e7" vertical={false} />
                             <XAxis
@@ -220,7 +242,7 @@ const Index = () => {
                                 name="current"
                             />
                         </LineChart>
-                    </ResponsiveContainer>
+                    </ResponsiveContainer> */}
                 </div>
             </div>
         </div>

@@ -1,5 +1,89 @@
 import axios from "axios";
 
+//获取Offers数据
+export const GetOffersData = async ({
+    shopName,
+    server,
+}: {
+    shopName: string;
+    server?: string;
+}) => {
+    try {
+        const response = await axios({
+            url: `${server || process.env.SERVER_URL}/offers`,
+            method: "GET",
+        });
+
+        console.log(`${shopName} GetOffersData: `, response.data);
+
+        return response.data;
+    } catch (error) {
+        console.error(`${shopName} Error GetOffersData:`, error);
+        return {
+            success: false,
+            errorCode: 10001,
+            errorMsg: "SERVER_ERROR",
+            response: null,
+        };
+    }
+};
+
+//获取AYT数据
+export const GetAYTData = async ({
+    shopName,
+    server,
+}: {
+    shopName: string;
+    server?: string;
+}) => {
+    try {
+        const response = await axios({
+            url: `${server || process.env.SERVER_URL}/ayt`,
+            method: "GET",
+        });
+
+        console.log(`${shopName} GetAYTData: `, response.data);
+
+        return response.data;
+    } catch (error) {
+        console.error(`${shopName} Error GetAYTData:`, error);
+        return {
+            success: false,
+            errorCode: 10001,
+            errorMsg: "SERVER_ERROR",
+            response: null,
+        };
+    }
+};
+
+//获取GMV数据
+export const GetGMVData = async ({
+    shopName,
+    server,
+}: {
+    shopName: string;
+    server?: string;
+}) => {
+    try {
+        const response = await axios({
+            url: `${server || process.env.SERVER_URL}/gmv`,
+            method: "GET",
+        });
+
+        console.log(`${shopName} GetGMVData: `, response.data);
+
+        return response.data;
+    } catch (error) {
+        console.error(`${shopName} Error GetGMVData:`, error);
+        return {
+            success: false,
+            errorCode: 10001,
+            errorMsg: "SERVER_ERROR",
+            response: null,
+        };
+    }
+};
+
 // 查询用户折扣信息
 export const BatchQueryUserDiscount = async ({
     shopName,

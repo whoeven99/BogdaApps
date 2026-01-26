@@ -10,12 +10,21 @@ import { mutationDiscountAutomaticActivate, mutationDiscountAutomaticDeactivate,
 import { globalStore } from "app/globalStore";
 import { useTranslation } from "react-i18next";
 import { Button, Modal, Space, Spin, Switch, Typography } from "antd";
-import { BatchQueryUserDiscount, DeleteUserDiscount, UpdateUserDiscountStatus } from "app/api/javaServer";
+import { BatchQueryUserDiscount, DeleteUserDiscount, GetGMVData, UpdateUserDiscountStatus } from "app/api/javaServer";
 import { useDispatch, useSelector } from "react-redux";
 import { OfferType } from "app/types";
 import { setOffersData } from "app/store/modules/offersData";
 
 const { Text } = Typography;
+
+interface GMVDataType {
+    totalGmv: number;
+    gmvGrowthRate: number;
+    activeOffers: number;
+    newOffersThisWeek: number;
+    avgConversionRate: number;
+    conversionTrend: number;
+}
 
 export const loader = async () => {
     return {
@@ -212,11 +221,20 @@ const Index = () => {
 
     const { ciwiBundleExtensionId, ciwiBundleExtensionType } = useLoaderData<typeof loader>();
 
+    const [gmvData, setGmvData] = useState<GMVDataType>({
+        totalGmv: 125430,
+        gmvGrowthRate: 15.2,
+        activeOffers: 24,
+        newOffersThisWeek: 3,
+        avgConversionRate: 2.8,
+        conversionTrend: 0
+    });
+
     const [isThemeExtensionEnabled, setIsThemeExtensionEnabled] = useState(false);
 
     const [deleteOfferInfo, setDeleteOfferInfo] = useState<any>(null);
 
-    const [pageLoadingArr, setPageLoadingArr] = useState<string[]>(["offersData"]);
+    const [pageLoadingArr, setPageLoadingArr] = useState<string[]>(["offersData", "gmvData"]);
 
     const blockUrl = useMemo(
         () =>
@@ -293,6 +311,7 @@ const Index = () => {
                 method: "POST",
             },
         );
+        getGMVData();
         setTimeout(() => {
             batchQueryUserDiscount();
         }, 2000);
@@ -366,6 +385,43 @@ const Index = () => {
         }
     }, [discountNodeDeleteFetcher.data]);
 
+    const batchQueryUserDiscount = useCallback(async () => {
+        const batchQueryUserDiscountData = await BatchQueryUserDiscount({
+            shopName: globalStore.shop,
+            server: globalStore.server,
+        });
+
+        if (batchQueryUserDiscountData.success) {
+            const data = batchQueryUserDiscountData.response?.map((item: any) => (
+                {
+                    id: item?.discountGid,
+                    name: item?.basic_information?.offerName,
+                    status: item?.status,
+                    metafields: item?.metafields,
+                    gmv: "",
+                    conversion: "",
+                    exposurePV: "",
+                    addToCartPV: "",
+                }
+            ))
+            dispatch(setOffersData(data));
+        }
+        setPageLoadingArr((prev) => prev.filter((item) => item !== "offersData"));
+    }, [globalStore.shop, globalStore.server]);
+
+    const getGMVData = useCallback(async () => {
+        const getGMVData = await GetGMVData({
+            shopName: globalStore.shop,
+            server: globalStore.server,
+        });
+
+        if (getGMVData.success) {
+            const data = JSON.parse(getGMVData.response);
+            dispatch(setOffersData(data));
+        }
+        setPageLoadingArr((prev) => prev.filter((item) => item !== "gmvData"));
+    }, [globalStore.shop, globalStore.server]);
+
     const switchDiscountStatus = (
         {
             id,
@@ -388,30 +444,6 @@ const Index = () => {
             },
         );
     }
-
-    const batchQueryUserDiscount = useCallback(async () => {
-        const batchQueryUserDiscountData = await BatchQueryUserDiscount({
-            shopName: globalStore.shop,
-            server: globalStore.server,
-        });
-
-        if (batchQueryUserDiscountData.success) {
-            const data = batchQueryUserDiscountData.response?.map((item: any) => (
-                {
-                    id: item?.discountGid,
-                    name: item?.basic_information?.offerName,
-                    status: item?.status,
-                    metafields: item?.metafields,
-                    gmv: "",
-                    conversion: "",
-                    exposurePV: "",
-                    addToCartPV: "",
-                }
-            ))
-            dispatch(setOffersData(data));
-        }
-        setPageLoadingArr([]);
-    }, [globalStore.shop, globalStore.server]);
 
     const deleteOffer = async ({
         id,
@@ -454,8 +486,9 @@ const Index = () => {
                         <h2 className="!font-['Inter'] !font-semibold !text-[20px] !leading-[30px] !text-[#202223] !tracking-[-0.4492px] !m-0">
                             GMV Overview
                         </h2>
-                        <button
-                            className="!text-[#008060] !font-['Inter'] !font-medium !text-[14px] !leading-[21px] !tracking-[-0.1504px] !bg-transparent !border-0 !cursor-pointer hover:bg-[rgba(0,128,96,0.1)] !px-[12px] !py-[6px] !rounded-[6px] !flex !items-center !gap-[6px]"
+                        <Button
+                            type="text"
+                            className="!font-['Inter'] !font-medium !text-[14px]"
                             onClick={() => navigate("/app/analytics")}
                         >
                             View Details
@@ -474,7 +507,7 @@ const Index = () => {
                                     strokeLinejoin="round"
                                 />
                             </svg>
-                        </button>
+                        </Button>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-[16px] sm:gap-[20px]">
@@ -484,10 +517,11 @@ const Index = () => {
                                 Total GMV
                             </span>
                             <h3 className="!font-['Inter'] !font-semibold !text-[28px] !leading-[42px] !text-[#202223] !tracking-[0.3828px] !m-0">
-                                $125,430
+                                ${gmvData.totalGmv.toLocaleString()}
                             </h3>
                             <span className="!font-['Inter'] !font-normal !text-[14px] !leading-[22.4px] !text-[#108043] !tracking-[-0.1504px]">
-                                ↑ +15.2% from last month
+                                {/* ↑ +{gmvData.gmvGrowthRate}% from last month */}
+                                {gmvData.gmvGrowthRate === 0 ? t("→ No change") : t(`${gmvData.gmvGrowthRate > 0 ? "↑ +" : "↓ -"}${gmvData.gmvGrowthRate}% from last month`)}
                             </span>
                         </div>
 
@@ -497,10 +531,10 @@ const Index = () => {
                                 Active Offers
                             </span>
                             <h3 className="!font-['Inter'] !font-semibold !text-[28px] !leading-[42px] !text-[#202223] !tracking-[0.3828px] !m-0">
-                                24
+                                {gmvData.activeOffers}
                             </h3>
                             <span className="!font-['Inter'] !font-normal !text-[14px] !leading-[22.4px] !text-[#108043] !tracking-[-0.1504px]">
-                                ↑ +3 new this week
+                                {gmvData.newOffersThisWeek === 0 ? t("→ No change") : t(`${gmvData.newOffersThisWeek > 0 ? "↑ +" : "↓ -"}${gmvData.newOffersThisWeek} new this week`)}
                             </span>
                         </div>
 
@@ -510,10 +544,10 @@ const Index = () => {
                                 Avg. Conversion
                             </span>
                             <h3 className="!font-['Inter'] !font-semibold !text-[28px] !leading-[42px] !text-[#202223] !tracking-[0.3828px] !m-0">
-                                2.8%
+                                {gmvData.avgConversionRate}%
                             </h3>
                             <span className="!font-['Inter'] !font-normal !text-[14px] !leading-[22.4px] !text-[#916a00] !tracking-[-0.1504px]">
-                                → No change
+                                {gmvData.conversionTrend === 0 ? t("→ No change") : t(`${gmvData.conversionTrend > 0 ? "↑ +" : "↓ -"}${gmvData.conversionTrend}% from last month`)}
                             </span>
                         </div>
                     </div>
@@ -558,15 +592,13 @@ const Index = () => {
 
                     {/* Enable/Disable and Need help buttons */}
                     <div className="!flex !flex-col !gap-[12px]">
-                        <button
+                        <Button
+                            type={isThemeExtensionEnabled ? "default" : "primary"}
                             onClick={() => open(blockUrl, "_blank")}
-                            className={`!px-[16px] !py-[8px] !rounded-[6px] !font-['Inter'] !font-medium !text-[14px] !leading-[21px] !tracking-[-0.1504px] !cursor-pointer !transition-colors !w-full !border-0 ${isThemeExtensionEnabled
-                                ? "!bg-white !border !border-[#dfe3e8] !text-[#d72c0d] !hover:bg-[#fef3f2]"
-                                : "!bg-[#008060] !text-white !hover:bg-[#006e52]"
-                                }`}
+                            className="!font-['Inter'] !font-medium !text-[14px]"
                         >
                             {isThemeExtensionEnabled ? "Disable" : "Enable"}
-                        </button>
+                        </Button>
                         {/* <button className="bg-white border border-[#dfe3e8] px-[16px] py-[8px] rounded-[6px] font-['Inter'] font-medium text-[14px] leading-[21px] text-[#202223] tracking-[-0.1504px] cursor-pointer hover:bg-[#f4f6f8] transition-colors w-full">
               Need help?
             </button> */}
@@ -580,12 +612,13 @@ const Index = () => {
                     <h2 className="!font-['Inter'] !font-semibold !text-[18px] sm:!text-[20px] !leading-[27px] sm:!leading-[30px] !text-[#202223] !tracking-[-0.4492px] !m-0">
                         My Offers
                     </h2>
-                    <button
-                        className="!w-full sm:!w-auto !bg-[#008060] !text-white !px-[16px] !py-[8px] !rounded-[6px] !font-['Inter'] !font-medium !text-[14px] !leading-[21px] !tracking-[-0.1504px] !border-0 !cursor-pointer !hover:bg-[#006e52] !transition-colors"
+                    <Button
+                        type="primary"
+                        className="!font-['Inter'] !font-medium !text-[14px]"
                         onClick={() => navigate("/app/create")}
                     >
                         Create New Offer
-                    </button>
+                    </Button>
                 </div>
                 <div
                     style={{
@@ -701,15 +734,15 @@ const Index = () => {
                                     </td>
                                     <td className="!p-[12px] !border-b !border-[#dfe3e8]">
                                         <div className="!flex !items-center !gap-[8px]">
-                                            <button
-                                                className="!text-[#6d7175] !bg-transparent !border-0 !cursor-pointer !hover:text-[#008060] !p-[4px] !rounded-[4px] !hover:bg-[rgba(0,128,96,0.1)] !transition-colors"
+                                            <Button
+                                                type="text"
                                                 title="Edit"
                                                 onClick={() => navigate(`/app/create?discountGid=${offer.id}`)}
                                             >
                                                 <Pencil size={16} />
-                                            </button>
-                                            <button
-                                                className="!text-[#6d7175] !bg-transparent !border-0 !cursor-pointer !hover:text-[#d72c0d] !p-[4px] !rounded-[4px] !hover:bg-[rgba(215,44,13,0.1)] !transition-colors"
+                                            </Button>
+                                            <Button
+                                                type="text"
                                                 title="Delete"
                                                 onClick={() => setDeleteOfferInfo({
                                                     id: offer.id,
@@ -724,7 +757,7 @@ const Index = () => {
                                                 })}
                                             >
                                                 <Trash2 size={16} />
-                                            </button>
+                                            </Button>
                                         </div>
                                     </td>
                                 </tr>
@@ -805,14 +838,14 @@ const Index = () => {
                                 </div>
 
                                 <div className="!flex !items-center !gap-[8px] !pt-[12px] !border-t !border-[#dfe3e8]">
-                                    <button
-                                        className="!text-[#6d7175] !bg-transparent !border-0 !cursor-pointer hover:text-[#008060] !p-[8px] !rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
+                                    <Button
+                                        type="text"
                                         title="Edit"
                                     >
                                         <Pencil size={18} />
-                                    </button>
-                                    <button
-                                        className="!text-[#6d7175] !bg-transparent !border-0 !cursor-pointer hover:text-[#d72c0d] !p-[8px] !rounded-[4px] hover:bg-[rgba(215,44,13,0.1)] transition-colors"
+                                    </Button>
+                                    <Button
+                                        type="text"
                                         title="Delete"
                                         onClick={() => setDeleteOfferInfo({
                                             id: offer.id,
@@ -827,7 +860,7 @@ const Index = () => {
                                         })}
                                     >
                                         <Trash2 size={18} />
-                                    </button>
+                                    </Button>
                                 </div>
                             </div>
                         ))}

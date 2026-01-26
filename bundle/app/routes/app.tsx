@@ -139,7 +139,7 @@ function Navigation() {
   const location = useLocation();
 
   return (
-    <nav className="bg-white flex flex-col sm:flex-row gap-[8px] sm:gap-[16px] items-stretch sm:items-start pb-0 px-[16px] pt-[16px] rounded-[8px] mb-[16px] sm:mb-[24px]">
+    <nav className="bg-white flex flex-col sm:flex-row gap-[8px] sm:gap-[16px] items-stretch sm:items-start pb-0 px-[16px] pt-[16px] rounded-[8px]">
       <Link
         to="/app"
         className={`rounded-[4px] px-[12px] py-[7px] no-underline text-center sm:text-left ${location.pathname === '/app' ? '!bg-[#f4f6f8]' : ''
