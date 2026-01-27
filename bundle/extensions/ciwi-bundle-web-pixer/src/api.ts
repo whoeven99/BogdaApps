@@ -1,87 +1,31 @@
-export const ProductViewReport = ({
-    topic,
+export const ProductViewOrAddToCart = async ({
+    event,
     shopName,
-    bundleId,
     productId,
-    clientId
+    clientId,
+    extra,
 }: {
-    topic: string,
+    event: string,
     shopName: string,
-    bundleId: string,
     productId: string,
-    clientId: string
+    clientId: string,
+    extra: any,
 }) => {
-    console.log("ProductViewReport: ", {
-        topic,
-        shopName,
-        bundleId,
-        productId,
-        clientId
-    });
-}
-
-export const ProductAddToCartReport = ({
-    topic,
-    shopName,
-    bundleId,
-    productId,
-    clientId
-}: {
-    topic: string,
-    shopName: string,
-    bundleId: string,
-    productId: string,
-    clientId: string
-}) => {
-    console.log("ProductAddToCartReport: ", {
-        topic,
-        shopName,
-        bundleId,
-        productId,
-        clientId
-    });
-}
-
-export const CheckoutStartedReport = ({
-    topic,
-    shopName,
-    bundleId,
-    productId,
-    clientId
-}: {
-    topic: string,
-    shopName: string,
-    bundleId: string,
-    productId: string,
-    clientId: string
-}) => {
-    console.log("CheckoutStartedReport: ", {
-        topic,
-        shopName,
-        bundleId,
-        productId,
-        clientId
-    });
-}
-
-export const CheckoutCompletedReport = ({
-    topic,
-    shopName,
-    bundleId,
-    productId,
-    clientId
-}: {
-    topic: string,
-    shopName: string,
-    bundleId: string,
-    productId: string,
-    clientId: string
-}) => {
-    console.log("CheckoutCompletedReport: ", {
-        topic,
-        shopName,
-        bundleId,
-        productId,
-        clientId
-    });
+    try {
+        await fetch('https://d7dcb9c460e4.ngrok.app/productViewOrAddToCart', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                event,
+                shopName,
+                productId,
+                clientId,
+                extra,
+            }),
+        })
+    } catch (error) {
+        console.error(`${shopName} Error ProductView: `, error)
+    }
 }

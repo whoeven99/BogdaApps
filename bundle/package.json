@@ -23,6 +23,7 @@
     "node": "^18.20 || ^20.10 || >=21.0.0"
   },
   "dependencies": {
+    "@alicloud/log": "^1.2.6",
     "@ant-design/icons": "^5.5.1",
     "@prisma/client": "^6.2.1",
     "@react-spring/web": "^9.7.5",
@@ -69,6 +70,7 @@
     "@remix-run/route-config": "^2.16.1",
     "@shopify/api-codegen-preset": "^1.1.1",
     "@tailwindcss/vite": "4.1.12",
+    "@types/alicloud__log": "^1.2.1",
     "@types/crypto-js": "^4.2.2",
     "@types/eslint": "^9.6.1",
     "@types/jquery": "^3.5.30",

@@ -2,6 +2,7 @@
   <script id="ciwi-bundles-config" type="application/json">
     {
       "shopifyDomain": "{{ shop.domain }}",
+      "moneyFormat": "{{ shop.money_format }}",
       "productId": {{ product.id }},
       "variantIds": [
         {% for item in product.variants %}
@@ -24,7 +25,7 @@
       "currencySymbol": "{{ localization.country.currency.symbol }}"
     }
   </script>
-  <script src="{{ 'ciwi-bundle-if-add-to-dom.js' | asset_url }}" defer></script>
+  <script type="module" src="{{ 'ciwi-bundle-if-add-to-dom.js' | asset_url }}" defer></script>
   <link rel="stylesheet" href="{{ 'ciwi-bundle-if-add-to-dom.css' | asset_url }}">
 {% endif %}
 
