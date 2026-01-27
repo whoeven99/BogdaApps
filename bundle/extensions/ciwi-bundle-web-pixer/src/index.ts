@@ -42,7 +42,6 @@ register(({ analytics, browser, init, settings }) => {
   });
   analytics.subscribe('checkout_started', async (event) => {
     console.log('Checkout started', JSON.stringify(event));
-
     // CheckoutStartedReport({
     //   server,
     //   topic: 'checkout_started',
@@ -51,7 +50,6 @@ register(({ analytics, browser, init, settings }) => {
     //   productId: item.variant?.id || "",
     //   clientId: event.clientId
     // })
-
   })
 
   analytics.subscribe('checkout_completed', (event) => {

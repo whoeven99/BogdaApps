@@ -162,31 +162,15 @@ const Index = () => {
                 </div>
             </div>
 
-            {/* Charts Section */}
             <div
-                className="grid grid-cols-[340px_1fr] gap-[16px]"
                 style={{
                     paddingBottom: '24px'
                 }}
             >
-                {/* Bundle conversion - Pie Chart */}
-                <div className="bg-white rounded-[8px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] p-[20px]">
-                    <h3 className="font-['Inter'] font-semibold text-[16px] leading-[24px] text-[#202223] tracking-[-0.3203px] m-0 mb-[8px]">
-                        Bundle conversion
-                    </h3>
-                    <p className="font-['Inter'] font-normal text-[13px] leading-[20.8px] text-[#6d7175] tracking-[-0.0762px] mb-[24px]">
-                        See how many customers are converting to bundles.
-                    </p>
-
-
-                    <div style={{ width: '100%', height: '240px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <DonutChart value={convertData.converted} total={convertData.notConverted + convertData.converted} />
-                    </div>
-                </div>
-
                 {/* Daily added revenue - Line Chart */}
                 <div
                     className="bg-white rounded-[8px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] p-[20px]"
+
                 >
                     <h3 className="font-['Inter'] font-semibold text-[16px] leading-[24px] text-[#202223] tracking-[-0.3203px] m-0 mb-[8px]">
                         Daily added revenue

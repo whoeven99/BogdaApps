@@ -510,7 +510,7 @@ const Index = () => {
                         </Button>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-[16px] sm:gap-[20px]">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-[16px] sm:gap-[20px]">
                         {/* Total GMV */}
                         <div className="!flex !flex-col !gap-[16px]">
                             <span className="!font-['Inter'] !font-normal !text-[14px] !leading-[22.4px] !text-[#6d7175] !tracking-[-0.1504px]">
@@ -526,7 +526,7 @@ const Index = () => {
                         </div>
 
                         {/* Active Offers */}
-                        <div className="!flex !flex-col !gap-[16px]">
+                        {/* <div className="!flex !flex-col !gap-[16px]">
                             <span className="!font-['Inter'] !font-normal !text-[14px] !leading-[22.4px] !text-[#6d7175] !tracking-[-0.1504px]">
                                 Active Offers
                             </span>
@@ -536,7 +536,7 @@ const Index = () => {
                             <span className="!font-['Inter'] !font-normal !text-[14px] !leading-[22.4px] !text-[#108043] !tracking-[-0.1504px]">
                                 {gmvData.newOffersThisWeek === 0 ? t("→ No change") : t(`${gmvData.newOffersThisWeek > 0 ? "↑ +" : "↓ -"}${gmvData.newOffersThisWeek} new this week`)}
                             </span>
-                        </div>
+                        </div> */}
 
                         {/* Avg. Conversion */}
                         <div className="!flex !flex-col !gap-[16px]">
