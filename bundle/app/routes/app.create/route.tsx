@@ -374,6 +374,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             try {
                 const variables = discountAutomaticAppCreateAndMetafieldsSetRequestBody?.discountAutomaticAppCreateAndMetafieldsSetRequestJsondata
 
+                console.log("variables", JSON.stringify(variables));
+
                 const shopData = await queryShop({
                     shop,
                     accessToken: accessToken || "",

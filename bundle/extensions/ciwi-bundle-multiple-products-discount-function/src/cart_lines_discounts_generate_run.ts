@@ -100,7 +100,8 @@ export function cartLinesDiscountsGenerateRun(
     } else if (targetingSettingsJSON?.quantity_scope === "cross_products") {
       for (const l of input.cart.lines) {
         if (l.merchandise.__typename !== "ProductVariant") continue;
-        if (productPoolJSON?.include_variant_ids?.includes(l.merchandise.id)) {
+        const variantId = l.merchandise.id.split("gid://shopify/ProductVariant/")[1].toString();
+        if (productPoolJSON?.include_variant_ids?.includes(variantId)) {
           lineQuantityMap.set("totalQuantity", (lineQuantityMap.get("totalQuantity") ?? 0) + l.quantity);
         }
       }

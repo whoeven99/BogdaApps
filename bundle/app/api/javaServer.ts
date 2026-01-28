@@ -123,6 +123,8 @@ export const SaveUserDiscount = async ({
     data: any;
 }) => {
     try {
+        console.log(`${shopName} SaveUserDiscount Input: `, JSON.stringify(data));
+
         const response = await axios({
             url: `${server || process.env.SERVER_URL}/bundle/discount/saveUserDiscount?shopName=${shopName}`,
             method: "POST",
