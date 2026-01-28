@@ -10,7 +10,7 @@ import { useEffect, useState } from "react";
 import { ConfigProvider, Flex, Spin } from "antd";
 import { useTranslation } from "react-i18next";
 import { globalStore } from "app/globalStore";
-import { queryShop } from "app/api/admin";
+import { mutationWebPixelCreate, queryShop, queryWebpixer } from "app/api/admin";
 import { InitUser } from "app/api/javaServer";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
@@ -34,6 +34,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   const shopRequestBody = JSON.parse(
     formData.get("shopRequestBody") as string,
+  );
+  const webpixerRequestBody = JSON.parse(
+    formData.get("webpixerRequestBody") as string,
   );
 
   switch (true) {
@@ -69,7 +72,49 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         errorMsg: "SERVER_ERROR",
         response: null,
       }
+    case !!webpixerRequestBody:
+      const queryWebpixerData = await queryWebpixer({
+        shop,
+        accessToken: accessToken || "",
+      });
 
+      if (queryWebpixerData?.webPixel) {
+        return {
+          success: true,
+          errorCode: 0,
+          errorMsg: "",
+          response: queryWebpixerData,
+        }
+      } else {
+        const webpixerData = await mutationWebPixelCreate({
+          shop,
+          accessToken: accessToken || "",
+          variables: {
+            webPixel: {
+              settings: {
+                shopName: shop,
+                server: process.env.SHOPIFY_APP_URL || "",
+              }
+            }
+          }
+        });
+
+        if (webpixerData) {
+          return {
+            success: true,
+            errorCode: 0,
+            errorMsg: "",
+            response: webpixerData,
+          }
+        }
+      }
+
+      return {
+        success: false,
+        errorCode: 10001,
+        errorMsg: "SERVER_ERROR",
+        response: null,
+      }
     default:
       console.error(`${shop} Request with unrecognized key: `, formData);
       return {
@@ -86,6 +131,7 @@ export default function App() {
   const { t } = useTranslation();
 
   const initFetcher = useFetcher<any>();
+  const webpixerInitFetcher = useFetcher<any>();
 
   const [isClient, setIsClient] = useState(false);
 
@@ -93,10 +139,9 @@ export default function App() {
     globalStore.shop = shop;
     globalStore.server = server;
     initFetcher.submit({ shopRequestBody: JSON.stringify({}) }, { method: "POST" });
+    webpixerInitFetcher.submit({ webpixerRequestBody: JSON.stringify({}) }, { method: "POST" });
     setIsClient(true);
   }, []);
-
-
 
   return (
     <AppProvider isEmbeddedApp apiKey={apiKey}>

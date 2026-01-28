@@ -1,18 +1,18 @@
-export const ProductViewOrAddToCart = async ({
+export const WebpixerToAli = async ({
+    server,
     event,
     shopName,
-    productId,
     clientId,
     extra,
 }: {
+    server: string,
     event: string,
     shopName: string,
-    productId: string,
     clientId: string,
-    extra: any,
+    extra: string,
 }) => {
     try {
-        await fetch('https://d7dcb9c460e4.ngrok.app/productViewOrAddToCart', {
+        await fetch(`${server}/webpixerToAli`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -20,12 +20,11 @@ export const ProductViewOrAddToCart = async ({
             body: JSON.stringify({
                 event,
                 shopName,
-                productId,
                 clientId,
                 extra,
             }),
         })
     } catch (error) {
-        console.error(`${shopName} Error ProductView: `, error)
+        console.error(`${shopName} Error WebpixerToAli: `, error)
     }
 }

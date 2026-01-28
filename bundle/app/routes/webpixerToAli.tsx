@@ -38,7 +38,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // const formData = await request.formData();
     const data = await request.json()
 
-    console.log("data: ", data);
+    console.log("webpixerToAli post data: ", data);
+
     // 写入日志
     try {
         const logGroup = {
@@ -49,7 +50,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                         shopName: data?.shopName || "",
                         productId: data?.productId || "",
                         clientId: data?.clientId || "",
-                        extra: JSON.stringify(data?.extra || {})
+                        extra: data?.extra || "{}"
                     },
                     timestamp: Math.floor(new Date().getTime() / 1000)
                 },

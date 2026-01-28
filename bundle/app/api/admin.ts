@@ -1,6 +1,47 @@
 import axios from "axios";
 
 //指定查询多个产品信息
+export const queryWebpixer = async ({
+    shop,
+    accessToken,
+}: {
+    shop: string;
+    accessToken: string;
+}) => {
+    try {
+        const gql = `
+            query {
+                webPixel {
+                    id
+                    settings
+                }
+            }
+        `;
+
+        const { data } = await axios.post(
+            `https://${shop}/admin/api/${process.env.GRAPHQL_VERSION}/graphql.json`,
+            {
+                query: gql,
+            },
+            {
+                headers: {
+                    "X-Shopify-Access-Token": accessToken,
+                },
+            }
+        );
+
+        const res = data?.data;
+
+        console.log(`${shop} queryWebpixer:`, res);
+
+        return res;
+    } catch (error: any) {
+        console.error(`${shop} Error queryWebpixer:`, error?.response?.data);
+        return null;
+    }
+};
+
+//指定查询多个产品信息
 export const querySpecialProductVariants = async ({
     shop,
     accessToken,
@@ -70,64 +111,6 @@ export const querySpecialProductVariants = async ({
         return res;
     } catch (error: any) {
         console.error(`${shop} Error querySpecialProductVariants:`, error?.response?.data);
-        return null;
-    }
-};
-
-//查询前三个指定产品信息
-export const queryThreeProductVariants = async ({
-    shop,
-    accessToken,
-    ids
-}: {
-    shop: string;
-    accessToken: string;
-    ids: string[];
-}) => {
-    try {
-        const gql = `
-        {
-            ${ids.map((id: string, index: number) => `
-                productVariant${index + 1}: productVariant(id: "${id}") {
-                    id
-                    title
-                    price
-                    media(first: 1) {
-                        edges {
-                            node {
-                                preview {
-                                    image {
-                                        url
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    product {
-                        title
-                    }
-                }
-                `
-        ).join("\n")}
-        }
-        `;
-        const { data } = await axios.post(
-            `https://${shop}/admin/api/${process.env.GRAPHQL_VERSION}/graphql.json`,
-            { query: gql },
-            {
-                headers: {
-                    "X-Shopify-Access-Token": accessToken,
-                },
-            }
-        );
-
-        const res = data?.data;
-
-        console.log(`${shop} queryThreeProductVariants:`, res);
-
-        return res;
-    } catch (error: any) {
-        console.error(`${shop} Error queryThreeProductVariants:`, error?.response?.data);
         return null;
     }
 };
@@ -976,3 +959,57 @@ export const mutationDiscountAutomaticDeactivate = async ({
     }
 }
 
+//创建webPixel
+export const mutationWebPixelCreate = async ({
+    shop,
+    accessToken,
+    variables
+}: {
+    shop: string;
+    accessToken: string;
+    variables: any;
+}) => {
+    try {
+        const gql = `
+            mutation webPixelCreate($webPixel: WebPixelInput!) {
+                webPixelCreate(webPixel: $webPixel) {
+                        userErrors {
+                            field
+                            message
+                            code
+                        }
+                        webPixel {
+                            id
+                            settings
+                        }
+                    }
+                }
+            `;
+
+        console.log(`${shop} mutationWebPixelCreate gql:`, gql);
+
+        const { data } = await axios.post(
+            `https://${shop}/admin/api/${process.env.GRAPHQL_VERSION}/graphql.json`,
+            { query: gql, variables },
+            {
+                headers: {
+                    "X-Shopify-Access-Token": accessToken,
+                },
+            }
+        );
+
+        const res = data?.data?.webPixelCreate;
+
+        console.log(`${shop} mutationWebPixelCreate:`, data);
+
+        if (res?.userErrors?.length > 0) {
+            console.error(`${shop} Error mutationWebPixelCreate:`, res?.userErrors);
+            return null;
+        }
+
+        return res;
+    } catch (error: any) {
+        console.error(`${shop} Error mutationWebPixelCreate error: `, error?.response?.data);
+        return null;
+    }
+}

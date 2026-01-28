@@ -1,6 +1,6 @@
 import { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { useFetcher, useLoaderData, useNavigate } from "@remix-run/react";
-import { mutationDiscountAutomaticAppCreateAndMetafieldsSet, mutationDiscountAutomaticAppUpdateAndMetafieldsSet, queryCustomers, queryMarkets, queryProducts, queryProductVariants, querySegments, queryShop, querySpecialProductVariants, queryThreeProductVariants } from "app/api/admin";
+import { mutationDiscountAutomaticAppCreateAndMetafieldsSet, mutationDiscountAutomaticAppUpdateAndMetafieldsSet, queryCustomers, queryMarkets, queryProducts, queryProductVariants, querySegments, queryShop, querySpecialProductVariants } from "app/api/admin";
 import { authenticate } from "app/shopify.server";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -914,11 +914,12 @@ const Index = () => {
             }
         }
 
+        const id = Date.now()
+
         if (discountGid) {
             const discountAutomaticAppUpdateAndMetafieldsSetRequestJsondata = {
                 id: discountGid,
                 automaticAppDiscount: {
-                    title: basicInformation?.offerName,
                     functionHandle: "ciwi-bundle-multiple-products-discount-function",
                     startsAt: dayjs(targetingSettingsData?.schedule?.startsAt).toISOString(),
                     endsAt: targetingSettingsData?.schedule?.endsAt ? dayjs(targetingSettingsData?.schedule?.endsAt).toISOString() : null,
@@ -1010,7 +1011,7 @@ const Index = () => {
         } else {
             const discountAutomaticAppCreateAndMetafieldsSetRequestJsondata = {
                 automaticAppDiscount: {
-                    title: basicInformation?.offerName,
+                    title: `#Bundle ${id}`,
                     functionHandle: "ciwi-bundle-multiple-products-discount-function",
                     startsAt: dayjs(targetingSettingsData?.schedule?.startsAt).toISOString(),
                     endsAt: targetingSettingsData?.schedule?.endsAt ? dayjs(targetingSettingsData?.schedule?.endsAt).toISOString() : null,
@@ -1065,7 +1066,7 @@ const Index = () => {
                 },
                 metafields: [
                     {
-                        key: `ciwi_bundles_config_${Date.now()}`,
+                        key: `ciwi_bundles_config_${id}`,
                         namespace: "ciwi_bundles_config",
                         ownerId: "",
                         type: "json",
@@ -1092,7 +1093,8 @@ const Index = () => {
                             include_collection_ids: null,
                         },
                         metafields: {
-                            key: `ciwi_bundles_config_${Date.now()}`,
+                            key: `ciwi_bundles_config_${Date.now()
+                                } `,
                             namespace: "ciwi_bundles_config",
                             ownerId: "",
                         },

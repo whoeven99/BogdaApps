@@ -286,7 +286,7 @@ async function insertHtmlNextToCartForms() {
     sessionStorage.setItem(
       "current-ciwi-bundle-rule",
       JSON.stringify({
-        [`${variantId}`]: bundleData?.basic_information?.offerName,
+        [`${variantId}`]: `#Bundle ${bundleData?.bundleKey.split("ciwi_bundles_config_")[1]}`,
       }),
     );
     const inventoryData = configElJson?.[variantId];
