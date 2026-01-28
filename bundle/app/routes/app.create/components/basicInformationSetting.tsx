@@ -183,7 +183,7 @@ const BasicInformationSetting: React.FC<BasicInformationSettingProps> = ({
                                             <input
                                                 type="radio"
                                                 name="discount-rule-group"
-                                                value={rule.trigger_scope.min_quantity}
+                                                value={rule.quantity}
                                                 checked={selectedRuleIndex === null ? rule.selectedByDefault : selectedRuleIndex === index}
                                                 readOnly
                                                 style={{ width: '16px', height: '16px' }}
@@ -210,7 +210,7 @@ const BasicInformationSetting: React.FC<BasicInformationSettingProps> = ({
                                             {
                                                 rule.discount.value === 1 && (
                                                     <div style={{ textAlign: 'right' }}>
-                                                        <strong style={{ fontSize: '16px' }}>€{Number(rule.trigger_scope.min_quantity * previewPrice).toFixed(2)}</strong>
+                                                        <strong style={{ fontSize: '16px' }}>€{Number(rule.quantity * previewPrice).toFixed(2)}</strong>
                                                     </div>
                                                 )
                                             }
@@ -225,8 +225,8 @@ const BasicInformationSetting: React.FC<BasicInformationSettingProps> = ({
                                                 (rule.discount.value > 0 && rule.discount.value < 1
                                                 ) && (
                                                     <div style={{ textAlign: 'right' }}>
-                                                        <strong style={{ fontSize: '16px' }}>€{Number(rule.trigger_scope.min_quantity * previewPrice * rule.discount.value).toFixed(2)}</strong>
-                                                        <div style={{ fontSize: '12px', color: '#6d7175', textDecoration: 'line-through' }}>€{Number(rule.trigger_scope.min_quantity * previewPrice).toFixed(2)}</div>
+                                                        <strong style={{ fontSize: '16px' }}>€{Number(rule.quantity * previewPrice * rule.discount.value).toFixed(2)}</strong>
+                                                        <div style={{ fontSize: '12px', color: '#6d7175', textDecoration: 'line-through' }}>€{Number(rule.quantity * previewPrice).toFixed(2)}</div>
                                                     </div>
                                                 )
                                             }

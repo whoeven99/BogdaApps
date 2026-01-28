@@ -128,14 +128,15 @@ async function insertHtmlNextToCartForms() {
   );
   if (selectedIndex === -1) selectedIndex = 0;
 
-  qtyInput.value =
-    bundleData.discount_rules[selectedIndex]?.trigger_scope?.min_quantity || 1;
+  qtyInput.value = bundleData.discount_rules[selectedIndex]?.quantity || 1;
 
   const wrapper = document.createElement("div");
   wrapper.className = "ciwi-bundle-wrapper";
 
   const rulesHtml = bundleData.discount_rules
     .map((rule, index) => {
+      console.log("rule.selectedByDefault: ", rule.selectedByDefault);
+
       let priceHtml = "";
 
       if (rule.discount.value === 1) {
@@ -144,9 +145,7 @@ async function insertHtmlNextToCartForms() {
               ${configElJson.currencySymbol}
               ${detectNumberFormat(
                 configElJson.moneyFormat,
-                Number(
-                  (rule.trigger_scope.min_quantity * configElJson.price) / 100,
-                ).toFixed(2),
+                Number((rule.quantity * configElJson.price) / 100).toFixed(2),
               )}
             </strong>
           `;
@@ -159,9 +158,7 @@ async function insertHtmlNextToCartForms() {
               ${detectNumberFormat(
                 configElJson.moneyFormat,
                 Number(
-                  (rule.trigger_scope.min_quantity *
-                    configElJson.price *
-                    rule.discount.value) /
+                  (rule.quantity * configElJson.price * rule.discount.value) /
                     100,
                 ).toFixed(2),
               )}
@@ -170,9 +167,7 @@ async function insertHtmlNextToCartForms() {
               ${configElJson.currencySymbol}
               ${detectNumberFormat(
                 configElJson.moneyFormat,
-                Number(
-                  (rule.trigger_scope.min_quantity * configElJson.price) / 100,
-                ).toFixed(2),
+                Number((rule.quantity * configElJson.price) / 100).toFixed(2),
               )}
             </div>
           `;
@@ -182,7 +177,7 @@ async function insertHtmlNextToCartForms() {
           <div
             class="ciwi-rule"
             data-index="${index}"
-            data-qty="${rule.trigger_scope.min_quantity}"
+            data-qty="${rule.quantity}"
             style="
               border: 1px solid ${rule.selectedByDefault ? "#000" : bundleData.style_config.card.border_color};
               border-radius: 8px;
@@ -232,7 +227,7 @@ async function insertHtmlNextToCartForms() {
                   <strong style="font-size:14px">${rule.title}</strong>
 
                   ${
-                    rule.discount.value < 1
+                    rule.labelText
                       ? `
                         <span
                           style="
@@ -281,6 +276,13 @@ async function insertHtmlNextToCartForms() {
 
   insertTarget.insertBefore(wrapper, insertBeforeNode);
 
+  setTimeout(() => {
+    const defaultRule = wrapper.querySelector(
+      '.ciwi-rule[data-index="' + selectedIndex + '"] input',
+    );
+    if (defaultRule) defaultRule.checked = true;
+  }, 0);
+
   function syncBundleDisabled() {
     const variantId = String(variantInput.value);
     sessionStorage.setItem(
@@ -314,6 +316,7 @@ async function insertHtmlNextToCartForms() {
     attributes: true,
     attributeFilter: ["value"],
   });
+
   syncBundleDisabled();
 
   wrapper.addEventListener("click", (e) => {

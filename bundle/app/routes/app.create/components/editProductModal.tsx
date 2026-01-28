@@ -46,16 +46,6 @@ const EditProductModal: React.FC<ProductModalProps> = ({
         );
     }, [searchQuery, productModalData]);
 
-    console.log("filteredVariants: ", filteredVariants);
-
-    const onPrevious = () => {
-
-    }
-
-    const onNext = () => {
-
-    }
-
     const onClose = () => {
         setMainModalType(null);
         setSearchQuery("");

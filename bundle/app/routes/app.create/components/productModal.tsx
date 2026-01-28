@@ -93,7 +93,6 @@ const ProductModal: React.FC<ProductModalProps> = ({
 
         const timer = setTimeout(() => {
             setDebouncedQuery(searchQuery);
-            console.log("🔍 trigger search:", searchQuery);
             setSearchLoading(true);
         }, 400);
 

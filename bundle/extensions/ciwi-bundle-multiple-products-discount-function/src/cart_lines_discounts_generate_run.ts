@@ -63,51 +63,73 @@ export function cartLinesDiscountsGenerateRun(
   //定义产品Candidates数组
   const productCandidates: Array<ProductDiscountCandidate> = [];
 
+
+
+  //初始化折扣规则数据
+  let appliedRule: any = null;
+
+  const productDiscountData: productDiscountDataType =
+    input.discount as productDiscountDataType;
+
+  const basicInformation = productDiscountData.basicInformation?.value;
+  const discountRules = productDiscountData.discountRules?.value;
+  const styleConfig = productDiscountData.styleConfig?.value;
+  const targetingSettings = productDiscountData.targetingSettings?.value;
+  const productPool = productDiscountData.productPool?.value;
+
+  const basicInformationJSON = parseJSON<any>(basicInformation);
+  const discountRulesJSON = parseJSON<any>(discountRules);
+  const targetingSettingsJSON = parseJSON<any>(targetingSettings);
+  const productPoolJSON = parseJSON<any>(productPool);
+
+  // if (!discountRulesJSON || !targetingSettingsJSON || !productPoolJSON) continue;
+
   //定义每行购物车item ID与Quantity的映射关系
   const lineQuantityMap = new Map<string, number>();
 
-  for (const l of input.cart.lines) {
-    if (l.merchandise.__typename !== "ProductVariant") continue;
-    const id = l.merchandise.id;
-    lineQuantityMap.set(id, (lineQuantityMap.get(id) ?? 0) + l.quantity);
+  if (Array.isArray(productPoolJSON?.include_variant_ids) && targetingSettingsJSON?.quantity_scope) {
+    if (targetingSettingsJSON?.quantity_scope === "same_product") {
+      for (const l of input.cart.lines) {
+        if (l.merchandise.__typename !== "ProductVariant") continue;
+        const variantId = l.merchandise.id.split("gid://shopify/ProductVariant/")[1].toString();
+        if (productPoolJSON?.include_variant_ids?.includes(variantId)) {
+          const id = l.merchandise.product.id;
+          lineQuantityMap.set(id, (lineQuantityMap.get(id) ?? 0) + l.quantity);
+        }
+      }
+    } else if (targetingSettingsJSON?.quantity_scope === "cross_products") {
+      for (const l of input.cart.lines) {
+        if (l.merchandise.__typename !== "ProductVariant") continue;
+        if (productPoolJSON?.include_variant_ids?.includes(l.merchandise.id)) {
+          lineQuantityMap.set("totalQuantity", (lineQuantityMap.get("totalQuantity") ?? 0) + l.quantity);
+        }
+      }
+    }
   }
+
 
   //轮询购物车每个item
   for (const line of input.cart.lines) {
     if (line.merchandise.__typename !== "ProductVariant") continue;
 
-    //初始化折扣规则数据
-    let appliedRule: any = null;
+    const variantId = line.merchandise.id;
+    const variantIdWithoutGid = variantId.split("gid://shopify/ProductVariant/")[1].toString();
+    const productId = line.merchandise.product.id;
 
-    const productDiscountData: productDiscountDataType =
-      input.discount as productDiscountDataType;
-
-    const basicInformation = productDiscountData.basicInformation?.value;
-    const discountRules = productDiscountData.discountRules?.value;
-    const styleConfig = productDiscountData.styleConfig?.value;
-    const targetingSettings = productDiscountData.targetingSettings?.value;
-    const productPool = productDiscountData.productPool?.value;
-
-    const discountRulesJSON = parseJSON<any>(discountRules);
-    const basicInformationJSON = parseJSON<any>(basicInformation);
-    const productPoolJSON = parseJSON<any>(productPool);
-
-    if (!discountRulesJSON) continue;
-
-    const variantIdStr = line.merchandise.id.split("gid://shopify/ProductVariant/")[1].toString();
-
-    if (Array.isArray(productPoolJSON?.include_variant_ids) && productPoolJSON?.include_variant_ids?.includes(variantIdStr)) {
+    if (Array.isArray(productPoolJSON?.include_variant_ids) && productPoolJSON?.include_variant_ids?.includes(variantIdWithoutGid)) {
       appliedRule = {
         typename: "RangeDiscountsType",
         ranges: discountRulesJSON.map((rule: any, index: number) => {
           return {
-            min: rule.trigger_scope.min_quantity,
-            max: discountRulesJSON[index + 1]?.trigger_scope?.min_quantity ? discountRulesJSON[index + 1]?.trigger_scope?.min_quantity : undefined,
+            min: rule.quantity,
+            max: discountRulesJSON[index + 1]?.quantity ? discountRulesJSON[index + 1]?.quantity : undefined,
             discountRate: rule.discount.value,
           }
         }),
       }
     }
+
+    if (!appliedRule) continue;
 
     //购物车此行产品数量quantity数据
     const quantity = line.quantity;
@@ -125,45 +147,45 @@ export function cartLinesDiscountsGenerateRun(
       case appliedRule?.typename == "RangeDiscountsType":
         const candidate1 = ruleAsRangeDiscountsTypeOperate({
           lineQuantityMap,
+          calculateRule: targetingSettingsJSON?.quantity_scope || "same_variant",
+          productId,
           rule: appliedRule,
           quantity,
           unitPriceCents,
           lineId,
           message: basicInformationJSON.offerName,
         });
-
-        console.log("candidate1: ", candidate1);
 
         if (!candidate1) continue;
         productCandidates.push(candidate1);
         break;
 
-      case appliedRule?.typename == "WholeHouseRentalDiscountType":
-        const candidate2 = ruleAsWholeHouseRentalDiscountTypeOperate({
-          lineQuantityMap,
-          rule: appliedRule,
-          quantity,
-          unitPriceCents,
-          lineId,
-        });
-        if (!candidate2) continue;
-        productCandidates.push(candidate2);
-        break;
+      // case appliedRule?.typename == "WholeHouseRentalDiscountType":
+      //   const candidate2 = ruleAsWholeHouseRentalDiscountTypeOperate({
+      //     lineQuantityMap,
+      //     rule: appliedRule,
+      //     quantity,
+      //     unitPriceCents,
+      //     lineId,
+      //   });
+      //   if (!candidate2) continue;
+      //   productCandidates.push(candidate2);
+      //   break;
 
-      case appliedRule?.typename == "BundleDiscountType":
-        const variantId = line.merchandise.id;
+      // case appliedRule?.typename == "BundleDiscountType":
+      //   const variantId = line.merchandise.id;
 
-        const candidate3 = ruleAsBundleDiscountTypeOperate({
-          lineQuantityMap,
-          rule: appliedRule,
-          unitPriceCents,
-          lineId,
-          variantId,
-          message: basicInformationJSON.offerName,
-        });
-        if (!candidate3) continue;
-        productCandidates.push(candidate3);
-        break;
+      //   const candidate3 = ruleAsBundleDiscountTypeOperate({
+      //     lineQuantityMap,
+      //     rule: appliedRule,
+      //     unitPriceCents,
+      //     lineId,
+      //     variantId,
+      //     message: basicInformationJSON.offerName,
+      //   });
+      //   if (!candidate3) continue;
+      //   productCandidates.push(candidate3);
+      //   break;
 
       default:
         break;
@@ -285,6 +307,8 @@ const calculateRangeDiscountTotalCents = ({
 
 const ruleAsRangeDiscountsTypeOperate = ({
   lineQuantityMap,
+  calculateRule,
+  productId,
   rule,
   quantity,
   unitPriceCents,
@@ -292,6 +316,11 @@ const ruleAsRangeDiscountsTypeOperate = ({
   message,
 }: {
   lineQuantityMap: Map<string, number>;
+  calculateRule:
+  | "same_variant"     // 同商品同变体
+  | "same_product"     // 同商品不同变体
+  | "cross_products";  // 跨商品
+  productId: string;
   rule: RangeDiscountsType;
   quantity: number;
   unitPriceCents: number;
@@ -299,16 +328,16 @@ const ruleAsRangeDiscountsTypeOperate = ({
   message: string;
 }): ProductDiscountCandidate | null => {
   try {
-    // 合并计算其他变体数量
-    if (rule?.calculateQuantityWithVariantsArray?.length) {
-      for (const id of rule.calculateQuantityWithVariantsArray) {
-        quantity += lineQuantityMap.get(id) ?? 0;
-      }
+    console.log("lineQuantityMap: ", JSON.stringify(lineQuantityMap));
+
+    if (calculateRule == "same_variant") {
+    } else if (calculateRule == "same_product") {
+      quantity = lineQuantityMap.get(productId) ?? 0;
+    } else if (calculateRule == "cross_products") {
+      quantity = lineQuantityMap.get("totalQuantity") ?? 0;
     }
 
     if (quantity <= 0) return null;
-
-    console.log("quantity: ", quantity);
 
     const totalDiscountCents = calculateRangeDiscountTotalCents({
       quantity,

@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, Copy, Trash2 } from "lucide-react";
-import { DiscountRulesType, ProductVariantsDataType, StyleConfigType } from "../route";
-import { Button, Checkbox, Flex, Input, InputNumber, Statistic } from "antd";
+import { DiscountRulesType, ProductVariantsDataType, StyleConfigType, TargetingSettingsType } from "../route";
+import { Button, Checkbox, Flex, Input, InputNumber, Select, Space, Statistic } from "antd";
 import { useEffect, useMemo, useRef } from "react";
 
 const { Timer } = Statistic;
@@ -11,6 +11,8 @@ interface ProductsAndDiscountsSettingProps {
     setMainModalType: (modalType: "ProductVariants" | "EditProductVariants" | null) => void;
     discountRules: DiscountRulesType[];
     styleConfigData: StyleConfigType;
+    targetingSettingsData: TargetingSettingsType;
+    setTargetingSettingsData: (data: TargetingSettingsType) => void;
     setDiscountRules: (rules: DiscountRulesType[]) => void;
     selectedRuleIndex: number | null;
     setSelectedRuleIndex: (rule: number | null) => void;
@@ -27,6 +29,8 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
     setMainModalType,
     discountRules,
     styleConfigData,
+    targetingSettingsData,
+    setTargetingSettingsData,
     setDiscountRules,
     selectedRuleIndex,
     setSelectedRuleIndex,
@@ -35,23 +39,34 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
     const ruleContainerRefs = useRef<Record<number, HTMLDivElement | null>>({});
     const prevLengthRef = useRef(discountRules.length);
 
-    const switchDefaultSelectedItem = (e: number) => {
-        const data = discountRules.map((rule) => {
-            if (rule?.id == e) {
-                rule.selectedByDefault = true;
-            } else {
-                rule.selectedByDefault = false;
-            }
-            return rule;
-        })
+    const defaultRuleOptions = useMemo(() => {
+        return discountRules.map((rule) => ({
+            value: rule.id,
+            label: rule.title,
+        }))
+    }, [discountRules])
 
-        setDiscountRules(data);
-    };
+    const selectedDefaultRuleOption = useMemo(() => {
+        const selectedRule = discountRules.find((rule) => rule.id == selectedRuleIndex) || discountRules.find((rule) => rule.selectedByDefault)
+        return selectedRule?.id;
+    }, [discountRules, selectedRuleIndex])
 
-    useEffect(() => {
-        console.log(selectedRuleIndex);
-
-    }, [selectedRuleIndex]);
+    const quantityScopeOptions = useMemo(() => {
+        return [
+            {
+                value: "same_variant",
+                label: "Same variant",
+            },
+            {
+                value: "same_product",
+                label: "Same product",
+            },
+            {
+                value: "cross_products",
+                label: "Cross products",
+            },
+        ]
+    }, [])
 
     useEffect(() => {
         if (discountRules.length > prevLengthRef.current) {
@@ -69,14 +84,27 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
         prevLengthRef.current = discountRules.length;
     }, [discountRules.length]);
 
+    const handleDefaultSelectChange = (value: number) => {
+        const data = discountRules.map((rule) => {
+            if (rule?.id == value) {
+                rule.selectedByDefault = true;
+            } else {
+                rule.selectedByDefault = false;
+            }
+            return rule;
+        })
+        setSelectedRuleIndex(null)
+        setDiscountRules(data);
+    };
+
     return (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 400px', gap: '24px', alignItems: 'start' }}>
             {/* Left Column - Form */}
-            <div>
-                <h2 className="polaris-text-heading-md" style={{ marginBottom: '16px' }}>Products & Discounts</h2>
+            <Space vertical size={"large"}>
+                <h2 className="polaris-text-heading-md" >Products & Discounts</h2>
 
                 {/* Product Selection Section */}
-                <div style={{ marginBottom: '32px' }}>
+                <div>
                     <h3 style={{ fontSize: '14px', fontWeight: 500, marginBottom: '12px' }}>Products eligible for offer</h3>
 
                     <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
@@ -119,6 +147,30 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                             View selected({selectedProducts.length})
                         </Button>}
                     </Flex>
+                </div>
+
+                <div>
+                    <h3 style={{ fontSize: '14px', fontWeight: 500, marginBottom: '12px' }}>Selected by default</h3>
+                    <Select
+                        options={defaultRuleOptions}
+                        value={selectedDefaultRuleOption}
+                        onChange={(e) => handleDefaultSelectChange(e)}
+                        style={{
+                            width: '100%',
+                        }}
+                    />
+                </div>
+
+                <div>
+                    <h3 style={{ fontSize: '14px', fontWeight: 500, marginBottom: '12px' }}>Quantity scope</h3>
+                    <Select
+                        options={quantityScopeOptions}
+                        value={targetingSettingsData.quantity_scope}
+                        onChange={(e) => setTargetingSettingsData({ ...targetingSettingsData, quantity_scope: e })}
+                        style={{
+                            width: '100%',
+                        }}
+                    />
                 </div>
 
                 {/* Discount Rules Section */}
@@ -228,10 +280,10 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                                                 {/* <span style={{ fontSize: '14px', fontWeight: 500 }}>Buy</span> */}
                                                 <InputNumber
                                                     min={1}
-                                                    value={rule.trigger_scope.min_quantity}
+                                                    value={rule.quantity}
                                                     onChange={(value) => {
                                                         const newRules = [...discountRules];
-                                                        newRules[index].trigger_scope.min_quantity = value || 0;
+                                                        newRules[index].quantity = value || 0;
                                                         setDiscountRules(newRules);
                                                     }}
                                                     style={{
@@ -389,18 +441,7 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                                         />
                                     </div>
 
-                                    <div style={{ marginBottom: '16px' }}>
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                                            <Checkbox
-                                                checked={rule.selectedByDefault}
-                                                onChange={() => {
-                                                    switchDefaultSelectedItem(rule.id)
-                                                    setSelectedRuleIndex(null)
-                                                }}
-                                            />
-                                            <span style={{ fontSize: '14px' }}>Selected by default</span>
-                                        </label>
-                                    </div>
+
                                 </div>
                             )}
                         </div>
@@ -413,10 +454,7 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                                 id: Date.now(),
                                 enabled: true,
                                 isExpanded: true,
-                                trigger_scope: {
-                                    quantity_scope: "same_variant",
-                                    min_quantity: discountRules.length + 1,
-                                },
+                                quantity: discountRules.length + 1,
                                 discount: {
                                     type: "percentage",
                                     value: 0.9,
@@ -447,7 +485,7 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                         + Add discount rule
                     </button>
                 </div>
-            </div>
+            </Space>
 
             {/* Right Column - Preview */}
             <div style={{ position: 'sticky', top: '24px' }}>
@@ -527,7 +565,7 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                                             <input
                                                 type="radio"
                                                 name="discount-rule-group"
-                                                value={rule.trigger_scope.min_quantity}
+                                                value={rule.quantity}
                                                 checked={selectedRuleIndex === null ? rule.selectedByDefault : selectedRuleIndex === index}
                                                 readOnly
                                                 style={{ width: '16px', height: '16px' }}
@@ -554,7 +592,7 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                                             {
                                                 rule.discount.value === 1 && (
                                                     <div style={{ textAlign: 'right' }}>
-                                                        <strong style={{ fontSize: '16px' }}>€{Number(rule.trigger_scope.min_quantity * previewPrice).toFixed(2)}</strong>
+                                                        <strong style={{ fontSize: '16px' }}>€{Number(rule.quantity * previewPrice).toFixed(2)}</strong>
                                                     </div>
                                                 )
                                             }
@@ -569,8 +607,8 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                                                 (rule.discount.value > 0 && rule.discount.value < 1
                                                 ) && (
                                                     <div style={{ textAlign: 'right' }}>
-                                                        <strong style={{ fontSize: '16px' }}>€{Number(rule.trigger_scope.min_quantity * previewPrice * rule.discount.value).toFixed(2)}</strong>
-                                                        <div style={{ fontSize: '12px', color: '#6d7175', textDecoration: 'line-through' }}>€{Number(rule.trigger_scope.min_quantity * previewPrice).toFixed(2)}</div>
+                                                        <strong style={{ fontSize: '16px' }}>€{Number(rule.quantity * previewPrice * rule.discount.value).toFixed(2)}</strong>
+                                                        <div style={{ fontSize: '12px', color: '#6d7175', textDecoration: 'line-through' }}>€{Number(rule.quantity * previewPrice).toFixed(2)}</div>
                                                     </div>
                                                 )
                                             }

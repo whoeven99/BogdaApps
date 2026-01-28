@@ -43,13 +43,7 @@ export interface DiscountRulesType {
     enabled: boolean;
     isExpanded: boolean;
     title: string;
-    trigger_scope: {
-        quantity_scope:
-        | "same_variant"     // 同商品同变体
-        | "same_product"     // 同商品不同变体
-        | "cross_products";  // 跨商品
-        min_quantity: number;
-    };
+    quantity: number;
     discount: {
         type: "percentage" | "amount"
         value: number;
@@ -118,6 +112,10 @@ export interface StyleConfigType {
 }
 
 export interface TargetingSettingsType {
+    quantity_scope:
+    | "same_variant"     // 同商品同变体
+    | "same_product"     // 同商品不同变体
+    | "cross_products";  // 跨商品
     marketVisibilitySettingData: string[];
     visibilityConstraints: {
         maxDiscountAmount: number;
@@ -598,10 +596,7 @@ const Index = () => {
             id: Date.now(),
             enabled: true,
             isExpanded: true,
-            trigger_scope: {
-                quantity_scope: "same_variant",
-                min_quantity: 1,
-            },
+            quantity: 1,
             discount: {
                 type: "percentage",
                 value: 1,
@@ -620,10 +615,7 @@ const Index = () => {
             id: Date.now() + 1,
             enabled: true,
             isExpanded: true,
-            trigger_scope: {
-                quantity_scope: "same_variant",
-                min_quantity: 2,
-            },
+            quantity: 2,
             discount: {
                 type: "percentage",
                 value: 0.8,
@@ -667,6 +659,7 @@ const Index = () => {
     })
 
     const [targetingSettingsData, setTargetingSettingsData] = useState<TargetingSettingsType>({
+        quantity_scope: "same_variant",
         marketVisibilitySettingData: [],
         visibilityConstraints: {
             maxDiscountAmount: 100,
@@ -863,7 +856,7 @@ const Index = () => {
                     shopify.toast.show(t("Please select at least one discount rule"))
                     break;
                 }
-                if (discountRules.some(rule => rule.trigger_scope.min_quantity == 0)) {
+                if (discountRules.some(rule => rule.quantity == 0)) {
                     shopify.toast.show(t("Buy quantity can't be 0"))
                     break;
                 }
@@ -1206,6 +1199,8 @@ const Index = () => {
                                     setMainModalType={setMainModalType}
                                     discountRules={discountRules}
                                     styleConfigData={styleConfigData}
+                                    targetingSettingsData={targetingSettingsData}
+                                    setTargetingSettingsData={setTargetingSettingsData}
                                     setDiscountRules={setDiscountRules}
                                     selectedRuleIndex={selectedRuleIndex}
                                     setSelectedRuleIndex={setSelectedRuleIndex}
