@@ -890,10 +890,17 @@ const Index = () => {
     }
 
     const handleConfirm = () => {
+        const id = Date.now()
+
+        let newBasicInformation = {
+            ...basicInformation,
+            offerName: basicInformation?.offerName ? basicInformation?.offerName : `#Bundle ${id}`,
+        }
+
         const selectedProductVariantIds = selectedProducts.map((product) => product.id.split("gid://shopify/ProductVariant/")[1]);
 
         const metafieldValue = {
-            basic_information: basicInformation,
+            basic_information: newBasicInformation,
             discount_rules: discountRules,
             style_config: styleConfigData,
             targeting_settings: {
@@ -910,8 +917,6 @@ const Index = () => {
                 include_collection_ids: null,
             }
         }
-
-        const id = Date.now()
 
         if (discountGid) {
             const discountAutomaticAppUpdateAndMetafieldsSetRequestJsondata = {
@@ -935,7 +940,7 @@ const Index = () => {
                         namespace: "ciwi_bundles_config",
                         ownerId: discountGid,
                         type: "json",
-                        value: JSON.stringify(basicInformation)
+                        value: JSON.stringify(newBasicInformation)
                     },
                     {
                         key: `discount_rules`,
@@ -985,7 +990,7 @@ const Index = () => {
                 discountAutomaticAppUpdateAndMetafieldsSetRequestBody:
                     JSON.stringify({
                         discountAutomaticAppUpdateAndMetafieldsSetRequestJsondata,
-                        basic_information: basicInformation,
+                        basic_information: newBasicInformation,
                         discount_rules: discountRules,
                         style_config: styleConfigData,
                         targeting_settings: {
@@ -1022,7 +1027,7 @@ const Index = () => {
                             key: `basic_information`,
                             namespace: "ciwi_bundles_config",
                             type: "json",
-                            value: JSON.stringify(basicInformation)
+                            value: JSON.stringify(newBasicInformation)
                         },
                         {
                             key: `discount_rules`,
@@ -1090,8 +1095,7 @@ const Index = () => {
                             include_collection_ids: null,
                         },
                         metafields: {
-                            key: `ciwi_bundles_config_${Date.now()
-                                } `,
+                            key: `ciwi_bundles_config_${id}`,
                             namespace: "ciwi_bundles_config",
                             ownerId: "",
                         },
