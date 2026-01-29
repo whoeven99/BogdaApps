@@ -402,10 +402,10 @@ const Index = () => {
                     name: item?.basic_information?.displayName,
                     status: item?.status,
                     metafields: item?.metafields,
-                    gmv: "",
-                    conversion: "",
-                    exposurePV: "",
-                    addToCartPV: "",
+                    gmv: 0,
+                    conversion: 0,
+                    exposurePV: 0,
+                    addToCartPV: 0,
                 }
             ))
             dispatch(setOffersData(data));
@@ -422,13 +422,14 @@ const Index = () => {
             const o = getAllUserDiscount.response?.myOffers
             if (Array.isArray(o) && o.length > 0) {
                 data = data?.map((item: any) => {
-                    const offer = o.find((offer: any) => offer.discountGid === item.discountGid)
+                    const offer = o.find((offer: any) => offer.discountId === item.id)
+
                     return {
                         ...item,
-                        gmv: offer?.gmv || "",
-                        conversion: offer?.conversion || "",
-                        exposurePV: offer?.exposurePv || "",
-                        addToCartPV: offer?.addToCartPv || "",
+                        gmv: offer?.gmv || 0,
+                        conversion: offer?.conversion || 0,
+                        exposurePV: offer?.exposurePv || 0,
+                        addToCartPV: offer?.addToCartPv || 0,
                     }
                 })
             }
@@ -819,7 +820,7 @@ const Index = () => {
                                         {offer.addToCartPV}
                                     </td>
                                     <td className="!p-[12px] !border-b !border-[#dfe3e8] !font-['Inter'] !font-normal !text-[14px] !leading-[22.4px] !text-[#202223] !tracking-[-0.1504px]">
-                                        {offer.gmv}
+                                        ${offer.gmv}
                                     </td>
                                     <td className="!p-[12px] !border-b !border-[#dfe3e8] !font-['Inter'] !font-normal !text-[14px] !leading-[22.4px] !text-[#202223] !tracking-[-0.1504px]">
                                         {offer.conversion}
@@ -916,7 +917,7 @@ const Index = () => {
                                     <div>
                                         <div className="text-[12px] text-[#6d7175] mb-[4px]">GMV</div>
                                         <div className="text-[14px] font-medium text-[#202223]">
-                                            {offer.gmv}
+                                            ${offer.gmv}
                                         </div>
                                     </div>
                                     <div>

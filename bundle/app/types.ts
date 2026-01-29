@@ -3,8 +3,8 @@ export interface OfferType {
     name: string;
     status: string;
     metafields: any;
-    gmv: string;
-    conversion: string;
-    exposurePV: string;
-    addToCartPV: string;
+    gmv: number;
+    conversion: number;
+    exposurePV: number;
+    addToCartPV: number;
 }

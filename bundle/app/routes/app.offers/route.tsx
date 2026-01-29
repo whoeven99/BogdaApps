@@ -5,7 +5,7 @@ import { OfferType } from 'app/types';
 import { useDispatch, useSelector } from 'react-redux';
 import { Button, Modal, Space, Spin, Switch, Typography } from 'antd';
 import { useTranslation } from 'react-i18next';
-import { BatchQueryUserDiscount } from 'app/api/javaServer';
+import { BatchQueryUserDiscount, GetAllUserDiscount } from 'app/api/javaServer';
 import { globalStore } from 'app/globalStore';
 import { setOffersData } from 'app/store/modules/offersData';
 
@@ -86,27 +86,52 @@ const Index = () => {
   }, [discountNodeDeleteFetcher.data]);
 
   const batchQueryUserDiscount = useCallback(async () => {
+    let data: OfferType[] = []
     const batchQueryUserDiscountData = await BatchQueryUserDiscount({
       shopName: globalStore.shop,
       server: globalStore.server,
     });
 
     if (batchQueryUserDiscountData.success) {
-      const data = batchQueryUserDiscountData.response?.map((item: any) => (
+      data = batchQueryUserDiscountData.response?.map((item: any) => (
         {
           id: item?.discountGid,
           name: item?.basic_information?.displayName,
           status: item?.status,
           metafields: item?.metafields,
-          gmv: "",
-          conversion: "",
-          exposurePV: "",
-          addToCartPV: "",
+          gmv: 0,
+          conversion: 0,
+          exposurePV: 0,
+          addToCartPV: 0,
         }
       ))
       dispatch(setOffersData(data));
     }
-    setPageLoadingArr([]);
+
+    setPageLoadingArr((prev) => prev.filter((item) => item !== "offersData"));
+
+    const getAllUserDiscount = await GetAllUserDiscount({
+      shopName: globalStore.shop,
+      server: globalStore.server,
+    });
+
+    if (getAllUserDiscount.success) {
+      const o = getAllUserDiscount.response?.myOffers
+      if (Array.isArray(o) && o.length > 0) {
+        data = data?.map((item: any) => {
+          const offer = o.find((offer: any) => offer.discountId === item.id)
+
+          return {
+            ...item,
+            gmv: offer?.gmv || 0,
+            conversion: offer?.conversion || 0,
+            exposurePV: offer?.exposurePv || 0,
+            addToCartPV: offer?.addToCartPv || 0,
+          }
+        })
+      }
+      dispatch(setOffersData(data));
+    }
   }, [globalStore.shop, globalStore.server]);
 
   const switchDiscountStatus = (

@@ -160,10 +160,10 @@ export default function App() {
           name: item?.basic_information?.displayName,
           status: item?.status,
           metafields: item?.metafields,
-          gmv: "",
-          conversion: "",
-          exposurePV: "",
-          addToCartPV: "",
+          gmv: 0,
+          conversion: 0,
+          exposurePV: 0,
+          addToCartPV: 0,
         }
       ))
       dispatch(setOffersData(data));
