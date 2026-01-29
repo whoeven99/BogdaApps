@@ -62,10 +62,10 @@ const BasicInformationSetting: React.FC<BasicInformationSettingProps> = ({
                             onChange={(e) => {
                                 setBasicInformation({
                                     ...basicInformation,
-                                    offerName: e.target.value
+                                    displayName: e.target.value
                                 })
                             }}
-                            value={basicInformation.offerName}
+                            value={basicInformation.displayName}
                         />
                     </Flex>
 

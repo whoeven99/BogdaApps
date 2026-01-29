@@ -154,7 +154,7 @@ export function cartLinesDiscountsGenerateRun(
           quantity,
           unitPriceCents,
           lineId,
-          message: basicInformationJSON.offerName,
+          message: basicInformationJSON.displayName,
         });
 
         if (!candidate1) continue;
@@ -182,7 +182,7 @@ export function cartLinesDiscountsGenerateRun(
       //     unitPriceCents,
       //     lineId,
       //     variantId,
-      //     message: basicInformationJSON.offerName,
+      //     message: basicInformationJSON.displayName,
       //   });
       //   if (!candidate3) continue;
       //   productCandidates.push(candidate3);

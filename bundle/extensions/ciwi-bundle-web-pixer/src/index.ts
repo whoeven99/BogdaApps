@@ -67,7 +67,7 @@ register(({ analytics, browser, init, settings }) => {
     console.log('Checkout completed', JSON.stringify(event));
     WebpixerToAli({
       server,
-      event: "checkout_started",
+      event: "checkout_completed",
       shopName,
       clientId: event.clientId,
       extra: JSON.stringify({

@@ -6,12 +6,14 @@ import { NavMenu } from "@shopify/app-bridge-react";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 
 import { authenticate } from "../shopify.server";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ConfigProvider, Flex, Spin } from "antd";
 import { useTranslation } from "react-i18next";
 import { globalStore } from "app/globalStore";
 import { mutationWebPixelCreate, queryShop, queryWebpixer } from "app/api/admin";
-import { InitUser } from "app/api/javaServer";
+import { BatchQueryUserDiscount, InitUser } from "app/api/javaServer";
+import { setOffersData } from "app/store/modules/offersData";
+import { useDispatch } from "react-redux";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
@@ -129,6 +131,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 export default function App() {
   const { apiKey, shop, server } = useLoaderData<typeof loader>();
   const { t } = useTranslation();
+  const dispatch = useDispatch();
 
   const initFetcher = useFetcher<any>();
   const webpixerInitFetcher = useFetcher<any>();
@@ -138,9 +141,33 @@ export default function App() {
   useEffect(() => {
     globalStore.shop = shop;
     globalStore.server = server;
+    batchQueryUserDiscount()
     initFetcher.submit({ shopRequestBody: JSON.stringify({}) }, { method: "POST" });
     webpixerInitFetcher.submit({ webpixerRequestBody: JSON.stringify({}) }, { method: "POST" });
     setIsClient(true);
+  }, []);
+
+  const batchQueryUserDiscount = useCallback(async () => {
+    const batchQueryUserDiscountData = await BatchQueryUserDiscount({
+      shopName: shop,
+      server: server,
+    });
+
+    if (batchQueryUserDiscountData.success) {
+      const data = batchQueryUserDiscountData.response?.map((item: any) => (
+        {
+          id: item?.discountGid,
+          name: item?.basic_information?.displayName,
+          status: item?.status,
+          metafields: item?.metafields,
+          gmv: "",
+          conversion: "",
+          exposurePV: "",
+          addToCartPV: "",
+        }
+      ))
+      dispatch(setOffersData(data));
+    }
   }, []);
 
   return (

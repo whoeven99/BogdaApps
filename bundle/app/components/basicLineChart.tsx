@@ -14,7 +14,7 @@ echarts.use([
 
 interface BasicLineChartProps {
     Xdata: string[];
-    Ydata: number[];
+    Ydata: string[];
 }
 
 const BasicLineChart: React.FC<BasicLineChartProps> = ({ Xdata, Ydata }) => {

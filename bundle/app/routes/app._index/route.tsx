@@ -10,7 +10,7 @@ import { mutationDiscountAutomaticActivate, mutationDiscountAutomaticDeactivate,
 import { globalStore } from "app/globalStore";
 import { useTranslation } from "react-i18next";
 import { Button, Modal, Space, Spin, Switch, Typography } from "antd";
-import { BatchQueryUserDiscount, DeleteUserDiscount, GetGMVData, UpdateUserDiscountStatus } from "app/api/javaServer";
+import { BatchQueryUserDiscount, BundleOrdersByTimeAndShopName, DeleteUserDiscount, GetAllUserDiscount, GetAvgConversion, GetTotalGMV, GetTotalGMVIndicator, UpdateUserDiscountStatus } from "app/api/javaServer";
 import { useDispatch, useSelector } from "react-redux";
 import { OfferType } from "app/types";
 import { setOffersData } from "app/store/modules/offersData";
@@ -20,8 +20,8 @@ const { Text } = Typography;
 interface GMVDataType {
     totalGmv: number;
     gmvGrowthRate: number;
-    activeOffers: number;
-    newOffersThisWeek: number;
+    bundleOrders: number;
+    bundleOrdersGrowthRate: number;
     avgConversionRate: number;
     conversionTrend: number;
 }
@@ -221,12 +221,12 @@ const Index = () => {
 
     const { ciwiBundleExtensionId, ciwiBundleExtensionType } = useLoaderData<typeof loader>();
 
-    const [gmvData, setGmvData] = useState<GMVDataType>({
-        totalGmv: 125430,
-        gmvGrowthRate: 15.2,
-        activeOffers: 24,
-        newOffersThisWeek: 3,
-        avgConversionRate: 2.8,
+    const [overviewData, setOverviewData] = useState<GMVDataType>({
+        totalGmv: 0,
+        gmvGrowthRate: 0,
+        bundleOrders: 0,
+        bundleOrdersGrowthRate: 0,
+        avgConversionRate: 0,
         conversionTrend: 0
     });
 
@@ -311,7 +311,10 @@ const Index = () => {
                 method: "POST",
             },
         );
-        getGMVData();
+        getTotalGMV();
+        getTotalGMVIndicator();
+        bundleOrdersByTimeAndShopName();
+        getAvgConversion();
         setTimeout(() => {
             batchQueryUserDiscount();
         }, 2000);
@@ -386,16 +389,17 @@ const Index = () => {
     }, [discountNodeDeleteFetcher.data]);
 
     const batchQueryUserDiscount = useCallback(async () => {
+        let data: OfferType[] = []
         const batchQueryUserDiscountData = await BatchQueryUserDiscount({
             shopName: globalStore.shop,
             server: globalStore.server,
         });
 
         if (batchQueryUserDiscountData.success) {
-            const data = batchQueryUserDiscountData.response?.map((item: any) => (
+            data = batchQueryUserDiscountData.response?.map((item: any) => (
                 {
                     id: item?.discountGid,
-                    name: item?.basic_information?.offerName,
+                    name: item?.basic_information?.displayName,
                     status: item?.status,
                     metafields: item?.metafields,
                     gmv: "",
@@ -406,18 +410,91 @@ const Index = () => {
             ))
             dispatch(setOffersData(data));
         }
-        setPageLoadingArr((prev) => prev.filter((item) => item !== "offersData"));
-    }, [globalStore.shop, globalStore.server]);
 
-    const getGMVData = useCallback(async () => {
-        const getGMVData = await GetGMVData({
+        setPageLoadingArr((prev) => prev.filter((item) => item !== "offersData"));
+
+        const getAllUserDiscount = await GetAllUserDiscount({
             shopName: globalStore.shop,
             server: globalStore.server,
         });
 
-        if (getGMVData.success) {
-            const data = JSON.parse(getGMVData.response);
+        if (getAllUserDiscount.success) {
+            const o = getAllUserDiscount.response?.myOffers
+            if (Array.isArray(o) && o.length > 0) {
+                data = data?.map((item: any) => {
+                    const offer = o.find((offer: any) => offer.discountGid === item.discountGid)
+                    return {
+                        ...item,
+                        gmv: offer?.gmv || "",
+                        conversion: offer?.conversion || "",
+                        exposurePV: offer?.exposurePv || "",
+                        addToCartPV: offer?.addToCartPv || "",
+                    }
+                })
+            }
             dispatch(setOffersData(data));
+        }
+    }, [globalStore.shop, globalStore.server]);
+
+    const getTotalGMV = useCallback(async () => {
+        const getTotalGMV = await GetTotalGMV({
+            shopName: globalStore.shop,
+            server: globalStore.server,
+        });
+
+        if (getTotalGMV.success) {
+            setOverviewData((prev) => ({
+                ...prev,
+                totalGmv: getTotalGMV?.response?.totalGMV || 0,
+            }))
+        }
+        setPageLoadingArr((prev) => prev.filter((item) => item !== "gmvData"));
+    }, [globalStore.shop, globalStore.server]);
+
+    const getTotalGMVIndicator = useCallback(async () => {
+        const getTotalGMVIndicator = await GetTotalGMVIndicator({
+            shopName: globalStore.shop,
+            server: globalStore.server,
+        });
+
+        if (getTotalGMVIndicator.success) {
+            setOverviewData((prev) => ({
+                ...prev,
+                gmvGrowthRate: getTotalGMVIndicator?.response?.gmvIndicator || 0,
+            }))
+        }
+        setPageLoadingArr((prev) => prev.filter((item) => item !== "gmvData"));
+    }, [globalStore.shop, globalStore.server]);
+
+    const bundleOrdersByTimeAndShopName = useCallback(async () => {
+        const bundleOrdersByTimeAndShopName = await BundleOrdersByTimeAndShopName({
+            shopName: globalStore.shop,
+            server: globalStore.server,
+            day: 60,
+        });
+
+        if (bundleOrdersByTimeAndShopName.success) {
+            setOverviewData((prev) => ({
+                ...prev,
+                bundleOrders: bundleOrdersByTimeAndShopName?.response?.bundleOrders || 0,
+                bundleOrdersGrowthRate: bundleOrdersByTimeAndShopName?.response?.bundleOrdersIndicator || 0,
+            }))
+        }
+        setPageLoadingArr((prev) => prev.filter((item) => item !== "gmvData"));
+    }, [globalStore.shop, globalStore.server]);
+
+    const getAvgConversion = useCallback(async () => {
+        const getAvgConversion = await GetAvgConversion({
+            shopName: globalStore.shop,
+            server: globalStore.server,
+        });
+
+        if (getAvgConversion.success) {
+            setOverviewData((prev) => ({
+                ...prev,
+                avgConversionRate: getAvgConversion?.response?.avgConversion?.toFixed(2) || 0,
+                conversionTrend: getAvgConversion?.response?.avgConversionIndicator || 0,
+            }))
         }
         setPageLoadingArr((prev) => prev.filter((item) => item !== "gmvData"));
     }, [globalStore.shop, globalStore.server]);
@@ -510,33 +587,43 @@ const Index = () => {
                         </Button>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-[16px] sm:gap-[20px]">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-[16px] sm:gap-[20px]">
                         {/* Total GMV */}
                         <div className="!flex !flex-col !gap-[16px]">
                             <span className="!font-['Inter'] !font-normal !text-[14px] !leading-[22.4px] !text-[#6d7175] !tracking-[-0.1504px]">
                                 Total GMV
                             </span>
                             <h3 className="!font-['Inter'] !font-semibold !text-[28px] !leading-[42px] !text-[#202223] !tracking-[0.3828px] !m-0">
-                                ${gmvData.totalGmv.toLocaleString()}
+                                ${overviewData.totalGmv.toLocaleString()}
                             </h3>
-                            <span className="!font-['Inter'] !font-normal !text-[14px] !leading-[22.4px] !text-[#108043] !tracking-[-0.1504px]">
+                            <span
+                                className="!font-['Inter'] !font-normal !text-[14px] !leading-[22.4px] !tracking-[-0.1504px]"
+                                style={{
+                                    color: overviewData.gmvGrowthRate === 0 ? "#916a00" : overviewData.gmvGrowthRate > 0 ? "#108043" : "#D93025",
+                                }}
+                            >
                                 {/* ↑ +{gmvData.gmvGrowthRate}% from last month */}
-                                {gmvData.gmvGrowthRate === 0 ? t("→ No change") : t(`${gmvData.gmvGrowthRate > 0 ? "↑ +" : "↓ -"}${gmvData.gmvGrowthRate}% from last month`)}
+                                {overviewData.gmvGrowthRate === 0 ? t("→ No change") : t(`${overviewData.gmvGrowthRate > 0 ? "↑ +" : "↓ -"}${overviewData.gmvGrowthRate}% from last month`)}
                             </span>
                         </div>
 
                         {/* Active Offers */}
-                        {/* <div className="!flex !flex-col !gap-[16px]">
+                        <div className="!flex !flex-col !gap-[16px]">
                             <span className="!font-['Inter'] !font-normal !text-[14px] !leading-[22.4px] !text-[#6d7175] !tracking-[-0.1504px]">
-                                Active Offers
+                                Bundle Orders
                             </span>
                             <h3 className="!font-['Inter'] !font-semibold !text-[28px] !leading-[42px] !text-[#202223] !tracking-[0.3828px] !m-0">
-                                {gmvData.activeOffers}
+                                {overviewData.bundleOrders}
                             </h3>
-                            <span className="!font-['Inter'] !font-normal !text-[14px] !leading-[22.4px] !text-[#108043] !tracking-[-0.1504px]">
-                                {gmvData.newOffersThisWeek === 0 ? t("→ No change") : t(`${gmvData.newOffersThisWeek > 0 ? "↑ +" : "↓ -"}${gmvData.newOffersThisWeek} new this week`)}
+                            <span
+                                className="!font-['Inter'] !font-normal !text-[14px] !leading-[22.4px] !tracking-[-0.1504px]"
+                                style={{
+                                    color: overviewData.bundleOrdersGrowthRate === 0 ? "#916a00" : overviewData.bundleOrdersGrowthRate > 0 ? "#108043" : "#D93025",
+                                }}
+                            >
+                                {overviewData.bundleOrdersGrowthRate === 0 ? t("→ No change") : t(`${overviewData.bundleOrdersGrowthRate > 0 ? "↑ +" : "↓ -"}${overviewData.bundleOrdersGrowthRate}% from last month`)}
                             </span>
-                        </div> */}
+                        </div>
 
                         {/* Avg. Conversion */}
                         <div className="!flex !flex-col !gap-[16px]">
@@ -544,10 +631,15 @@ const Index = () => {
                                 Avg. Conversion
                             </span>
                             <h3 className="!font-['Inter'] !font-semibold !text-[28px] !leading-[42px] !text-[#202223] !tracking-[0.3828px] !m-0">
-                                {gmvData.avgConversionRate}%
+                                {overviewData.avgConversionRate}%
                             </h3>
-                            <span className="!font-['Inter'] !font-normal !text-[14px] !leading-[22.4px] !text-[#916a00] !tracking-[-0.1504px]">
-                                {gmvData.conversionTrend === 0 ? t("→ No change") : t(`${gmvData.conversionTrend > 0 ? "↑ +" : "↓ -"}${gmvData.conversionTrend}% from last month`)}
+                            <span
+                                className="!font-['Inter'] !font-normal !text-[14px] !leading-[22.4px] !tracking-[-0.1504px]"
+                                style={{
+                                    color: overviewData.conversionTrend === 0 ? "#916a00" : overviewData.conversionTrend > 0 ? "#108043" : "#D93025",
+                                }}
+                            >
+                                {overviewData.conversionTrend === 0 ? t("→ No change") : t(`${overviewData.conversionTrend > 0 ? "↑ +" : "↓ -"}${overviewData.conversionTrend}% from last month`)}
                             </span>
                         </div>
                     </div>

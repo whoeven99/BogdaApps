@@ -95,7 +95,7 @@ const Index = () => {
       const data = batchQueryUserDiscountData.response?.map((item: any) => (
         {
           id: item?.discountGid,
-          name: item?.basic_information?.offerName,
+          name: item?.basic_information?.displayName,
           status: item?.status,
           metafields: item?.metafields,
           gmv: "",

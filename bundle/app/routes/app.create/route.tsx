@@ -25,6 +25,7 @@ export interface ProductVariantsDataType {
 
 export interface BasicInformationType {
     offerName: string;
+    displayName: string;
     offerType: {
         category: string;
         subtype:
@@ -586,7 +587,8 @@ const Index = () => {
     const [selectedRuleIndex, setSelectedRuleIndex] = useState<number | null>(null);
 
     const [basicInformation, setBasicInformation] = useState<BasicInformationType>({
-        offerName: `#Bundle ${Date.now()}`,
+        offerName: "",
+        displayName: `#Bundle ${Date.now()}`,
         offerType: {
             category: "product",
             subtype: "quantity-breaks-same"
@@ -843,7 +845,7 @@ const Index = () => {
     const nextStepCheckAndConfirm = () => {
         switch (true) {
             case step == 1:
-                if (!basicInformation?.offerName) {
+                if (!basicInformation?.displayName) {
                     shopify.toast.show(t("Offer Name can't be empty"))
                     break;
                 }

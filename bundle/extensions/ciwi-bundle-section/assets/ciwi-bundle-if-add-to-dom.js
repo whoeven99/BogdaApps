@@ -135,8 +135,6 @@ async function insertHtmlNextToCartForms() {
 
   const rulesHtml = bundleData.discount_rules
     .map((rule, index) => {
-      console.log("rule.selectedByDefault: ", rule.selectedByDefault);
-
       let priceHtml = "";
 
       if (rule.discount.value === 1) {
