@@ -10,9 +10,9 @@ const sls = new Client({
     region: process.env.ALIBABA_CLOUD_REGION || "us-west-1",
 })
 // 必选，Project名称。
-const projectName = process.env.ALIBABA_CLOUD_PROJECT || "bogdalogtest"
+const projectName = process.env.ALIBABA_CLOUD_PROJECT || "ciwi-log"
 // 必选，Logstore名称。
-const logstoreName = process.env.ALIBABA_CLOUD_LOGSTORE || "bogdabundletest"
+const logstoreName = process.env.ALIBABA_CLOUD_LOGSTORE || "bogdatech-prod"
 
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",

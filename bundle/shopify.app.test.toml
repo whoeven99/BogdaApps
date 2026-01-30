@@ -1,6 +1,5 @@
-#正式环境还没生成暂时使用本地配置
-
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
 client_id = "8fb76a03c5a927bd8551572d7190ea8f"
 name = "Ciwi.ai:Bundle(Test)"
 application_url = "https://bundletest.onrender.com"
@@ -20,7 +19,7 @@ api_version = "2025-10"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "write_discounts,write_products,read_customers,write_customers,read_markets,read_themes"
+scopes = "write_discounts,write_products,read_customers,write_customers,read_markets,read_themes,write_pixels,read_customer_events"
 
 [auth]
 redirect_urls = [

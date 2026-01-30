@@ -188,7 +188,7 @@ const ScheduleAndBudgetSetting: React.FC<ScheduleAndBudgetSettingProps> = ({
             </div>
 
             {/* Budget */}
-            <div style={{ marginBottom: '32px' }}>
+            {/* <div style={{ marginBottom: '32px' }}>
                 <h3 style={{ fontSize: '14px', fontWeight: 500, marginBottom: '12px' }}>Budget</h3>
                 <div className="polaris-grid">
                     <Flex
@@ -283,13 +283,13 @@ const ScheduleAndBudgetSetting: React.FC<ScheduleAndBudgetSettingProps> = ({
                         </Text>
                     </Flex>
                 </div>
-            </div>
+            </div> */}
 
             {/* Risk Control */}
             <div style={{ marginBottom: '32px' }}>
                 <h3 style={{ fontSize: '14px', fontWeight: 500, marginBottom: '12px' }}>Risk Control</h3>
                 <div className="polaris-stack polaris-stack--vertical">
-                    <Flex
+                    {/* <Flex
                         align="left"
                         vertical
                         flex={1}
@@ -322,7 +322,7 @@ const ScheduleAndBudgetSetting: React.FC<ScheduleAndBudgetSettingProps> = ({
                         <Text style={{ fontSize: '12px', color: '#6d7175' }}>
                             {t("How many times each customer can use this offer")}
                         </Text>
-                    </Flex>
+                    </Flex> */}
 
                     <Flex
                         style={{

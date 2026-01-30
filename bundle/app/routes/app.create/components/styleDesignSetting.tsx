@@ -399,27 +399,8 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                 </div> */}
 
                 {/* Promotional Features */}
-                <div style={{ marginTop: '24px' }}>
+                {/* <div style={{ marginTop: '24px' }}>
                     <h3 style={{ fontSize: '14px', fontWeight: 500, marginBottom: '12px' }}>Promotional Features</h3>
-
-                    {/* <div style={{
-                                        border: '1px solid #dfe3e8',
-                                        borderRadius: '8px',
-                                        padding: '16px',
-                                        marginBottom: '16px'
-                                    }}>
-                                        <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                                            <input
-                                                type="checkbox"
-                                                defaultChecked={true}
-                                                style={{ marginRight: '8px', width: '16px', height: '16px' }}
-                                            />
-                                            <span style={{ fontSize: '14px', fontWeight: 500 }}>Show Strikethrough Price</span>
-                                        </label>
-                                        <p style={{ fontSize: '12px', color: '#6d7175', marginTop: '8px', marginLeft: '24px' }}>
-                                            Display original price with strikethrough to highlight savings
-                                        </p>
-                                    </div> */}
 
                     <div style={{
                         border: '1px solid #dfe3e8',
@@ -468,25 +449,6 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                                     <option value="72">72 Hours</option>
                                 </select>
                             </label>
-
-                            {/* <label style={{ fontSize: '13px', fontWeight: 500, display: 'block', marginTop: '12px' }}>
-                                                Timer Style
-                                                <select
-                                                    defaultValue="minimal"
-                                                    style={{
-                                                        width: '100%',
-                                                        padding: '8px 12px',
-                                                        marginTop: '8px',
-                                                        border: '1px solid #dfe3e8',
-                                                        borderRadius: '6px',
-                                                        fontSize: '14px'
-                                                    }}
-                                                >
-                                                    <option value="minimal">Minimal (00:00:00)</option>
-                                                    <option value="badge">Badge Style</option>
-                                                    <option value="boxed">Boxed Numbers</option>
-                                                </select>
-                                            </label> */}
                             <Flex
                                 justify="space-between"
                                 align="left"
@@ -523,7 +485,7 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                             </Flex>
                         </div>
                     </div>
-                </div>
+                </div> */}
             </div>
 
             {/* Right Column - Preview */}
