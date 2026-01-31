@@ -81,7 +81,7 @@ async function insertHtmlNextToCartForms() {
 
     const isInTargetMarketArray =
       targetingSettingsData?.marketVisibilitySettingData?.some((market) =>
-        market?.includes(configElJson?.marketId),
+        market?.includes(`gid://shopify/Market/${configElJson.marketId}`),
       );
     console.log("isInTargetMarketArray: ", isInTargetMarketArray);
 
