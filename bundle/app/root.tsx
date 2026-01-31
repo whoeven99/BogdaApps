@@ -6,15 +6,18 @@ import {
   ScrollRestoration,
 } from "@remix-run/react";
 import { createHead } from "remix-island";
+import "./styles/index.css";
+import { Provider } from "react-redux";
+import store from "./store";
 
 export default function App() {
   return (
-    <>
+    <Provider store={store}>
       <Head />
       <Outlet />
       <ScrollRestoration />
       <Scripts />
-    </>
+    </Provider>
   );
 }
 

@@ -12,20 +12,44 @@ query CartInput {
         __typename
         ... on ProductVariant {
           id
-          metafield(namespace: "custom", key: "ciwi_variant_bundle_pricing_rule") {
-            value
+          product {
+            id
           }
-          # product {
-          #   id
-          #   metafield(namespace: "custom", key: "ciwi_product_bundle_pricing_rule") {
-          #     value
-          #   }
-          # }
         }
       }
     }
   }
   discount {
     discountClasses
+    basicInformation: metafield(
+      namespace: "ciwi_bundles_config"
+      key: "basic_information"
+    ) {
+      value
+    }
+    discountRules: metafield(
+      namespace: "ciwi_bundles_config"
+      key: "discount_rules"
+    ) {
+      value
+    }
+    styleConfig: metafield(
+      namespace: "ciwi_bundles_config"
+      key: "style_config"
+    ) {
+      value
+    }
+    targetingSettings: metafield(
+      namespace: "ciwi_bundles_config"
+      key: "targeting_settings"
+    ) {
+      value
+    }
+    productPool: metafield(
+      namespace: "ciwi_bundles_config"
+      key: "product_pool"
+    ) {
+      value
+    }
   }
 }

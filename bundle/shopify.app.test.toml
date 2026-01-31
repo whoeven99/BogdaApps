@@ -1,12 +1,12 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "c39cadd79559cb62c51564f1a572632f"
-name = "Ciwi.ai:Bundle(LocalW)"
-application_url = "https://2c971c469ed8.ngrok.app"
+client_id = "8fb76a03c5a927bd8551572d7190ea8f"
+name = "Ciwi.ai:Bundle(Test)"
+application_url = "https://bundletest.onrender.com"
 embedded = true
 
 [webhooks]
-api_version = "2025-04"
+api_version = "2025-10"
 
   [[webhooks.subscriptions]]
   topics = [
@@ -19,13 +19,13 @@ api_version = "2025-04"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "write_discounts,write_products"
+scopes = "write_discounts,write_products,read_customers,write_customers,read_markets,read_themes,write_pixels,read_customer_events"
 
 [auth]
 redirect_urls = [
-  "https://2c971c469ed8.ngrok.app/auth/callback",
-  "https://2c971c469ed8.ngrok.app/auth/shopify/callback",
-  "https://2c971c469ed8.ngrok.app/api/auth/callback"
+  "https://bundletest.onrender.com/auth/callback",
+  "https://bundletest.onrender.com/auth/shopify/callback",
+  "https://bundletest.onrender.com/api/auth/callback"
 ]
 
 [pos]
@@ -33,3 +33,5 @@ embedded = false
 
 [build]
 automatically_update_urls_on_dev = true
+dev_store_url = "quickstart-0f992326.myshopify.com"
+

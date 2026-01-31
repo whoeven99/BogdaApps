@@ -1,41 +1,36 @@
-#正式环境还没生成暂时使用本地配置
-
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
-client_id = "c39cadd79559cb62c51564f1a572632f"
-name = "Ciwi.ai:Bundle(LocalW)"
-application_url = "https://2c971c469ed8.ngrok.app"
+
+client_id = "bfc13ad696f2a8d2a77ba6eee1e26966"
+name = "Ciwi.ai:Bundle"
+application_url = "https://bogdaapps-rh3r.onrender.com"
 embedded = true
 
-[build]
-automatically_update_urls_on_dev = true
-dev_store_url = "ciwishop.myshopify.com"
+[webhooks]
+api_version = "2025-10"
+
+  [[webhooks.subscriptions]]
+  topics = [
+  "app_subscriptions/update",
+  "app/uninstalled",
+  "app_purchases_one_time/update"
+]
+  uri = "/webhooks"
+  compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "write_products"
+scopes = "write_discounts,write_products,read_customers,write_customers,read_markets,read_themes,write_pixels,read_customer_events"
 
 [auth]
 redirect_urls = [
-  "https://2c971c469ed8.ngrok.app/auth/callback",
-  "https://2c971c469ed8.ngrok.app/auth/shopify/callback",
-  "https://2c971c469ed8.ngrok.app/api/auth/callback"
-]
-
-[webhooks]
-api_version = "2025-04"
-
-[[webhooks.subscriptions]]
-uri = "/webhooks"
-topics = [
-  "app_purchases_one_time/update",
-  "app_subscriptions/update",
-  "app/uninstalled"
-]
-compliance_topics = [
-  "customers/data_request",
-  "customers/redact",
-  "shop/redact"
+  "https://bogdaapps-rh3r.onrender.com/auth/callback",
+  "https://bogdaapps-rh3r.onrender.com/auth/shopify/callback",
+  "https://bogdaapps-rh3r.onrender.com/api/auth/callback"
 ]
 
 [pos]
 embedded = false
+
+[build]
+automatically_update_urls_on_dev = true
+dev_store_url = "ciwishop.myshopify.com"

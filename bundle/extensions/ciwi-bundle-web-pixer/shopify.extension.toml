@@ -1,0 +1,29 @@
+name = "ciwi-bundle-web-pixer"
+type = "web_pixel_extension"
+uid = "362d7006-c923-089d-3b7f-94f8e4cb8db1416e119d"
+runtime_context = "strict"
+
+[customer_privacy]
+analytics = true
+marketing = true
+preferences = false
+sale_of_data = "enabled"
+
+[settings]
+type = "object"
+
+[settings.fields.shopName]
+name = "Shop Name"
+description = "Shop Name"
+type = "single_line_text_field"
+validations =  [
+  { name = "min", value = "1" }
+]
+
+[settings.fields.server]
+name = "Server URL"
+description = "The server URL where pixel data should be sent"
+type = "single_line_text_field"
+validations = [
+  { name = "min", value = "5" }
+]
