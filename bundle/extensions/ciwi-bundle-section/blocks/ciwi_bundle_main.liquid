@@ -13,6 +13,8 @@
       {% for item in product.variants %}
         "{{ item.id }}": {
           "available": {{ item.available | default: false }},
+          "compareAtPrice": {{ item.compare_at_price | json }},
+          "price": {{ item.price | json }},
           "inventoryQuantity": {{ item.inventory_quantity | default: 0 }},
           "inventoryPolicy": {{ item.inventory_policy | json }}
         },

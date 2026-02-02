@@ -46,22 +46,24 @@ export interface DiscountRulesType {
     title: string;
     quantity: number;
     discount: {
-        type: "percentage" | "amount"
+        type: "percentage" | "amount" | "product"
         value: number;
         maxDiscount: number;
     };
+    subtitle: string;
+    labelText: string;
+    badgeText: string;
+    selectedByDefault: boolean;
+    showAsSoldOut: boolean;
     discount_reward: {
-        reward_item: string[] //奖品池，可以选择商品享受 discount 优惠
-        reward_discount: {
+        id: string;
+        quantity: number; //奖品池，可以选择商品享受 discount 优惠
+        discount: {
             type: "percentage" | "amount"
             value: number;
             maxDiscount: number;
         };
     }[];
-    subtitle: string;
-    labelText: string;
-    badgeText: string;
-    selectedByDefault: boolean;
     reward: {
         type: "discount" | "upsell" | "freegift" | "bundle";
         products: {
@@ -79,7 +81,66 @@ export interface DiscountRulesType {
             visibleWithoutCheck: boolean;
         };
     }[];
-    showAsSoldOut: boolean;
+}
+
+export interface SubscriptionType {
+    enable: boolean;
+    settings: {
+        layout: "checkbox" | "horizontal" | "vertical";
+        position: "below" | "above";
+        subscription_title: string;
+        subscription_subtitle: string;
+        oneTime_title: string;
+        oneTime_subtitle: string;
+        defaultSelected: boolean;
+    }
+    style: {
+        colors: {
+            title: string;
+            subtitle: string;
+        }
+        sizes: {
+            title: string;
+            subtitle: string;
+        }
+    }
+}
+
+export interface ProgressiveGiftType {
+    enable: boolean;
+    settings: {
+        layout: "horizontal" | "vertical";
+        title: string;
+        subtitle: string;
+        hideTilUnlocked: boolean;
+        showLabels: boolean;
+        gifts: {
+            type: "freegift" | "freeshipping";
+            unlockedAt: number;
+            label: string;
+            labelCrossOut: string;
+            title: string;
+            lockedTitle: string;
+            imgUrl: string;
+            product?: {
+                id: string;
+                variantId: string[];
+                title: string;
+                imgUrl: string;
+                quantity: number;
+            }
+        }[]
+    }
+    style: {
+        colors: {
+            title: string;
+            subtitle: string;
+        }
+        sizes: {
+            title: string;
+            subtitle: string;
+        }
+    }
 }
 
 export interface StyleConfigType {
@@ -129,7 +190,9 @@ export interface TargetingSettingsType {
     };
     budget: {
         totalBudget: number | null;
+        usedTotalBudget: number | null;
         dailyBudget: number | null;
+        usedDailyBudget: number | null;
     };
     usage_limit: {
         per_customer: number | null;
@@ -404,6 +467,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 if (discountAutomaticAppCreateAndMetafieldsSetData) {
                     const basic_information = discountAutomaticAppCreateAndMetafieldsSetRequestBody?.basic_information
                     const discount_rules = discountAutomaticAppCreateAndMetafieldsSetRequestBody?.discount_rules
+                    const subscription = discountAutomaticAppCreateAndMetafieldsSetRequestBody?.subscription
+                    const progressive_gift = discountAutomaticAppCreateAndMetafieldsSetRequestBody?.progressive_gift
                     const style_config = discountAutomaticAppCreateAndMetafieldsSetRequestBody?.style_config
                     const targeting_settings = discountAutomaticAppCreateAndMetafieldsSetRequestBody?.targeting_settings
                     const product_pool = discountAutomaticAppCreateAndMetafieldsSetRequestBody?.product_pool
@@ -419,6 +484,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                         discountData: {
                             basic_information,
                             discount_rules,
+                            subscription,
+                            progressive_gift,
                             style_config,
                             targeting_settings,
                             product_pool,
@@ -636,6 +703,51 @@ const Index = () => {
         },
     ]);
 
+    const [subscriptionData, setSubscriptionData] = useState<SubscriptionType>({
+        enable: false,
+        settings: {
+            layout: "checkbox",
+            position: "below",
+            subscription_title: "Subscribe & Save 20%",
+            subscription_subtitle: "Delivered weekly",
+            oneTime_title: "One-time purchase",
+            oneTime_subtitle: "",
+            defaultSelected: false,
+        },
+        style: {
+            colors: {
+                title: "#000",
+                subtitle: "#000",
+            },
+            sizes: {
+                title: "15px",
+                subtitle: "13px",
+            }
+        }
+    })
+
+    const [progressiveGiftData, setProgressiveGiftData] = useState<ProgressiveGiftType>({
+        enable: false,
+        settings: {
+            layout: "horizontal",
+            title: "🎁 Free gifts with your order",
+            subtitle: "Unlock selecting a higher bundle",
+            hideTilUnlocked: false,
+            showLabels: true,
+            gifts: []
+        },
+        style: {
+            colors: {
+                title: "#000",
+                subtitle: "#000",
+            },
+            sizes: {
+                title: "15px",
+                subtitle: "13px",
+            }
+        }
+    })
+
     const [styleConfigData, setStyleConfigData] = useState<StyleConfigType>({
         layout: {
             base_style: "vertical_stack",
@@ -676,7 +788,9 @@ const Index = () => {
         },
         budget: {
             totalBudget: null,
+            usedTotalBudget: null,
             dailyBudget: null,
+            usedDailyBudget: null,
         },
         usage_limit: {
             per_customer: null,
@@ -837,7 +951,6 @@ const Index = () => {
             setDiscountRules(discount_rules)
             setStyleConfigData(style_config)
             setTargetingSettingsData(targeting_settings)
-
             metafieldsRef.current = getUserDiscountData.response?.discountData?.metafields;
         }
     }, [globalStore.shop, globalStore.server])
@@ -902,6 +1015,8 @@ const Index = () => {
         const metafieldValue = {
             basic_information: newBasicInformation,
             discount_rules: discountRules,
+            subscription: subscriptionData,
+            progressive_gift: progressiveGiftData,
             style_config: styleConfigData,
             targeting_settings: {
                 ...targetingSettingsData,
@@ -950,6 +1065,20 @@ const Index = () => {
                         value: JSON.stringify(discountRules)
                     },
                     {
+                        key: `subscription`,
+                        namespace: "ciwi_bundles_config",
+                        ownerId: discountGid,
+                        type: "json",
+                        value: JSON.stringify(subscriptionData)
+                    },
+                    {
+                        key: `progressive_gift`,
+                        namespace: "ciwi_bundles_config",
+                        ownerId: discountGid,
+                        type: "json",
+                        value: JSON.stringify(progressiveGiftData)
+                    },
+                    {
                         key: `style_config`,
                         namespace: "ciwi_bundles_config",
                         ownerId: discountGid,
@@ -993,6 +1122,8 @@ const Index = () => {
                         basic_information: newBasicInformation,
                         discount_rules: discountRules,
                         style_config: styleConfigData,
+                        subscription: subscriptionData,
+                        progressive_gift: progressiveGiftData,
                         targeting_settings: {
                             ...targetingSettingsData,
                             startsAt: dayjs(targetingSettingsData?.schedule?.startsAt).toISOString(),
@@ -1034,6 +1165,18 @@ const Index = () => {
                             namespace: "ciwi_bundles_config",
                             type: "json",
                             value: JSON.stringify(discountRules)
+                        },
+                        {
+                            key: `subscription`,
+                            namespace: "ciwi_bundles_config",
+                            type: "json",
+                            value: JSON.stringify(subscriptionData)
+                        },
+                        {
+                            key: `progressive_gift`,
+                            namespace: "ciwi_bundles_config",
+                            type: "json",
+                            value: JSON.stringify(progressiveGiftData)
                         },
                         {
                             key: `style_config`,
@@ -1083,6 +1226,8 @@ const Index = () => {
                         discountAutomaticAppCreateAndMetafieldsSetRequestJsondata,
                         basic_information: basicInformation,
                         discount_rules: discountRules,
+                        subscription: subscriptionData,
+                        progressive_gift: progressiveGiftData,
                         style_config: styleConfigData,
                         targeting_settings: {
                             ...targetingSettingsData,

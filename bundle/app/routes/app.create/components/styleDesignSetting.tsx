@@ -399,7 +399,7 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                 </div> */}
 
                 {/* Promotional Features */}
-                {/* <div style={{ marginTop: '24px' }}>
+                <div style={{ marginTop: '24px' }}>
                     <h3 style={{ fontSize: '14px', fontWeight: 500, marginBottom: '12px' }}>Promotional Features</h3>
 
                     <div style={{
@@ -409,7 +409,7 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                     }}>
                         <Checkbox
                             checked={styleConfigData?.countdown?.enabled}
-                            onChange={(e) =>
+                            onChange={() =>
                                 setStyleConfigData(
                                     {
                                         ...styleConfigData,
@@ -485,7 +485,7 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                             </Flex>
                         </div>
                     </div>
-                </div> */}
+                </div>
             </div>
 
             {/* Right Column - Preview */}
@@ -513,33 +513,32 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                     </h3>
 
                     {/* Countdown Timer (when enabled) */}
-                    {
-                        styleConfigData?.countdown?.enabled && (
-                            <div style={{
-                                background: '#fff8f0',
-                                border: '1px solid #ffd700',
-                                borderRadius: '6px',
-                                padding: '8px 12px',
-                                marginBottom: '16px',
-                                textAlign: 'center'
-                            }}>
-                                <div style={{ fontSize: '11px', color: '#6d7175', marginBottom: '4px' }}>
-                                    ⏱️ Limited time offer ends in
-                                </div>
-                                <Timer
-                                    type="countdown"
-                                    value={Date.now() + 1000 * 60 * 60 * styleConfigData?.countdown.duration}
-                                    styles={{
-                                        content: {
-                                            fontSize: '18px',
-                                            fontWeight: 600,
-                                            color: styleConfigData?.countdown.color,
-                                            fontFamily: 'monospace'
-                                        }
-                                    }}
-                                />
+                    {styleConfigData?.countdown?.enabled && (
+                        <div style={{
+                            background: '#fff8f0',
+                            border: '1px solid #ffd700',
+                            borderRadius: '6px',
+                            padding: '8px 12px',
+                            marginBottom: '16px',
+                            textAlign: 'center'
+                        }}>
+                            <div style={{ fontSize: '11px', color: '#6d7175', marginBottom: '4px' }}>
+                                ⏱️ Limited time offer ends in
                             </div>
-                        )}
+                            <Timer
+                                type="countdown"
+                                value={Date.now() + 1000 * 60 * 60 * styleConfigData?.countdown.duration}
+                                styles={{
+                                    content: {
+                                        fontSize: '18px',
+                                        fontWeight: 600,
+                                        color: styleConfigData?.countdown.color,
+                                        fontFamily: 'monospace'
+                                    }
+                                }}
+                            />
+                        </div>
+                    )}
 
                     {/* Product Items */}
                     {selectedOfferType.id === 'quantity-breaks-same' && (
