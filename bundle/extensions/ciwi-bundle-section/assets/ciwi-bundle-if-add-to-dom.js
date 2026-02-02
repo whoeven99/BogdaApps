@@ -135,42 +135,6 @@ async function insertHtmlNextToCartForms() {
 
   const rulesHtml = bundleData.discount_rules
     .map((rule, index) => {
-      let priceHtml = "";
-
-      if (rule.discount.value === 1) {
-        priceHtml = `
-            <strong class="ciwi-money" style="font-size:16px">
-              ${configElJson.currencySymbol}
-              ${detectNumberFormat(
-                configElJson.moneyFormat,
-                Number((rule.quantity * configElJson.price) / 100).toFixed(2),
-              )}
-            </strong>
-          `;
-      } else if (rule.discount.value === 0) {
-        priceHtml = `<strong class="ciwi-money" style="font-size:16px">Free</strong>`;
-      } else {
-        priceHtml = `
-            <strong class="ciwi-money" style="font-size:16px">
-              ${configElJson.currencySymbol}
-              ${detectNumberFormat(
-                configElJson.moneyFormat,
-                Number(
-                  (rule.quantity * configElJson.price * rule.discount.value) /
-                    100,
-                ).toFixed(2),
-              )}
-            </strong>
-            <div class="ciwi-money" style="font-size:12px;color:#6d7175;text-decoration:line-through">
-              ${configElJson.currencySymbol}
-              ${detectNumberFormat(
-                configElJson.moneyFormat,
-                Number((rule.quantity * configElJson.price) / 100).toFixed(2),
-              )}
-            </div>
-          `;
-      }
-
       return `
           <div
             class="ciwi-rule"
@@ -305,13 +269,17 @@ async function insertHtmlNextToCartForms() {
   function renderRulePrice(discount, quantity, price) {
     const original = (quantity * price) / 100;
 
+    console.log("discount: ", discount);
+    console.log("discount === 1: ", discount === 1);
+    console.log("discount === 0: ", discount === 0);
+
     if (discount === 1) {
       return `
-      <strong class="ciwi-money" style="font-size:16px">
-        ${configElJson.currencySymbol}
-        ${detectNumberFormat(configElJson.moneyFormat, original.toFixed(2))}
-      </strong>
-    `;
+        <strong class="ciwi-money" style="font-size:16px">
+          ${configElJson.currencySymbol}
+          ${detectNumberFormat(configElJson.moneyFormat, original.toFixed(2))}
+        </strong>
+      `;
     }
 
     if (discount === 0) {
@@ -321,19 +289,19 @@ async function insertHtmlNextToCartForms() {
     const discounted = (quantity * price * discount) / 100;
 
     return `
-    <strong class="ciwi-money ciwi-bundle-price" style="font-size:16px">
-      ${configElJson.currencySymbol}
-      ${detectNumberFormat(configElJson.moneyFormat, discounted.toFixed(2))}
-    </strong>
+      <strong class="ciwi-money ciwi-bundle-price" style="font-size:16px">
+        ${configElJson.currencySymbol}
+        ${detectNumberFormat(configElJson.moneyFormat, discounted.toFixed(2))}
+      </strong>
 
-    <div
-      class="ciwi-money"
-      style="font-size:12px;color:#6d7175;text-decoration:line-through"
-    >
-      ${configElJson.currencySymbol}
-      ${detectNumberFormat(configElJson.moneyFormat, original.toFixed(2))}
-    </div>
-  `;
+      <div
+        class="ciwi-money"
+        style="font-size:12px;color:#6d7175;text-decoration:line-through"
+      >
+        ${configElJson.currencySymbol}
+        ${detectNumberFormat(configElJson.moneyFormat, original.toFixed(2))}
+      </div>
+    `;
   }
 
   function syncBundleDisabled() {
@@ -359,13 +327,18 @@ async function insertHtmlNextToCartForms() {
       ruleEl.style.opacity = disabled ? "0.5" : "1";
       ruleEl.style.cursor = disabled ? "not-allowed" : "pointer";
       const qty = ruleEl.dataset.qty;
-      const discount = ruleEl.dataset.discount;
+      const discount = Number(ruleEl.dataset.discount);
+      console.log("discount: ", discount);
+
       const radio = ruleEl.querySelector('input[type="radio"]');
       if (radio) {
         radio.disabled = disabled;
         if (disabled) radio.checked = false;
       }
       const priceEl = ruleEl.querySelector(".ciwi-bundle-price");
+
+      console.log("priceEl: ", priceEl);
+
       if (priceEl) {
         priceEl.innerHTML = renderRulePrice(discount, qty, price);
       }
