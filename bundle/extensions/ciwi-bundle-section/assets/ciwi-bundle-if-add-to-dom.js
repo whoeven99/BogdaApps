@@ -148,7 +148,7 @@ async function insertHtmlNextToCartForms() {
             </strong>
           `;
       } else if (rule.discount.value === 0) {
-        priceHtml = `<strong style="font-size:16px">Free</strong>`;
+        priceHtml = `<strong class="ciwi-money" style="font-size:16px">Free</strong>`;
       } else {
         priceHtml = `
             <strong class="ciwi-money" style="font-size:16px">
@@ -176,6 +176,7 @@ async function insertHtmlNextToCartForms() {
             class="ciwi-rule"
             data-index="${index}"
             data-qty="${rule.quantity}"
+            data-discount="${rule.discount.value}"
             style="
               border: 1px solid ${rule.selectedByDefault ? "#000" : bundleData.style_config.card.border_color};
               border-radius: 8px;
@@ -246,8 +247,7 @@ async function insertHtmlNextToCartForms() {
                   ${rule.subtitle || ""}
                 </div>
               </div>
-              <div style="text-align:right">
-                ${priceHtml}
+              <div class="ciwi-bundle-price" style="text-align:right">
               </div>
             </div>
           </div>
@@ -267,12 +267,33 @@ async function insertHtmlNextToCartForms() {
             ${bundleData.style_config.title.text || ""}
         </h3>
 
+        <div
+          class="ciwi-bundle-countdown"
+          style="
+            display: none,
+          "
+        >
+          <div
+            style="
+              font-size: 11px;
+              color: #6d7175;
+              margin-bottom: 4px;
+            "
+          >
+            ⏱️ Limited time offer ends in
+          </div>
+          <span
+            id="ciwi-countdown"
+            style="
+              font-size:18px;
+              font-weight:600;
+              font-family:monospace;
+            "
+          ></span>
+        </div>
+
         ${rulesHtml}
     `;
-
-  console.log("wrapper: ", wrapper);
-
-  insertTarget.insertBefore(wrapper, insertBeforeNode);
 
   setTimeout(() => {
     const defaultRule = wrapper.querySelector(
@@ -280,6 +301,40 @@ async function insertHtmlNextToCartForms() {
     );
     if (defaultRule) defaultRule.checked = true;
   }, 0);
+
+  function renderRulePrice(discount, quantity, price) {
+    const original = (quantity * price) / 100;
+
+    if (discount === 1) {
+      return `
+      <strong class="ciwi-money" style="font-size:16px">
+        ${configElJson.currencySymbol}
+        ${detectNumberFormat(configElJson.moneyFormat, original.toFixed(2))}
+      </strong>
+    `;
+    }
+
+    if (discount === 0) {
+      return `<strong class="ciwi-money ciwi-bundle-price" style="font-size:16px">Free</strong>`;
+    }
+
+    const discounted = (quantity * price * discount) / 100;
+
+    return `
+    <strong class="ciwi-money ciwi-bundle-price" style="font-size:16px">
+      ${configElJson.currencySymbol}
+      ${detectNumberFormat(configElJson.moneyFormat, discounted.toFixed(2))}
+    </strong>
+
+    <div
+      class="ciwi-money"
+      style="font-size:12px;color:#6d7175;text-decoration:line-through"
+    >
+      ${configElJson.currencySymbol}
+      ${detectNumberFormat(configElJson.moneyFormat, original.toFixed(2))}
+    </div>
+  `;
+  }
 
   function syncBundleDisabled() {
     const variantId = String(variantInput.value);
@@ -289,10 +344,12 @@ async function insertHtmlNextToCartForms() {
         [`${variantId}`]: `#Bundle ${bundleData?.bundleKey.split("ciwi_bundles_config_")[1]}`,
       }),
     );
-    const inventoryData = configElJson?.[variantId];
-    const inventoryQuantity = Number(inventoryData?.inventoryQuantity);
-    const inventoryPolicy = inventoryData?.inventoryPolicy;
-    const inventoryAvailable = inventoryData?.available;
+    const variantData = configElJson?.[variantId];
+    const inventoryQuantity = Number(variantData?.inventoryQuantity);
+    const inventoryPolicy = variantData?.inventoryPolicy;
+    const inventoryAvailable = variantData?.available;
+    const price = Number(variantData?.price);
+
     const disabled =
       inventoryQuantity === 0 &&
       inventoryPolicy === "deny" &&
@@ -301,12 +358,118 @@ async function insertHtmlNextToCartForms() {
     wrapper.querySelectorAll(".ciwi-rule").forEach((ruleEl) => {
       ruleEl.style.opacity = disabled ? "0.5" : "1";
       ruleEl.style.cursor = disabled ? "not-allowed" : "pointer";
+      const qty = ruleEl.dataset.qty;
+      const discount = ruleEl.dataset.discount;
       const radio = ruleEl.querySelector('input[type="radio"]');
       if (radio) {
         radio.disabled = disabled;
         if (disabled) radio.checked = false;
       }
+      const priceEl = ruleEl.querySelector(".ciwi-bundle-price");
+      if (priceEl) {
+        priceEl.innerHTML = renderRulePrice(discount, qty, price);
+      }
     });
+  }
+
+  function CountdownEnable(enable, deadline, durationHours, color) {
+    console.log("enable: ", enable);
+    console.log("deadline: ", deadline);
+    console.log("durationHours: ", durationHours);
+    console.log("color: ", color);
+
+    if (!enable || !deadline) return;
+
+    const maxDurationMs = durationHours * 60 * 60 * 1000;
+    const now = Date.now();
+    const endTime = new Date(deadline).getTime();
+
+    // 不在倒计时窗口内，不渲染
+    if (endTime - now > maxDurationMs) return;
+
+    const el = document.getElementById("ciwi-countdown");
+    if (!el) return;
+
+    el.style.color = color;
+
+    function pad(n) {
+      return String(n).padStart(2, "0");
+    }
+
+    function tick() {
+      const diff = endTime - Date.now();
+
+      if (diff <= 0) {
+        el.textContent = "00:00:00";
+        clearInterval(timer);
+
+        const wrapper = document.querySelector(".ciwi-bundle-wrapper");
+        if (wrapper) {
+          wrapper.style.display = "none";
+        }
+
+        return;
+      }
+
+      const totalSeconds = Math.floor(diff / 1000);
+
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const seconds = totalSeconds % 60;
+
+      el.textContent = `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+
+      const countdownEl = document.querySelector(".ciwi-bundle-countdown");
+      if (countdownEl) {
+        countdownEl.style.display = "block";
+        countdownEl.style.background = "#fff8f0";
+        countdownEl.style.border = "1px solid #ffd700";
+        countdownEl.style.borderRadius = "6px";
+        countdownEl.style.padding = "8px 12px";
+        countdownEl.style.marginBottom = "16px";
+        countdownEl.style.textAlign = "center";
+      }
+    }
+
+    tick();
+    const timer = setInterval(tick, 1000);
+  }
+
+  function CiwiBundleInitialize() {
+    const enabled = bundleData.style_config?.countdown?.enabled;
+    const deadline = bundleData.targeting_settings?.schedule?.endsAt;
+    const duration = bundleData.style_config?.countdown?.duration;
+    const color = bundleData.style_config?.countdown?.color;
+
+    if (deadline) {
+      const now = Date.now();
+      const endTime = new Date(deadline).getTime();
+      if (now - endTime >= 0) {
+        return;
+      }
+    }
+
+    wrapper.addEventListener("click", (e) => {
+      if (Number(configElJson?.[String(variantInput.value)]) === 0) return;
+
+      const ruleEl = e.target.closest(".ciwi-rule");
+      if (!ruleEl) return;
+
+      const qty = ruleEl.dataset.qty;
+      qtyInput.value = qty;
+
+      wrapper.querySelectorAll(".ciwi-rule").forEach((el) => {
+        el.style.border = `1px solid ${bundleData.style_config.card.border_color}`;
+        el.querySelector('input[type="radio"]').checked = false;
+      });
+
+      ruleEl.style.border = "1px solid #000";
+      ruleEl.querySelector('input[type="radio"]').checked = true;
+    });
+
+    insertTarget.insertBefore(wrapper, insertBeforeNode);
+
+    CountdownEnable(enabled, deadline, duration, color);
   }
 
   const observer = new MutationObserver(syncBundleDisabled);
@@ -316,24 +479,7 @@ async function insertHtmlNextToCartForms() {
   });
 
   syncBundleDisabled();
-
-  wrapper.addEventListener("click", (e) => {
-    if (Number(configElJson?.[String(variantInput.value)]) === 0) return;
-
-    const ruleEl = e.target.closest(".ciwi-rule");
-    if (!ruleEl) return;
-
-    const qty = ruleEl.dataset.qty;
-    qtyInput.value = qty;
-
-    wrapper.querySelectorAll(".ciwi-rule").forEach((el) => {
-      el.style.border = `1px solid ${bundleData.style_config.card.border_color}`;
-      el.querySelector('input[type="radio"]').checked = false;
-    });
-
-    ruleEl.style.border = "1px solid #000";
-    ruleEl.querySelector('input[type="radio"]').checked = true;
-  });
+  CiwiBundleInitialize();
 }
 
 if (document.readyState === "loading") {

@@ -1,6 +1,7 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import { UpdateUserDiscountStatus } from "app/api/javaServer";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
     const { topic, shop, session, admin, payload } =
@@ -26,6 +27,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 return new Response(null, { status: 200 });
             } catch (error) {
                 console.error("Error APP_UNINSTALLED:", error);
+                return new Response(null, { status: 200 });
+            }
+        case "DISCOUNT_UPDATE":
+            try {
+                UpdateUserDiscountStatus({
+                    shopName: shop,
+                    discountGid: payload.admin_graphql_api_id,
+                    status: payload.status,
+                });
+                return new Response(null, { status: 200 });
+            } catch (error) {
+                console.error("Error DISCOUNT_UPDATE:", error);
                 return new Response(null, { status: 200 });
             }
         case "CUSTOMERS_DATA_REQUEST":
