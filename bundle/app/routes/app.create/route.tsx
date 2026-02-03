@@ -1046,9 +1046,19 @@ const Index = () => {
     const handleConfirm = () => {
         const id = Date.now()
 
-        let newBasicInformation = {
+        let newBasicInformation = null
+
+        if (discountGid) {
+            if (!basicInformation?.offerName) return;
+            newBasicInformation = {
+                ...basicInformation,
+                offerName: basicInformation?.offerName,
+            }
+        }
+
+        newBasicInformation = {
             ...basicInformation,
-            offerName: basicInformation?.offerName ? basicInformation?.offerName : `#Bundle ${id}`,
+            offerName: `#Bundle ${id}`,
         }
 
         const selectedProductVariantIds = selectedProducts.map((product) => product.id.split("gid://shopify/ProductVariant/")[1]);

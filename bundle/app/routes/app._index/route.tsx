@@ -143,7 +143,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                     const updateUserDiscountStatusData = await UpdateUserDiscountStatus({
                         shopName: shop,
                         discountGid: discountNodeStatusRequestBody.id,
-                        status: discountNodeStatusData?.automaticDiscountNode?.automaticDiscount?.status,
+                        status: discountNodeStatusData?.automaticDiscountNode?.automaticDiscount?.status ? "ACTIVE" : "EXPIRED",
                     });
 
                     return updateUserDiscountStatusData
