@@ -206,14 +206,14 @@ const BasicInformationSetting: React.FC<BasicInformationSettingProps> = ({
                                         <div style={{ fontSize: '12px', color: '#6d7175' }}>{rule.subtitle}</div>
                                     </div>
                                     {
-                                        (rule.discount.type === 'percentage' && rule.discount.value === 0) || (rule.discount.type === 'product' && rule.discount.value === 0) && (
+                                        (rule.discount.type === 'percentage' && rule.discount.value === 1) || (rule.discount.type === 'product' && rule.discount.value === 0) && (
                                             <div style={{ textAlign: 'right' }}>
                                                 <strong style={{ fontSize: '16px' }}>€{Number(rule.quantity * previewPrice).toFixed(2)}</strong>
                                             </div>
                                         )
                                     }
                                     {
-                                        (rule.discount.type === 'percentage' && rule.discount.value === 1) && (
+                                        (rule.discount.type === 'percentage' && rule.discount.value === 0) && (
                                             <div style={{ textAlign: 'right' }}>
                                                 <strong style={{ fontSize: '16px' }}>Free</strong>
                                             </div>
