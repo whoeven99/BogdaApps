@@ -29,7 +29,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 console.error("Error APP_UNINSTALLED:", error);
                 return new Response(null, { status: 200 });
             }
-        case "DISCOUNT_UPDATE":
+        case "DISCOUNTS_UPDATE":
             try {
                 UpdateUserDiscountStatus({
                     shopName: shop,
