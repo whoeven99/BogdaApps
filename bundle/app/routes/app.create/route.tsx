@@ -30,7 +30,7 @@ export interface BasicInformationType {
         category: string;
         subtype:
         | "quantity-breaks-same"
-        | "bogo"
+        | "buy-x-get-y"
         | "quantity-breaks-different"
         | "complete-bundle"
         | "subscription"
@@ -174,10 +174,6 @@ export interface StyleConfigType {
 }
 
 export interface TargetingSettingsType {
-    quantity_scope:
-    | "same_variant"     // 同商品同变体
-    | "same_product"     // 同商品不同变体
-    | "cross_products";  // 跨商品
     marketVisibilitySettingData: string[];
     visibilityConstraints: {
         maxDiscountAmount: number;
@@ -612,15 +608,15 @@ const Index = () => {
         description: string;
     }[] = [
             {
-                id: 'quantity-breaks-same',
-                name: t('Quantity breaks for the same product'),
-                description: t('Offer discounts when customers buy multiple quantities of the same product'),
+                id: "quantity-breaks-same",
+                name: t("Quantity breaks for the same product"),
+                description: t("Offer discounts when customers buy multiple quantities of the same product"),
             },
-            // {
-            //     id: 'bogo',
-            //     name: t('Buy X, get Y free (BOGO) deal'),
-            //     description: t('Create buy-one-get-one or buy-X-get-Y-free promotions')
-            // },
+            {
+                id: "buy-x-get-y",
+                name: t("Buy X, get Y free (BOGO) deal"),
+                description: t("Create buy-one-get-one or buy-X-get-Y-free promotions")
+            },
             // {
             //     id: 'quantity-breaks-different',
             //     name: t('Quantity breaks for different products'),
@@ -651,6 +647,7 @@ const Index = () => {
         value: string;
         label: string;
     }[]>([])
+
     const [selectedRuleIndex, setSelectedRuleIndex] = useState<number | null>(null);
 
     const [basicInformation, setBasicInformation] = useState<BasicInformationType>({
@@ -775,7 +772,6 @@ const Index = () => {
     })
 
     const [targetingSettingsData, setTargetingSettingsData] = useState<TargetingSettingsType>({
-        quantity_scope: "same_variant",
         marketVisibilitySettingData: [],
         visibilityConstraints: {
             maxDiscountAmount: 100,
@@ -844,6 +840,51 @@ const Index = () => {
         }
         setLoading(false)
     }, [])
+
+    useEffect(() => {
+        if (basicInformation.offerType.subtype === "buy-x-get-y") {
+            setDiscountRules([
+                {
+                    id: Date.now(),
+                    enabled: true,
+                    isExpanded: true,
+                    quantity: 1,
+                    discount: {
+                        type: "product",
+                        value: 0,
+                        maxDiscount: 1,
+                    },
+                    discount_reward: [],
+                    title: 'Single',
+                    subtitle: 'single',
+                    labelText: '',
+                    badgeText: '',
+                    selectedByDefault: false,
+                    reward: [],
+                    showAsSoldOut: false,
+                },
+                {
+                    id: Date.now() + 1,
+                    enabled: true,
+                    isExpanded: true,
+                    quantity: 3,
+                    discount: {
+                        type: "product",
+                        value: 1,
+                        maxDiscount: 1,
+                    },
+                    discount_reward: [],
+                    title: 'Buy 2 Get 1',
+                    subtitle: 'buy 2 get 1',
+                    labelText: 'SAVE 33%',
+                    badgeText: 'Popular',
+                    selectedByDefault: true,
+                    reward: [],
+                    showAsSoldOut: false,
+                },
+            ])
+        }
+    }, [basicInformation])
 
     useEffect(() => {
         window.scrollTo({
@@ -948,7 +989,7 @@ const Index = () => {
                 })
             }, { method: 'POST' })
             setBasicInformation(basic_information)
-            setDiscountRules(discount_rules)
+            setTimeout(() => setDiscountRules(discount_rules), 50)
             setStyleConfigData(style_config)
             setTargetingSettingsData(targeting_settings)
             metafieldsRef.current = getUserDiscountData.response?.discountData?.metafields;
@@ -1350,14 +1391,12 @@ const Index = () => {
                                     previewPrice={previewPrice}
                                     selectedProducts={selectedProducts}
                                     setMainModalType={setMainModalType}
+                                    basicInformation={basicInformation}
                                     discountRules={discountRules}
                                     styleConfigData={styleConfigData}
-                                    targetingSettingsData={targetingSettingsData}
-                                    setTargetingSettingsData={setTargetingSettingsData}
                                     setDiscountRules={setDiscountRules}
                                     selectedRuleIndex={selectedRuleIndex}
                                     setSelectedRuleIndex={setSelectedRuleIndex}
-                                    selectedOfferType={selectedOfferType}
                                 />
                             </>
                         )}

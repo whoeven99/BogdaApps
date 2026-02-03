@@ -8,13 +8,18 @@ import {
 } from "../generated/api";
 
 interface RangeDiscountsType {
-  typename: "RangeDiscountsType";
-  ranges: {
-    min: number; // 最小件数（包含）
-    max?: number; // 最大件数（包含），不填表示无限
-    discountRate: number;
-  }[];
-  calculateQuantityWithVariantsArray?: string[];
+  min: number; // 最小件数（包含）
+  max?: number; // 最大件数（包含），不填表示无限
+  discountRate: {
+    type: "percentage" | "amount" | "product"
+    value: number;
+    maxDiscount: number;
+  };
+}
+
+interface BuyXGetYType {
+  Xquantity: number;
+  Yquantity: number;
 }
 
 interface WholeHouseRentalDiscountType {
@@ -63,10 +68,7 @@ export function cartLinesDiscountsGenerateRun(
   //定义产品Candidates数组
   const productCandidates: Array<ProductDiscountCandidate> = [];
 
-
-
   //初始化折扣规则数据
-  let appliedRule: any = null;
 
   const productDiscountData: productDiscountDataType =
     input.discount as productDiscountDataType;
@@ -82,55 +84,16 @@ export function cartLinesDiscountsGenerateRun(
   const targetingSettingsJSON = parseJSON<any>(targetingSettings);
   const productPoolJSON = parseJSON<any>(productPool);
 
-  // if (!discountRulesJSON || !targetingSettingsJSON || !productPoolJSON) continue;
-
-  //定义每行购物车item ID与Quantity的映射关系
-  const lineQuantityMap = new Map<string, number>();
-
-  if (Array.isArray(productPoolJSON?.include_variant_ids) && targetingSettingsJSON?.quantity_scope) {
-    if (targetingSettingsJSON?.quantity_scope === "same_product") {
-      for (const l of input.cart.lines) {
-        if (l.merchandise.__typename !== "ProductVariant") continue;
-        const variantId = l.merchandise.id.split("gid://shopify/ProductVariant/")[1].toString();
-        if (productPoolJSON?.include_variant_ids?.includes(variantId)) {
-          const id = l.merchandise.product.id;
-          lineQuantityMap.set(id, (lineQuantityMap.get(id) ?? 0) + l.quantity);
-        }
-      }
-    } else if (targetingSettingsJSON?.quantity_scope === "cross_products") {
-      for (const l of input.cart.lines) {
-        if (l.merchandise.__typename !== "ProductVariant") continue;
-        const variantId = l.merchandise.id.split("gid://shopify/ProductVariant/")[1].toString();
-        if (productPoolJSON?.include_variant_ids?.includes(variantId)) {
-          lineQuantityMap.set("totalQuantity", (lineQuantityMap.get("totalQuantity") ?? 0) + l.quantity);
-        }
-      }
-    }
-  }
-
-
   //轮询购物车每个item
   for (const line of input.cart.lines) {
     if (line.merchandise.__typename !== "ProductVariant") continue;
 
     const variantId = line.merchandise.id;
     const variantIdWithoutGid = variantId.split("gid://shopify/ProductVariant/")[1].toString();
-    const productId = line.merchandise.product.id;
 
-    if (Array.isArray(productPoolJSON?.include_variant_ids) && productPoolJSON?.include_variant_ids?.includes(variantIdWithoutGid)) {
-      appliedRule = {
-        typename: "RangeDiscountsType",
-        ranges: discountRulesJSON.map((rule: any, index: number) => {
-          return {
-            min: rule.quantity,
-            max: discountRulesJSON[index + 1]?.quantity ? discountRulesJSON[index + 1]?.quantity : undefined,
-            discountRate: rule.discount.value,
-          }
-        }),
-      }
+    if (!Array.isArray(productPoolJSON?.include_variant_ids) || !productPoolJSON?.include_variant_ids?.includes(variantIdWithoutGid)) {
+      continue;
     }
-
-    if (!appliedRule) continue;
 
     //购物车此行产品数量quantity数据
     const quantity = line.quantity;
@@ -145,33 +108,57 @@ export function cartLinesDiscountsGenerateRun(
 
     //根据typename字段做不同的折扣处理
     switch (true) {
-      case appliedRule?.typename == "RangeDiscountsType":
-        const candidate1 = ruleAsRangeDiscountsTypeOperate({
-          lineQuantityMap,
-          calculateRule: targetingSettingsJSON?.quantity_scope || "same_variant",
-          productId,
-          rule: appliedRule,
-          quantity,
-          unitPriceCents,
-          lineId,
-          message: basicInformationJSON.displayName,
-        });
+      case basicInformationJSON?.offerType?.subtype == "quantity-breaks-same":
+        try {
+          const ranges = discountRulesJSON.map((rule: any, index: number) => {
+            return {
+              min: rule.quantity,
+              max: discountRulesJSON[index + 1]?.quantity ? discountRulesJSON[index + 1]?.quantity : undefined,
+              discountRate: rule.discount,
+            }
+          });
 
-        if (!candidate1) continue;
-        productCandidates.push(candidate1);
-        break;
+          const candidate1 = ruleAsQuantityBreaksSameTypeOperate({
+            ranges,
+            quantity,
+            unitPriceCents,
+            lineId,
+            message: basicInformationJSON.displayName,
+          });
 
-      // case appliedRule?.typename == "WholeHouseRentalDiscountType":
-      //   const candidate2 = ruleAsWholeHouseRentalDiscountTypeOperate({
-      //     lineQuantityMap,
-      //     rule: appliedRule,
-      //     quantity,
-      //     unitPriceCents,
-      //     lineId,
-      //   });
-      //   if (!candidate2) continue;
-      //   productCandidates.push(candidate2);
-      //   break;
+          if (!candidate1) continue;
+          productCandidates.push(candidate1);
+          break;
+        } catch (error) {
+          console.error("quantity-breaks-same: ", error);
+          break;
+        }
+
+      case basicInformationJSON?.offerType?.subtype == "buy-x-get-y":
+        try {
+          const ranges = discountRulesJSON.map((rule: any, index: number) => {
+            return {
+              Xquantity: rule.quantity,
+              Yquantity: rule.discount.value,
+            }
+          });
+
+          const candidate2 = ruleAsBuyXGetYTypeOperate({
+            ranges,
+            quantity,
+            unitPriceCents,
+            lineId,
+            message: basicInformationJSON.displayName,
+          });
+
+          if (!candidate2) continue;
+          productCandidates.push(candidate2);
+          break;
+        } catch (error) {
+          console.error("buy-x-get-y: ", error);
+          break;
+        }
+
 
       // case appliedRule?.typename == "BundleDiscountType":
       //   const variantId = line.merchandise.id;
@@ -207,49 +194,6 @@ export function cartLinesDiscountsGenerateRun(
   return { operations };
 }
 
-// 以分为单位计算折后总额
-const calculateDiscountedTotalCents = ({
-  quantity,
-  unitPriceCents,
-  rule,
-}: {
-  quantity: number;
-  unitPriceCents: number;
-  rule: WholeHouseRentalDiscountType;
-}) => {
-  const groups = Math.floor(quantity / rule.groupSize);
-  const remainderQty = quantity % rule.groupSize;
-
-  const groupItemCount = groups * rule.groupSize;
-  // 对组折扣与零头折扣分别计算并四舍五入到分
-  let total = Math.round(groupItemCount * unitPriceCents * rule.groupDiscount);
-
-  if (remainderQty > 0) {
-    const remainderDiscount = rule.remainder?.[String(remainderQty)] ?? 1;
-    total += Math.round(remainderQty * unitPriceCents * remainderDiscount);
-  }
-
-  return total;
-};
-
-const calculateBundleGroups = ({
-  rule,
-  quantityMap,
-}: {
-  rule: BundleDiscountType;
-  quantityMap: Map<string, number>;
-}): number => {
-  let groups = Infinity;
-
-  for (const item of rule.bundleItems) {
-    const cartQty = quantityMap.get(item.variantId) ?? 0;
-    const possibleGroups = Math.floor(cartQty / item.quantity);
-    groups = Math.min(groups, possibleGroups);
-  }
-
-  return Number.isFinite(groups) ? groups : 0;
-};
-
 const getCandidate = ({
   lineId,
   discountPerItemCents,
@@ -274,76 +218,61 @@ const getCandidate = ({
   };
 };
 
-const findMatchedRange = (
-  quantity: number,
-  ranges: RangeDiscountsType["ranges"],
-) => {
-  return ranges.find((r) => {
-    if (quantity < r.min) return false;
-    if (r.max != null && quantity >= r.max) return false;
-    return true;
-  });
-};
-
-const calculateRangeDiscountTotalCents = ({
+const calculateQuantityBreaksSameTotalCents = ({
   quantity,
   unitPriceCents,
-  rule,
+  ranges,
 }: {
   quantity: number;
   unitPriceCents: number;
-  rule: RangeDiscountsType;
+  ranges: RangeDiscountsType[];
 }) => {
-  const matchedRange = findMatchedRange(quantity, rule.ranges);
+  const matchedRange = ranges.find((r) => {
+    if (quantity < r.min) return false;
+    if (r.max != null && quantity >= r.max) return false;
+    return true;
+  });;
   if (!matchedRange) return null;
 
-  const discountedTotal = Math.round(
-    quantity * unitPriceCents * matchedRange.discountRate,
-  );
+  let discountedTotal = 0;
+
+  if (matchedRange.discountRate.type === "percentage") {
+    discountedTotal = Math.round(
+      quantity * unitPriceCents * matchedRange.discountRate.value,
+    );
+  }
+
+  if (matchedRange.discountRate.type === "amount") {
+    discountedTotal = Math.round(
+      matchedRange.discountRate.value,
+    );
+  }
 
   const originalTotal = quantity * unitPriceCents;
 
   return originalTotal - discountedTotal;
 };
 
-const ruleAsRangeDiscountsTypeOperate = ({
-  lineQuantityMap,
-  calculateRule,
-  productId,
-  rule,
+const ruleAsQuantityBreaksSameTypeOperate = ({
+  ranges,
   quantity,
   unitPriceCents,
   lineId,
   message,
 }: {
-  lineQuantityMap: Map<string, number>;
-  calculateRule:
-  | "same_variant"     // 同商品同变体
-  | "same_product"     // 同商品不同变体
-  | "cross_products";  // 跨商品
-  productId: string;
-  rule: RangeDiscountsType;
+  ranges: RangeDiscountsType[];
   quantity: number;
   unitPriceCents: number;
   lineId: string;
   message: string;
 }): ProductDiscountCandidate | null => {
   try {
-    console.log("lineQuantityMap: ", JSON.stringify(lineQuantityMap));
-
-    if (calculateRule == "same_variant") {
-    } else if (calculateRule == "same_product") {
-      quantity = lineQuantityMap.get(productId) ?? 0;
-    } else if (calculateRule == "cross_products") {
-      quantity = lineQuantityMap.get("totalQuantity") ?? 0;
-    }
-
     if (quantity <= 0) return null;
 
-    const totalDiscountCents = calculateRangeDiscountTotalCents({
+    const totalDiscountCents = calculateQuantityBreaksSameTotalCents({
       quantity,
       unitPriceCents,
-      rule,
+      ranges,
     });
 
     if (!totalDiscountCents || totalDiscountCents <= 0) return null;
@@ -365,106 +294,52 @@ const ruleAsRangeDiscountsTypeOperate = ({
   }
 };
 
-const ruleAsWholeHouseRentalDiscountTypeOperate = ({
-  lineQuantityMap,
-  rule,
+const ruleAsBuyXGetYTypeOperate = ({
+  ranges,
   quantity,
   unitPriceCents,
   lineId,
-}: {
-  lineQuantityMap: Map<string, number>;
-  rule: WholeHouseRentalDiscountType;
-  quantity: number; //购物车产品的总数量
-  unitPriceCents: number; //产品总价格分级数据
-  lineId: string; //购物车id
-}): ProductDiscountCandidate | null => {
-  try {
-    // 计算捆绑变体的总数量
-    if (rule?.calculateQuantityWithVariantsArray?.length) {
-      for (const id of rule.calculateQuantityWithVariantsArray) {
-        quantity += lineQuantityMap.get(id) ?? 0;
-      }
-    }
-
-    if (quantity <= 0) return null;
-
-    // 单独按行计算价格
-    const originalTotalCents = unitPriceCents * quantity;
-    const discountedTotalCents = calculateDiscountedTotalCents({
-      quantity,
-      unitPriceCents,
-      rule,
-    });
-
-    const totalDiscountCents = originalTotalCents - discountedTotalCents;
-    if (totalDiscountCents <= 0) return null;
-
-    // 使用向下取整，避免累积四舍五入导致超额折扣
-    const discountPerItemCents = Math.round(totalDiscountCents / quantity);
-    const candidate = getCandidate({
-      lineId,
-      discountPerItemCents,
-    });
-    // 返回candidate
-    return candidate;
-  } catch (error) {
-    return null;
-  }
-};
-
-const ruleAsBundleDiscountTypeOperate = ({
-  lineQuantityMap,
-  rule,
-  unitPriceCents,
-  lineId,
-  variantId,
   message,
 }: {
-  lineQuantityMap: Map<string, number>;
-  rule: BundleDiscountType;
-  unitPriceCents: number; //产品总价格分级数据
-  lineId: string; //购物车id
-  variantId: string; // 当前变体id
+  ranges: BuyXGetYType[];
+  quantity: number;
+  unitPriceCents: number;
+  lineId: string;
   message: string;
 }): ProductDiscountCandidate | null => {
   try {
-    // 计算 bundle 组数（全局）
-    const bundleGroups = calculateBundleGroups({
-      rule,
-      quantityMap: lineQuantityMap,
-    });
+    if (ranges.length <= 0) return null;
 
-    if (bundleGroups <= 0) return null;
-
-    // 获取当前变体在bundle中的数据
-    const bundle = rule.bundleItems.find(
-      (item) => item.variantId === variantId,
+    const sortedRanges = [...ranges].sort(
+      (a, b) => (b.Xquantity - b.Yquantity) - (a.Xquantity - a.Yquantity)
     );
 
-    if (!bundle) return null;
+    let remaining = quantity;
+    let discountQuantity = 0;
 
-    // 计算需要折扣的件数
-    const discountQty = bundleGroups * bundle.quantity;
+    for (const range of sortedRanges) {
+      const cycle = range.Xquantity;
 
-    if (discountQty <= 0) return null;
+      if (remaining < cycle) continue;
 
-    // 计算每一件应该优惠多少钱
-    const discountPerItemCents = Math.round(
-      unitPriceCents * (1 - bundle.discountRate),
-    );
+      const times = Math.floor(remaining / cycle);
 
-    if (discountPerItemCents <= 0) return null;
+      discountQuantity += times * range.Yquantity;
+      remaining = remaining % cycle;
 
+      if (remaining === 0) break;
+    }
+
+    // ⚠️ Shopify 要 per-item 折扣
     const candidate = getCandidate({
       lineId,
-      discountPerItemCents,
-      message:
-        bundle.discountRate === 0 ? "isFree Text" : message,
-      quantity: discountQty,
+      discountPerItemCents: discountQuantity * unitPriceCents,
+      message,
+      quantity: discountQuantity,
     });
     // 返回candidate
     return candidate;
-  } catch (error) {
+  } catch {
     return null;
   }
 };

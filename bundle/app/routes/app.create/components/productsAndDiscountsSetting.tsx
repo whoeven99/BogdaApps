@@ -1,7 +1,8 @@
 import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, Copy, Trash2 } from "lucide-react";
-import { DiscountRulesType, ProductVariantsDataType, StyleConfigType, TargetingSettingsType } from "../route";
+import { BasicInformationType, DiscountRulesType, ProductVariantsDataType, StyleConfigType, TargetingSettingsType } from "../route";
 import { Button, Checkbox, Flex, Input, InputNumber, Select, Space, Statistic } from "antd";
 import { useEffect, useMemo, useRef } from "react";
+import { useTranslation } from "react-i18next";
 
 const { Timer } = Statistic;
 
@@ -9,33 +10,27 @@ interface ProductsAndDiscountsSettingProps {
     previewPrice: number;
     selectedProducts: ProductVariantsDataType[];
     setMainModalType: (modalType: "ProductVariants" | "EditProductVariants" | null) => void;
+    basicInformation: BasicInformationType;
     discountRules: DiscountRulesType[];
     styleConfigData: StyleConfigType;
-    targetingSettingsData: TargetingSettingsType;
-    setTargetingSettingsData: (data: TargetingSettingsType) => void;
     setDiscountRules: (rules: DiscountRulesType[]) => void;
     selectedRuleIndex: number | null;
     setSelectedRuleIndex: (rule: number | null) => void;
-    selectedOfferType: {
-        id: string;
-        name: string;
-        description: string;
-    };
 }
 
 const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = ({
     previewPrice,
     selectedProducts,
     setMainModalType,
+    basicInformation,
     discountRules,
     styleConfigData,
-    targetingSettingsData,
-    setTargetingSettingsData,
     setDiscountRules,
     selectedRuleIndex,
     setSelectedRuleIndex,
-    selectedOfferType
 }) => {
+    const { t } = useTranslation();
+
     const ruleContainerRefs = useRef<Record<number, HTMLDivElement | null>>({});
     const prevLengthRef = useRef(discountRules.length);
 
@@ -50,23 +45,6 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
         const selectedRule = discountRules.find((rule) => rule.id == selectedRuleIndex) || discountRules.find((rule) => rule.selectedByDefault)
         return selectedRule?.id;
     }, [discountRules, selectedRuleIndex])
-
-    const quantityScopeOptions = useMemo(() => {
-        return [
-            {
-                value: "same_variant",
-                label: "Same variant",
-            },
-            {
-                value: "same_product",
-                label: "Same product",
-            },
-            {
-                value: "cross_products",
-                label: "Cross products",
-            },
-        ]
-    }, [])
 
     useEffect(() => {
         if (discountRules.length > prevLengthRef.current) {
@@ -83,6 +61,10 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
 
         prevLengthRef.current = discountRules.length;
     }, [discountRules.length]);
+
+    useEffect(() => {
+        console.log(discountRules);
+    }, [discountRules])
 
     const handleDefaultSelectChange = (value: number) => {
         const data = discountRules.map((rule) => {
@@ -155,18 +137,6 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                         options={defaultRuleOptions}
                         value={selectedDefaultRuleOption}
                         onChange={(e) => handleDefaultSelectChange(e)}
-                        style={{
-                            width: '100%',
-                        }}
-                    />
-                </div>
-
-                <div>
-                    <h3 style={{ fontSize: '14px', fontWeight: 500, marginBottom: '12px' }}>Quantity scope</h3>
-                    <Select
-                        options={quantityScopeOptions}
-                        value={targetingSettingsData.quantity_scope}
-                        onChange={(e) => setTargetingSettingsData({ ...targetingSettingsData, quantity_scope: e })}
                         style={{
                             width: '100%',
                         }}
@@ -274,60 +244,106 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
                                         <div>
                                             <label style={{ fontSize: '13px', fontWeight: 500, display: 'block', marginBottom: '8px' }}>
-                                                Quantity
+                                                {t(basicInformation.offerType.subtype === "buy-x-get-y" ? "Buy quantity" : "Quantity")}
                                             </label>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                 {/* <span style={{ fontSize: '14px', fontWeight: 500 }}>Buy</span> */}
-                                                <InputNumber
-                                                    min={1}
-                                                    value={rule.quantity}
-                                                    onChange={(value) => {
-                                                        const newRules = [...discountRules];
-                                                        newRules[index].quantity = value || 0;
-                                                        setDiscountRules(newRules);
-                                                    }}
-                                                    style={{
-                                                        flex: 1,
-                                                        border: '1px solid #dfe3e8',
-                                                        borderRadius: '6px',
-                                                        fontSize: '14px',
-                                                    }}
-                                                />
+                                                {basicInformation.offerType.subtype === "buy-x-get-y" ?
+                                                    <InputNumber
+                                                        min={0}
+                                                        step={1}
+                                                        value={rule.quantity - rule.discount.value}
+                                                        onChange={(value) => {
+                                                            const a = value ?? 0
+                                                            console.log(a);
+                                                            const newRules = [...discountRules];
+                                                            newRules[index].quantity = a + rule.discount.value;
+                                                            setDiscountRules(newRules);
+                                                        }}
+                                                        style={{
+                                                            flex: 1,
+                                                            border: '1px solid #dfe3e8',
+                                                            borderRadius: '6px',
+                                                            fontSize: '14px',
+                                                        }}
+                                                    />
+                                                    :
+                                                    <InputNumber
+                                                        min={1}
+                                                        step={1}
+                                                        value={rule.quantity}
+                                                        onChange={(value) => {
+                                                            const newRules = [...discountRules];
+                                                            newRules[index].quantity = value || 0;
+                                                            setDiscountRules(newRules);
+                                                        }}
+                                                        style={{
+                                                            flex: 1,
+                                                            border: '1px solid #dfe3e8',
+                                                            borderRadius: '6px',
+                                                            fontSize: '14px',
+                                                        }}
+                                                    />
+                                                }
                                             </div>
                                         </div>
 
                                         <div>
                                             <label style={{ fontSize: '13px', fontWeight: 500, display: 'block', marginBottom: '8px', color: '#a0a0a0' }}>
-                                                DiscountRate
+                                                {t(basicInformation.offerType.subtype === "buy-x-get-y" ? "Get quantity" : "DiscountRate")}
                                             </label>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                <InputNumber
-                                                    min={0}
-                                                    max={1}
-                                                    step={0.01}
-                                                    value={rule.discount.value}
-                                                    onChange={(value) => {
-                                                        const newRules = [...discountRules];
-                                                        newRules[index].discount.value = value ?? 0;
-                                                        setDiscountRules(newRules);
-                                                    }}
-                                                    formatter={(value) => {
-                                                        if (value === undefined || value === null) return '';
-                                                        return String(value).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
-                                                    }}
-                                                    parser={(value) => {
-                                                        if (value === '' || value === undefined || value === null) {
-                                                            return 0;
-                                                        }
-                                                        return Number(value);
-                                                    }}
-                                                    style={{
-                                                        flex: 1,
-                                                        border: '1px solid #dfe3e8',
-                                                        borderRadius: '6px',
-                                                        fontSize: '14px',
-                                                    }}
-                                                />
+                                                {basicInformation.offerType.subtype === "buy-x-get-y" ?
+                                                    <InputNumber
+                                                        min={0}
+                                                        step={1}
+                                                        value={rule.discount.value}
+                                                        onChange={(value) => {
+                                                            const a = value ?? 0
+                                                            const b = rule.quantity - rule.discount.value;
+
+                                                            console.log(a, b);
+                                                            const newRules = [...discountRules];
+                                                            newRules[index].discount.value = a;
+                                                            newRules[index].quantity = a + b;
+                                                            setDiscountRules(newRules);
+                                                        }}
+                                                        style={{
+                                                            flex: 1,
+                                                            border: '1px solid #dfe3e8',
+                                                            borderRadius: '6px',
+                                                            fontSize: '14px',
+                                                        }}
+                                                    />
+                                                    :
+                                                    <InputNumber
+                                                        min={0}
+                                                        max={1}
+                                                        step={0.01}
+                                                        value={rule.discount.value}
+                                                        onChange={(value) => {
+                                                            const newRules = [...discountRules];
+                                                            newRules[index].discount.value = value ?? 0;
+                                                            setDiscountRules(newRules);
+                                                        }}
+                                                        formatter={(value) => {
+                                                            if (value === undefined || value === null) return '';
+                                                            return String(value).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
+                                                        }}
+                                                        parser={(value) => {
+                                                            if (value === '' || value === undefined || value === null) {
+                                                                return 0;
+                                                            }
+                                                            return Number(value);
+                                                        }}
+                                                        style={{
+                                                            flex: 1,
+                                                            border: '1px solid #dfe3e8',
+                                                            borderRadius: '6px',
+                                                            fontSize: '14px',
+                                                        }}
+                                                    />
+                                                }
                                             </div>
                                         </div>
                                     </div>
@@ -455,7 +471,11 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                                 enabled: true,
                                 isExpanded: true,
                                 quantity: discountRules.length + 1,
-                                discount: {
+                                discount: basicInformation.offerType.subtype === "buy-x-get-y" ? {
+                                    type: "product",
+                                    value: 0,
+                                    maxDiscount: 100,
+                                } : {
                                     type: "percentage",
                                     value: 0.9,
                                     maxDiscount: 100,
@@ -541,83 +561,86 @@ const ProductsAndDiscountsSetting: React.FC<ProductsAndDiscountsSettingProps> = 
                         )}
 
                     {/* Product Items */}
-                    {selectedOfferType.id === 'quantity-breaks-same' && (
-                        <>
-                            {discountRules.map((rule, index) => {
-                                return (
-                                    <div
-                                        key={index}
-                                        style={{
-                                            border: (selectedRuleIndex === null ? rule.selectedByDefault : selectedRuleIndex === index) ? '1px solid #000' : `1px solid ${styleConfigData?.card?.border_color}`,
-                                            borderRadius: '8px',
-                                            padding: '12px',
-                                            marginBottom: '12px',
-                                            position: 'relative',
-                                            background: styleConfigData?.card.background_color,
-                                            cursor: 'pointer'
-                                        }}
-                                        onClick={() => setSelectedRuleIndex(index)}
-                                    >
-                                        {rule.badgeText && <div style={{ position: 'absolute', top: '-8px', right: '12px', background: '#000', color: '#fff', padding: '2px 12px', borderRadius: '12px', fontSize: '10px', fontWeight: 600, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                            {rule.badgeText}
-                                        </div>}
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <input
-                                                type="radio"
-                                                name="discount-rule-group"
-                                                value={rule.quantity}
-                                                checked={selectedRuleIndex === null ? rule.selectedByDefault : selectedRuleIndex === index}
-                                                readOnly
-                                                style={{ width: '16px', height: '16px' }}
-                                            />
-                                            <div style={{ flex: 1 }}>
-                                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                                                    <strong style={{ fontSize: '14px' }}>{rule.title}</strong>
-                                                    {!!rule.labelText &&
-                                                        <span
-                                                            style={{
-                                                                background: styleConfigData?.card?.label_color,
-                                                                padding: '2px 6px',
-                                                                borderRadius: '4px',
-                                                                fontSize: '10px'
-                                                            }}
+                    {discountRules.map((rule, index) => {
+                        return (
+                            <div
+                                key={index}
+                                style={{
+                                    border: (selectedRuleIndex === null ? rule.selectedByDefault : selectedRuleIndex === index) ? '1px solid #000' : `1px solid ${styleConfigData?.card?.border_color}`,
+                                    borderRadius: '8px',
+                                    padding: '12px',
+                                    marginBottom: '12px',
+                                    position: 'relative',
+                                    background: styleConfigData?.card.background_color,
+                                    cursor: 'pointer'
+                                }}
+                                onClick={() => setSelectedRuleIndex(index)}
+                            >
+                                {rule.badgeText && <div style={{ position: 'absolute', top: '-8px', right: '12px', background: '#000', color: '#fff', padding: '2px 12px', borderRadius: '12px', fontSize: '10px', fontWeight: 600, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {rule.badgeText}
+                                </div>}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <input
+                                        type="radio"
+                                        name="discount-rule-group"
+                                        value={rule.quantity}
+                                        checked={selectedRuleIndex === null ? rule.selectedByDefault : selectedRuleIndex === index}
+                                        readOnly
+                                        style={{ width: '16px', height: '16px' }}
+                                    />
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                            <strong style={{ fontSize: '14px' }}>{rule.title}</strong>
+                                            {!!rule.labelText &&
+                                                <span
+                                                    style={{
+                                                        background: styleConfigData?.card?.label_color,
+                                                        padding: '2px 6px',
+                                                        borderRadius: '4px',
+                                                        fontSize: '10px'
+                                                    }}
 
-                                                        >
-                                                            {rule.labelText}
-                                                        </span>
-                                                    }
-                                                </div>
-                                                <div style={{ fontSize: '12px', color: '#6d7175' }}>{rule.subtitle}</div>
-                                            </div>
-                                            {
-                                                rule.discount.value === 1 && (
-                                                    <div style={{ textAlign: 'right' }}>
-                                                        <strong style={{ fontSize: '16px' }}>€{Number(rule.quantity * previewPrice).toFixed(2)}</strong>
-                                                    </div>
-                                                )
-                                            }
-                                            {
-                                                rule.discount.value === 0 && (
-                                                    <div style={{ textAlign: 'right' }}>
-                                                        <strong style={{ fontSize: '16px' }}>Free</strong>
-                                                    </div>
-                                                )
-                                            }
-                                            {
-                                                (rule.discount.value > 0 && rule.discount.value < 1
-                                                ) && (
-                                                    <div style={{ textAlign: 'right' }}>
-                                                        <strong style={{ fontSize: '16px' }}>€{Number(rule.quantity * previewPrice * rule.discount.value).toFixed(2)}</strong>
-                                                        <div style={{ fontSize: '12px', color: '#6d7175', textDecoration: 'line-through' }}>€{Number(rule.quantity * previewPrice).toFixed(2)}</div>
-                                                    </div>
-                                                )
+                                                >
+                                                    {rule.labelText}
+                                                </span>
                                             }
                                         </div>
+                                        <div style={{ fontSize: '12px', color: '#6d7175' }}>{rule.subtitle}</div>
                                     </div>
-                                )
-                            })}
-                        </>
-                    )}
+                                    {
+                                        (rule.discount.type === 'percentage' && rule.discount.value === 1) || (rule.discount.type === 'product' && rule.discount.value === 0) && (
+                                            <div style={{ textAlign: 'right' }}>
+                                                <strong style={{ fontSize: '16px' }}>€{Number(rule.quantity * previewPrice).toFixed(2)}</strong>
+                                            </div>
+                                        )
+                                    }
+                                    {
+                                        (rule.discount.type === 'percentage' && rule.discount.value === 0) && (
+                                            <div style={{ textAlign: 'right' }}>
+                                                <strong style={{ fontSize: '16px' }}>Free</strong>
+                                            </div>
+                                        )
+                                    }
+                                    {
+                                        (rule.discount.type === 'percentage' && rule.discount.value > 0 && rule.discount.value < 1) && (
+                                            <div style={{ textAlign: 'right' }}>
+                                                <strong style={{ fontSize: '16px' }}>€{Number(rule.quantity * previewPrice * rule.discount.value).toFixed(2)}</strong>
+                                                <div style={{ fontSize: '12px', color: '#6d7175', textDecoration: 'line-through' }}>€{Number(rule.quantity * previewPrice).toFixed(2)}</div>
+                                            </div>
+                                        )
+                                    }
+                                    {
+                                        (rule.discount.type === 'product' && rule.discount.value > 0) && (
+                                            <div style={{ textAlign: 'right' }}>
+                                                <strong style={{ fontSize: '16px' }}>€{Number(previewPrice * (rule.quantity - rule.discount.value)).toFixed(2)}</strong>
+                                                <div style={{ fontSize: '12px', color: '#6d7175', textDecoration: 'line-through' }}>€{Number(rule.quantity * previewPrice).toFixed(2)}</div>
+                                            </div>
+                                        )
+                                    }
+                                </div>
+                            </div>
+                        )
+                    })}
                 </div>
 
                 <p style={{ fontSize: '12px', color: '#6d7175', marginTop: '12px', fontStyle: 'italic' }}>

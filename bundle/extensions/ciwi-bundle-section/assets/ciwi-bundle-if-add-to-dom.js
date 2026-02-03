@@ -140,7 +140,7 @@ async function insertHtmlNextToCartForms() {
             class="ciwi-rule"
             data-index="${index}"
             data-qty="${rule.quantity}"
-            data-discount="${rule.discount.value}"
+            data-discount="${bundleData?.basic_information?.offerType?.subtype === "buy-x-get-y" ? (rule.quantity - rule.discount.value) / rule.quantity : rule.discount.value}"
             style="
               border: 1px solid ${rule.selectedByDefault ? "#000" : bundleData.style_config.card.border_color};
               border-radius: 8px;
@@ -234,7 +234,7 @@ async function insertHtmlNextToCartForms() {
         <div
           class="ciwi-bundle-countdown"
           style="
-            display: none,
+            display: none;
           "
         >
           <div
