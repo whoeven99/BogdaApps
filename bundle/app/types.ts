@@ -8,3 +8,10 @@ export interface OfferType {
     exposurePV: number;
     addToCartPV: number;
 }
+
+export interface ProductVariantsDataType {
+    id: string;
+    name: string;
+    price: number;
+    image: string
+}

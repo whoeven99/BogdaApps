@@ -460,3 +460,49 @@ if (document.readyState === "loading") {
 } else {
   insertHtmlNextToCartForms();
 }
+
+// const GIFT_VARIANT_ID = 44218278674455;
+
+// const originalFetch = window.fetch;
+
+// window.fetch = async (...args) => {
+//   const url = args[0];
+//   const options = args[1] || {};
+
+//   // 防止递归
+//   if (options?.headers?.["X-AUTO-GIFT"]) {
+//     return originalFetch(...args);
+//   }
+
+//   if (typeof url === "string" && /\/cart\/add/.test(url)) {
+//     try {
+//       let body = null;
+
+//       if (options.body instanceof FormData) {
+//         body = Object.fromEntries(options.body.entries());
+//       } else if (typeof options.body === "string") {
+//         body = JSON.parse(options.body);
+//       }
+
+//       const quantity = Number(body?.quantity || 1);
+
+//       // ⭐ 先加 gift
+//       await originalFetch("/cart/add.js", {
+//         method: "POST",
+//         headers: {
+//           "Content-Type": "application/json",
+//           "X-AUTO-GIFT": "1",
+//         },
+//         body: JSON.stringify({
+//           id: GIFT_VARIANT_ID,
+//           quantity,
+//         }),
+//       });
+//     } catch (e) {
+//       console.warn("auto gift failed", e);
+//     }
+//   }
+
+//   // ⭐ 最后才加主商品（主题监听这里）
+//   return originalFetch(...args);
+// };

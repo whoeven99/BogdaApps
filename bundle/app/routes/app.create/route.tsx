@@ -15,17 +15,12 @@ import { Affix, Button, Flex, Spin } from "antd";
 import { globalStore } from "app/globalStore";
 import { GetUserDiscount, SaveUserDiscount, UpdateUserDiscount } from "app/api/javaServer";
 import EditProductModal from "./components/editProductModal";
-
-export interface ProductVariantsDataType {
-    id: string;
-    name: string;
-    price: number;
-    image: string
-}
+import { ProductVariantsDataType } from "app/types";
 
 export interface BasicInformationType {
     offerName: string;
     displayName: string;
+    enable: boolean;
     offerType: {
         category: string;
         subtype:
@@ -41,9 +36,8 @@ export interface BasicInformationType {
 
 export interface DiscountRulesType {
     id: number;
-    enabled: boolean;
-    isExpanded: boolean;
     title: string;
+    isExpanded: boolean;
     quantity: number;
     discount: {
         type: "percentage" | "amount" | "product"
@@ -172,7 +166,6 @@ export interface StyleConfigType {
         color: string;
     }; //倒计时组件配置
 }
-
 export interface TargetingSettingsType {
     marketVisibilitySettingData: string[];
     visibilityConstraints: {
@@ -186,9 +179,7 @@ export interface TargetingSettingsType {
     };
     budget: {
         totalBudget: number | null;
-        usedTotalBudget: number | null;
         dailyBudget: number | null;
-        usedDailyBudget: number | null;
     };
     usage_limit: {
         per_customer: number | null;
@@ -603,25 +594,27 @@ const Index = () => {
     ];
 
     const offerTypes: {
-        id: string;
+        id:
+        "quantity-breaks-same"
+        | "buy-x-get-y"
+        | "quantity-breaks-different"
+        | "complete-bundle"
+        | "subscription"
+        | "progressive-gifts";
         name: string;
-        description: string;
     }[] = [
             {
                 id: "quantity-breaks-same",
                 name: t("Quantity breaks for the same product"),
-                description: t("Offer discounts when customers buy multiple quantities of the same product"),
             },
             {
                 id: "buy-x-get-y",
                 name: t("Buy X, get Y free (BOGO) deal"),
-                description: t("Create buy-one-get-one or buy-X-get-Y-free promotions")
             },
-            // {
-            //     id: 'quantity-breaks-different',
-            //     name: t('Quantity breaks for different products'),
-            //     description: t('Offer discounts when customers buy multiple different products together')
-            // },
+            {
+                id: 'quantity-breaks-different',
+                name: t('Quantity breaks for different products'),
+            },
             // {
             //     id: 'complete-bundle',
             //     name: t('Complete the bundle'),
@@ -653,6 +646,7 @@ const Index = () => {
     const [basicInformation, setBasicInformation] = useState<BasicInformationType>({
         offerName: "",
         displayName: `#Bundle ${Date.now()}`,
+        enable: true,
         offerType: {
             category: "product",
             subtype: "quantity-breaks-same"
@@ -662,7 +656,6 @@ const Index = () => {
     const [discountRules, setDiscountRules] = useState<DiscountRulesType[]>([
         {
             id: Date.now(),
-            enabled: true,
             isExpanded: true,
             quantity: 1,
             discount: {
@@ -681,7 +674,6 @@ const Index = () => {
         },
         {
             id: Date.now() + 1,
-            enabled: true,
             isExpanded: true,
             quantity: 2,
             discount: {
@@ -784,9 +776,7 @@ const Index = () => {
         },
         budget: {
             totalBudget: null,
-            usedTotalBudget: null,
             dailyBudget: null,
-            usedDailyBudget: null,
         },
         usage_limit: {
             per_customer: null,
@@ -796,17 +786,6 @@ const Index = () => {
     })
 
     const [mainModalType, setMainModalType] = useState<"ProductVariants" | "EditProductVariants" | null>(null)
-
-    const selectedOfferType = useMemo(() => {
-        return offerTypes.find(type => type.id == basicInformation.offerType?.subtype) || offerTypes[0]
-    }, [basicInformation])
-
-    const previewPrice: number = useMemo(() => {
-        if (selectedProducts.length > 0) {
-            return selectedProducts[0].price;
-        }
-        return 65;
-    }, [selectedProducts])
 
     const durationDays = useMemo(() => {
         const { startsAt, endsAt } = targetingSettingsData.schedule;
@@ -842,11 +821,50 @@ const Index = () => {
     }, [])
 
     useEffect(() => {
+        if (basicInformation.offerType?.subtype === "quantity-breaks-same") {
+            setDiscountRules([
+                {
+                    id: Date.now(),
+                    isExpanded: true,
+                    quantity: 1,
+                    discount: {
+                        type: "percentage",
+                        value: 1,
+                        maxDiscount: 1,
+                    },
+                    discount_reward: [],
+                    title: 'Single',
+                    subtitle: 'single',
+                    labelText: '',
+                    badgeText: '',
+                    selectedByDefault: false,
+                    reward: [],
+                    showAsSoldOut: false,
+                },
+                {
+                    id: Date.now() + 1,
+                    isExpanded: true,
+                    quantity: 2,
+                    discount: {
+                        type: "percentage",
+                        value: 0.8,
+                        maxDiscount: 100,
+                    },
+                    discount_reward: [],
+                    title: 'Duo',
+                    subtitle: 'duo',
+                    labelText: 'SAVE 20%',
+                    badgeText: 'Popular',
+                    selectedByDefault: true,
+                    reward: [],
+                    showAsSoldOut: false,
+                },
+            ])
+        }
         if (basicInformation.offerType.subtype === "buy-x-get-y") {
             setDiscountRules([
                 {
                     id: Date.now(),
-                    enabled: true,
                     isExpanded: true,
                     quantity: 1,
                     discount: {
@@ -865,7 +883,6 @@ const Index = () => {
                 },
                 {
                     id: Date.now() + 1,
-                    enabled: true,
                     isExpanded: true,
                     quantity: 3,
                     discount: {
@@ -877,6 +894,46 @@ const Index = () => {
                     title: 'Buy 2 Get 1',
                     subtitle: 'buy 2 get 1',
                     labelText: 'SAVE 33%',
+                    badgeText: 'Popular',
+                    selectedByDefault: true,
+                    reward: [],
+                    showAsSoldOut: false,
+                },
+            ])
+        }
+        if (basicInformation.offerType?.subtype === "quantity-breaks-different") {
+            setDiscountRules([
+                {
+                    id: Date.now(),
+                    isExpanded: true,
+                    quantity: 1,
+                    discount: {
+                        type: "percentage",
+                        value: 1,
+                        maxDiscount: 1,
+                    },
+                    discount_reward: [],
+                    title: 'Single',
+                    subtitle: 'single',
+                    labelText: '',
+                    badgeText: '',
+                    selectedByDefault: false,
+                    reward: [],
+                    showAsSoldOut: false,
+                },
+                {
+                    id: Date.now() + 1,
+                    isExpanded: true,
+                    quantity: 2,
+                    discount: {
+                        type: "percentage",
+                        value: 0.8,
+                        maxDiscount: 100,
+                    },
+                    discount_reward: [],
+                    title: 'Duo',
+                    subtitle: 'duo',
+                    labelText: 'SAVE 20%',
                     badgeText: 'Popular',
                     selectedByDefault: true,
                     reward: [],
@@ -960,6 +1017,10 @@ const Index = () => {
             }
         }
     }, [productPoolDataFetcher.data])
+
+    useEffect(() => {
+        console.log("selectedProducts: ", selectedProducts);
+    }, [selectedProducts])
 
     const getUserDiscount = useCallback(async (discountGid: string) => {
         const getUserDiscountData = await GetUserDiscount({
@@ -1275,7 +1336,7 @@ const Index = () => {
                 discountAutomaticAppCreateAndMetafieldsSetRequestBody:
                     JSON.stringify({
                         discountAutomaticAppCreateAndMetafieldsSetRequestJsondata,
-                        basic_information: basicInformation,
+                        basic_information: newBasicInformation,
                         discount_rules: discountRules,
                         subscription: subscriptionData,
                         progressive_gift: progressiveGiftData,
@@ -1368,8 +1429,7 @@ const Index = () => {
                         {step === 1 &&
                             <BasicInformationSetting
                                 offerTypes={offerTypes}
-                                selectedOfferType={selectedOfferType}
-                                previewPrice={previewPrice}
+                                previewProduct={selectedProducts[0]}
                                 basicInformation={basicInformation}
                                 discountRules={discountRules}
                                 styleConfigData={styleConfigData}
@@ -1398,7 +1458,7 @@ const Index = () => {
                                 />
 
                                 <ProductsAndDiscountsSetting
-                                    previewPrice={previewPrice}
+                                    previewProduct={selectedProducts[0]}
                                     selectedProducts={selectedProducts}
                                     setMainModalType={setMainModalType}
                                     basicInformation={basicInformation}
@@ -1413,11 +1473,11 @@ const Index = () => {
 
                         {step === 3 && (
                             <StyleDesignSetting
-                                previewPrice={previewPrice}
+                                basicInformation={basicInformation}
+                                previewProduct={selectedProducts[0]}
                                 styleConfigData={styleConfigData}
                                 setStyleConfigData={setStyleConfigData}
                                 discountRules={discountRules}
-                                selectedOfferType={selectedOfferType}
                                 selectedRuleIndex={selectedRuleIndex}
                                 setSelectedRuleIndex={setSelectedRuleIndex}
                             />
@@ -1467,6 +1527,8 @@ const Index = () => {
                         {step === 4 ? t(discountGid ? "Save Offer" : "Create Offer") : 'Next'}
                     </Button>
                 </div>
+
+
             </div>
         )
 };

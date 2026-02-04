@@ -1,32 +1,33 @@
 import { Button, Checkbox, ColorPicker, Flex, Statistic, Typography } from "antd";
-import { DiscountRulesType, StyleConfigType } from "../route";
+import { BasicInformationType, DiscountRulesType, StyleConfigType } from "../route";
+import { ProductVariantsDataType } from "app/types";
+import { useMemo } from "react";
 
 const { Timer } = Statistic;
-const { Text } = Typography;
 
 interface StyleConfigDataProps {
-    previewPrice: number;
+    basicInformation: BasicInformationType;
+    previewProduct: ProductVariantsDataType;
     styleConfigData: StyleConfigType;
     setStyleConfigData: (styleConfigData: StyleConfigType) => void;
     discountRules: DiscountRulesType[];
-    selectedOfferType: {
-        id: string;
-        name: string;
-        description: string;
-    };
     selectedRuleIndex: number | null;
     setSelectedRuleIndex: (selectedRuleIndex: number) => void;
 }
 
 const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
-    previewPrice,
+    basicInformation,
+    previewProduct,
     styleConfigData,
     setStyleConfigData,
     discountRules,
-    selectedOfferType,
     selectedRuleIndex,
     setSelectedRuleIndex
 }) => {
+    const previewPrice: number = useMemo(() => {
+        return previewProduct?.price ?? 65;
+    }, [previewProduct])
+
     return (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 400px', gap: '24px', alignItems: 'start' }}>
             {/* Left Column - Form */}
@@ -539,8 +540,7 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                                     }}
                                 />
                             </div>
-                        )
-                    }
+                        )}
 
                     {/* Product Items */}
                     {discountRules.map((rule, index) => {
@@ -558,10 +558,18 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                                 }}
                                 onClick={() => setSelectedRuleIndex(index)}
                             >
-                                {rule.badgeText && <div style={{ position: 'absolute', top: '-8px', right: '12px', background: '#000', color: '#fff', padding: '2px 12px', borderRadius: '12px', fontSize: '10px', fontWeight: 600, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                    {rule.badgeText}
-                                </div>}
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                {rule.badgeText &&
+                                    <div style={{ position: 'absolute', top: '-8px', right: '12px', background: '#000', color: '#fff', padding: '2px 12px', borderRadius: '12px', fontSize: '10px', fontWeight: 600, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                        {rule.badgeText}
+                                    </div>
+                                }
+                                <div
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                    }}
+                                >
                                     <input
                                         type="radio"
                                         name="discount-rule-group"
@@ -620,6 +628,87 @@ const StyleDesignSetting: React.FC<StyleConfigDataProps> = ({
                                         )
                                     }
                                 </div>
+                                {(basicInformation.offerType.subtype === "quantity-breaks-different" && (selectedRuleIndex === index || (selectedRuleIndex === null && rule.selectedByDefault)) && previewProduct) &&
+                                    <div
+                                        style={{
+                                            display: 'flex',
+                                            alignItems: 'left',
+                                            flexDirection: 'column',
+                                            gap: '4px',
+                                            marginTop: '8px',
+                                            cursor: "default"
+                                        }}
+                                    >
+                                        <div
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '8px'
+                                            }}
+                                        >
+                                            <img
+                                                src={previewProduct?.image}
+                                                alt={previewProduct.name}
+                                                style={{
+                                                    width: '40px',
+                                                    height: 'auto',
+                                                    objectFit: 'cover',
+                                                    borderRadius: '4px',
+                                                }}
+                                            />
+                                            <div
+                                                style={{
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    justifyContent: 'flex-start',
+                                                    alignItems: 'flex-start',
+                                                }}
+                                            >
+                                                <strong>{previewProduct?.name}</strong>
+                                            </div>
+                                        </div>
+                                        {Array.from({ length: rule.quantity - 1 }).map((_, i) => (
+                                            <div
+                                                key={i}
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '8px'
+                                                }}
+                                            >
+                                                <div
+
+                                                    style={{
+                                                        width: 40,
+                                                        height: 40,
+                                                        border: "1px solid rgb(233, 233, 233)",
+                                                        borderRadius: "4px",
+                                                        display: "flex",
+                                                        alignItems: "center",
+                                                        justifyContent: "center",
+                                                        fontWeight: "bold",
+                                                        cursor: "pointer",
+                                                    }}
+                                                >
+                                                    +
+                                                </div>
+                                                <div
+                                                    style={{
+                                                        color: "#fff",
+                                                        fontSize: "12px",
+                                                        lineHeight: "1.4",
+                                                        padding: "6px 14px",
+                                                        borderRadius: "8px",
+                                                        backgroundColor: "var(--kaching-collection-breaks-button-color, #333)",
+                                                        cursor: "pointer",
+                                                    }}
+                                                >
+                                                    Choose
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                }
                             </div>
                         )
                     })}
