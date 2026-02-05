@@ -1,11 +1,11 @@
 import { X } from "lucide-react";
-import { ProductVariantsDataType } from "../route";
 import { useFetcher } from "@remix-run/react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button, Checkbox, Divider, Flex, Input, Popover, Radio } from "antd";
 import { EllipsisOutlined, SearchOutlined } from "@ant-design/icons";
 import { Pagination } from "@shopify/polaris";
+import { ProductVariantsDataType } from "app/types";
 
 interface productModalItemType {
     productId: string;

@@ -34,46 +34,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   const formData = await request.formData();
 
-  const shopRequestBody = JSON.parse(
-    formData.get("shopRequestBody") as string,
+  const initRequestBody = JSON.parse(
+    formData.get("initRequestBody") as string,
   );
   const webpixerRequestBody = JSON.parse(
     formData.get("webpixerRequestBody") as string,
   );
 
   switch (true) {
-    case !!shopRequestBody:
-      const shopData = await queryShop({
-        ...shopRequestBody,
-        shop,
-        accessToken,
+    case !!initRequestBody:
+      const initUserData = await InitUser({
+        shopName: shop,
+        accessToken: accessToken || "",
       });
 
-      if (shopData) {
-        const shopEmail = shopData?.shop?.email;
-        const shopOwnerName = shopData?.shop?.shopOwnerName;
-        const lastSpaceIndex = shopOwnerName.lastIndexOf(" ");
-        const firstName = shopOwnerName.substring(0, lastSpaceIndex);
-        const lastName = shopOwnerName.substring(lastSpaceIndex + 1);
-
-        const initUserData = await InitUser({
-          shopName: shop,
-          accessToken: accessToken || "",
-          email: shopEmail || "",
-          userTag: shopOwnerName || "",
-          firstName: firstName || "",
-          lastName: lastName || "",
-        });
-
-        return initUserData;
-      }
-
-      return {
-        success: false,
-        errorCode: 10001,
-        errorMsg: "SERVER_ERROR",
-        response: null,
-      }
+      return initUserData;
     case !!webpixerRequestBody:
       const queryWebpixerData = await queryWebpixer({
         shop,
@@ -142,10 +117,18 @@ export default function App() {
     globalStore.shop = shop;
     globalStore.server = server;
     batchQueryUserDiscount()
-    initFetcher.submit({ shopRequestBody: JSON.stringify({}) }, { method: "POST" });
+    initFetcher.submit({ initRequestBody: JSON.stringify({}) }, { method: "POST" });
     webpixerInitFetcher.submit({ webpixerRequestBody: JSON.stringify({}) }, { method: "POST" });
     setIsClient(true);
   }, []);
+
+  useEffect(() => {
+    if (initFetcher.data) {
+      if (initFetcher.data.success) {
+        globalStore.storefrontAccessToken = initFetcher.data?.response?.storefrontAccessToken || "";
+      }
+    }
+  }, [initFetcher.data]);
 
   const batchQueryUserDiscount = useCallback(async () => {
     const batchQueryUserDiscountData = await BatchQueryUserDiscount({

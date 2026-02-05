@@ -16,6 +16,9 @@ import { globalStore } from "app/globalStore";
 import { GetUserDiscount, SaveUserDiscount, UpdateUserDiscount } from "app/api/javaServer";
 import EditProductModal from "./components/editProductModal";
 import { ProductVariantsDataType } from "app/types";
+import { QueryStorefrontProducts } from "app/api/storefront";
+import { batchAddPreviewProductModalData, setPreviewProductModalState } from "app/store/modules/previewProductModalData";
+import { useDispatch, useSelector } from "react-redux";
 
 export interface BasicInformationType {
     offerName: string;
@@ -166,6 +169,7 @@ export interface StyleConfigType {
         color: string;
     }; //倒计时组件配置
 }
+
 export interface TargetingSettingsType {
     marketVisibilitySettingData: string[];
     visibilityConstraints: {
@@ -576,6 +580,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 const Index = () => {
     const { discountGid } = useLoaderData<typeof loader>();
     const navigate = useNavigate();
+    const dispatch = useDispatch();
+    const previewProductModalData = useSelector((state: any) => state.previewProductModalData);
     const { t } = useTranslation();
 
     const metafieldsRef = useRef<any>(null);
@@ -902,6 +908,12 @@ const Index = () => {
             ])
         }
         if (basicInformation.offerType?.subtype === "quantity-breaks-different") {
+            if (previewProductModalData.state === "null") {
+                setTimeout(() => {
+                    queryStorefrontProducts({
+                    })
+                }, 500)
+            }
             setDiscountRules([
                 {
                     id: Date.now(),
@@ -967,27 +979,6 @@ const Index = () => {
         }
     }, [shopMarketsDataFetcher.data])
 
-    // useEffect(() => {
-    //     switch (true) {
-    //         case mainModalType == "Customer":
-    //             customersDataFetcher.submit({
-    //                 customersRequestBody: JSON.stringify({
-    //                     query: '',
-    //                 })
-    //             }, { method: 'POST' })
-    //             break;
-    //         case mainModalType == "CustomerSegments":
-    //             customerSegmentsDataFetcher.submit({
-    //                 customerSegmentsRequestBody: JSON.stringify({
-    //                     query: '',
-    //                 })
-    //             }, { method: 'POST' })
-    //             break;
-    //         default:
-    //             break;
-    //     }
-    // }, [mainModalType])
-
     useEffect(() => {
         if (confirmFetcher.data) {
             if (confirmFetcher.data.success) {
@@ -1017,10 +1008,6 @@ const Index = () => {
             }
         }
     }, [productPoolDataFetcher.data])
-
-    useEffect(() => {
-        console.log("selectedProducts: ", selectedProducts);
-    }, [selectedProducts])
 
     const getUserDiscount = useCallback(async (discountGid: string) => {
         const getUserDiscountData = await GetUserDiscount({
@@ -1056,6 +1043,38 @@ const Index = () => {
             metafieldsRef.current = getUserDiscountData.response?.discountData?.metafields;
         }
     }, [globalStore.shop, globalStore.server])
+
+    const queryStorefrontProducts = async ({
+        startCursor,
+        endCursor,
+    }: {
+        startCursor?: string,
+        endCursor?: string,
+    }) => {
+        dispatch(setPreviewProductModalState("pending"))
+
+        const response = await QueryStorefrontProducts({
+            shop: globalStore.shop,
+            storefrontAccessToken: globalStore.storefrontAccessToken,
+            startCursor,
+            endCursor,
+        })
+
+        if (response?.products?.nodes?.length) {
+            const products = response?.products?.nodes
+            dispatch(batchAddPreviewProductModalData(products))
+            const hasNextPage = response?.products?.pageInfo?.hasNextPage
+            if (hasNextPage) {
+                queryStorefrontProducts({
+                    endCursor: response?.products?.pageInfo?.endCursor,
+                })
+            } else {
+                dispatch(setPreviewProductModalState("success"))
+            }
+        } else {
+            dispatch(setPreviewProductModalState("success"))
+        }
+    }
 
     const nextStepCheckAndConfirm = () => {
         switch (true) {
@@ -1377,7 +1396,9 @@ const Index = () => {
         :
         (
             <div className="polaris-page">
-                <Affix offsetTop={0}>
+                <Affix
+                    offsetTop={0}
+                >
                     <Header backUrl="/app" title={t(discountGid ? "Edit Offer" : "Create New Offer")} />
                 </Affix>
 
@@ -1527,8 +1548,6 @@ const Index = () => {
                         {step === 4 ? t(discountGid ? "Save Offer" : "Create Offer") : 'Next'}
                     </Button>
                 </div>
-
-
             </div>
         )
 };

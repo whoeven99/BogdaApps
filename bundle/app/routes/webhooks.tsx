@@ -1,7 +1,7 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
-import { UpdateUserDiscountStatus } from "app/api/javaServer";
+import { Uninstall, UpdateUserDiscountStatus } from "app/api/javaServer";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
     const { topic, shop, session, admin, payload } =
@@ -24,6 +24,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 if (session) {
                     await db.session.deleteMany({ where: { shop } });
                 }
+                Uninstall({ shopName: shop });
                 return new Response(null, { status: 200 });
             } catch (error) {
                 console.error("Error APP_UNINSTALLED:", error);

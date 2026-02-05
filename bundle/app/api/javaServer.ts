@@ -1,5 +1,33 @@
 import axios from "axios";
 
+//卸载webhook调用接口
+export const Uninstall = async ({
+    shopName,
+    server,
+}: {
+    shopName: string;
+    server?: string;
+}) => {
+    try {
+        const response = await axios({
+            url: `${server || process.env.SERVER_URL}/bundle/users/uninstall?shopName=${shopName}`,
+            method: "POST",
+        });
+
+        console.log(`${shopName} Uninstall: `, response.data);
+
+        return response.data;
+    } catch (error) {
+        console.error(`${shopName} Error Uninstall:`, error);
+        return {
+            success: false,
+            errorCode: 10001,
+            errorMsg: "SERVER_ERROR",
+            response: null,
+        };
+    }
+};
+
 //查询totalGMV
 export const GetTotalGMV = async ({
     shopName,
@@ -458,18 +486,10 @@ export const InitUser = async ({
     shopName,
     server,
     accessToken,
-    email,
-    userTag,
-    firstName,
-    lastName,
 }: {
     shopName: string;
     server?: string;
     accessToken: string;
-    email: string;
-    userTag: string;
-    firstName: string;
-    lastName: string;
 }) => {
     try {
         const response = await axios({
@@ -477,10 +497,6 @@ export const InitUser = async ({
             method: "POST",
             data: {
                 accessToken,
-                email,
-                userTag,
-                firstName,
-                lastName,
             }
         });
 
