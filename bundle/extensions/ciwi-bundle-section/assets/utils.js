@@ -77,7 +77,7 @@ export function transObjectConfigToArray(configElJson) {
   return ciwiBundleconfig;
 }
 
-export function searchCartAddForm() {
+export function searchCartAddForm(configElJson) {
   let form = null;
   const cartAddforms = document.querySelectorAll('form[action*="/cart/add"]');
 
@@ -111,7 +111,7 @@ export function searchVariantInputOnForm(form) {
   return variantInput;
 }
 
-export function getMostUsefulBundle(bundleEntries) {
+export function getMostUsefulBundle(bundleEntries, configElJson, variantInput) {
   let bundleData = null;
 
   for (const bundle of bundleEntries) {
@@ -150,5 +150,27 @@ export function getMostUsefulBundle(bundleEntries) {
     break;
   }
 
+  console.log("bundleData: ", bundleData);
+
   return bundleData;
+}
+
+export function initqtyInput(bundleData, form, selectedIndex) {
+  let qtyInput = null;
+
+  Array.from(form.children).forEach((child) => {
+    if (child.tagName === "INPUT" && child.name === "quantity") {
+      qtyInput = child;
+    }
+  });
+
+  if (!qtyInput) {
+    qtyInput = document.createElement("input");
+    qtyInput.type = "hidden";
+    qtyInput.name = "quantity";
+    qtyInput.value = bundleData.discount_rules[selectedIndex]?.quantity || 1;
+    form.appendChild(qtyInput);
+  }
+
+  return qtyInput;
 }

@@ -1,4 +1,12 @@
-import { detectNumberFormat } from "./utils.js";
+import {
+  detectNumberFormat,
+  transObjectConfigToArray,
+  searchCartAddForm,
+  searchVariantInputOnForm,
+  getMostUsefulBundle,
+  initqtyInput,
+} from "./utils.js";
+import { initCiwiBundleBlock } from "./ciwi-bundle-block-init.js";
 
 async function insertHtmlNextToCartForms() {
   const configEl = document.getElementById("ciwi-bundles-config");
@@ -12,7 +20,7 @@ async function insertHtmlNextToCartForms() {
 
   if (bundleEntries.length === 0) return;
 
-  const form = searchCartAddForm();
+  const form = searchCartAddForm(configElJson);
   if (!form) return;
 
   const variantInput = searchVariantInputOnForm(form);
@@ -33,160 +41,27 @@ async function insertHtmlNextToCartForms() {
   if (!insertTarget || !insertBeforeNode) return;
   if (insertTarget.querySelector(".ciwi-bundle-wrapper")) return;
 
-  const bundleData = getMostUsefulBundle(bundleEntries);
+  const bundleData = getMostUsefulBundle(
+    bundleEntries,
+    configElJson,
+    variantInput,
+  );
 
   if (!bundleData) return;
-
-  let qtyInput = null;
-
-  Array.from(form.children).forEach((child) => {
-    if (child.tagName === "INPUT" && child.name === "quantity") {
-      qtyInput = child;
-    }
-  });
-
-  if (!qtyInput) {
-    qtyInput = document.createElement("input");
-    qtyInput.type = "hidden";
-    qtyInput.name = "quantity";
-    form.appendChild(qtyInput);
-  }
 
   let selectedIndex = bundleData.discount_rules.findIndex(
     (r) => r.selectedByDefault,
   );
   if (selectedIndex === -1) selectedIndex = 0;
 
-  qtyInput.value = bundleData.discount_rules[selectedIndex]?.quantity || 1;
+  const qtyInput = initqtyInput(bundleData, form, selectedIndex);
+
+  if (!qtyInput) return;
 
   const wrapper = document.createElement("div");
   wrapper.className = "ciwi-bundle-wrapper";
 
-  const rulesHtml = bundleData.discount_rules
-    .map((rule, index) => {
-      return `
-          <div
-            class="ciwi-rule"
-            data-index="${index}"
-            data-qty="${rule.quantity}"
-            data-discount="${bundleData?.basic_information?.offerType?.subtype === "buy-x-get-y" ? (rule.quantity - rule.discount.value) / rule.quantity : rule.discount.value}"
-            style="
-              border: 1px solid ${rule.selectedByDefault ? "#000" : bundleData.style_config.card.border_color};
-              border-radius: 8px;
-              padding: 12px;
-              margin-bottom: 12px;
-              position: relative;
-              background: ${bundleData.style_config.card.background_color};
-              cursor: pointer;
-            "
-          >
-            ${
-              rule.badgeText
-                ? `
-                <div
-                  style="
-                    position:absolute;
-                    top:-8px;
-                    right:12px;
-                    background:#000;
-                    color:#fff;
-                    padding:2px 12px;
-                    border-radius:12px;
-                    font-size:10px;
-                    font-weight:600;
-                    max-width:100%;
-                    overflow:hidden;
-                    text-overflow:ellipsis;
-                  "
-                >
-                  ${rule.badgeText}
-                </div>
-              `
-                : ""
-            }
-
-            <div class="ciwi-rule__content">
-              <input
-                type="radio"
-                name="discount-rule-group"
-                value="${rule.discount.value}"
-                checked=${rule.selectedByDefault}
-                style="width:16px;height:16px"
-              />
-
-              <div style="flex:1">
-                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-                  <strong style="font-size:14px">${rule.title}</strong>
-
-                  ${
-                    rule.labelText
-                      ? `
-                        <span
-                          style="
-                            background:${bundleData.style_config.card.label_color || "#f0f0f0"};
-                            padding:2px 6px;
-                            border-radius:4px;
-                            font-size:10px;
-                          "
-                        >
-                          ${rule.labelText}
-                        </span>
-                      `
-                      : ""
-                  }
-                </div>
-
-                <div style="font-size:12px;color:#6d7175">
-                  ${rule.subtitle || ""}
-                </div>
-              </div>
-              <div class="ciwi-bundle-price" style="text-align:right">
-              </div>
-            </div>
-          </div>
-        `;
-    })
-    .join("");
-
-  wrapper.innerHTML = `
-        <h3
-            style="
-            font-size:${bundleData.style_config.title.fontSize || "16px"};
-            font-weight:${bundleData.style_config.title.fontWeight || 600};
-            color:${bundleData.style_config.title.color || "#000"};
-            margin-bottom:16px;
-            "
-        >
-            ${bundleData.style_config.title.text || ""}
-        </h3>
-
-        <div
-          class="ciwi-bundle-countdown"
-          style="
-            display: none;
-          "
-        >
-          <div
-            style="
-              font-size: 11px;
-              color: #6d7175;
-              margin-bottom: 4px;
-            "
-          >
-            ⏱️ Limited time offer ends in
-          </div>
-          <span
-            id="ciwi-countdown"
-            style="
-              font-size:18px;
-              font-weight:600;
-              font-family:monospace;
-            "
-          ></span>
-        </div>
-
-        ${rulesHtml}
-    `;
+  initCiwiBundleBlock(bundleData, wrapper);
 
   setTimeout(() => {
     const defaultRule = wrapper.querySelector(
@@ -375,6 +250,7 @@ async function insertHtmlNextToCartForms() {
   }
 
   const observer = new MutationObserver(syncBundleDisabled);
+
   observer.observe(variantInput, {
     attributes: true,
     attributeFilter: ["value"],
