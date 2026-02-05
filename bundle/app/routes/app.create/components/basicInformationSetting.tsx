@@ -12,7 +12,7 @@ interface BasicInformationSettingProps {
     offerTypes: {
         id: string;
         name: string;
-        enable?: boolean;
+        enable: boolean;
     }[];
     previewProduct: ProductVariantsDataType;
     basicInformation: BasicInformationType;

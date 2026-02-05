@@ -608,15 +608,17 @@ const Index = () => {
         | "subscription"
         | "progressive-gifts";
         name: string;
-        enable?: boolean;
+        enable: boolean;
     }[] = [
             {
                 id: "quantity-breaks-same",
                 name: t("Quantity breaks for the same product"),
+                enable: true
             },
             {
                 id: "buy-x-get-y",
                 name: t("Buy X, get Y free (BOGO) deal"),
+                enable: true
             },
             {
                 id: 'quantity-breaks-different',
