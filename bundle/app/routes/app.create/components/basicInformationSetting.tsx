@@ -12,6 +12,7 @@ interface BasicInformationSettingProps {
     offerTypes: {
         id: string;
         name: string;
+        enable?: boolean;
     }[];
     previewProduct: ProductVariantsDataType;
     basicInformation: BasicInformationType;
@@ -81,7 +82,7 @@ const BasicInformationSetting: React.FC<BasicInformationSettingProps> = ({
                                 width: '100%',
                                 zIndex: 0
                             }}
-                            options={offerTypes.map(type => (
+                            options={offerTypes.filter(type => type?.enable).map(type => (
                                 {
                                     value: type.id,
                                     label: type.name

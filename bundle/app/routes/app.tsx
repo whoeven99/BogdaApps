@@ -23,6 +23,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   return {
     shop,
+    isDevelopment: process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test" || false,
     server: process.env.SERVER_URL || "",
     apiKey: process.env.SHOPIFY_API_KEY || "",
   };
@@ -104,7 +105,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function App() {
-  const { apiKey, shop, server } = useLoaderData<typeof loader>();
+  const { apiKey, shop, server, isDevelopment } = useLoaderData<typeof loader>();
   const { t } = useTranslation();
   const dispatch = useDispatch();
 
@@ -116,6 +117,7 @@ export default function App() {
   useEffect(() => {
     globalStore.shop = shop;
     globalStore.server = server;
+    globalStore.isDevelopment = isDevelopment;
     batchQueryUserDiscount()
     initFetcher.submit({ initRequestBody: JSON.stringify({}) }, { method: "POST" });
     webpixerInitFetcher.submit({ webpixerRequestBody: JSON.stringify({}) }, { method: "POST" });

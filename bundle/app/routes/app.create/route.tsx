@@ -608,6 +608,7 @@ const Index = () => {
         | "subscription"
         | "progressive-gifts";
         name: string;
+        enable?: boolean;
     }[] = [
             {
                 id: "quantity-breaks-same",
@@ -620,6 +621,7 @@ const Index = () => {
             {
                 id: 'quantity-breaks-different',
                 name: t('Quantity breaks for different products'),
+                enable: globalStore.isDevelopment
             },
             // {
             //     id: 'complete-bundle',
