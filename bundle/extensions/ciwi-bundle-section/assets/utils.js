@@ -63,3 +63,92 @@ function formatWithSpaceAndPeriod(integerPart, decimalPart) {
   integerPart = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
   return decimalPart ? `${integerPart}.${decimalPart}` : integerPart;
 }
+
+export function transObjectConfigToArray(configElJson) {
+  const ciwiBundleconfig = Object.keys(configElJson)
+    .filter((key) => key.startsWith("ciwi_bundles_config_"))
+    .map((key) => ({
+      bundleKey: key,
+      ...configElJson[key],
+    }));
+
+  console.log("ciwiBundleconfig: ", ciwiBundleconfig);
+
+  return ciwiBundleconfig;
+}
+
+export function searchCartAddForm() {
+  let form = null;
+  const cartAddforms = document.querySelectorAll('form[action*="/cart/add"]');
+
+  for (const cartAddform of cartAddforms) {
+    const children = Array.from(cartAddform.children);
+    console.log(configElJson.variantIds);
+
+    for (const child of children) {
+      console.log(child.tagName === "INPUT");
+      console.log(child.value);
+      console.log(configElJson.variantIds.includes(Number(child.value)));
+      if (
+        child.tagName === "INPUT" &&
+        child.name === "id" &&
+        configElJson.variantIds.includes(Number(child.value))
+      ) {
+        form = cartAddform;
+        break;
+      }
+    }
+  }
+
+  console.log("form: ", form);
+
+  return form;
+}
+
+export function searchVariantInputOnForm(form) {
+  const variantInput = form.querySelector('input[name="id"]');
+  console.log("variantInput: ", variantInput);
+  return variantInput;
+}
+
+export function getMostUsefulBundle(bundleEntries) {
+  let bundleData = null;
+
+  for (const bundle of bundleEntries) {
+    console.log("bundle: ", bundle);
+
+    const discountRules = bundle?.discount_rules || [];
+    console.log("discountRules: ", discountRules);
+    const targetingSettingsData = bundle?.targeting_settings || {};
+    console.log("targetingSettingsData: ", targetingSettingsData);
+    const selectedProductVariantIds =
+      bundle?.product_pool?.include_variant_ids || [];
+    console.log("selectedProductVariantIds: ", selectedProductVariantIds);
+
+    const isInTargetMarketArray =
+      targetingSettingsData?.marketVisibilitySettingData?.some((market) =>
+        market?.includes(`gid://shopify/Market/${configElJson.marketId}`),
+      );
+    console.log("isInTargetMarketArray: ", isInTargetMarketArray);
+
+    if (!isInTargetMarketArray) continue;
+
+    const isInSelectedProductVariantIdsArray =
+      selectedProductVariantIds?.includes(String(variantInput?.value));
+    console.log(
+      "isInSelectedProductVariantIdsArray: ",
+      isInSelectedProductVariantIdsArray,
+    );
+
+    if (!isInSelectedProductVariantIdsArray) continue;
+
+    console.log("discountRules: ", discountRules);
+
+    if (!Array.isArray(discountRules) || discountRules.length === 0) continue;
+
+    bundleData = bundle;
+    break;
+  }
+
+  return bundleData;
+}

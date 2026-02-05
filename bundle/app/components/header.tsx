@@ -18,8 +18,8 @@ const Header: React.FC<HeaderProps> = (
             align="center"
             style={{
                 backgroundColor: "rgb(241, 241, 241)",
-                margin: "0 -1.5rem",
-                padding: "0 1.5rem",
+                margin: "0 -300px",
+                padding: "0 300px",
             }}
         >
             <div>
