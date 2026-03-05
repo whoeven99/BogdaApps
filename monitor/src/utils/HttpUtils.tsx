@@ -1,9 +1,20 @@
 import axios from 'axios';
 
+/** prod / test 后端域名 */
+export const BACKEND_DOMAINS = {
+  prod: 'https://springbackendprod.azurewebsites.net',
+  test: 'https://springbackendservice-e3hgbjgqafb9cpdh.canadacentral-01.azurewebsites.net',
+} as const;
+
+export type BackendEnv = 'prod' | 'test';
+
+function getDomain(env: any): string {
+  const normalized = env === 'productions' || env === 'production' ? 'prod' : env;
+  return normalized === 'prod' ? BACKEND_DOMAINS.prod : BACKEND_DOMAINS.test;
+}
+
 export const httpGet = async (env: any, url: string): Promise<any> => {
-  const domain = env === 'production'
-      ? 'https://springbackendprod.azurewebsites.net'
-      : 'https://springbackendservice-e3hgbjgqafb9cpdh.canadacentral-01.azurewebsites.net';
+  const domain = getDomain(env);
 
   try {
     const response = await axios.get(`${domain}${url}`, {
@@ -19,9 +30,7 @@ export const httpGet = async (env: any, url: string): Promise<any> => {
 };
 
 export const httpPost = async (env: any, url: string, data: any): Promise<any> => {
-  const domain = env === 'production'
-      ? 'https://springbackendprod.azurewebsites.net'
-      : 'https://springbackendservice-e3hgbjgqafb9cpdh.canadacentral-01.azurewebsites.net';
+  const domain = getDomain(env);
 
   try {
     const response = await axios.post(`${domain}${url}`, data, {
@@ -37,9 +46,7 @@ export const httpPost = async (env: any, url: string, data: any): Promise<any> =
 };
 
 export const httpDelete = async (env: any, url: string, data?: any): Promise<any> => {
-  const domain = env === 'production'
-    ? 'https://springbackendprod.azurewebsites.net'
-    : 'https://springbackendservice-e3hgbjgqafb9cpdh.canadacentral-01.azurewebsites.net';
+  const domain = getDomain(env);
 
   try {
     const response = await axios.delete(`${domain}${url}`, {
@@ -56,9 +63,7 @@ export const httpDelete = async (env: any, url: string, data?: any): Promise<any
 };
 
 export const httpPut = async (env: any, url: string, data: any): Promise<any> => {
-  const domain = env === 'production'
-    ? 'https://springbackendprod.azurewebsites.net'
-    : 'https://springbackendservice-e3hgbjgqafb9cpdh.canadacentral-01.azurewebsites.net';
+  const domain = getDomain(env);
 
   try {
     const response = await axios.put(`${domain}${url}`, data, {

@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { httpGet, httpDelete, httpPut } from '../utils/HttpUtils';
+import { httpGet, httpDelete, httpPut, type BackendEnv } from '../utils/HttpUtils';
 import './config.css';
 import { useNavigate } from 'react-router-dom';
 
 const Config: React.FC = () => {
   const navigate = useNavigate();
+  const [backendEnv, setBackendEnv] = useState<BackendEnv>('prod');
   const [data, setData] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -17,7 +18,7 @@ const Config: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await httpGet('production', '/bogdaconfig');
+      const res = await httpGet(backendEnv, '/bogdaconfig');
       setData(res || {});
     } catch (e: any) {
       setError(e?.message || '加载失败');
@@ -32,7 +33,7 @@ const Config: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      await httpDelete('production', `/bogdaconfig?key=${key}`);
+      await httpDelete(backendEnv, `/bogdaconfig?key=${key}`);
       await loadData();
     } catch (e: any) {
       setError(e?.message || '删除失败');
@@ -57,7 +58,7 @@ const Config: React.FC = () => {
     setError(null);
     try {
       await httpPut(
-        'production',
+        backendEnv,
         `/bogdaconfig?key=${newKey}&value=${newValue}`,
         {}
       );
@@ -74,7 +75,7 @@ const Config: React.FC = () => {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [backendEnv]);
 
   return (
     <div className="config-page">
@@ -86,11 +87,23 @@ const Config: React.FC = () => {
       <div className="config-card">
         <div className="config-toolbar">
           <div className="config-actions">
+            <label className="config-env-label">
+              环境：
+              <select
+                className="config-env-select"
+                value={backendEnv}
+                onChange={(e) => setBackendEnv(e.target.value as BackendEnv)}
+                disabled={loading}
+              >
+                <option value="prod">Prod</option>
+                <option value="test">Test</option>
+              </select>
+            </label>
             <button
               className="config-btn"
               onClick={() => navigate('/')}
               disabled={loading}
-              style={{ marginRight: 8 }}
+              style={{ marginLeft: 12, marginRight: 8 }}
             >
               返回首页
             </button>
