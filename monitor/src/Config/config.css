@@ -40,6 +40,39 @@
 .config-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.config-env-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #475569;
+  margin-right: 4px;
+}
+
+.config-env-select {
+  padding: 6px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  background: #ffffff;
+  cursor: pointer;
+  min-width: 90px;
+}
+
+.config-env-select:hover:not(:disabled) {
+  border-color: #2563eb;
+}
+
+.config-env-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .config-btn {
