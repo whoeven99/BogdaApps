@@ -5,6 +5,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { DashboardPage } from "../DashboardPage";
 import { AllOffersPage } from "../AllOffersPage";
 import { PricingPage } from "../PricingPage";
+import { CreateNewOffer } from "../CreateNewOffer";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
@@ -15,6 +16,7 @@ type HomeTabKey = "dashboard" | "offers" | "pricing";
 
 export default function Index() {
   const [activeTab, setActiveTab] = useState<HomeTabKey>("dashboard");
+  const [showCreateOffer, setShowCreateOffer] = useState(false);
 
   return (
     <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px]">
@@ -22,7 +24,10 @@ export default function Index() {
       <nav className="bg-white flex flex-col sm:flex-row gap-[8px] sm:gap-[16px] items-stretch sm:items-start pb-0 px-[16px] pt-[16px] rounded-[8px] mb-[16px] sm:mb-[24px]">
         <button
           type="button"
-          onClick={() => setActiveTab("dashboard")}
+          onClick={() => {
+            setShowCreateOffer(false);
+            setActiveTab("dashboard");
+          }}
           className={`rounded-[4px] px-[12px] py-[7px] text-center sm:text-left cursor-pointer bg-transparent ${
             activeTab === "dashboard" ? "bg-[#dfe3e8]" : ""
           }`}
@@ -40,7 +45,10 @@ export default function Index() {
 
         <button
           type="button"
-          onClick={() => setActiveTab("offers")}
+          onClick={() => {
+            setShowCreateOffer(false);
+            setActiveTab("offers");
+          }}
           className={`rounded-[4px] px-[12px] py-[7px] text-center sm:text-left cursor-pointer bg-transparent ${
             activeTab === "offers" ? "bg-[#dfe3e8]" : ""
           }`}
@@ -58,7 +66,10 @@ export default function Index() {
 
         <button
           type="button"
-          onClick={() => setActiveTab("pricing")}
+          onClick={() => {
+            setShowCreateOffer(false);
+            setActiveTab("pricing");
+          }}
           className={`rounded-[4px] px-[12px] py-[7px] text-center sm:text-left cursor-pointer bg-transparent ${
             activeTab === "pricing" ? "bg-[#dfe3e8]" : ""
           }`}
@@ -77,7 +88,12 @@ export default function Index() {
 
       {/* Tab content */}
       {activeTab === "dashboard" && <DashboardPage />}
-      {activeTab === "offers" && <AllOffersPage />}
+      {activeTab === "offers" && !showCreateOffer && (
+        <AllOffersPage onCreateOffer={() => setShowCreateOffer(true)} />
+      )}
+      {activeTab === "offers" && showCreateOffer && (
+        <CreateNewOffer onBack={() => setShowCreateOffer(false)} />
+      )}
       {activeTab === "pricing" && <PricingPage />}
     </div>
   );

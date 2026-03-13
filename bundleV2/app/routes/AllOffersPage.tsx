@@ -35,9 +35,17 @@ const offers = [
   },
 ];
 
-export function AllOffersPage() {
+interface AllOffersPageProps {
+  onCreateOffer?: () => void;
+}
+
+export function AllOffersPage({ onCreateOffer }: AllOffersPageProps) {
   const handleShowGuide = () => {};
-  const handleCreateOffer = () => {};
+  const handleCreateOffer = () => {
+    if (onCreateOffer) {
+      onCreateOffer();
+    }
+  };
   const handleAnalytics = () => {};
   const handleEdit = () => {};
   const handleCopy = () => {};

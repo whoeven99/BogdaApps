@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Copy, Trash2, Pencil, ChartBar, ArrowUp, ArrowDown } from "lucide-react";
 import "../styles/tailwind.css";
+import { CreateNewOffer } from "./CreateNewOffer";
 
 const mockOverview = {
   totalGmv: "$125,430",
@@ -78,13 +79,24 @@ function ChevronRightIcon() {
 
 export function DashboardPage() {
   const [isThemeExtensionEnabled, setIsThemeExtensionEnabled] = useState(true);
+  const [showCreateOffer, setShowCreateOffer] = useState(false);
 
   const handleViewDetails = () => {}; // mock
-  const handleCreateOffer = () => {}; // mock
+  const handleCreateOffer = () => {
+    setShowCreateOffer(true);
+  };
   const handleCreateAbTest = () => {}; // mock
   const handleViewAllOffers = () => {}; // mock
   const handleViewAllAbTests = () => {}; // mock
   const handleNeedHelp = () => {}; // mock
+
+  if (showCreateOffer) {
+    return (
+      <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px]">
+        <CreateNewOffer onBack={() => setShowCreateOffer(false)} />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px]">
