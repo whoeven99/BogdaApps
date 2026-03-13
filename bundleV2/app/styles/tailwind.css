@@ -1,0 +1,4 @@
+@import "tailwindcss";
+
+/* Scan app directory for utility classes */
+@source "../**/*.{js,ts,jsx,tsx}";
