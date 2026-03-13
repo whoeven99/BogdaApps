@@ -23,11 +23,17 @@ export default function Index() {
         <button
           type="button"
           onClick={() => setActiveTab("dashboard")}
-          className={`rounded-[4px] px-[12px] py-[7px] text-center sm:text-left border-0 cursor-pointer bg-transparent ${
-            activeTab === "dashboard" ? "bg-[#f4f6f8]" : ""
+          className={`rounded-[4px] px-[12px] py-[7px] text-center sm:text-left cursor-pointer bg-transparent ${
+            activeTab === "dashboard" ? "bg-[#dfe3e8]" : ""
           }`}
         >
-          <span className="font-['Inter'] font-normal leading-[25.6px] text-[#202223] text-[16px] tracking-[-0.3125px]">
+          <span
+            className={`font-['Inter'] leading-[25.6px] text-[16px] tracking-[-0.3125px] ${
+              activeTab === "dashboard"
+                ? "font-semibold text-[#202223]"
+                : "font-normal text-[#6d7175]"
+            }`}
+          >
             Dashboard
           </span>
         </button>
@@ -35,11 +41,17 @@ export default function Index() {
         <button
           type="button"
           onClick={() => setActiveTab("offers")}
-          className={`rounded-[4px] px-[12px] py-[7px] text-center sm:text-left border-0 cursor-pointer bg-transparent ${
-            activeTab === "offers" ? "bg-[#f4f6f8]" : ""
+          className={`rounded-[4px] px-[12px] py-[7px] text-center sm:text-left cursor-pointer bg-transparent ${
+            activeTab === "offers" ? "bg-[#dfe3e8]" : ""
           }`}
         >
-          <span className="font-['Inter'] font-normal leading-[25.6px] text-[#202223] text-[16px] tracking-[-0.3125px]">
+          <span
+            className={`font-['Inter'] leading-[25.6px] text-[16px] tracking-[-0.3125px] ${
+              activeTab === "offers"
+                ? "font-semibold text-[#202223]"
+                : "font-normal text-[#6d7175]"
+            }`}
+          >
             All Offers
           </span>
         </button>
@@ -47,11 +59,17 @@ export default function Index() {
         <button
           type="button"
           onClick={() => setActiveTab("pricing")}
-          className={`rounded-[4px] px-[12px] py-[7px] text-center sm:text-left border-0 cursor-pointer bg-transparent ${
-            activeTab === "pricing" ? "bg-[#f4f6f8]" : ""
+          className={`rounded-[4px] px-[12px] py-[7px] text-center sm:text-left cursor-pointer bg-transparent ${
+            activeTab === "pricing" ? "bg-[#dfe3e8]" : ""
           }`}
         >
-          <span className="font-['Inter'] font-normal leading-[25.6px] text-[#202223] text-[16px] tracking-[-0.3125px]">
+          <span
+            className={`font-['Inter'] leading-[25.6px] text-[16px] tracking-[-0.3125px] ${
+              activeTab === "pricing"
+                ? "font-semibold text-[#202223]"
+                : "font-normal text-[#6d7175]"
+            }`}
+          >
             Pricing
           </span>
         </button>
