@@ -32,3 +32,32 @@ model Session {
   refreshToken        String?
   refreshTokenExpires DateTime?
 }
+
+model Offer {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Basic Information
+  name          String
+  offerType     String
+  pricingOption String  @default("duo")
+  layoutFormat  String  @default("vertical")
+
+  // Schedule
+  startTime DateTime
+  endTime   DateTime
+
+  // Budget (optional)
+  totalBudget Float?
+  dailyBudget Float?
+
+  // Targeting & Settings
+  customerSegments      String?
+  markets               String?
+  usageLimitPerCustomer String @default("unlimited")
+
+  // Products & Discounts (先用 JSON，后面可以拆表)
+  selectedProductsJson String?
+  discountRulesJson    String?
+}

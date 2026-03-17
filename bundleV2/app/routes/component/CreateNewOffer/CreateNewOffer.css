@@ -86,6 +86,12 @@
   margin-top: 4px;
 }
 
+.create-offer-error-text {
+  font-size: 12px;
+  color: #d72c0d;
+  margin-top: 4px;
+}
+
 /* Preview card */
 .create-offer-preview-card {
   width: 100%;

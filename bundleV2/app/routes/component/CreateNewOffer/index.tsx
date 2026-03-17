@@ -39,6 +39,12 @@ interface CreateNewOfferProps {
 export function CreateNewOffer({ onBack }: CreateNewOfferProps) {
   const [step, setStep] = useState(1);
   const [offerType, setOfferType] = useState("quantity-breaks-same");
+  const [offerName, setOfferName] = useState("");
+  const [offerNameError, setOfferNameError] = useState("");
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
+  const [startTimeError, setStartTimeError] = useState("");
+  const [endTimeError, setEndTimeError] = useState("");
   const [productSelection, setProductSelection] = useState(
     "specific-selected",
   );
@@ -158,7 +164,20 @@ export function CreateNewOffer({ onBack }: CreateNewOfferProps) {
                       type="text"
                       placeholder="e.g., Summer Bundle Deal"
                       className="create-offer-input"
+                      value={offerName}
+                      onChange={(e) => {
+                        setOfferName(e.target.value);
+                        if (offerNameError && e.target.value.trim()) {
+                          setOfferNameError("");
+                        }
+                      }}
+                      required
                     />
+                    {offerNameError && (
+                      <p className="create-offer-error-text">
+                        {offerNameError}
+                      </p>
+                    )}
                   </label>
 
                   <label className="create-offer-label create-offer-label--mt">
@@ -969,10 +988,24 @@ export function CreateNewOffer({ onBack }: CreateNewOfferProps) {
                       type="datetime-local"
                       step="1"
                       className="create-offer-datetime"
+                      value={startTime}
+                      onChange={(e) => {
+                        setStartTime(e.target.value);
+                        if (startTimeError && e.target.value) {
+                          setStartTimeError("");
+                        }
+                      }}
+                      required
                     />
-                    <p className="create-offer-helper-text">
-                      When the offer becomes active
-                    </p>
+                    {startTimeError ? (
+                      <p className="create-offer-error-text">
+                        {startTimeError}
+                      </p>
+                    ) : (
+                      <p className="create-offer-helper-text">
+                        When the offer becomes active
+                      </p>
+                    )}
                   </label>
                   <label
                     className="create-offer-label"
@@ -982,10 +1015,24 @@ export function CreateNewOffer({ onBack }: CreateNewOfferProps) {
                       type="datetime-local"
                       step="1"
                       className="create-offer-datetime"
+                      value={endTime}
+                      onChange={(e) => {
+                        setEndTime(e.target.value);
+                        if (endTimeError && e.target.value) {
+                          setEndTimeError("");
+                        }
+                      }}
+                      required
                     />
-                    <p className="create-offer-helper-text">
-                      When the offer expires
-                    </p>
+                    {endTimeError ? (
+                      <p className="create-offer-error-text">
+                        {endTimeError}
+                      </p>
+                    ) : (
+                      <p className="create-offer-helper-text">
+                        When the offer expires
+                      </p>
+                    )}
                   </label>
                 </div>
               </div>
@@ -1069,9 +1116,41 @@ export function CreateNewOffer({ onBack }: CreateNewOfferProps) {
         <button
           className="polaris-button"
           onClick={() => {
+            if (step === 1) {
+              if (!offerName.trim()) {
+                setOfferNameError("Offer Name is required.");
+                return;
+              }
+              setOfferNameError("");
+              setStep(2);
+              return;
+            }
+
             if (step < 4) {
               setStep(step + 1);
-            } else if (onBack) {
+              return;
+            }
+
+            // step === 4, validate schedule fields before creating
+            let hasError = false;
+            if (!startTime) {
+              setStartTimeError("Start Time is required.");
+              hasError = true;
+            } else {
+              setStartTimeError("");
+            }
+            if (!endTime) {
+              setEndTimeError("End Time is required.");
+              hasError = true;
+            } else {
+              setEndTimeError("");
+            }
+
+            if (hasError) {
+              return;
+            }
+
+            if (onBack) {
               onBack();
             }
           }}
