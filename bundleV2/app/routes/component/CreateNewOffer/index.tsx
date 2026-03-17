@@ -79,6 +79,12 @@ export function CreateNewOffer({ onBack, initialOffer }: CreateNewOfferProps) {
   );
   const [startTimeError, setStartTimeError] = useState("");
   const [endTimeError, setEndTimeError] = useState("");
+  const [totalBudget, setTotalBudget] = useState(
+    initialOffer?.totalBudget != null ? String(initialOffer.totalBudget) : "",
+  );
+  const [dailyBudget, setDailyBudget] = useState(
+    initialOffer?.dailyBudget != null ? String(initialOffer.dailyBudget) : "",
+  );
   const [productSelection, setProductSelection] = useState(
     "specific-selected",
   );
@@ -1149,6 +1155,8 @@ export function CreateNewOffer({ onBack, initialOffer }: CreateNewOfferProps) {
                       placeholder="$0.00"
                       className="create-offer-input"
                       name="totalBudget"
+                      value={totalBudget}
+                      onChange={(e) => setTotalBudget(e.target.value)}
                     />
                     <p className="create-offer-helper-text">
                       Maximum total spend for this offer
@@ -1163,6 +1171,8 @@ export function CreateNewOffer({ onBack, initialOffer }: CreateNewOfferProps) {
                       placeholder="$0.00"
                       className="create-offer-input"
                       name="dailyBudget"
+                      value={dailyBudget}
+                      onChange={(e) => setDailyBudget(e.target.value)}
                     />
                     <p className="create-offer-helper-text">
                       Maximum spend per day

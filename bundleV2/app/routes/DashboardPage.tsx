@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Form, useSearchParams } from "react-router";
+import { Form, useNavigation, useSearchParams } from "react-router";
 import { Copy, Trash2, Pencil, ChartBar, ArrowUp, ArrowDown } from "lucide-react";
 import "../styles/tailwind.css";
 import { CreateNewOffer } from "./component/CreateNewOffer";
@@ -24,7 +24,7 @@ const mockOverview = {
 type DashboardOfferRow = {
   id: string;
   name: string;
-  status: string;
+  isActive: boolean;
   exposurePV: number;
   addToCartPV: number;
   gmv: number;
@@ -66,15 +66,17 @@ function ChevronRightIcon() {
 
 export function DashboardPage({ onViewAllOffers, offers }: DashboardPageProps) {
   const [searchParams] = useSearchParams();
+  const navigation = useNavigation();
   const [isThemeExtensionEnabled, setIsThemeExtensionEnabled] = useState(true);
   const [showCreateOffer, setShowCreateOffer] = useState(false);
   const [editingOfferId, setEditingOfferId] = useState<string | null>(null);
   const [deletingOffer, setDeletingOffer] = useState<DashboardOfferRow | null>(
     null,
   );
+  const [togglingIds, setTogglingIds] = useState<string[]>([]);
 
   const offerRows: DashboardOfferRow[] = (offers ?? []).map((offer) => {
-    const status = (offer.status ?? "Paused") as string;
+    const isActive = !!offer.status;
     const exposurePV = offer.exposurePV ?? 0;
     const addToCartPV = offer.addToCartPV ?? 0;
     const gmv = offer.gmv ?? 0;
@@ -83,7 +85,7 @@ export function DashboardPage({ onViewAllOffers, offers }: DashboardPageProps) {
     return {
       id: offer.id,
       name: offer.name,
-      status,
+      isActive,
       exposurePV,
       addToCartPV,
       gmv,
@@ -92,6 +94,25 @@ export function DashboardPage({ onViewAllOffers, offers }: DashboardPageProps) {
   });
 
   const visibleOffers = offerRows.slice(0, 4);
+
+  useEffect(() => {
+    if (navigation.state === "submitting" && navigation.formData) {
+      const intent = navigation.formData.get("intent");
+      const id = navigation.formData.get("offerId");
+      if (intent === "toggle-offer-status" && typeof id === "string" && id) {
+        setTogglingIds((prev) =>
+          prev.includes(id) ? prev : [...prev, id],
+        );
+      }
+    } else if (navigation.state === "idle" && togglingIds.length > 0) {
+      const timer = setTimeout(() => {
+        setTogglingIds([]);
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [navigation.state, navigation.formData, togglingIds.length]);
+
+  const getIsToggling = (offerId: string) => togglingIds.includes(offerId);
 
   const handleViewDetails = () => {}; // mock
   const handleCreateOffer = () => {
@@ -292,7 +313,8 @@ export function DashboardPage({ onViewAllOffers, offers }: DashboardPageProps) {
               </tr>
             ) : (
               visibleOffers.map((offer) => {
-                const isActive = offer.status.toLowerCase() === "active";
+                const isToggling = getIsToggling(offer.id);
+                const statusLabel = offer.isActive ? "Active" : "Paused";
                 const gmvDisplay = `$${offer.gmv.toLocaleString()}`;
                 const conversionDisplay = `${offer.conversion.toFixed(1)}%`;
 
@@ -304,26 +326,44 @@ export function DashboardPage({ onViewAllOffers, offers }: DashboardPageProps) {
                       </div>
                     </td>
                     <td className="p-[12px] border-b border-[#dfe3e8]">
-                      <div className="flex items-center gap-[8px]">
-                        <span
-                          className="relative inline-block w-[44px] h-[24px] rounded-[12px] cursor-pointer"
-                          style={{
-                            backgroundColor: isActive ? "#008060" : "#c4cdd5",
-                          }}
-                          title={isActive ? "Click to deactivate" : "Click to activate"}
+                      <Form method="post">
+                        <input type="hidden" name="intent" value="toggle-offer-status" />
+                        <input type="hidden" name="offerId" value={offer.id} />
+                        <input
+                          type="hidden"
+                          name="nextStatus"
+                          value={offer.isActive ? "false" : "true"}
+                        />
+                        <button
+                          type="submit"
+                          disabled={isToggling}
+                          className={`flex items-center gap-[8px] bg-transparent border-0 p-0 cursor-pointer ${
+                            isToggling ? "opacity-70 cursor-default" : ""
+                          }`}
                         >
                           <span
-                            className="absolute top-[2px] w-[20px] h-[20px] bg-white rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.2)]"
-                            style={{ left: isActive ? "22px" : "2px" }}
-                          />
-                        </span>
-                        <span
-                          className="text-[14px] font-medium"
-                          style={{ color: isActive ? "#108043" : "#6d7175" }}
-                        >
-                          {offer.status || "Paused"}
-                        </span>
-                      </div>
+                            className={`relative inline-block w-[44px] h-[24px] rounded-[12px] transition-colors duration-200 ${
+                              isToggling ? "animate-pulse" : ""
+                            }`}
+                            style={{
+                              backgroundColor: offer.isActive ? "#008060" : "#c4cdd5",
+                            }}
+                          >
+                            <span
+                              className={`absolute top-[2px] w-[20px] h-[20px] bg-white rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.2)] transition-all duration-200 ${
+                                isToggling ? "animate-pulse" : ""
+                              }`}
+                              style={{ left: offer.isActive ? "22px" : "2px" }}
+                            />
+                          </span>
+                          <span
+                            className="text-[14px] font-medium"
+                            style={{ color: offer.isActive ? "#108043" : "#6d7175" }}
+                          >
+                            {isToggling ? "Updating..." : statusLabel}
+                          </span>
+                        </button>
+                      </Form>
                     </td>
                     <td className="p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-normal text-[14px] leading-[22.4px] text-[#202223] tracking-[-0.1504px]">
                       {offer.exposurePV.toLocaleString()}
@@ -373,13 +413,14 @@ export function DashboardPage({ onViewAllOffers, offers }: DashboardPageProps) {
               No offers yet. Create your first offer to see it here.
             </div>
           ) : (
-            visibleOffers.map((offer) => {
-              const isActive = offer.status.toLowerCase() === "active";
-              const gmvDisplay = `$${offer.gmv.toLocaleString()}`;
-              const conversionDisplay = `${offer.conversion.toFixed(1)}%`;
+              visibleOffers.map((offer) => {
+                const isToggling = getIsToggling(offer.id);
+                const statusLabel = offer.isActive ? "Active" : "Paused";
+                const gmvDisplay = `$${offer.gmv.toLocaleString()}`;
+                const conversionDisplay = `${offer.conversion.toFixed(1)}%`;
 
-              return (
-                <div key={offer.id} className="border border-[#dfe3e8] rounded-[8px] p-[16px]">
+                return (
+                  <div key={offer.id} className="border border-[#dfe3e8] rounded-[8px] p-[16px]">
                   <div className="flex items-start justify-between mb-[12px]">
                     <div className="flex items-center gap-[8px] flex-wrap">
                       <span className="font-['Inter'] font-medium text-[16px] text-[#202223]">
@@ -387,23 +428,42 @@ export function DashboardPage({ onViewAllOffers, offers }: DashboardPageProps) {
                       </span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-[8px] mb-[12px]">
-                    <span
-                      className="relative inline-block w-[44px] h-[24px] rounded-[12px]"
-                      style={{ backgroundColor: isActive ? "#008060" : "#c4cdd5" }}
+                  <Form method="post">
+                    <input type="hidden" name="intent" value="toggle-offer-status" />
+                    <input type="hidden" name="offerId" value={offer.id} />
+                    <input
+                      type="hidden"
+                      name="nextStatus"
+                      value={offer.isActive ? "false" : "true"}
+                    />
+                    <button
+                      type="submit"
+                      disabled={isToggling}
+                      className={`flex items-center gap-[8px] mb-[12px] bg-transparent border-0 p-0 cursor-pointer ${
+                        isToggling ? "opacity-70 cursor-default" : ""
+                      }`}
                     >
                       <span
-                        className="absolute top-[2px] w-[20px] h-[20px] bg-white rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.2)]"
-                        style={{ left: isActive ? "22px" : "2px" }}
-                      />
-                    </span>
-                    <span
-                      className="text-[14px] font-medium"
-                      style={{ color: isActive ? "#108043" : "#6d7175" }}
-                    >
-                      {offer.status || "Paused"}
-                    </span>
-                  </div>
+                        className={`relative inline-block w-[44px] h-[24px] rounded-[12px] transition-colors duration-200 ${
+                          isToggling ? "animate-pulse" : ""
+                        }`}
+                        style={{ backgroundColor: offer.isActive ? "#008060" : "#c4cdd5" }}
+                      >
+                        <span
+                          className={`absolute top-[2px] w-[20px] h-[20px] bg-white rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.2)] transition-all duration-200 ${
+                            isToggling ? "animate-pulse" : ""
+                          }`}
+                          style={{ left: offer.isActive ? "22px" : "2px" }}
+                        />
+                      </span>
+                      <span
+                        className="text-[14px] font-medium"
+                        style={{ color: offer.isActive ? "#108043" : "#6d7175" }}
+                      >
+                        {isToggling ? "Updating..." : statusLabel}
+                      </span>
+                    </button>
+                  </Form>
                   <div className="grid grid-cols-2 gap-[12px] mb-[12px]">
                     <div>
                       <div className="text-[12px] text-[#6d7175] mb-[4px]">GMV</div>

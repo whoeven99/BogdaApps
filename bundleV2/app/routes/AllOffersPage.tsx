@@ -2,13 +2,13 @@
 import { useEffect, useState } from "react";
 import "../styles/tailwind.css";
 import { Trash2, Pencil } from "lucide-react";
-import { Form, useSearchParams } from "react-router";
+import { Form, useNavigation, useSearchParams } from "react-router";
 import type { IndexLoaderData } from "./_index/route";
 
 type AllOffersRow = {
   id: string;
   name: string;
-  status: string;
+  isActive: boolean;
   exposurePV: number;
   addToCartPV: number;
   gmv: number;
@@ -32,7 +32,7 @@ export function AllOffersPage({ onCreateOffer, offers }: AllOffersPageProps) {
   const handleDelete = () => {};
 
   const rows: AllOffersRow[] = (offers ?? []).map((offer) => {
-    const status = (offer.status ?? "Paused") as string;
+  const isActive = !!offer.status;
     const exposurePV = offer.exposurePV ?? 0;
     const addToCartPV = offer.addToCartPV ?? 0;
     const gmv = offer.gmv ?? 0;
@@ -42,7 +42,7 @@ export function AllOffersPage({ onCreateOffer, offers }: AllOffersPageProps) {
     return {
       id: offer.id,
       name: offer.name,
-      status,
+    isActive,
       exposurePV,
       addToCartPV,
       gmv,
@@ -52,7 +52,9 @@ export function AllOffersPage({ onCreateOffer, offers }: AllOffersPageProps) {
   });
 
   const [searchParams] = useSearchParams();
+  const navigation = useNavigation();
   const [deletingOffer, setDeletingOffer] = useState<AllOffersRow | null>(null);
+  const [togglingIds, setTogglingIds] = useState<string[]>([]);
 
   const toast = searchParams.get("toast");
 
@@ -61,6 +63,25 @@ export function AllOffersPage({ onCreateOffer, offers }: AllOffersPageProps) {
       setDeletingOffer(null);
     }
   }, [toast]);
+
+  useEffect(() => {
+    if (navigation.state === "submitting" && navigation.formData) {
+      const intent = navigation.formData.get("intent");
+      const id = navigation.formData.get("offerId");
+      if (intent === "toggle-offer-status" && typeof id === "string" && id) {
+        setTogglingIds((prev) =>
+          prev.includes(id) ? prev : [...prev, id],
+        );
+      }
+    } else if (navigation.state === "idle" && togglingIds.length > 0) {
+      const timer = setTimeout(() => {
+        setTogglingIds([]);
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [navigation.state, navigation.formData, togglingIds.length]);
+
+  const getIsToggling = (offerId: string) => togglingIds.includes(offerId);
 
   return (
     <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px]">
@@ -135,7 +156,8 @@ export function AllOffersPage({ onCreateOffer, offers }: AllOffersPageProps) {
               </tr>
             ) : (
               rows.map((offer) => {
-                const isActive = offer.status.toLowerCase() === "active";
+                const isToggling = getIsToggling(offer.id);
+                const statusLabel = offer.isActive ? "Active" : "Paused";
                 const gmvDisplay = `$${offer.gmv.toLocaleString()}`;
                 const conversionDisplay = `${offer.conversion.toFixed(1)}%`;
                 const createdDisplay = offer.createdAt
@@ -150,32 +172,47 @@ export function AllOffersPage({ onCreateOffer, offers }: AllOffersPageProps) {
                   </div>
                 </td>
                 <td className="p-[12px] border-b border-[#dfe3e8]">
-                  <div className="flex items-center gap-[8px]">
-                    <span
-                      className="relative inline-block w-[44px] h-[24px] rounded-[12px]"
-                      style={{
-                        backgroundColor:
-                          isActive ? "#008060" : "#c4cdd5",
-                      }}
+                  <Form method="post">
+                    <input type="hidden" name="intent" value="toggle-offer-status" />
+                    <input type="hidden" name="offerId" value={offer.id} />
+                    <input
+                      type="hidden"
+                      name="nextStatus"
+                      value={offer.isActive ? "false" : "true"}
+                    />
+                    <button
+                      type="submit"
+                      disabled={isToggling}
+                      className={`flex items-center gap-[8px] bg-transparent border-0 p-0 cursor-pointer ${
+                        isToggling ? "opacity-70 cursor-default" : ""
+                      }`}
                     >
                       <span
-                        className="absolute top-[2px] w-[20px] h-[20px] bg-white rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.2)]"
-                        style={{ left: offer.status === "Active" ? "22px" : "2px" }}
-                      />
-                    </span>
-                    <span
-                      style={{
-                        fontSize: 14,
-                        color:
-                          isActive
-                            ? "#108043"
-                            : "#6d7175",
-                        fontWeight: 500,
-                      }}
-                    >
-                      {offer.status || "Paused"}
-                    </span>
-                  </div>
+                        className={`relative inline-block w-[44px] h-[24px] rounded-[12px] transition-colors duration-200 ${
+                          isToggling ? "animate-pulse" : ""
+                        }`}
+                        style={{
+                          backgroundColor: offer.isActive ? "#008060" : "#c4cdd5",
+                        }}
+                      >
+                        <span
+                          className={`absolute top-[2px] w-[20px] h-[20px] bg-white rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.2)] transition-all duration-200 ${
+                            isToggling ? "animate-pulse" : ""
+                          }`}
+                          style={{ left: offer.isActive ? "22px" : "2px" }}
+                        />
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 14,
+                          color: offer.isActive ? "#108043" : "#6d7175",
+                          fontWeight: 500,
+                        }}
+                      >
+                        {isToggling ? "Updating..." : statusLabel}
+                      </span>
+                    </button>
+                  </Form>
                 </td>
                 <td className="p-[12px] border-b border-[#dfe3e8] text-[14px] text-[#202223] font-['Inter']">
                   {offer.exposurePV.toLocaleString()}

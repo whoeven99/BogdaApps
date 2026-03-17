@@ -29,9 +29,9 @@ type OfferListItem = {
   customerSegments: string | null;
   markets: string | null;
   usageLimitPerCustomer: string;
+  status: boolean;
   selectedProductsJson: string | null;
   discountRulesJson: string | null;
-  status?: string | null;
   exposurePV?: number | null;
   addToCartPV?: number | null;
   gmv?: number | null;
@@ -132,6 +132,27 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return redirect(url.pathname + "?" + url.searchParams.toString());
   }
 
+  if (intent === "toggle-offer-status") {
+    const idRaw = String(formData.get("offerId") || "").trim();
+    const nextStatusRaw = String(formData.get("nextStatus") || "").trim();
+
+    if (!idRaw) {
+      return new Response("Missing offer id", { status: 400 });
+    }
+
+    const nextStatus = nextStatusRaw === "true";
+
+    await prismaAny.offer.update({
+      where: { id: idRaw },
+      data: { status: nextStatus },
+    });
+
+    const url = new URL(request.url);
+    url.searchParams.set("toast", "toggle-success");
+
+    return redirect(url.pathname + "?" + url.searchParams.toString());
+  }
+
   if (intent === "delete-offer") {
     const idRaw = String(formData.get("offerId") || "").trim();
     if (!idRaw) {
@@ -177,6 +198,8 @@ export default function Index() {
       setToastMessage("Offer 删除成功");
       setShowCreateOffer(false);
       setActiveTab("dashboard");
+    } else if (toast === "toggle-success") {
+      setToastMessage("Offer 状态已更新");
     } else {
       setToastMessage(null);
     }
