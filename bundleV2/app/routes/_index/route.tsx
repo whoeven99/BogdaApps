@@ -5,7 +5,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { DashboardPage } from "../DashboardPage";
 import { AllOffersPage } from "../AllOffersPage";
 import { PricingPage } from "../PricingPage";
-import { CreateNewOffer } from "../CreateNewOffer";
+import { CreateNewOffer } from "../component/CreateNewOffer";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
@@ -87,7 +87,9 @@ export default function Index() {
       </nav>
 
       {/* Tab content */}
-      {activeTab === "dashboard" && <DashboardPage />}
+      {activeTab === "dashboard" && (
+        <DashboardPage onViewAllOffers={() => setActiveTab("offers")} />
+      )}
       {activeTab === "offers" && !showCreateOffer && (
         <AllOffersPage onCreateOffer={() => setShowCreateOffer(true)} />
       )}

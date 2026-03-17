@@ -1,7 +1,11 @@
 import { useState } from "react";
 import { Copy, Trash2, Pencil, ChartBar, ArrowUp, ArrowDown } from "lucide-react";
 import "../styles/tailwind.css";
-import { CreateNewOffer } from "./CreateNewOffer";
+import { CreateNewOffer } from "./component/CreateNewOffer";
+
+interface DashboardPageProps {
+  onViewAllOffers?: () => void;
+}
 
 const mockOverview = {
   totalGmv: "$125,430",
@@ -77,7 +81,7 @@ function ChevronRightIcon() {
   );
 }
 
-export function DashboardPage() {
+export function DashboardPage({ onViewAllOffers }: DashboardPageProps) {
   const [isThemeExtensionEnabled, setIsThemeExtensionEnabled] = useState(true);
   const [showCreateOffer, setShowCreateOffer] = useState(false);
 
@@ -86,7 +90,11 @@ export function DashboardPage() {
     setShowCreateOffer(true);
   };
   const handleCreateAbTest = () => {}; // mock
-  const handleViewAllOffers = () => {}; // mock
+  const handleViewAllOffers = () => {
+    if (onViewAllOffers) {
+      onViewAllOffers();
+    }
+  };
   const handleViewAllAbTests = () => {}; // mock
   const handleNeedHelp = () => {}; // mock
 
@@ -100,13 +108,6 @@ export function DashboardPage() {
 
   return (
     <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px]">
-      {/* Header */}
-      <div className="mb-[16px] sm:mb-[24px]">
-        <h1 className="font-['Inter'] font-semibold text-[20px] sm:text-[24px] leading-[30px] sm:leading-[36px] text-[#202223] tracking-[0.0703px] m-0">
-          Dashboard
-        </h1>
-      </div>
-
       {/* GMV Overview + Theme Extension */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-[16px] sm:gap-[24px] mb-[24px] sm:mb-[36px]">
         {/* GMV Overview Card */}
