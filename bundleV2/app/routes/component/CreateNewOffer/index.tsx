@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Form } from "react-router";
 import {
   X,
   ArrowUp,
@@ -118,7 +119,7 @@ export function CreateNewOffer({ onBack }: CreateNewOfferProps) {
   ];
 
   return (
-    <div className="polaris-page create-offer-page">
+    <Form className="polaris-page create-offer-page" method="post">
       <div className="polaris-page__header">
         <div>
           <button
@@ -131,6 +132,23 @@ export function CreateNewOffer({ onBack }: CreateNewOfferProps) {
           <h1 className="polaris-page__title">Create New Offer</h1>
         </div>
       </div>
+
+      <input type="hidden" name="intent" value="create-offer" />
+      {/* 始终提交的核心字段（即使对应输入步骤已切换隐藏） */}
+      <input type="hidden" name="name" value={offerName} />
+      <input type="hidden" name="offerType" value={offerType} />
+      <input type="hidden" name="pricingOption" value={pricingOption} />
+      <input type="hidden" name="layoutFormat" value={layoutFormat} />
+      <input
+        type="hidden"
+        name="selectedProductsJson"
+        value={JSON.stringify(selectedProducts)}
+      />
+      <input
+        type="hidden"
+        name="discountRulesJson"
+        value={JSON.stringify(discountRules)}
+      />
 
       <div className="polaris-card create-offer-card">
         <div className="create-offer-steps sm:flex sm:gap-[12px]">
@@ -817,6 +835,8 @@ export function CreateNewOffer({ onBack }: CreateNewOfferProps) {
                         <input
                           type="checkbox"
                           defaultChecked
+                          name="customerSegments"
+                          value="all"
                           className="create-offer-checkbox"
                         />
                         <span className="create-offer-checkbox-text">
@@ -828,6 +848,8 @@ export function CreateNewOffer({ onBack }: CreateNewOfferProps) {
                       >
                         <input
                           type="checkbox"
+                          name="customerSegments"
+                          value="vip"
                           className="create-offer-checkbox"
                         />
                         <span className="create-offer-checkbox-text">
@@ -839,6 +861,8 @@ export function CreateNewOffer({ onBack }: CreateNewOfferProps) {
                       >
                         <input
                           type="checkbox"
+                          name="customerSegments"
+                          value="new"
                           className="create-offer-checkbox"
                         />
                         <span className="create-offer-checkbox-text">
@@ -850,6 +874,8 @@ export function CreateNewOffer({ onBack }: CreateNewOfferProps) {
                       >
                         <input
                           type="checkbox"
+                          name="customerSegments"
+                          value="returning"
                           className="create-offer-checkbox"
                         />
                         <span className="create-offer-checkbox-text">
@@ -861,6 +887,8 @@ export function CreateNewOffer({ onBack }: CreateNewOfferProps) {
                       >
                         <input
                           type="checkbox"
+                          name="customerSegments"
+                          value="high-value"
                           className="create-offer-checkbox"
                         />
                         <span className="create-offer-checkbox-text">
@@ -872,6 +900,8 @@ export function CreateNewOffer({ onBack }: CreateNewOfferProps) {
                       >
                         <input
                           type="checkbox"
+                          name="customerSegments"
+                          value="at-risk"
                           className="create-offer-checkbox"
                         />
                         <span className="create-offer-checkbox-text">
@@ -895,6 +925,8 @@ export function CreateNewOffer({ onBack }: CreateNewOfferProps) {
                         <input
                           type="checkbox"
                           defaultChecked
+                          name="markets"
+                          value="all"
                           className="create-offer-checkbox"
                         />
                         <span className="create-offer-checkbox-text">
@@ -906,6 +938,8 @@ export function CreateNewOffer({ onBack }: CreateNewOfferProps) {
                       >
                         <input
                           type="checkbox"
+                          name="markets"
+                          value="us"
                           className="create-offer-checkbox"
                         />
                         <span className="create-offer-checkbox-text">
@@ -917,6 +951,8 @@ export function CreateNewOffer({ onBack }: CreateNewOfferProps) {
                       >
                         <input
                           type="checkbox"
+                          name="markets"
+                          value="eu"
                           className="create-offer-checkbox"
                         />
                         <span className="create-offer-checkbox-text">
@@ -928,6 +964,8 @@ export function CreateNewOffer({ onBack }: CreateNewOfferProps) {
                       >
                         <input
                           type="checkbox"
+                          name="markets"
+                          value="uk"
                           className="create-offer-checkbox"
                         />
                         <span className="create-offer-checkbox-text">
@@ -939,6 +977,8 @@ export function CreateNewOffer({ onBack }: CreateNewOfferProps) {
                       >
                         <input
                           type="checkbox"
+                          name="markets"
+                          value="ca"
                           className="create-offer-checkbox"
                         />
                         <span className="create-offer-checkbox-text">
@@ -950,6 +990,8 @@ export function CreateNewOffer({ onBack }: CreateNewOfferProps) {
                       >
                         <input
                           type="checkbox"
+                          name="markets"
+                          value="au"
                           className="create-offer-checkbox"
                         />
                         <span className="create-offer-checkbox-text">
@@ -961,6 +1003,8 @@ export function CreateNewOffer({ onBack }: CreateNewOfferProps) {
                       >
                         <input
                           type="checkbox"
+                          name="markets"
+                          value="apac"
                           className="create-offer-checkbox"
                         />
                         <span className="create-offer-checkbox-text">
@@ -988,6 +1032,7 @@ export function CreateNewOffer({ onBack }: CreateNewOfferProps) {
                       type="datetime-local"
                       step="1"
                       className="create-offer-datetime"
+                      name="startTime"
                       value={startTime}
                       onChange={(e) => {
                         setStartTime(e.target.value);
@@ -1015,6 +1060,7 @@ export function CreateNewOffer({ onBack }: CreateNewOfferProps) {
                       type="datetime-local"
                       step="1"
                       className="create-offer-datetime"
+                      name="endTime"
                       value={endTime}
                       onChange={(e) => {
                         setEndTime(e.target.value);
@@ -1050,6 +1096,7 @@ export function CreateNewOffer({ onBack }: CreateNewOfferProps) {
                       type="number"
                       placeholder="$0.00"
                       className="create-offer-input"
+                      name="totalBudget"
                     />
                     <p className="create-offer-helper-text">
                       Maximum total spend for this offer
@@ -1063,6 +1110,7 @@ export function CreateNewOffer({ onBack }: CreateNewOfferProps) {
                       type="number"
                       placeholder="$0.00"
                       className="create-offer-input"
+                      name="dailyBudget"
                     />
                     <p className="create-offer-helper-text">
                       Maximum spend per day
@@ -1082,6 +1130,7 @@ export function CreateNewOffer({ onBack }: CreateNewOfferProps) {
                     Usage Limit Per Customer
                     <select
                       defaultValue="unlimited"
+                      name="usageLimitPerCustomer"
                       className="create-offer-select"
                     >
                       <option value="unlimited">Unlimited</option>
@@ -1149,17 +1198,13 @@ export function CreateNewOffer({ onBack }: CreateNewOfferProps) {
             if (hasError) {
               return;
             }
-
-            if (onBack) {
-              onBack();
-            }
           }}
-          type="button"
+          type={step === 4 ? "submit" : "button"}
         >
           {step === 4 ? "Create Offer" : "Next"}
         </button>
       </div>
-    </div>
+    </Form>
   );
 }
 

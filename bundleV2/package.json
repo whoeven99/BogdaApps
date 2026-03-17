@@ -17,6 +17,7 @@
     "prisma": "prisma",
     "prisma_local_studio": "prisma studio",
     "graphql-codegen": "graphql-codegen",
+    "add_prisma_table": "npx prisma migrate dev --name add_offers_table",
     "vite": "vite",
     "typecheck": "react-router typegen && tsc --noEmit"
   },

@@ -1,15 +1,70 @@
 import { useState } from "react";
-import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { authenticate } from "../../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { DashboardPage } from "../DashboardPage";
 import { AllOffersPage } from "../AllOffersPage";
 import { PricingPage } from "../PricingPage";
 import { CreateNewOffer } from "../component/CreateNewOffer";
+import prisma from "../../db.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
   return null;
+};
+
+export const action = async ({ request }: ActionFunctionArgs) => {
+  const { session } = await authenticate.admin(request);
+  const formData = await request.formData();
+  const intent = formData.get("intent");
+
+  console.log("action intent", intent);
+
+  if (intent === "create-offer") {
+    const name = String(formData.get("name") || "").trim();
+    const offerType = String(formData.get("offerType") || "").trim();
+    const pricingOption = String(formData.get("pricingOption") || "").trim() || "duo";
+    const layoutFormat = String(formData.get("layoutFormat") || "").trim() || "vertical";
+    const startTimeRaw = String(formData.get("startTime") || "");
+    const endTimeRaw = String(formData.get("endTime") || "");
+    const selectedProductsJson = String(formData.get("selectedProductsJson") || "");
+    const discountRulesJson = String(formData.get("discountRulesJson") || "");
+
+    const totalBudget = formData.get("totalBudget");
+    const dailyBudget = formData.get("dailyBudget");
+
+    const customerSegments = formData.getAll("customerSegments") as string[];
+    const markets = formData.getAll("markets") as string[];
+
+    if (!name || !startTimeRaw || !endTimeRaw) {
+      return new Response("Missing required fields", { status: 400 });
+    }
+
+    const startTime = new Date(startTimeRaw);
+    const endTime = new Date(endTimeRaw);
+
+    await prisma.offer.create({
+      data: {
+        name,
+        offerType,
+        pricingOption,
+        layoutFormat,
+        startTime,
+        endTime,
+        totalBudget: totalBudget ? Number(totalBudget) : null,
+        dailyBudget: dailyBudget ? Number(dailyBudget) : null,
+        customerSegments: customerSegments.length ? customerSegments.join(",") : null,
+        markets: markets.length ? markets.join(",") : null,
+        usageLimitPerCustomer: String(formData.get("usageLimitPerCustomer") || "unlimited"),
+        selectedProductsJson: selectedProductsJson || null,
+        discountRulesJson: discountRulesJson || null,
+      },
+    });
+
+    return new Response(null, { status: 204 });
+  }
+
+  return new Response(null, { status: 200 });
 };
 
 type HomeTabKey = "dashboard" | "offers" | "pricing";
