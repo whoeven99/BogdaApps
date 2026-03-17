@@ -33,44 +33,87 @@ type Product = {
   image: string;
 };
 
-interface CreateNewOfferProps {
-  onBack?: () => void;
+interface InitialOffer {
+  id: string;
+  name: string;
+  offerType: string;
+  pricingOption: "single" | "duo";
+  layoutFormat: "vertical" | "horizontal" | "card" | "compact";
+  startTime: string;
+  endTime: string;
+  totalBudget: number | null;
+  dailyBudget: number | null;
+  customerSegments: string | null;
+  markets: string | null;
+  usageLimitPerCustomer: string;
+  selectedProductsJson: string | null;
+  discountRulesJson: string | null;
 }
 
-export function CreateNewOffer({ onBack }: CreateNewOfferProps) {
+interface CreateNewOfferProps {
+  onBack?: () => void;
+  initialOffer?: InitialOffer;
+}
+
+function formatForDateTimeLocal(value: string | Date) {
+  const d = typeof value === "string" ? new Date(value) : value;
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+    `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  );
+}
+
+export function CreateNewOffer({ onBack, initialOffer }: CreateNewOfferProps) {
   const [step, setStep] = useState(1);
-  const [offerType, setOfferType] = useState("quantity-breaks-same");
-  const [offerName, setOfferName] = useState("");
+  const [offerType, setOfferType] = useState(
+    initialOffer?.offerType ?? "quantity-breaks-same",
+  );
+  const [offerName, setOfferName] = useState(initialOffer?.name ?? "");
   const [offerNameError, setOfferNameError] = useState("");
-  const [startTime, setStartTime] = useState("");
-  const [endTime, setEndTime] = useState("");
+  const [startTime, setStartTime] = useState(
+    initialOffer ? formatForDateTimeLocal(initialOffer.startTime) : "",
+  );
+  const [endTime, setEndTime] = useState(
+    initialOffer ? formatForDateTimeLocal(initialOffer.endTime) : "",
+  );
   const [startTimeError, setStartTimeError] = useState("");
   const [endTimeError, setEndTimeError] = useState("");
   const [productSelection, setProductSelection] = useState(
     "specific-selected",
   );
-  const [pricingOption, setPricingOption] = useState<"single" | "duo">("duo");
+  const [pricingOption, setPricingOption] = useState<"single" | "duo">(
+    initialOffer?.pricingOption ?? "duo",
+  );
   const [layoutFormat, setLayoutFormat] = useState<
     "vertical" | "horizontal" | "card" | "compact"
-  >("vertical");
+  >(initialOffer?.layoutFormat ?? "vertical");
   const [showProductModal, setShowProductModal] = useState(false);
-  const [selectedProducts, setSelectedProducts] = useState<Product[]>([]);
-  const [discountRules, setDiscountRules] = useState<DiscountRule[]>([
-    {
-      id: 1,
-      isExpanded: true,
-      title: "Buy 1, get 1 free",
-      buyQty: 1,
-      getQty: 1,
-      priceType: "default",
-      subtitle: "",
-      badgeText: "",
-      badgeStyle: "simple",
-      label: "SAVE {{saved_percentage}}",
-      selectedByDefault: true,
-      showAsSoldOut: false,
-    },
-  ]);
+  const [selectedProducts, setSelectedProducts] = useState<Product[]>(
+    initialOffer?.selectedProductsJson
+      ? (JSON.parse(initialOffer.selectedProductsJson) as Product[])
+      : [],
+  );
+  const [discountRules, setDiscountRules] = useState<DiscountRule[]>(
+    initialOffer?.discountRulesJson
+      ? (JSON.parse(initialOffer.discountRulesJson) as DiscountRule[])
+      : [
+          {
+            id: 1,
+            isExpanded: true,
+            title: "Buy 1, get 1 free",
+            buyQty: 1,
+            getQty: 1,
+            priceType: "default",
+            subtitle: "",
+            badgeText: "",
+            badgeStyle: "simple",
+            label: "SAVE {{saved_percentage}}",
+            selectedByDefault: true,
+            showAsSoldOut: false,
+          },
+        ],
+  );
 
   const steps = [
     "Basic Information",
@@ -129,11 +172,20 @@ export function CreateNewOffer({ onBack }: CreateNewOfferProps) {
           >
             ← Back
           </button>
-          <h1 className="polaris-page__title">Create New Offer</h1>
+          <h1 className="polaris-page__title">
+            {initialOffer ? "Edit Offer" : "Create New Offer"}
+          </h1>
         </div>
       </div>
 
-      <input type="hidden" name="intent" value="create-offer" />
+      <input
+        type="hidden"
+        name="intent"
+        value={initialOffer ? "update-offer" : "create-offer"}
+      />
+      {initialOffer && (
+        <input type="hidden" name="offerId" value={initialOffer.id} />
+      )}
       {/* 始终提交的核心字段（即使对应输入步骤已切换隐藏） */}
       <input type="hidden" name="name" value={offerName} />
       <input type="hidden" name="offerType" value={offerType} />
@@ -1201,7 +1253,11 @@ export function CreateNewOffer({ onBack }: CreateNewOfferProps) {
           }}
           type={step === 4 ? "submit" : "button"}
         >
-          {step === 4 ? "Create Offer" : "Next"}
+          {step === 4
+            ? initialOffer
+              ? "Update Offer"
+              : "Create Offer"
+            : "Next"}
         </button>
       </div>
     </Form>

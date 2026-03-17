@@ -1,5 +1,13 @@
-import { useState } from "react";
-import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
+import { useEffect, useState } from "react";
+import {
+  useLoaderData,
+  useNavigate,
+  useSearchParams,
+  type ActionFunctionArgs,
+  type HeadersFunction,
+  type LoaderFunctionArgs,
+} from "react-router";
+import { redirect } from "react-router";
 import { authenticate } from "../../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { DashboardPage } from "../DashboardPage";
@@ -8,19 +16,61 @@ import { PricingPage } from "../PricingPage";
 import { CreateNewOffer } from "../component/CreateNewOffer";
 import prisma from "../../db.server";
 
+type OfferListItem = {
+  id: string;
+  name: string;
+  offerType: string;
+  pricingOption: string;
+  layoutFormat: string;
+  startTime: string;
+  endTime: string;
+  totalBudget: number | null;
+  dailyBudget: number | null;
+  customerSegments: string | null;
+  markets: string | null;
+  usageLimitPerCustomer: string;
+  selectedProductsJson: string | null;
+  discountRulesJson: string | null;
+  status?: string | null;
+  exposurePV?: number | null;
+  addToCartPV?: number | null;
+  gmv?: number | null;
+  conversion?: number | null;
+};
+
+export type IndexLoaderData = {
+  offers: OfferListItem[];
+};
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
-  return null;
+
+  const prismaAny: any = prisma;
+  const prismaOffers = await prismaAny.offer.findMany({
+    orderBy: { createdAt: "desc" },
+  });
+
+  const offers = prismaOffers as OfferListItem[];
+
+  return Response.json({ offers } satisfies IndexLoaderData);
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const formData = await request.formData();
-  const intent = formData.get("intent");
+  let intent = formData.get("intent");
+  const prismaAny: any = prisma;
 
   console.log("action intent", intent);
 
-  if (intent === "create-offer") {
+  // 兼容 fallback：如果没有显式 intent，但有 offerId，则视为更新，否则视为创建
+  if (!intent) {
+    const hasId = formData.get("offerId");
+    intent = hasId ? "update-offer" : "create-offer";
+  }
+
+  if (intent === "create-offer" || intent === "update-offer") {
+    const idRaw = String(formData.get("offerId") || "").trim();
     const name = String(formData.get("name") || "").trim();
     const offerType = String(formData.get("offerType") || "").trim();
     const pricingOption = String(formData.get("pricingOption") || "").trim() || "duo";
@@ -43,25 +93,60 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const startTime = new Date(startTimeRaw);
     const endTime = new Date(endTimeRaw);
 
-    await prisma.offer.create({
-      data: {
-        name,
-        offerType,
-        pricingOption,
-        layoutFormat,
-        startTime,
-        endTime,
-        totalBudget: totalBudget ? Number(totalBudget) : null,
-        dailyBudget: dailyBudget ? Number(dailyBudget) : null,
-        customerSegments: customerSegments.length ? customerSegments.join(",") : null,
-        markets: markets.length ? markets.join(",") : null,
-        usageLimitPerCustomer: String(formData.get("usageLimitPerCustomer") || "unlimited"),
-        selectedProductsJson: selectedProductsJson || null,
-        discountRulesJson: discountRulesJson || null,
-      },
+    const data = {
+      name,
+      offerType,
+      pricingOption,
+      layoutFormat,
+      startTime,
+      endTime,
+      totalBudget: totalBudget ? Number(totalBudget) : null,
+      dailyBudget: dailyBudget ? Number(dailyBudget) : null,
+      customerSegments: customerSegments.length
+        ? customerSegments.join(",")
+        : null,
+      markets: markets.length ? markets.join(",") : null,
+      usageLimitPerCustomer: String(
+        formData.get("usageLimitPerCustomer") || "unlimited",
+      ),
+      selectedProductsJson: selectedProductsJson || null,
+      discountRulesJson: discountRulesJson || null,
+    };
+
+    const url = new URL(request.url);
+
+    if (intent === "create-offer") {
+      await prismaAny.offer.create({ data });
+      url.searchParams.set("toast", "create-success");
+    } else {
+      if (!idRaw) {
+        return new Response("Missing offer id", { status: 400 });
+      }
+      await prismaAny.offer.update({
+        where: { id: idRaw },
+        data,
+      });
+      url.searchParams.set("toast", "update-success");
+    }
+
+    return redirect(url.pathname + "?" + url.searchParams.toString());
+  }
+
+  if (intent === "delete-offer") {
+    const idRaw = String(formData.get("offerId") || "").trim();
+    if (!idRaw) {
+      return new Response("Missing offer id", { status: 400 });
+    }
+
+    const prismaAny: any = prisma;
+    await prismaAny.offer.delete({
+      where: { id: idRaw },
     });
 
-    return new Response(null, { status: 204 });
+    const url = new URL(request.url);
+    url.searchParams.set("toast", "delete-success");
+
+    return redirect(url.pathname + "?" + url.searchParams.toString());
   }
 
   return new Response(null, { status: 200 });
@@ -70,11 +155,57 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 type HomeTabKey = "dashboard" | "offers" | "pricing";
 
 export default function Index() {
+  const { offers } = useLoaderData() as IndexLoaderData;
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<HomeTabKey>("dashboard");
   const [showCreateOffer, setShowCreateOffer] = useState(false);
 
+  const toast = searchParams.get("toast");
+
+  useEffect(() => {
+    if (toast === "create-success") {
+      setToastMessage("Offer 创建成功");
+      setShowCreateOffer(false);
+      setActiveTab("dashboard");
+    } else if (toast === "update-success") {
+      setToastMessage("Offer 更新成功");
+      setShowCreateOffer(false);
+      setActiveTab("dashboard");
+    } else if (toast === "delete-success") {
+      setToastMessage("Offer 删除成功");
+      setShowCreateOffer(false);
+      setActiveTab("dashboard");
+    } else {
+      setToastMessage(null);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    if (!toast || !toastMessage) return;
+
+    const timer = setTimeout(() => {
+      const next = new URLSearchParams(searchParams);
+      next.delete("toast");
+      navigate(
+        {
+          search: next.toString() ? `?${next.toString()}` : "",
+        },
+        { replace: true },
+      );
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, [toast, toastMessage, navigate, searchParams]);
+
   return (
-    <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px]">
+    <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px] relative">
+      {toastMessage && (
+        <div className="fixed z-50 top-4 left-1/2 -translate-x-1/2 bg-[#108043] text-white px-4 py-2 rounded shadow-lg text-sm font-['Inter']">
+          {toastMessage}
+        </div>
+      )}
       {/* Tabs */}
       <nav className="bg-white flex flex-col sm:flex-row gap-[8px] sm:gap-[16px] items-stretch sm:items-start pb-0 px-[16px] pt-[16px] rounded-[8px] mb-[16px] sm:mb-[24px]">
         <button
@@ -143,10 +274,16 @@ export default function Index() {
 
       {/* Tab content */}
       {activeTab === "dashboard" && (
-        <DashboardPage onViewAllOffers={() => setActiveTab("offers")} />
+        <DashboardPage
+          offers={offers}
+          onViewAllOffers={() => setActiveTab("offers")}
+        />
       )}
       {activeTab === "offers" && !showCreateOffer && (
-        <AllOffersPage onCreateOffer={() => setShowCreateOffer(true)} />
+        <AllOffersPage
+          offers={offers}
+          onCreateOffer={() => setShowCreateOffer(true)}
+        />
       )}
       {activeTab === "offers" && showCreateOffer && (
         <CreateNewOffer onBack={() => setShowCreateOffer(false)} />

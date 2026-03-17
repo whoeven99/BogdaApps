@@ -1,55 +1,66 @@
 // AllOffersPage.tsx
+import { useEffect, useState } from "react";
 import "../styles/tailwind.css";
-import { Copy, Trash2, Pencil, ChartBar } from "lucide-react";
+import { Trash2, Pencil } from "lucide-react";
+import { Form, useSearchParams } from "react-router";
+import type { IndexLoaderData } from "./_index/route";
 
-const offers = [
-  {
-    id: 1,
-    name: "Summer Bundle",
-    status: "Active",
-    gmv: "$12,430",
-    conversion: "3.2%",
-    exposurePV: "45,230",
-    addToCartPV: "8,920",
-    created: "2024-01-15",
-  },
-  {
-    id: 2,
-    name: "Winter Sale Pack",
-    status: "Active",
-    gmv: "$8,920",
-    conversion: "2.8%",
-    exposurePV: "38,150",
-    addToCartPV: "7,200",
-    created: "2024-01-20",
-  },
-  {
-    id: 3,
-    name: "Spring Collection",
-    status: "Paused",
-    gmv: "$5,640",
-    conversion: "1.9%",
-    exposurePV: "22,600",
-    addToCartPV: "4,100",
-    created: "2024-02-01",
-  },
-];
+type AllOffersRow = {
+  id: string;
+  name: string;
+  status: string;
+  exposurePV: number;
+  addToCartPV: number;
+  gmv: number;
+  conversion: number;
+  createdAt: string;
+};
 
 interface AllOffersPageProps {
   onCreateOffer?: () => void;
+  offers?: IndexLoaderData["offers"];
 }
 
-export function AllOffersPage({ onCreateOffer }: AllOffersPageProps) {
+export function AllOffersPage({ onCreateOffer, offers }: AllOffersPageProps) {
   const handleShowGuide = () => {};
   const handleCreateOffer = () => {
     if (onCreateOffer) {
       onCreateOffer();
     }
   };
-  const handleAnalytics = () => {};
   const handleEdit = () => {};
-  const handleCopy = () => {};
   const handleDelete = () => {};
+
+  const rows: AllOffersRow[] = (offers ?? []).map((offer) => {
+    const status = (offer.status ?? "Paused") as string;
+    const exposurePV = offer.exposurePV ?? 0;
+    const addToCartPV = offer.addToCartPV ?? 0;
+    const gmv = offer.gmv ?? 0;
+    const conversion = offer.conversion ?? 0;
+    const createdAt = offer.startTime ?? "";
+
+    return {
+      id: offer.id,
+      name: offer.name,
+      status,
+      exposurePV,
+      addToCartPV,
+      gmv,
+      conversion,
+      createdAt,
+    };
+  });
+
+  const [searchParams] = useSearchParams();
+  const [deletingOffer, setDeletingOffer] = useState<AllOffersRow | null>(null);
+
+  const toast = searchParams.get("toast");
+
+  useEffect(() => {
+    if (toast === "delete-success") {
+      setDeletingOffer(null);
+    }
+  }, [toast]);
 
   return (
     <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px]">
@@ -113,16 +124,29 @@ export function AllOffersPage({ onCreateOffer }: AllOffersPageProps) {
             </tr>
           </thead>
           <tbody>
-            {offers.map((offer) => (
-              <tr key={offer.id}>
+            {rows.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={8}
+                  className="p-[12px] border-b border-[#dfe3e8] text-[14px] text-[#6d7175] font-['Inter']"
+                >
+                  No offers yet. Create your first offer to see it here.
+                </td>
+              </tr>
+            ) : (
+              rows.map((offer) => {
+                const isActive = offer.status.toLowerCase() === "active";
+                const gmvDisplay = `$${offer.gmv.toLocaleString()}`;
+                const conversionDisplay = `${offer.conversion.toFixed(1)}%`;
+                const createdDisplay = offer.createdAt
+                  ? new Date(offer.createdAt).toISOString().slice(0, 10)
+                  : "-";
+
+                return (
+                  <tr key={offer.id}>
                 <td className="p-[12px] border-b border-[#dfe3e8] text-[14px] text-[#202223] font-['Inter']">
                   <div className="flex items-center gap-[8px]">
                     {offer.name}
-                    {offer.id <= 2 && (
-                      <span className="bg-[#00A47C] text-white text-[10px] font-semibold py-[2px] px-[6px] rounded-[4px] uppercase tracking-wider">
-                        NEW
-                      </span>
-                    )}
                   </div>
                 </td>
                 <td className="p-[12px] border-b border-[#dfe3e8]">
@@ -131,7 +155,7 @@ export function AllOffersPage({ onCreateOffer }: AllOffersPageProps) {
                       className="relative inline-block w-[44px] h-[24px] rounded-[12px]"
                       style={{
                         backgroundColor:
-                          offer.status === "Active" ? "#008060" : offer.status === "Paused" ? "#c4cdd5" : "#c4cdd5",
+                          isActive ? "#008060" : "#c4cdd5",
                       }}
                     >
                       <span
@@ -143,43 +167,33 @@ export function AllOffersPage({ onCreateOffer }: AllOffersPageProps) {
                       style={{
                         fontSize: 14,
                         color:
-                          offer.status === "Active"
+                          isActive
                             ? "#108043"
-                            : offer.status === "Paused"
-                            ? "#916a00"
                             : "#6d7175",
                         fontWeight: 500,
                       }}
                     >
-                      {offer.status}
+                      {offer.status || "Paused"}
                     </span>
                   </div>
                 </td>
                 <td className="p-[12px] border-b border-[#dfe3e8] text-[14px] text-[#202223] font-['Inter']">
-                  {offer.exposurePV}
+                  {offer.exposurePV.toLocaleString()}
                 </td>
                 <td className="p-[12px] border-b border-[#dfe3e8] text-[14px] text-[#202223] font-['Inter']">
-                  {offer.addToCartPV}
+                  {offer.addToCartPV.toLocaleString()}
                 </td>
                 <td className="p-[12px] border-b border-[#dfe3e8] text-[14px] text-[#202223] font-['Inter']">
-                  {offer.gmv}
+                  {gmvDisplay}
                 </td>
                 <td className="p-[12px] border-b border-[#dfe3e8] text-[14px] text-[#202223] font-['Inter']">
-                  {offer.conversion}
+                  {conversionDisplay}
                 </td>
                 <td className="p-[12px] border-b border-[#dfe3e8] text-[14px] text-[#6d7175] font-['Inter']">
-                  {offer.created}
+                  {createdDisplay}
                 </td>
                 <td className="p-[12px] border-b border-[#dfe3e8]">
                   <div className="flex items-center gap-[8px]">
-                    <button
-                      type="button"
-                      className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[4px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
-                      onClick={handleAnalytics}
-                      title="Analytics"
-                    >
-                      <ChartBar size={16} />
-                    </button>
                     <button
                       type="button"
                       className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[4px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
@@ -190,27 +204,61 @@ export function AllOffersPage({ onCreateOffer }: AllOffersPageProps) {
                     </button>
                     <button
                       type="button"
-                      className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[4px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
-                      onClick={handleCopy}
-                      title="Copy"
-                    >
-                      <Copy size={16} />
-                    </button>
-                    <button
-                      type="button"
                       className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#d72c0d] p-[4px] rounded-[4px] hover:bg-[rgba(215,44,13,0.1)] transition-colors"
-                      onClick={handleDelete}
                       title="Delete"
+                      onClick={() => setDeletingOffer(offer)}
                     >
                       <Trash2 size={16} />
                     </button>
                   </div>
                 </td>
               </tr>
-            ))}
+                );
+              })
+            )}
           </tbody>
         </table>
       </div>
+
+      {deletingOffer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.4)]">
+          <div className="bg-white rounded-[12px] shadow-[0_4px_16px_rgba(0,0,0,0.24)] max-w-[400px] w-[90%] p-[20px]">
+            <h2 className="font-['Inter'] font-semibold text-[18px] leading-[27px] text-[#202223] mb-[8px]">
+              Delete offer
+            </h2>
+            <p className="font-['Inter'] text-[14px] leading-[21px] text-[#6d7175] mb-[16px]">
+              Are you sure you want to delete offer{" "}
+              <span className="font-semibold text-[#202223]">
+                {deletingOffer.name}
+              </span>
+              ? This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-[8px]">
+              <button
+                type="button"
+                className="px-[12px] py-[6px] rounded-[6px] border border-[#dfe3e8] bg-white text-[#202223] text-[14px] font-['Inter'] hover:bg-[#f4f6f8]"
+                onClick={() => setDeletingOffer(null)}
+              >
+                Cancel
+              </button>
+              <Form method="post">
+                <input type="hidden" name="intent" value="delete-offer" />
+                <input
+                  type="hidden"
+                  name="offerId"
+                  value={deletingOffer.id}
+                />
+                <button
+                  type="submit"
+                  className="px-[12px] py-[6px] rounded-[6px] bg-[#d72c0d] text-white text-[14px] font-['Inter'] hover:bg-[#bc2200]"
+                >
+                  Delete
+                </button>
+              </Form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

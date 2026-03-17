@@ -1,10 +1,13 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { Form, useSearchParams } from "react-router";
 import { Copy, Trash2, Pencil, ChartBar, ArrowUp, ArrowDown } from "lucide-react";
 import "../styles/tailwind.css";
 import { CreateNewOffer } from "./component/CreateNewOffer";
+import type { IndexLoaderData } from "./_index/route";
 
 interface DashboardPageProps {
   onViewAllOffers?: () => void;
+  offers?: IndexLoaderData["offers"];
 }
 
 const mockOverview = {
@@ -18,35 +21,15 @@ const mockOverview = {
   conversionTrendColor: "text-[#916a00]" as const,
 };
 
-const mockOffers = [
-  {
-    id: 1,
-    name: "Summer Bundle",
-    status: "Active" as const,
-    gmv: "$12,430",
-    conversion: "3.2%",
-    exposurePV: "45,230",
-    addToCartPV: "8,920",
-  },
-  {
-    id: 2,
-    name: "Winter Sale Pack",
-    status: "Active" as const,
-    gmv: "$8,920",
-    conversion: "2.8%",
-    exposurePV: "38,150",
-    addToCartPV: "7,200",
-  },
-  {
-    id: 3,
-    name: "Spring Collection",
-    status: "Paused" as const,
-    gmv: "$5,640",
-    conversion: "1.9%",
-    exposurePV: "22,600",
-    addToCartPV: "4,100",
-  },
-];
+type DashboardOfferRow = {
+  id: string;
+  name: string;
+  status: string;
+  exposurePV: number;
+  addToCartPV: number;
+  gmv: number;
+  conversion: number;
+};
 
 const mockAbTests = [
   {
@@ -81,12 +64,38 @@ function ChevronRightIcon() {
   );
 }
 
-export function DashboardPage({ onViewAllOffers }: DashboardPageProps) {
+export function DashboardPage({ onViewAllOffers, offers }: DashboardPageProps) {
+  const [searchParams] = useSearchParams();
   const [isThemeExtensionEnabled, setIsThemeExtensionEnabled] = useState(true);
   const [showCreateOffer, setShowCreateOffer] = useState(false);
+  const [editingOfferId, setEditingOfferId] = useState<string | null>(null);
+  const [deletingOffer, setDeletingOffer] = useState<DashboardOfferRow | null>(
+    null,
+  );
+
+  const offerRows: DashboardOfferRow[] = (offers ?? []).map((offer) => {
+    const status = (offer.status ?? "Paused") as string;
+    const exposurePV = offer.exposurePV ?? 0;
+    const addToCartPV = offer.addToCartPV ?? 0;
+    const gmv = offer.gmv ?? 0;
+    const conversion = offer.conversion ?? 0;
+
+    return {
+      id: offer.id,
+      name: offer.name,
+      status,
+      exposurePV,
+      addToCartPV,
+      gmv,
+      conversion,
+    };
+  });
+
+  const visibleOffers = offerRows.slice(0, 4);
 
   const handleViewDetails = () => {}; // mock
   const handleCreateOffer = () => {
+    setEditingOfferId(null);
     setShowCreateOffer(true);
   };
   const handleCreateAbTest = () => {}; // mock
@@ -98,10 +107,31 @@ export function DashboardPage({ onViewAllOffers }: DashboardPageProps) {
   const handleViewAllAbTests = () => {}; // mock
   const handleNeedHelp = () => {}; // mock
 
+  const toast = searchParams.get("toast");
+
+  useEffect(() => {
+    if (
+      toast === "create-success" ||
+      toast === "update-success" ||
+      toast === "delete-success"
+    ) {
+      setShowCreateOffer(false);
+      setDeletingOffer(null);
+    }
+  }, [toast]);
+
   if (showCreateOffer) {
+    const editingOffer =
+      editingOfferId && offers
+        ? (offers.find((o) => o.id === editingOfferId) as any)
+        : undefined;
+
     return (
       <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px]">
-        <CreateNewOffer onBack={() => setShowCreateOffer(false)} />
+        <CreateNewOffer
+          onBack={() => setShowCreateOffer(false)}
+          initialOffer={editingOffer}
+        />
       </div>
     );
   }
@@ -251,157 +281,166 @@ export function DashboardPage({ onViewAllOffers }: DashboardPageProps) {
             </tr>
           </thead>
           <tbody>
-            {mockOffers.map((offer) => (
-              <tr key={offer.id}>
-                <td className="p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-normal text-[14px] leading-[22.4px] text-[#202223] tracking-[-0.1504px]">
-                  <div className="flex items-center gap-[8px]">
-                    {offer.name}
-                    <span className="bg-[#00A47C] text-white text-[10px] font-semibold py-[2px] px-[6px] rounded-[4px] uppercase tracking-wider">
-                      NEW
-                    </span>
-                  </div>
-                </td>
-                <td className="p-[12px] border-b border-[#dfe3e8]">
-                  <div className="flex items-center gap-[8px]">
-                    <span
-                      className="relative inline-block w-[44px] h-[24px] rounded-[12px] cursor-pointer"
-                      style={{
-                        backgroundColor: offer.status === "Active" ? "#008060" : "#c4cdd5",
-                      }}
-                      title={offer.status === "Active" ? "Click to deactivate" : "Click to activate"}
-                    >
-                      <span
-                        className="absolute top-[2px] w-[20px] h-[20px] bg-white rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.2)]"
-                        style={{ left: offer.status === "Active" ? "22px" : "2px" }}
-                      />
-                    </span>
-                    <span
-                      className="text-[14px] font-medium"
-                      style={{ color: offer.status === "Active" ? "#108043" : "#6d7175" }}
-                    >
-                      {offer.status}
-                    </span>
-                  </div>
-                </td>
-                <td className="p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-normal text-[14px] leading-[22.4px] text-[#202223] tracking-[-0.1504px]">
-                  {offer.exposurePV}
-                </td>
-                <td className="p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-normal text-[14px] leading-[22.4px] text-[#202223] tracking-[-0.1504px]">
-                  {offer.addToCartPV}
-                </td>
-                <td className="p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-normal text-[14px] leading-[22.4px] text-[#202223] tracking-[-0.1504px]">
-                  {offer.gmv}
-                </td>
-                <td className="p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-normal text-[14px] leading-[22.4px] text-[#202223] tracking-[-0.1504px]">
-                  {offer.conversion}
-                </td>
-                <td className="p-[12px] border-b border-[#dfe3e8]">
-                  <div className="flex items-center gap-[8px]">
-                    <button
-                      type="button"
-                      className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[4px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
-                      title="Analytics"
-                    >
-                      <ChartBar size={16} />
-                    </button>
-                    <button
-                      type="button"
-                      className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[4px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
-                      title="Edit"
-                    >
-                      <Pencil size={16} />
-                    </button>
-                    <button
-                      type="button"
-                      className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[4px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
-                      title="Copy"
-                    >
-                      <Copy size={16} />
-                    </button>
-                    <button
-                      type="button"
-                      className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#d72c0d] p-[4px] rounded-[4px] hover:bg-[rgba(215,44,13,0.1)] transition-colors"
-                      title="Delete"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
+            {visibleOffers.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={7}
+                  className="p-[12px] border-b border-[#dfe3e8] font-['Inter'] text-[14px] leading-[22.4px] text-[#6d7175] tracking-[-0.1504px]"
+                >
+                  No offers yet. Create your first offer to see it here.
                 </td>
               </tr>
-            ))}
+            ) : (
+              visibleOffers.map((offer) => {
+                const isActive = offer.status.toLowerCase() === "active";
+                const gmvDisplay = `$${offer.gmv.toLocaleString()}`;
+                const conversionDisplay = `${offer.conversion.toFixed(1)}%`;
+
+                return (
+                  <tr key={offer.id}>
+                    <td className="p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-normal text-[14px] leading-[22.4px] text-[#202223] tracking-[-0.1504px]">
+                      <div className="flex items-center gap-[8px]">
+                        {offer.name}
+                      </div>
+                    </td>
+                    <td className="p-[12px] border-b border-[#dfe3e8]">
+                      <div className="flex items-center gap-[8px]">
+                        <span
+                          className="relative inline-block w-[44px] h-[24px] rounded-[12px] cursor-pointer"
+                          style={{
+                            backgroundColor: isActive ? "#008060" : "#c4cdd5",
+                          }}
+                          title={isActive ? "Click to deactivate" : "Click to activate"}
+                        >
+                          <span
+                            className="absolute top-[2px] w-[20px] h-[20px] bg-white rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.2)]"
+                            style={{ left: isActive ? "22px" : "2px" }}
+                          />
+                        </span>
+                        <span
+                          className="text-[14px] font-medium"
+                          style={{ color: isActive ? "#108043" : "#6d7175" }}
+                        >
+                          {offer.status || "Paused"}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-normal text-[14px] leading-[22.4px] text-[#202223] tracking-[-0.1504px]">
+                      {offer.exposurePV.toLocaleString()}
+                    </td>
+                    <td className="p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-normal text-[14px] leading-[22.4px] text-[#202223] tracking-[-0.1504px]">
+                      {offer.addToCartPV.toLocaleString()}
+                    </td>
+                    <td className="p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-normal text-[14px] leading-[22.4px] text-[#202223] tracking-[-0.1504px]">
+                      {gmvDisplay}
+                    </td>
+                    <td className="p-[12px] border-b border-[#dfe3e8] font-['Inter'] font-normal text-[14px] leading-[22.4px] text-[#202223] tracking-[-0.1504px]">
+                      {conversionDisplay}
+                    </td>
+                    <td className="p-[12px] border-b border-[#dfe3e8]">
+                      <div className="flex items-center gap-[8px]">
+                        <button
+                          type="button"
+                          className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[4px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
+                          title="Edit"
+                          onClick={() => {
+                            setEditingOfferId(offer.id);
+                            setShowCreateOffer(true);
+                          }}
+                        >
+                          <Pencil size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#d72c0d] p-[4px] rounded-[4px] hover:bg-[rgba(215,44,13,0.1)] transition-colors"
+                          title="Delete"
+                          onClick={() => setDeletingOffer(offer)}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
           </tbody>
         </table>
 
         <div className="md:hidden space-y-[12px]">
-          {mockOffers.map((offer) => (
-            <div key={offer.id} className="border border-[#dfe3e8] rounded-[8px] p-[16px]">
-              <div className="flex items-start justify-between mb-[12px]">
-                <div className="flex items-center gap-[8px] flex-wrap">
-                  <span className="font-['Inter'] font-medium text-[16px] text-[#202223]">{offer.name}</span>
-                  <span className="bg-[#00A47C] text-white text-[10px] font-semibold py-[2px] px-[6px] rounded-[4px] uppercase tracking-wider">
-                    NEW
-                  </span>
-                </div>
-              </div>
-              <div className="flex items-center gap-[8px] mb-[12px]">
-                <span
-                  className="relative inline-block w-[44px] h-[24px] rounded-[12px]"
-                  style={{ backgroundColor: offer.status === "Active" ? "#008060" : "#c4cdd5" }}
-                >
-                  <span
-                    className="absolute top-[2px] w-[20px] h-[20px] bg-white rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.2)]"
-                    style={{ left: offer.status === "Active" ? "22px" : "2px" }}
-                  />
-                </span>
-                <span
-                  className="text-[14px] font-medium"
-                  style={{ color: offer.status === "Active" ? "#108043" : "#6d7175" }}
-                >
-                  {offer.status}
-                </span>
-              </div>
-              <div className="grid grid-cols-2 gap-[12px] mb-[12px]">
-                <div>
-                  <div className="text-[12px] text-[#6d7175] mb-[4px]">GMV</div>
-                  <div className="text-[14px] font-medium text-[#202223]">{offer.gmv}</div>
-                </div>
-                <div>
-                  <div className="text-[12px] text-[#6d7175] mb-[4px]">Conversion</div>
-                  <div className="text-[14px] font-medium text-[#202223]">{offer.conversion}</div>
-                </div>
-              </div>
-              <div className="flex items-center gap-[8px] pt-[12px] border-t border-[#dfe3e8]">
-                <button
-                  type="button"
-                  className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[8px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
-                  title="Analytics"
-                >
-                  <ChartBar size={18} />
-                </button>
-                <button
-                  type="button"
-                  className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[8px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
-                  title="Edit"
-                >
-                  <Pencil size={18} />
-                </button>
-                <button
-                  type="button"
-                  className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[8px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
-                  title="Copy"
-                >
-                  <Copy size={18} />
-                </button>
-                <button
-                  type="button"
-                  className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#d72c0d] p-[8px] rounded-[4px] hover:bg-[rgba(215,44,13,0.1)] transition-colors"
-                  title="Delete"
-                >
-                  <Trash2 size={18} />
-                </button>
-              </div>
+          {visibleOffers.length === 0 ? (
+            <div className="border border-[#dfe3e8] rounded-[8px] p-[16px] text-[14px] text-[#6d7175] font-['Inter']">
+              No offers yet. Create your first offer to see it here.
             </div>
-          ))}
+          ) : (
+            visibleOffers.map((offer) => {
+              const isActive = offer.status.toLowerCase() === "active";
+              const gmvDisplay = `$${offer.gmv.toLocaleString()}`;
+              const conversionDisplay = `${offer.conversion.toFixed(1)}%`;
+
+              return (
+                <div key={offer.id} className="border border-[#dfe3e8] rounded-[8px] p-[16px]">
+                  <div className="flex items-start justify-between mb-[12px]">
+                    <div className="flex items-center gap-[8px] flex-wrap">
+                      <span className="font-['Inter'] font-medium text-[16px] text-[#202223]">
+                        {offer.name}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-[8px] mb-[12px]">
+                    <span
+                      className="relative inline-block w-[44px] h-[24px] rounded-[12px]"
+                      style={{ backgroundColor: isActive ? "#008060" : "#c4cdd5" }}
+                    >
+                      <span
+                        className="absolute top-[2px] w-[20px] h-[20px] bg-white rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.2)]"
+                        style={{ left: isActive ? "22px" : "2px" }}
+                      />
+                    </span>
+                    <span
+                      className="text-[14px] font-medium"
+                      style={{ color: isActive ? "#108043" : "#6d7175" }}
+                    >
+                      {offer.status || "Paused"}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-[12px] mb-[12px]">
+                    <div>
+                      <div className="text-[12px] text-[#6d7175] mb-[4px]">GMV</div>
+                      <div className="text-[14px] font-medium text-[#202223]">{gmvDisplay}</div>
+                    </div>
+                    <div>
+                      <div className="text-[12px] text-[#6d7175] mb-[4px]">Conversion</div>
+                      <div className="text-[14px] font-medium text-[#202223]">
+                        {conversionDisplay}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-[8px] pt-[12px] border-t border-[#dfe3e8]">
+                    <button
+                      type="button"
+                      className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[8px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
+                      title="Edit"
+                      onClick={() => {
+                        setEditingOfferId(offer.id);
+                        setShowCreateOffer(true);
+                      }}
+                    >
+                      <Pencil size={18} />
+                    </button>
+                    <button
+                      type="button"
+                      className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#d72c0d] p-[8px] rounded-[4px] hover:bg-[rgba(215,44,13,0.1)] transition-colors"
+                      title="Delete"
+                      onClick={() => setDeletingOffer(offer)}
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
 
         <div className="flex justify-center mt-[16px] sm:mt-[20px] pt-[16px] border-t border-[#dfe3e8]">
@@ -631,6 +670,42 @@ export function DashboardPage({ onViewAllOffers }: DashboardPageProps) {
           </button>
         </div>
       </div>
+
+      {deletingOffer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.4)]">
+          <div className="bg-white rounded-[12px] shadow-[0_4px_16px_rgba(0,0,0,0.24)] max-w-[400px] w-[90%] p-[20px]">
+            <h2 className="font-['Inter'] font-semibold text-[18px] leading-[27px] text-[#202223] mb-[8px]">
+              Delete offer
+            </h2>
+            <p className="font-['Inter'] text-[14px] leading-[21px] text-[#6d7175] mb-[16px]">
+              Are you sure you want to delete offer{" "}
+              <span className="font-semibold text-[#202223]">
+                {deletingOffer.name}
+              </span>
+              ? This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-[8px]">
+              <button
+                type="button"
+                className="px-[12px] py-[6px] rounded-[6px] border border-[#dfe3e8] bg-white text-[#202223] text-[14px] font-['Inter'] hover:bg-[#f4f6f8]"
+                onClick={() => setDeletingOffer(null)}
+              >
+                Cancel
+              </button>
+              <Form method="post">
+                <input type="hidden" name="intent" value="delete-offer" />
+                <input type="hidden" name="offerId" value={deletingOffer.id} />
+                <button
+                  type="submit"
+                  className="px-[12px] py-[6px] rounded-[6px] bg-[#d72c0d] text-white text-[14px] font-['Inter'] hover:bg-[#bc2200]"
+                >
+                  Delete
+                </button>
+              </Form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
