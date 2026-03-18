@@ -56,7 +56,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const formData = await request.formData();
   let intent = formData.get("intent");
   const prismaAny: any = prisma;
@@ -127,6 +127,79 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         data,
       });
       url.searchParams.set("toast", "update-success");
+    }
+
+    // Prisma 写入成功后，同步全部 offers 到 shop metafield
+    try {
+      // 1. 重新查询全部 offers 列表
+      const allOffers = (await prismaAny.offer.findMany({
+        orderBy: { createdAt: "desc" },
+      })) as OfferListItem[];
+
+      const metafieldValue = JSON.stringify({
+        updatedAt: new Date().toISOString(),
+        offers: allOffers,
+      });
+
+      // 2. 查询当前 shop 的 GID
+      const shopIdResponse = await admin.graphql(
+        `#graphql
+        query ShopId {
+          shop {
+            id
+          }
+        }
+      `,
+      );
+
+      const shopIdJson = await shopIdResponse.json();
+      const shopId = shopIdJson?.data?.shop?.id as string | undefined;
+
+      if (!shopId) {
+        console.error("Failed to resolve shop id for metafield sync", shopIdJson);
+      } else {
+        // 3. 写入 shop metafield：namespace=ciwi_bundle, key=ciwi-bundle-offers
+        const metafieldsSetResponse = await admin.graphql(
+          `#graphql
+          mutation MetafieldsSet($metafields: [MetafieldsSetInput!]!) {
+            metafieldsSet(metafields: $metafields) {
+              metafields {
+                id
+                key
+                namespace
+              }
+              userErrors {
+                field
+                message
+              }
+            }
+          }
+        `,
+          {
+            variables: {
+              metafields: [
+                {
+                  ownerId: shopId,
+                  namespace: "ciwi_bundle",
+                  key: "ciwi-bundle-offers",
+                  type: "json",
+                  value: metafieldValue,
+                },
+              ],
+            },
+          },
+        );
+
+        const metafieldsSetJson = await metafieldsSetResponse.json();
+        const userErrors =
+          metafieldsSetJson?.data?.metafieldsSet?.userErrors || [];
+
+        if (userErrors.length > 0) {
+          console.error("metafieldsSet userErrors", userErrors);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to sync offers metafield", error);
     }
 
     return redirect(url.pathname + "?" + url.searchParams.toString());

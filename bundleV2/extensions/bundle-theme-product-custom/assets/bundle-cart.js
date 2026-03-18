@@ -8,6 +8,31 @@ if (document.readyState === "loading") {
 
 function initBundleCartTest() {
   try {
+    // 先尝试读取 shop metafield 中的 offers 配置
+    const metaEl = document.getElementById("ciwi-bundle-offers");
+    if (metaEl) {
+      try {
+        let raw = (metaEl.innerText || metaEl.textContent || "").trim();
+
+        // Liquid 输出中可能被包了一层字符串，并且是 Ruby 风格 (=> / nil)
+        // 例如：" {\"updatedAt\"=>\"...\", \"offers\"=>[... \"totalBudget\"=>nil ...]}"
+        if (raw.startsWith('"') && raw.endsWith('"')) {
+          raw = raw.slice(1, -1);
+        }
+
+        const jsonLike = raw
+          .replace(/=>/g, ":")
+          .replace(/\bnil\b/g, "null");
+
+        const offersConfig = JSON.parse(jsonLike);
+        console.log("ciwi-bundle-offers metafield config", offersConfig);
+      } catch (e) {
+        console.error("Failed to parse ciwi-bundle-offers metafield", e);
+      }
+    } else {
+      console.log("ciwi-bundle-offers metafield not found on page");
+    }
+
     enhanceCartPrices();
 
     // 处理抽屉购物车等动态插入的 DOM
