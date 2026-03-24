@@ -1,0 +1,22 @@
+api_version = "2025-07"
+
+[[extensions]]
+name = "10% Cart Lines Discount"
+handle = "cart-lines-10-percent-discount-function"
+
+uid = "d21a066f-25d9-97ef-1ebc-8e679c617ef3af1e4f84"
+
+type = "function"
+description = "Apply 10% off to all product lines in cart."
+
+[[extensions.targeting]]
+target = "cart.lines.discounts.generate.run"
+input_query = "src/cart_lines_discounts_generate_run.graphql"
+export = "cart-lines-discounts-generate-run"
+
+[extensions.build]
+command = ""
+path = "dist/function.wasm"
+
+[extensions.access]
+scopes = "write_discounts"
