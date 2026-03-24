@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Form } from "react-router";
 import {
   X,
@@ -65,6 +65,18 @@ function formatForDateTimeLocal(value: string | Date) {
 }
 
 export function CreateNewOffer({ onBack, initialOffer }: CreateNewOfferProps) {
+  const startTimeInputRef = useRef<HTMLInputElement | null>(null);
+  const endTimeInputRef = useRef<HTMLInputElement | null>(null);
+  const openDateTimePicker = (input: HTMLInputElement | null) => {
+    const pickerInput = input as
+      | (HTMLInputElement & {
+          showPicker?: () => void;
+        })
+      | null;
+    if (!pickerInput) return;
+    pickerInput.focus();
+    pickerInput.showPicker?.();
+  };
   const [step, setStep] = useState(1);
   const [offerType, setOfferType] = useState(
     initialOffer?.offerType ?? "quantity-breaks-same",
@@ -72,7 +84,9 @@ export function CreateNewOffer({ onBack, initialOffer }: CreateNewOfferProps) {
   const [offerName, setOfferName] = useState(initialOffer?.name ?? "");
   const [offerNameError, setOfferNameError] = useState("");
   const [startTime, setStartTime] = useState(
-    initialOffer ? formatForDateTimeLocal(initialOffer.startTime) : "",
+    initialOffer
+      ? formatForDateTimeLocal(initialOffer.startTime)
+      : formatForDateTimeLocal(new Date()),
   );
   const [endTime, setEndTime] = useState(
     initialOffer ? formatForDateTimeLocal(initialOffer.endTime) : "",
@@ -94,6 +108,8 @@ export function CreateNewOffer({ onBack, initialOffer }: CreateNewOfferProps) {
   const [layoutFormat, setLayoutFormat] = useState<
     "vertical" | "horizontal" | "card" | "compact"
   >(initialOffer?.layoutFormat ?? "vertical");
+  const [cardBackgroundColor, setCardBackgroundColor] = useState("#ffffff");
+  const [accentColor, setAccentColor] = useState("#008060");
   const [showProductModal, setShowProductModal] = useState(false);
   const [selectedProducts, setSelectedProducts] = useState<Product[]>(
     initialOffer?.selectedProductsJson
@@ -107,7 +123,7 @@ export function CreateNewOffer({ onBack, initialOffer }: CreateNewOfferProps) {
           {
             id: 1,
             isExpanded: true,
-            title: "Buy 1, get 1 free",
+            title: "Buy more, save more",
             buyQty: 1,
             getQty: 1,
             priceType: "default",
@@ -134,36 +150,6 @@ export function CreateNewOffer({ onBack, initialOffer }: CreateNewOfferProps) {
       name: "Quantity breaks for the same product",
       description:
         "Offer discounts when customers buy multiple quantities of the same product",
-    },
-    {
-      id: "bogo",
-      name: "Buy X, get Y free (BOGO) deal",
-      description:
-        "Create buy-one-get-one or buy-X-get-Y-free promotions",
-    },
-    {
-      id: "quantity-breaks-different",
-      name: "Quantity breaks for different products",
-      description:
-        "Offer discounts when customers buy multiple different products together",
-    },
-    {
-      id: "complete-bundle",
-      name: "Complete the bundle",
-      description:
-        "Encourage customers to complete a bundle by adding recommended products",
-    },
-    {
-      id: "subscription",
-      name: "Subscription",
-      description:
-        "Offer recurring subscription discounts for regular deliveries",
-    },
-    {
-      id: "progressive-gifts",
-      name: "Progressive gifts",
-      description:
-        "Unlock free gifts as customers add more items to their cart",
     },
   ];
 
@@ -264,6 +250,7 @@ export function CreateNewOffer({ onBack, initialOffer }: CreateNewOfferProps) {
                         setOfferType(e.target.value)
                       }
                       className="create-offer-input"
+                      disabled
                     >
                       {offerTypes.map((type) => (
                         <option key={type.id} value={type.id}>
@@ -291,18 +278,18 @@ export function CreateNewOffer({ onBack, initialOffer }: CreateNewOfferProps) {
                   {offerType === "quantity-breaks-same" && (
                     <>
                       <div
-                        className={`create-offer-pricing-card ${
+                        className={`create-offer-pricing-card create-offer-pricing-card--readonly ${
                           pricingOption === "single"
                             ? "create-offer-pricing-card--selected"
                             : ""
                         }`}
-                        onClick={() => setPricingOption("single")}
                       >
                         <div className="create-offer-pricing-header">
                           <input
                             type="radio"
                             checked={pricingOption === "single"}
                             readOnly
+                            disabled
                             className="create-offer-radio"
                           />
                           <div className="create-offer-pricing-title">
@@ -317,12 +304,11 @@ export function CreateNewOffer({ onBack, initialOffer }: CreateNewOfferProps) {
                         </div>
                       </div>
                       <div
-                        className={`create-offer-pricing-card create-offer-pricing-card--primary ${
+                        className={`create-offer-pricing-card create-offer-pricing-card--primary create-offer-pricing-card--readonly ${
                           pricingOption === "duo"
                             ? "create-offer-pricing-card--selected"
                             : ""
                         }`}
-                        onClick={() => setPricingOption("duo")}
                       >
                         <div className="create-offer-pricing-badge">
                           Most Popular
@@ -332,6 +318,7 @@ export function CreateNewOffer({ onBack, initialOffer }: CreateNewOfferProps) {
                             type="radio"
                             checked={pricingOption === "duo"}
                             readOnly
+                            disabled
                             className="create-offer-radio"
                           />
                           <div className="create-offer-pricing-title">
@@ -525,7 +512,7 @@ export function CreateNewOffer({ onBack, initialOffer }: CreateNewOfferProps) {
 
                   <div>
                     <h3 className="create-offer-section-heading">
-                      Discount rules
+                      Buy more, save more
                     </h3>
 
                     {discountRules.map((rule, index) => (
@@ -548,7 +535,7 @@ export function CreateNewOffer({ onBack, initialOffer }: CreateNewOfferProps) {
                         >
                           <span style={{ fontSize: "16px" }}>🎯</span>
                           <span className="create-offer-discount-title">
-                            Bar #{index + 1} - {rule.title}
+                            Tier #{index + 1} - {rule.title}
                           </span>
 
                           <div
@@ -669,18 +656,18 @@ export function CreateNewOffer({ onBack, initialOffer }: CreateNewOfferProps) {
                     {offerType === "quantity-breaks-same" && (
                       <>
                         <div
-                          className={`create-offer-pricing-card ${
+                          className={`create-offer-pricing-card create-offer-pricing-card--readonly ${
                             pricingOption === "single"
                               ? "create-offer-pricing-card--selected"
                               : ""
                           }`}
-                          onClick={() => setPricingOption("single")}
                         >
                           <div className="create-offer-pricing-header">
                             <input
                               type="radio"
                               checked={pricingOption === "single"}
                               readOnly
+                              disabled
                               className="create-offer-radio"
                             />
                             <div className="create-offer-pricing-title">
@@ -695,12 +682,11 @@ export function CreateNewOffer({ onBack, initialOffer }: CreateNewOfferProps) {
                           </div>
                         </div>
                         <div
-                          className={`create-offer-pricing-card create-offer-pricing-card--primary ${
+                          className={`create-offer-pricing-card create-offer-pricing-card--primary create-offer-pricing-card--readonly ${
                             pricingOption === "duo"
                               ? "create-offer-pricing-card--selected"
                               : ""
                           }`}
-                          onClick={() => setPricingOption("duo")}
                         >
                           <div className="create-offer-pricing-badge">
                             Most Popular
@@ -710,6 +696,7 @@ export function CreateNewOffer({ onBack, initialOffer }: CreateNewOfferProps) {
                               type="radio"
                               checked={pricingOption === "duo"}
                               readOnly
+                              disabled
                               className="create-offer-radio"
                             />
                             <div className="create-offer-pricing-title">
@@ -835,7 +822,10 @@ export function CreateNewOffer({ onBack, initialOffer }: CreateNewOfferProps) {
                       Card Background Color
                       <input
                         type="color"
-                        defaultValue="#ffffff"
+                        value={cardBackgroundColor}
+                        onChange={(e) =>
+                          setCardBackgroundColor(e.target.value)
+                        }
                         className="create-offer-color-input"
                       />
                     </label>
@@ -845,7 +835,8 @@ export function CreateNewOffer({ onBack, initialOffer }: CreateNewOfferProps) {
                       Accent Color
                       <input
                         type="color"
-                        defaultValue="#008060"
+                        value={accentColor}
+                        onChange={(e) => setAccentColor(e.target.value)}
                         className="create-offer-color-input"
                       />
                     </label>
@@ -865,7 +856,84 @@ export function CreateNewOffer({ onBack, initialOffer }: CreateNewOfferProps) {
                   }
                 </p>
                 <div className="create-offer-preview-card">
-                  {/* 这里可以按需补充更详细的样式预览 */}
+                  <div
+                    className="create-offer-style-preview-header"
+                    style={{ color: accentColor }}
+                  >
+                    Bundle & Save
+                  </div>
+                  <div
+                    className={`create-offer-style-preview-list create-offer-style-preview-list--${layoutFormat}`}
+                  >
+                    <div
+                      className="create-offer-style-preview-item"
+                      style={{ background: cardBackgroundColor }}
+                    >
+                      <div className="create-offer-style-preview-item-title">
+                        Single
+                      </div>
+                      <div className="create-offer-style-preview-item-subtitle">
+                        Standard price
+                      </div>
+                      <div className="create-offer-style-preview-item-price">
+                        €65,00
+                      </div>
+                    </div>
+                    <div
+                      className="create-offer-style-preview-item create-offer-style-preview-item--featured"
+                      style={{
+                        background: cardBackgroundColor,
+                        borderColor: accentColor,
+                      }}
+                    >
+                      <div
+                        className="create-offer-style-preview-badge"
+                        style={{ background: accentColor }}
+                      >
+                        Most Popular
+                      </div>
+                      <div className="create-offer-style-preview-item-title">
+                        Duo
+                      </div>
+                      <div className="create-offer-style-preview-item-subtitle">
+                        Buy more, save more
+                      </div>
+                      <div className="create-offer-style-preview-item-price">
+                        €110,50
+                      </div>
+                      <div className="create-offer-style-preview-item-original">
+                        €130,00
+                      </div>
+                    </div>
+                    <div
+                      className="create-offer-style-preview-item"
+                      style={{ background: cardBackgroundColor }}
+                    >
+                      <div className="create-offer-style-preview-item-title">
+                        Trio
+                      </div>
+                      <div className="create-offer-style-preview-item-subtitle">
+                        Extra savings
+                      </div>
+                      <div className="create-offer-style-preview-item-price">
+                        €149,00
+                      </div>
+                    </div>
+                    <div
+                      className="create-offer-style-preview-item"
+                      style={{ background: cardBackgroundColor }}
+                    >
+                      <div className="create-offer-style-preview-item-title">
+                        Pack of 4
+                      </div>
+                      <div className="create-offer-style-preview-item-subtitle">
+                        Best value
+                      </div>
+                      <div className="create-offer-style-preview-item-price">
+                        €185,00
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1087,11 +1155,15 @@ export function CreateNewOffer({ onBack, initialOffer }: CreateNewOfferProps) {
                   >
                     Start Time
                     <input
+                      ref={startTimeInputRef}
                       type="datetime-local"
                       step="1"
                       className="create-offer-datetime"
                       name="startTime"
                       value={startTime}
+                      onClick={() => {
+                        openDateTimePicker(startTimeInputRef.current);
+                      }}
                       onChange={(e) => {
                         setStartTime(e.target.value);
                         if (startTimeError && e.target.value) {
@@ -1115,11 +1187,15 @@ export function CreateNewOffer({ onBack, initialOffer }: CreateNewOfferProps) {
                   >
                     End Time
                     <input
+                      ref={endTimeInputRef}
                       type="datetime-local"
                       step="1"
                       className="create-offer-datetime"
                       name="endTime"
                       value={endTime}
+                      onClick={() => {
+                        openDateTimePicker(endTimeInputRef.current);
+                      }}
                       onChange={(e) => {
                         setEndTime(e.target.value);
                         if (endTimeError && e.target.value) {
