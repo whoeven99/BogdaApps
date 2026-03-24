@@ -8,6 +8,7 @@ import type { IndexLoaderData } from "./_index/route";
 interface DashboardPageProps {
   onViewAllOffers?: () => void;
   offers?: IndexLoaderData["offers"];
+  storeProducts?: IndexLoaderData["storeProducts"];
 }
 
 const mockOverview = {
@@ -64,7 +65,11 @@ function ChevronRightIcon() {
   );
 }
 
-export function DashboardPage({ onViewAllOffers, offers }: DashboardPageProps) {
+export function DashboardPage({
+  onViewAllOffers,
+  offers,
+  storeProducts = [],
+}: DashboardPageProps) {
   const [searchParams] = useSearchParams();
   const navigation = useNavigation();
   const [isThemeExtensionEnabled, setIsThemeExtensionEnabled] = useState(true);
@@ -152,6 +157,7 @@ export function DashboardPage({ onViewAllOffers, offers }: DashboardPageProps) {
         <CreateNewOffer
           onBack={() => setShowCreateOffer(false)}
           initialOffer={editingOffer}
+          storeProducts={storeProducts}
         />
       </div>
     );

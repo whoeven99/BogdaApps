@@ -38,12 +38,20 @@ type OfferListItem = {
   conversion?: number | null;
 };
 
+export type StoreProductItem = {
+  id: string;
+  name: string;
+  price: string;
+  image: string;
+};
+
 export type IndexLoaderData = {
   offers: OfferListItem[];
+  storeProducts: StoreProductItem[];
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+  const { admin } = await authenticate.admin(request);
 
   const prismaAny: any = prisma;
   const prismaOffers = await prismaAny.offer.findMany({
@@ -52,7 +60,63 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const offers = prismaOffers as OfferListItem[];
 
-  return Response.json({ offers } satisfies IndexLoaderData);
+  const productsResponse = await admin.graphql(
+    `#graphql
+      query AppProducts {
+        products(first: 100) {
+          edges {
+            node {
+              id
+              title
+              featuredImage {
+                url
+              }
+              variants(first: 1) {
+                edges {
+                  node {
+                    price
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    `,
+  );
+  const productsJson = await productsResponse.json();
+  const productEdges =
+    (productsJson?.data?.products?.edges as
+      | Array<{
+          node?: {
+            id?: string;
+            title?: string;
+            featuredImage?: { url?: string | null } | null;
+            variants?: {
+              edges?: Array<{ node?: { price?: string | null } | null }>;
+            } | null;
+          } | null;
+        }>
+      | undefined) ?? [];
+
+  const storeProducts: StoreProductItem[] = productEdges
+    .map((edge) => {
+      const node = edge?.node;
+      const priceRaw = node?.variants?.edges?.[0]?.node?.price;
+      const image = node?.featuredImage?.url;
+      if (!node?.id || !node.title) {
+        return null;
+      }
+      return {
+        id: node.id,
+        name: node.title,
+        price: priceRaw ? `€${priceRaw}` : "€0.00",
+        image: image || "https://via.placeholder.com/60",
+      };
+    })
+    .filter((item): item is StoreProductItem => item !== null);
+
+  return Response.json({ offers, storeProducts } satisfies IndexLoaderData);
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -249,7 +313,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 type HomeTabKey = "dashboard" | "offers" | "pricing";
 
 export default function Index() {
-  const { offers } = useLoaderData() as IndexLoaderData;
+  const { offers, storeProducts } = useLoaderData() as IndexLoaderData;
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -372,6 +436,7 @@ export default function Index() {
       {activeTab === "dashboard" && (
         <DashboardPage
           offers={offers}
+          storeProducts={storeProducts}
           onViewAllOffers={() => setActiveTab("offers")}
         />
       )}
@@ -382,7 +447,10 @@ export default function Index() {
         />
       )}
       {activeTab === "offers" && showCreateOffer && (
-        <CreateNewOffer onBack={() => setShowCreateOffer(false)} />
+        <CreateNewOffer
+          onBack={() => setShowCreateOffer(false)}
+          storeProducts={storeProducts}
+        />
       )}
       {activeTab === "pricing" && <PricingPage />}
     </div>

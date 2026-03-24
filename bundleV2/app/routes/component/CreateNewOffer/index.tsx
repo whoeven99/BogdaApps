@@ -15,6 +15,7 @@ type DiscountRule = {
   id: number;
   isExpanded: boolean;
   title: string;
+  discountPercent: number;
   buyQty: number;
   getQty: number;
   priceType: string;
@@ -27,7 +28,7 @@ type DiscountRule = {
 };
 
 type Product = {
-  id: number;
+  id: string | number;
   name: string;
   price: string;
   image: string;
@@ -53,6 +54,7 @@ interface InitialOffer {
 interface CreateNewOfferProps {
   onBack?: () => void;
   initialOffer?: InitialOffer;
+  storeProducts?: Product[];
 }
 
 function formatForDateTimeLocal(value: string | Date) {
@@ -64,7 +66,11 @@ function formatForDateTimeLocal(value: string | Date) {
   );
 }
 
-export function CreateNewOffer({ onBack, initialOffer }: CreateNewOfferProps) {
+export function CreateNewOffer({
+  onBack,
+  initialOffer,
+  storeProducts = [],
+}: CreateNewOfferProps) {
   const startTimeInputRef = useRef<HTMLInputElement | null>(null);
   const endTimeInputRef = useRef<HTMLInputElement | null>(null);
   const openDateTimePicker = (input: HTMLInputElement | null) => {
@@ -111,6 +117,7 @@ export function CreateNewOffer({ onBack, initialOffer }: CreateNewOfferProps) {
   const [cardBackgroundColor, setCardBackgroundColor] = useState("#ffffff");
   const [accentColor, setAccentColor] = useState("#008060");
   const [showProductModal, setShowProductModal] = useState(false);
+  const [productSearch, setProductSearch] = useState("");
   const [selectedProducts, setSelectedProducts] = useState<Product[]>(
     initialOffer?.selectedProductsJson
       ? (JSON.parse(initialOffer.selectedProductsJson) as Product[])
@@ -124,6 +131,7 @@ export function CreateNewOffer({ onBack, initialOffer }: CreateNewOfferProps) {
             id: 1,
             isExpanded: true,
             title: "Buy more, save more",
+            discountPercent: 15,
             buyQty: 1,
             getQty: 1,
             priceType: "default",
@@ -152,6 +160,9 @@ export function CreateNewOffer({ onBack, initialOffer }: CreateNewOfferProps) {
         "Offer discounts when customers buy multiple quantities of the same product",
     },
   ];
+  const filteredStoreProducts = storeProducts.filter((product) =>
+    product.name.toLowerCase().includes(productSearch.toLowerCase().trim()),
+  );
 
   return (
     <Form className="polaris-page create-offer-page" method="post">
@@ -375,30 +386,13 @@ export function CreateNewOffer({ onBack, initialOffer }: CreateNewOfferProps) {
                     <input
                       type="text"
                       placeholder="Search products..."
-                    className="create-offer-modal-search"
+                      className="create-offer-modal-search"
+                      value={productSearch}
+                      onChange={(e) => setProductSearch(e.target.value)}
                     />
 
                   <div className="create-offer-modal-products">
-                      {[
-                        {
-                          id: 1,
-                          name: "Product A",
-                          price: "€65.00",
-                          image: "https://via.placeholder.com/60",
-                        },
-                        {
-                          id: 2,
-                          name: "Product B",
-                          price: "€75.00",
-                          image: "https://via.placeholder.com/60",
-                        },
-                        {
-                          id: 3,
-                          name: "Product C",
-                          price: "€85.00",
-                          image: "https://via.placeholder.com/60",
-                        },
-                      ].map((product) => (
+                      {filteredStoreProducts.map((product) => (
                         <div
                           key={product.id}
                         className="create-offer-modal-product"
@@ -438,6 +432,11 @@ export function CreateNewOffer({ onBack, initialOffer }: CreateNewOfferProps) {
                           />
                         </div>
                       ))}
+                      {filteredStoreProducts.length === 0 && (
+                        <div className="create-offer-helper-text">
+                          No products found.
+                        </div>
+                      )}
                     </div>
 
                     <button
@@ -479,6 +478,20 @@ export function CreateNewOffer({ onBack, initialOffer }: CreateNewOfferProps) {
                                 key={product.id}
                                 className="create-offer-selected-card"
                               >
+                                <button
+                                  type="button"
+                                  className="create-offer-selected-remove"
+                                  onClick={() =>
+                                    setSelectedProducts(
+                                      selectedProducts.filter(
+                                        (p) => p.id !== product.id,
+                                      ),
+                                    )
+                                  }
+                                  aria-label={`Remove ${product.name}`}
+                                >
+                                  <X size={14} />
+                                </button>
                                 <img
                                   src={product.image}
                                   alt={product.name}
@@ -636,6 +649,40 @@ export function CreateNewOffer({ onBack, initialOffer }: CreateNewOfferProps) {
                             <ChevronDown size={20} />
                           )}
                         </div>
+                        {rule.isExpanded && (
+                          <div className="create-offer-discount-body">
+                            <div className="create-offer-discount-form-row">
+                              <label className="create-offer-label">
+                                Discount (%)
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  step="1"
+                                  className="create-offer-input"
+                                  value={rule.discountPercent}
+                                  onChange={(e) => {
+                                    const newRules = [...discountRules];
+                                    const parsedValue = Number(
+                                      e.target.value,
+                                    );
+                                    newRules[index].discountPercent =
+                                      Number.isFinite(parsedValue)
+                                        ? Math.max(
+                                            0,
+                                            Math.min(100, parsedValue),
+                                          )
+                                        : 0;
+                                    setDiscountRules(newRules);
+                                  }}
+                                />
+                                <p className="create-offer-helper-text">
+                                  For example: set 15 for 15% off
+                                </p>
+                              </label>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -707,7 +754,8 @@ export function CreateNewOffer({ onBack, initialOffer }: CreateNewOfferProps) {
                                 </span>
                               </div>
                               <div className="create-offer-pricing-subtitle">
-                                You save 15%
+                                You save{" "}
+                                {discountRules[0]?.discountPercent ?? 15}%
                               </div>
                             </div>
                             <div className="create-offer-pricing-right">

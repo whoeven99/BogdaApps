@@ -239,8 +239,10 @@
   width: 90%;
   max-width: 800px;
   max-height: 90vh;
-  overflow: auto;
+  overflow: hidden;
   padding: 24px;
+  display: flex;
+  flex-direction: column;
 }
 
 .create-offer-modal-header {
@@ -274,6 +276,9 @@
   display: grid;
   gap: 12px;
   margin-bottom: 20px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
 }
 
 .create-offer-modal-product {
@@ -315,6 +320,7 @@
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
+  margin-top: 12px;
 }
 
 /* Selected products summary */
@@ -334,6 +340,28 @@
   padding: 8px;
   text-align: center;
   flex: 1;
+  position: relative;
+}
+
+.create-offer-selected-remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 999px;
+  background: #f1f2f3;
+  color: #6d7175;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.create-offer-selected-remove:hover {
+  background: #e4e5e7;
+  color: #202223;
 }
 
 .create-offer-selected-image {
@@ -400,6 +428,18 @@
 .create-offer-discount-actions {
   display: flex;
   gap: 8px;
+}
+
+.create-offer-discount-body {
+  padding: 16px;
+  border-top: 1px solid #dfe3e8;
+  background: #ffffff;
+}
+
+.create-offer-discount-form-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
 }
 
 .create-offer-icon-button {
