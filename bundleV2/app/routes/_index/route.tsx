@@ -150,14 +150,34 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const customerSegments = formData.getAll("customerSegments") as string[];
     const markets = formData.getAll("markets") as string[];
 
-    if (!name || !startTimeRaw || !endTimeRaw) {
-      return new Response("Missing required fields", { status: 400 });
+    // Store which Shopify shop this offer belongs to.
+    // `session.shop` is typically the shop's domain. As a fallback, use GraphQL `shop.name`.
+    let shopName = String((session as any)?.shop ?? "");
+    if (!shopName) {
+      const shopNameResponse = await admin.graphql(
+        `#graphql
+        query ShopName {
+          shop {
+            name
+          }
+        }`,
+      );
+      const shopNameJson = await shopNameResponse.json();
+      shopName = shopNameJson?.data?.shop?.name ?? "";
+    }
+
+    if (!name) {
+      return new Response("Offer name is required", { status: 400 });
+    }
+    if (!startTimeRaw || !endTimeRaw) {
+      return new Response("Missing required schedule fields", { status: 400 });
     }
 
     const startTime = new Date(startTimeRaw);
     const endTime = new Date(endTimeRaw);
 
     const data = {
+      shopName,
       name,
       offerType,
       pricingOption,

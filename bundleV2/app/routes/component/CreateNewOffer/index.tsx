@@ -190,7 +190,7 @@ export function CreateNewOffer({
         <input type="hidden" name="offerId" value={initialOffer.id} />
       )}
       {/* 始终提交的核心字段（即使对应输入步骤已切换隐藏） */}
-      <input type="hidden" name="name" value={offerName} />
+      <input type="hidden" name="name" value={offerName.trim()} />
       <input type="hidden" name="offerType" value={offerType} />
       <input type="hidden" name="pricingOption" value={pricingOption} />
       <input type="hidden" name="layoutFormat" value={layoutFormat} />
