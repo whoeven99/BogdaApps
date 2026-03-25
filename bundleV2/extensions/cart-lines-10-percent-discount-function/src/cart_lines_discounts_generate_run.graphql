@@ -13,6 +13,13 @@ query CartInput {
       }
     }
   }
+  shop {
+    metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-offers") {
+      jsonValue
+      value
+      type
+    }
+  }
   discount {
     discountClasses
   }

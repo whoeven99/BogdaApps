@@ -8,9 +8,27 @@ import {
 
 const DISCOUNT_PERCENTAGE = "10.0";
 
+type OfferMetafieldPayload = {
+  updatedAt?: string;
+  offers?: Array<{
+    id?: string;
+    status?: boolean;
+    selectedProductsJson?: string | null;
+    discountRulesJson?: string | null;
+  }>;
+};
+
 export function cartLinesDiscountsGenerateRun(
-  input: CartInput,
+  input: CartInput, // input 配置在graphql文件中
 ): CartLinesDiscountsGenerateRunResult {
+  // app里存储的优惠数据，存在shopify metafield里
+  const offersPayload = input.shop.metafield?.jsonValue as
+    | OfferMetafieldPayload
+    | null
+    | undefined;
+  const offers = offersPayload?.offers ?? [];
+  console.log("offers", JSON.stringify(offers, null, 2));
+
   if (!checkValid(input)) {
     return { operations: [] };
   }
@@ -25,7 +43,7 @@ export function cartLinesDiscountsGenerateRun(
     if (!lineId || !quantity) continue;
 
     const candidate: ProductDiscountCandidate = {
-      message: "10% OFF (DEBUG)",
+      message: offers.length ? "10% OFF (Offer Matched11)" : "10% OFF (DEBUG)",
       targets: [
         {
           cartLine: {

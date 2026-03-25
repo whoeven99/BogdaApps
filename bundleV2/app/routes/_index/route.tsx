@@ -213,16 +213,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       url.searchParams.set("toast", "update-success");
     }
 
-    // Prisma 写入成功后，同步全部 offers 到 shop metafield
+    // Prisma 写入成功后，同步当前 shop 的 offers 到 shop metafield
     try {
-      // 1. 重新查询全部 offers 列表
-      const allOffers = (await prismaAny.offer.findMany({
+      // 1. 只查询当前 shopName 下的 offers
+      const shopOffers = (await prismaAny.offer.findMany({
+        where: { shopName },
         orderBy: { createdAt: "desc" },
       })) as OfferListItem[];
 
       const metafieldValue = JSON.stringify({
         updatedAt: new Date().toISOString(),
-        offers: allOffers,
+        offers: shopOffers,
       });
 
       // 2. 查询当前 shop 的 GID
