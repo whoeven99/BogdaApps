@@ -2,29 +2,13 @@ import { useRef, useState } from "react";
 import { Form } from "react-router";
 import {
   X,
-  ArrowUp,
-  ArrowDown,
-  Copy,
-  Trash2,
-  ChevronUp,
-  ChevronDown,
 } from "lucide-react";
 import "./CreateNewOffer.css";
 
 type DiscountRule = {
-  id: number;
-  isExpanded: boolean;
-  title: string;
+  // 数量阈值：例如 count=2 表示“买 2 件及以上”生效
+  count: number;
   discountPercent: number;
-  buyQty: number;
-  getQty: number;
-  priceType: string;
-  subtitle: string;
-  badgeText: string;
-  badgeStyle: string;
-  label: string;
-  selectedByDefault: boolean;
-  showAsSoldOut: boolean;
 };
 
 type Product = {
@@ -38,17 +22,11 @@ interface InitialOffer {
   id: string;
   name: string;
   offerType: string;
-  pricingOption: "single" | "duo";
-  layoutFormat: "vertical" | "horizontal" | "card" | "compact";
+  discountRulesJson: string | null;
   startTime: string;
   endTime: string;
-  totalBudget: number | null;
-  dailyBudget: number | null;
-  customerSegments: string | null;
-  markets: string | null;
-  usageLimitPerCustomer: string;
   selectedProductsJson: string | null;
-  discountRulesJson: string | null;
+  offerSettingsJson: string | null;
 }
 
 interface CreateNewOfferProps {
@@ -64,6 +42,135 @@ function formatForDateTimeLocal(value: string | Date) {
     `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
     `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
   );
+}
+
+function parseSelectedProductIds(
+  selectedProductsJson?: string | null,
+): string[] {
+  if (!selectedProductsJson) return [];
+
+  try {
+    const parsed = JSON.parse(selectedProductsJson);
+    if (!Array.isArray(parsed)) return [];
+
+    // 兼容：
+    // - 新格式：["gid://shopify/Product/xxx", ...]
+    // - 旧格式：[{ id: "gid://shopify/Product/xxx", name, price, image }, ...]
+    const ids: string[] = [];
+    for (const item of parsed) {
+      if (typeof item === "string") {
+        ids.push(item);
+        continue;
+      }
+
+      if (item && typeof item === "object") {
+        const id = (item as { id?: unknown }).id;
+        if (typeof id === "string") ids.push(id);
+        else if (typeof id === "number") ids.push(String(id));
+      }
+    }
+
+    return ids;
+  } catch {
+    return [];
+  }
+}
+
+function parseOfferSettings(
+  offerSettingsJson?: string | null,
+): {
+  layoutFormat: "vertical" | "horizontal" | "card" | "compact";
+  totalBudget: number | null;
+  dailyBudget: number | null;
+  customerSegments: string | null;
+  markets: string | null;
+  usageLimitPerCustomer: string;
+} {
+  if (!offerSettingsJson) {
+    return {
+      layoutFormat: "vertical",
+      totalBudget: null,
+      dailyBudget: null,
+      customerSegments: null,
+      markets: null,
+      usageLimitPerCustomer: "unlimited",
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(offerSettingsJson) as Partial<{
+      layoutFormat: "vertical" | "horizontal" | "card" | "compact";
+      totalBudget: number | null;
+      dailyBudget: number | null;
+      customerSegments: string | null;
+      markets: string | null;
+      usageLimitPerCustomer: string;
+    }>;
+
+    return {
+      layoutFormat: parsed.layoutFormat ?? "vertical",
+      totalBudget:
+        parsed.totalBudget !== undefined ? parsed.totalBudget : null,
+      dailyBudget:
+        parsed.dailyBudget !== undefined ? parsed.dailyBudget : null,
+      customerSegments:
+        parsed.customerSegments !== undefined
+          ? parsed.customerSegments
+          : null,
+      markets: parsed.markets !== undefined ? parsed.markets : null,
+      usageLimitPerCustomer:
+        parsed.usageLimitPerCustomer ?? "unlimited",
+    };
+  } catch {
+    return {
+      layoutFormat: "vertical",
+      totalBudget: null,
+      dailyBudget: null,
+      customerSegments: null,
+      markets: null,
+      usageLimitPerCustomer: "unlimited",
+    };
+  }
+}
+
+function parseDiscountRules(
+  discountRulesJson?: string | null,
+): DiscountRule[] {
+  // discountRulesJson 现在是一个对象：{ "2": 20, "3": 25 }
+  // key: count（字符串），value: discountPercent（数字）
+  if (!discountRulesJson) return [{ count: 2, discountPercent: 15 }];
+
+  const parsed = JSON.parse(discountRulesJson) as Record<string, unknown>;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return [{ count: 2, discountPercent: 15 }];
+  }
+
+  return Object.entries(parsed)
+    .map(([countStr, percentRaw]) => {
+      const count = Number(countStr);
+      const discountPercent = Number(percentRaw);
+      if (!Number.isFinite(count) || count < 1) return null;
+      if (!Number.isFinite(discountPercent)) return null;
+      return {
+        count,
+        discountPercent: Math.max(0, Math.min(100, discountPercent)),
+      } satisfies DiscountRule;
+    })
+    .filter((x): x is DiscountRule => x !== null)
+    .sort((a, b) => a.count - b.count);
+}
+
+function buildDiscountRulesJson(tiers: DiscountRule[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const tier of tiers) {
+    if (!Number.isFinite(tier.count) || tier.count < 1) continue;
+    if (!Number.isFinite(tier.discountPercent)) continue;
+    out[String(Math.trunc(tier.count))] = Math.max(
+      0,
+      Math.min(100, tier.discountPercent),
+    );
+  }
+  return out;
 }
 
 export function CreateNewOffer({
@@ -99,51 +206,60 @@ export function CreateNewOffer({
   );
   const [startTimeError, setStartTimeError] = useState("");
   const [endTimeError, setEndTimeError] = useState("");
+
+  const offerSettings = parseOfferSettings(
+    initialOffer?.offerSettingsJson,
+  );
+
   const [totalBudget, setTotalBudget] = useState(
-    initialOffer?.totalBudget != null ? String(initialOffer.totalBudget) : "",
+    offerSettings.totalBudget != null
+      ? String(offerSettings.totalBudget)
+      : "",
   );
   const [dailyBudget, setDailyBudget] = useState(
-    initialOffer?.dailyBudget != null ? String(initialOffer.dailyBudget) : "",
+    offerSettings.dailyBudget != null
+      ? String(offerSettings.dailyBudget)
+      : "",
   );
   const [productSelection, setProductSelection] = useState(
     "specific-selected",
   );
-  const [pricingOption, setPricingOption] = useState<"single" | "duo">(
-    initialOffer?.pricingOption ?? "duo",
-  );
   const [layoutFormat, setLayoutFormat] = useState<
     "vertical" | "horizontal" | "card" | "compact"
-  >(initialOffer?.layoutFormat ?? "vertical");
+  >(offerSettings.layoutFormat);
   const [cardBackgroundColor, setCardBackgroundColor] = useState("#ffffff");
   const [accentColor, setAccentColor] = useState("#008060");
   const [showProductModal, setShowProductModal] = useState(false);
   const [productSearch, setProductSearch] = useState("");
-  const [selectedProducts, setSelectedProducts] = useState<Product[]>(
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>(
     initialOffer?.selectedProductsJson
-      ? (JSON.parse(initialOffer.selectedProductsJson) as Product[])
+      ? parseSelectedProductIds(initialOffer.selectedProductsJson)
       : [],
   );
-  const [discountRules, setDiscountRules] = useState<DiscountRule[]>(
-    initialOffer?.discountRulesJson
-      ? (JSON.parse(initialOffer.discountRulesJson) as DiscountRule[])
-      : [
-          {
-            id: 1,
-            isExpanded: true,
-            title: "Buy more, save more",
-            discountPercent: 15,
-            buyQty: 1,
-            getQty: 1,
-            priceType: "default",
-            subtitle: "",
-            badgeText: "",
-            badgeStyle: "simple",
-            label: "SAVE {{saved_percentage}}",
-            selectedByDefault: true,
-            showAsSoldOut: false,
-          },
-        ],
-  );
+
+  // 仅用于页面展示；落库/提交只需要 ids。
+  const selectedProducts: Product[] = selectedProductIds.map((id) => {
+    const found = storeProducts.find((p) => String(p.id) === String(id));
+    return (
+      found ?? {
+        id,
+        name: "Unknown product",
+        price: "€0.00",
+        image: "https://via.placeholder.com/60",
+      }
+    );
+  });
+  const [discountRules, setDiscountRules] = useState<DiscountRule[]>(() => {
+    const parsed = parseDiscountRules(initialOffer?.discountRulesJson);
+    const byCount = new Map<number, number>(
+      parsed.map((r) => [r.count, r.discountPercent]),
+    );
+    const get = (count: number) => byCount.get(count) ?? 15;
+    return [
+      { count: 2, discountPercent: get(2) },
+      { count: 3, discountPercent: get(3) },
+    ];
+  });
 
   const steps = [
     "Basic Information",
@@ -190,19 +306,19 @@ export function CreateNewOffer({
         <input type="hidden" name="offerId" value={initialOffer.id} />
       )}
       {/* 始终提交的核心字段（即使对应输入步骤已切换隐藏） */}
-      <input type="hidden" name="name" value={offerName.trim()} />
+      {/* 保留 offer name 中间的空格（避免某些情况下 trim 触发不符合预期的问题） */}
+      <input type="hidden" name="name" value={offerName} />
       <input type="hidden" name="offerType" value={offerType} />
-      <input type="hidden" name="pricingOption" value={pricingOption} />
       <input type="hidden" name="layoutFormat" value={layoutFormat} />
       <input
         type="hidden"
         name="selectedProductsJson"
-        value={JSON.stringify(selectedProducts)}
+        value={JSON.stringify(selectedProductIds)}
       />
       <input
         type="hidden"
         name="discountRulesJson"
-        value={JSON.stringify(discountRules)}
+        value={JSON.stringify(buildDiscountRulesJson(discountRules))}
       />
 
       <div className="polaris-card create-offer-card">
@@ -289,16 +405,12 @@ export function CreateNewOffer({
                   {offerType === "quantity-breaks-same" && (
                     <>
                       <div
-                        className={`create-offer-pricing-card create-offer-pricing-card--readonly ${
-                          pricingOption === "single"
-                            ? "create-offer-pricing-card--selected"
-                            : ""
-                        }`}
+                        className="create-offer-pricing-card create-offer-pricing-card--readonly"
                       >
                         <div className="create-offer-pricing-header">
                           <input
                             type="radio"
-                            checked={pricingOption === "single"}
+                            checked={false}
                             readOnly
                             disabled
                             className="create-offer-radio"
@@ -315,11 +427,7 @@ export function CreateNewOffer({
                         </div>
                       </div>
                       <div
-                        className={`create-offer-pricing-card create-offer-pricing-card--primary create-offer-pricing-card--readonly ${
-                          pricingOption === "duo"
-                            ? "create-offer-pricing-card--selected"
-                            : ""
-                        }`}
+                        className="create-offer-pricing-card create-offer-pricing-card--primary create-offer-pricing-card--readonly create-offer-pricing-card--selected"
                       >
                         <div className="create-offer-pricing-badge">
                           Most Popular
@@ -327,7 +435,7 @@ export function CreateNewOffer({
                         <div className="create-offer-pricing-header">
                           <input
                             type="radio"
-                            checked={pricingOption === "duo"}
+                            checked={true}
                             readOnly
                             disabled
                             className="create-offer-radio"
@@ -397,14 +505,11 @@ export function CreateNewOffer({
                           key={product.id}
                         className="create-offer-modal-product"
                           onClick={() => {
-                            if (
-                              !selectedProducts.find(
-                                (p) => p.id === product.id,
-                              )
-                            ) {
-                              setSelectedProducts([
-                                ...selectedProducts,
-                                product,
+                            const productId = String(product.id);
+                            if (!selectedProductIds.includes(productId)) {
+                              setSelectedProductIds([
+                                ...selectedProductIds,
+                                productId,
                               ]);
                             }
                           }}
@@ -424,8 +529,8 @@ export function CreateNewOffer({
                           </div>
                           <input
                             type="checkbox"
-                            checked={selectedProducts.some(
-                              (p) => p.id === product.id,
+                            checked={selectedProductIds.includes(
+                              String(product.id),
                             )}
                             readOnly
                           className="create-offer-modal-product-checkbox"
@@ -461,7 +566,7 @@ export function CreateNewOffer({
                       Products eligible for offer
                     </h3>
 
-                    {selectedProducts.length === 0 ? (
+                    {selectedProductIds.length === 0 ? (
                       <button
                         onClick={() => setShowProductModal(true)}
                         className="create-offer-modal-footer-button"
@@ -482,9 +587,9 @@ export function CreateNewOffer({
                                   type="button"
                                   className="create-offer-selected-remove"
                                   onClick={() =>
-                                    setSelectedProducts(
-                                      selectedProducts.filter(
-                                        (p) => p.id !== product.id,
+                                    setSelectedProductIds(
+                                      selectedProductIds.filter(
+                                        (id) => id !== String(product.id),
                                       ),
                                     )
                                   }
@@ -508,8 +613,8 @@ export function CreateNewOffer({
                           )}
                         </div>
                         <div className="create-offer-selected-count">
-                          {selectedProducts.length} product
-                          {selectedProducts.length > 1 ? "s" : ""}{" "}
+                          {selectedProductIds.length} product
+                          {selectedProductIds.length > 1 ? "s" : ""}{" "}
                           selected
                         </div>
                         <button
@@ -528,163 +633,83 @@ export function CreateNewOffer({
                       Buy more, save more
                     </h3>
 
-                    {discountRules.map((rule, index) => (
-                      <div
-                        key={rule.id}
-                        className="create-offer-discount-card"
-                      >
-                        <div
-                          className={`create-offer-discount-header ${
-                            rule.isExpanded
-                              ? "create-offer-discount-header--expanded"
-                              : ""
-                          }`}
-                          onClick={() => {
-                            const newRules = [...discountRules];
-                            newRules[index].isExpanded =
-                              !newRules[index].isExpanded;
-                            setDiscountRules(newRules);
-                          }}
-                        >
-                          <span style={{ fontSize: "16px" }}>🎯</span>
-                          <span className="create-offer-discount-title">
-                            Tier #{index + 1} - {rule.title}
-                          </span>
-
-                          <div
-                            className="create-offer-discount-actions"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <button
-                              disabled={index === 0}
-                              onClick={() => {
-                                if (index > 0) {
-                                  const newRules = [
-                                    ...discountRules,
-                                  ];
-                                  [
-                                    newRules[index],
-                                    newRules[index - 1],
-                                  ] = [
-                                    newRules[index - 1],
-                                    newRules[index],
-                                  ];
-                                  setDiscountRules(newRules);
-                                }
-                              }}
-                              className={`create-offer-icon-button ${
-                                index === 0
-                                  ? "create-offer-icon-button--disabled"
-                                  : ""
-                              }`}
-                              type="button"
-                            >
-                              <ArrowUp size={18} />
-                            </button>
-                            <button
-                              disabled={
-                                index === discountRules.length - 1
+                    <div className="create-offer-discount-card">
+                      <div className="create-offer-discount-body">
+                        <div className="create-offer-discount-form-row">
+                          <label className="create-offer-label">
+                            Discount for 2 items (%)
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="1"
+                              className="create-offer-input"
+                              value={
+                                discountRules.find((r) => r.count === 2)
+                                  ?.discountPercent ?? 15
                               }
-                              onClick={() => {
-                                if (
-                                  index <
-                                  discountRules.length - 1
-                                ) {
-                                  const newRules = [
-                                    ...discountRules,
-                                  ];
-                                  [
-                                    newRules[index],
-                                    newRules[index + 1],
-                                  ] = [
-                                    newRules[index + 1],
-                                    newRules[index],
-                                  ];
-                                  setDiscountRules(newRules);
-                                }
-                              }}
-                              className={`create-offer-icon-button ${
-                                index === discountRules.length - 1
-                                  ? "create-offer-icon-button--disabled"
-                                  : ""
-                              }`}
-                              type="button"
-                            >
-                              <ArrowDown size={18} />
-                            </button>
-                            <button
-                              onClick={() => {
-                                setDiscountRules([
-                                  ...discountRules,
-                                  {
-                                    ...rule,
-                                    id: Date.now(),
-                                    isExpanded: false,
-                                  },
-                                ]);
-                              }}
-                              className="create-offer-icon-button"
-                              type="button"
-                            >
-                              <Copy size={18} />
-                            </button>
-                            <button
-                              onClick={() => {
-                                setDiscountRules(
-                                  discountRules.filter(
-                                    (_, i) => i !== index,
+                              onChange={(e) => {
+                                const parsedValue = Number(e.target.value);
+                                const nextPercent =
+                                  Number.isFinite(parsedValue) &&
+                                  parsedValue >= 0
+                                    ? Math.max(
+                                        0,
+                                        Math.min(100, parsedValue),
+                                      )
+                                    : 0;
+                                setDiscountRules((prev) =>
+                                  prev.map((r) =>
+                                    r.count === 2
+                                      ? { ...r, discountPercent: nextPercent }
+                                      : r,
                                   ),
                                 );
                               }}
-                              className="create-offer-icon-button create-offer-icon-button--danger"
-                              type="button"
-                            >
-                              <Trash2 size={18} />
-                            </button>
-                          </div>
-
-                          {rule.isExpanded ? (
-                            <ChevronUp size={20} />
-                          ) : (
-                            <ChevronDown size={20} />
-                          )}
+                            />
+                          </label>
                         </div>
-                        {rule.isExpanded && (
-                          <div className="create-offer-discount-body">
-                            <div className="create-offer-discount-form-row">
-                              <label className="create-offer-label">
-                                Discount (%)
-                                <input
-                                  type="number"
-                                  min="0"
-                                  max="100"
-                                  step="1"
-                                  className="create-offer-input"
-                                  value={rule.discountPercent}
-                                  onChange={(e) => {
-                                    const newRules = [...discountRules];
-                                    const parsedValue = Number(
-                                      e.target.value,
-                                    );
-                                    newRules[index].discountPercent =
-                                      Number.isFinite(parsedValue)
-                                        ? Math.max(
-                                            0,
-                                            Math.min(100, parsedValue),
-                                          )
-                                        : 0;
-                                    setDiscountRules(newRules);
-                                  }}
-                                />
-                                <p className="create-offer-helper-text">
-                                  For example: set 15 for 15% off
-                                </p>
-                              </label>
-                            </div>
-                          </div>
-                        )}
                       </div>
-                    ))}
+                    </div>
+
+                    <div className="create-offer-discount-card">
+                      <div className="create-offer-discount-body">
+                        <div className="create-offer-discount-form-row">
+                          <label className="create-offer-label">
+                            Discount for 3 items (%)
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="1"
+                              className="create-offer-input"
+                              value={
+                                discountRules.find((r) => r.count === 3)
+                                  ?.discountPercent ?? 15
+                              }
+                              onChange={(e) => {
+                                const parsedValue = Number(e.target.value);
+                                const nextPercent =
+                                  Number.isFinite(parsedValue) &&
+                                  parsedValue >= 0
+                                    ? Math.max(
+                                        0,
+                                        Math.min(100, parsedValue),
+                                      )
+                                    : 0;
+                                setDiscountRules((prev) =>
+                                  prev.map((r) =>
+                                    r.count === 3
+                                      ? { ...r, discountPercent: nextPercent }
+                                      : r,
+                                  ),
+                                );
+                              }}
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -703,16 +728,12 @@ export function CreateNewOffer({
                     {offerType === "quantity-breaks-same" && (
                       <>
                         <div
-                          className={`create-offer-pricing-card create-offer-pricing-card--readonly ${
-                            pricingOption === "single"
-                              ? "create-offer-pricing-card--selected"
-                              : ""
-                          }`}
+                              className="create-offer-pricing-card create-offer-pricing-card--readonly"
                         >
                           <div className="create-offer-pricing-header">
                             <input
                               type="radio"
-                              checked={pricingOption === "single"}
+                                  checked={false}
                               readOnly
                               disabled
                               className="create-offer-radio"
@@ -729,11 +750,7 @@ export function CreateNewOffer({
                           </div>
                         </div>
                         <div
-                          className={`create-offer-pricing-card create-offer-pricing-card--primary create-offer-pricing-card--readonly ${
-                            pricingOption === "duo"
-                              ? "create-offer-pricing-card--selected"
-                              : ""
-                          }`}
+                              className="create-offer-pricing-card create-offer-pricing-card--primary create-offer-pricing-card--readonly create-offer-pricing-card--selected"
                         >
                           <div className="create-offer-pricing-badge">
                             Most Popular
@@ -741,7 +758,7 @@ export function CreateNewOffer({
                           <div className="create-offer-pricing-header">
                             <input
                               type="radio"
-                              checked={pricingOption === "duo"}
+                                  checked={true}
                               readOnly
                               disabled
                               className="create-offer-radio"
@@ -1315,7 +1332,10 @@ export function CreateNewOffer({
                   >
                     Usage Limit Per Customer
                     <select
-                      defaultValue="unlimited"
+                      defaultValue={
+                        offerSettings.usageLimitPerCustomer ??
+                        "unlimited"
+                      }
                       name="usageLimitPerCustomer"
                       className="create-offer-select"
                     >

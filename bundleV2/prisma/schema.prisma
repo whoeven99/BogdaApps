@@ -35,8 +35,6 @@ model Session {
 
 model Offer {
   id        String   @id @default(cuid())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 
   // Which Shopify shop this offer belongs to (domain-style "shop")
   shopName String @default("")
@@ -45,25 +43,21 @@ model Offer {
   status Boolean @default(false)
 
   // Basic Information
-  name          String
-  offerType     String
-  pricingOption String  @default("duo")
-  layoutFormat  String  @default("vertical")
+  name      String
+  offerType String
+
+  // Products & Discounts
+  discountRulesJson    String?
+  selectedProductsJson String?
+
+  // Layout / Budget / Targeting / Risk Control (合并到 JSON 字段)
+  offerSettingsJson String?
 
   // Schedule
   startTime DateTime
   endTime   DateTime
 
-  // Budget (optional)
-  totalBudget Float?
-  dailyBudget Float?
-
-  // Targeting & Settings
-  customerSegments      String?
-  markets               String?
-  usageLimitPerCustomer String @default("unlimited")
-
-  // Products & Discounts (先用 JSON，后面可以拆表)
-  selectedProductsJson String?
-  discountRulesJson    String?
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

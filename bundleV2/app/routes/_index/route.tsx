@@ -20,18 +20,12 @@ type OfferListItem = {
   id: string;
   name: string;
   offerType: string;
-  pricingOption: string;
-  layoutFormat: string;
   startTime: string;
   endTime: string;
-  totalBudget: number | null;
-  dailyBudget: number | null;
-  customerSegments: string | null;
-  markets: string | null;
-  usageLimitPerCustomer: string;
   status: boolean;
   selectedProductsJson: string | null;
   discountRulesJson: string | null;
+  offerSettingsJson: string | null;
   exposurePV?: number | null;
   addToCartPV?: number | null;
   gmv?: number | null;
@@ -135,10 +129,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (intent === "create-offer" || intent === "update-offer") {
     const idRaw = String(formData.get("offerId") || "").trim();
-    const name = String(formData.get("name") || "").trim();
+    const nameRaw = String(formData.get("name") || "");
+    const name = nameRaw.trim();
     const offerType = String(formData.get("offerType") || "").trim();
-    const pricingOption = String(formData.get("pricingOption") || "").trim() || "duo";
-    const layoutFormat = String(formData.get("layoutFormat") || "").trim() || "vertical";
+    const layoutFormat = String(formData.get("layoutFormat") || "")
+      .trim() || "vertical";
     const startTimeRaw = String(formData.get("startTime") || "");
     const endTimeRaw = String(formData.get("endTime") || "");
     const selectedProductsJson = String(formData.get("selectedProductsJson") || "");
@@ -149,6 +144,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     const customerSegments = formData.getAll("customerSegments") as string[];
     const markets = formData.getAll("markets") as string[];
+
+    const usageLimitPerCustomer = String(
+      formData.get("usageLimitPerCustomer") || "unlimited",
+    );
+
+    const offerSettingsJson = JSON.stringify({
+      layoutFormat,
+      totalBudget: totalBudget ? Number(totalBudget) : null,
+      dailyBudget: dailyBudget ? Number(dailyBudget) : null,
+      customerSegments: customerSegments.length
+        ? customerSegments.join(",")
+        : null,
+      markets: markets.length ? markets.join(",") : null,
+      usageLimitPerCustomer,
+    });
 
     // Store which Shopify shop this offer belongs to.
     // `session.shop` is typically the shop's domain. As a fallback, use GraphQL `shop.name`.
@@ -178,21 +188,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     const data = {
       shopName,
-      name,
+      // 保留中间空格（validation 用 trim 后的 name）
+      name: nameRaw,
       offerType,
-      pricingOption,
-      layoutFormat,
       startTime,
       endTime,
-      totalBudget: totalBudget ? Number(totalBudget) : null,
-      dailyBudget: dailyBudget ? Number(dailyBudget) : null,
-      customerSegments: customerSegments.length
-        ? customerSegments.join(",")
-        : null,
-      markets: markets.length ? markets.join(",") : null,
-      usageLimitPerCustomer: String(
-        formData.get("usageLimitPerCustomer") || "unlimited",
-      ),
+      offerSettingsJson,
       selectedProductsJson: selectedProductsJson || null,
       discountRulesJson: discountRulesJson || null,
     };
@@ -200,49 +201,92 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const url = new URL(request.url);
 
     if (intent === "create-offer") {
-      await prismaAny.offer.create({ data });
-      url.searchParams.set("toast", "create-success");
+      try {
+        await prismaAny.offer.create({ data });
+        url.searchParams.set("toast", "create-success");
+      } catch (error) {
+        console.error("offer create failed", {
+          error,
+          form: {
+            nameRaw,
+            offerType,
+            startTimeRaw,
+            endTimeRaw,
+            selectedProductsJson,
+            discountRulesJson,
+            offerSettingsJson,
+          },
+        });
+        return new Response("Offer create failed (see server logs).", {
+          status: 500,
+        });
+      }
     } else {
       if (!idRaw) {
         return new Response("Missing offer id", { status: 400 });
       }
-      await prismaAny.offer.update({
-        where: { id: idRaw },
-        data,
-      });
-      url.searchParams.set("toast", "update-success");
+      try {
+        await prismaAny.offer.update({
+          where: { id: idRaw },
+          data,
+        });
+        url.searchParams.set("toast", "update-success");
+      } catch (error) {
+        console.error("offer update failed", {
+          error,
+          form: {
+            idRaw,
+            nameRaw,
+            offerType,
+            startTimeRaw,
+            endTimeRaw,
+            selectedProductsJson,
+            discountRulesJson,
+            offerSettingsJson,
+          },
+        });
+        return new Response("Offer update failed (see server logs).", {
+          status: 500,
+        });
+      }
     }
 
     // Prisma 写入成功后，同步当前 shop 的 offers 到 shop metafield
     try {
-      // 1. 只查询当前 shopName 下的 offers
-      const shopOffers = (await prismaAny.offer.findMany({
-        where: { shopName },
-        orderBy: { createdAt: "desc" },
-      })) as OfferListItem[];
+      const syncOffersMetafield = async (shopNameToSync: string) => {
+        // 1. 只查询当前 shopName 下的 offers
+        const shopOffers = (await prismaAny.offer.findMany({
+          where: { shopName: shopNameToSync },
+          orderBy: { createdAt: "desc" },
+        })) as OfferListItem[];
 
-      const metafieldValue = JSON.stringify({
-        updatedAt: new Date().toISOString(),
-        offers: shopOffers,
-      });
+        const metafieldValue = JSON.stringify({
+          updatedAt: new Date().toISOString(),
+          offers: shopOffers,
+        });
 
-      // 2. 查询当前 shop 的 GID
-      const shopIdResponse = await admin.graphql(
-        `#graphql
-        query ShopId {
-          shop {
-            id
+        // 2. 查询当前 shop 的 GID
+        const shopIdResponse = await admin.graphql(
+          `#graphql
+          query ShopId {
+            shop {
+              id
+            }
           }
+        `,
+        );
+
+        const shopIdJson = await shopIdResponse.json();
+        const shopId = shopIdJson?.data?.shop?.id as string | undefined;
+
+        if (!shopId) {
+          console.error(
+            "Failed to resolve shop id for metafield sync",
+            shopIdJson,
+          );
+          return;
         }
-      `,
-      );
 
-      const shopIdJson = await shopIdResponse.json();
-      const shopId = shopIdJson?.data?.shop?.id as string | undefined;
-
-      if (!shopId) {
-        console.error("Failed to resolve shop id for metafield sync", shopIdJson);
-      } else {
         // 3. 写入 shop metafield：namespace=ciwi_bundle, key=ciwi-bundle-offers
         const metafieldsSetResponse = await admin.graphql(
           `#graphql
@@ -282,7 +326,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         if (userErrors.length > 0) {
           console.error("metafieldsSet userErrors", userErrors);
         }
-      }
+      };
+
+      await syncOffersMetafield(shopName);
     } catch (error) {
       console.error("Failed to sync offers metafield", error);
     }
@@ -300,10 +346,74 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     const nextStatus = nextStatusRaw === "true";
 
-    await prismaAny.offer.update({
+    const updatedOffer = await prismaAny.offer.update({
       where: { id: idRaw },
       data: { status: nextStatus },
     });
+
+    // 同步 metafield，保证前端/扩展端实时生效
+    try {
+      const shopNameToSync = updatedOffer?.shopName as string | undefined;
+      if (shopNameToSync) {
+        const shopOffers = (await prismaAny.offer.findMany({
+          where: { shopName: shopNameToSync },
+          orderBy: { createdAt: "desc" },
+        })) as OfferListItem[];
+
+        const metafieldValue = JSON.stringify({
+          updatedAt: new Date().toISOString(),
+          offers: shopOffers,
+        });
+
+        const shopIdResponse = await admin.graphql(
+          `#graphql
+          query ShopId {
+            shop {
+              id
+            }
+          }
+        `,
+        );
+
+        const shopIdJson = await shopIdResponse.json();
+        const shopId = shopIdJson?.data?.shop?.id as string | undefined;
+
+        if (shopId) {
+          await admin.graphql(
+            `#graphql
+            mutation MetafieldsSet($metafields: [MetafieldsSetInput!]!) {
+              metafieldsSet(metafields: $metafields) {
+                metafields {
+                  id
+                  key
+                  namespace
+                }
+                userErrors {
+                  field
+                  message
+                }
+              }
+            }
+          `,
+            {
+              variables: {
+                metafields: [
+                  {
+                    ownerId: shopId,
+                    namespace: "ciwi_bundle",
+                    key: "ciwi-bundle-offers",
+                    type: "json",
+                    value: metafieldValue,
+                  },
+                ],
+              },
+            },
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Failed to sync offers metafield after toggle", error);
+    }
 
     const url = new URL(request.url);
     url.searchParams.set("toast", "toggle-success");
@@ -318,9 +428,79 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     const prismaAny: any = prisma;
+
+    // 删除前先拿到 shopName（用于同步 metafield）
+    const offerToDelete = await prismaAny.offer.findUnique({
+      where: { id: idRaw },
+    });
+    const shopNameToSync = offerToDelete?.shopName as string | undefined;
+
     await prismaAny.offer.delete({
       where: { id: idRaw },
     });
+
+    // 同步 metafield，保证扩展端不再使用已删除 offer
+    try {
+      if (shopNameToSync) {
+        const shopOffers = (await prismaAny.offer.findMany({
+          where: { shopName: shopNameToSync },
+          orderBy: { createdAt: "desc" },
+        })) as OfferListItem[];
+
+        const metafieldValue = JSON.stringify({
+          updatedAt: new Date().toISOString(),
+          offers: shopOffers,
+        });
+
+        const shopIdResponse = await admin.graphql(
+          `#graphql
+          query ShopId {
+            shop {
+              id
+            }
+          }
+        `,
+        );
+
+        const shopIdJson = await shopIdResponse.json();
+        const shopId = shopIdJson?.data?.shop?.id as string | undefined;
+
+        if (shopId) {
+          await admin.graphql(
+            `#graphql
+            mutation MetafieldsSet($metafields: [MetafieldsSetInput!]!) {
+              metafieldsSet(metafields: $metafields) {
+                metafields {
+                  id
+                  key
+                  namespace
+                }
+                userErrors {
+                  field
+                  message
+                }
+              }
+            }
+          `,
+            {
+              variables: {
+                metafields: [
+                  {
+                    ownerId: shopId,
+                    namespace: "ciwi_bundle",
+                    key: "ciwi-bundle-offers",
+                    type: "json",
+                    value: metafieldValue,
+                  },
+                ],
+              },
+            },
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Failed to sync offers metafield after delete", error);
+    }
 
     const url = new URL(request.url);
     url.searchParams.set("toast", "delete-success");

@@ -7,6 +7,7 @@ import {
 } from "../generated/api";
 
 const DISCOUNT_PERCENTAGE = "10.0";
+const DEFAULT_DISCOUNT_PERCENTAGE = DISCOUNT_PERCENTAGE;
 
 type OfferMetafieldPayload = {
   updatedAt?: string;
@@ -46,10 +47,21 @@ export function cartLinesDiscountsGenerateRun(
     const quantity = line.quantity;
     if (!lineId || !quantity) continue;
 
+    console.log("find suitOffer");
     const suitOffer = findOffer(lineId, offers); // TODO
     if (!suitOffer) continue;
+    console.log("find suitOffer success");
 
-    // TODO
+    console.log("get discountPercentValue");
+    const discountPercentValue = getDiscountPercentValue(
+      suitOffer.discountRulesJson,
+      quantity,
+    );
+    console.log("get discountPercentValue success");
+    // 数量阈值没满足时，不对该 line 施加折扣
+    if (!discountPercentValue) continue;
+
+    console.log("create candidate");
     const candidate: ProductDiscountCandidate = {
       message: suitOffer.name,
       targets: [
@@ -62,7 +74,7 @@ export function cartLinesDiscountsGenerateRun(
       ],
       value: {
         percentage: {
-          value: DISCOUNT_PERCENTAGE,
+          value: discountPercentValue,
         },
       },
     };
@@ -81,7 +93,67 @@ export function cartLinesDiscountsGenerateRun(
     },
   }];
 
+  console.log("create operations success");
   return { operations };
+}
+
+type DiscountTier = {
+  count: number;
+  discountPercent: number;
+};
+
+function parseDiscountRulesJson(
+  discountRulesJson?: string | null,
+): DiscountTier[] {
+  if (!discountRulesJson) return [];
+
+  try {
+    const parsed = JSON.parse(discountRulesJson) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return [];
+
+    const tiers: DiscountTier[] = [];
+    for (const [countStr, percentRaw] of Object.entries(
+      parsed as Record<string, unknown>,
+    )) {
+      const count = Number(countStr);
+      const discountPercent = Number(percentRaw);
+      if (!Number.isFinite(count) || count < 1) continue;
+      if (!Number.isFinite(discountPercent) || discountPercent < 0) continue;
+      tiers.push({ count, discountPercent });
+    }
+
+    tiers.sort((a, b) => a.count - b.count);
+    return tiers;
+  } catch {
+    return [];
+  }
+}
+
+function formatDiscountPercentValue(percent: number): string {
+  if (!Number.isFinite(percent)) return DEFAULT_DISCOUNT_PERCENTAGE;
+  // Shopify 使用十进制字符串表示（例如 "10.0"）
+  return percent.toFixed(1);
+}
+
+function getDiscountPercentValue(
+  discountRulesJson: string | null | undefined,
+  quantity: number,
+): string | null {
+  const tiers = parseDiscountRulesJson(discountRulesJson);
+
+  // 如果规则为空：保持旧行为（默认 10%）
+  if (tiers.length === 0) {
+    return null;
+  }
+
+  // 选中所有满足 quantity >= count 的 tier 里 count 最大的那个
+  let best: DiscountTier | null = null;
+  for (const tier of tiers) {
+    if (quantity >= tier.count) best = tier;
+  }
+
+  if (!best) return null;
+  return formatDiscountPercentValue(best.discountPercent);
 }
 
 // 解析selectedProductsJson，返回商品id列表
