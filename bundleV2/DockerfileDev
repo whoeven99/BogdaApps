@@ -7,8 +7,7 @@ WORKDIR /app
 
 COPY package.json package-lock.json* ./
 
-RUN npm install -g npm@latest && \
-    npm ci  # 使用 ci 更可靠，严格依据锁文件
+RUN npm ci --omit=dev && npm cache clean --force
 
 ENV NODE_ENV=test
 
