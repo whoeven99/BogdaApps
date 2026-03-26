@@ -8,7 +8,8 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 
 # Install full deps (including optional/platform packages required by Vite/Rollup)
-RUN npm install --include=optional && npm cache clean --force
+RUN npm install 
+RUN npm install @rollup/rollup-linux-x64-gnu
 
 ENV NODE_ENV=test
 
