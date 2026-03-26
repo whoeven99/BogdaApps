@@ -18,3 +18,19 @@ CREATE TABLE "Session" (
     "refreshToken" TEXT,
     "refreshTokenExpires" DATETIME
 );
+
+-- CreateTable
+CREATE TABLE "Offer" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "shopName" TEXT NOT NULL DEFAULT '',
+    "status" BOOLEAN NOT NULL DEFAULT false,
+    "name" TEXT NOT NULL,
+    "offerType" TEXT NOT NULL,
+    "discountRulesJson" TEXT,
+    "selectedProductsJson" TEXT,
+    "offerSettingsJson" TEXT,
+    "startTime" DATETIME NOT NULL,
+    "endTime" DATETIME NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL
+);
