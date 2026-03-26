@@ -5,11 +5,10 @@ EXPOSE 3000
 
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
+COPY package.json yarn.lock ./
 
 # Install full deps (including optional/platform packages required by Vite/Rollup)
-RUN npm install 
-RUN npm install @rollup/rollup-linux-x64-gnu
+RUN yarn install 
 
 ENV NODE_ENV=test
 
