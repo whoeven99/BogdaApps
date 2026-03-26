@@ -11,7 +11,7 @@
 在当前项目目录下运行：
 
 ```shell
-npm install
+yarn install
 ```
 
 ### 1.3 启动项目
