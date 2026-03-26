@@ -63,8 +63,8 @@ function createTursoClient(): PrismaClient {
 }
 
 function createPrismaClient(): PrismaClient {
-  console.log("[db] ENV=", process.env.ENV, "TURSO_URL=", process.env.TURSO_DATABASE_URL);
-  const target = process.env.ENV;
+  console.log("[db] NODE_ENV=", process.env.NODE_ENV, "TURSO_URL=", process.env.TURSO_DATABASE_URL);
+  const target = process.env.NODE_ENV;
   if (target === "local") {
     if (!global.prismaLocalGlobal) {
       global.prismaLocalGlobal = new PrismaClient();
