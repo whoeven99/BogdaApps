@@ -119,6 +119,35 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   let intent = formData.get("intent");
   const prismaAny: any = prisma;
 
+  const isTransientDbWriteError = (error: unknown) => {
+    const message =
+      error instanceof Error
+        ? error.message
+        : typeof error === "string"
+          ? error
+          : JSON.stringify(error);
+    const upper = String(message || "").toUpperCase();
+    return (
+      upper.includes("SQLITE_BUSY") ||
+      upper.includes("SQLITE_LOCKED") ||
+      upper.includes("DEADLOCK") ||
+      upper.includes("TIMED OUT")
+    );
+  };
+
+  async function writeOfferWithRetry<T>(writeFn: () => Promise<T>) {
+    try {
+      return await writeFn();
+    } catch (error) {
+      if (!isTransientDbWriteError(error)) {
+        throw error;
+      }
+      console.warn("offer write failed once, retrying...", error);
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      return writeFn();
+    }
+  }
+
   console.log("action intent", intent);
 
   // 兼容 fallback：如果没有显式 intent，但有 offerId，则视为更新，否则视为创建
@@ -202,7 +231,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     if (intent === "create-offer") {
       try {
-        await prismaAny.offer.create({ data });
+        await writeOfferWithRetry(() => prismaAny.offer.create({ data }));
         url.searchParams.set("toast", "create-success");
       } catch (error) {
         console.error("offer create failed", {
@@ -226,10 +255,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return new Response("Missing offer id", { status: 400 });
       }
       try {
-        await prismaAny.offer.update({
-          where: { id: idRaw },
-          data,
-        });
+        await writeOfferWithRetry(() =>
+          prismaAny.offer.update({
+            where: { id: idRaw },
+            data,
+          }),
+        );
         url.searchParams.set("toast", "update-success");
       } catch (error) {
         console.error("offer update failed", {
@@ -508,7 +539,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return redirect(url.pathname + "?" + url.searchParams.toString());
   }
 
-  return new Response(null, { status: 200 });
+  return new Response(`Unknown intent: ${String(intent || "")}`, {
+    status: 400,
+  });
 };
 
 type HomeTabKey = "dashboard" | "offers" | "pricing";

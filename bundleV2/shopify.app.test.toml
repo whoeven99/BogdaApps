@@ -1,12 +1,12 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "d77f12d3778c2a1a43df884698122cef"
+client_id = "ab25ea895c6df574ae9ff70e9c7731c5"
 name = "Ciwi:bundlev2(Test)"
 application_url = "https://bundlev2.onrender.com"
 embedded = true
 
 [build]
-include_config_on_deploy = true
+automatically_update_urls_on_dev = false
 
 [webhooks]
 api_version = "2026-04"
