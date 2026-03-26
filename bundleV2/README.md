@@ -1,3 +1,48 @@
+# 项目开发说明
+
+## 1. 本地开发
+
+### 1.1 新建自己的 app 和配置文件
+
+根据 `shopify.app.toml` 的指引，新建自己的 app 和对应的 toml 配置文件（例如：`shopify.app.yourname.toml`）。
+
+### 1.2 安装依赖
+
+在当前项目目录下运行：
+
+```shell
+npm install
+```
+
+### 1.3 启动项目
+
+使用自己的配置名启动：
+
+```shell
+shopify app dev --config your.name
+```
+
+启动成功后会直接给出应用链接和 GraphQL 链接。
+
+现在默认会自动创建反向代理 tunnel，不需要额外手动创建。  
+如果遇到网络问题可以多切换几次网络重试；仍不行再用 ngrok 自己创建反向代理。
+
+### 1.4 应用代码位置
+
+应用内容对应 `app` 文件夹。
+
+### 1.5 数据库位置
+
+数据库对应 `prisma` 目录：
+
+- `schema.prisma`：数据库结构（DDL）配置
+- `dev.sqlite`：本地使用的数据库文件（数据保存在这里）
+
+## 2. 开发后发布到 test 环境
+
+- Render events 页面：<https://dashboard.render.com/web/srv-d72ffhdm5p6s73d0pa4g/events>
+
+//
 # Shopify App Template - React Router
 
 This is a template for building a [Shopify app](https://shopify.dev/docs/apps/getting-started) using [React Router](https://reactrouter.com/). It was forked from the [Shopify Remix app template](https://github.com/Shopify/shopify-app-template-remix) and converted to React Router.
@@ -74,26 +119,6 @@ Please read the [documentation for @shopify/shopify-app-react-router](https://sh
 This template is configured with the Shopify Dev MCP. This instructs [Cursor](https://cursor.com/), [GitHub Copilot](https://github.com/features/copilot) and [Claude Code](https://claude.com/product/claude-code) and [Google Gemini CLI](https://github.com/google-gemini/gemini-cli) to use the Shopify Dev MCP.
 
 For more information on the Shopify Dev MCP please read [the documentation](https://shopify.dev/docs/apps/build/devmcp).
-
-## Deployment
-
-### Application Storage
-
-This template uses [Prisma](https://www.prisma.io/) to store session data, by default using an [SQLite](https://www.sqlite.org/index.html) database.
-The database is defined as a Prisma schema in `prisma/schema.prisma`.
-
-This use of SQLite works in production if your app runs as a single instance.
-The database that works best for you depends on the data your app needs and how it is queried.
-Here’s a short list of databases providers that provide a free tier to get started:
-
-| Database   | Type             | Hosters                                                                                                                                                                                                                                    |
-| ---------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| MySQL      | SQL              | [Digital Ocean](https://www.digitalocean.com/products/managed-databases-mysql), [Planet Scale](https://planetscale.com/), [Amazon Aurora](https://aws.amazon.com/rds/aurora/), [Google Cloud SQL](https://cloud.google.com/sql/docs/mysql) |
-| PostgreSQL | SQL              | [Digital Ocean](https://www.digitalocean.com/products/managed-databases-postgresql), [Amazon Aurora](https://aws.amazon.com/rds/aurora/), [Google Cloud SQL](https://cloud.google.com/sql/docs/postgres)                                   |
-| Redis      | Key-value        | [Digital Ocean](https://www.digitalocean.com/products/managed-databases-redis), [Amazon MemoryDB](https://aws.amazon.com/memorydb/)                                                                                                        |
-| MongoDB    | NoSQL / Document | [Digital Ocean](https://www.digitalocean.com/products/managed-databases-mongodb), [MongoDB Atlas](https://www.mongodb.com/atlas/database)                                                                                                  |
-
-To use one of these, you can use a different [datasource provider](https://www.prisma.io/docs/reference/api-reference/prisma-schema-reference#datasource) in your `schema.prisma` file, or a different [SessionStorage adapter package](https://github.com/Shopify/shopify-api-js/blob/main/packages/shopify-api/docs/guides/session-storage.md).
 
 ### Build
 
