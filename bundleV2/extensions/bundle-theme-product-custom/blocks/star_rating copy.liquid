@@ -1,0 +1,23 @@
+<div class="custom-product-extension">
+  {{ block.settings.text }}
+</div>
+
+{% schema %}
+{
+  "name": "bundleyw商品定制",
+  "target": "section",
+  "enabled_on": {
+    "templates": ["product"]
+  },
+  "stylesheet": "app.css",
+  "javascript": "app.js",
+  "settings": [
+    {
+      "type": "text",
+      "id": "text",
+      "label": "显示文本",
+      "default": "Hello from my bundleyw!"
+    }
+  ]
+}
+{% endschema %}
