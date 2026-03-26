@@ -10,8 +10,6 @@ COPY package.json yarn.lock ./
 # Install full deps (including optional/platform packages required by Vite/Rollup)
 RUN yarn install 
 
-ENV NODE_ENV=test
-
 COPY . .
 
 RUN npm run build
