@@ -5,7 +5,7 @@
     "build": "react-router build",
     "dev": "shopify app dev",
     "run-localdb": "prisma studio",
-    "update-localdb": "prisma migrate dev --name", // 比如：yarn update-localdb -- add_offers_table
+    "update-localdb": "prisma migrate dev --name update_table",
     "config:link": "shopify app config link",
     "generate": "shopify app generate",
     "deploy": "shopify app deploy",
