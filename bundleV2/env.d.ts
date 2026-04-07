@@ -3,8 +3,9 @@
 
 declare namespace NodeJS {
   interface ProcessEnv {
-    /** 环境目标：local=本地 SQLite，test=远端 Turso */
-    NODE_ENV?: "local" | "test";
+    /** local | sqlite=本机 Prisma；turso | test=远端 LibSQL（需 TURSO_*）。未设置时：production→turso，其余→local */
+    DATABASE_TARGET?: "local" | "sqlite" | "turso" | "test";
+    NODE_ENV?: string;
     /** Turso / LibSQL 远程库 URL，例如 libsql://xxx.turso.io */
     TURSO_DATABASE_URL?: string;
     /** Turso CLI: turso db tokens create <database-name> */

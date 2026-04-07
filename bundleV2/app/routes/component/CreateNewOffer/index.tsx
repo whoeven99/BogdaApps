@@ -4,6 +4,7 @@ import {
   X,
 } from "lucide-react";
 import "./CreateNewOffer.css";
+import BundlePreview from "./BundlePreview";
 
 type DiscountRule = {
   // 数量阈值：例如 count=2 表示“买 2 件及以上”生效
@@ -920,86 +921,11 @@ export function CreateNewOffer({
                     )?.description
                   }
                 </p>
-                <div className="create-offer-preview-card">
-                  <div
-                    className="create-offer-style-preview-header"
-                    style={{ color: accentColor }}
-                  >
-                    Bundle & Save
-                  </div>
-                  <div
-                    className={`create-offer-style-preview-list create-offer-style-preview-list--${layoutFormat}`}
-                  >
-                    <div
-                      className="create-offer-style-preview-item"
-                      style={{ background: cardBackgroundColor }}
-                    >
-                      <div className="create-offer-style-preview-item-title">
-                        Single
-                      </div>
-                      <div className="create-offer-style-preview-item-subtitle">
-                        Standard price
-                      </div>
-                      <div className="create-offer-style-preview-item-price">
-                        €65,00
-                      </div>
-                    </div>
-                    <div
-                      className="create-offer-style-preview-item create-offer-style-preview-item--featured"
-                      style={{
-                        background: cardBackgroundColor,
-                        borderColor: accentColor,
-                      }}
-                    >
-                      <div
-                        className="create-offer-style-preview-badge"
-                        style={{ background: accentColor }}
-                      >
-                        Most Popular
-                      </div>
-                      <div className="create-offer-style-preview-item-title">
-                        Duo
-                      </div>
-                      <div className="create-offer-style-preview-item-subtitle">
-                        Buy more, save more
-                      </div>
-                      <div className="create-offer-style-preview-item-price">
-                        €110,50
-                      </div>
-                      <div className="create-offer-style-preview-item-original">
-                        €130,00
-                      </div>
-                    </div>
-                    <div
-                      className="create-offer-style-preview-item"
-                      style={{ background: cardBackgroundColor }}
-                    >
-                      <div className="create-offer-style-preview-item-title">
-                        Trio
-                      </div>
-                      <div className="create-offer-style-preview-item-subtitle">
-                        Extra savings
-                      </div>
-                      <div className="create-offer-style-preview-item-price">
-                        €149,00
-                      </div>
-                    </div>
-                    <div
-                      className="create-offer-style-preview-item"
-                      style={{ background: cardBackgroundColor }}
-                    >
-                      <div className="create-offer-style-preview-item-title">
-                        Pack of 4
-                      </div>
-                      <div className="create-offer-style-preview-item-subtitle">
-                        Best value
-                      </div>
-                      <div className="create-offer-style-preview-item-price">
-                        €185,00
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <BundlePreview
+                  layoutFormat={layoutFormat}
+                  accentColor={accentColor}
+                  cardBackgroundColor={cardBackgroundColor}
+                />
               </div>
             </div>
           )}
