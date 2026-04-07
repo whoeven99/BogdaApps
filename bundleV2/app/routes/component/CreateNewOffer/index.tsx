@@ -137,41 +137,65 @@ function parseOfferSettings(
 function parseDiscountRules(
   discountRulesJson?: string | null,
 ): DiscountRule[] {
-  // discountRulesJson 现在是一个对象：{ "2": 20, "3": 25 }
-  // key: count（字符串），value: discountPercent（数字）
-  if (!discountRulesJson) return [{ count: 2, discountPercent: 15 }];
+  if (!discountRulesJson) return [];
 
-  const parsed = JSON.parse(discountRulesJson) as Record<string, unknown>;
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return [{ count: 2, discountPercent: 15 }];
+  try {
+    const parsed = JSON.parse(discountRulesJson) as unknown;
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .map((item) => {
+        if (!item || typeof item !== "object") return null;
+        const count = Number((item as { count?: unknown }).count);
+        const discountPercent = Number(
+          (item as { discountPercent?: unknown }).discountPercent,
+        );
+        if (!Number.isFinite(count) || count < 1) return null;
+        if (!Number.isFinite(discountPercent)) return null;
+        return {
+          count: Math.trunc(count),
+          discountPercent: Math.max(0, Math.min(100, discountPercent)),
+        } satisfies DiscountRule;
+      })
+      .filter((x): x is DiscountRule => x !== null)
+      .sort((a, b) => a.count - b.count);
+  } catch {
+    return [];
   }
-
-  return Object.entries(parsed)
-    .map(([countStr, percentRaw]) => {
-      const count = Number(countStr);
-      const discountPercent = Number(percentRaw);
-      if (!Number.isFinite(count) || count < 1) return null;
-      if (!Number.isFinite(discountPercent)) return null;
-      return {
-        count,
-        discountPercent: Math.max(0, Math.min(100, discountPercent)),
-      } satisfies DiscountRule;
-    })
-    .filter((x): x is DiscountRule => x !== null)
-    .sort((a, b) => a.count - b.count);
 }
 
-function buildDiscountRulesJson(tiers: DiscountRule[]): Record<string, number> {
-  const out: Record<string, number> = {};
+function buildDiscountRulesJson(tiers: DiscountRule[]): DiscountRule[] {
+  const out: DiscountRule[] = [];
   for (const tier of tiers) {
     if (!Number.isFinite(tier.count) || tier.count < 1) continue;
     if (!Number.isFinite(tier.discountPercent)) continue;
-    out[String(Math.trunc(tier.count))] = Math.max(
-      0,
-      Math.min(100, tier.discountPercent),
+    out.push({
+      count: Math.trunc(tier.count),
+      discountPercent: Math.max(0, Math.min(100, tier.discountPercent)),
+    });
+  }
+
+  return out
+    .sort((a, b) => a.count - b.count)
+    .filter((tier, index, arr) =>
+      index === arr.findIndex((x) => x.count === tier.count),
+    );
+}
+
+function sanitizeDiscountRules(tiers: DiscountRule[]): DiscountRule[] {
+  const dedupedByCount = new Map<number, number>();
+  for (const tier of tiers) {
+    if (!Number.isFinite(tier.count) || tier.count < 1) continue;
+    if (!Number.isFinite(tier.discountPercent)) continue;
+    dedupedByCount.set(
+      Math.trunc(tier.count),
+      Math.max(0, Math.min(100, tier.discountPercent)),
     );
   }
-  return out;
+
+  return [...dedupedByCount.entries()]
+    .map(([count, discountPercent]) => ({ count, discountPercent }))
+    .sort((a, b) => a.count - b.count);
 }
 
 export function CreateNewOffer({
@@ -179,6 +203,9 @@ export function CreateNewOffer({
   initialOffer,
   storeProducts = [],
 }: CreateNewOfferProps) {
+  const baseUnitPrice = 100;
+  const formatPreviewPrice = (value: number) =>
+    `€${value.toFixed(2).replace(".", ",")}`;
   const startTimeInputRef = useRef<HTMLInputElement | null>(null);
   const endTimeInputRef = useRef<HTMLInputElement | null>(null);
   const openDateTimePicker = (input: HTMLInputElement | null) => {
@@ -250,17 +277,11 @@ export function CreateNewOffer({
       }
     );
   });
-  const [discountRules, setDiscountRules] = useState<DiscountRule[]>(() => {
-    const parsed = parseDiscountRules(initialOffer?.discountRulesJson);
-    const byCount = new Map<number, number>(
-      parsed.map((r) => [r.count, r.discountPercent]),
-    );
-    const get = (count: number) => byCount.get(count) ?? 15;
-    return [
-      { count: 2, discountPercent: get(2) },
-      { count: 3, discountPercent: get(3) },
-    ];
-  });
+  const [discountRules, setDiscountRules] = useState<DiscountRule[]>(() =>
+    parseDiscountRules(initialOffer?.discountRulesJson),
+  );
+  const normalizedDiscountRules = sanitizeDiscountRules(discountRules);
+  const featuredRule = normalizedDiscountRules[0];
 
   const steps = [
     "Basic Information",
@@ -319,7 +340,7 @@ export function CreateNewOffer({
       <input
         type="hidden"
         name="discountRulesJson"
-        value={JSON.stringify(buildDiscountRulesJson(discountRules))}
+        value={JSON.stringify(buildDiscountRulesJson(normalizedDiscountRules))}
       />
 
       <div className="polaris-card create-offer-card">
@@ -423,7 +444,7 @@ export function CreateNewOffer({
                             </div>
                           </div>
                           <strong className="create-offer-pricing-price">
-                            €65,00
+                            {formatPreviewPrice(baseUnitPrice)}
                           </strong>
                         </div>
                       </div>
@@ -633,84 +654,89 @@ export function CreateNewOffer({
                     <h3 className="create-offer-section-heading">
                       Buy more, save more
                     </h3>
-
-                    <div className="create-offer-discount-card">
-                      <div className="create-offer-discount-body">
-                        <div className="create-offer-discount-form-row">
-                          <label className="create-offer-label">
-                            Discount for 2 items (%)
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              step="1"
-                              className="create-offer-input"
-                              value={
-                                discountRules.find((r) => r.count === 2)
-                                  ?.discountPercent ?? 15
-                              }
-                              onChange={(e) => {
-                                const parsedValue = Number(e.target.value);
-                                const nextPercent =
-                                  Number.isFinite(parsedValue) &&
-                                  parsedValue >= 0
-                                    ? Math.max(
-                                        0,
-                                        Math.min(100, parsedValue),
-                                      )
-                                    : 0;
-                                setDiscountRules((prev) =>
-                                  prev.map((r) =>
-                                    r.count === 2
-                                      ? { ...r, discountPercent: nextPercent }
-                                      : r,
-                                  ),
-                                );
+                    {discountRules.map((rule, index) => (
+                      <div className="create-offer-discount-card" key={`${rule.count}-${index}`}>
+                        <div className="create-offer-discount-body">
+                          <div className="create-offer-discount-form-row create-offer-discount-form-row--inline">
+                            <label className="create-offer-label">
+                              Item quantity
+                              <input
+                                type="number"
+                                min="1"
+                                step="1"
+                                className="create-offer-input"
+                                value={rule.count}
+                                onChange={(e) => {
+                                  const parsedValue = Number(e.target.value);
+                                  const nextCount =
+                                    Number.isFinite(parsedValue) && parsedValue >= 1
+                                      ? Math.trunc(parsedValue)
+                                      : 1;
+                                  setDiscountRules((prev) =>
+                                    prev.map((r, i) =>
+                                      i === index ? { ...r, count: nextCount } : r,
+                                    ),
+                                  );
+                                }}
+                              />
+                            </label>
+                            <label className="create-offer-label">
+                              Discount (%)
+                              <input
+                                type="number"
+                                min="0"
+                                max="100"
+                                step="1"
+                                className="create-offer-input"
+                                value={rule.discountPercent}
+                                onChange={(e) => {
+                                  const parsedValue = Number(e.target.value);
+                                  const nextPercent =
+                                    Number.isFinite(parsedValue) && parsedValue >= 0
+                                      ? Math.max(0, Math.min(100, parsedValue))
+                                      : 0;
+                                  setDiscountRules((prev) =>
+                                    prev.map((r, i) =>
+                                      i === index
+                                        ? { ...r, discountPercent: nextPercent }
+                                        : r,
+                                    ),
+                                  );
+                                }}
+                              />
+                            </label>
+                            <button
+                              type="button"
+                              className="create-offer-remove-tier-button"
+                              onClick={() => {
+                                setDiscountRules((prev) => {
+                                  if (prev.length <= 1) return prev;
+                                  return prev.filter((_, i) => i !== index);
+                                });
                               }}
-                            />
-                          </label>
+                              disabled={discountRules.length <= 1}
+                            >
+                              Remove
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-
-                    <div className="create-offer-discount-card">
-                      <div className="create-offer-discount-body">
-                        <div className="create-offer-discount-form-row">
-                          <label className="create-offer-label">
-                            Discount for 3 items (%)
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              step="1"
-                              className="create-offer-input"
-                              value={
-                                discountRules.find((r) => r.count === 3)
-                                  ?.discountPercent ?? 15
-                              }
-                              onChange={(e) => {
-                                const parsedValue = Number(e.target.value);
-                                const nextPercent =
-                                  Number.isFinite(parsedValue) &&
-                                  parsedValue >= 0
-                                    ? Math.max(
-                                        0,
-                                        Math.min(100, parsedValue),
-                                      )
-                                    : 0;
-                                setDiscountRules((prev) =>
-                                  prev.map((r) =>
-                                    r.count === 3
-                                      ? { ...r, discountPercent: nextPercent }
-                                      : r,
-                                  ),
-                                );
-                              }}
-                            />
-                          </label>
-                        </div>
-                      </div>
-                    </div>
+                    ))}
+                    <button
+                      type="button"
+                      className="create-offer-add-tier-button"
+                      onClick={() => {
+                        setDiscountRules((prev) => {
+                          const maxCount = prev.reduce(
+                            (max, rule) => Math.max(max, rule.count),
+                            1,
+                          );
+                          return [...prev, { count: maxCount + 1, discountPercent: 15 }];
+                        });
+                      }}
+                    >
+                      + Add discount tier
+                    </button>
                   </div>
                 </div>
 
@@ -746,46 +772,99 @@ export function CreateNewOffer({
                               </div>
                             </div>
                             <strong className="create-offer-pricing-price">
-                              €65,00
+                              {formatPreviewPrice(baseUnitPrice)}
                             </strong>
                           </div>
                         </div>
-                        <div
-                              className="create-offer-pricing-card create-offer-pricing-card--primary create-offer-pricing-card--readonly create-offer-pricing-card--selected"
-                        >
-                          <div className="create-offer-pricing-badge">
-                            Most Popular
-                          </div>
-                          <div className="create-offer-pricing-header">
-                            <input
-                              type="radio"
-                                  checked={true}
-                              readOnly
-                              disabled
-                              className="create-offer-radio"
-                            />
-                            <div className="create-offer-pricing-title">
-                              <div className="create-offer-pricing-meta">
-                                <strong>Duo</strong>
-                                <span className="create-offer-pricing-save">
-                                  SAVE €19,50
-                                </span>
+                        {featuredRule && (
+                          <div
+                            className="create-offer-pricing-card create-offer-pricing-card--primary create-offer-pricing-card--readonly create-offer-pricing-card--selected"
+                          >
+                            <div className="create-offer-pricing-badge">
+                              Most Popular
+                            </div>
+                            <div className="create-offer-pricing-header">
+                              <input
+                                type="radio"
+                                checked={true}
+                                readOnly
+                                disabled
+                                className="create-offer-radio"
+                              />
+                              <div className="create-offer-pricing-title">
+                                <div className="create-offer-pricing-meta">
+                                  <strong>{featuredRule.count} items</strong>
+                                  <span className="create-offer-pricing-save">
+                                    SAVE{" "}
+                                    {formatPreviewPrice(
+                                      featuredRule.count *
+                                        baseUnitPrice *
+                                        (featuredRule.discountPercent / 100),
+                                    )}
+                                  </span>
+                                </div>
+                                <div className="create-offer-pricing-subtitle">
+                                  You save {featuredRule.discountPercent}%
+                                </div>
                               </div>
-                              <div className="create-offer-pricing-subtitle">
-                                You save{" "}
-                                {discountRules[0]?.discountPercent ?? 15}%
+                              <div className="create-offer-pricing-right">
+                                <strong className="create-offer-pricing-price">
+                                  {formatPreviewPrice(
+                                    featuredRule.count *
+                                      baseUnitPrice *
+                                      (1 - featuredRule.discountPercent / 100),
+                                  )}
+                                </strong>
+                                <div className="create-offer-pricing-original">
+                                  {formatPreviewPrice(
+                                    featuredRule.count * baseUnitPrice,
+                                  )}
+                                </div>
                               </div>
                             </div>
-                            <div className="create-offer-pricing-right">
-                              <strong className="create-offer-pricing-price">
-                                €110,50
-                              </strong>
-                              <div className="create-offer-pricing-original">
-                                €130,00
+                          </div>
+                        )}
+                        {normalizedDiscountRules.slice(1).map((rule) => {
+                          const originalTotal = rule.count * baseUnitPrice;
+                          const discountedTotal =
+                            originalTotal * (1 - rule.discountPercent / 100);
+                          const saved = originalTotal - discountedTotal;
+                          return (
+                            <div
+                              key={`preview-tier-${rule.count}`}
+                              className="create-offer-pricing-card create-offer-pricing-card--readonly"
+                            >
+                              <div className="create-offer-pricing-header">
+                                <input
+                                  type="radio"
+                                  checked={false}
+                                  readOnly
+                                  disabled
+                                  className="create-offer-radio"
+                                />
+                                <div className="create-offer-pricing-title">
+                                  <div className="create-offer-pricing-meta">
+                                    <strong>{rule.count} items</strong>
+                                    <span className="create-offer-pricing-save">
+                                      SAVE {formatPreviewPrice(saved)}
+                                    </span>
+                                  </div>
+                                  <div className="create-offer-pricing-subtitle">
+                                    You save {rule.discountPercent}%
+                                  </div>
+                                </div>
+                                <div className="create-offer-pricing-right">
+                                  <strong className="create-offer-pricing-price">
+                                    {formatPreviewPrice(discountedTotal)}
+                                  </strong>
+                                  <div className="create-offer-pricing-original">
+                                    {formatPreviewPrice(originalTotal)}
+                                  </div>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </div>
+                          );
+                        })}
                         <div className="create-offer-pricing-footer">
                           <strong>
                             Quantity breaks for the same product

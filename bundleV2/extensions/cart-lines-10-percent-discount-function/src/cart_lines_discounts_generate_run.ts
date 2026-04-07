@@ -109,17 +109,18 @@ function parseDiscountRulesJson(
 
   try {
     const parsed = JSON.parse(discountRulesJson) as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return [];
+    if (!Array.isArray(parsed)) return [];
 
     const tiers: DiscountTier[] = [];
-    for (const [countStr, percentRaw] of Object.entries(
-      parsed as Record<string, unknown>,
-    )) {
-      const count = Number(countStr);
-      const discountPercent = Number(percentRaw);
+    for (const item of parsed) {
+      if (!item || typeof item !== "object") continue;
+      const count = Number((item as { count?: unknown }).count);
+      const discountPercent = Number(
+        (item as { discountPercent?: unknown }).discountPercent,
+      );
       if (!Number.isFinite(count) || count < 1) continue;
       if (!Number.isFinite(discountPercent) || discountPercent < 0) continue;
-      tiers.push({ count, discountPercent });
+      tiers.push({ count: Math.trunc(count), discountPercent });
     }
 
     tiers.sort((a, b) => a.count - b.count);

@@ -6,6 +6,12 @@
   data-ciwi-selectors="{{ block.settings.anchor_selector | escape }}"
 ></div>
 
+{% if shop.metafields.ciwi_bundle and shop.metafields.ciwi_bundle["ciwi-bundle-offers"] %}
+  <script id="ciwi-bundle-offers" type="application/json">
+    {{ shop.metafields.ciwi_bundle["ciwi-bundle-offers"].value }}
+  </script>
+{% endif %}
+
 {% schema %}
 {
   "name": "Product detail message",
