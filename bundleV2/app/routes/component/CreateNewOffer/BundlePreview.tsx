@@ -1,4 +1,4 @@
-import { renderBundlePreviewHtml } from "../../../../extensions/bundle-theme-product-custom/assets/bundle-preview-shared.js";
+import { renderBundlePreviewHtml } from "./bundlePreviewShared";
 
 type Props = {
   layoutFormat: "vertical" | "horizontal" | "card" | "compact";
