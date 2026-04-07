@@ -9,6 +9,9 @@ interface DashboardPageProps {
   onViewAllOffers?: () => void;
   offers?: IndexLoaderData["offers"];
   storeProducts?: IndexLoaderData["storeProducts"];
+  shop: string;
+  apiKey: string;
+  themeExtensionEnabled: boolean;
 }
 
 const mockOverview = {
@@ -69,10 +72,12 @@ export function DashboardPage({
   onViewAllOffers,
   offers,
   storeProducts = [],
+  shop,
+  apiKey,
+  themeExtensionEnabled,
 }: DashboardPageProps) {
   const [searchParams] = useSearchParams();
   const navigation = useNavigation();
-  const [isThemeExtensionEnabled, setIsThemeExtensionEnabled] = useState(true);
   const [showCreateOffer, setShowCreateOffer] = useState(false);
   const [editingOfferId, setEditingOfferId] = useState<string | null>(null);
   const [deletingOffer, setDeletingOffer] = useState<DashboardOfferRow | null>(
@@ -132,6 +137,12 @@ export function DashboardPage({
   };
   const handleViewAllAbTests = () => {}; // mock
   const handleNeedHelp = () => {}; // mock
+  const handleThemeExtensionToggle = () => {
+    const storeHandle = shop.replace(".myshopify.com", "");
+    const appEmbed = `${apiKey}/product_detail_message`;
+    const editorUrl = `https://admin.shopify.com/store/${storeHandle}/themes/current/editor?context=apps&appEmbed=${encodeURIComponent(appEmbed)}`;
+    window.open(editorUrl, "_top");
+  };
 
   const toast = searchParams.get("toast");
 
@@ -226,34 +237,38 @@ export function DashboardPage({
               Theme extension
             </h2>
             <div
-              className={`flex items-center gap-[6px] px-[8px] py-[4px] rounded-[4px] ${isThemeExtensionEnabled ? "bg-[#d1f7c4]" : "bg-[#f4f6f8]"}`}
+              className={`flex items-center gap-[6px] px-[8px] py-[4px] rounded-[4px] ${themeExtensionEnabled ? "bg-[#d1f7c4]" : "bg-[#f4f6f8]"}`}
             >
               <div
-                className={`w-[8px] h-[8px] rounded-full ${isThemeExtensionEnabled ? "bg-[#108043]" : "bg-[#6d7175]"}`}
+                className={`w-[8px] h-[8px] rounded-full ${themeExtensionEnabled ? "bg-[#108043]" : "bg-[#6d7175]"}`}
               />
               <span
-                className={`font-['Inter'] font-medium text-[14px] leading-[21px] tracking-[-0.1504px] ${isThemeExtensionEnabled ? "text-[#108043]" : "text-[#6d7175]"}`}
+                className={`font-['Inter'] font-medium text-[14px] leading-[21px] tracking-[-0.1504px] ${themeExtensionEnabled ? "text-[#108043]" : "text-[#6d7175]"}`}
               >
-                {isThemeExtensionEnabled ? "Active" : "Inactive"}
+                {themeExtensionEnabled ? "Active" : "Inactive"}
               </span>
             </div>
           </div>
           <p className="font-['Inter'] font-normal text-[16px] leading-[25.6px] text-[#202223] tracking-[-0.3125px] mb-[20px]">
-            {isThemeExtensionEnabled
+            {themeExtensionEnabled
               ? "Bundles widget is visible in product pages."
               : "Bundles widget is currently disabled."}
+          </p>
+          <p className="font-['Inter'] font-normal text-[13px] leading-[20px] text-[#6d7175] tracking-[-0.1px] mb-[12px]">
+            This opens Theme Editor App Embeds. Toggle the extension there and
+            click Save in Shopify.
           </p>
           <div className="flex flex-col gap-[12px]">
             <button
               type="button"
-              onClick={() => setIsThemeExtensionEnabled(!isThemeExtensionEnabled)}
+              onClick={handleThemeExtensionToggle}
               className={`px-[16px] py-[8px] rounded-[6px] font-['Inter'] font-medium text-[14px] leading-[21px] tracking-[-0.1504px] cursor-pointer transition-colors w-full border-0 ${
-                isThemeExtensionEnabled
+                themeExtensionEnabled
                   ? "bg-white border border-[#dfe3e8] text-[#d72c0d] hover:bg-[#fef3f2]"
                   : "bg-[#008060] text-white hover:bg-[#006e52]"
               }`}
             >
-              {isThemeExtensionEnabled ? "Disable" : "Enable"}
+              {themeExtensionEnabled ? "Disable" : "Enable"}
             </button>
             <button
               type="button"
