@@ -44,8 +44,87 @@ export type IndexLoaderData = {
   storeProducts: StoreProductItem[];
 };
 
+const ensureWebPixel = async (admin: any, shop: string) => {
+  let currentWebPixelId: string | undefined;
+
+  try {
+    const queryResponse = await admin.graphql(
+      `#graphql
+        query CurrentWebPixel {
+          webPixel {
+            id
+          }
+        }
+      `,
+    );
+    const queryJson = await queryResponse.json();
+    currentWebPixelId = queryJson?.data?.webPixel?.id as string | undefined;
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : JSON.stringify(error);
+    if (!errorMessage.includes("No web pixel was found for this app")) {
+      throw error;
+    }
+    currentWebPixelId = undefined;
+  }
+
+  console.log("[web-pixel] query result", {
+    shop,
+    currentWebPixelId,
+  });
+
+  if (currentWebPixelId) return;
+
+  const createResponse = await admin.graphql(
+    `#graphql
+      mutation WebPixelCreate($webPixel: WebPixelInput!) {
+        webPixelCreate(webPixel: $webPixel) {
+          userErrors {
+            field
+            message
+            code
+          }
+          webPixel {
+            id
+            settings
+          }
+        }
+      }
+    `,
+    {
+      variables: {
+        webPixel: {
+          settings: {
+            shopName: shop,
+            server: process.env.SHOPIFY_APP_URL || "",
+          },
+        },
+      },
+    },
+  );
+  const createJson = await createResponse.json();
+  const createResult = createJson?.data?.webPixelCreate;
+  const userErrors = createResult?.userErrors || [];
+
+  if (userErrors.length > 0) {
+    console.error("[web-pixel] create userErrors", { shop, userErrors });
+    return;
+  }
+
+  console.log("[web-pixel] created", {
+    shop,
+    id: createResult?.webPixel?.id,
+  });
+};
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
+
+  try {
+    await ensureWebPixel(admin, session.shop);
+  } catch (error) {
+    console.error("Failed to ensure web pixel exists", error);
+  }
 
   const prismaAny: any = prisma;
   const prismaOffers = await prismaAny.offer.findMany({
