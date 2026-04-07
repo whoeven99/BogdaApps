@@ -42,10 +42,241 @@ export type StoreProductItem = {
 export type IndexLoaderData = {
   offers: OfferListItem[];
   storeProducts: StoreProductItem[];
+  shop: string;
+  apiKey: string;
+  themeExtensionEnabled: boolean;
+};
+
+const ensureWebPixel = async (admin: any, shop: string) => {
+  let currentWebPixelId: string | undefined;
+
+  try {
+    const queryResponse = await admin.graphql(
+      `#graphql
+        query CurrentWebPixel {
+          webPixel {
+            id
+          }
+        }
+      `,
+    );
+    const queryJson = await queryResponse.json();
+    currentWebPixelId = queryJson?.data?.webPixel?.id as string | undefined;
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : JSON.stringify(error);
+    if (!errorMessage.includes("No web pixel was found for this app")) {
+      throw error;
+    }
+    currentWebPixelId = undefined;
+  }
+
+  console.log("[web-pixel] query result", {
+    shop,
+    currentWebPixelId,
+  });
+
+  if (currentWebPixelId) return;
+
+  const createResponse = await admin.graphql(
+    `#graphql
+      mutation WebPixelCreate($webPixel: WebPixelInput!) {
+        webPixelCreate(webPixel: $webPixel) {
+          userErrors {
+            field
+            message
+            code
+          }
+          webPixel {
+            id
+            settings
+          }
+        }
+      }
+    `,
+    {
+      variables: {
+        webPixel: {
+          settings: {
+            shopName: shop,
+            server: process.env.SHOPIFY_APP_URL || "",
+          },
+        },
+      },
+    },
+  );
+  const createJson = await createResponse.json();
+  const createResult = createJson?.data?.webPixelCreate;
+  const userErrors = createResult?.userErrors || [];
+
+  if (userErrors.length > 0) {
+    console.error("[web-pixel] create userErrors", { shop, userErrors });
+    return;
+  }
+
+  console.log("[web-pixel] created", {
+    shop,
+    id: createResult?.webPixel?.id,
+  });
+};
+
+/**
+ * Collect objects that look like theme JSON blocks (have string `type`).
+ * App embeds may live under `current.blocks` or nested elsewhere in settings_data.
+ */
+const collectTypedBlocks = (node: unknown, out: Array<Record<string, any>>): void => {
+  if (node === null || typeof node !== "object") return;
+  if (Array.isArray(node)) {
+    for (const item of node) collectTypedBlocks(item, out);
+    return;
+  }
+  const rec = node as Record<string, unknown>;
+  if (typeof rec.type === "string") {
+    out.push(rec);
+  }
+  for (const v of Object.values(rec)) {
+    collectTypedBlocks(v, out);
+  }
+};
+
+/**
+ * App embed status for a single theme extension block (e.g. product_detail_message → product-detail-message.js).
+ * Matches editor deep-link form: `appEmbed={client_id}/{blockHandle}` e.g. `1cdf.../product_detail_message`.
+ * `type` in JSON may be `.../apps/{client_id}/blocks/{handle}/...` or `.../apps/{client_id}/{handle}/...`.
+ */
+const getThemeExtensionEnabled = async (
+  admin: any,
+  extensionHandle: string,
+  /** Liquid filename base, e.g. product_detail_message for product_detail_message.liquid */
+  blockHandle: string,
+  /** SHOPIFY_API_KEY / app client id — required to match real storefront block types */
+  appClientId: string,
+  /** App display name from shopify.app.*.toml (will be normalized to slug for matching) */
+  appName?: string,
+): Promise<boolean> => {
+  try {
+    const response = await admin.graphql(
+      `#graphql
+        query MainThemeSettingsData {
+          themes(first: 1, roles: [MAIN]) {
+            edges {
+              node {
+                files(filenames: ["config/settings_data.json"], first: 1) {
+                  nodes {
+                    ... on OnlineStoreThemeFile {
+                      body {
+                        ... on OnlineStoreThemeFileBodyText {
+                          content
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      `,
+    );
+    const json = await response.json();
+    const content =
+      json?.data?.themes?.edges?.[0]?.node?.files?.nodes?.[0]?.body?.content;
+
+    if (!content || typeof content !== "string") {
+      return false;
+    }
+
+    // Some themes may include comments in settings_data content.
+    // Strip JS-style comments before JSON.parse for compatibility.
+    const normalizedContent = content
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+    const settingsData = JSON.parse(normalizedContent);
+    const blockEntries: Array<Record<string, any>> = [];
+    collectTypedBlocks(settingsData, blockEntries);
+
+    const handleKebab = blockHandle.replace(/_/g, "-");
+    const blockPathSegments = [
+      `/blocks/${blockHandle}/`,
+      `/blocks/${handleKebab}/`,
+    ];
+
+    const appNameSlug = String(appName || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+
+    const isOurAppBlock = (blockType: string) => {
+      if (!appClientId && !extensionHandle) return false;
+      if (appClientId && blockType.includes(`/apps/${appClientId}/`)) return true;
+      if (extensionHandle && blockType.includes(`/apps/${extensionHandle}/`))
+        return true;
+      if (appNameSlug && blockType.includes(`/apps/${appNameSlug}/`)) return true;
+      return false;
+    };
+
+    const matchesEmbedFromEditorUrl = (blockType: string) => {
+      if (!appClientId) return false;
+      if (
+        blockType.includes(`/apps/${appClientId}/${blockHandle}/`) ||
+        blockType.includes(`/apps/${appClientId}/${handleKebab}/`)
+      ) {
+        return true;
+      }
+      return blockPathSegments.some((seg) => blockType.includes(seg));
+    };
+
+    for (const block of blockEntries) {
+      const blockType = String(block?.type || "");
+      const matchesBlock = matchesEmbedFromEditorUrl(blockType);
+      if (!matchesBlock) continue;
+      const matchedByApp = isOurAppBlock(blockType);
+      if (!matchedByApp) {
+        console.log("[theme-extension] skipped block from other app", {
+          extensionHandle,
+          blockHandle,
+          appClientId,
+          blockType,
+        });
+        continue;
+      }
+      const enabled = block?.disabled !== true;
+      console.log("[theme-extension] matched embed block", {
+        extensionHandle,
+        blockHandle,
+        appClientId,
+        appNameSlug,
+        blockType,
+        matchedByApp,
+        disabled: block?.disabled,
+        enabled,
+      });
+      return enabled;
+    }
+
+    console.log("[theme-extension] no matched embed block", {
+      extensionHandle,
+      blockHandle,
+      appClientId,
+      appNameSlug,
+      scannedBlockCount: blockEntries.length,
+    });
+  } catch (error) {
+    console.error("Failed to read theme extension status", error);
+  }
+
+  return false;
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
+
+  try {
+    await ensureWebPixel(admin, session.shop);
+  } catch (error) {
+    console.error("Failed to ensure web pixel exists", error);
+  }
 
   const prismaAny: any = prisma;
   const prismaOffers = await prismaAny.offer.findMany({
@@ -110,7 +341,24 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     })
     .filter((item): item is StoreProductItem => item !== null);
 
-  return Response.json({ offers, storeProducts } satisfies IndexLoaderData);
+  // product_detail_message.liquid → product-detail-message.js
+  // eslint-disable-next-line no-undef
+  const apiKey = process.env.SHOPIFY_API_KEY || "";
+  const themeExtensionEnabled = await getThemeExtensionEnabled(
+    admin,
+    "bundlev2-theme-product-custom",
+    "product_detail_message",
+    apiKey,
+    "ciwi.template.yewen",
+  );
+
+  return Response.json({
+    offers,
+    storeProducts,
+    shop: session.shop,
+    themeExtensionEnabled,
+    apiKey,
+  } satisfies IndexLoaderData);
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -547,7 +795,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 type HomeTabKey = "dashboard" | "offers" | "pricing";
 
 export default function Index() {
-  const { offers, storeProducts } = useLoaderData() as IndexLoaderData;
+  const { offers, storeProducts, shop, apiKey, themeExtensionEnabled } =
+    useLoaderData() as IndexLoaderData;
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -671,6 +920,9 @@ export default function Index() {
         <DashboardPage
           offers={offers}
           storeProducts={storeProducts}
+          shop={shop}
+          apiKey={apiKey}
+          themeExtensionEnabled={themeExtensionEnabled}
           onViewAllOffers={() => setActiveTab("offers")}
         />
       )}
