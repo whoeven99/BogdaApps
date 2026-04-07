@@ -62,9 +62,29 @@ function createTursoClient(): PrismaClient {
   return new PrismaClient({ adapter });
 }
 
+type DbTarget = "local" | "turso";
+
+/** 数据库路由：勿用 NODE_ENV（dev 下恒为 development）。见 DATABASE_TARGET。 */
+function resolveDbTarget(): DbTarget {
+  const t = process.env.DATABASE_TARGET?.trim().toLowerCase();
+  if (t === "turso" || t === "test") return "turso";
+  if (t === "local" || t === "sqlite") return "local";
+  // 未显式设置时：生产走 Turso，其余（development 等）走本地 SQLite
+  return process.env.NODE_ENV === "production" ? "turso" : "local";
+}
+
 function createPrismaClient(): PrismaClient {
-  console.log("[db] NODE_ENV=", process.env.NODE_ENV, "TURSO_URL=", process.env.TURSO_DATABASE_URL);
-  const target = process.env.NODE_ENV;
+  const target = resolveDbTarget();
+  console.log(
+    "[db] DATABASE_TARGET=",
+    process.env.DATABASE_TARGET ?? "(unset)",
+    "resolved=",
+    target,
+    "NODE_ENV=",
+    process.env.NODE_ENV,
+    "TURSO_DATABASE_URL=",
+    process.env.TURSO_DATABASE_URL ? "(set)" : undefined,
+  );
   if (target === "local") {
     if (!global.prismaLocalGlobal) {
       global.prismaLocalGlobal = new PrismaClient();
