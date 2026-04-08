@@ -25,9 +25,20 @@ function formatEuro(value) {
 
 function normalizePriceNumber(value) {
   if (value == null) return null;
-  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    // ShopifyAnalytics 常见数值是分（如 18000 表示 180.00）
+    return Number.isInteger(value) ? value / 100 : value;
+  }
   if (typeof value === "string") {
-    const n = Number(value.replace(",", ".").trim());
+    const raw = value.trim();
+    if (!raw) return null;
+    // 纯数字字符串按分处理；带小数分隔符按元处理
+    if (/^\d+$/.test(raw)) {
+      const cents = Number(raw);
+      if (Number.isFinite(cents)) return cents / 100;
+      return null;
+    }
+    const n = Number(raw.replace(",", "."));
     if (Number.isFinite(n)) return n;
   }
   return null;
@@ -266,6 +277,22 @@ function insertNearAddToCart(node, selectors) {
 
   const { container, form } = hit;
   const addBtn = form.querySelector("[name='add'], button[type='submit']");
+  const buyNowBtn = container.querySelector(
+    ".shopify-payment-button, shopify-buy-it-now-button, [data-shopify='payment-button']",
+  );
+
+  if (addBtn && buyNowBtn) {
+    // 优先找两个按钮的共同容器，并插在其前面，避免错位
+    let ancestor = addBtn.parentElement;
+    while (ancestor && ancestor !== container) {
+      if (ancestor.contains(buyNowBtn)) {
+        ancestor.insertAdjacentElement("beforebegin", node);
+        return true;
+      }
+      ancestor = ancestor.parentElement;
+    }
+  }
+
   const buttonsGroup = addBtn?.closest(
     ".product-form__buttons, .product-form__submit, .product-form__controls-group",
   );
