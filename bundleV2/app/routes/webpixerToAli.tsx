@@ -41,19 +41,37 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
+  const startedAt = Date.now();
   let data: Record<string, unknown> = {};
   try {
     const raw = await request.text();
     if (raw) data = JSON.parse(raw) as Record<string, unknown>;
-  } catch {
+  } catch (parseError) {
+    console.error("[web-pixel] webpixerToAli invalid json", {
+      parseError: String(parseError),
+    });
     return new Response(JSON.stringify({ success: false, message: "invalid json body" }), {
       status: 400,
       headers: corsHeaders,
     });
   }
 
-  console.log("[web-pixel] webpixerToAli post data: ", data);
+  const event = String(data?.event ?? "product_view");
+  const shopName = String(data?.shopName ?? "");
+  const productId = String(data?.productId ?? "");
+  const clientId = String(data?.clientId ?? "");
+  const extra = String(data?.extra ?? "{}");
 
+  console.log("[web-pixel] webpixerToAli request received", {
+    event,
+    shopName,
+    productId,
+    clientId,
+    extraLength: extra.length,
+  });
+
+  const slsProjectName = projectName();
+  const slsLogstoreName = logstoreName();
   const sls = createSlsClient();
   if (!sls) {
     console.warn(
@@ -69,8 +87,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
   }
 
-  const event = String(data?.event ?? "product_view");
-  const shopName = String(data?.shopName ?? "");
+  console.log("[web-pixel] webpixerToAli SLS config", {
+    project: slsProjectName,
+    logstore: slsLogstoreName,
+    endpoint: process.env.ALIBABA_CLOUD_ENDPOINT || "",
+    region: process.env.ALIBABA_CLOUD_REGION || "us-west-1",
+  });
 
   try {
     const logGroup = {
@@ -79,9 +101,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           content: {
             event,
             shopName,
-            productId: String(data?.productId ?? ""),
-            clientId: String(data?.clientId ?? ""),
-            extra: String(data?.extra ?? "{}"),
+            productId,
+            clientId,
+            extra,
           },
           timestamp: Math.floor(Date.now() / 1000),
         },
@@ -89,7 +111,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       topic: event,
       source: shopName,
     };
-    await sls.postLogStoreLogs(projectName(), logstoreName(), logGroup);
+    console.log("[web-pixel] webpixerToAli SLS write start", {
+      topic: logGroup.topic,
+      source: logGroup.source,
+      logsCount: logGroup.logs.length,
+      elapsedMs: Date.now() - startedAt,
+    });
+    await sls.postLogStoreLogs(slsProjectName, slsLogstoreName, logGroup);
+    console.log("[web-pixel] webpixerToAli SLS write success", {
+      elapsedMs: Date.now() - startedAt,
+    });
 
     return new Response(
       JSON.stringify({
@@ -103,7 +134,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
   } catch (error: unknown) {
     const err = error as { status?: number; message?: string };
-    console.error(`${shopName} ${event} error: `, error);
+    console.error("[web-pixel] webpixerToAli SLS write failed", {
+      shopName,
+      event,
+      elapsedMs: Date.now() - startedAt,
+      status: err?.status,
+      message: err?.message,
+      error: String(error),
+    });
     return new Response(
       JSON.stringify({
         success: false,

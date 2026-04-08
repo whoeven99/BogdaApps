@@ -15,5 +15,12 @@ declare namespace NodeJS {
     SCOPES?: string;
     SHOPIFY_APP_URL?: string;
     SHOP_CUSTOM_DOMAIN?: string;
+    /** 阿里云日志 Web Pixel 上报（webpixerToAli） */
+    ALIBABA_CLOUD_ACCESS_KEY_ID?: string;
+    ALIBABA_CLOUD_ACCESS_KEY_SECRET?: string;
+    ALIBABA_CLOUD_ENDPOINT?: string;
+    ALIBABA_CLOUD_REGION?: string;
+    ALIBABA_CLOUD_PROJECT?: string;
+    ALIBABA_CLOUD_LOGSTORE?: string;
   }
 }
