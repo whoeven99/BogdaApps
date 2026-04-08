@@ -10,7 +10,7 @@ import prisma from "./db.server";
 const CART_LINES_DISCOUNT_FUNCTION_TITLE = "10% Cart Lines Discount";
 const CART_LINES_DISCOUNT_AUTO_TITLE = "Ciwi Bundle Auto Discount";
 
-async function ensureCartLinesAutomaticDiscount(admin: any) {
+export async function ensureCartLinesAutomaticDiscount(admin: any) {
   const functionsResp = await admin.graphql(
     `#graphql
       query AppDiscountFunctions {
@@ -99,6 +99,7 @@ async function ensureCartLinesAutomaticDiscount(admin: any) {
           title: CART_LINES_DISCOUNT_AUTO_TITLE,
           functionId: targetFn.id,
           startsAt: new Date().toISOString(),
+          discountClasses: ["PRODUCT"],
           combinesWith: {
             orderDiscounts: false,
             productDiscounts: true,

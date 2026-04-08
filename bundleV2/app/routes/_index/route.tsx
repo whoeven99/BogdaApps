@@ -8,7 +8,10 @@ import {
   type LoaderFunctionArgs,
 } from "react-router";
 import { redirect } from "react-router";
-import { authenticate } from "../../shopify.server";
+import {
+  authenticate,
+  ensureCartLinesAutomaticDiscount,
+} from "../../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { DashboardPage } from "../DashboardPage";
 import { AllOffersPage } from "../AllOffersPage";
@@ -278,6 +281,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     await ensureWebPixel(admin, session.shop);
   } catch (error) {
     console.error("Failed to ensure web pixel exists", error);
+  }
+  try {
+    await ensureCartLinesAutomaticDiscount(admin);
+  } catch (error) {
+    console.error("Failed to ensure automatic app discount exists", error);
   }
 
   const prismaAny: any = prisma;
