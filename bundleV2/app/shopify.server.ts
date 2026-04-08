@@ -10,6 +10,12 @@ import prisma from "./db.server";
 const CART_LINES_DISCOUNT_FUNCTION_TITLE = "10% Cart Lines Discount";
 const CART_LINES_DISCOUNT_AUTO_TITLE = "Ciwi Bundle Auto Discount";
 
+function getAutoDiscountTitle(): string {
+  const appName = process.env.SHOPIFY_APP_NAME?.trim();
+  if (!appName) return CART_LINES_DISCOUNT_AUTO_TITLE;
+  return `${appName} - ${CART_LINES_DISCOUNT_AUTO_TITLE}`;
+}
+
 export async function ensureCartLinesAutomaticDiscount(admin: any) {
   const functionsResp = await admin.graphql(
     `#graphql
@@ -96,7 +102,7 @@ export async function ensureCartLinesAutomaticDiscount(admin: any) {
     {
       variables: {
         automaticAppDiscount: {
-          title: CART_LINES_DISCOUNT_AUTO_TITLE,
+          title: getAutoDiscountTitle(),
           functionId: targetFn.id,
           startsAt: new Date().toISOString(),
           discountClasses: ["PRODUCT"],
