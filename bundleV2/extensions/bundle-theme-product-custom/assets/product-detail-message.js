@@ -23,6 +23,44 @@ function formatEuro(value) {
   return `€${Number(value).toFixed(2).replace(".", ",")}`;
 }
 
+function normalizePriceNumber(value) {
+  if (value == null) return null;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const n = Number(value.replace(",", ".").trim());
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+function getSelectedVariantId() {
+  const input = document.querySelector("form[action*='/cart/add'] input[name='id']");
+  if (!input) return "";
+  return String(input.value || "").trim();
+}
+
+function getCurrentUnitPrice() {
+  const productMeta = window?.ShopifyAnalytics?.meta?.product;
+  if (!productMeta || typeof productMeta !== "object") return 100;
+
+  const selectedVariantId = getSelectedVariantId();
+  const variants = Array.isArray(productMeta.variants) ? productMeta.variants : [];
+
+  if (selectedVariantId && variants.length) {
+    const matched = variants.find((v) => String(v?.id || "") === selectedVariantId);
+    const matchedPrice = normalizePriceNumber(matched?.price);
+    if (matchedPrice != null) return matchedPrice;
+  }
+
+  const productPrice = normalizePriceNumber(productMeta.price);
+  if (productPrice != null) return productPrice;
+
+  const firstVariantPrice = normalizePriceNumber(variants[0]?.price);
+  if (firstVariantPrice != null) return firstVariantPrice;
+
+  return 100;
+}
+
 function parseDiscountRulesJson(discountRulesJson) {
   try {
     let parsed = discountRulesJson;
@@ -111,7 +149,7 @@ function renderBundlePreviewHtml(offer) {
   if (!discountRules.length) return "";
 
   const layoutFormat = "vertical";
-  const unitPrice = 100;
+  const unitPrice = getCurrentUnitPrice();
   const items = [
     {
       title: "Single",
@@ -228,6 +266,16 @@ function insertNearAddToCart(node, selectors) {
 
   const { container, form } = hit;
   const addBtn = form.querySelector("[name='add'], button[type='submit']");
+  const buttonsGroup = addBtn?.closest(
+    ".product-form__buttons, .product-form__submit, .product-form__controls-group",
+  );
+
+  // 优先插在按钮组前，避免插到 Add 和 Buy now 两个按钮中间
+  if (buttonsGroup) {
+    buttonsGroup.insertAdjacentElement("beforebegin", node);
+    return true;
+  }
+
   if (addBtn) {
     addBtn.insertAdjacentElement("beforebegin", node);
     return true;
