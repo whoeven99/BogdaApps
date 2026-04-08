@@ -237,6 +237,8 @@ const getThemeExtensionEnabled = async (
           extensionHandle,
           blockHandle,
           appClientId,
+          appName,
+          appNameSlug,
           blockType,
         });
         continue;
@@ -345,7 +347,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // eslint-disable-next-line no-undef
   const apiKey = process.env.SHOPIFY_API_KEY || "";
   const appDisplayName =
-    process.env.SHOPIFY_APP_NAME || process.env.APP_NAME || "Ciwi:bundlev2(Test)";
+    process.env.SHOPIFY_APP_NAME || process.env.APP_NAME;
   const themeExtensionEnabled = await getThemeExtensionEnabled(
     admin,
     "bundlev2-theme-product-custom",
