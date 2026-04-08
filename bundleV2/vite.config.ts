@@ -1,3 +1,5 @@
+import "dotenv/config";
+
 import { reactRouter } from "@react-router/dev/vite";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig, type UserConfig } from "vite";
@@ -38,7 +40,10 @@ if (host === "localhost") {
 
 export default defineConfig({
   server: {
-    allowedHosts: [host],
+    // 避免 Windows 上 cloudflared 连 127.0.0.1 / ::1 与 Vite 默认只绑 localhost 不一致导致隧道 502
+    host: true,
+    // 允许 cloudflared 生成的临时二级域名访问（如 xxx.trycloudflare.com）
+    allowedHosts: [host, "localhost", "127.0.0.1", ".trycloudflare.com"],
     cors: {
       preflightContinue: true,
     },
