@@ -14,7 +14,7 @@ async function ensureCartLinesAutomaticDiscount(admin: any) {
   const functionsResp = await admin.graphql(
     `#graphql
       query AppDiscountFunctions {
-        shopifyFunctions(first: 100, apiType: DISCOUNT) {
+        shopifyFunctions(first: 100) {
           nodes {
             id
             title
