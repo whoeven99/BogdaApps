@@ -8,7 +8,10 @@ import {
   type LoaderFunctionArgs,
 } from "react-router";
 import { redirect } from "react-router";
-import { authenticate } from "../../shopify.server";
+import {
+  authenticate,
+  ensureCartLinesAutomaticDiscount,
+} from "../../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { DashboardPage } from "../DashboardPage";
 import { AllOffersPage } from "../AllOffersPage";
@@ -237,6 +240,8 @@ const getThemeExtensionEnabled = async (
           extensionHandle,
           blockHandle,
           appClientId,
+          appName,
+          appNameSlug,
           blockType,
         });
         continue;
@@ -276,6 +281,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     await ensureWebPixel(admin, session.shop);
   } catch (error) {
     console.error("Failed to ensure web pixel exists", error);
+  }
+  try {
+    await ensureCartLinesAutomaticDiscount(admin);
+  } catch (error) {
+    console.error("Failed to ensure automatic app discount exists", error);
   }
 
   const prismaAny: any = prisma;
@@ -344,12 +354,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // product_detail_message.liquid → product-detail-message.js
   // eslint-disable-next-line no-undef
   const apiKey = process.env.SHOPIFY_API_KEY || "";
+  const appDisplayName =
+    process.env.SHOPIFY_APP_NAME || process.env.APP_NAME;
   const themeExtensionEnabled = await getThemeExtensionEnabled(
     admin,
     "bundlev2-theme-product-custom",
     "product_detail_message",
     apiKey,
-    "ciwi.template.yewen",
+    appDisplayName,
   );
 
   return Response.json({
