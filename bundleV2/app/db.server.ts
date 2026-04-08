@@ -69,8 +69,10 @@ function resolveDbTarget(): DbTarget {
   const t = process.env.DATABASE_TARGET?.trim().toLowerCase();
   if (t === "turso" || t === "test") return "turso";
   if (t === "local" || t === "sqlite") return "local";
-  // 未显式设置时：生产走 Turso，其余（development 等）走本地 SQLite
-  return process.env.NODE_ENV === "production" ? "turso" : "local";
+  // 未显式设置时：prod/test 走 Turso，其余（development 等）走本地 SQLite
+  return process.env.NODE_ENV === "prod" || process.env.NODE_ENV === "test"
+    ? "turso"
+    : "local";
 }
 
 function createPrismaClient(): PrismaClient {
