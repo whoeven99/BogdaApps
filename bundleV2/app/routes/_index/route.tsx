@@ -344,12 +344,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // product_detail_message.liquid → product-detail-message.js
   // eslint-disable-next-line no-undef
   const apiKey = process.env.SHOPIFY_API_KEY || "";
+  const appDisplayName =
+    process.env.SHOPIFY_APP_NAME || process.env.APP_NAME || "Ciwi:bundlev2(Test)";
   const themeExtensionEnabled = await getThemeExtensionEnabled(
     admin,
     "bundlev2-theme-product-custom",
     "product_detail_message",
     apiKey,
-    "ciwi.template.yewen",
+    appDisplayName,
   );
 
   return Response.json({
