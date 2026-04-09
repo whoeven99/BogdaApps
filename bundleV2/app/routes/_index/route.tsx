@@ -17,7 +17,12 @@ import { DashboardPage } from "../DashboardPage";
 import { AllOffersPage } from "../AllOffersPage";
 import { PricingPage } from "../PricingPage";
 import { CreateNewOffer } from "../component/CreateNewOffer";
+import { Prisma } from "@prisma/client";
 import prisma from "../../db.server";
+import {
+  getCachedShopOffers,
+  invalidateShopOffersCache,
+} from "../../shopOffersCache.server";
 
 type OfferListItem = {
   id: string;
@@ -274,6 +279,11 @@ const getThemeExtensionEnabled = async (
   return false;
 };
 
+/** 同一店铺内名称去重：忽略大小写与连续空白 */
+function normalizeOfferNameKey(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
 
@@ -288,12 +298,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.error("Failed to ensure automatic app discount exists", error);
   }
 
-  const prismaAny: any = prisma;
-  const prismaOffers = await prismaAny.offer.findMany({
-    orderBy: { createdAt: "desc" },
-  });
-
-  const offers = prismaOffers as OfferListItem[];
+  const prismaOffers = await getCachedShopOffers(session.shop);
+  const offers = prismaOffers as unknown as OfferListItem[];
 
   const productsResponse = await admin.graphql(
     `#graphql
@@ -418,7 +424,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (intent === "create-offer" || intent === "update-offer") {
     const idRaw = String(formData.get("offerId") || "").trim();
-    const nameRaw = String(formData.get("name") || "");
+    const nameRaw = String(
+      formData.get("offerName") ?? formData.get("name") ?? "",
+    );
     const name = nameRaw.trim();
     const offerType = String(formData.get("offerType") || "").trim();
     const layoutFormat = String(formData.get("layoutFormat") || "")
@@ -472,13 +480,30 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return new Response("Missing required schedule fields", { status: 400 });
     }
 
+    const nameKey = normalizeOfferNameKey(name);
+    const siblingOffers = await prismaAny.offer.findMany({
+      where: { shopName },
+      select: { id: true, name: true },
+    });
+    const nameTaken = siblingOffers.some(
+      (o: { id: string; name: string }) =>
+        normalizeOfferNameKey(o.name) === nameKey &&
+        (intent === "create-offer" || o.id !== idRaw),
+    );
+    if (nameTaken) {
+      return new Response(
+        "An offer with this name already exists for this shop.",
+        { status: 409 },
+      );
+    }
+
     const startTime = new Date(startTimeRaw);
     const endTime = new Date(endTimeRaw);
 
     const data = {
       shopName,
-      // 保留中间空格（validation 用 trim 后的 name）
-      name: nameRaw,
+      // 去掉首尾空白，保留名称中间空格（避免编码/解析边界问题）
+      name,
       offerType,
       startTime,
       endTime,
@@ -494,6 +519,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         await writeOfferWithRetry(() => prismaAny.offer.create({ data }));
         url.searchParams.set("toast", "create-success");
       } catch (error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2002"
+        ) {
+          return new Response(
+            "An offer with this name already exists for this shop.",
+            { status: 409 },
+          );
+        }
         console.error("offer create failed", {
           error,
           form: {
@@ -523,6 +557,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         );
         url.searchParams.set("toast", "update-success");
       } catch (error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2002"
+        ) {
+          return new Response(
+            "An offer with this name already exists for this shop.",
+            { status: 409 },
+          );
+        }
         console.error("offer update failed", {
           error,
           form: {
@@ -624,6 +667,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       console.error("Failed to sync offers metafield", error);
     }
 
+    invalidateShopOffersCache(shopName);
+
     return redirect(url.pathname + "?" + url.searchParams.toString());
   }
 
@@ -704,6 +749,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     } catch (error) {
       console.error("Failed to sync offers metafield after toggle", error);
+    }
+
+    if (updatedOffer?.shopName) {
+      invalidateShopOffersCache(String(updatedOffer.shopName));
     }
 
     const url = new URL(request.url);
@@ -791,6 +840,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     } catch (error) {
       console.error("Failed to sync offers metafield after delete", error);
+    }
+
+    if (shopNameToSync) {
+      invalidateShopOffersCache(shopNameToSync);
     }
 
     const url = new URL(request.url);
@@ -948,6 +1001,7 @@ export default function Index() {
         <CreateNewOffer
           onBack={() => setShowCreateOffer(false)}
           storeProducts={storeProducts}
+          existingOffers={offers.map((o) => ({ id: o.id, name: o.name }))}
         />
       )}
       {activeTab === "pricing" && <PricingPage />}

@@ -34,6 +34,12 @@ interface CreateNewOfferProps {
   onBack?: () => void;
   initialOffer?: InitialOffer;
   storeProducts?: Product[];
+  /** 当前店铺已有 offers，用于名称重复校验（与后台 normalize 规则一致） */
+  existingOffers?: Array<{ id: string; name: string }>;
+}
+
+function normalizeOfferNameKey(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 function formatForDateTimeLocal(value: string | Date) {
@@ -202,6 +208,7 @@ export function CreateNewOffer({
   onBack,
   initialOffer,
   storeProducts = [],
+  existingOffers = [],
 }: CreateNewOfferProps) {
   const baseUnitPrice = 100;
   const formatPreviewPrice = (value: number) =>
@@ -303,7 +310,25 @@ export function CreateNewOffer({
   );
 
   return (
-    <Form className="polaris-page create-offer-page" method="post">
+    <Form
+      className="polaris-page create-offer-page"
+      method="post"
+      onSubmit={(e) => {
+        const key = normalizeOfferNameKey(offerName);
+        const taken = existingOffers.some(
+          (o) =>
+            normalizeOfferNameKey(o.name) === key &&
+            o.id !== initialOffer?.id,
+        );
+        if (taken) {
+          e.preventDefault();
+          setOfferNameError(
+            "An offer with this name already exists. Choose another name.",
+          );
+          setStep(1);
+        }
+      }}
+    >
       <div className="polaris-page__header">
         <div>
           <button
@@ -328,8 +353,8 @@ export function CreateNewOffer({
         <input type="hidden" name="offerId" value={initialOffer.id} />
       )}
       {/* 始终提交的核心字段（即使对应输入步骤已切换隐藏） */}
-      {/* 保留 offer name 中间的空格（避免某些情况下 trim 触发不符合预期的问题） */}
-      <input type="hidden" name="name" value={offerName} />
+      {/* 使用 offerName 避免与表单语义字段 name 冲突；中间空格由服务端 trim 首尾后落库 */}
+      <input type="hidden" name="offerName" value={offerName} />
       <input type="hidden" name="offerType" value={offerType} />
       <input type="hidden" name="layoutFormat" value={layoutFormat} />
       <input
@@ -1379,6 +1404,18 @@ export function CreateNewOffer({
             if (step === 1) {
               if (!offerName.trim()) {
                 setOfferNameError("Offer Name is required.");
+                return;
+              }
+              const key = normalizeOfferNameKey(offerName);
+              const taken = existingOffers.some(
+                (o) =>
+                  normalizeOfferNameKey(o.name) === key &&
+                  o.id !== initialOffer?.id,
+              );
+              if (taken) {
+                setOfferNameError(
+                  "An offer with this name already exists. Choose another name.",
+                );
                 return;
               }
               setOfferNameError("");

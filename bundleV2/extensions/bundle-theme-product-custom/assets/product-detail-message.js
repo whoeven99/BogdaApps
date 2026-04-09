@@ -131,18 +131,21 @@ function getCurrentProductGid() {
 function getCurrentOffer(offersConfig) {
   const offers = Array.isArray(offersConfig?.offers) ? offersConfig.offers : [];
   const currentProductGid = getCurrentProductGid();
-  const validOffers = [];
 
   console.log("[ciwi] offers total:", offers.length, "currentProductGid:", currentProductGid);
+
+  if (!offers.length) {
+    console.log("[ciwi] no offers in metafield — skip bundle UI");
+    return null;
+  }
 
   for (const offer of offers) {
     if (!offer || typeof offer !== "object") continue;
     const discountRules = parseDiscountRulesJson(offer.discountRulesJson);
     if (!discountRules.length) continue;
-    validOffers.push(offer);
 
     const selectedIds = parseSelectedProductIds(offer.selectedProductsJson);
-    // 指定了商品列表时，优先按当前商品精准匹配
+    // 指定了商品列表时，仅当前商品命中才展示
     if (selectedIds.length > 0) {
       if (!currentProductGid) continue;
       if (!selectedIds.includes(currentProductGid)) continue;
@@ -150,9 +153,9 @@ function getCurrentOffer(offersConfig) {
 
     return offer;
   }
-  // 回退：至少展示一个有效 offer，避免整块 UI 消失
-  console.log("[ciwi] valid offers total:", validOffers.length);
-  return validOffers[0] || null;
+
+  console.log("[ciwi] no matching offer for current product — skip bundle UI");
+  return null;
 }
 
 function renderBundlePreviewHtml(offer) {
@@ -371,7 +374,6 @@ function run() {
 
     const currentOffer = getCurrentOffer(offersConfigCache);
     if (!currentOffer) {
-      console.log("[ciwi] no current offer resolved");
       return;
     }
 
