@@ -35,11 +35,9 @@ model Session {
 
 model Offer {
   id        String   @id @default(cuid())
-
-  // Which Shopify shop this offer belongs to (domain-style "shop")
   shopName String @default("")
 
-  // Status
+  // Status 是否生效
   status Boolean @default(false)
 
   // Basic Information
@@ -60,4 +58,6 @@ model Offer {
   // Timestamps
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@unique([shopName, name])
 }

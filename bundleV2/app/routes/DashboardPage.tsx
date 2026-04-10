@@ -35,6 +35,15 @@ type DashboardOfferRow = {
   conversion: number;
 };
 
+type GmvOverviewMetrics = {
+  totalGmv: number;
+  conversion: number;
+  visitor: number;
+  bundleOrders: number;
+  exposurePv: number;
+  orderPv: number;
+};
+
 const mockAbTests = [
   {
     id: 1,
@@ -147,6 +156,73 @@ export function DashboardPage({
   const toast = searchParams.get("toast");
 
   useEffect(() => {
+    if (toast === "delete-success") {
+      setDeletingOffer(null);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const now = new Date();
+    const from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    const query = new URLSearchParams({
+      mode: "overview",
+      shopName: shop,
+      from: from.toISOString(),
+      to: now.toISOString(),
+    });
+
+    const run = async () => {
+      try {
+        const response = await fetch(`/webpixerToAli?${query.toString()}`, {
+          method: "GET",
+          signal: controller.signal,
+        });
+        const data = (await response.json().catch(() => ({}))) as {
+          success?: boolean;
+          message?: string;
+          metrics?: GmvOverviewMetrics;
+          range?: { from?: string; to?: string };
+          logsFetched?: number;
+        };
+
+        if (!response.ok || !data.success) {
+          console.error("[dashboard][gmv-overview] query failed", {
+            status: response.status,
+            message: data?.message || "unknown error",
+            shop,
+            range: data?.range,
+          });
+          return;
+        }
+
+        console.log("[dashboard][gmv-overview] metrics", {
+          shop,
+          range: data.range,
+          logsFetched: data.logsFetched ?? 0,
+          totalGmv: data.metrics?.totalGmv ?? 0,
+          conversion: data.metrics?.conversion ?? 0,
+          visitor: data.metrics?.visitor ?? 0,
+          bundleOrders: data.metrics?.bundleOrders ?? 0,
+          exposurePv: data.metrics?.exposurePv ?? 0,
+          orderPv: data.metrics?.orderPv ?? 0,
+        });
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        console.error("[dashboard][gmv-overview] query exception", {
+          shop,
+          error: String(error),
+        });
+      }
+    };
+
+    run();
+
+    return () => controller.abort();
+  }, [shop]);
+
+  useEffect(() => {
     if (
       toast === "create-success" ||
       toast === "update-success" ||
@@ -169,6 +245,10 @@ export function DashboardPage({
           onBack={() => setShowCreateOffer(false)}
           initialOffer={editingOffer}
           storeProducts={storeProducts}
+          existingOffers={(offers ?? []).map((o) => ({
+            id: o.id,
+            name: o.name,
+          }))}
         />
       </div>
     );

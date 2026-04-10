@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import { Form } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import { useFetcher, useNavigate, useSearchParams } from "react-router";
 import {
   X,
 } from "lucide-react";
@@ -34,6 +34,26 @@ interface CreateNewOfferProps {
   onBack?: () => void;
   initialOffer?: InitialOffer;
   storeProducts?: Product[];
+  /** 当前店铺已有 offers，用于名称重复校验（与后台 normalize 规则一致） */
+  existingOffers?: Array<{ id: string; name: string }>;
+}
+
+/** 与 `_index/route` action 错误响应一致，避免从 route 循环引用 */
+type OfferActionErrorBody = {
+  _offerActionError: true;
+  message: string;
+};
+
+function isOfferActionErrorBody(data: unknown): data is OfferActionErrorBody {
+  if (typeof data !== "object" || data === null) return false;
+  const o = data as Record<string, unknown>;
+  return (
+    o._offerActionError === true && typeof o.message === "string"
+  );
+}
+
+function normalizeOfferNameKey(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 function formatForDateTimeLocal(value: string | Date) {
@@ -77,6 +97,19 @@ function parseSelectedProductIds(
   }
 }
 
+function sanitizeHexColor(raw: unknown, fallback: string): string {
+  const t = String(raw ?? "").trim();
+  if (/^#[0-9A-Fa-f]{6}$/.test(t)) return t.toLowerCase();
+  if (/^#[0-9A-Fa-f]{3}$/.test(t)) {
+    const r = t[1];
+    const g = t[2];
+    const b = t[3];
+    return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
+  }
+  if (/^#[0-9A-Fa-f]{8}$/.test(t)) return `#${t.slice(1, 7)}`.toLowerCase();
+  return fallback;
+}
+
 function parseOfferSettings(
   offerSettingsJson?: string | null,
 ): {
@@ -86,6 +119,8 @@ function parseOfferSettings(
   customerSegments: string | null;
   markets: string | null;
   usageLimitPerCustomer: string;
+  accentColor: string;
+  cardBackgroundColor: string;
 } {
   if (!offerSettingsJson) {
     return {
@@ -95,6 +130,8 @@ function parseOfferSettings(
       customerSegments: null,
       markets: null,
       usageLimitPerCustomer: "unlimited",
+      accentColor: "#008060",
+      cardBackgroundColor: "#ffffff",
     };
   }
 
@@ -106,6 +143,8 @@ function parseOfferSettings(
       customerSegments: string | null;
       markets: string | null;
       usageLimitPerCustomer: string;
+      accentColor?: string;
+      cardBackgroundColor?: string;
     }>;
 
     return {
@@ -121,6 +160,11 @@ function parseOfferSettings(
       markets: parsed.markets !== undefined ? parsed.markets : null,
       usageLimitPerCustomer:
         parsed.usageLimitPerCustomer ?? "unlimited",
+      accentColor: sanitizeHexColor(parsed.accentColor, "#008060"),
+      cardBackgroundColor: sanitizeHexColor(
+        parsed.cardBackgroundColor,
+        "#ffffff",
+      ),
     };
   } catch {
     return {
@@ -130,6 +174,8 @@ function parseOfferSettings(
       customerSegments: null,
       markets: null,
       usageLimitPerCustomer: "unlimited",
+      accentColor: "#008060",
+      cardBackgroundColor: "#ffffff",
     };
   }
 }
@@ -202,7 +248,32 @@ export function CreateNewOffer({
   onBack,
   initialOffer,
   storeProducts = [],
+  existingOffers = [],
 }: CreateNewOfferProps) {
+  const fetcher = useFetcher();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [submitErrorToast, setSubmitErrorToast] = useState<string | null>(null);
+  const wasSubmittingRef = useRef(false);
+
+  useEffect(() => {
+    if (fetcher.state === "submitting") {
+      setSubmitErrorToast(null);
+      wasSubmittingRef.current = true;
+      return;
+    }
+    if (fetcher.state !== "idle" || !wasSubmittingRef.current) return;
+    wasSubmittingRef.current = false;
+    const data = fetcher.data;
+    if (!isOfferActionErrorBody(data)) return;
+    setSubmitErrorToast(data.message);
+    // 去掉 URL 里的成功 toast，避免保存失败时仍显示绿色「创建/更新成功」
+    const next = new URLSearchParams(searchParams);
+    next.delete("toast");
+    const qs = next.toString();
+    navigate({ search: qs ? `?${qs}` : "" }, { replace: true });
+  }, [fetcher.state, fetcher.data, navigate, searchParams]);
+
   const baseUnitPrice = 100;
   const formatPreviewPrice = (value: number) =>
     `€${value.toFixed(2).replace(".", ",")}`;
@@ -255,8 +326,10 @@ export function CreateNewOffer({
   const [layoutFormat, setLayoutFormat] = useState<
     "vertical" | "horizontal" | "card" | "compact"
   >(offerSettings.layoutFormat);
-  const [cardBackgroundColor, setCardBackgroundColor] = useState("#ffffff");
-  const [accentColor, setAccentColor] = useState("#008060");
+  const [cardBackgroundColor, setCardBackgroundColor] = useState(
+    offerSettings.cardBackgroundColor,
+  );
+  const [accentColor, setAccentColor] = useState(offerSettings.accentColor);
   const [showProductModal, setShowProductModal] = useState(false);
   const [productSearch, setProductSearch] = useState("");
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>(
@@ -303,7 +376,57 @@ export function CreateNewOffer({
   );
 
   return (
-    <Form className="polaris-page create-offer-page" method="post">
+    <fetcher.Form
+      className="polaris-page create-offer-page"
+      method="post"
+      onSubmit={(e) => {
+        const key = normalizeOfferNameKey(offerName);
+        const taken = existingOffers.some(
+          (o) =>
+            normalizeOfferNameKey(o.name) === key &&
+            o.id !== initialOffer?.id,
+        );
+        if (taken) {
+          e.preventDefault();
+          setOfferNameError(
+            "An offer with this name already exists. Choose another name.",
+          );
+          setStep(1);
+          return;
+        }
+
+        // 非最后一步一律不提交：防止 Enter、隐式提交或按钮 type 切换导致误保存
+        if (step !== 4) {
+          e.preventDefault();
+          return;
+        }
+
+        let hasError = false;
+        if (!startTime) {
+          setStartTimeError("Start Time is required.");
+          hasError = true;
+        } else {
+          setStartTimeError("");
+        }
+        if (!endTime) {
+          setEndTimeError("End Time is required.");
+          hasError = true;
+        } else {
+          setEndTimeError("");
+        }
+        if (hasError) {
+          e.preventDefault();
+        }
+      }}
+    >
+      {submitErrorToast && (
+        <div
+          className="fixed z-50 top-4 left-1/2 -translate-x-1/2 bg-[#d72c0d] text-white px-4 py-2 rounded shadow-lg text-sm font-['Inter'] max-w-[min(520px,calc(100vw-32px))] text-center"
+          role="alert"
+        >
+          {submitErrorToast}
+        </div>
+      )}
       <div className="polaris-page__header">
         <div>
           <button
@@ -328,10 +451,16 @@ export function CreateNewOffer({
         <input type="hidden" name="offerId" value={initialOffer.id} />
       )}
       {/* 始终提交的核心字段（即使对应输入步骤已切换隐藏） */}
-      {/* 保留 offer name 中间的空格（避免某些情况下 trim 触发不符合预期的问题） */}
-      <input type="hidden" name="name" value={offerName} />
+      {/* 使用 offerName 避免与表单语义字段 name 冲突；中间空格由服务端 trim 首尾后落库 */}
+      <input type="hidden" name="offerName" value={offerName} />
       <input type="hidden" name="offerType" value={offerType} />
       <input type="hidden" name="layoutFormat" value={layoutFormat} />
+      <input type="hidden" name="accentColor" value={accentColor} />
+      <input
+        type="hidden"
+        name="cardBackgroundColor"
+        value={cardBackgroundColor}
+      />
       <input
         type="hidden"
         name="selectedProductsJson"
@@ -1367,6 +1496,7 @@ export function CreateNewOffer({
         {step > 1 && (
           <button
             className="polaris-button polaris-button--plain"
+            disabled={fetcher.state !== "idle"}
             onClick={() => setStep(step - 1)}
             type="button"
           >
@@ -1375,10 +1505,23 @@ export function CreateNewOffer({
         )}
         <button
           className="polaris-button"
+          disabled={fetcher.state !== "idle"}
           onClick={() => {
             if (step === 1) {
               if (!offerName.trim()) {
                 setOfferNameError("Offer Name is required.");
+                return;
+              }
+              const key = normalizeOfferNameKey(offerName);
+              const taken = existingOffers.some(
+                (o) =>
+                  normalizeOfferNameKey(o.name) === key &&
+                  o.id !== initialOffer?.id,
+              );
+              if (taken) {
+                setOfferNameError(
+                  "An offer with this name already exists. Choose another name.",
+                );
                 return;
               }
               setOfferNameError("");
@@ -1388,38 +1531,21 @@ export function CreateNewOffer({
 
             if (step < 4) {
               setStep(step + 1);
-              return;
             }
-
-            // step === 4, validate schedule fields before creating
-            let hasError = false;
-            if (!startTime) {
-              setStartTimeError("Start Time is required.");
-              hasError = true;
-            } else {
-              setStartTimeError("");
-            }
-            if (!endTime) {
-              setEndTimeError("End Time is required.");
-              hasError = true;
-            } else {
-              setEndTimeError("");
-            }
-
-            if (hasError) {
-              return;
-            }
+            // 第 4 步由表单 onSubmit 校验并提交，不在此处校验（避免校验失败仍触发 submit）
           }}
           type={step === 4 ? "submit" : "button"}
         >
-          {step === 4
-            ? initialOffer
-              ? "Update Offer"
-              : "Create Offer"
-            : "Next"}
+          {fetcher.state !== "idle"
+            ? "Saving…"
+            : step === 4
+              ? initialOffer
+                ? "Update Offer"
+                : "Create Offer"
+              : "Next"}
         </button>
       </div>
-    </Form>
+    </fetcher.Form>
   );
 }
 

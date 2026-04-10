@@ -10,6 +10,12 @@ query CartInput {
       }
       merchandise {
         __typename
+        ... on ProductVariant {
+          id
+          product {
+            id
+          }
+        }
       }
     }
   }

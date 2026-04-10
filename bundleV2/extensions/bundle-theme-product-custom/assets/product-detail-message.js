@@ -9,6 +9,8 @@ const DEFAULT_SELECTORS = [
 
 const RETRY_MS = 12_000;
 let offersConfigCache = null;
+let priceSyncController = null;
+let bundlePriceDebounceT = null;
 
 function esc(value) {
   return String(value ?? "")
@@ -44,30 +46,116 @@ function normalizePriceNumber(value) {
   return null;
 }
 
+/** 从主题页面上展示的金额文案解析单价（随变体切换而变） */
+function parseMoneyFromDomString(text) {
+  if (!text || typeof text !== "string") return null;
+  const t = text.replace(/\u00a0/g, " ").trim();
+  const stripped = t.replace(/[€$£¥₹\s]/gi, "").trim();
+  if (!stripped) return null;
+  // 1.234,56（欧陆）
+  if (/^\d{1,3}(\.\d{3})*,\d{1,2}$/.test(stripped)) {
+    const n = Number(stripped.replace(/\./g, "").replace(",", "."));
+    return Number.isFinite(n) ? n : null;
+  }
+  // 1,234.56（美英）
+  if (/^\d{1,3}(,\d{3})*\.\d{1,2}$/.test(stripped)) {
+    const n = Number(stripped.replace(/,/g, ""));
+    return Number.isFinite(n) ? n : null;
+  }
+  // 12,99 或 12.99
+  if (/,\d{1,2}$/.test(stripped)) {
+    const n = Number(stripped.replace(/\./g, "").replace(",", "."));
+    return Number.isFinite(n) ? n : null;
+  }
+  const n = Number(stripped.replace(/,/g, ""));
+  return Number.isFinite(n) ? n : null;
+}
+
+function getAddToCartForm() {
+  return document.querySelector("form[action*='/cart/add']");
+}
+
 function getSelectedVariantId() {
-  const input = document.querySelector("form[action*='/cart/add'] input[name='id']");
+  const form = getAddToCartForm();
+  const input = form?.querySelector("input[name='id']");
   if (!input) return "";
   return String(input.value || "").trim();
 }
 
+function isPriceElementVisible(el) {
+  if (!el || !(el instanceof Element)) return false;
+  const st = window.getComputedStyle(el);
+  if (st.display === "none" || st.visibility === "hidden" || Number(st.opacity) === 0) {
+    return false;
+  }
+  if (el.closest(".visually-hidden, .hidden, [hidden], template")) return false;
+  return true;
+}
+
+/**
+ * 从当前产品区 DOM 读取「单件价」（优先促销价），与主题变体切换同步
+ */
+function getUnitPriceFromProductDom() {
+  const form = getAddToCartForm();
+  const root =
+    form?.closest(".product, .product-section, product-info, [id^='ProductInfo'], main") ||
+    document.querySelector("main") ||
+    document.body;
+
+  const trySelectors = [
+    ".price .price-item--sale .money",
+    ".price__sale .money",
+    ".price-item--sale .money",
+    "[data-product-price-sale]",
+    ".price .price-item--regular .money",
+    ".price__regular .money",
+    ".price-item--regular .money",
+    ".product__price .money",
+    ".price .money",
+    "[data-product-price]",
+    "sale-price .money",
+  ];
+
+  for (const sel of trySelectors) {
+    const nodes = root.querySelectorAll(sel);
+    for (let i = 0; i < nodes.length; i++) {
+      const el = nodes[i];
+      if (!isPriceElementVisible(el)) continue;
+      const p = parseMoneyFromDomString(el.textContent || "");
+      if (p != null && p > 0) return p;
+    }
+  }
+  return null;
+}
+
 function getCurrentUnitPrice() {
   const productMeta = window?.ShopifyAnalytics?.meta?.product;
-  if (!productMeta || typeof productMeta !== "object") return 100;
-
   const selectedVariantId = getSelectedVariantId();
-  const variants = Array.isArray(productMeta.variants) ? productMeta.variants : [];
+  const variants =
+    productMeta && typeof productMeta === "object" && Array.isArray(productMeta.variants)
+      ? productMeta.variants
+      : [];
 
-  if (selectedVariantId && variants.length) {
-    const matched = variants.find((v) => String(v?.id || "") === selectedVariantId);
-    const matchedPrice = normalizePriceNumber(matched?.price);
-    if (matchedPrice != null) return matchedPrice;
+  // 1) 页面上顾客看到的单价（随变体/样式切换更新，优先）
+  const domPrice = getUnitPriceFromProductDom();
+  if (domPrice != null) return domPrice;
+
+  // 2) Analytics 里按当前 variant id 匹配
+  if (productMeta && typeof productMeta === "object") {
+    if (selectedVariantId && variants.length) {
+      const matched = variants.find(
+        (v) => String(v?.id || "") === selectedVariantId,
+      );
+      const matchedPrice = normalizePriceNumber(matched?.price);
+      if (matchedPrice != null) return matchedPrice;
+    }
+
+    const productPrice = normalizePriceNumber(productMeta.price);
+    if (productPrice != null) return productPrice;
+
+    const firstVariantPrice = normalizePriceNumber(variants[0]?.price);
+    if (firstVariantPrice != null) return firstVariantPrice;
   }
-
-  const productPrice = normalizePriceNumber(productMeta.price);
-  if (productPrice != null) return productPrice;
-
-  const firstVariantPrice = normalizePriceNumber(variants[0]?.price);
-  if (firstVariantPrice != null) return firstVariantPrice;
 
   return 100;
 }
@@ -131,18 +219,21 @@ function getCurrentProductGid() {
 function getCurrentOffer(offersConfig) {
   const offers = Array.isArray(offersConfig?.offers) ? offersConfig.offers : [];
   const currentProductGid = getCurrentProductGid();
-  const validOffers = [];
 
   console.log("[ciwi] offers total:", offers.length, "currentProductGid:", currentProductGid);
+
+  if (!offers.length) {
+    console.log("[ciwi] no offers in metafield — skip bundle UI");
+    return null;
+  }
 
   for (const offer of offers) {
     if (!offer || typeof offer !== "object") continue;
     const discountRules = parseDiscountRulesJson(offer.discountRulesJson);
     if (!discountRules.length) continue;
-    validOffers.push(offer);
 
     const selectedIds = parseSelectedProductIds(offer.selectedProductsJson);
-    // 指定了商品列表时，优先按当前商品精准匹配
+    // 指定了商品列表时，仅当前商品命中才展示
     if (selectedIds.length > 0) {
       if (!currentProductGid) continue;
       if (!selectedIds.includes(currentProductGid)) continue;
@@ -150,9 +241,9 @@ function getCurrentOffer(offersConfig) {
 
     return offer;
   }
-  // 回退：至少展示一个有效 offer，避免整块 UI 消失
-  console.log("[ciwi] valid offers total:", validOffers.length);
-  return validOffers[0] || null;
+
+  console.log("[ciwi] no matching offer for current product — skip bundle UI");
+  return null;
 }
 
 function renderBundlePreviewHtml(offer) {
@@ -331,6 +422,70 @@ function buildBundleUi(offer) {
   return wrapper;
 }
 
+function scheduleBundlePriceRefresh(offer) {
+  if (!offer) return;
+  if (bundlePriceDebounceT != null) clearTimeout(bundlePriceDebounceT);
+  // 略延迟：不少主题先改 variant input，再在下一帧更新 .price DOM
+  bundlePriceDebounceT = setTimeout(() => {
+    bundlePriceDebounceT = null;
+    const wrap = document.querySelector(".ciwi-bundle-wrapper");
+    if (!wrap) return;
+    const html = renderBundlePreviewHtml(offer);
+    if (html) wrap.innerHTML = html;
+  }, 64);
+}
+
+function detachBundlePriceSync() {
+  if (bundlePriceDebounceT != null) {
+    clearTimeout(bundlePriceDebounceT);
+    bundlePriceDebounceT = null;
+  }
+  if (priceSyncController) {
+    priceSyncController.abort();
+    priceSyncController = null;
+  }
+}
+
+/** 变体 / 样式切换后重算 bundle 展示价（与页面主价格区同步） */
+function attachBundlePriceSync(offer) {
+  detachBundlePriceSync();
+  const ac = new AbortController();
+  priceSyncController = ac;
+  const { signal } = ac;
+
+  const refresh = () => scheduleBundlePriceRefresh(offer);
+
+  document.addEventListener("variant:change", refresh, { signal });
+  document.addEventListener("shopify:variant:change", refresh, { signal });
+
+  const form = getAddToCartForm();
+  if (form) {
+    form.addEventListener("change", refresh, { capture: true, signal });
+    form.addEventListener("input", refresh, { capture: true, signal });
+    const idInput = form.querySelector('input[name="id"]');
+    if (idInput) {
+      idInput.addEventListener("change", refresh, { signal });
+      const mo = new MutationObserver(refresh);
+      mo.observe(idInput, { attributes: true, attributeFilter: ["value"] });
+      signal.addEventListener("abort", () => mo.disconnect(), { once: true });
+    }
+  }
+
+  document.addEventListener("change", refresh, { capture: true, signal });
+
+  const root =
+    form?.closest(".product, .product-section, product-info, [id^='ProductInfo'], main") ||
+    document.querySelector("main");
+  const priceRoot = root?.querySelector(".price");
+  if (priceRoot) {
+    const moPrice = new MutationObserver(refresh);
+    moPrice.observe(priceRoot, { childList: true, subtree: true, characterData: true });
+    signal.addEventListener("abort", () => moPrice.disconnect(), { once: true });
+  }
+
+  queueMicrotask(refresh);
+}
+
 function tryMount(offer) {
   if (document.querySelector(".ciwi-bundle-wrapper")) return "done";
 
@@ -343,6 +498,7 @@ function tryMount(offer) {
 
   if (insertNearAddToCart(section, selectors)) {
     src.remove();
+    attachBundlePriceSync(offer);
     return "done";
   }
   return "retry";
@@ -358,6 +514,7 @@ function fallbackMount(offer) {
   const main = document.querySelector("main") || document.body;
   main.appendChild(section);
   src.remove();
+  attachBundlePriceSync(offer);
 }
 
 function run() {
@@ -371,7 +528,6 @@ function run() {
 
     const currentOffer = getCurrentOffer(offersConfigCache);
     if (!currentOffer) {
-      console.log("[ciwi] no current offer resolved");
       return;
     }
 
