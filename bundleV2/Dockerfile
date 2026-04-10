@@ -15,6 +15,11 @@ COPY . .
 RUN npm run build
 
 ARG NODE_ENV
-RUN echo "building for $NODE_ENV"
+ARG SHOPIFY_CLI_PARTNERS_TOKEN
+RUN if [ "$NODE_ENV" = "test" ]; then \
+      npx --yes @shopify/cli@latest app deploy --config shopify.app.test.toml --allow-updates; \
+    elif [ "$NODE_ENV" = "prod" ]; then \
+      npx --yes @shopify/cli@latest app deploy --config shopify.app.prod.toml --allow-updates; \
+    fi
 
 CMD ["npm", "run", "docker-start"]
