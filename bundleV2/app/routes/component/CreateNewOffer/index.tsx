@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import { Form } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import { useFetcher } from "react-router";
 import {
   X,
 } from "lucide-react";
@@ -36,6 +36,20 @@ interface CreateNewOfferProps {
   storeProducts?: Product[];
   /** 当前店铺已有 offers，用于名称重复校验（与后台 normalize 规则一致） */
   existingOffers?: Array<{ id: string; name: string }>;
+}
+
+/** 与 `_index/route` action 错误响应一致，避免从 route 循环引用 */
+type OfferActionErrorBody = {
+  _offerActionError: true;
+  message: string;
+};
+
+function isOfferActionErrorBody(data: unknown): data is OfferActionErrorBody {
+  if (typeof data !== "object" || data === null) return false;
+  const o = data as Record<string, unknown>;
+  return (
+    o._offerActionError === true && typeof o.message === "string"
+  );
 }
 
 function normalizeOfferNameKey(value: string): string {
@@ -210,6 +224,23 @@ export function CreateNewOffer({
   storeProducts = [],
   existingOffers = [],
 }: CreateNewOfferProps) {
+  const fetcher = useFetcher();
+  const [submitErrorToast, setSubmitErrorToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (fetcher.state === "submitting") {
+      setSubmitErrorToast(null);
+    }
+  }, [fetcher.state]);
+
+  useEffect(() => {
+    if (fetcher.state !== "idle") return;
+    const data = fetcher.data;
+    if (isOfferActionErrorBody(data)) {
+      setSubmitErrorToast(data.message);
+    }
+  }, [fetcher.state, fetcher.data]);
+
   const baseUnitPrice = 100;
   const formatPreviewPrice = (value: number) =>
     `€${value.toFixed(2).replace(".", ",")}`;
@@ -310,7 +341,7 @@ export function CreateNewOffer({
   );
 
   return (
-    <Form
+    <fetcher.Form
       className="polaris-page create-offer-page"
       method="post"
       onSubmit={(e) => {
@@ -329,6 +360,14 @@ export function CreateNewOffer({
         }
       }}
     >
+      {submitErrorToast && (
+        <div
+          className="fixed z-50 top-4 left-1/2 -translate-x-1/2 bg-[#d72c0d] text-white px-4 py-2 rounded shadow-lg text-sm font-['Inter'] max-w-[min(520px,calc(100vw-32px))] text-center"
+          role="alert"
+        >
+          {submitErrorToast}
+        </div>
+      )}
       <div className="polaris-page__header">
         <div>
           <button
@@ -1392,6 +1431,7 @@ export function CreateNewOffer({
         {step > 1 && (
           <button
             className="polaris-button polaris-button--plain"
+            disabled={fetcher.state !== "idle"}
             onClick={() => setStep(step - 1)}
             type="button"
           >
@@ -1400,6 +1440,7 @@ export function CreateNewOffer({
         )}
         <button
           className="polaris-button"
+          disabled={fetcher.state !== "idle"}
           onClick={() => {
             if (step === 1) {
               if (!offerName.trim()) {
@@ -1449,14 +1490,16 @@ export function CreateNewOffer({
           }}
           type={step === 4 ? "submit" : "button"}
         >
-          {step === 4
-            ? initialOffer
-              ? "Update Offer"
-              : "Create Offer"
-            : "Next"}
+          {fetcher.state !== "idle"
+            ? "Saving…"
+            : step === 4
+              ? initialOffer
+                ? "Update Offer"
+                : "Create Offer"
+              : "Next"}
         </button>
       </div>
-    </Form>
+    </fetcher.Form>
   );
 }
 

@@ -40,6 +40,135 @@ type OfferListItem = {
   conversion?: number | null;
 };
 
+type OfferActionErrorPayload = {
+  _offerActionError: true;
+  message: string;
+};
+
+function offerActionErrorResponse(message: string, status: number) {
+  return Response.json(
+    { _offerActionError: true as const, message } satisfies OfferActionErrorPayload,
+    { status },
+  );
+}
+
+type ShopOffersMetafieldSyncResult =
+  | { ok: true }
+  | { ok: false; message: string };
+
+async function syncShopOffersMetafield(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  admin: any,
+  shopNameToSync: string,
+): Promise<ShopOffersMetafieldSyncResult> {
+  const prismaAny: any = prisma;
+  try {
+    const shopOffers = (await prismaAny.offer.findMany({
+      where: { shopName: shopNameToSync },
+      orderBy: { createdAt: "desc" },
+    })) as OfferListItem[];
+
+    const metafieldValue = JSON.stringify({
+      updatedAt: new Date().toISOString(),
+      offers: shopOffers,
+    });
+
+    const shopIdResponse = await admin.graphql(
+      `#graphql
+      query ShopId {
+        shop {
+          id
+        }
+      }
+    `,
+    );
+
+    const shopIdJson = (await shopIdResponse.json()) as {
+      data?: { shop?: { id?: string } };
+      errors?: Array<{ message?: string }>;
+    };
+
+    if (shopIdJson.errors?.length) {
+      return {
+        ok: false,
+        message: shopIdJson.errors.map((e) => e.message || "unknown").join("; "),
+      };
+    }
+
+    const shopId = shopIdJson?.data?.shop?.id;
+    if (!shopId) {
+      return {
+        ok: false,
+        message: "无法解析店铺 ID，Metafield 未写入。",
+      };
+    }
+
+    const metafieldsSetResponse = await admin.graphql(
+      `#graphql
+      mutation MetafieldsSet($metafields: [MetafieldsSetInput!]!) {
+        metafieldsSet(metafields: $metafields) {
+          metafields {
+            id
+            key
+            namespace
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `,
+      {
+        variables: {
+          metafields: [
+            {
+              ownerId: shopId,
+              namespace: "ciwi_bundle",
+              key: "ciwi-bundle-offers",
+              type: "json",
+              value: metafieldValue,
+            },
+          ],
+        },
+      },
+    );
+
+    const metafieldsSetJson = (await metafieldsSetResponse.json()) as {
+      data?: {
+        metafieldsSet?: {
+          userErrors?: Array<{ message?: string }>;
+        };
+      };
+      errors?: Array<{ message?: string }>;
+    };
+
+    if (metafieldsSetJson.errors?.length) {
+      return {
+        ok: false,
+        message: metafieldsSetJson.errors
+          .map((e) => e.message || "unknown")
+          .join("; "),
+      };
+    }
+
+    const userErrors =
+      metafieldsSetJson?.data?.metafieldsSet?.userErrors ?? [];
+    if (userErrors.length > 0) {
+      return {
+        ok: false,
+        message: userErrors.map((e) => e.message || "unknown").join("; "),
+      };
+    }
+
+    return { ok: true };
+  } catch (error) {
+    const msg =
+      error instanceof Error ? error.message : JSON.stringify(error);
+    return { ok: false, message: msg || "Metafield 同步异常" };
+  }
+}
+
 export type StoreProductItem = {
   id: string;
   name: string;
@@ -474,10 +603,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     if (!name) {
-      return new Response("Offer name is required", { status: 400 });
+      return offerActionErrorResponse("请填写 Offer 名称。", 400);
     }
     if (!startTimeRaw || !endTimeRaw) {
-      return new Response("Missing required schedule fields", { status: 400 });
+      return offerActionErrorResponse("请填写开始时间与结束时间。", 400);
     }
 
     const nameKey = normalizeOfferNameKey(name);
@@ -491,9 +620,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         (intent === "create-offer" || o.id !== idRaw),
     );
     if (nameTaken) {
-      return new Response(
-        "An offer with this name already exists for this shop.",
-        { status: 409 },
+      return offerActionErrorResponse(
+        "该店铺下已存在同名 Offer，请更换名称。",
+        409,
       );
     }
 
@@ -523,9 +652,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           error instanceof Prisma.PrismaClientKnownRequestError &&
           error.code === "P2002"
         ) {
-          return new Response(
-            "An offer with this name already exists for this shop.",
-            { status: 409 },
+          return offerActionErrorResponse(
+            "该店铺下已存在同名 Offer，请更换名称。",
+            409,
           );
         }
         console.error("offer create failed", {
@@ -540,13 +669,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             offerSettingsJson,
           },
         });
-        return new Response("Offer create failed (see server logs).", {
-          status: 500,
-        });
+        return offerActionErrorResponse(
+          "创建 Offer 失败，请稍后重试。",
+          500,
+        );
       }
     } else {
       if (!idRaw) {
-        return new Response("Missing offer id", { status: 400 });
+        return offerActionErrorResponse("缺少 Offer ID，无法更新。", 400);
       }
       try {
         await writeOfferWithRetry(() =>
@@ -561,9 +691,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           error instanceof Prisma.PrismaClientKnownRequestError &&
           error.code === "P2002"
         ) {
-          return new Response(
-            "An offer with this name already exists for this shop.",
-            { status: 409 },
+          return offerActionErrorResponse(
+            "该店铺下已存在同名 Offer，请更换名称。",
+            409,
           );
         }
         console.error("offer update failed", {
@@ -579,92 +709,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             offerSettingsJson,
           },
         });
-        return new Response("Offer update failed (see server logs).", {
-          status: 500,
-        });
+        return offerActionErrorResponse(
+          "更新 Offer 失败，请稍后重试。",
+          500,
+        );
       }
     }
 
-    // Prisma 写入成功后，同步当前 shop 的 offers 到 shop metafield
-    try {
-      const syncOffersMetafield = async (shopNameToSync: string) => {
-        // 1. 只查询当前 shopName 下的 offers
-        const shopOffers = (await prismaAny.offer.findMany({
-          where: { shopName: shopNameToSync },
-          orderBy: { createdAt: "desc" },
-        })) as OfferListItem[];
-
-        const metafieldValue = JSON.stringify({
-          updatedAt: new Date().toISOString(),
-          offers: shopOffers,
-        });
-
-        // 2. 查询当前 shop 的 GID
-        const shopIdResponse = await admin.graphql(
-          `#graphql
-          query ShopId {
-            shop {
-              id
-            }
-          }
-        `,
-        );
-
-        const shopIdJson = await shopIdResponse.json();
-        const shopId = shopIdJson?.data?.shop?.id as string | undefined;
-
-        if (!shopId) {
-          console.error(
-            "Failed to resolve shop id for metafield sync",
-            shopIdJson,
-          );
-          return;
-        }
-
-        // 3. 写入 shop metafield：namespace=ciwi_bundle, key=ciwi-bundle-offers
-        const metafieldsSetResponse = await admin.graphql(
-          `#graphql
-          mutation MetafieldsSet($metafields: [MetafieldsSetInput!]!) {
-            metafieldsSet(metafields: $metafields) {
-              metafields {
-                id
-                key
-                namespace
-              }
-              userErrors {
-                field
-                message
-              }
-            }
-          }
-        `,
-          {
-            variables: {
-              metafields: [
-                {
-                  ownerId: shopId,
-                  namespace: "ciwi_bundle",
-                  key: "ciwi-bundle-offers",
-                  type: "json",
-                  value: metafieldValue,
-                },
-              ],
-            },
-          },
-        );
-
-        const metafieldsSetJson = await metafieldsSetResponse.json();
-        const userErrors =
-          metafieldsSetJson?.data?.metafieldsSet?.userErrors || [];
-
-        if (userErrors.length > 0) {
-          console.error("metafieldsSet userErrors", userErrors);
-        }
-      };
-
-      await syncOffersMetafield(shopName);
-    } catch (error) {
-      console.error("Failed to sync offers metafield", error);
+    const syncResult = await syncShopOffersMetafield(admin, shopName);
+    if (!syncResult.ok) {
+      console.error("syncShopOffersMetafield failed after offer write", {
+        shopName,
+        message: syncResult.message,
+      });
+      return offerActionErrorResponse(
+        `同步到店铺失败（主题/折扣依赖此数据）：${syncResult.message}`,
+        502,
+      );
     }
 
     invalidateShopOffersCache(shopName);
