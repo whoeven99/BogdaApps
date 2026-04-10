@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  useActionData,
   useLoaderData,
   useNavigate,
   useSearchParams,
@@ -7,7 +8,6 @@ import {
   type HeadersFunction,
   type LoaderFunctionArgs,
 } from "react-router";
-import { redirect } from "react-router";
 import {
   authenticate,
   ensureCartLinesAutomaticDiscount,
@@ -757,7 +757,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     invalidateShopOffersCache(shopName);
 
-    return redirect(url.pathname + "?" + url.searchParams.toString());
+    return Response.json({ success: true, toast: url.searchParams.get("toast") });
   }
 
   if (intent === "toggle-offer-status") {
@@ -843,10 +843,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       invalidateShopOffersCache(String(updatedOffer.shopName));
     }
 
-    const url = new URL(request.url);
-    url.searchParams.set("toast", "toggle-success");
-
-    return redirect(url.pathname + "?" + url.searchParams.toString());
+    return Response.json({ success: true, toast: "toggle-success" });
   }
 
   if (intent === "delete-offer") {
@@ -934,10 +931,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       invalidateShopOffersCache(shopNameToSync);
     }
 
-    const url = new URL(request.url);
-    url.searchParams.set("toast", "delete-success");
-
-    return redirect(url.pathname + "?" + url.searchParams.toString());
+    return Response.json({ success: true, toast: "delete-success" });
   }
 
   return new Response(`Unknown intent: ${String(intent || "")}`, {
@@ -950,27 +944,25 @@ type HomeTabKey = "dashboard" | "offers" | "pricing";
 export default function Index() {
   const { offers, storeProducts, shop, apiKey, themeExtensionEnabled } =
     useLoaderData() as IndexLoaderData;
+  const actionData = useActionData() as { toast?: string } | undefined;
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<HomeTabKey>("dashboard");
   const [showCreateOffer, setShowCreateOffer] = useState(false);
 
-  const toast = searchParams.get("toast");
+  const toast = searchParams.get("toast") || actionData?.toast;
 
   useEffect(() => {
     if (toast === "create-success") {
       setToastMessage("Offer 创建成功");
       setShowCreateOffer(false);
-      setActiveTab("dashboard");
     } else if (toast === "update-success") {
       setToastMessage("Offer 更新成功");
       setShowCreateOffer(false);
-      setActiveTab("dashboard");
     } else if (toast === "delete-success") {
       setToastMessage("Offer 删除成功");
       setShowCreateOffer(false);
-      setActiveTab("dashboard");
     } else if (toast === "toggle-success") {
       setToastMessage("Offer 状态已更新");
     } else {

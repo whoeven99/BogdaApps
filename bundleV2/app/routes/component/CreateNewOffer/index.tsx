@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useFetcher, useNavigate, useSearchParams } from "react-router";
 import {
   X,
@@ -264,7 +264,14 @@ export function CreateNewOffer({
     }
     if (fetcher.state !== "idle" || !wasSubmittingRef.current) return;
     wasSubmittingRef.current = false;
-    const data = fetcher.data;
+    const data = fetcher.data as any;
+    if (data?.success && data?.toast) {
+      const next = new URLSearchParams(searchParams);
+      next.set("toast", data.toast);
+      const qs = next.toString();
+      navigate({ search: qs ? `?${qs}` : "" }, { replace: true });
+      return;
+    }
     if (!isOfferActionErrorBody(data)) return;
     setSubmitErrorToast(data.message);
     // 去掉 URL 里的成功 toast，避免保存失败时仍显示绿色「创建/更新成功」
@@ -339,7 +346,7 @@ export function CreateNewOffer({
   );
 
   // 仅用于页面展示；落库/提交只需要 ids。
-  const selectedProducts: Product[] = selectedProductIds.map((id) => {
+  const selectedProducts: Product[] = selectedProductIds.map((id: string) => {
     const found = storeProducts.find((p) => String(p.id) === String(id));
     return (
       found ?? {
@@ -379,7 +386,7 @@ export function CreateNewOffer({
     <fetcher.Form
       className="polaris-page create-offer-page"
       method="post"
-      onSubmit={(e) => {
+      onSubmit={(e: any) => {
         const key = normalizeOfferNameKey(offerName);
         const taken = existingOffers.some(
           (o) =>
@@ -431,7 +438,10 @@ export function CreateNewOffer({
         <div>
           <button
             className="polaris-button polaris-button--plain"
-            onClick={onBack}
+            onClick={(e) => {
+              onBack();
+              e.preventDefault();
+            }}
             type="button"
           >
             ← Back
@@ -480,7 +490,10 @@ export function CreateNewOffer({
               className={`create-offer-step sm:text-[14px] sm:p-[12px] ${
                 step === index + 1 ? "create-offer-step--active" : ""
               }`}
-              onClick={() => setStep(index + 1)}
+              onClick={(e) => {
+                setStep(index + 1);
+                e.preventDefault();
+              }}
             >
               <span className="hidden sm:inline">
                 {index + 1}.{" "}
@@ -634,7 +647,10 @@ export function CreateNewOffer({
                         Select Products
                       </h2>
                       <button
-                        onClick={() => setShowProductModal(false)}
+                        onClick={(e) => {
+                          setShowProductModal(false);
+                          e.preventDefault();
+                        }}
                       className="create-offer-modal-close"
                         type="button"
                       >
@@ -655,7 +671,7 @@ export function CreateNewOffer({
                         <div
                           key={product.id}
                         className="create-offer-modal-product"
-                          onClick={() => {
+                          onClick={(e) => {
                             const productId = String(product.id);
                             if (!selectedProductIds.includes(productId)) {
                               setSelectedProductIds([
@@ -663,6 +679,7 @@ export function CreateNewOffer({
                                 productId,
                               ]);
                             }
+                            e.preventDefault();
                           }}
                         >
                           <img
@@ -696,7 +713,10 @@ export function CreateNewOffer({
                     </div>
 
                     <button
-                      onClick={() => setShowProductModal(false)}
+                      onClick={(e) => {
+                        setShowProductModal(false);
+                        e.preventDefault();
+                      }}
                     className="create-offer-modal-footer-button"
                       type="button"
                     >
@@ -719,7 +739,10 @@ export function CreateNewOffer({
 
                     {selectedProductIds.length === 0 ? (
                       <button
-                        onClick={() => setShowProductModal(true)}
+                        onClick={(e) => {
+                          setShowProductModal(true);
+                          e.preventDefault();
+                        }}
                         className="create-offer-modal-footer-button"
                         type="button"
                       >
@@ -737,13 +760,14 @@ export function CreateNewOffer({
                                 <button
                                   type="button"
                                   className="create-offer-selected-remove"
-                                  onClick={() =>
+                                  onClick={(e) => {
                                     setSelectedProductIds(
                                       selectedProductIds.filter(
                                         (id) => id !== String(product.id),
                                       ),
-                                    )
-                                  }
+                                    );
+                                    e.preventDefault();
+                                  }}
                                   aria-label={`Remove ${product.name}`}
                                 >
                                   <X size={14} />
@@ -769,7 +793,10 @@ export function CreateNewOffer({
                           selected
                         </div>
                         <button
-                          onClick={() => setShowProductModal(true)}
+                          onClick={(e) => {
+                            setShowProductModal(true);
+                            e.preventDefault();
+                          }}
                           className="create-offer-selected-edit"
                           type="button"
                         >
@@ -1028,7 +1055,10 @@ export function CreateNewOffer({
                           ? "create-offer-layout-card--active"
                           : ""
                       }`}
-                      onClick={() => setLayoutFormat("vertical")}
+                      onClick={(e) => {
+                        setLayoutFormat("vertical");
+                        e.preventDefault();
+                      }}
                     >
                       <div className="create-offer-layout-card-title">
                         Vertical Stack
@@ -1043,7 +1073,10 @@ export function CreateNewOffer({
                           ? "create-offer-layout-card--active"
                           : ""
                       }`}
-                      onClick={() => setLayoutFormat("horizontal")}
+                      onClick={(e) => {
+                        setLayoutFormat("horizontal");
+                        e.preventDefault();
+                      }}
                     >
                       <div className="create-offer-layout-card-title">
                         Horizontal Grid
@@ -1058,7 +1091,10 @@ export function CreateNewOffer({
                           ? "create-offer-layout-card--active"
                           : ""
                       }`}
-                      onClick={() => setLayoutFormat("card")}
+                      onClick={(e) => {
+                        setLayoutFormat("card");
+                        e.preventDefault();
+                      }}
                     >
                       <div className="create-offer-layout-card-title">
                         Card Grid
@@ -1073,7 +1109,10 @@ export function CreateNewOffer({
                           ? "create-offer-layout-card--active"
                           : ""
                       }`}
-                      onClick={() => setLayoutFormat("compact")}
+                      onClick={(e) => {
+                        setLayoutFormat("compact");
+                        e.preventDefault();
+                      }}
                     >
                       <div className="create-offer-layout-card-title">
                         Compact List
@@ -1090,9 +1129,7 @@ export function CreateNewOffer({
                     Card Colors
                   </h3>
                   <div className="polaris-grid">
-                    <label
-                      className="create-offer-label"
-                    >
+                    <label className="create-offer-label">
                       Card Background Color
                       <input
                         type="color"
@@ -1103,9 +1140,7 @@ export function CreateNewOffer({
                         className="create-offer-color-input"
                       />
                     </label>
-                    <label
-                      className="create-offer-label"
-                    >
+                    <label className="create-offer-label">
                       Accent Color
                       <input
                         type="color"
@@ -1497,7 +1532,10 @@ export function CreateNewOffer({
           <button
             className="polaris-button polaris-button--plain"
             disabled={fetcher.state !== "idle"}
-            onClick={() => setStep(step - 1)}
+            onClick={(e) => {
+              setStep(step - 1);
+              e.preventDefault();
+            }}
             type="button"
           >
             Previous
@@ -1506,10 +1544,11 @@ export function CreateNewOffer({
         <button
           className="polaris-button"
           disabled={fetcher.state !== "idle"}
-          onClick={() => {
+          onClick={(e: any) => {
             if (step === 1) {
               if (!offerName.trim()) {
                 setOfferNameError("Offer Name is required.");
+                e.preventDefault();
                 return;
               }
               const key = normalizeOfferNameKey(offerName);
@@ -1522,15 +1561,18 @@ export function CreateNewOffer({
                 setOfferNameError(
                   "An offer with this name already exists. Choose another name.",
                 );
+                e.preventDefault();
                 return;
               }
               setOfferNameError("");
               setStep(2);
+              e.preventDefault();
               return;
             }
 
             if (step < 4) {
               setStep(step + 1);
+              e.preventDefault();
             }
             // 第 4 步由表单 onSubmit 校验并提交，不在此处校验（避免校验失败仍触发 submit）
           }}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Form, useNavigation, useSearchParams } from "react-router";
+import { Form, useNavigation, useSearchParams, useActionData } from "react-router";
 import { Copy, Trash2, Pencil, ChartBar, ArrowUp, ArrowDown } from "lucide-react";
 import "../styles/tailwind.css";
 import { CreateNewOffer } from "./component/CreateNewOffer";
@@ -86,6 +86,7 @@ export function DashboardPage({
   themeExtensionEnabled,
 }: DashboardPageProps) {
   const [searchParams] = useSearchParams();
+  const actionData = useActionData() as { toast?: string } | undefined;
   const navigation = useNavigation();
   const [showCreateOffer, setShowCreateOffer] = useState(false);
   const [editingOfferId, setEditingOfferId] = useState<string | null>(null);
@@ -153,7 +154,7 @@ export function DashboardPage({
     window.open(editorUrl, "_top");
   };
 
-  const toast = searchParams.get("toast");
+  const toast = searchParams.get("toast") || actionData?.toast;
 
   useEffect(() => {
     if (toast === "delete-success") {

@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import "../styles/tailwind.css";
 import { Trash2, Pencil } from "lucide-react";
-import { Form, useNavigation, useSearchParams } from "react-router";
+import { Form, useNavigation, useSearchParams, useActionData } from "react-router";
 import type { IndexLoaderData } from "./_index/route";
 
 type AllOffersRow = {
@@ -52,11 +52,12 @@ export function AllOffersPage({ onCreateOffer, offers }: AllOffersPageProps) {
   });
 
   const [searchParams] = useSearchParams();
+  const actionData = useActionData() as { toast?: string } | undefined;
   const navigation = useNavigation();
   const [deletingOffer, setDeletingOffer] = useState<AllOffersRow | null>(null);
   const [togglingIds, setTogglingIds] = useState<string[]>([]);
 
-  const toast = searchParams.get("toast");
+  const toast = searchParams.get("toast") || actionData?.toast;
 
   useEffect(() => {
     if (toast === "delete-success") {
