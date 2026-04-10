@@ -17,7 +17,7 @@ import { DashboardPage } from "../DashboardPage";
 import { AllOffersPage } from "../AllOffersPage";
 import { PricingPage } from "../PricingPage";
 import { CreateNewOffer } from "../component/CreateNewOffer";
-import { Prisma } from "@prisma/client";
+import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
 import prisma from "../../db.server";
 import {
   getCachedShopOffers,
@@ -429,6 +429,8 @@ function normalizeOfferNameKey(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+import { AppProvider } from "@shopify/shopify-app-react-router/react";
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
 
@@ -519,8 +521,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     offers,
     storeProducts,
     shop: session.shop,
-    themeExtensionEnabled,
     apiKey,
+    themeExtensionEnabled,
   } satisfies IndexLoaderData);
 };
 
@@ -677,9 +679,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       try {
         await writeOfferWithRetry(() => prismaAny.offer.create({ data }));
         url.searchParams.set("toast", "create-success");
-      } catch (error) {
+      } catch (error: any) {
         if (
-          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error instanceof PrismaClientKnownRequestError &&
           error.code === "P2002"
         ) {
           return offerActionErrorResponse(
@@ -716,9 +718,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           }),
         );
         url.searchParams.set("toast", "update-success");
-      } catch (error) {
+      } catch (error: any) {
         if (
-          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error instanceof PrismaClientKnownRequestError &&
           error.code === "P2002"
         ) {
           return offerActionErrorResponse(
@@ -991,12 +993,13 @@ export default function Index() {
   }, [toast, toastMessage, navigate, searchParams]);
 
   return (
-    <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px] relative">
-      {toastMessage && (
-        <div className="fixed z-50 top-4 left-1/2 -translate-x-1/2 bg-[#108043] text-white px-4 py-2 rounded shadow-lg text-sm font-['Inter']">
-          {toastMessage}
-        </div>
-      )}
+    <AppProvider embedded apiKey={apiKey}>
+      <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px] relative">
+        {toastMessage && (
+          <div className="fixed z-50 top-4 left-1/2 -translate-x-1/2 bg-[#108043] text-white px-4 py-2 rounded shadow-lg text-sm font-['Inter']">
+            {toastMessage}
+          </div>
+        )}
       {/* Tabs */}
       <nav className="bg-white flex flex-col sm:flex-row gap-[8px] sm:gap-[16px] items-stretch sm:items-start pb-0 px-[16px] pt-[16px] rounded-[8px] mb-[16px] sm:mb-[24px]">
         <button
@@ -1088,7 +1091,8 @@ export default function Index() {
         />
       )}
       {activeTab === "pricing" && <PricingPage />}
-    </div>
+      </div>
+    </AppProvider>
   );
 }
 
