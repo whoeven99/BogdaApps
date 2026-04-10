@@ -250,7 +250,20 @@ function renderBundlePreviewHtml(offer) {
   const discountRules = parseDiscountRulesJson(offer?.discountRulesJson);
   if (!discountRules.length) return "";
 
-  const layoutFormat = "vertical";
+  // Extract styles from offer settings, use defaults if missing
+  let offerSettings = {};
+  try {
+    if (offer?.offerSettingsJson) {
+      offerSettings = JSON.parse(offer.offerSettingsJson);
+    }
+  } catch (e) {
+    console.error("[ciwi] failed to parse offerSettingsJson", e);
+  }
+  
+  const layoutFormat = offerSettings.layoutFormat || "vertical";
+  const accentColor = offerSettings.accentColor || "#111111";
+  const cardBackgroundColor = offerSettings.cardBackgroundColor || "#ffffff";
+
   const unitPrice = getCurrentUnitPrice();
   const items = [
     {
@@ -279,10 +292,14 @@ function renderBundlePreviewHtml(offer) {
       const featuredClass = item.featured
         ? " create-offer-style-preview-item--featured"
         : "";
-      return `<div class="create-offer-style-preview-item${featuredClass}" style="background:#ffffff;">
+      const featuredStyle = item.featured 
+        ? `border-color: ${accentColor}; background-color: ${cardBackgroundColor}; box-shadow: 0 8px 18px ${accentColor}25;`
+        : `background-color: ${cardBackgroundColor};`;
+        
+      return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}">
       ${
         item.featured && item.badge
-          ? `<div class="create-offer-style-preview-badge" style="background:#111111;">${esc(item.badge)}</div>`
+          ? `<div class="create-offer-style-preview-badge" style="background:${accentColor};">${esc(item.badge)}</div>`
           : ""
       }
       <div class="create-offer-style-preview-item-title">${esc(item.title)}</div>
@@ -303,7 +320,7 @@ function renderBundlePreviewHtml(offer) {
     .join("");
 
   return `<div class="create-offer-preview-card">
-    <div class="create-offer-style-preview-header" style="color:#111111;">Bundle & Save</div>
+    <div class="create-offer-style-preview-header" style="color:${accentColor};">Bundle & Save</div>
     <div class="create-offer-style-preview-list create-offer-style-preview-list--${layoutFormat}">
       ${itemsHtml}
     </div>

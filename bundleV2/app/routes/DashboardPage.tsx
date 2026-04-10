@@ -1,6 +1,16 @@
 import { useEffect, useState } from "react";
 import { Form, useNavigation, useSearchParams, useActionData } from "react-router";
-import { Copy, Trash2, Pencil, ChartBar, ArrowUp, ArrowDown } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ChartBar,
+  ChartLineUp,
+  Coins,
+  Package,
+  Pencil,
+  Trash2,
+  Users,
+} from "lucide-react";
 import "../styles/tailwind.css";
 import { CreateNewOffer } from "./component/CreateNewOffer";
 import type { IndexLoaderData } from "./_index/route";
@@ -484,6 +494,14 @@ export function DashboardPage({
                         <button
                           type="button"
                           className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[4px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
+                          title="View Details"
+                          onClick={handleViewAllOffers}
+                        >
+                          <ChartBar size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[4px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
                           title="Edit"
                           onClick={() => {
                             setEditingOfferId(offer.id);
@@ -579,6 +597,14 @@ export function DashboardPage({
                     </div>
                   </div>
                   <div className="flex items-center gap-[8px] pt-[12px] border-t border-[#dfe3e8]">
+                    <button
+                      type="button"
+                      className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[8px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
+                      title="View Details"
+                      onClick={handleViewAllOffers}
+                    >
+                      <ChartBar size={18} />
+                    </button>
                     <button
                       type="button"
                       className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[8px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"

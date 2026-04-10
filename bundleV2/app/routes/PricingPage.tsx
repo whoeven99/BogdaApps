@@ -40,16 +40,9 @@ export function PricingPage() {
   const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
 
   return (
-    <div className="polaris-page">
-      <div className="polaris-page__header">
+    <div className="polaris-page" style={{ maxWidth: 1000, margin: "0 auto" }}>
+      <div className="polaris-page__header" style={{ marginBottom: "20px" }}>
         <div>
-          <button
-            type="button"
-            className="polaris-button polaris-button--plain"
-            onClick={() => setBillingCycle("monthly")}
-          >
-            ← Back
-          </button>
           <h1 className="polaris-page__title">Pricing Plans</h1>
         </div>
       </div>
