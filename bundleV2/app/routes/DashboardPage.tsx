@@ -4,7 +4,7 @@ import {
   ArrowDown,
   ArrowUp,
   ChartBar,
-  ChartLineUp,
+  ChartLine,
   Coins,
   Package,
   Pencil,
@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import "../styles/tailwind.css";
 import { CreateNewOffer } from "./component/CreateNewOffer";
+import BasicLineChart from "../components/basicLineChart";
 import type { IndexLoaderData } from "./_index/route";
 
 interface DashboardPageProps {
@@ -125,6 +126,34 @@ export function DashboardPage({
 
   const visibleOffers = offerRows.slice(0, 4);
 
+  // 计算真实 Overview 数据
+  const realOverview = (() => {
+    let totalGmv = 0;
+    let totalExposure = 0;
+    let totalAddToCart = 0;
+    let activeOffers = 0;
+
+    offerRows.forEach((o) => {
+      totalGmv += o.gmv || 0;
+      totalExposure += o.exposurePV || 0;
+      totalAddToCart += o.addToCartPV || 0;
+      if (o.isActive) activeOffers += 1;
+    });
+
+    const avgConversion = totalExposure > 0 ? (totalAddToCart / totalExposure) * 100 : 0;
+
+    return {
+      totalGmv: `$${totalGmv.toLocaleString()}`,
+      gmvTrend: "+0.0%",
+      gmvTrendLabel: "from last month",
+      activeOffers,
+      activeOffersTrend: "currently running",
+      avgConversion: `${avgConversion.toFixed(1)}%`,
+      conversionTrendLabel: "Overall avg",
+      conversionTrendColor: "text-[#916a00]" as const,
+    };
+  })();
+
   useEffect(() => {
     if (navigation.state === "submitting" && navigation.formData) {
       const intent = navigation.formData.get("intent");
@@ -144,7 +173,9 @@ export function DashboardPage({
 
   const getIsToggling = (offerId: string) => togglingIds.includes(offerId);
 
-  const handleViewDetails = () => {}; // mock
+  const handleViewDetails = () => {
+    onViewAllOffers?.();
+  };
   const handleCreateOffer = () => {
     setEditingOfferId(null);
     setShowCreateOffer(true);
@@ -290,10 +321,10 @@ export function DashboardPage({
                 Total GMV
               </span>
               <h3 className="font-['Inter'] font-semibold text-[28px] leading-[42px] text-[#202223] tracking-[0.3828px] m-0">
-                {mockOverview.totalGmv}
+                {realOverview.totalGmv}
               </h3>
               <span className="font-['Inter'] font-normal text-[14px] leading-[22.4px] text-[#108043] tracking-[-0.1504px]">
-                ↑ {mockOverview.gmvTrend} {mockOverview.gmvTrendLabel}
+                {realOverview.gmvTrend} {realOverview.gmvTrendLabel}
               </span>
             </div>
             <div className="flex flex-col gap-[16px]">
@@ -301,10 +332,10 @@ export function DashboardPage({
                 Active Offers
               </span>
               <h3 className="font-['Inter'] font-semibold text-[28px] leading-[42px] text-[#202223] tracking-[0.3828px] m-0">
-                {mockOverview.activeOffers}
+                {realOverview.activeOffers}
               </h3>
               <span className="font-['Inter'] font-normal text-[14px] leading-[22.4px] text-[#108043] tracking-[-0.1504px]">
-                ↑ {mockOverview.activeOffersTrend}
+                {realOverview.activeOffersTrend}
               </span>
             </div>
             <div className="flex flex-col gap-[16px]">
@@ -312,12 +343,23 @@ export function DashboardPage({
                 Avg. Conversion
               </span>
               <h3 className="font-['Inter'] font-semibold text-[28px] leading-[42px] text-[#202223] tracking-[0.3828px] m-0">
-                {mockOverview.avgConversion}
+                {realOverview.avgConversion}
               </h3>
-              <span className={`font-['Inter'] font-normal text-[14px] leading-[22.4px] tracking-[-0.1504px] ${mockOverview.conversionTrendColor}`}>
-                → {mockOverview.conversionTrendLabel}
+              <span className={`font-['Inter'] font-normal text-[14px] leading-[22.4px] tracking-[-0.1504px] ${realOverview.conversionTrendColor}`}>
+                {realOverview.conversionTrendLabel}
               </span>
             </div>
+          </div>
+          
+          <div className="mt-[24px] pt-[20px] border-t border-[#dfe3e8]">
+             <h3 className="font-['Inter'] font-medium text-[16px] leading-[24px] text-[#202223] tracking-[-0.3125px] mb-[16px]">
+               GMV Trend (Last 7 Days)
+             </h3>
+             <BasicLineChart 
+                Xdata={["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]}
+                Ydata={[120, 200, 150, 80, 70, 110, 130]}
+                height={260}
+             />
           </div>
         </div>
 
