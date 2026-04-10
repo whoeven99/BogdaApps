@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useFetcher } from "react-router";
+import { useFetcher, useNavigate, useSearchParams } from "react-router";
 import {
   X,
 } from "lucide-react";
@@ -97,6 +97,19 @@ function parseSelectedProductIds(
   }
 }
 
+function sanitizeHexColor(raw: unknown, fallback: string): string {
+  const t = String(raw ?? "").trim();
+  if (/^#[0-9A-Fa-f]{6}$/.test(t)) return t.toLowerCase();
+  if (/^#[0-9A-Fa-f]{3}$/.test(t)) {
+    const r = t[1];
+    const g = t[2];
+    const b = t[3];
+    return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
+  }
+  if (/^#[0-9A-Fa-f]{8}$/.test(t)) return `#${t.slice(1, 7)}`.toLowerCase();
+  return fallback;
+}
+
 function parseOfferSettings(
   offerSettingsJson?: string | null,
 ): {
@@ -106,6 +119,8 @@ function parseOfferSettings(
   customerSegments: string | null;
   markets: string | null;
   usageLimitPerCustomer: string;
+  accentColor: string;
+  cardBackgroundColor: string;
 } {
   if (!offerSettingsJson) {
     return {
@@ -115,6 +130,8 @@ function parseOfferSettings(
       customerSegments: null,
       markets: null,
       usageLimitPerCustomer: "unlimited",
+      accentColor: "#008060",
+      cardBackgroundColor: "#ffffff",
     };
   }
 
@@ -126,6 +143,8 @@ function parseOfferSettings(
       customerSegments: string | null;
       markets: string | null;
       usageLimitPerCustomer: string;
+      accentColor?: string;
+      cardBackgroundColor?: string;
     }>;
 
     return {
@@ -141,6 +160,11 @@ function parseOfferSettings(
       markets: parsed.markets !== undefined ? parsed.markets : null,
       usageLimitPerCustomer:
         parsed.usageLimitPerCustomer ?? "unlimited",
+      accentColor: sanitizeHexColor(parsed.accentColor, "#008060"),
+      cardBackgroundColor: sanitizeHexColor(
+        parsed.cardBackgroundColor,
+        "#ffffff",
+      ),
     };
   } catch {
     return {
@@ -150,6 +174,8 @@ function parseOfferSettings(
       customerSegments: null,
       markets: null,
       usageLimitPerCustomer: "unlimited",
+      accentColor: "#008060",
+      cardBackgroundColor: "#ffffff",
     };
   }
 }
@@ -225,21 +251,28 @@ export function CreateNewOffer({
   existingOffers = [],
 }: CreateNewOfferProps) {
   const fetcher = useFetcher();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [submitErrorToast, setSubmitErrorToast] = useState<string | null>(null);
+  const wasSubmittingRef = useRef(false);
 
   useEffect(() => {
     if (fetcher.state === "submitting") {
       setSubmitErrorToast(null);
+      wasSubmittingRef.current = true;
+      return;
     }
-  }, [fetcher.state]);
-
-  useEffect(() => {
-    if (fetcher.state !== "idle") return;
+    if (fetcher.state !== "idle" || !wasSubmittingRef.current) return;
+    wasSubmittingRef.current = false;
     const data = fetcher.data;
-    if (isOfferActionErrorBody(data)) {
-      setSubmitErrorToast(data.message);
-    }
-  }, [fetcher.state, fetcher.data]);
+    if (!isOfferActionErrorBody(data)) return;
+    setSubmitErrorToast(data.message);
+    // 去掉 URL 里的成功 toast，避免保存失败时仍显示绿色「创建/更新成功」
+    const next = new URLSearchParams(searchParams);
+    next.delete("toast");
+    const qs = next.toString();
+    navigate({ search: qs ? `?${qs}` : "" }, { replace: true });
+  }, [fetcher.state, fetcher.data, navigate, searchParams]);
 
   const baseUnitPrice = 100;
   const formatPreviewPrice = (value: number) =>
@@ -293,8 +326,10 @@ export function CreateNewOffer({
   const [layoutFormat, setLayoutFormat] = useState<
     "vertical" | "horizontal" | "card" | "compact"
   >(offerSettings.layoutFormat);
-  const [cardBackgroundColor, setCardBackgroundColor] = useState("#ffffff");
-  const [accentColor, setAccentColor] = useState("#008060");
+  const [cardBackgroundColor, setCardBackgroundColor] = useState(
+    offerSettings.cardBackgroundColor,
+  );
+  const [accentColor, setAccentColor] = useState(offerSettings.accentColor);
   const [showProductModal, setShowProductModal] = useState(false);
   const [productSearch, setProductSearch] = useState("");
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>(
@@ -357,6 +392,30 @@ export function CreateNewOffer({
             "An offer with this name already exists. Choose another name.",
           );
           setStep(1);
+          return;
+        }
+
+        // 非最后一步一律不提交：防止 Enter、隐式提交或按钮 type 切换导致误保存
+        if (step !== 4) {
+          e.preventDefault();
+          return;
+        }
+
+        let hasError = false;
+        if (!startTime) {
+          setStartTimeError("Start Time is required.");
+          hasError = true;
+        } else {
+          setStartTimeError("");
+        }
+        if (!endTime) {
+          setEndTimeError("End Time is required.");
+          hasError = true;
+        } else {
+          setEndTimeError("");
+        }
+        if (hasError) {
+          e.preventDefault();
         }
       }}
     >
@@ -396,6 +455,12 @@ export function CreateNewOffer({
       <input type="hidden" name="offerName" value={offerName} />
       <input type="hidden" name="offerType" value={offerType} />
       <input type="hidden" name="layoutFormat" value={layoutFormat} />
+      <input type="hidden" name="accentColor" value={accentColor} />
+      <input
+        type="hidden"
+        name="cardBackgroundColor"
+        value={cardBackgroundColor}
+      />
       <input
         type="hidden"
         name="selectedProductsJson"
@@ -1466,27 +1531,8 @@ export function CreateNewOffer({
 
             if (step < 4) {
               setStep(step + 1);
-              return;
             }
-
-            // step === 4, validate schedule fields before creating
-            let hasError = false;
-            if (!startTime) {
-              setStartTimeError("Start Time is required.");
-              hasError = true;
-            } else {
-              setStartTimeError("");
-            }
-            if (!endTime) {
-              setEndTimeError("End Time is required.");
-              hasError = true;
-            } else {
-              setEndTimeError("");
-            }
-
-            if (hasError) {
-              return;
-            }
+            // 第 4 步由表单 onSubmit 校验并提交，不在此处校验（避免校验失败仍触发 submit）
           }}
           type={step === 4 ? "submit" : "button"}
         >

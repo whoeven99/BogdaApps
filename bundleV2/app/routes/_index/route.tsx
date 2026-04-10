@@ -52,6 +52,22 @@ function offerActionErrorResponse(message: string, status: number) {
   );
 }
 
+function sanitizeHexColorParam(
+  raw: string | null | undefined,
+  fallback: string,
+): string {
+  const t = String(raw ?? "").trim();
+  if (/^#[0-9A-Fa-f]{6}$/.test(t)) return t.toLowerCase();
+  if (/^#[0-9A-Fa-f]{3}$/.test(t)) {
+    const r = t[1];
+    const g = t[2];
+    const b = t[3];
+    return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
+  }
+  if (/^#[0-9A-Fa-f]{8}$/.test(t)) return `#${t.slice(1, 7)}`.toLowerCase();
+  return fallback;
+}
+
 type ShopOffersMetafieldSyncResult =
   | { ok: true }
   | { ok: false; message: string };
@@ -575,6 +591,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       formData.get("usageLimitPerCustomer") || "unlimited",
     );
 
+    const accentColor = sanitizeHexColorParam(
+      String(formData.get("accentColor") || ""),
+      "#008060",
+    );
+    const cardBackgroundColor = sanitizeHexColorParam(
+      String(formData.get("cardBackgroundColor") || ""),
+      "#ffffff",
+    );
+
     const offerSettingsJson = JSON.stringify({
       layoutFormat,
       totalBudget: totalBudget ? Number(totalBudget) : null,
@@ -584,6 +609,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         : null,
       markets: markets.length ? markets.join(",") : null,
       usageLimitPerCustomer,
+      accentColor,
+      cardBackgroundColor,
     });
 
     // Store which Shopify shop this offer belongs to.
