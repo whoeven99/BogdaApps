@@ -156,6 +156,12 @@ export function DashboardPage({
   const toast = searchParams.get("toast");
 
   useEffect(() => {
+    if (toast === "delete-success") {
+      setDeletingOffer(null);
+    }
+  }, [toast]);
+
+  useEffect(() => {
     const controller = new AbortController();
     const now = new Date();
     const from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);

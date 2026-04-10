@@ -6,8 +6,24 @@ import {
   ProductDiscountSelectionStrategy,
 } from "../generated/api";
 
+const LOG_PREFIX = "[ciwi-cart-lines-discount]";
+
 const DISCOUNT_PERCENTAGE = "10.0";
 const DEFAULT_DISCOUNT_PERCENTAGE = DISCOUNT_PERCENTAGE;
+
+function log(step: string, detail?: unknown): void {
+  try {
+    if (detail === undefined) {
+      console.error(`${LOG_PREFIX} ${step}`);
+    } else {
+      console.error(
+        `${LOG_PREFIX} ${step} ${typeof detail === "string" ? detail : JSON.stringify(detail)}`,
+      );
+    }
+  } catch {
+    console.error(`${LOG_PREFIX} ${step} (log stringify failed)`);
+  }
+}
 
 type OfferMetafieldPayload = {
   updatedAt?: string;
@@ -23,45 +39,112 @@ type OfferMetafieldPayload = {
 type Offer = NonNullable<OfferMetafieldPayload["offers"]>[number];
 
 export function cartLinesDiscountsGenerateRun(
-  input: CartInput, // input 配置在graphql文件中
+  input: CartInput,
 ): CartLinesDiscountsGenerateRunResult {
-  // app里存储的优惠数据，存在shopify metafield里
+  log("run_start", {
+    cartLineCount: input.cart.lines.length,
+    discountClasses: input.discount.discountClasses,
+    metafieldPresent: Boolean(input.shop.metafield),
+    metafieldType: input.shop.metafield?.type ?? null,
+  });
+
   const offersPayload = input.shop.metafield?.jsonValue as
     | OfferMetafieldPayload
     | null
     | undefined;
   const offers = offersPayload?.offers ?? [];
-  console.log("offers", JSON.stringify(offers, null, 2));
 
-  if (!offers.length || !checkValid(input)) {
+  log("metafield_offers", {
+    updatedAt: offersPayload?.updatedAt ?? null,
+    offerCount: offers.length,
+    offersSummary: offers.map((o) => ({
+      id: o.id,
+      name: o.name,
+      status: o.status,
+      selectedProductsJsonLength: o.selectedProductsJson?.length ?? 0,
+      discountRulesJsonLength: o.discountRulesJson?.length ?? 0,
+    })),
+  });
+
+  if (!offers.length) {
+    log("early_exit", { reason: "no_offers_in_metafield" });
+    return { operations: [] };
+  }
+
+  if (!checkValid(input)) {
+    log("early_exit", {
+      reason: "checkValid_failed",
+      cartLineCount: input.cart.lines.length,
+      hasProductDiscountClass: input.discount.discountClasses.includes(
+        DiscountClass.Product,
+      ),
+    });
     return { operations: [] };
   }
 
   const productCandidates: ProductDiscountCandidate[] = [];
 
-  // 遍历购物车商品，生成productCandidates
   for (const line of input.cart.lines) {
-    if (line.merchandise.__typename !== "ProductVariant") continue;
+    if (line.merchandise.__typename !== "ProductVariant") {
+      log("line_skip", {
+        cartLineId: line.id,
+        reason: "merchandise_not_product_variant",
+        typename: line.merchandise.__typename,
+      });
+      continue;
+    }
 
     const lineId = line.id;
     const quantity = line.quantity;
-    if (!lineId || !quantity) continue;
+    const productId = line.merchandise.product?.id;
+    const variantId = line.merchandise.id;
 
-    console.log("find suitOffer");
-    const suitOffer = findOffer(lineId, offers); // TODO
-    if (!suitOffer) continue;
-    console.log("find suitOffer success");
+    log("line_evaluate", {
+      cartLineId: lineId,
+      quantity,
+      productId,
+      variantId,
+    });
 
-    console.log("get discountPercentValue");
+    if (!lineId || !quantity) {
+      log("line_skip", { cartLineId: lineId, reason: "missing_line_id_or_qty" });
+      continue;
+    }
+
+    const suitOffer = findOffer(productId, variantId, offers);
+    if (!suitOffer) {
+      log("line_no_matching_offer", {
+        cartLineId: lineId,
+        productId,
+        variantId,
+      });
+      continue;
+    }
+
+    log("line_matched_offer", {
+      cartLineId: lineId,
+      offerId: suitOffer.id,
+      offerName: suitOffer.name,
+    });
+
     const discountPercentValue = getDiscountPercentValue(
       suitOffer.discountRulesJson,
       quantity,
     );
-    console.log("get discountPercentValue success");
-    // 数量阈值没满足时，不对该 line 施加折扣
-    if (!discountPercentValue) continue;
+    log("line_discount_percent", {
+      cartLineId: lineId,
+      discountPercentValue,
+      quantity,
+    });
 
-    console.log("create candidate");
+    if (!discountPercentValue) {
+      log("line_skip", {
+        cartLineId: lineId,
+        reason: "no_discount_percent_after_rules",
+      });
+      continue;
+    }
+
     const candidate: ProductDiscountCandidate = {
       message: suitOffer.name,
       targets: [
@@ -80,20 +163,34 @@ export function cartLinesDiscountsGenerateRun(
     };
 
     productCandidates.push(candidate);
+    log("line_candidate_added", {
+      cartLineId: lineId,
+      percent: discountPercentValue,
+    });
   }
 
   if (!productCandidates.length) {
+    log("early_exit", {
+      reason: "no_product_candidates_after_lines",
+      linesProcessed: input.cart.lines.length,
+    });
     return { operations: [] };
   }
 
-  const operations = [{
-    productDiscountsAdd: {
-      candidates: productCandidates,
-      selectionStrategy: ProductDiscountSelectionStrategy.All,
+  const operations = [
+    {
+      productDiscountsAdd: {
+        candidates: productCandidates,
+        selectionStrategy: ProductDiscountSelectionStrategy.All,
+      },
     },
-  }];
+  ];
 
-  console.log("create operations success");
+  log("run_success", {
+    candidateCount: productCandidates.length,
+    operationsJsonLength: JSON.stringify(operations).length,
+  });
+
   return { operations };
 }
 
@@ -132,7 +229,6 @@ function parseDiscountRulesJson(
 
 function formatDiscountPercentValue(percent: number): string {
   if (!Number.isFinite(percent)) return DEFAULT_DISCOUNT_PERCENTAGE;
-  // Shopify 使用十进制字符串表示（例如 "10.0"）
   return percent.toFixed(1);
 }
 
@@ -142,22 +238,24 @@ function getDiscountPercentValue(
 ): string | null {
   const tiers = parseDiscountRulesJson(discountRulesJson);
 
-  // 如果规则为空：保持旧行为（默认 10%）
+  // 规则为空：与历史「默认 10%」行为一致
   if (tiers.length === 0) {
-    return null;
+    log("discount_rules_fallback_default", { quantity });
+    return DEFAULT_DISCOUNT_PERCENTAGE;
   }
 
-  // 选中所有满足 quantity >= count 的 tier 里 count 最大的那个
   let best: DiscountTier | null = null;
   for (const tier of tiers) {
     if (quantity >= tier.count) best = tier;
   }
 
-  if (!best) return null;
+  if (!best) {
+    log("discount_rules_no_tier_met", { quantity, tierCounts: tiers.map((t) => t.count) });
+    return null;
+  }
   return formatDiscountPercentValue(best.discountPercent);
 }
 
-// 解析selectedProductsJson，返回商品id列表
 const parseSelectedIds = (selectedProductsJson?: string | null): string[] => {
   if (!selectedProductsJson) return [];
 
@@ -183,20 +281,42 @@ const parseSelectedIds = (selectedProductsJson?: string | null): string[] => {
 };
 
 /**
- * 尝试为当前 cart line 找到“匹配的生效 offer”（suitOffer）
+ * selectedProductsJson 存的是 Product GID（与主题端、后台一致），需用购物车行的 product.id / variant.id 匹配，不能用 CartLine.id。
  */
-const findOffer = (lineId: string, offers: Offer[]): Offer | null => {
-  const matched = offers.find((offer) => {
-    if (offer.status === false) return false;
+const findOffer = (
+  productId: string | undefined,
+  variantId: string | undefined,
+  offers: Offer[],
+): Offer | null => {
+  for (const offer of offers) {
+    if (offer.status === false) {
+      log("offer_skip_disabled", { offerId: offer.id, name: offer.name });
+      continue;
+    }
 
     const selectedIds = parseSelectedIds(offer.selectedProductsJson);
-    // 没有限制时，视为对所有 line 都生效
-    if (!selectedIds.length) return true;
+    if (!selectedIds.length) {
+      log("offer_match_all_products", { offerId: offer.id, name: offer.name });
+      return offer;
+    }
 
-    return selectedIds.includes(lineId);
-  });
+    const hit =
+      (productId && selectedIds.includes(productId)) ||
+      (variantId && selectedIds.includes(variantId));
 
-  return matched ?? null;
+    log("offer_selected_ids_check", {
+      offerId: offer.id,
+      name: offer.name,
+      selectedIdCount: selectedIds.length,
+      productId,
+      variantId,
+      hit,
+    });
+
+    if (hit) return offer;
+  }
+
+  return null;
 };
 
 const checkValid = (input: CartInput): boolean => {
@@ -214,4 +334,3 @@ const checkValid = (input: CartInput): boolean => {
 
   return true;
 };
-
