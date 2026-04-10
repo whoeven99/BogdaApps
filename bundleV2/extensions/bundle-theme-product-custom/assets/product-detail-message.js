@@ -21,8 +21,73 @@ function esc(value) {
     .replace(/'/g, "&#39;");
 }
 
-function formatEuro(value) {
-  return `€${Number(value).toFixed(2).replace(".", ",")}`;
+function detectNumberFormat(moneyFormat, price) {
+  let number = price.toString();
+
+  let [integerPart, decimalPart = "00"] = number.split(".");
+  decimalPart = Number(`0.${decimalPart}`).toFixed(2).slice(2);
+  switch (true) {
+    case moneyFormat.includes("amount_no_decimals"):
+      return formatWithComma(integerPart, "");
+    case moneyFormat.includes("amount_with_comma_separator"):
+      return formatWithCommaAndCommaDecimal(integerPart, decimalPart);
+    case moneyFormat.includes("amount_no_decimals_with_comma_separator"):
+      return formatWithCommaAndCommaDecimal(integerPart, "");
+    case moneyFormat.includes("amount_with_apostrophe_separator"):
+      return formatWithApostrophe(integerPart, decimalPart);
+    case moneyFormat.includes("amount_no_decimals_with_space_separator"):
+      return formatWithSpace(integerPart, "");
+    case moneyFormat.includes("amount_with_space_separator"):
+      return formatWithSpace(integerPart, decimalPart);
+    case moneyFormat.includes("amount_with_period_and_space_separator"):
+      return formatWithSpaceAndPeriod(integerPart, decimalPart);
+    case moneyFormat.includes("amount"):
+      return formatWithComma(integerPart, decimalPart);
+    default:
+      return number;
+  }
+}
+
+function formatWithComma(integerPart, decimalPart) {
+  integerPart = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return decimalPart ? `${integerPart}.${decimalPart}` : integerPart;
+}
+
+function formatWithCommaAndCommaDecimal(integerPart, decimalPart) {
+  integerPart = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return decimalPart ? `${integerPart},${decimalPart}` : integerPart;
+}
+
+function formatWithApostrophe(integerPart, decimalPart) {
+  integerPart = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, "'");
+  return decimalPart ? `${integerPart}.${decimalPart}` : integerPart;
+}
+
+function formatWithSpace(integerPart, decimalPart) {
+  integerPart = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  return decimalPart ? `${integerPart},${decimalPart}` : integerPart;
+}
+
+function formatWithSpaceAndPeriod(integerPart, decimalPart) {
+  integerPart = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  return decimalPart ? `${integerPart}.${decimalPart}` : integerPart;
+}
+
+function formatPrice(value) {
+  const configEl = document.getElementById("ciwi-bundles-config");
+  let currencySymbol = "€";
+  let moneyFormat = "amount_with_comma_separator";
+
+  if (configEl) {
+    try {
+      const config = JSON.parse(configEl.textContent || "{}");
+      if (config.currencySymbol) currencySymbol = config.currencySymbol;
+      if (config.moneyFormat) moneyFormat = config.moneyFormat;
+    } catch (e) {}
+  }
+  
+  const formattedNumber = detectNumberFormat(moneyFormat, Number(value).toFixed(2));
+  return `${currencySymbol}${formattedNumber}`;
 }
 
 function normalizePriceNumber(value) {
@@ -176,9 +241,12 @@ function parseDiscountRulesJson(discountRulesJson) {
         if (!Number.isFinite(count) || count < 1) return null;
         if (!Number.isFinite(discountPercent)) return null;
         return {
-          count: Math.trunc(count),
-          discountPercent: Math.max(0, Math.min(100, discountPercent)),
-        };
+        count: Math.trunc(count),
+        discountPercent: Math.max(0, Math.min(100, discountPercent)),
+        title: item.title || "",
+        subtitle: item.subtitle || "",
+        badge: item.badge || "",
+      };
       })
       .filter(Boolean)
       .sort((a, b) => a.count - b.count);
@@ -263,26 +331,27 @@ function renderBundlePreviewHtml(offer) {
   const layoutFormat = offerSettings.layoutFormat || "vertical";
   const accentColor = offerSettings.accentColor || "#111111";
   const cardBackgroundColor = offerSettings.cardBackgroundColor || "#ffffff";
+  const widgetTitle = offerSettings.title || "Bundle & Save";
 
   const unitPrice = getCurrentUnitPrice();
   const items = [
     {
       title: "Single",
       subtitle: "Standard price",
-      price: formatEuro(unitPrice),
+      price: formatPrice(unitPrice),
     },
     ...discountRules.map((rule, index) => {
       const originalTotal = unitPrice * rule.count;
       const discountedTotal = originalTotal * (1 - rule.discountPercent / 100);
       const saved = originalTotal - discountedTotal;
       return {
-        title: `${rule.count} items`,
-        subtitle: `You save ${rule.discountPercent}%`,
-        price: formatEuro(discountedTotal),
-        original: formatEuro(originalTotal),
+        title: rule.title || `${rule.count} items`,
+        subtitle: rule.subtitle || `You save ${rule.discountPercent}%`,
+        price: formatPrice(discountedTotal),
+        original: formatPrice(originalTotal),
         featured: index === 0,
-        badge: index === 0 ? "Most Popular" : "",
-        saveLabel: `SAVE ${formatEuro(saved)}`,
+        badge: index === 0 ? (rule.badge || "Most Popular") : (rule.badge || ""),
+        saveLabel: `SAVE ${formatPrice(saved)}`,
       };
     }),
   ];
@@ -320,7 +389,7 @@ function renderBundlePreviewHtml(offer) {
     .join("");
 
   return `<div class="create-offer-preview-card">
-    <div class="create-offer-style-preview-header" style="color:${accentColor};">Bundle & Save</div>
+    <div class="create-offer-style-preview-header" style="color:${accentColor};">${esc(widgetTitle)}</div>
     <div class="create-offer-style-preview-list create-offer-style-preview-list--${layoutFormat}">
       ${itemsHtml}
     </div>

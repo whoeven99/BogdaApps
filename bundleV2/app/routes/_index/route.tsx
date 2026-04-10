@@ -600,7 +600,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       "#ffffff",
     );
 
+    const title = String(formData.get("title") || "Bundle & Save").trim();
+
     const offerSettingsJson = JSON.stringify({
+      title,
       layoutFormat,
       totalBudget: totalBudget ? Number(totalBudget) : null,
       dailyBudget: dailyBudget ? Number(dailyBudget) : null,

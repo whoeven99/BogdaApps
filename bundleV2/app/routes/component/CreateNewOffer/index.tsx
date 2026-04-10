@@ -10,6 +10,9 @@ type DiscountRule = {
   // 数量阈值：例如 count=2 表示“买 2 件及以上”生效
   count: number;
   discountPercent: number;
+  title?: string;
+  subtitle?: string;
+  badge?: string;
 };
 
 type Product = {
@@ -113,6 +116,7 @@ function sanitizeHexColor(raw: unknown, fallback: string): string {
 function parseOfferSettings(
   offerSettingsJson?: string | null,
 ): {
+  title: string;
   layoutFormat: "vertical" | "horizontal" | "card" | "compact";
   totalBudget: number | null;
   dailyBudget: number | null;
@@ -124,6 +128,7 @@ function parseOfferSettings(
 } {
   if (!offerSettingsJson) {
     return {
+      title: "Bundle & Save",
       layoutFormat: "vertical",
       totalBudget: null,
       dailyBudget: null,
@@ -137,6 +142,7 @@ function parseOfferSettings(
 
   try {
     const parsed = JSON.parse(offerSettingsJson) as Partial<{
+      title: string;
       layoutFormat: "vertical" | "horizontal" | "card" | "compact";
       totalBudget: number | null;
       dailyBudget: number | null;
@@ -148,6 +154,7 @@ function parseOfferSettings(
     }>;
 
     return {
+      title: parsed.title || "Bundle & Save",
       layoutFormat: parsed.layoutFormat ?? "vertical",
       totalBudget:
         parsed.totalBudget !== undefined ? parsed.totalBudget : null,
@@ -168,6 +175,7 @@ function parseOfferSettings(
     };
   } catch {
     return {
+      title: "Bundle & Save",
       layoutFormat: "vertical",
       totalBudget: null,
       dailyBudget: null,
@@ -201,7 +209,10 @@ function parseDiscountRules(
         return {
           count: Math.trunc(count),
           discountPercent: Math.max(0, Math.min(100, discountPercent)),
-        } satisfies DiscountRule;
+          title: (item as { title?: string }).title || "",
+          subtitle: (item as { subtitle?: string }).subtitle || "",
+          badge: (item as { badge?: string }).badge || "",
+        } as DiscountRule;
       })
       .filter((x): x is DiscountRule => x !== null)
       .sort((a, b) => a.count - b.count);
@@ -218,6 +229,9 @@ function buildDiscountRulesJson(tiers: DiscountRule[]): DiscountRule[] {
     out.push({
       count: Math.trunc(tier.count),
       discountPercent: Math.max(0, Math.min(100, tier.discountPercent)),
+      title: tier.title || "",
+      subtitle: tier.subtitle || "",
+      badge: tier.badge || "",
     });
   }
 
@@ -229,18 +243,23 @@ function buildDiscountRulesJson(tiers: DiscountRule[]): DiscountRule[] {
 }
 
 function sanitizeDiscountRules(tiers: DiscountRule[]): DiscountRule[] {
-  const dedupedByCount = new Map<number, number>();
+  const dedupedByCount = new Map<number, DiscountRule>();
   for (const tier of tiers) {
     if (!Number.isFinite(tier.count) || tier.count < 1) continue;
     if (!Number.isFinite(tier.discountPercent)) continue;
     dedupedByCount.set(
       Math.trunc(tier.count),
-      Math.max(0, Math.min(100, tier.discountPercent)),
+      {
+        count: Math.trunc(tier.count),
+        discountPercent: Math.max(0, Math.min(100, tier.discountPercent)),
+        title: tier.title || "",
+        subtitle: tier.subtitle || "",
+        badge: tier.badge || "",
+      }
     );
   }
 
-  return [...dedupedByCount.entries()]
-    .map(([count, discountPercent]) => ({ count, discountPercent }))
+  return Array.from(dedupedByCount.values())
     .sort((a, b) => a.count - b.count);
 }
 
@@ -337,6 +356,16 @@ export function CreateNewOffer({
     offerSettings.cardBackgroundColor,
   );
   const [accentColor, setAccentColor] = useState(offerSettings.accentColor);
+  const [widgetTitle, setWidgetTitle] = useState(offerSettings.title);
+  const [customerSegments, setCustomerSegments] = useState<string[]>(
+    offerSettings.customerSegments ? offerSettings.customerSegments.split(",") : ["all"]
+  );
+  const [markets, setMarkets] = useState<string[]>(
+    offerSettings.markets ? offerSettings.markets.split(",") : ["all"]
+  );
+  const [usageLimitPerCustomer, setUsageLimitPerCustomer] = useState(
+    offerSettings.usageLimitPerCustomer
+  );
   const [showProductModal, setShowProductModal] = useState(false);
   const [productSearch, setProductSearch] = useState("");
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>(
@@ -439,7 +468,7 @@ export function CreateNewOffer({
           <button
             className="polaris-button polaris-button--plain"
             onClick={(e) => {
-              onBack();
+              onBack?.();
               e.preventDefault();
             }}
             type="button"
@@ -463,6 +492,7 @@ export function CreateNewOffer({
       {/* 始终提交的核心字段（即使对应输入步骤已切换隐藏） */}
       {/* 使用 offerName 避免与表单语义字段 name 冲突；中间空格由服务端 trim 首尾后落库 */}
       <input type="hidden" name="offerName" value={offerName} />
+      <input type="hidden" name="title" value={widgetTitle} />
       <input type="hidden" name="offerType" value={offerType} />
       <input type="hidden" name="layoutFormat" value={layoutFormat} />
       <input type="hidden" name="accentColor" value={accentColor} />
@@ -471,6 +501,17 @@ export function CreateNewOffer({
         name="cardBackgroundColor"
         value={cardBackgroundColor}
       />
+      <input
+        type="hidden"
+        name="usageLimitPerCustomer"
+        value={usageLimitPerCustomer}
+      />
+      {customerSegments.map((segment) => (
+        <input key={segment} type="hidden" name="customerSegments" value={segment} />
+      ))}
+      {markets.map((market) => (
+        <input key={market} type="hidden" name="markets" value={market} />
+      ))}
       <input
         type="hidden"
         name="selectedProductsJson"
@@ -861,6 +902,52 @@ export function CreateNewOffer({
                                 }}
                               />
                             </label>
+                          </div>
+                          
+                          {/* 新增的文本配置字段 */}
+                          <div className="create-offer-discount-form-row" style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                            <label className="create-offer-label">
+                              Title
+                              <input
+                                type="text"
+                                className="create-offer-input"
+                                value={rule.title || ''}
+                                placeholder="e.g. Duo, Trio"
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setDiscountRules(prev => prev.map((r, i) => i === index ? { ...r, title: val } : r));
+                                }}
+                              />
+                            </label>
+                            <label className="create-offer-label">
+                              Subtitle
+                              <input
+                                type="text"
+                                className="create-offer-input"
+                                value={rule.subtitle || ''}
+                                placeholder="e.g. You save 20%"
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setDiscountRules(prev => prev.map((r, i) => i === index ? { ...r, subtitle: val } : r));
+                                }}
+                              />
+                            </label>
+                            <label className="create-offer-label">
+                              Badge
+                              <input
+                                type="text"
+                                className="create-offer-input"
+                                value={rule.badge || ''}
+                                placeholder="e.g. Most Popular"
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setDiscountRules(prev => prev.map((r, i) => i === index ? { ...r, badge: val } : r));
+                                }}
+                              />
+                            </label>
+                          </div>
+                          
+                          <div className="create-offer-discount-form-row" style={{ marginTop: '12px' }}>
                             <button
                               type="button"
                               className="create-offer-remove-tier-button"
@@ -937,7 +1024,7 @@ export function CreateNewOffer({
                             className="create-offer-pricing-card create-offer-pricing-card--primary create-offer-pricing-card--readonly create-offer-pricing-card--selected"
                           >
                             <div className="create-offer-pricing-badge">
-                              Most Popular
+                              {featuredRule.badge || "Most Popular"}
                             </div>
                             <div className="create-offer-pricing-header">
                               <input
@@ -949,7 +1036,7 @@ export function CreateNewOffer({
                               />
                               <div className="create-offer-pricing-title">
                                 <div className="create-offer-pricing-meta">
-                                  <strong>{featuredRule.count} items</strong>
+                                  <strong>{featuredRule.title || `${featuredRule.count} items`}</strong>
                                   <span className="create-offer-pricing-save">
                                     SAVE{" "}
                                     {formatPreviewPrice(
@@ -960,7 +1047,7 @@ export function CreateNewOffer({
                                   </span>
                                 </div>
                                 <div className="create-offer-pricing-subtitle">
-                                  You save {featuredRule.discountPercent}%
+                                  {featuredRule.subtitle || `You save ${featuredRule.discountPercent}%`}
                                 </div>
                               </div>
                               <div className="create-offer-pricing-right">
@@ -990,6 +1077,11 @@ export function CreateNewOffer({
                               key={`preview-tier-${rule.count}`}
                               className="create-offer-pricing-card create-offer-pricing-card--readonly"
                             >
+                              {rule.badge && (
+                                <div className="create-offer-pricing-badge" style={{ backgroundColor: "#000" }}>
+                                  {rule.badge}
+                                </div>
+                              )}
                               <div className="create-offer-pricing-header">
                                 <input
                                   type="radio"
@@ -1000,13 +1092,13 @@ export function CreateNewOffer({
                                 />
                                 <div className="create-offer-pricing-title">
                                   <div className="create-offer-pricing-meta">
-                                    <strong>{rule.count} items</strong>
+                                    <strong>{rule.title || `${rule.count} items`}</strong>
                                     <span className="create-offer-pricing-save">
                                       SAVE {formatPreviewPrice(saved)}
                                     </span>
                                   </div>
                                   <div className="create-offer-pricing-subtitle">
-                                    You save {rule.discountPercent}%
+                                    {rule.subtitle || `You save ${rule.discountPercent}%`}
                                   </div>
                                 </div>
                                 <div className="create-offer-pricing-right">
@@ -1043,6 +1135,22 @@ export function CreateNewOffer({
                 <p className="polaris-text-subdued">
                   Customize the appearance of your bundle widget
                 </p>
+
+                <div className="create-offer-layout-options" style={{ marginTop: '24px' }}>
+                  <label className="create-offer-layout-label">
+                    Widget Title
+                  </label>
+                  <input
+                    type="text"
+                    className="create-offer-input"
+                    value={widgetTitle}
+                    placeholder="e.g. Bundle & Save"
+                    onChange={(e) => setWidgetTitle(e.target.value)}
+                  />
+                  <p className="create-offer-helper-text">
+                    The main heading displayed above your bundle options
+                  </p>
+                </div>
 
                 <div className="create-offer-layout-options">
                   <label className="create-offer-layout-label">
@@ -1166,8 +1274,9 @@ export function CreateNewOffer({
                 </p>
                 <BundlePreview
                   layoutFormat={layoutFormat}
-                  accentColor={accentColor}
                   cardBackgroundColor={cardBackgroundColor}
+                  accentColor={accentColor}
+                  title={widgetTitle}
                 />
               </div>
             </div>
@@ -1189,79 +1298,98 @@ export function CreateNewOffer({
                   >
                     Customer Segments
                     <div className="create-offer-checkbox-grid">
-                      <label
-                        className="create-offer-checkbox-label"
-                      >
+                      <label className="create-offer-checkbox-label">
                         <input
                           type="checkbox"
-                          defaultChecked
-                          name="customerSegments"
-                          value="all"
+                          checked={customerSegments.includes("all")}
+                          onChange={(e) => {
+                            if (e.target.checked) setCustomerSegments(["all"]);
+                          }}
                           className="create-offer-checkbox"
                         />
                         <span className="create-offer-checkbox-text">
                           All Customers
                         </span>
                       </label>
-                      <label
-                        className="create-offer-checkbox-label"
-                      >
+                      <label className="create-offer-checkbox-label">
                         <input
                           type="checkbox"
-                          name="customerSegments"
-                          value="vip"
+                          checked={customerSegments.includes("vip")}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setCustomerSegments(prev => prev.includes("all") ? ["vip"] : [...prev, "vip"]);
+                            } else {
+                              setCustomerSegments(prev => prev.filter(v => v !== "vip"));
+                            }
+                          }}
                           className="create-offer-checkbox"
                         />
                         <span className="create-offer-checkbox-text">
                           VIP Customers
                         </span>
                       </label>
-                      <label
-                        className="create-offer-checkbox-label"
-                      >
+                      <label className="create-offer-checkbox-label">
                         <input
                           type="checkbox"
-                          name="customerSegments"
-                          value="new"
+                          checked={customerSegments.includes("new")}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setCustomerSegments(prev => prev.includes("all") ? ["new"] : [...prev, "new"]);
+                            } else {
+                              setCustomerSegments(prev => prev.filter(v => v !== "new"));
+                            }
+                          }}
                           className="create-offer-checkbox"
                         />
                         <span className="create-offer-checkbox-text">
                           New Customers
                         </span>
                       </label>
-                      <label
-                        className="create-offer-checkbox-label"
-                      >
+                      <label className="create-offer-checkbox-label">
                         <input
                           type="checkbox"
-                          name="customerSegments"
-                          value="returning"
+                          checked={customerSegments.includes("returning")}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setCustomerSegments(prev => prev.includes("all") ? ["returning"] : [...prev, "returning"]);
+                            } else {
+                              setCustomerSegments(prev => prev.filter(v => v !== "returning"));
+                            }
+                          }}
                           className="create-offer-checkbox"
                         />
                         <span className="create-offer-checkbox-text">
                           Returning Customers
                         </span>
                       </label>
-                      <label
-                        className="create-offer-checkbox-label"
-                      >
+                      <label className="create-offer-checkbox-label">
                         <input
                           type="checkbox"
-                          name="customerSegments"
-                          value="high-value"
+                          checked={customerSegments.includes("high-value")}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setCustomerSegments(prev => prev.includes("all") ? ["high-value"] : [...prev, "high-value"]);
+                            } else {
+                              setCustomerSegments(prev => prev.filter(v => v !== "high-value"));
+                            }
+                          }}
                           className="create-offer-checkbox"
                         />
                         <span className="create-offer-checkbox-text">
                           High-Value Customers
                         </span>
                       </label>
-                      <label
-                        className="create-offer-checkbox-label"
-                      >
+                      <label className="create-offer-checkbox-label">
                         <input
                           type="checkbox"
-                          name="customerSegments"
-                          value="at-risk"
+                          checked={customerSegments.includes("at-risk")}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setCustomerSegments(prev => prev.includes("all") ? ["at-risk"] : [...prev, "at-risk"]);
+                            } else {
+                              setCustomerSegments(prev => prev.filter(v => v !== "at-risk"));
+                            }
+                          }}
                           className="create-offer-checkbox"
                         />
                         <span className="create-offer-checkbox-text">
@@ -1279,92 +1407,115 @@ export function CreateNewOffer({
                   >
                     Market Visibility
                     <div className="create-offer-checkbox-grid">
-                      <label
-                        className="create-offer-checkbox-label"
-                      >
+                      <label className="create-offer-checkbox-label">
                         <input
                           type="checkbox"
-                          defaultChecked
-                          name="markets"
-                          value="all"
+                          checked={markets.includes("all")}
+                          onChange={(e) => {
+                            if (e.target.checked) setMarkets(["all"]);
+                          }}
                           className="create-offer-checkbox"
                         />
                         <span className="create-offer-checkbox-text">
                           All Markets
                         </span>
                       </label>
-                      <label
-                        className="create-offer-checkbox-label"
-                      >
+                      <label className="create-offer-checkbox-label">
                         <input
                           type="checkbox"
-                          name="markets"
-                          value="us"
+                          checked={markets.includes("us")}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setMarkets(prev => prev.includes("all") ? ["us"] : [...prev, "us"]);
+                            } else {
+                              setMarkets(prev => prev.filter(v => v !== "us"));
+                            }
+                          }}
                           className="create-offer-checkbox"
                         />
                         <span className="create-offer-checkbox-text">
                           United States
                         </span>
                       </label>
-                      <label
-                        className="create-offer-checkbox-label"
-                      >
+                      <label className="create-offer-checkbox-label">
                         <input
                           type="checkbox"
-                          name="markets"
-                          value="eu"
+                          checked={markets.includes("eu")}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setMarkets(prev => prev.includes("all") ? ["eu"] : [...prev, "eu"]);
+                            } else {
+                              setMarkets(prev => prev.filter(v => v !== "eu"));
+                            }
+                          }}
                           className="create-offer-checkbox"
                         />
                         <span className="create-offer-checkbox-text">
                           Europe
                         </span>
                       </label>
-                      <label
-                        className="create-offer-checkbox-label"
-                      >
+                      <label className="create-offer-checkbox-label">
                         <input
                           type="checkbox"
-                          name="markets"
-                          value="uk"
+                          checked={markets.includes("uk")}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setMarkets(prev => prev.includes("all") ? ["uk"] : [...prev, "uk"]);
+                            } else {
+                              setMarkets(prev => prev.filter(v => v !== "uk"));
+                            }
+                          }}
                           className="create-offer-checkbox"
                         />
                         <span className="create-offer-checkbox-text">
                           United Kingdom
                         </span>
                       </label>
-                      <label
-                        className="create-offer-checkbox-label"
-                      >
+                      <label className="create-offer-checkbox-label">
                         <input
                           type="checkbox"
-                          name="markets"
-                          value="ca"
+                          checked={markets.includes("ca")}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setMarkets(prev => prev.includes("all") ? ["ca"] : [...prev, "ca"]);
+                            } else {
+                              setMarkets(prev => prev.filter(v => v !== "ca"));
+                            }
+                          }}
                           className="create-offer-checkbox"
                         />
                         <span className="create-offer-checkbox-text">
                           Canada
                         </span>
                       </label>
-                      <label
-                        className="create-offer-checkbox-label"
-                      >
+                      <label className="create-offer-checkbox-label">
                         <input
                           type="checkbox"
-                          name="markets"
-                          value="au"
+                          checked={markets.includes("au")}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setMarkets(prev => prev.includes("all") ? ["au"] : [...prev, "au"]);
+                            } else {
+                              setMarkets(prev => prev.filter(v => v !== "au"));
+                            }
+                          }}
                           className="create-offer-checkbox"
                         />
                         <span className="create-offer-checkbox-text">
                           Australia
                         </span>
                       </label>
-                      <label
-                        className="create-offer-checkbox-label"
-                      >
+                      <label className="create-offer-checkbox-label">
                         <input
                           type="checkbox"
-                          name="markets"
-                          value="apac"
+                          checked={markets.includes("apac")}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setMarkets(prev => prev.includes("all") ? ["apac"] : [...prev, "apac"]);
+                            } else {
+                              setMarkets(prev => prev.filter(v => v !== "apac"));
+                            }
+                          }}
                           className="create-offer-checkbox"
                         />
                         <span className="create-offer-checkbox-text">
@@ -1501,11 +1652,8 @@ export function CreateNewOffer({
                   >
                     Usage Limit Per Customer
                     <select
-                      defaultValue={
-                        offerSettings.usageLimitPerCustomer ??
-                        "unlimited"
-                      }
-                      name="usageLimitPerCustomer"
+                      value={usageLimitPerCustomer}
+                      onChange={(e) => setUsageLimitPerCustomer(e.target.value)}
                       className="create-offer-select"
                     >
                       <option value="unlimited">Unlimited</option>
