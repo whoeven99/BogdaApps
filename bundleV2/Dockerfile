@@ -14,4 +14,7 @@ COPY . .
 
 RUN npm run build
 
+ARG NODE_ENV
+RUN echo "building for $NODE_ENV"
+
 CMD ["npm", "run", "docker-start"]
