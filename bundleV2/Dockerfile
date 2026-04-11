@@ -19,12 +19,12 @@ RUN if [ "$NODE_ENV" = "test" ]; then \
       npx --yes @shopify/cli@latest app deploy \
         --config shopify.app.test.toml \
         --allow-updates \
-        --deployment-token "$SHOPIFY_CLI_APP_DEPLOY_TOKEN"; \
+        --cli-token "$SHOPIFY_CLI_APP_DEPLOY_TOKEN"; \
     elif [ "$NODE_ENV" = "prod" ]; then \
       npx --yes @shopify/cli@latest app deploy \
         --config shopify.app.prod.toml \
         --allow-updates \
-        --deployment-token "$SHOPIFY_CLI_APP_DEPLOY_TOKEN"; \
+        --cli-token "$SHOPIFY_CLI_APP_DEPLOY_TOKEN"; \
     fi
 
 CMD ["npm", "run", "docker-start"]
