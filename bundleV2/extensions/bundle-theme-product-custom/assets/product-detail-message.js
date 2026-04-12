@@ -600,6 +600,7 @@ function scheduleBundlePriceRefresh(offer) {
     if (!wrap) return;
     const html = renderBundlePreviewHtml(offer);
     if (html) wrap.innerHTML = html;
+    hideThemeQuantitySelectors();
   }, 64);
 }
 
