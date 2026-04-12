@@ -643,17 +643,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (intent === "create-offer" || intent === "update-offer") {
     const idRaw = String(formData.get("offerId") || "").trim();
-    const nameRaw = String(
-      formData.get("offerName") ?? formData.get("name") ?? "",
-    );
-    const name = nameRaw.trim();
-    const cartTitleRaw = String(formData.get("cartTitle") || "Bundle Discount");
-    const cartTitle = cartTitleRaw.trim();
+    const nameRaw = String(formData.get("offerName") || "").trim();
+    const name = nameRaw; // fallback logic removed as requested by original form code handling offerName properly
+    const cartTitle = String(formData.get("cartTitle") || "Bundle Discount").trim();
     const offerType = String(formData.get("offerType") || "").trim();
     const layoutFormat =
       String(formData.get("layoutFormat") || "").trim() || "vertical";
-    const startTimeRaw = String(formData.get("startTime") || "");
-    const endTimeRaw = String(formData.get("endTime") || "");
+    const startTimeRaw = String(formData.get("startTime") || "").trim();
+    const endTimeRaw = String(formData.get("endTime") || "").trim();
     const selectedProductsJson = String(
       formData.get("selectedProductsJson") || "",
     );
@@ -749,7 +746,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return offerActionErrorResponse("请填写 Offer 名称。", 400);
     }
     if (!startTimeRaw || !endTimeRaw) {
-      return offerActionErrorResponse("请填写开始时间与结束时间。", 400);
+      return offerActionErrorResponse("请填写有效的开始时间与结束时间。", 400);
+    }
+
+    const startTime = new Date(startTimeRaw);
+    const endTime = new Date(endTimeRaw);
+
+    if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
+      return offerActionErrorResponse("请填写有效的开始时间与结束时间。", 400);
     }
 
     const nameKey = normalizeOfferNameKey(name);
@@ -768,9 +772,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         409,
       );
     }
-
-    const startTime = new Date(startTimeRaw);
-    const endTime = new Date(endTimeRaw);
 
     const data = {
       shopName,
@@ -794,7 +795,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         url.searchParams.set("toast", "create-success");
       } catch (error: any) {
         if (
-          error instanceof PrismaClientKnownRequestError &&
           error.code === "P2002"
         ) {
           return offerActionErrorResponse(
@@ -830,7 +830,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         url.searchParams.set("toast", "update-success");
       } catch (error: any) {
         if (
-          error instanceof PrismaClientKnownRequestError &&
           error.code === "P2002"
         ) {
           return offerActionErrorResponse(

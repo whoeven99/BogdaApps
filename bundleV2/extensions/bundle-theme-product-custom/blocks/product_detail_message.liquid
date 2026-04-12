@@ -40,6 +40,8 @@
   </script>
 {% endif %}
 
+<script src="{{ 'product-detail-message.js' | asset_url }}" defer></script>
+
 {% schema %}
 {
   "name": "Product detail message",
@@ -48,7 +50,6 @@
     "templates": ["product"]
   },
   "stylesheet": "product-detail-message.css",
-  "javascript": "product-detail-message.js",
   "settings": [
     {
       "type": "text",

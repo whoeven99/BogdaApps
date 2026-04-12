@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useFetcher, useNavigate, useSearchParams } from "react-router";
-import { Button, Input, Select, Switch, Checkbox } from "antd";
+import { Button, Input, Select, Switch, Checkbox, DatePicker } from "antd";
+import dayjs from "dayjs";
 import {
   X,
 } from "lucide-react";
@@ -71,11 +72,8 @@ function normalizeOfferNameKey(value: string): string {
 
 function formatForDateTimeLocal(value: string | Date) {
   const d = typeof value === "string" ? new Date(value) : value;
-  const pad = (n: number) => n.toString().padStart(2, "0");
-  return (
-    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
-    `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-  );
+  if (isNaN(d.getTime())) return "";
+  return d.toISOString();
 }
 
 function parseSelectedProductIds(
@@ -375,12 +373,12 @@ export function CreateNewOffer({
   const [offerNameError, setOfferNameError] = useState("");
   const [cartTitleError, setCartTitleError] = useState("");
   const [startTime, setStartTime] = useState(
-    initialOffer
-      ? formatForDateTimeLocal(initialOffer.startTime)
-      : formatForDateTimeLocal(new Date()),
+    initialOffer && initialOffer.startTime
+      ? new Date(initialOffer.startTime).toISOString()
+      : new Date().toISOString(),
   );
   const [endTime, setEndTime] = useState(
-    initialOffer ? formatForDateTimeLocal(initialOffer.endTime) : "",
+    initialOffer && initialOffer.endTime ? new Date(initialOffer.endTime).toISOString() : "",
   );
   const [startTimeError, setStartTimeError] = useState("");
   const [endTimeError, setEndTimeError] = useState("");
@@ -551,11 +549,17 @@ export function CreateNewOffer({
         if (!startTime) {
           setStartTimeError("Start Time is required.");
           hasError = true;
+        } else if (startTime && (!dayjs(startTime).isValid() || startTime === "")) {
+          setStartTimeError("Invalid start time format.");
+          hasError = true;
         } else {
           setStartTimeError("");
         }
         if (!endTime) {
           setEndTimeError("End Time is required.");
+          hasError = true;
+        } else if (endTime && (!dayjs(endTime).isValid() || endTime === "")) {
+          setEndTimeError("Invalid end time format.");
           hasError = true;
         } else {
           setEndTimeError("");
@@ -589,15 +593,7 @@ export function CreateNewOffer({
             <h1 className="text-[24px] font-semibold m-0 text-[#1c1f23]">
               {initialOffer ? "Edit Offer" : "Create New Offer"}
             </h1>
-            <div className="flex items-center gap-[8px]">
-              <span className="text-[14px] text-[#5c6166] font-medium">Status:</span>
-              <div className="flex items-center gap-[8px]">
-                <Switch checked={status} onChange={(checked) => setStatus(checked)} />
-                <span className="text-[14px] font-medium min-w-[50px] text-left" style={{ color: status ? "#008060" : "#6d7175" }}>
-                  {status ? "Active" : "Paused"}
-                </span>
-              </div>
-            </div>
+            
           </div>
         </div>
       </div>
@@ -1542,7 +1538,8 @@ export function CreateNewOffer({
                   Target Audience
                 </h3>
                 <div className="flex flex-col gap-4">
-                  <div>
+                  {/* Hidden Customer Segments */}
+                  {false && <div>
                     <label className="block text-[14px] font-medium text-[#1c1f23] mb-2">
                       Customer Segments
                     </label>
@@ -1619,7 +1616,7 @@ export function CreateNewOffer({
                     <p className="text-[13px] text-[#5c6166] mt-2">
                       Select one or more customer segments to target
                     </p>
-                  </div>
+                  </div>}
 
                   <div>
                     <label className="block text-[14px] font-medium text-[#1c1f23] mb-2">
@@ -1666,26 +1663,21 @@ export function CreateNewOffer({
                 <div className="grid grid-cols-2 gap-4">
                   <label className="block text-[14px] font-medium text-[#1c1f23]">
                     Start Time
-                    <Input
+                    <DatePicker
                       size="large"
-                      ref={startTimeInputRef as any}
-                      type="datetime-local"
-                      step="1"
+                      showTime
                       className="mt-1 w-full"
-                      name="startTime"
-                      value={startTime}
-                      onClick={() => {
-                        openDateTimePicker(startTimeInputRef.current as any);
-                      }}
-                      onChange={(e) => {
-                        setStartTime(e.target.value);
-                        if (startTimeError && e.target.value) {
+                      value={startTime && dayjs(startTime).isValid() ? dayjs(startTime) : null}
+                      onChange={(date) => {
+                        const val = date ? date.toISOString() : '';
+                        setStartTime(val);
+                        if (startTimeError && val) {
                           setStartTimeError("");
                         }
                       }}
                       status={startTimeError ? "error" : ""}
-                      required
                     />
+                    <input type="hidden" name="startTime" value={startTime} />
                     {startTimeError ? (
                       <p className="text-red-500 text-xs mt-1">
                         {startTimeError}
@@ -1698,26 +1690,21 @@ export function CreateNewOffer({
                   </label>
                   <label className="block text-[14px] font-medium text-[#1c1f23]">
                     End Time
-                    <Input
+                    <DatePicker
                       size="large"
-                      ref={endTimeInputRef as any}
-                      type="datetime-local"
-                      step="1"
+                      showTime
                       className="mt-1 w-full"
-                      name="endTime"
-                      value={endTime}
-                      onClick={() => {
-                        openDateTimePicker(endTimeInputRef.current as any);
-                      }}
-                      onChange={(e) => {
-                        setEndTime(e.target.value);
-                        if (endTimeError && e.target.value) {
+                      value={endTime && dayjs(endTime).isValid() ? dayjs(endTime) : null}
+                      onChange={(date) => {
+                        const val = date ? date.toISOString() : '';
+                        setEndTime(val);
+                        if (endTimeError && val) {
                           setEndTimeError("");
                         }
                       }}
                       status={endTimeError ? "error" : ""}
-                      required
                     />
+                    <input type="hidden" name="endTime" value={endTime} />
                     {endTimeError ? (
                       <p className="text-red-500 text-xs mt-1">
                         {endTimeError}
@@ -1731,7 +1718,8 @@ export function CreateNewOffer({
                 </div>
               </div>
 
-              <div className="mb-8">
+              {/* Hidden Budget Module */}
+              {false && <div className="mb-8">
                 <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
                   Budget
                 </h3>
@@ -1767,9 +1755,10 @@ export function CreateNewOffer({
                     </p>
                   </label>
                 </div>
-              </div>
+              </div>}
 
-              <div className="mb-8">
+              {/* Hidden Risk Control Module */}
+              {false && <div className="mb-8">
                 <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
                   Risk Control
                 </h3>
@@ -1796,7 +1785,7 @@ export function CreateNewOffer({
                     </p>
                   </label>
                 </div>
-              </div>
+              </div>}
             </div>
           )}
         </div>
@@ -1848,6 +1837,31 @@ export function CreateNewOffer({
             if (step < 4) {
               setStep(step + 1);
               e.preventDefault();
+            }
+            if (step === 4) {
+              let hasError = false;
+              if (!startTime) {
+                setStartTimeError("Start Time is required.");
+                hasError = true;
+              } else if (startTime && (!dayjs(startTime).isValid() || startTime === "")) {
+                setStartTimeError("Invalid start time format.");
+                hasError = true;
+              } else {
+                setStartTimeError("");
+              }
+              if (!endTime) {
+                setEndTimeError("End Time is required.");
+                hasError = true;
+              } else if (endTime && (!dayjs(endTime).isValid() || endTime === "")) {
+                setEndTimeError("Invalid end time format.");
+                hasError = true;
+              } else {
+                setEndTimeError("");
+              }
+              if (hasError) {
+                e.preventDefault();
+                return;
+              }
             }
             // 第 4 步由表单 onSubmit 校验并提交，不在此处校验（避免校验失败仍触发 submit）
           }}
