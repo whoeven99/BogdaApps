@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useFetcher, useNavigate, useSearchParams } from "react-router";
+import { Button, Input, Select, Switch, Checkbox, Space } from "antd";
 import {
   X,
 } from "lucide-react";
@@ -509,7 +510,7 @@ export function CreateNewOffer({
 
   return (
     <fetcher.Form
-      className="polaris-page create-offer-page"
+      className="relative max-w-5xl mx-auto"
       method="post"
       onSubmit={(e: any) => {
         const key = normalizeOfferNameKey(offerName);
@@ -567,46 +568,29 @@ export function CreateNewOffer({
           {submitErrorToast}
         </div>
       )}
-      <div className="polaris-page__header">
+      <div className="mb-6">
         <div>
-          <button
-            className="polaris-button polaris-button--plain"
+          <Button
+            type="text"
             onClick={(e) => {
               onBack?.();
               e.preventDefault();
             }}
-            type="button"
           >
             ← Back
-          </button>
-          <div className="flex items-center justify-between w-full gap-[16px]">
-            <h1 className="polaris-page__title m-0">
+          </Button>
+          <div className="flex items-center justify-between w-full gap-[16px] mt-2">
+            <h1 className="text-2xl font-semibold m-0 text-gray-900">
               {initialOffer ? "Edit Offer" : "Create New Offer"}
             </h1>
             <div className="flex items-center gap-[8px]">
               <span className="text-[14px] text-[#6d7175] font-medium">Status:</span>
-              <button
-                type="button"
-                onClick={() => setStatus(!status)}
-                className="flex items-center gap-[8px] bg-transparent border-0 p-0 cursor-pointer"
-              >
-                <span
-                  className="relative inline-block w-[44px] h-[24px] rounded-[12px] transition-colors duration-200"
-                  style={{
-                    backgroundColor: status ? "#008060" : "#c4cdd5",
-                  }}
-                >
-                  <span
-                    className="absolute top-[2px] w-[20px] h-[20px] bg-white rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.2)] transition-all duration-200"
-                    style={{
-                      left: status ? "22px" : "2px",
-                    }}
-                  />
-                </span>
+              <div className="flex items-center gap-[8px]">
+                <Switch checked={status} onChange={(checked) => setStatus(checked)} />
                 <span className="text-[14px] font-medium min-w-[50px] text-left" style={{ color: status ? "#008060" : "#6d7175" }}>
                   {status ? "Active" : "Paused"}
                 </span>
-              </button>
+              </div>
             </div>
           </div>
         </div>
@@ -664,13 +648,15 @@ export function CreateNewOffer({
         value={JSON.stringify(buildDiscountRulesJson(normalizedDiscountRules))}
       />
 
-      <div className="polaris-card create-offer-card">
-        <div className="create-offer-steps sm:flex sm:gap-[12px]">
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-20">
+        <div className="flex flex-col sm:flex-row gap-3 mb-8">
           {steps.map((stepName, index) => (
             <div
               key={index}
-              className={`create-offer-step sm:text-[14px] sm:p-[12px] ${
-                step === index + 1 ? "create-offer-step--active" : ""
+              className={`flex-1 py-3 px-4 rounded-md text-center text-sm font-medium cursor-pointer transition-colors ${
+                step === index + 1
+                  ? "bg-[#008060] text-white"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
               }`}
               onClick={(e) => {
                 setStep(index + 1);
@@ -685,20 +671,20 @@ export function CreateNewOffer({
           ))}
         </div>
 
-        <div className="polaris-layout">
+        <div>
           {step === 1 && (
             <div className="create-offer-basic-grid lg:grid-cols-[1fr_400px]">
               <div>
-                <h2 className="polaris-text-heading-md create-offer-section-title">
+                <h2 className="text-xl font-semibold mb-4 text-gray-900">
                   Basic Information
                 </h2>
-                <div className="polaris-stack polaris-stack--vertical">
-                  <label className="create-offer-label">
-                    Offer Name
-                    <input
-                      type="text"
+                <div className="flex flex-col gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Offer Name
+                    </label>
+                    <Input
                       placeholder="e.g., Summer Bundle Deal"
-                      className="create-offer-input"
                       value={offerName}
                       onChange={(e) => {
                         setOfferName(e.target.value);
@@ -706,38 +692,34 @@ export function CreateNewOffer({
                           setOfferNameError("");
                         }
                       }}
-                      required
+                      status={offerNameError ? "error" : ""}
                     />
                     {offerNameError && (
-                      <p className="create-offer-error-text">
+                      <p className="text-red-500 text-xs mt-1">
                         {offerNameError}
                       </p>
                     )}
-                  </label>
+                  </div>
 
-                  <label className="create-offer-label create-offer-label--mt">
-                    Offer Type
-                    <select
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Offer Type
+                    </label>
+                    <Select
                       value={offerType}
-                      onChange={(e) =>
-                        setOfferType(e.target.value)
-                      }
-                      className="create-offer-input"
+                      onChange={(val) => setOfferType(val)}
                       disabled
-                    >
-                      {offerTypes.map((type) => (
-                        <option key={type.id} value={type.id}>
-                          {type.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="create-offer-label mt-[16px]">
-                    Display Title (Cart & Checkout)
-                    <input
-                      type="text"
+                      className="w-full"
+                      options={offerTypes.map(t => ({ label: t.name, value: t.id }))}
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Display Title (Cart & Checkout)
+                    </label>
+                    <Input
                       placeholder="e.g., Bundle Discount"
-                      className="create-offer-input"
                       value={cartTitle}
                       onChange={(e) => {
                         setCartTitle(e.target.value);
@@ -745,24 +727,25 @@ export function CreateNewOffer({
                           setCartTitleError("");
                         }
                       }}
+                      status={cartTitleError ? "error" : ""}
                     />
-                    <div className="text-[12px] text-[#6d7175] mt-[4px]">
+                    <div className="text-xs text-gray-500 mt-1">
                       This is the discount name shown to customers in their cart and checkout.
                     </div>
                     {cartTitleError && (
-                      <div className="create-offer-error-text">
+                      <div className="text-red-500 text-xs mt-1">
                         {cartTitleError}
                       </div>
                     )}
-                  </label>
+                  </div>
                 </div>
               </div>
 
               <div className="create-offer-sticky-preview">
-                <h3 className="create-offer-section-heading">
+                <h3 className="text-sm font-medium text-gray-900 mb-3">
                   Preview
                 </h3>
-                <p className="polaris-text-subdued create-offer-text-subdued">
+                <p className="text-sm text-gray-500 mb-6">
                   {
                     offerTypes.find(
                       (type) => type.id === offerType,
@@ -846,26 +829,25 @@ export function CreateNewOffer({
             <>
               <div className="create-offer-products-grid">
                 <div>
-                  <h2 className="polaris-text-heading-md create-offer-section-title">
+                  <h2 className="text-xl font-semibold mb-6 text-gray-900">
                     Products & Discounts
                   </h2>
 
-                  <div className="create-offer-selected-products">
-                    <h3 className="create-offer-section-heading">
+                  <div className="mb-8">
+                    <h3 className="text-sm font-medium text-gray-900 mb-3">
                       Products eligible for offer
                     </h3>
 
                     {selectedProductsData.length === 0 ? (
-                      <button
+                      <Button
+                        type="primary"
                         onClick={(e) => {
                           handleSelectProducts();
                           e.preventDefault();
                         }}
-                        className="create-offer-modal-footer-button"
-                        type="button"
                       >
                         Add products eligible for offer
-                      </button>
+                      </Button>
                     ) : (
                       <div>
                         <div className="create-offer-selected-grid">
@@ -917,35 +899,35 @@ export function CreateNewOffer({
                               : "";
                           })()}
                         </div>
-                        <button
+                        <Button
+                          type="link"
                           onClick={(e) => {
                             handleSelectProducts();
                             e.preventDefault();
                           }}
-                          className="create-offer-selected-edit"
-                          type="button"
+                          className="px-0"
                         >
                           Edit products
-                        </button>
+                        </Button>
                       </div>
                     )}
                   </div>
 
                   <div>
-                    <h3 className="create-offer-section-heading">
+                    <h3 className="text-sm font-medium text-gray-900 mb-3">
                       Buy more, save more
                     </h3>
                     {discountRules.map((rule, index) => (
                       <div className="create-offer-discount-card" key={`${rule.count}-${index}`}>
                         <div className="create-offer-discount-body">
                           <div className="create-offer-discount-form-row create-offer-discount-form-row--inline">
-                            <label className="create-offer-label">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
                               Item quantity
-                              <input
+                              <Input
                                 type="number"
-                                min="1"
-                                step="1"
-                                className="create-offer-input"
+                                min={1}
+                                step={1}
+                                className="mt-1"
                                 value={rule.count}
                                 onChange={(e) => {
                                   const parsedValue = Number(e.target.value);
@@ -961,14 +943,14 @@ export function CreateNewOffer({
                                 }}
                               />
                             </label>
-                            <label className="create-offer-label">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
                               Discount (%)
-                              <input
+                              <Input
                                 type="number"
-                                min="0"
-                                max="100"
-                                step="1"
-                                className="create-offer-input"
+                                min={0}
+                                max={100}
+                                step={1}
+                                className="mt-1"
                                 value={rule.discountPercent}
                                 onChange={(e) => {
                                   const parsedValue = Number(e.target.value);
@@ -990,11 +972,10 @@ export function CreateNewOffer({
                           
                           {/* 新增的文本配置字段 */}
                           <div className="create-offer-discount-form-row" style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
-                            <label className="create-offer-label">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
                               Title
-                              <input
-                                type="text"
-                                className="create-offer-input"
+                              <Input
+                                className="mt-1"
                                 value={rule.title || ''}
                                 placeholder="e.g. Duo, Trio"
                                 onChange={(e) => {
@@ -1003,11 +984,10 @@ export function CreateNewOffer({
                                 }}
                               />
                             </label>
-                            <label className="create-offer-label">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
                               Subtitle
-                              <input
-                                type="text"
-                                className="create-offer-input"
+                              <Input
+                                className="mt-1"
                                 value={rule.subtitle || ''}
                                 placeholder="e.g. You save 20%"
                                 onChange={(e) => {
@@ -1016,11 +996,10 @@ export function CreateNewOffer({
                                 }}
                               />
                             </label>
-                            <label className="create-offer-label">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
                               Badge
-                              <input
-                                type="text"
-                                className="create-offer-input"
+                              <Input
+                                className="mt-1"
                                 value={rule.badge || ''}
                                 placeholder="e.g. Most Popular"
                                 onChange={(e) => {
@@ -1032,9 +1011,8 @@ export function CreateNewOffer({
                           </div>
                           
                           <div className="create-offer-discount-form-row" style={{ marginTop: '12px' }}>
-                            <button
-                              type="button"
-                              className="create-offer-remove-tier-button"
+                            <Button
+                              danger
                               onClick={() => {
                                 setDiscountRules((prev) => {
                                   if (prev.length <= 1) return prev;
@@ -1044,14 +1022,14 @@ export function CreateNewOffer({
                               disabled={discountRules.length <= 1}
                             >
                               Remove
-                            </button>
+                            </Button>
                           </div>
                         </div>
                       </div>
                     ))}
-                    <button
-                      type="button"
-                      className="create-offer-add-tier-button"
+                    <Button
+                      type="dashed"
+                      className="w-full"
                       onClick={() => {
                         setDiscountRules((prev) => {
                           const maxCount = prev.reduce(
@@ -1063,15 +1041,15 @@ export function CreateNewOffer({
                       }}
                     >
                       + Add discount tier
-                    </button>
+                    </Button>
                   </div>
                 </div>
 
                 <div className="create-offer-sticky-preview">
-                  <h3 className="create-offer-section-heading">
+                  <h3 className="text-sm font-medium text-gray-900 mb-3">
                     Preview
                   </h3>
-                  <p className="polaris-text-subdued create-offer-text-subdued">
+                  <p className="text-sm text-gray-500 mb-6">
                     {
                       offerTypes.find(
                         (type) => type.id === offerType,
@@ -1213,115 +1191,113 @@ export function CreateNewOffer({
           {step === 3 && (
             <div className="create-offer-style-grid">
               <div>
-                <h2 className="polaris-text-heading-md create-offer-section-title">
+                <h2 className="text-xl font-semibold mb-2 text-gray-900">
                   Style Design
                 </h2>
-                <p className="polaris-text-subdued">
+                <p className="text-sm text-gray-500 mb-6">
                   Customize the appearance of your bundle widget
                 </p>
 
-                <div className="create-offer-layout-options" style={{ marginTop: '24px' }}>
-                  <label className="create-offer-layout-label">
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     Widget Title
                   </label>
-                  <input
-                    type="text"
-                    className="create-offer-input"
+                  <Input
                     value={widgetTitle}
                     placeholder="e.g. Bundle & Save"
                     onChange={(e) => setWidgetTitle(e.target.value)}
                   />
-                  <p className="create-offer-helper-text">
+                  <p className="text-xs text-gray-500 mt-1">
                     The main heading displayed above your bundle options
                   </p>
                 </div>
 
-                <div className="create-offer-layout-options">
-                  <label className="create-offer-layout-label">
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     Layout Format
                   </label>
-                  <div className="create-offer-layout-grid">
+                  <div className="grid grid-cols-2 gap-3">
                     <div
-                      className={`create-offer-layout-card ${
+                      className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
                         layoutFormat === "vertical"
-                          ? "create-offer-layout-card--active"
-                          : ""
+                          ? "border-[#008060] bg-[#f0faf6]"
+                          : "border-gray-200 bg-white"
                       }`}
                       onClick={(e) => {
                         setLayoutFormat("vertical");
                         e.preventDefault();
                       }}
                     >
-                      <div className="create-offer-layout-card-title">
+                      <div className="font-medium mb-1 text-gray-900">
                         Vertical Stack
                       </div>
-                      <div className="create-offer-layout-card-desc">
+                      <div className="text-xs text-gray-500">
                         Products stacked vertically
                       </div>
                     </div>
                     <div
-                      className={`create-offer-layout-card ${
+                      className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
                         layoutFormat === "horizontal"
-                          ? "create-offer-layout-card--active"
-                          : ""
+                          ? "border-[#008060] bg-[#f0faf6]"
+                          : "border-gray-200 bg-white"
                       }`}
                       onClick={(e) => {
                         setLayoutFormat("horizontal");
                         e.preventDefault();
                       }}
                     >
-                      <div className="create-offer-layout-card-title">
+                      <div className="font-medium mb-1 text-gray-900">
                         Horizontal Grid
                       </div>
-                      <div className="create-offer-layout-card-desc">
+                      <div className="text-xs text-gray-500">
                         Products in a row
                       </div>
                     </div>
                     <div
-                      className={`create-offer-layout-card ${
+                      className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
                         layoutFormat === "card"
-                          ? "create-offer-layout-card--active"
-                          : ""
+                          ? "border-[#008060] bg-[#f0faf6]"
+                          : "border-gray-200 bg-white"
                       }`}
                       onClick={(e) => {
                         setLayoutFormat("card");
                         e.preventDefault();
                       }}
                     >
-                      <div className="create-offer-layout-card-title">
+                      <div className="font-medium mb-1 text-gray-900">
                         Card Grid
                       </div>
-                      <div className="create-offer-layout-card-desc">
+                      <div className="text-xs text-gray-500">
                         2x2 grid layout
                       </div>
                     </div>
                     <div
-                      className={`create-offer-layout-card ${
+                      className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
                         layoutFormat === "compact"
-                          ? "create-offer-layout-card--active"
-                          : ""
+                          ? "border-[#008060] bg-[#f0faf6]"
+                          : "border-gray-200 bg-white"
                       }`}
                       onClick={(e) => {
                         setLayoutFormat("compact");
                         e.preventDefault();
                       }}
                     >
-                      <div className="create-offer-layout-card-title">
+                      <div className="font-medium mb-1 text-gray-900">
                         Compact List
                       </div>
-                      <div className="create-offer-layout-card-desc">
+                      <div className="text-xs text-gray-500">
                         Condensed view
                       </div>
                     </div>
                   </div>
                 </div>
 
-                <div className="create-offer-card-colors" style={{ marginTop: '24px' }}>
-                  <h3 className="create-offer-section-heading">
+                <div className="mb-6">
+                  <h3 className="text-sm font-medium text-gray-900 mb-3">
                     Card & Typography Colors
                   </h3>
-                  <div className="polaris-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '16px' }}>
-                    <label className="create-offer-label">
+                  <div className="grid grid-cols-2 gap-4">
+                    <label className="block text-sm font-medium text-gray-700">
                       Card Background Color
                       <input
                         type="color"
@@ -1329,124 +1305,121 @@ export function CreateNewOffer({
                         onChange={(e) =>
                           setCardBackgroundColor(e.target.value)
                         }
-                        className="create-offer-color-input"
+                        className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1"
                       />
                     </label>
-                    <label className="create-offer-label">
+                    <label className="block text-sm font-medium text-gray-700">
                       Accent Color
                       <input
                         type="color"
                         value={accentColor}
                         onChange={(e) => setAccentColor(e.target.value)}
-                        className="create-offer-color-input"
+                        className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1"
                       />
                     </label>
-                    <label className="create-offer-label">
+                    <label className="block text-sm font-medium text-gray-700">
                       Border Color
                       <input
                         type="color"
                         value={borderColor}
                         onChange={(e) => setBorderColor(e.target.value)}
-                        className="create-offer-color-input"
+                        className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1"
                       />
                     </label>
-                    <label className="create-offer-label">
+                    <label className="block text-sm font-medium text-gray-700">
                       Label Text Color
                       <input
                         type="color"
                         value={labelColor}
                         onChange={(e) => setLabelColor(e.target.value)}
-                        className="create-offer-color-input"
+                        className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1"
                       />
                     </label>
                   </div>
                 </div>
 
-                <div className="create-offer-typography" style={{ marginTop: '24px' }}>
-                  <h3 className="create-offer-section-heading">
+                <div className="mb-6">
+                  <h3 className="text-sm font-medium text-gray-900 mb-3">
                     Title Typography
                   </h3>
-                  <div className="polaris-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '16px' }}>
-                    <label className="create-offer-label">
+                  <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                    <label className="block text-sm font-medium text-gray-700">
                       Font Size (px)
-                      <input
+                      <Input
                         type="number"
-                        min="10"
-                        max="36"
+                        min={10}
+                        max={36}
                         value={titleFontSize}
                         onChange={(e) => setTitleFontSize(Number(e.target.value))}
-                        className="create-offer-input"
+                        className="mt-1"
                       />
                     </label>
-                    <label className="create-offer-label">
+                    <label className="block text-sm font-medium text-gray-700">
                       Font Weight
-                      <select
+                      <Select
                         value={titleFontWeight}
-                        onChange={(e) => setTitleFontWeight(e.target.value)}
-                        className="create-offer-input"
-                      >
-                        <option value="400">Regular (400)</option>
-                        <option value="500">Medium (500)</option>
-                        <option value="600">Semi Bold (600)</option>
-                        <option value="700">Bold (700)</option>
-                      </select>
+                        onChange={(val) => setTitleFontWeight(val)}
+                        className="w-full mt-1"
+                        options={[
+                          { label: "Regular (400)", value: "400" },
+                          { label: "Medium (500)", value: "500" },
+                          { label: "Semi Bold (600)", value: "600" },
+                          { label: "Bold (700)", value: "700" }
+                        ]}
+                      />
                     </label>
-                    <label className="create-offer-label">
+                    <label className="block text-sm font-medium text-gray-700">
                       Title Color
                       <input
                         type="color"
                         value={titleColor}
                         onChange={(e) => setTitleColor(e.target.value)}
-                        className="create-offer-color-input"
+                        className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1"
                       />
                     </label>
                   </div>
                 </div>
 
-                <div className="create-offer-button-style" style={{ marginTop: '24px' }}>
-                  <h3 className="create-offer-section-heading">
+                <div className="mb-6">
+                  <h3 className="text-sm font-medium text-gray-900 mb-3">
                     Button Style & Extra
                   </h3>
-                  <div className="polaris-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '16px' }}>
-                    <label className="create-offer-label">
+                  <div className="grid grid-cols-2 gap-4">
+                    <label className="block text-sm font-medium text-gray-700">
                       Button Text
-                      <input
-                        type="text"
+                      <Input
                         value={buttonText}
                         onChange={(e) => setButtonText(e.target.value)}
-                        className="create-offer-input"
+                        className="mt-1"
                       />
                     </label>
-                    <label className="create-offer-label">
+                    <label className="block text-sm font-medium text-gray-700">
                       Button Color
                       <input
                         type="color"
                         value={buttonPrimaryColor}
                         onChange={(e) => setButtonPrimaryColor(e.target.value)}
-                        className="create-offer-color-input"
+                        className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1"
                       />
                     </label>
                   </div>
                   
-                  <label className="create-offer-checkbox-label" style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <input
-                      type="checkbox"
+                  <div className="mt-4">
+                    <Checkbox
                       checked={enableCountdown}
                       onChange={(e) => setEnableCountdown(e.target.checked)}
-                      className="create-offer-checkbox"
-                    />
-                    <span className="create-offer-checkbox-text">
+                    >
                       Enable Countdown Timer
-                    </span>
-                  </label>
+                    </Checkbox>
+                  </div>
                 </div>
               </div>
 
               <div className="create-offer-sticky-preview">
-                <h3 className="create-offer-section-heading">
+                <h3 className="text-sm font-medium text-gray-900 mb-3">
                   Preview
                 </h3>
-                <p className="polaris-text-subdued create-offer-text-subdued">
+                <p className="text-sm text-gray-500 mb-6">
                   {
                     offerTypes.find(
                       (type) => type.id === offerType,
@@ -1473,270 +1446,203 @@ export function CreateNewOffer({
 
           {step === 4 && (
             <div>
-              <h2 className="polaris-text-heading-md create-offer-section-title">
+              <h2 className="text-xl font-semibold mb-6 text-gray-900">
                 Targeting & Settings
               </h2>
 
-              <div className="create-offer-section">
-                <h3 className="create-offer-section-heading">
+              <div className="mb-8">
+                <h3 className="text-sm font-medium text-gray-900 mb-3">
                   Target Audience
                 </h3>
-                <div className="polaris-stack polaris-stack--vertical">
-                  <label
-                    className="create-offer-label"
-                  >
-                    Customer Segments
-                    <div className="create-offer-checkbox-grid">
-                      <label className="create-offer-checkbox-label">
-                        <input
-                          type="checkbox"
-                          checked={customerSegments.includes("all")}
-                          onChange={(e) => {
-                            if (e.target.checked) setCustomerSegments(["all"]);
-                          }}
-                          className="create-offer-checkbox"
-                        />
-                        <span className="create-offer-checkbox-text">
-                          All Customers
-                        </span>
-                      </label>
-                      <label className="create-offer-checkbox-label">
-                        <input
-                          type="checkbox"
-                          checked={customerSegments.includes("vip")}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setCustomerSegments(prev => prev.includes("all") ? ["vip"] : [...prev, "vip"]);
-                            } else {
-                              setCustomerSegments(prev => prev.filter(v => v !== "vip"));
-                            }
-                          }}
-                          className="create-offer-checkbox"
-                        />
-                        <span className="create-offer-checkbox-text">
-                          VIP Customers
-                        </span>
-                      </label>
-                      <label className="create-offer-checkbox-label">
-                        <input
-                          type="checkbox"
-                          checked={customerSegments.includes("new")}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setCustomerSegments(prev => prev.includes("all") ? ["new"] : [...prev, "new"]);
-                            } else {
-                              setCustomerSegments(prev => prev.filter(v => v !== "new"));
-                            }
-                          }}
-                          className="create-offer-checkbox"
-                        />
-                        <span className="create-offer-checkbox-text">
-                          New Customers
-                        </span>
-                      </label>
-                      <label className="create-offer-checkbox-label">
-                        <input
-                          type="checkbox"
-                          checked={customerSegments.includes("returning")}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setCustomerSegments(prev => prev.includes("all") ? ["returning"] : [...prev, "returning"]);
-                            } else {
-                              setCustomerSegments(prev => prev.filter(v => v !== "returning"));
-                            }
-                          }}
-                          className="create-offer-checkbox"
-                        />
-                        <span className="create-offer-checkbox-text">
-                          Returning Customers
-                        </span>
-                      </label>
-                      <label className="create-offer-checkbox-label">
-                        <input
-                          type="checkbox"
-                          checked={customerSegments.includes("high-value")}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setCustomerSegments(prev => prev.includes("all") ? ["high-value"] : [...prev, "high-value"]);
-                            } else {
-                              setCustomerSegments(prev => prev.filter(v => v !== "high-value"));
-                            }
-                          }}
-                          className="create-offer-checkbox"
-                        />
-                        <span className="create-offer-checkbox-text">
-                          High-Value Customers
-                        </span>
-                      </label>
-                      <label className="create-offer-checkbox-label">
-                        <input
-                          type="checkbox"
-                          checked={customerSegments.includes("at-risk")}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setCustomerSegments(prev => prev.includes("all") ? ["at-risk"] : [...prev, "at-risk"]);
-                            } else {
-                              setCustomerSegments(prev => prev.filter(v => v !== "at-risk"));
-                            }
-                          }}
-                          className="create-offer-checkbox"
-                        />
-                        <span className="create-offer-checkbox-text">
-                          At-Risk Customers
-                        </span>
-                      </label>
+                <div className="flex flex-col gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Customer Segments
+                    </label>
+                    <div className="grid grid-cols-2 gap-3 border border-gray-200 rounded-md p-4">
+                      <Checkbox
+                        checked={customerSegments.includes("all")}
+                        onChange={(e) => {
+                          if (e.target.checked) setCustomerSegments(["all"]);
+                        }}
+                      >
+                        All Customers
+                      </Checkbox>
+                      <Checkbox
+                        checked={customerSegments.includes("vip")}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setCustomerSegments(prev => prev.includes("all") ? ["vip"] : [...prev, "vip"]);
+                          } else {
+                            setCustomerSegments(prev => prev.filter(v => v !== "vip"));
+                          }
+                        }}
+                      >
+                        VIP Customers
+                      </Checkbox>
+                      <Checkbox
+                        checked={customerSegments.includes("new")}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setCustomerSegments(prev => prev.includes("all") ? ["new"] : [...prev, "new"]);
+                          } else {
+                            setCustomerSegments(prev => prev.filter(v => v !== "new"));
+                          }
+                        }}
+                      >
+                        New Customers
+                      </Checkbox>
+                      <Checkbox
+                        checked={customerSegments.includes("returning")}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setCustomerSegments(prev => prev.includes("all") ? ["returning"] : [...prev, "returning"]);
+                          } else {
+                            setCustomerSegments(prev => prev.filter(v => v !== "returning"));
+                          }
+                        }}
+                      >
+                        Returning Customers
+                      </Checkbox>
+                      <Checkbox
+                        checked={customerSegments.includes("high-value")}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setCustomerSegments(prev => prev.includes("all") ? ["high-value"] : [...prev, "high-value"]);
+                          } else {
+                            setCustomerSegments(prev => prev.filter(v => v !== "high-value"));
+                          }
+                        }}
+                      >
+                        High-Value Customers
+                      </Checkbox>
+                      <Checkbox
+                        checked={customerSegments.includes("at-risk")}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setCustomerSegments(prev => prev.includes("all") ? ["at-risk"] : [...prev, "at-risk"]);
+                          } else {
+                            setCustomerSegments(prev => prev.filter(v => v !== "at-risk"));
+                          }
+                        }}
+                      >
+                        At-Risk Customers
+                      </Checkbox>
                     </div>
-                    <p className="create-offer-helper-text">
+                    <p className="text-xs text-gray-500 mt-2">
                       Select one or more customer segments to target
                     </p>
-                  </label>
+                  </div>
 
-                  <label
-                    className="create-offer-label create-offer-label--mt"
-                  >
-                    Market Visibility
-                    <div className="create-offer-checkbox-grid">
-                      <label className="create-offer-checkbox-label">
-                        <input
-                          type="checkbox"
-                          checked={markets.includes("all")}
-                          onChange={(e) => {
-                            if (e.target.checked) setMarkets(["all"]);
-                          }}
-                          className="create-offer-checkbox"
-                        />
-                        <span className="create-offer-checkbox-text">
-                          All Markets
-                        </span>
-                      </label>
-                      <label className="create-offer-checkbox-label">
-                        <input
-                          type="checkbox"
-                          checked={markets.includes("us")}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setMarkets(prev => prev.includes("all") ? ["us"] : [...prev, "us"]);
-                            } else {
-                              setMarkets(prev => prev.filter(v => v !== "us"));
-                            }
-                          }}
-                          className="create-offer-checkbox"
-                        />
-                        <span className="create-offer-checkbox-text">
-                          United States
-                        </span>
-                      </label>
-                      <label className="create-offer-checkbox-label">
-                        <input
-                          type="checkbox"
-                          checked={markets.includes("eu")}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setMarkets(prev => prev.includes("all") ? ["eu"] : [...prev, "eu"]);
-                            } else {
-                              setMarkets(prev => prev.filter(v => v !== "eu"));
-                            }
-                          }}
-                          className="create-offer-checkbox"
-                        />
-                        <span className="create-offer-checkbox-text">
-                          Europe
-                        </span>
-                      </label>
-                      <label className="create-offer-checkbox-label">
-                        <input
-                          type="checkbox"
-                          checked={markets.includes("uk")}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setMarkets(prev => prev.includes("all") ? ["uk"] : [...prev, "uk"]);
-                            } else {
-                              setMarkets(prev => prev.filter(v => v !== "uk"));
-                            }
-                          }}
-                          className="create-offer-checkbox"
-                        />
-                        <span className="create-offer-checkbox-text">
-                          United Kingdom
-                        </span>
-                      </label>
-                      <label className="create-offer-checkbox-label">
-                        <input
-                          type="checkbox"
-                          checked={markets.includes("ca")}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setMarkets(prev => prev.includes("all") ? ["ca"] : [...prev, "ca"]);
-                            } else {
-                              setMarkets(prev => prev.filter(v => v !== "ca"));
-                            }
-                          }}
-                          className="create-offer-checkbox"
-                        />
-                        <span className="create-offer-checkbox-text">
-                          Canada
-                        </span>
-                      </label>
-                      <label className="create-offer-checkbox-label">
-                        <input
-                          type="checkbox"
-                          checked={markets.includes("au")}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setMarkets(prev => prev.includes("all") ? ["au"] : [...prev, "au"]);
-                            } else {
-                              setMarkets(prev => prev.filter(v => v !== "au"));
-                            }
-                          }}
-                          className="create-offer-checkbox"
-                        />
-                        <span className="create-offer-checkbox-text">
-                          Australia
-                        </span>
-                      </label>
-                      <label className="create-offer-checkbox-label">
-                        <input
-                          type="checkbox"
-                          checked={markets.includes("apac")}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setMarkets(prev => prev.includes("all") ? ["apac"] : [...prev, "apac"]);
-                            } else {
-                              setMarkets(prev => prev.filter(v => v !== "apac"));
-                            }
-                          }}
-                          className="create-offer-checkbox"
-                        />
-                        <span className="create-offer-checkbox-text">
-                          Asia Pacific
-                        </span>
-                      </label>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Market Visibility
+                    </label>
+                    <div className="grid grid-cols-2 gap-3 border border-gray-200 rounded-md p-4">
+                      <Checkbox
+                        checked={markets.includes("all")}
+                        onChange={(e) => {
+                          if (e.target.checked) setMarkets(["all"]);
+                        }}
+                      >
+                        All Markets
+                      </Checkbox>
+                      <Checkbox
+                        checked={markets.includes("us")}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setMarkets(prev => prev.includes("all") ? ["us"] : [...prev, "us"]);
+                          } else {
+                            setMarkets(prev => prev.filter(v => v !== "us"));
+                          }
+                        }}
+                      >
+                        United States
+                      </Checkbox>
+                      <Checkbox
+                        checked={markets.includes("eu")}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setMarkets(prev => prev.includes("all") ? ["eu"] : [...prev, "eu"]);
+                          } else {
+                            setMarkets(prev => prev.filter(v => v !== "eu"));
+                          }
+                        }}
+                      >
+                        Europe
+                      </Checkbox>
+                      <Checkbox
+                        checked={markets.includes("uk")}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setMarkets(prev => prev.includes("all") ? ["uk"] : [...prev, "uk"]);
+                          } else {
+                            setMarkets(prev => prev.filter(v => v !== "uk"));
+                          }
+                        }}
+                      >
+                        United Kingdom
+                      </Checkbox>
+                      <Checkbox
+                        checked={markets.includes("ca")}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setMarkets(prev => prev.includes("all") ? ["ca"] : [...prev, "ca"]);
+                          } else {
+                            setMarkets(prev => prev.filter(v => v !== "ca"));
+                          }
+                        }}
+                      >
+                        Canada
+                      </Checkbox>
+                      <Checkbox
+                        checked={markets.includes("au")}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setMarkets(prev => prev.includes("all") ? ["au"] : [...prev, "au"]);
+                          } else {
+                            setMarkets(prev => prev.filter(v => v !== "au"));
+                          }
+                        }}
+                      >
+                        Australia
+                      </Checkbox>
+                      <Checkbox
+                        checked={markets.includes("apac")}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setMarkets(prev => prev.includes("all") ? ["apac"] : [...prev, "apac"]);
+                          } else {
+                            setMarkets(prev => prev.filter(v => v !== "apac"));
+                          }
+                        }}
+                      >
+                        Asia Pacific
+                      </Checkbox>
                     </div>
-                    <p className="create-offer-helper-text">
+                    <p className="text-xs text-gray-500 mt-2">
                       Select which markets can see this offer
                     </p>
-                  </label>
+                  </div>
                 </div>
               </div>
 
-              <div className="create-offer-section">
-                <h3 className="create-offer-section-heading">
+              <div className="mb-8">
+                <h3 className="text-sm font-medium text-gray-900 mb-3">
                   Schedule
                 </h3>
-                <div className="polaris-grid create-offer-schedule-grid">
-                  <label
-                    className="create-offer-label"
-                  >
+                <div className="grid grid-cols-2 gap-4">
+                  <label className="block text-sm font-medium text-gray-700">
                     Start Time
-                    <input
-                      ref={startTimeInputRef}
+                    <Input
+                      ref={startTimeInputRef as any}
                       type="datetime-local"
                       step="1"
-                      className="create-offer-datetime"
+                      className="mt-1 w-full"
                       name="startTime"
                       value={startTime}
                       onClick={() => {
-                        openDateTimePicker(startTimeInputRef.current);
+                        openDateTimePicker(startTimeInputRef.current as any);
                       }}
                       onChange={(e) => {
                         setStartTime(e.target.value);
@@ -1744,31 +1650,30 @@ export function CreateNewOffer({
                           setStartTimeError("");
                         }
                       }}
+                      status={startTimeError ? "error" : ""}
                       required
                     />
                     {startTimeError ? (
-                      <p className="create-offer-error-text">
+                      <p className="text-red-500 text-xs mt-1">
                         {startTimeError}
                       </p>
                     ) : (
-                      <p className="create-offer-helper-text">
+                      <p className="text-gray-500 text-xs mt-1">
                         When the offer becomes active
                       </p>
                     )}
                   </label>
-                  <label
-                    className="create-offer-label"
-                  >
+                  <label className="block text-sm font-medium text-gray-700">
                     End Time
-                    <input
-                      ref={endTimeInputRef}
+                    <Input
+                      ref={endTimeInputRef as any}
                       type="datetime-local"
                       step="1"
-                      className="create-offer-datetime"
+                      className="mt-1 w-full"
                       name="endTime"
                       value={endTime}
                       onClick={() => {
-                        openDateTimePicker(endTimeInputRef.current);
+                        openDateTimePicker(endTimeInputRef.current as any);
                       }}
                       onChange={(e) => {
                         setEndTime(e.target.value);
@@ -1776,14 +1681,15 @@ export function CreateNewOffer({
                           setEndTimeError("");
                         }
                       }}
+                      status={endTimeError ? "error" : ""}
                       required
                     />
                     {endTimeError ? (
-                      <p className="create-offer-error-text">
+                      <p className="text-red-500 text-xs mt-1">
                         {endTimeError}
                       </p>
                     ) : (
-                      <p className="create-offer-helper-text">
+                      <p className="text-gray-500 text-xs mt-1">
                         When the offer expires
                       </p>
                     )}
@@ -1791,69 +1697,64 @@ export function CreateNewOffer({
                 </div>
               </div>
 
-              <div className="create-offer-section">
-                <h3 className="create-offer-section-heading">
+              <div className="mb-8">
+                <h3 className="text-sm font-medium text-gray-900 mb-3">
                   Budget
                 </h3>
-                <div className="polaris-grid create-offer-budget-grid">
-                  <label
-                    className="create-offer-label"
-                  >
+                <div className="grid grid-cols-2 gap-4">
+                  <label className="block text-sm font-medium text-gray-700">
                     Total Budget (Optional)
-                    <input
+                    <Input
                       type="number"
                       placeholder="$0.00"
-                      className="create-offer-input"
+                      className="mt-1 w-full"
                       name="totalBudget"
                       value={totalBudget}
                       onChange={(e) => setTotalBudget(e.target.value)}
                     />
-                    <p className="create-offer-helper-text">
+                    <p className="text-gray-500 text-xs mt-1">
                       Maximum total spend for this offer
                     </p>
                   </label>
-                  <label
-                    className="create-offer-label"
-                  >
+                  <label className="block text-sm font-medium text-gray-700">
                     Daily Budget (Optional)
-                    <input
+                    <Input
                       type="number"
                       placeholder="$0.00"
-                      className="create-offer-input"
+                      className="mt-1 w-full"
                       name="dailyBudget"
                       value={dailyBudget}
                       onChange={(e) => setDailyBudget(e.target.value)}
                     />
-                    <p className="create-offer-helper-text">
+                    <p className="text-gray-500 text-xs mt-1">
                       Maximum spend per day
                     </p>
                   </label>
                 </div>
               </div>
 
-              <div className="create-offer-section">
-                <h3 className="create-offer-section-heading">
+              <div className="mb-8">
+                <h3 className="text-sm font-medium text-gray-900 mb-3">
                   Risk Control
                 </h3>
-                <div className="polaris-stack polaris-stack--vertical">
-                  <label
-                    className="create-offer-label"
-                  >
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
                     Usage Limit Per Customer
-                    <select
+                    <Select
                       value={usageLimitPerCustomer}
-                      onChange={(e) => setUsageLimitPerCustomer(e.target.value)}
-                      className="create-offer-select"
-                    >
-                      <option value="unlimited">Unlimited</option>
-                      <option value="1">1 time only</option>
-                      <option value="2">2 times</option>
-                      <option value="3">3 times</option>
-                      <option value="5">5 times</option>
-                      <option value="10">10 times</option>
-                      <option value="custom">Custom...</option>
-                    </select>
-                    <p className="create-offer-helper-text">
+                      onChange={(val) => setUsageLimitPerCustomer(val)}
+                      className="w-full mt-1"
+                      options={[
+                        { label: "Unlimited", value: "unlimited" },
+                        { label: "1 time only", value: "1" },
+                        { label: "2 times", value: "2" },
+                        { label: "3 times", value: "3" },
+                        { label: "5 times", value: "5" },
+                        { label: "10 times", value: "10" },
+                        { label: "Custom...", value: "custom" }
+                      ]}
+                    />
+                    <p className="text-gray-500 text-xs mt-1">
                       How many times each customer can use this offer
                     </p>
                   </label>
@@ -1864,22 +1765,20 @@ export function CreateNewOffer({
         </div>
       </div>
 
-      <div className="create-offer-bottom-bar">
+      <div className="create-offer-bottom-bar bg-white border-t border-gray-200 p-4 flex justify-end gap-3 sticky bottom-0 z-50">
         {step > 1 && (
-          <button
-            className="polaris-button polaris-button--plain"
+          <Button
             disabled={fetcher.state !== "idle"}
             onClick={(e) => {
               setStep(step - 1);
               e.preventDefault();
             }}
-            type="button"
           >
             Previous
-          </button>
+          </Button>
         )}
-        <button
-          className="polaris-button"
+        <Button
+          type="primary"
           disabled={fetcher.state !== "idle"}
           onClick={(e: any) => {
             if (step === 1) {
@@ -1913,7 +1812,7 @@ export function CreateNewOffer({
             }
             // 第 4 步由表单 onSubmit 校验并提交，不在此处校验（避免校验失败仍触发 submit）
           }}
-          type={step === 4 ? "submit" : "button"}
+          htmlType={step === 4 ? "submit" : "button"}
         >
           {fetcher.state !== "idle"
             ? "Saving…"
@@ -1922,7 +1821,7 @@ export function CreateNewOffer({
                 ? "Update Offer"
                 : "Create Offer"
               : "Next"}
-        </button>
+        </Button>
       </div>
     </fetcher.Form>
   );
