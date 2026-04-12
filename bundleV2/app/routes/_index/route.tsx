@@ -1006,73 +1006,75 @@ export default function Index() {
           </div>
         )}
       {/* Tabs */}
-      <nav className="bg-white flex flex-col sm:flex-row gap-[8px] sm:gap-[16px] items-stretch sm:items-start pb-0 px-[16px] pt-[16px] rounded-[8px] mb-[16px] sm:mb-[24px]">
-        <button
-          type="button"
-          onClick={() => {
-            setShowCreateOffer(false);
-            setActiveTab("dashboard");
-          }}
-          className={`rounded-[4px] px-[12px] py-[7px] text-center sm:text-left cursor-pointer bg-transparent ${
-            activeTab === "dashboard" ? "bg-[#dfe3e8]" : ""
-          }`}
-        >
-          <span
-            className={`font-['Inter'] leading-[25.6px] text-[16px] tracking-[-0.3125px] ${
-              activeTab === "dashboard"
-                ? "font-semibold text-[#202223]"
-                : "font-normal text-[#6d7175]"
+      {!showCreateOffer && (
+        <nav className="bg-white flex flex-col sm:flex-row gap-[8px] sm:gap-[16px] items-stretch sm:items-start pb-0 px-[16px] pt-[16px] rounded-[8px] mb-[16px] sm:mb-[24px]">
+          <button
+            type="button"
+            onClick={() => {
+              setShowCreateOffer(false);
+              setActiveTab("dashboard");
+            }}
+            className={`rounded-[4px] px-[12px] py-[7px] text-center sm:text-left cursor-pointer bg-transparent ${
+              activeTab === "dashboard" ? "bg-[#dfe3e8]" : ""
             }`}
           >
-            Dashboard
-          </span>
-        </button>
+            <span
+              className={`font-['Inter'] leading-[25.6px] text-[16px] tracking-[-0.3125px] ${
+                activeTab === "dashboard"
+                  ? "font-semibold text-[#202223]"
+                  : "font-normal text-[#6d7175]"
+              }`}
+            >
+              Dashboard
+            </span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => {
-            setShowCreateOffer(false);
-            setActiveTab("offers");
-          }}
-          className={`rounded-[4px] px-[12px] py-[7px] text-center sm:text-left cursor-pointer bg-transparent ${
-            activeTab === "offers" ? "bg-[#dfe3e8]" : ""
-          }`}
-        >
-          <span
-            className={`font-['Inter'] leading-[25.6px] text-[16px] tracking-[-0.3125px] ${
-              activeTab === "offers"
-                ? "font-semibold text-[#202223]"
-                : "font-normal text-[#6d7175]"
+          <button
+            type="button"
+            onClick={() => {
+              setShowCreateOffer(false);
+              setActiveTab("offers");
+            }}
+            className={`rounded-[4px] px-[12px] py-[7px] text-center sm:text-left cursor-pointer bg-transparent ${
+              activeTab === "offers" ? "bg-[#dfe3e8]" : ""
             }`}
           >
-            All Offers
-          </span>
-        </button>
+            <span
+              className={`font-['Inter'] leading-[25.6px] text-[16px] tracking-[-0.3125px] ${
+                activeTab === "offers"
+                  ? "font-semibold text-[#202223]"
+                  : "font-normal text-[#6d7175]"
+              }`}
+            >
+              All Offers
+            </span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => {
-            setShowCreateOffer(false);
-            setActiveTab("pricing");
-          }}
-          className={`rounded-[4px] px-[12px] py-[7px] text-center sm:text-left cursor-pointer bg-transparent ${
-            activeTab === "pricing" ? "bg-[#dfe3e8]" : ""
-          }`}
-        >
-          <span
-            className={`font-['Inter'] leading-[25.6px] text-[16px] tracking-[-0.3125px] ${
-              activeTab === "pricing"
-                ? "font-semibold text-[#202223]"
-                : "font-normal text-[#6d7175]"
+          <button
+            type="button"
+            onClick={() => {
+              setShowCreateOffer(false);
+              setActiveTab("pricing");
+            }}
+            className={`rounded-[4px] px-[12px] py-[7px] text-center sm:text-left cursor-pointer bg-transparent ${
+              activeTab === "pricing" ? "bg-[#dfe3e8]" : ""
             }`}
           >
-            Pricing
-          </span>
-        </button>
-      </nav>
+            <span
+              className={`font-['Inter'] leading-[25.6px] text-[16px] tracking-[-0.3125px] ${
+                activeTab === "pricing"
+                  ? "font-semibold text-[#202223]"
+                  : "font-normal text-[#6d7175]"
+              }`}
+            >
+              Pricing
+            </span>
+          </button>
+        </nav>
+      )}
 
       {/* Tab content */}
-      {activeTab === "dashboard" && (
+      {activeTab === "dashboard" && !showCreateOffer && (
         <DashboardPage
           offers={offers}
           storeProducts={storeProducts}
@@ -1080,6 +1082,10 @@ export default function Index() {
           apiKey={apiKey}
           themeExtensionEnabled={themeExtensionEnabled}
           onViewAllOffers={() => setActiveTab("offers")}
+          onCreateOffer={() => {
+            setShowCreateOffer(true);
+            setActiveTab("offers");
+          }}
         />
       )}
       {activeTab === "offers" && !showCreateOffer && (

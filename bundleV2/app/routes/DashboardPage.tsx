@@ -18,6 +18,7 @@ import type { IndexLoaderData } from "./_index/route";
 
 interface DashboardPageProps {
   onViewAllOffers?: () => void;
+  onCreateOffer?: () => void;
   offers?: IndexLoaderData["offers"];
   storeProducts?: IndexLoaderData["storeProducts"];
   shop: string;
@@ -90,6 +91,7 @@ function ChevronRightIcon() {
 
 export function DashboardPage({
   onViewAllOffers,
+  onCreateOffer,
   offers,
   storeProducts = [],
   shop,
@@ -176,9 +178,13 @@ export function DashboardPage({
   const handleViewDetails = () => {
     onViewAllOffers?.();
   };
-  const handleCreateOffer = () => {
-    setEditingOfferId(null);
-    setShowCreateOffer(true);
+  const handleCreateOfferClick = () => {
+    if (onCreateOffer) {
+      onCreateOffer();
+    } else {
+      setEditingOfferId(null);
+      setShowCreateOffer(true);
+    }
   };
   const handleCreateAbTest = () => {}; // mock
   const handleViewAllOffers = () => {
@@ -423,7 +429,7 @@ export function DashboardPage({
           <button
             type="button"
             className="w-full sm:w-auto bg-[#008060] text-white px-[16px] py-[8px] rounded-[6px] font-['Inter'] font-medium text-[14px] leading-[21px] tracking-[-0.1504px] border-0 cursor-pointer hover:bg-[#006e52] transition-colors"
-            onClick={handleCreateOffer}
+            onClick={handleCreateOfferClick}
           >
             Create New Offer
           </button>
