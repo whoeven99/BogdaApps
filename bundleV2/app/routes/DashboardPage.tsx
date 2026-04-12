@@ -27,6 +27,7 @@ interface DashboardPageProps {
   onCreateOffer?: () => void;
   offers?: IndexLoaderData["offers"];
   storeProducts?: IndexLoaderData["storeProducts"];
+  markets?: IndexLoaderData["markets"];
   shop: string;
   apiKey: string;
   themeExtensionEnabled: boolean;
@@ -113,6 +114,7 @@ export function DashboardPage({
   onCreateOffer,
   offers,
   storeProducts = [],
+  markets = [],
   shop,
   apiKey,
   themeExtensionEnabled,
@@ -311,6 +313,7 @@ export function DashboardPage({
           onBack={() => setShowCreateOffer(false)}
           initialOffer={editingOffer}
           storeProducts={storeProducts}
+          markets={markets}
           existingOffers={(offers ?? []).map((o) => ({
             id: o.id,
             name: o.name,

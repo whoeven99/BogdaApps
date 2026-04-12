@@ -36,10 +36,17 @@ interface InitialOffer {
   status: boolean;
 }
 
+interface MarketItem {
+  id: string;
+  name: string;
+  handle: string;
+}
+
 interface CreateNewOfferProps {
   onBack?: () => void;
   initialOffer?: InitialOffer;
   storeProducts?: Product[];
+  markets?: MarketItem[];
   /** 当前店铺已有 offers，用于名称重复校验（与后台 normalize 规则一致） */
   existingOffers?: Array<{ id: string; name: string }>;
 }
@@ -310,6 +317,7 @@ export function CreateNewOffer({
   onBack,
   initialOffer,
   storeProducts = [],
+  markets: shopMarkets = [],
   existingOffers = [],
 }: CreateNewOfferProps) {
   const fetcher = useFetcher();
@@ -1547,78 +1555,23 @@ export function CreateNewOffer({
                       >
                         All Markets
                       </Checkbox>
-                      <Checkbox
-                        checked={markets.includes("us")}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setMarkets(prev => prev.includes("all") ? ["us"] : [...prev, "us"]);
-                          } else {
-                            setMarkets(prev => prev.filter(v => v !== "us"));
-                          }
-                        }}
-                      >
-                        United States
-                      </Checkbox>
-                      <Checkbox
-                        checked={markets.includes("eu")}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setMarkets(prev => prev.includes("all") ? ["eu"] : [...prev, "eu"]);
-                          } else {
-                            setMarkets(prev => prev.filter(v => v !== "eu"));
-                          }
-                        }}
-                      >
-                        Europe
-                      </Checkbox>
-                      <Checkbox
-                        checked={markets.includes("uk")}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setMarkets(prev => prev.includes("all") ? ["uk"] : [...prev, "uk"]);
-                          } else {
-                            setMarkets(prev => prev.filter(v => v !== "uk"));
-                          }
-                        }}
-                      >
-                        United Kingdom
-                      </Checkbox>
-                      <Checkbox
-                        checked={markets.includes("ca")}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setMarkets(prev => prev.includes("all") ? ["ca"] : [...prev, "ca"]);
-                          } else {
-                            setMarkets(prev => prev.filter(v => v !== "ca"));
-                          }
-                        }}
-                      >
-                        Canada
-                      </Checkbox>
-                      <Checkbox
-                        checked={markets.includes("au")}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setMarkets(prev => prev.includes("all") ? ["au"] : [...prev, "au"]);
-                          } else {
-                            setMarkets(prev => prev.filter(v => v !== "au"));
-                          }
-                        }}
-                      >
-                        Australia
-                      </Checkbox>
-                      <Checkbox
-                        checked={markets.includes("apac")}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setMarkets(prev => prev.includes("all") ? ["apac"] : [...prev, "apac"]);
-                          } else {
-                            setMarkets(prev => prev.filter(v => v !== "apac"));
-                          }
-                        }}
-                      >
-                        Asia Pacific
-                      </Checkbox>
+                      {shopMarkets.map((market) => (
+                        <Checkbox
+                          key={market.id}
+                          checked={markets.includes(market.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setMarkets((prev) =>
+                                prev.includes("all") ? [market.id] : [...prev, market.id]
+                              );
+                            } else {
+                              setMarkets((prev) => prev.filter((v) => v !== market.id));
+                            }
+                          }}
+                        >
+                          {market.name}
+                        </Checkbox>
+                      ))}
                     </div>
                     <p className="text-xs text-gray-500 mt-2">
                       Select which markets can see this offer

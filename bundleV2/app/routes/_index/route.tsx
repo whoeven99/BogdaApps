@@ -196,9 +196,16 @@ export type StoreProductItem = {
   image: string;
 };
 
+export type MarketItem = {
+  id: string;
+  name: string;
+  handle: string;
+};
+
 export type IndexLoaderData = {
   offers: OfferListItem[];
   storeProducts: StoreProductItem[];
+  markets: MarketItem[];
   shop: string;
   apiKey: string;
   themeExtensionEnabled: boolean;
@@ -548,9 +555,41 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.error("Failed to check theme extension status", error);
   }
 
+  let markets: MarketItem[] = [];
+  try {
+    const marketsResponse = await admin.graphql(
+      `#graphql
+        query ShopMarkets {
+          markets(first: 250) {
+            edges {
+              node {
+                id
+                name
+                handle
+              }
+            }
+          }
+        }
+      `
+    );
+    const marketsJson = (await marketsResponse.json()) as any;
+    if (marketsJson.errors) {
+      console.error("GraphQL errors fetching markets:", marketsJson.errors);
+    }
+    const marketEdges = marketsJson?.data?.markets?.edges || [];
+    markets = marketEdges.map((edge: any) => ({
+      id: edge.node.id,
+      name: edge.node.name,
+      handle: edge.node.handle,
+    }));
+  } catch (error) {
+    console.error("Failed to fetch shop markets", error);
+  }
+
   return Response.json({
     offers,
     storeProducts,
+    markets,
     shop: session.shop,
     apiKey,
     themeExtensionEnabled,
@@ -1016,7 +1055,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 type HomeTabKey = "dashboard" | "offers" | "analytics";
 
 export default function Index() {
-  const { offers, storeProducts, shop, apiKey, themeExtensionEnabled } =
+  const { offers, storeProducts, markets, shop, apiKey, themeExtensionEnabled } =
     useLoaderData() as IndexLoaderData;
   const actionData = useActionData() as { toast?: string } | undefined;
   const [searchParams] = useSearchParams();
@@ -1142,6 +1181,7 @@ export default function Index() {
           <DashboardPage
             offers={offers}
             storeProducts={storeProducts}
+            markets={markets}
             shop={shop}
             apiKey={apiKey}
             themeExtensionEnabled={themeExtensionEnabled}
@@ -1163,6 +1203,7 @@ export default function Index() {
           <CreateNewOffer
             onBack={() => setShowCreateOffer(false)}
             storeProducts={storeProducts}
+            markets={markets}
             existingOffers={offers.map((o) => ({
               id: o.id,
               name: o.name,
