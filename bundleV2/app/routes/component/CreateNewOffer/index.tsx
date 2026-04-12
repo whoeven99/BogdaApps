@@ -127,6 +127,14 @@ function parseOfferSettings(
   usageLimitPerCustomer: string;
   accentColor: string;
   cardBackgroundColor: string;
+  titleFontSize: number;
+  titleFontWeight: string;
+  titleColor: string;
+  borderColor: string;
+  labelColor: string;
+  buttonText: string;
+  buttonPrimaryColor: string;
+  enableCountdown: boolean;
 } {
   if (!offerSettingsJson) {
     return {
@@ -139,6 +147,14 @@ function parseOfferSettings(
       usageLimitPerCustomer: "unlimited",
       accentColor: "#008060",
       cardBackgroundColor: "#ffffff",
+      titleFontSize: 14,
+      titleFontWeight: "600",
+      titleColor: "#111111",
+      borderColor: "#dfe3e8",
+      labelColor: "#ffffff",
+      buttonText: "Add to Cart",
+      buttonPrimaryColor: "#008060",
+      enableCountdown: false,
     };
   }
 
@@ -153,6 +169,14 @@ function parseOfferSettings(
       usageLimitPerCustomer: string;
       accentColor?: string;
       cardBackgroundColor?: string;
+      titleFontSize?: number;
+      titleFontWeight?: string;
+      titleColor?: string;
+      borderColor?: string;
+      labelColor?: string;
+      buttonText?: string;
+      buttonPrimaryColor?: string;
+      enableCountdown?: boolean;
     }>;
 
     return {
@@ -174,6 +198,14 @@ function parseOfferSettings(
         parsed.cardBackgroundColor,
         "#ffffff",
       ),
+      titleFontSize: parsed.titleFontSize ?? 14,
+      titleFontWeight: parsed.titleFontWeight ?? "600",
+      titleColor: sanitizeHexColor(parsed.titleColor, "#111111"),
+      borderColor: sanitizeHexColor(parsed.borderColor, "#dfe3e8"),
+      labelColor: sanitizeHexColor(parsed.labelColor, "#ffffff"),
+      buttonText: parsed.buttonText || "Add to Cart",
+      buttonPrimaryColor: sanitizeHexColor(parsed.buttonPrimaryColor, "#008060"),
+      enableCountdown: parsed.enableCountdown ?? false,
     };
   } catch {
     return {
@@ -186,6 +218,14 @@ function parseOfferSettings(
       usageLimitPerCustomer: "unlimited",
       accentColor: "#008060",
       cardBackgroundColor: "#ffffff",
+      titleFontSize: 14,
+      titleFontWeight: "600",
+      titleColor: "#111111",
+      borderColor: "#dfe3e8",
+      labelColor: "#ffffff",
+      buttonText: "Add to Cart",
+      buttonPrimaryColor: "#008060",
+      enableCountdown: false,
     };
   }
 }
@@ -360,6 +400,14 @@ export function CreateNewOffer({
     offerSettings.cardBackgroundColor,
   );
   const [accentColor, setAccentColor] = useState(offerSettings.accentColor);
+  const [titleFontSize, setTitleFontSize] = useState(offerSettings.titleFontSize);
+  const [titleFontWeight, setTitleFontWeight] = useState(offerSettings.titleFontWeight);
+  const [titleColor, setTitleColor] = useState(offerSettings.titleColor);
+  const [borderColor, setBorderColor] = useState(offerSettings.borderColor);
+  const [labelColor, setLabelColor] = useState(offerSettings.labelColor);
+  const [buttonText, setButtonText] = useState(offerSettings.buttonText);
+  const [buttonPrimaryColor, setButtonPrimaryColor] = useState(offerSettings.buttonPrimaryColor);
+  const [enableCountdown, setEnableCountdown] = useState(offerSettings.enableCountdown);
   const [widgetTitle, setWidgetTitle] = useState(offerSettings.title);
   const [customerSegments, setCustomerSegments] = useState<string[]>(
     offerSettings.customerSegments ? offerSettings.customerSegments.split(",") : ["all"]
@@ -541,6 +589,14 @@ export function CreateNewOffer({
       <input type="hidden" name="offerType" value={offerType} />
       <input type="hidden" name="layoutFormat" value={layoutFormat} />
       <input type="hidden" name="accentColor" value={accentColor} />
+      <input type="hidden" name="titleFontSize" value={titleFontSize} />
+      <input type="hidden" name="titleFontWeight" value={titleFontWeight} />
+      <input type="hidden" name="titleColor" value={titleColor} />
+      <input type="hidden" name="borderColor" value={borderColor} />
+      <input type="hidden" name="labelColor" value={labelColor} />
+      <input type="hidden" name="buttonText" value={buttonText} />
+      <input type="hidden" name="buttonPrimaryColor" value={buttonPrimaryColor} />
+      <input type="hidden" name="enableCountdown" value={enableCountdown ? "true" : "false"} />
       <input
         type="hidden"
         name="cardBackgroundColor"
@@ -1300,11 +1356,11 @@ export function CreateNewOffer({
                   </div>
                 </div>
 
-                <div className="create-offer-card-colors">
+                <div className="create-offer-card-colors" style={{ marginTop: '24px' }}>
                   <h3 className="create-offer-section-heading">
-                    Card Colors
+                    Card & Typography Colors
                   </h3>
-                  <div className="polaris-grid">
+                  <div className="polaris-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '16px' }}>
                     <label className="create-offer-label">
                       Card Background Color
                       <input
@@ -1325,7 +1381,104 @@ export function CreateNewOffer({
                         className="create-offer-color-input"
                       />
                     </label>
+                    <label className="create-offer-label">
+                      Border Color
+                      <input
+                        type="color"
+                        value={borderColor}
+                        onChange={(e) => setBorderColor(e.target.value)}
+                        className="create-offer-color-input"
+                      />
+                    </label>
+                    <label className="create-offer-label">
+                      Label Text Color
+                      <input
+                        type="color"
+                        value={labelColor}
+                        onChange={(e) => setLabelColor(e.target.value)}
+                        className="create-offer-color-input"
+                      />
+                    </label>
                   </div>
+                </div>
+
+                <div className="create-offer-typography" style={{ marginTop: '24px' }}>
+                  <h3 className="create-offer-section-heading">
+                    Title Typography
+                  </h3>
+                  <div className="polaris-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '16px' }}>
+                    <label className="create-offer-label">
+                      Font Size (px)
+                      <input
+                        type="number"
+                        min="10"
+                        max="36"
+                        value={titleFontSize}
+                        onChange={(e) => setTitleFontSize(Number(e.target.value))}
+                        className="create-offer-input"
+                      />
+                    </label>
+                    <label className="create-offer-label">
+                      Font Weight
+                      <select
+                        value={titleFontWeight}
+                        onChange={(e) => setTitleFontWeight(e.target.value)}
+                        className="create-offer-input"
+                      >
+                        <option value="400">Regular (400)</option>
+                        <option value="500">Medium (500)</option>
+                        <option value="600">Semi Bold (600)</option>
+                        <option value="700">Bold (700)</option>
+                      </select>
+                    </label>
+                    <label className="create-offer-label">
+                      Title Color
+                      <input
+                        type="color"
+                        value={titleColor}
+                        onChange={(e) => setTitleColor(e.target.value)}
+                        className="create-offer-color-input"
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="create-offer-button-style" style={{ marginTop: '24px' }}>
+                  <h3 className="create-offer-section-heading">
+                    Button Style & Extra
+                  </h3>
+                  <div className="polaris-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '16px' }}>
+                    <label className="create-offer-label">
+                      Button Text
+                      <input
+                        type="text"
+                        value={buttonText}
+                        onChange={(e) => setButtonText(e.target.value)}
+                        className="create-offer-input"
+                      />
+                    </label>
+                    <label className="create-offer-label">
+                      Button Color
+                      <input
+                        type="color"
+                        value={buttonPrimaryColor}
+                        onChange={(e) => setButtonPrimaryColor(e.target.value)}
+                        className="create-offer-color-input"
+                      />
+                    </label>
+                  </div>
+                  
+                  <label className="create-offer-checkbox-label" style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input
+                      type="checkbox"
+                      checked={enableCountdown}
+                      onChange={(e) => setEnableCountdown(e.target.checked)}
+                      className="create-offer-checkbox"
+                    />
+                    <span className="create-offer-checkbox-text">
+                      Enable Countdown Timer
+                    </span>
+                  </label>
                 </div>
               </div>
 
@@ -1344,6 +1497,14 @@ export function CreateNewOffer({
                   layoutFormat={layoutFormat}
                   cardBackgroundColor={cardBackgroundColor}
                   accentColor={accentColor}
+                  borderColor={borderColor}
+                  labelColor={labelColor}
+                  titleFontSize={titleFontSize}
+                  titleFontWeight={titleFontWeight}
+                  titleColor={titleColor}
+                  buttonText={buttonText}
+                  buttonPrimaryColor={buttonPrimaryColor}
+                  enableCountdown={enableCountdown}
                   title={widgetTitle}
                 />
               </div>

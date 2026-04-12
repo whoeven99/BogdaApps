@@ -331,8 +331,16 @@ function renderBundlePreviewHtml(offer) {
   }
   
   const layoutFormat = offerSettings.layoutFormat || "vertical";
-  const accentColor = offerSettings.accentColor || "#111111";
+  const accentColor = offerSettings.accentColor || "#008060";
   const cardBackgroundColor = offerSettings.cardBackgroundColor || "#ffffff";
+  const borderColor = offerSettings.borderColor || "#dfe3e8";
+  const labelColor = offerSettings.labelColor || "#ffffff";
+  const titleFontSize = offerSettings.titleFontSize || 14;
+  const titleFontWeight = offerSettings.titleFontWeight || "600";
+  const titleColor = offerSettings.titleColor || "#111111";
+  const buttonText = offerSettings.buttonText || "Add to Cart";
+  const buttonPrimaryColor = offerSettings.buttonPrimaryColor || "#008060";
+  const enableCountdown = offerSettings.enableCountdown || false;
   const widgetTitle = offerSettings.title || "Bundle & Save";
 
   const unitPrice = getCurrentUnitPrice();
@@ -365,12 +373,12 @@ function renderBundlePreviewHtml(offer) {
         : "";
       const featuredStyle = item.featured 
         ? `border-color: ${esc(accentColor)} !important; background: ${esc(cardBackgroundColor)} !important; box-shadow: 0 8px 18px ${esc(accentColor)}25 !important;`
-        : `background: ${esc(cardBackgroundColor)} !important;`;
+        : `border-color: ${esc(borderColor)} !important; background: ${esc(cardBackgroundColor)} !important;`;
         
       return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}">
       ${
         item.featured && item.badge
-          ? `<div class="create-offer-style-preview-badge" style="background:${esc(accentColor)} !important;">${esc(item.badge)}</div>`
+          ? `<div class="create-offer-style-preview-badge" style="background:${esc(accentColor)} !important; color:${esc(labelColor)} !important;">${esc(item.badge)}</div>`
           : ""
       }
       <div class="create-offer-style-preview-item-title">${esc(item.title)}</div>
@@ -390,11 +398,21 @@ function renderBundlePreviewHtml(offer) {
     })
     .join("");
 
+  const countdownHtml = enableCountdown
+    ? `<div class="create-offer-countdown-wrapper" style="margin-top: 12px; padding: 8px; background: #fff8f8; border: 1px solid #ffdcdc; border-radius: 6px; text-align: center;">
+         <div style="font-size: 12px; font-weight: 600; color: #d72c0d;" id="ciwi-countdown-timer" data-end="${Date.now() + 15 * 60 * 1000}">Ends in: 15:00</div>
+       </div>`
+    : "";
+
   return `<div class="create-offer-preview-card">
-    <div class="create-offer-style-preview-header" style="color:${esc(accentColor)} !important;">${esc(widgetTitle)}</div>
+    <div class="create-offer-style-preview-header" style="color:${esc(titleColor)} !important; font-size: ${esc(titleFontSize)}px !important; font-weight: ${esc(titleFontWeight)} !important;">${esc(widgetTitle)}</div>
     <div class="create-offer-style-preview-list create-offer-style-preview-list--${layoutFormat}">
       ${itemsHtml}
     </div>
+    ${countdownHtml}
+    <button class="create-offer-preview-button" onclick="document.querySelector('form[action*=\\'/cart/add\\'] button[type=\\'submit\\'], form[action*=\\'/cart/add\\'] [name=\\'add\\']')?.click()" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
+      ${esc(buttonText)}
+    </button>
   </div>`;
 }
 
@@ -587,6 +605,7 @@ function tryMount(offer) {
   if (insertNearAddToCart(section, selectors)) {
     src.remove();
     attachBundlePriceSync(offer);
+    initCountdownTimer();
     return "done";
   }
   return "retry";
@@ -603,6 +622,32 @@ function fallbackMount(offer) {
   main.appendChild(section);
   src.remove();
   attachBundlePriceSync(offer);
+  initCountdownTimer();
+}
+
+function initCountdownTimer() {
+  const timerEl = document.getElementById("ciwi-countdown-timer");
+  if (!timerEl) return;
+
+  const endTime = parseInt(timerEl.dataset.end, 10);
+  if (isNaN(endTime)) return;
+
+  const updateTimer = () => {
+    const now = Date.now();
+    const diff = endTime - now;
+
+    if (diff <= 0) {
+      timerEl.textContent = "Ends in: 00:00";
+      return;
+    }
+
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+    timerEl.textContent = `Ends in: ${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+    requestAnimationFrame(updateTimer);
+  };
+
+  requestAnimationFrame(updateTimer);
 }
 
 function run() {

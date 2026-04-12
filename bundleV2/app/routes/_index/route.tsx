@@ -608,6 +608,27 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       String(formData.get("cardBackgroundColor") || ""),
       "#ffffff",
     );
+    const borderColor = sanitizeHexColorParam(
+      String(formData.get("borderColor") || ""),
+      "#dfe3e8",
+    );
+    const labelColor = sanitizeHexColorParam(
+      String(formData.get("labelColor") || ""),
+      "#ffffff",
+    );
+    const titleColor = sanitizeHexColorParam(
+      String(formData.get("titleColor") || ""),
+      "#111111",
+    );
+    const buttonPrimaryColor = sanitizeHexColorParam(
+      String(formData.get("buttonPrimaryColor") || ""),
+      "#008060",
+    );
+    
+    const titleFontSize = Number(formData.get("titleFontSize")) || 14;
+    const titleFontWeight = String(formData.get("titleFontWeight") || "600");
+    const buttonText = String(formData.get("buttonText") || "Add to Cart").trim();
+    const enableCountdown = String(formData.get("enableCountdown")) === "true";
 
     const title = String(formData.get("title") || "Bundle & Save").trim();
 
@@ -623,6 +644,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       usageLimitPerCustomer,
       accentColor,
       cardBackgroundColor,
+      borderColor,
+      labelColor,
+      titleColor,
+      buttonPrimaryColor,
+      titleFontSize,
+      titleFontWeight,
+      buttonText,
+      enableCountdown,
     });
 
     // Store which Shopify shop this offer belongs to.
