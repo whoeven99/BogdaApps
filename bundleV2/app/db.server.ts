@@ -32,7 +32,7 @@ async function verifyTursoSchemaOnBoot(
     );
 
     if (!hasSessionTable) {
-      throw new Error(
+      console.error(
         "[db] ENV=test 已连接 Turso，但缺少 Session 表。请先执行 prisma/migrations 的初始化 SQL 到该 Turso 数据库。",
       );
     }
@@ -69,8 +69,10 @@ function resolveDbTarget(): DbTarget {
   const t = process.env.DATABASE_TARGET?.trim().toLowerCase();
   if (t === "turso" || t === "test") return "turso";
   if (t === "local" || t === "sqlite") return "local";
-  // 未显式设置时：prod/test 走 Turso，其余（development 等）走本地 SQLite
-  return process.env.NODE_ENV === "prod" || process.env.NODE_ENV === "test"
+  // 未显式设置时：production/test 走 Turso，其余（development 等）走本地 SQLite
+  return process.env.NODE_ENV === "production" ||
+    process.env.NODE_ENV === "prod" ||
+    process.env.NODE_ENV === "test"
     ? "turso"
     : "local";
 }

@@ -535,13 +535,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // eslint-disable-next-line no-undef
   const apiKey = process.env.SHOPIFY_API_KEY || "";
   const appDisplayName = process.env.SHOPIFY_APP_NAME || process.env.APP_NAME;
-  const themeExtensionEnabled = await getThemeExtensionEnabled(
-    admin,
-    "bundlev2-theme-product-custom",
-    "product_detail_message",
-    apiKey,
-    appDisplayName,
-  );
+  let themeExtensionEnabled = false;
+  try {
+    themeExtensionEnabled = await getThemeExtensionEnabled(
+      admin,
+      "bundlev2-theme-product-custom",
+      "product_detail_message",
+      apiKey,
+      appDisplayName,
+    );
+  } catch (error) {
+    console.error("Failed to check theme extension status", error);
+  }
 
   return Response.json({
     offers,
