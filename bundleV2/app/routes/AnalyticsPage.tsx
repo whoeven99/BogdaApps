@@ -1,5 +1,5 @@
 import { Select } from "antd";
-import { HelpCircle } from "lucide-react";
+import { CircleHelp } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import BasicLineChart from "../components/basicLineChart";
 
@@ -23,7 +23,7 @@ export function AnalyticsPage({ shop, offers }: AnalyticsPageProps) {
 
   const [basicLineChartData, setBasicLineChartData] = useState<{
     Xdata: string[];
-    Ydata: string[];
+    Ydata: number[];
   }>({
     Xdata: [],
     Ydata: [],
@@ -55,7 +55,7 @@ export function AnalyticsPage({ shop, offers }: AnalyticsPageProps) {
       try {
         const now = new Date();
         const from = new Date(
-          now.getTime() - selectedTimeRange * 24 * 60 * 60 * 1000
+          now.getTime() - selectedTimeRange * 24 * 60 * 60 * 1000,
         );
 
         const query = new URLSearchParams({
@@ -102,8 +102,8 @@ export function AnalyticsPage({ shop, offers }: AnalyticsPageProps) {
 
     const mockValues = Array.from(
       { length: selectedTimeRange },
-      () => Math.floor(Math.random() * 500) + 100
-    ).map(String);
+      () => Math.floor(Math.random() * 500) + 100,
+    );
 
     setBasicLineChartData({
       Xdata: mockDates,
@@ -143,7 +143,7 @@ export function AnalyticsPage({ shop, offers }: AnalyticsPageProps) {
             <span className="font-['Inter'] font-normal text-[14px] text-[#6d7175]">
               Visitors
             </span>
-            <HelpCircle size={16} className="text-[#6d7175]" />
+            <CircleHelp size={16} className="text-[#6d7175]" />
           </div>
           <h3 className="font-['Inter'] font-semibold text-[24px] text-[#202223] m-0">
             {analyticsData.visitors.toLocaleString()}
@@ -156,7 +156,7 @@ export function AnalyticsPage({ shop, offers }: AnalyticsPageProps) {
             <span className="font-['Inter'] font-normal text-[14px] text-[#6d7175]">
               Bundle orders
             </span>
-            <HelpCircle size={16} className="text-[#6d7175]" />
+            <CircleHelp size={16} className="text-[#6d7175]" />
           </div>
           <h3 className="font-['Inter'] font-semibold text-[24px] text-[#202223] m-0">
             {analyticsData.bundleOrders.toLocaleString()}
@@ -169,7 +169,7 @@ export function AnalyticsPage({ shop, offers }: AnalyticsPageProps) {
             <span className="font-['Inter'] font-normal text-[14px] text-[#6d7175]">
               Conversion to bundle
             </span>
-            <HelpCircle size={16} className="text-[#6d7175]" />
+            <CircleHelp size={16} className="text-[#6d7175]" />
           </div>
           <h3 className="font-['Inter'] font-semibold text-[24px] text-[#202223] m-0">
             {analyticsData.conversionRate.toFixed(2)}%
