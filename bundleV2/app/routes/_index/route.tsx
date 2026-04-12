@@ -700,7 +700,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const buttonText = String(
       formData.get("buttonText") || "Add to Cart",
     ).trim();
-    const enableCountdown = String(formData.get("enableCountdown")) === "true";
 
     const title = String(formData.get("title") || "Bundle & Save").trim();
 
@@ -723,7 +722,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       titleFontSize,
       titleFontWeight,
       buttonText,
-      enableCountdown,
     });
 
     // Store which Shopify shop this offer belongs to.

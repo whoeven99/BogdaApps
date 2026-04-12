@@ -46,7 +46,6 @@ export function renderBundlePreviewHtml({
   titleColor = "#111111",
   buttonText = "Add to Cart",
   buttonPrimaryColor = "#008060",
-  enableCountdown = false,
 }: {
   title?: string;
   layoutFormat?: LayoutFormat;
@@ -59,7 +58,6 @@ export function renderBundlePreviewHtml({
   titleColor?: string;
   buttonText?: string;
   buttonPrimaryColor?: string;
-  enableCountdown?: boolean;
 } = {}) {
   const safeLayout: LayoutFormat = ["vertical", "horizontal", "card", "compact"].includes(layoutFormat)
     ? layoutFormat
@@ -84,18 +82,11 @@ export function renderBundlePreviewHtml({
     </div>`;
   }).join("");
 
-  const countdownHtml = enableCountdown
-    ? `<div class="create-offer-countdown-wrapper" style="margin-top: 12px; padding: 8px; background: #fff8f8; border: 1px solid #ffdcdc; border-radius: 6px; text-align: center;">
-         <div style="font-size: 12px; font-weight: 600; color: #d72c0d;">Ends in: 00:15:00</div>
-       </div>`
-    : "";
-
   return `<div class="create-offer-preview-card">
     <div class="create-offer-style-preview-header" style="color:${esc(titleColor)} !important; font-size: ${esc(titleFontSize)}px !important; font-weight: ${esc(titleFontWeight)} !important;">${esc(title)}</div>
     <div class="create-offer-style-preview-list create-offer-style-preview-list--${safeLayout}">
       ${itemsHtml}
     </div>
-    ${countdownHtml}
     <button class="create-offer-preview-button" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
       ${esc(buttonText)}
     </button>

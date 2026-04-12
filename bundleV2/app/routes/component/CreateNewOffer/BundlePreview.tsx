@@ -11,7 +11,6 @@ type Props = {
   titleColor?: string;
   buttonText?: string;
   buttonPrimaryColor?: string;
-  enableCountdown?: boolean;
   title?: string;
 };
 
@@ -26,7 +25,6 @@ export default function BundlePreview({
   titleColor,
   buttonText,
   buttonPrimaryColor,
-  enableCountdown,
   title = "Bundle & Save",
 }: Props) {
   const html = renderBundlePreviewHtml({
@@ -41,7 +39,6 @@ export default function BundlePreview({
     titleColor,
     buttonText,
     buttonPrimaryColor,
-    enableCountdown,
   });
 
   return <div dangerouslySetInnerHTML={{ __html: html }} />;

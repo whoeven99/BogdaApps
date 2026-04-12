@@ -140,7 +140,6 @@ function parseOfferSettings(
   labelColor: string;
   buttonText: string;
   buttonPrimaryColor: string;
-  enableCountdown: boolean;
 } {
   if (!offerSettingsJson) {
     return {
@@ -160,7 +159,6 @@ function parseOfferSettings(
       labelColor: "#ffffff",
       buttonText: "Add to Cart",
       buttonPrimaryColor: "#008060",
-      enableCountdown: false,
     };
   }
 
@@ -182,7 +180,6 @@ function parseOfferSettings(
       labelColor?: string;
       buttonText?: string;
       buttonPrimaryColor?: string;
-      enableCountdown?: boolean;
     }>;
 
     return {
@@ -211,7 +208,6 @@ function parseOfferSettings(
       labelColor: sanitizeHexColor(parsed.labelColor, "#ffffff"),
       buttonText: parsed.buttonText || "Add to Cart",
       buttonPrimaryColor: sanitizeHexColor(parsed.buttonPrimaryColor, "#008060"),
-      enableCountdown: parsed.enableCountdown ?? false,
     };
   } catch {
     return {
@@ -231,7 +227,6 @@ function parseOfferSettings(
       labelColor: "#ffffff",
       buttonText: "Add to Cart",
       buttonPrimaryColor: "#008060",
-      enableCountdown: false,
     };
   }
 }
@@ -411,7 +406,6 @@ export function CreateNewOffer({
   const [labelColor, setLabelColor] = useState(offerSettings.labelColor);
   const [buttonText, setButtonText] = useState(offerSettings.buttonText);
   const [buttonPrimaryColor, setButtonPrimaryColor] = useState(offerSettings.buttonPrimaryColor);
-  const [enableCountdown, setEnableCountdown] = useState(offerSettings.enableCountdown);
   const [widgetTitle, setWidgetTitle] = useState(offerSettings.title);
   const [customerSegments, setCustomerSegments] = useState<string[]>(
     offerSettings.customerSegments ? offerSettings.customerSegments.split(",") : ["all"]
@@ -622,7 +616,6 @@ export function CreateNewOffer({
       <input type="hidden" name="labelColor" value={labelColor} />
       <input type="hidden" name="buttonText" value={buttonText} />
       <input type="hidden" name="buttonPrimaryColor" value={buttonPrimaryColor} />
-      <input type="hidden" name="enableCountdown" value={enableCountdown ? "true" : "false"} />
       <input
         type="hidden"
         name="cardBackgroundColor"
@@ -1483,15 +1476,6 @@ export function CreateNewOffer({
                       />
                     </label>
                   </div>
-                  
-                  <div className="mt-4">
-                    <Checkbox
-                      checked={enableCountdown}
-                      onChange={(e) => setEnableCountdown(e.target.checked)}
-                    >
-                      Enable Countdown Timer
-                    </Checkbox>
-                  </div>
                 </div>
               </div>
 
@@ -1517,7 +1501,6 @@ export function CreateNewOffer({
                   titleColor={titleColor}
                   buttonText={buttonText}
                   buttonPrimaryColor={buttonPrimaryColor}
-                  enableCountdown={enableCountdown}
                   title={widgetTitle}
                 />
                 <p className="text-[12px] text-[#5c6166] mt-3 italic font-normal">
