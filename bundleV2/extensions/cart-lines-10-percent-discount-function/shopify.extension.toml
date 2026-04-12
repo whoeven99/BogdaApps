@@ -2,7 +2,7 @@ api_version = "2025-07"
 
 [[extensions]]
 name = "10% Cart Lines Discount"
-handle = "cart-lines-10-percent-discount-function"
+handle = "cart-lines-10pct-discount"
 
 uid = "d21a066f-25d9-97ef-1ebc-8e679c617ef3af1e4f84"
 

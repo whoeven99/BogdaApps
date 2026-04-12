@@ -518,7 +518,7 @@ export function CreateNewOffer({
 
   return (
     <fetcher.Form
-      className="relative max-w-5xl mx-auto"
+      className="relative max-w-[1048px] mx-auto pb-6"
       method="post"
       onSubmit={(e: any) => {
         const key = normalizeOfferNameKey(offerName);
@@ -576,10 +576,11 @@ export function CreateNewOffer({
           {submitErrorToast}
         </div>
       )}
-      <div className="mb-6">
+      <div className="sticky top-0 z-[90] bg-[#f4f6f8] pt-4 pb-4 -mt-4 mb-6">
         <div>
           <Button
             type="text"
+            className="px-0 text-gray-600 hover:text-gray-900"
             onClick={(e) => {
               onBack?.();
               e.preventDefault();
@@ -587,8 +588,8 @@ export function CreateNewOffer({
           >
             ← Back
           </Button>
-          <div className="flex items-center justify-between w-full gap-[16px] mt-2">
-            <h1 className="text-2xl font-semibold m-0 text-gray-900">
+          <div className="flex items-center justify-between w-full gap-[16px] mt-1">
+            <h1 className="text-xl font-bold m-0 text-gray-900">
               {initialOffer ? "Edit Offer" : "Create New Offer"}
             </h1>
             <div className="flex items-center gap-[8px]">
@@ -656,104 +657,120 @@ export function CreateNewOffer({
         value={JSON.stringify(buildDiscountRulesJson(normalizedDiscountRules))}
       />
 
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-20">
-        <div className="flex flex-col sm:flex-row gap-3 mb-8">
-          {steps.map((stepName, index) => (
-            <div
-              key={index}
-              className={`flex-1 py-3 px-4 rounded-md text-center text-sm font-medium cursor-pointer transition-colors ${
-                step === index + 1
-                  ? "bg-[#008060] text-white"
-                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-              }`}
-              onClick={(e) => {
-                setStep(index + 1);
-                e.preventDefault();
-              }}
-            >
-              <span className="hidden sm:inline">
-                {index + 1}.{" "}
-              </span>
-              {stepName}
-            </div>
-          ))}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-[100px]">
+        <div className="grid grid-cols-2 sm:flex sm:gap-[12px] gap-[8px] mb-6">
+          {steps.map((stepName, index) => {
+            const stepNumber = index + 1;
+            const isActive = step === stepNumber;
+            const isClickable = stepNumber <= step;
+            return (
+              <div
+                key={index}
+                className={`flex-1 py-[10px] px-2 sm:p-[12px] rounded-md text-center text-[13px] sm:text-[14px] font-medium transition-colors ${
+                  isActive
+                    ? "bg-[#008060] text-white"
+                    : "bg-[#f4f6f8] text-[#6d7175]"
+                } ${
+                  isClickable
+                    ? "cursor-pointer hover:opacity-80"
+                    : "cursor-not-allowed opacity-50"
+                }`}
+                onClick={(e) => {
+                  if (isClickable) {
+                    setStep(stepNumber);
+                  }
+                  e.preventDefault();
+                }}
+              >
+                <span className="hidden sm:inline">
+                  {stepNumber}.{" "}
+                </span>
+                {stepName}
+              </div>
+            );
+          })}
         </div>
 
         <div>
           {step === 1 && (
             <div className="create-offer-basic-grid lg:grid-cols-[1fr_400px]">
-              <div>
-                <h2 className="text-xl font-semibold mb-4 text-gray-900">
-                  Basic Information
-                </h2>
-                <div className="flex flex-col gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Offer Name
-                    </label>
-                    <Input
-                      placeholder="e.g., Summer Bundle Deal"
-                      value={offerName}
-                      onChange={(e) => {
-                        setOfferName(e.target.value);
-                        if (offerNameError && e.target.value.trim()) {
-                          setOfferNameError("");
-                        }
-                      }}
-                      status={offerNameError ? "error" : ""}
-                    />
-                    {offerNameError && (
-                      <p className="text-red-500 text-xs mt-1">
-                        {offerNameError}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Offer Type
-                    </label>
-                    <Select
-                      value={offerType}
-                      onChange={(val) => setOfferType(val)}
-                      disabled
-                      className="w-full"
-                      options={offerTypes.map(t => ({ label: t.name, value: t.id }))}
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Display Title (Cart & Checkout)
-                    </label>
-                    <Input
-                      placeholder="e.g., Bundle Discount"
-                      value={cartTitle}
-                      onChange={(e) => {
-                        setCartTitle(e.target.value);
-                        if (cartTitleError && e.target.value.trim()) {
-                          setCartTitleError("");
-                        }
-                      }}
-                      status={cartTitleError ? "error" : ""}
-                    />
-                    <div className="text-xs text-gray-500 mt-1">
-                      This is the discount name shown to customers in their cart and checkout.
+              <div className="flex flex-col gap-6">
+                <div>
+                  <h2 className="text-lg font-semibold mb-4 text-gray-900">
+                    Basic Information
+                  </h2>
+                  <div className="flex flex-col gap-4">
+                    <div>
+                      <label className="block text-[14px] font-medium text-gray-900 mb-1">
+                        Offer Name
+                      </label>
+                      <Input
+                        size="large"
+                        placeholder="e.g., Summer Bundle Deal"
+                        value={offerName}
+                        onChange={(e) => {
+                          setOfferName(e.target.value);
+                          if (offerNameError && e.target.value.trim()) {
+                            setOfferNameError("");
+                          }
+                        }}
+                        status={offerNameError ? "error" : ""}
+                      />
+                      {offerNameError && (
+                        <p className="text-red-500 text-xs mt-1">
+                          {offerNameError}
+                        </p>
+                      )}
                     </div>
-                    {cartTitleError && (
-                      <div className="text-red-500 text-xs mt-1">
-                        {cartTitleError}
+
+                    <div>
+                      <label className="block text-[14px] font-medium text-gray-900 mb-1">
+                        Offer Type
+                      </label>
+                      <Select
+                        size="large"
+                        value={offerType}
+                        onChange={(val) => setOfferType(val)}
+                        disabled
+                        className="w-full"
+                        options={offerTypes.map(t => ({ label: t.name, value: t.id }))}
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-[14px] font-medium text-gray-900 mb-1">
+                        Display Title (Cart & Checkout)
+                      </label>
+                      <Input
+                        size="large"
+                        placeholder="e.g., Bundle Discount"
+                        value={cartTitle}
+                        onChange={(e) => {
+                          setCartTitle(e.target.value);
+                          if (cartTitleError && e.target.value.trim()) {
+                            setCartTitleError("");
+                          }
+                        }}
+                        status={cartTitleError ? "error" : ""}
+                      />
+                      <div className="text-[13px] text-gray-500 mt-1">
+                        This is the discount name shown to customers in their cart and checkout.
                       </div>
-                    )}
+                      {cartTitleError && (
+                        <div className="text-red-500 text-xs mt-1">
+                          {cartTitleError}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
 
               <div className="create-offer-sticky-preview">
-                <h3 className="text-sm font-medium text-gray-900 mb-3">
-                  Preview
+                <h3 className="text-[14px] font-medium text-gray-900 mb-3">
+                  Live Preview
                 </h3>
-                <p className="text-sm text-gray-500 mb-6">
+                <p className="text-xs text-gray-500 mb-6 font-normal">
                   {
                     offerTypes.find(
                       (type) => type.id === offerType,
@@ -829,6 +846,9 @@ export function CreateNewOffer({
                     </>
                   )}
                 </div>
+                <p className="text-[12px] text-[#6d7175] mt-3 italic font-normal">
+                  Note: This is a live preview. Changes will update in real-time when state is connected.
+                </p>
               </div>
             </div>
           )}
@@ -837,17 +857,18 @@ export function CreateNewOffer({
             <>
               <div className="create-offer-products-grid">
                 <div>
-                  <h2 className="text-xl font-semibold mb-6 text-gray-900">
+                  <h2 className="text-lg font-semibold mb-6 text-gray-900">
                     Products & Discounts
                   </h2>
 
                   <div className="mb-8">
-                    <h3 className="text-sm font-medium text-gray-900 mb-3">
+                    <h3 className="text-[14px] font-medium text-gray-900 mb-3">
                       Products eligible for offer
                     </h3>
 
                     {selectedProductsData.length === 0 ? (
                       <Button
+                        size="large"
                         type="primary"
                         onClick={(e) => {
                           handleSelectProducts();
@@ -922,16 +943,17 @@ export function CreateNewOffer({
                   </div>
 
                   <div>
-                    <h3 className="text-sm font-medium text-gray-900 mb-3">
+                    <h3 className="text-[14px] font-medium text-gray-900 mb-3">
                       Buy more, save more
                     </h3>
                     {discountRules.map((rule, index) => (
                       <div className="create-offer-discount-card" key={`${rule.count}-${index}`}>
                         <div className="create-offer-discount-body">
                           <div className="create-offer-discount-form-row create-offer-discount-form-row--inline">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <label className="block text-[14px] font-medium text-gray-900 mb-1">
                               Item quantity
                               <Input
+                                size="large"
                                 type="number"
                                 min={1}
                                 step={1}
@@ -951,9 +973,10 @@ export function CreateNewOffer({
                                 }}
                               />
                             </label>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <label className="block text-[14px] font-medium text-gray-900 mb-1">
                               Discount (%)
                               <Input
+                                size="large"
                                 type="number"
                                 min={0}
                                 max={100}
@@ -980,9 +1003,10 @@ export function CreateNewOffer({
                           
                           {/* 新增的文本配置字段 */}
                           <div className="create-offer-discount-form-row" style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <label className="block text-[14px] font-medium text-gray-900 mb-1">
                               Title
                               <Input
+                                size="large"
                                 className="mt-1"
                                 value={rule.title || ''}
                                 placeholder="e.g. Duo, Trio"
@@ -992,9 +1016,10 @@ export function CreateNewOffer({
                                 }}
                               />
                             </label>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <label className="block text-[14px] font-medium text-gray-900 mb-1">
                               Subtitle
                               <Input
+                                size="large"
                                 className="mt-1"
                                 value={rule.subtitle || ''}
                                 placeholder="e.g. You save 20%"
@@ -1004,9 +1029,10 @@ export function CreateNewOffer({
                                 }}
                               />
                             </label>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <label className="block text-[14px] font-medium text-gray-900 mb-1">
                               Badge
                               <Input
+                                size="large"
                                 className="mt-1"
                                 value={rule.badge || ''}
                                 placeholder="e.g. Most Popular"
@@ -1054,10 +1080,10 @@ export function CreateNewOffer({
                 </div>
 
                 <div className="create-offer-sticky-preview">
-                  <h3 className="text-sm font-medium text-gray-900 mb-3">
-                    Preview
+                  <h3 className="text-[14px] font-medium text-gray-900 mb-3">
+                    Live Preview
                   </h3>
-                  <p className="text-sm text-gray-500 mb-6">
+                  <p className="text-xs text-gray-500 mb-6 font-normal">
                     {
                       offerTypes.find(
                         (type) => type.id === offerType,
@@ -1191,6 +1217,9 @@ export function CreateNewOffer({
                       </>
                     )}
                   </div>
+                  <p className="text-[12px] text-[#6d7175] mt-3 italic font-normal">
+                    Note: This is a live preview. Changes will update in real-time when state is connected.
+                  </p>
                 </div>
               </div>
             </>
@@ -1199,18 +1228,19 @@ export function CreateNewOffer({
           {step === 3 && (
             <div className="create-offer-style-grid">
               <div>
-                <h2 className="text-xl font-semibold mb-2 text-gray-900">
+                <h2 className="text-lg font-semibold mb-2 text-gray-900">
                   Style Design
                 </h2>
-                <p className="text-sm text-gray-500 mb-6">
+                <p className="text-xs text-gray-500 mb-6 font-normal">
                   Customize the appearance of your bundle widget
                 </p>
 
                 <div className="mb-6">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-[14px] font-medium text-gray-900 mb-2">
                     Widget Title
                   </label>
                   <Input
+                    size="large"
                     value={widgetTitle}
                     placeholder="e.g. Bundle & Save"
                     onChange={(e) => setWidgetTitle(e.target.value)}
@@ -1221,7 +1251,7 @@ export function CreateNewOffer({
                 </div>
 
                 <div className="mb-6">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-[14px] font-medium text-gray-900 mb-2">
                     Layout Format
                   </label>
                   <div className="grid grid-cols-2 gap-3">
@@ -1301,11 +1331,11 @@ export function CreateNewOffer({
                 </div>
 
                 <div className="mb-6">
-                  <h3 className="text-sm font-medium text-gray-900 mb-3">
+                  <h3 className="text-[14px] font-medium text-gray-900 mb-3">
                     Card & Typography Colors
                   </h3>
                   <div className="grid grid-cols-2 gap-4">
-                    <label className="block text-sm font-medium text-gray-700">
+                    <label className="block text-[14px] font-medium text-gray-900">
                       Card Background Color
                       <input
                         type="color"
@@ -1313,47 +1343,48 @@ export function CreateNewOffer({
                         onChange={(e) =>
                           setCardBackgroundColor(e.target.value)
                         }
-                        className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1"
+                        className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1 cursor-pointer"
                       />
                     </label>
-                    <label className="block text-sm font-medium text-gray-700">
+                    <label className="block text-[14px] font-medium text-gray-900">
                       Accent Color
                       <input
                         type="color"
                         value={accentColor}
                         onChange={(e) => setAccentColor(e.target.value)}
-                        className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1"
+                        className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1 cursor-pointer"
                       />
                     </label>
-                    <label className="block text-sm font-medium text-gray-700">
+                    <label className="block text-[14px] font-medium text-gray-900">
                       Border Color
                       <input
                         type="color"
                         value={borderColor}
                         onChange={(e) => setBorderColor(e.target.value)}
-                        className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1"
+                        className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1 cursor-pointer"
                       />
                     </label>
-                    <label className="block text-sm font-medium text-gray-700">
+                    <label className="block text-[14px] font-medium text-gray-900">
                       Label Text Color
                       <input
                         type="color"
                         value={labelColor}
                         onChange={(e) => setLabelColor(e.target.value)}
-                        className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1"
+                        className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1 cursor-pointer"
                       />
                     </label>
                   </div>
                 </div>
 
                 <div className="mb-6">
-                  <h3 className="text-sm font-medium text-gray-900 mb-3">
+                  <h3 className="text-[14px] font-medium text-gray-900 mb-3">
                     Title Typography
                   </h3>
                   <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-                    <label className="block text-sm font-medium text-gray-700">
+                    <label className="block text-[14px] font-medium text-gray-900">
                       Font Size (px)
                       <Input
+                        size="large"
                         type="number"
                         min={10}
                         max={36}
@@ -1362,9 +1393,10 @@ export function CreateNewOffer({
                         className="mt-1"
                       />
                     </label>
-                    <label className="block text-sm font-medium text-gray-700">
+                    <label className="block text-[14px] font-medium text-gray-900">
                       Font Weight
                       <Select
+                        size="large"
                         value={titleFontWeight}
                         onChange={(val) => setTitleFontWeight(val)}
                         className="w-full mt-1"
@@ -1376,38 +1408,39 @@ export function CreateNewOffer({
                         ]}
                       />
                     </label>
-                    <label className="block text-sm font-medium text-gray-700">
+                    <label className="block text-[14px] font-medium text-gray-900">
                       Title Color
                       <input
                         type="color"
                         value={titleColor}
                         onChange={(e) => setTitleColor(e.target.value)}
-                        className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1"
+                        className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1 cursor-pointer"
                       />
                     </label>
                   </div>
                 </div>
 
                 <div className="mb-6">
-                  <h3 className="text-sm font-medium text-gray-900 mb-3">
+                  <h3 className="text-[14px] font-medium text-gray-900 mb-3">
                     Button Style & Extra
                   </h3>
                   <div className="grid grid-cols-2 gap-4">
-                    <label className="block text-sm font-medium text-gray-700">
+                    <label className="block text-[14px] font-medium text-gray-900">
                       Button Text
                       <Input
+                        size="large"
                         value={buttonText}
                         onChange={(e) => setButtonText(e.target.value)}
                         className="mt-1"
                       />
                     </label>
-                    <label className="block text-sm font-medium text-gray-700">
+                    <label className="block text-[14px] font-medium text-gray-900">
                       Button Color
                       <input
                         type="color"
                         value={buttonPrimaryColor}
                         onChange={(e) => setButtonPrimaryColor(e.target.value)}
-                        className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1"
+                        className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1 cursor-pointer"
                       />
                     </label>
                   </div>
@@ -1424,10 +1457,10 @@ export function CreateNewOffer({
               </div>
 
               <div className="create-offer-sticky-preview">
-                <h3 className="text-sm font-medium text-gray-900 mb-3">
-                  Preview
+                <h3 className="text-[14px] font-medium text-gray-900 mb-3">
+                  Live Preview
                 </h3>
-                <p className="text-sm text-gray-500 mb-6">
+                <p className="text-xs text-gray-500 mb-6 font-normal">
                   {
                     offerTypes.find(
                       (type) => type.id === offerType,
@@ -1448,23 +1481,26 @@ export function CreateNewOffer({
                   enableCountdown={enableCountdown}
                   title={widgetTitle}
                 />
+                <p className="text-[12px] text-[#6d7175] mt-3 italic font-normal">
+                  Note: This is a live preview. Changes will update in real-time when state is connected.
+                </p>
               </div>
             </div>
           )}
 
           {step === 4 && (
             <div>
-              <h2 className="text-xl font-semibold mb-6 text-gray-900">
+              <h2 className="text-lg font-semibold mb-6 text-gray-900">
                 Targeting & Settings
               </h2>
 
               <div className="mb-8">
-                <h3 className="text-sm font-medium text-gray-900 mb-3">
+                <h3 className="text-[14px] font-medium text-gray-900 mb-3">
                   Target Audience
                 </h3>
                 <div className="flex flex-col gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-[14px] font-medium text-gray-900 mb-2">
                       Customer Segments
                     </label>
                     <div className="grid grid-cols-2 gap-3 border border-gray-200 rounded-md p-4">
@@ -1543,7 +1579,7 @@ export function CreateNewOffer({
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-[14px] font-medium text-gray-900 mb-2">
                       Market Visibility
                     </label>
                     <div className="grid grid-cols-2 gap-3 border border-gray-200 rounded-md p-4">
@@ -1581,13 +1617,14 @@ export function CreateNewOffer({
               </div>
 
               <div className="mb-8">
-                <h3 className="text-sm font-medium text-gray-900 mb-3">
+                <h3 className="text-[14px] font-medium text-gray-900 mb-3">
                   Schedule
                 </h3>
                 <div className="grid grid-cols-2 gap-4">
-                  <label className="block text-sm font-medium text-gray-700">
+                  <label className="block text-[14px] font-medium text-gray-900">
                     Start Time
                     <Input
+                      size="large"
                       ref={startTimeInputRef as any}
                       type="datetime-local"
                       step="1"
@@ -1611,14 +1648,15 @@ export function CreateNewOffer({
                         {startTimeError}
                       </p>
                     ) : (
-                      <p className="text-gray-500 text-xs mt-1">
+                      <p className="text-gray-500 text-xs mt-1 font-normal">
                         When the offer becomes active
                       </p>
                     )}
                   </label>
-                  <label className="block text-sm font-medium text-gray-700">
+                  <label className="block text-[14px] font-medium text-gray-900">
                     End Time
                     <Input
+                      size="large"
                       ref={endTimeInputRef as any}
                       type="datetime-local"
                       step="1"
@@ -1642,7 +1680,7 @@ export function CreateNewOffer({
                         {endTimeError}
                       </p>
                     ) : (
-                      <p className="text-gray-500 text-xs mt-1">
+                      <p className="text-gray-500 text-xs mt-1 font-normal">
                         When the offer expires
                       </p>
                     )}
@@ -1651,13 +1689,14 @@ export function CreateNewOffer({
               </div>
 
               <div className="mb-8">
-                <h3 className="text-sm font-medium text-gray-900 mb-3">
+                <h3 className="text-[14px] font-medium text-gray-900 mb-3">
                   Budget
                 </h3>
                 <div className="grid grid-cols-2 gap-4">
-                  <label className="block text-sm font-medium text-gray-700">
+                  <label className="block text-[14px] font-medium text-gray-900">
                     Total Budget (Optional)
                     <Input
+                      size="large"
                       type="number"
                       placeholder="$0.00"
                       className="mt-1 w-full"
@@ -1665,13 +1704,14 @@ export function CreateNewOffer({
                       value={totalBudget}
                       onChange={(e) => setTotalBudget(e.target.value)}
                     />
-                    <p className="text-gray-500 text-xs mt-1">
+                    <p className="text-gray-500 text-xs mt-1 font-normal">
                       Maximum total spend for this offer
                     </p>
                   </label>
-                  <label className="block text-sm font-medium text-gray-700">
+                  <label className="block text-[14px] font-medium text-gray-900">
                     Daily Budget (Optional)
                     <Input
+                      size="large"
                       type="number"
                       placeholder="$0.00"
                       className="mt-1 w-full"
@@ -1679,7 +1719,7 @@ export function CreateNewOffer({
                       value={dailyBudget}
                       onChange={(e) => setDailyBudget(e.target.value)}
                     />
-                    <p className="text-gray-500 text-xs mt-1">
+                    <p className="text-gray-500 text-xs mt-1 font-normal">
                       Maximum spend per day
                     </p>
                   </label>
@@ -1687,13 +1727,14 @@ export function CreateNewOffer({
               </div>
 
               <div className="mb-8">
-                <h3 className="text-sm font-medium text-gray-900 mb-3">
+                <h3 className="text-[14px] font-medium text-gray-900 mb-3">
                   Risk Control
                 </h3>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">
+                  <label className="block text-[14px] font-medium text-gray-900">
                     Usage Limit Per Customer
                     <Select
+                      size="large"
                       value={usageLimitPerCustomer}
                       onChange={(val) => setUsageLimitPerCustomer(val)}
                       className="w-full mt-1"
@@ -1707,7 +1748,7 @@ export function CreateNewOffer({
                         { label: "Custom...", value: "custom" }
                       ]}
                     />
-                    <p className="text-gray-500 text-xs mt-1">
+                    <p className="text-gray-500 text-xs mt-1 font-normal">
                       How many times each customer can use this offer
                     </p>
                   </label>
@@ -1718,9 +1759,10 @@ export function CreateNewOffer({
         </div>
       </div>
 
-      <div className="create-offer-bottom-bar bg-white border-t border-gray-200 p-4 flex justify-end gap-3 sticky bottom-0 z-50">
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 py-4 px-6 flex justify-center items-center gap-3 z-[100] shadow-[0_-2px_8px_rgba(0,0,0,0.1)]">
         {step > 1 && (
           <Button
+            size="large"
             disabled={fetcher.state !== "idle"}
             onClick={(e) => {
               setStep(step - 1);
@@ -1731,7 +1773,9 @@ export function CreateNewOffer({
           </Button>
         )}
         <Button
+          size="large"
           type="primary"
+          style={{ background: step === 4 ? "#000000" : undefined }}
           disabled={fetcher.state !== "idle"}
           onClick={(e: any) => {
             if (step === 1) {

@@ -40,9 +40,12 @@
   align-items: flex-start;
 }
 
-.create-offer-products-grid,
-.create-offer-style-grid {
-  grid-template-columns: 1fr 400px;
+@media (min-width: 1024px) {
+  .create-offer-basic-grid,
+  .create-offer-products-grid,
+  .create-offer-style-grid {
+    grid-template-columns: 1fr 400px;
+  }
 }
 
 .create-offer-sticky-preview {
