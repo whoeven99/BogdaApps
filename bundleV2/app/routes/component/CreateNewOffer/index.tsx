@@ -418,26 +418,68 @@ export function CreateNewOffer({
   const [usageLimitPerCustomer, setUsageLimitPerCustomer] = useState(
     offerSettings.usageLimitPerCustomer
   );
-  const [showProductModal, setShowProductModal] = useState(false);
-  const [productSearch, setProductSearch] = useState("");
-  const [selectedProductIds, setSelectedProductIds] = useState<string[]>(
-    initialOffer?.selectedProductsJson
+  const [selectedProductsData, setSelectedProductsData] = useState<{
+    id: string;
+    title: string;
+    image: string;
+    price: string;
+    variantsCount: number;
+  }[]>(() => {
+    const ids = initialOffer?.selectedProductsJson
       ? parseSelectedProductIds(initialOffer.selectedProductsJson)
-      : [],
-  );
+      : [];
 
-  // 仅用于页面展示；落库/提交只需要 ids。
-  const selectedProducts: Product[] = selectedProductIds.map((id: string) => {
-    const found = storeProducts.find((p) => String(p.id) === String(id));
-    return (
-      found ?? {
-        id,
-        name: "Unknown product",
-        price: "€0.00",
-        image: "https://via.placeholder.com/60",
+    let parsedObjects: any[] = [];
+    try {
+      if (initialOffer?.selectedProductsJson) {
+        parsedObjects = JSON.parse(initialOffer.selectedProductsJson);
       }
-    );
+    } catch (e) {}
+
+    return ids.map((id: string) => {
+      const savedObj = parsedObjects.find(
+        (o) => o && typeof o === "object" && String(o.id) === id
+      );
+      if (savedObj && savedObj.title) {
+        return {
+          id,
+          title: savedObj.title,
+          image: savedObj.image || "https://via.placeholder.com/60",
+          price: savedObj.price || "€0.00",
+          variantsCount: savedObj.variantsCount || 1,
+        };
+      }
+
+      const found = storeProducts.find((p) => String(p.id) === id);
+      return {
+        id,
+        title: found?.name ?? "Unknown product",
+        image: found?.image ?? "https://via.placeholder.com/60",
+        price: found?.price ?? "€0.00",
+        variantsCount: 1,
+      };
+    });
   });
+
+  const handleSelectProducts = async () => {
+    const selected = await (window as any).shopify.resourcePicker({
+      type: "product",
+      action: "select",
+      multiple: true,
+      selectionIds: selectedProductsData.map((p) => ({ id: p.id })),
+    });
+
+    if (selected) {
+      const newData = selected.map((item: any) => ({
+        id: item.id,
+        title: item.title,
+        image: item.images?.[0]?.originalSrc || "https://via.placeholder.com/60",
+        price: item.variants?.[0]?.price || "€0.00",
+        variantsCount: item.variants?.length || 1,
+      }));
+      setSelectedProductsData(newData);
+    }
+  };
   const [discountRules, setDiscountRules] = useState<DiscountRule[]>(() =>
     parseDiscountRules(initialOffer?.discountRulesJson),
   );
@@ -463,9 +505,7 @@ export function CreateNewOffer({
         "Offer discounts when customers buy multiple quantities of the same product",
     },
   ];
-  const filteredStoreProducts = storeProducts.filter((product) =>
-    product.name.toLowerCase().includes(productSearch.toLowerCase().trim()),
-  );
+
 
   return (
     <fetcher.Form
@@ -616,7 +656,7 @@ export function CreateNewOffer({
       <input
         type="hidden"
         name="selectedProductsJson"
-        value={JSON.stringify(selectedProductIds)}
+        value={JSON.stringify(selectedProductsData)}
       />
       <input
         type="hidden"
@@ -804,93 +844,6 @@ export function CreateNewOffer({
 
           {step === 2 && (
             <>
-              {showProductModal && (
-              <div className="create-offer-modal-backdrop">
-                <div className="create-offer-modal">
-                  <div className="create-offer-modal-header">
-                    <h2 className="create-offer-modal-title">
-                        Select Products
-                      </h2>
-                      <button
-                        onClick={(e) => {
-                          setShowProductModal(false);
-                          e.preventDefault();
-                        }}
-                      className="create-offer-modal-close"
-                        type="button"
-                      >
-                        <X size={24} />
-                      </button>
-                    </div>
-
-                    <input
-                      type="text"
-                      placeholder="Search products..."
-                      className="create-offer-modal-search"
-                      value={productSearch}
-                      onChange={(e) => setProductSearch(e.target.value)}
-                    />
-
-                  <div className="create-offer-modal-products">
-                      {filteredStoreProducts.map((product) => (
-                        <div
-                          key={product.id}
-                        className="create-offer-modal-product"
-                          onClick={(e) => {
-                            const productId = String(product.id);
-                            if (!selectedProductIds.includes(productId)) {
-                              setSelectedProductIds([
-                                ...selectedProductIds,
-                                productId,
-                              ]);
-                            }
-                            e.preventDefault();
-                          }}
-                        >
-                          <img
-                            src={product.image}
-                            alt={product.name}
-                          className="create-offer-modal-product-image"
-                          />
-                        <div style={{ flex: 1 }}>
-                          <div className="create-offer-modal-product-name">
-                              {product.name}
-                            </div>
-                          <div className="create-offer-modal-product-price">
-                              {product.price}
-                            </div>
-                          </div>
-                          <input
-                            type="checkbox"
-                            checked={selectedProductIds.includes(
-                              String(product.id),
-                            )}
-                            readOnly
-                          className="create-offer-modal-product-checkbox"
-                          />
-                        </div>
-                      ))}
-                      {filteredStoreProducts.length === 0 && (
-                        <div className="create-offer-helper-text">
-                          No products found.
-                        </div>
-                      )}
-                    </div>
-
-                    <button
-                      onClick={(e) => {
-                        setShowProductModal(false);
-                        e.preventDefault();
-                      }}
-                    className="create-offer-modal-footer-button"
-                      type="button"
-                    >
-                      Done
-                    </button>
-                  </div>
-                </div>
-              )}
-
               <div className="create-offer-products-grid">
                 <div>
                   <h2 className="polaris-text-heading-md create-offer-section-title">
@@ -902,10 +855,10 @@ export function CreateNewOffer({
                       Products eligible for offer
                     </h3>
 
-                    {selectedProductIds.length === 0 ? (
+                    {selectedProductsData.length === 0 ? (
                       <button
                         onClick={(e) => {
-                          setShowProductModal(true);
+                          handleSelectProducts();
                           e.preventDefault();
                         }}
                         className="create-offer-modal-footer-button"
@@ -916,50 +869,57 @@ export function CreateNewOffer({
                     ) : (
                       <div>
                         <div className="create-offer-selected-grid">
-                          {selectedProducts.slice(0, 3).map(
-                            (product) => (
-                              <div
-                                key={product.id}
-                                className="create-offer-selected-card"
+                          {selectedProductsData.slice(0, 3).map((product) => (
+                            <div
+                              key={product.id}
+                              className="create-offer-selected-card"
+                            >
+                              <button
+                                type="button"
+                                className="create-offer-selected-remove"
+                                onClick={(e) => {
+                                  setSelectedProductsData(
+                                    selectedProductsData.filter(
+                                      (p) => p.id !== product.id,
+                                    ),
+                                  );
+                                  e.preventDefault();
+                                }}
+                                aria-label={`Remove ${product.title}`}
                               >
-                                <button
-                                  type="button"
-                                  className="create-offer-selected-remove"
-                                  onClick={(e) => {
-                                    setSelectedProductIds(
-                                      selectedProductIds.filter(
-                                        (id) => id !== String(product.id),
-                                      ),
-                                    );
-                                    e.preventDefault();
-                                  }}
-                                  aria-label={`Remove ${product.name}`}
-                                >
-                                  <X size={14} />
-                                </button>
-                                <img
-                                  src={product.image}
-                                  alt={product.name}
-                                  className="create-offer-selected-image"
-                                />
-                                <div className="create-offer-selected-name">
-                                  {product.name}
-                                </div>
-                                <div className="create-offer-selected-price">
-                                  {product.price}
-                                </div>
+                                <X size={14} />
+                              </button>
+                              <img
+                                src={product.image}
+                                alt={product.title}
+                                className="create-offer-selected-image"
+                              />
+                              <div className="create-offer-selected-name">
+                                {product.title}
                               </div>
-                            ),
-                          )}
+                              <div className="create-offer-selected-price">
+                                {product.price}
+                              </div>
+                            </div>
+                          ))}
                         </div>
                         <div className="create-offer-selected-count">
-                          {selectedProductIds.length} product
-                          {selectedProductIds.length > 1 ? "s" : ""}{" "}
+                          {selectedProductsData.length} product
+                          {selectedProductsData.length > 1 ? "s" : ""}{" "}
                           selected
+                          {(() => {
+                            const totalVariants = selectedProductsData.reduce(
+                              (sum, p) => sum + (p.variantsCount || 1),
+                              0
+                            );
+                            return totalVariants > 0
+                              ? ` (${totalVariants} variant${totalVariants > 1 ? "s" : ""})`
+                              : "";
+                          })()}
                         </div>
                         <button
                           onClick={(e) => {
-                            setShowProductModal(true);
+                            handleSelectProducts();
                             e.preventDefault();
                           }}
                           className="create-offer-selected-edit"
