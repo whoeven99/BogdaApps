@@ -1,6 +1,5 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import "../styles/tailwind.css";
-import "antd/dist/reset.css";
 import { Typography, Button, Switch, Modal, Space } from "antd";
 import { Trash2, Pencil } from "lucide-react";
 import { authenticate } from "../shopify.server";
@@ -72,7 +71,10 @@ export default function Index() {
             <h2 className="!font-['Inter'] !font-semibold !text-[20px] !leading-[30px] !text-[#202223] !tracking-[-0.4492px] !m-0">
               GMV Overview
             </h2>
-            <Button type="text" className="!font-['Inter'] !font-medium !text-[14px]">
+            <Button
+              type="text"
+              className="!font-['Inter'] !font-medium !text-[14px]"
+            >
               View Details
               <svg
                 width="16"
@@ -108,8 +110,8 @@ export default function Index() {
                     mockOverviewData.gmvGrowthRate === 0
                       ? "#916a00"
                       : mockOverviewData.gmvGrowthRate > 0
-                      ? "#108043"
-                      : "#D93025",
+                        ? "#108043"
+                        : "#D93025",
                 }}
               >
                 ↑ +{mockOverviewData.gmvGrowthRate}% from last month
@@ -131,8 +133,8 @@ export default function Index() {
                     mockOverviewData.bundleOrdersGrowthRate === 0
                       ? "#916a00"
                       : mockOverviewData.bundleOrdersGrowthRate > 0
-                      ? "#108043"
-                      : "#D93025",
+                        ? "#108043"
+                        : "#D93025",
                 }}
               >
                 ↑ +{mockOverviewData.bundleOrdersGrowthRate}% from last month
@@ -154,8 +156,8 @@ export default function Index() {
                     mockOverviewData.conversionTrend === 0
                       ? "#916a00"
                       : mockOverviewData.conversionTrend > 0
-                      ? "#108043"
-                      : "#D93025",
+                        ? "#108043"
+                        : "#D93025",
                 }}
               >
                 ↑ +{mockOverviewData.conversionTrend}% from last month
@@ -195,7 +197,9 @@ export default function Index() {
                 ></div>
                 <span
                   className={`!font-['Inter'] !font-medium !text-[14px] !leading-[21px] !tracking-[-0.1504px] ${
-                    isThemeExtensionEnabled ? "!text-[#108043]" : "!text-[#6d7175]"
+                    isThemeExtensionEnabled
+                      ? "!text-[#108043]"
+                      : "!text-[#6d7175]"
                   }`}
                 >
                   {isThemeExtensionEnabled ? "Active" : "Inactive"}
@@ -237,7 +241,10 @@ export default function Index() {
           <h2 className="!font-['Inter'] !font-semibold !text-[18px] sm:!text-[20px] !leading-[27px] sm:!leading-[30px] !text-[#202223] !tracking-[-0.4492px] !m-0">
             My Offers
           </h2>
-          <Button type="primary" className="!font-['Inter'] !font-medium !text-[14px]">
+          <Button
+            type="primary"
+            className="!font-['Inter'] !font-medium !text-[14px]"
+          >
             Create New Offer
           </Button>
         </div>
@@ -295,7 +302,8 @@ export default function Index() {
                     <span
                       style={{
                         fontSize: "14px",
-                        color: offer.status === "ACTIVE" ? "#108043" : "#6d7175",
+                        color:
+                          offer.status === "ACTIVE" ? "#108043" : "#6d7175",
                         fontWeight: 500,
                       }}
                     >

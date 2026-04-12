@@ -351,7 +351,14 @@ const getThemeExtensionEnabled = async (
     const normalizedContent = content
       .replace(/\/\*[\s\S]*?\*\//g, "")
       .replace(/^\s*\/\/.*$/gm, "");
-    const settingsData = JSON.parse(normalizedContent);
+
+    let settingsData;
+    try {
+      settingsData = JSON.parse(normalizedContent);
+    } catch (e) {
+      console.error("[theme-extension] failed to parse settings_data.json", e);
+      return false;
+    }
     const blockEntries: Array<Record<string, any>> = [];
     collectTypedBlocks(settingsData, blockEntries);
 
@@ -454,8 +461,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.error("Failed to ensure automatic app discount exists", error);
   }
 
-  const prismaOffers = await getCachedShopOffers(session.shop);
-  const offers = prismaOffers as unknown as OfferListItem[];
+  let offers: OfferListItem[] = [];
+  try {
+    const prismaOffers = await getCachedShopOffers(session.shop);
+    offers = prismaOffers as unknown as OfferListItem[];
+  } catch (error) {
+    console.error("Failed to get cached shop offers", error);
+  }
 
   const productsResponse = await admin.graphql(
     `#graphql
@@ -481,7 +493,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       }
     `,
   );
-  const productsJson = await productsResponse.json();
+  let productsJson;
+  try {
+    productsJson = await productsResponse.json();
+  } catch (error) {
+    console.error("Failed to parse products GraphQL response", error);
+    productsJson = {};
+  }
   const productEdges =
     (productsJson?.data?.products?.edges as
       | Array<{
