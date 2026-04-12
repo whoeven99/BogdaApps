@@ -99,7 +99,7 @@ export function AllOffersPage({ onCreateOffer, offers }: AllOffersPageProps) {
         <div className="flex flex-col sm:flex-row gap-[8px] sm:gap-[12px] w-full sm:w-auto">
           <button
             type="button"
-            className="bg-white text-[#1c1f23] px-[16px] py-[8px] rounded-[8px] font-medium text-[14px] border border-[#d5d9dd] shadow-sm hover:bg-[#f4f6f8] transition-all cursor-pointer"
+            className="bg-transparent text-[#1c1f23] px-[16px] py-[8px] rounded-[8px] font-medium text-[14px] border border-[#c4cdd5] hover:bg-[#f4f6f8] transition-all cursor-pointer"
             onClick={handleShowGuide}
           >
             Show Guide

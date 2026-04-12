@@ -786,7 +786,7 @@ export function DashboardPage({
             </button>
             <button
               type="button"
-              className="bg-white border border-[#dfe3e8] px-[16px] py-[8px] rounded-[6px] font-sans font-medium text-[14px] leading-[21px] text-[#1c1f23] tracking-normal cursor-pointer hover:bg-[#f4f6f8] transition-colors w-full"
+              className="bg-transparent border border-[#c4cdd5] px-[16px] py-[8px] rounded-[8px] font-sans font-medium text-[14px] leading-[21px] text-[#1c1f23] tracking-normal cursor-pointer hover:bg-[#f4f6f8] transition-colors w-full"
               onClick={handleNeedHelp}
             >
               Need help?

@@ -128,7 +128,18 @@ export default function App() {
 
   return (
     <AppProvider embedded apiKey={apiKey}>
-      <ConfigProvider theme={{ token: { colorPrimary: "#008060" } }}>
+      <ConfigProvider
+        theme={{
+          token: {
+            colorPrimary: "#008060",
+            colorPrimaryHover: "#006e52",
+            colorPrimaryActive: "#005c43",
+            colorLink: "#008060",
+            colorLinkHover: "#006e52",
+            colorLinkActive: "#005c43",
+          },
+        }}
+      >
       <s-app-nav>
         <s-link href="/app">Home</s-link>
         <s-link href="/app/additional">Additional page</s-link>
