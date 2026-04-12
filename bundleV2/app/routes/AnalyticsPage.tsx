@@ -114,7 +114,7 @@ export function AnalyticsPage({ shop, offers }: AnalyticsPageProps) {
   return (
     <div className="max-w-[1280px] mx-auto pb-[24px]">
       <div className="mb-[24px]">
-        <h1 className="text-[24px] font-semibold text-[#1c1f23] m-0">
+        <h1 className="text-[20px] font-semibold text-[#1c1f23] m-0">
           Analytics
         </h1>
       </div>
@@ -145,7 +145,7 @@ export function AnalyticsPage({ shop, offers }: AnalyticsPageProps) {
             </span>
             <CircleHelp size={16} className="text-[#5c6166]" />
           </div>
-          <h3 className="font-sans font-semibold text-[24px] text-[#1c1f23] m-0">
+          <h3 className="font-sans font-semibold text-[20px] text-[#1c1f23] m-0">
             {analyticsData.visitors.toLocaleString()}
           </h3>
         </div>
@@ -158,7 +158,7 @@ export function AnalyticsPage({ shop, offers }: AnalyticsPageProps) {
             </span>
             <CircleHelp size={16} className="text-[#5c6166]" />
           </div>
-          <h3 className="font-sans font-semibold text-[24px] text-[#1c1f23] m-0">
+          <h3 className="font-sans font-semibold text-[20px] text-[#1c1f23] m-0">
             {analyticsData.bundleOrders.toLocaleString()}
           </h3>
         </div>
@@ -171,7 +171,7 @@ export function AnalyticsPage({ shop, offers }: AnalyticsPageProps) {
             </span>
             <CircleHelp size={16} className="text-[#5c6166]" />
           </div>
-          <h3 className="font-sans font-semibold text-[24px] text-[#1c1f23] m-0">
+          <h3 className="font-sans font-semibold text-[20px] text-[#1c1f23] m-0">
             {analyticsData.conversionRate.toFixed(2)}%
           </h3>
         </div>
@@ -179,7 +179,7 @@ export function AnalyticsPage({ shop, offers }: AnalyticsPageProps) {
 
       {/* Daily added revenue - Line Chart */}
       <div className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[24px]">
-        <h3 className="font-sans font-semibold text-[16px] text-[#1c1f23] m-0 mb-[8px]">
+        <h3 className="font-sans font-semibold text-[14px] text-[#1c1f23] m-0 mb-[8px]">
           Daily added revenue
         </h3>
         <p className="font-sans font-normal text-[13px] text-[#5c6166] mb-[24px]">

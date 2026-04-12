@@ -16,6 +16,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { DashboardPage } from "../DashboardPage";
 import { AllOffersPage } from "../AllOffersPage";
 import { AnalyticsPage } from "../AnalyticsPage";
+import { PricingPage } from "../PricingPage";
 import { CreateNewOffer } from "../component/CreateNewOffer";
 import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
 import prisma from "../../db.server";
@@ -1065,7 +1066,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   });
 };
 
-type HomeTabKey = "dashboard" | "offers" | "analytics";
+type HomeTabKey = "dashboard" | "offers" | "analytics" | "pricing";
 
 export default function Index() {
   const { offers, storeProducts, markets, shop, apiKey, themeExtensionEnabled } =
@@ -1123,17 +1124,17 @@ export default function Index() {
         )}
         {/* Tabs */}
         {!showCreateOffer && (
-          <nav className="bg-white flex flex-col sm:flex-row gap-[8px] sm:gap-[16px] items-stretch sm:items-start pb-0 px-[16px] pt-[16px] rounded-[12px] border border-[#e3e8ed] shadow-sm mb-[16px] sm:mb-[24px]">
+          <nav className="flex flex-col sm:flex-row gap-[8px] sm:gap-[16px] items-stretch sm:items-start pb-0 mb-[16px] sm:mb-[24px] border-b border-[#e3e8ed]">
             <button
               type="button"
               onClick={() => {
                 setShowCreateOffer(false);
                 setActiveTab("dashboard");
               }}
-              className={`rounded-[8px] px-[16px] py-[8px] text-center sm:text-left cursor-pointer transition-all ${activeTab === "dashboard" ? "bg-[#f4f6f8] shadow-sm border border-[#e3e8ed]" : "bg-transparent border border-transparent hover:bg-[#f9fafb]"}`}
+              className={`px-[16px] py-[12px] text-center sm:text-left cursor-pointer transition-all border-b-2 ${activeTab === "dashboard" ? "border-[#008060] text-[#1c1f23]" : "border-transparent hover:border-[#8c9196] text-[#5c6166]"}`}
             >
               <span
-                className={`font-sans leading-[24px] text-[15px] tracking-normal ${activeTab === "dashboard" ? "font-semibold text-[#1c1f23]" : "font-medium text-[#5c6166]"}`}
+                className={`font-sans leading-[24px] text-[14px] font-medium tracking-normal ${activeTab === "dashboard" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
               >
                 Dashboard
               </span>
@@ -1145,10 +1146,10 @@ export default function Index() {
                 setShowCreateOffer(false);
                 setActiveTab("offers");
               }}
-              className={`rounded-[8px] px-[16px] py-[8px] text-center sm:text-left cursor-pointer transition-all ${activeTab === "offers" ? "bg-[#f4f6f8] shadow-sm border border-[#e3e8ed]" : "bg-transparent border border-transparent hover:bg-[#f9fafb]"}`}
+              className={`px-[16px] py-[12px] text-center sm:text-left cursor-pointer transition-all border-b-2 ${activeTab === "offers" ? "border-[#008060] text-[#1c1f23]" : "border-transparent hover:border-[#8c9196] text-[#5c6166]"}`}
             >
               <span
-                className={`font-sans leading-[24px] text-[15px] tracking-normal ${activeTab === "offers" ? "font-semibold text-[#1c1f23]" : "font-medium text-[#5c6166]"}`}
+                className={`font-sans leading-[24px] text-[14px] font-medium tracking-normal ${activeTab === "offers" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
               >
                 All Offers
               </span>
@@ -1160,12 +1161,27 @@ export default function Index() {
                 setShowCreateOffer(false);
                 setActiveTab("analytics");
               }}
-              className={`rounded-[8px] px-[16px] py-[8px] text-center sm:text-left cursor-pointer transition-all ${activeTab === "analytics" ? "bg-[#f4f6f8] shadow-sm border border-[#e3e8ed]" : "bg-transparent border border-transparent hover:bg-[#f9fafb]"}`}
+              className={`px-[16px] py-[12px] text-center sm:text-left cursor-pointer transition-all border-b-2 ${activeTab === "analytics" ? "border-[#008060] text-[#1c1f23]" : "border-transparent hover:border-[#8c9196] text-[#5c6166]"}`}
             >
               <span
-                className={`font-sans leading-[24px] text-[15px] tracking-normal ${activeTab === "analytics" ? "font-semibold text-[#1c1f23]" : "font-medium text-[#5c6166]"}`}
+                className={`font-sans leading-[24px] text-[14px] font-medium tracking-normal ${activeTab === "analytics" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
               >
                 Analytics
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setShowCreateOffer(false);
+                setActiveTab("pricing");
+              }}
+              className={`px-[16px] py-[12px] text-center sm:text-left cursor-pointer transition-all border-b-2 ${activeTab === "pricing" ? "border-[#008060] text-[#1c1f23]" : "border-transparent hover:border-[#8c9196] text-[#5c6166]"}`}
+            >
+              <span
+                className={`font-sans leading-[24px] text-[14px] font-medium tracking-normal ${activeTab === "pricing" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
+              >
+                Pricing
               </span>
             </button>
           </nav>
@@ -1209,6 +1225,9 @@ export default function Index() {
         )}
         {activeTab === "analytics" && (
           <AnalyticsPage shop={shop} offers={offers} />
+        )}
+        {activeTab === "pricing" && (
+          <PricingPage />
         )}
       </div>
     </AppProvider>

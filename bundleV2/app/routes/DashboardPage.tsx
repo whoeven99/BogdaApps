@@ -431,7 +431,7 @@ export function DashboardPage({
       {/* My Offers Card */}
       <div className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[20px] sm:p-[24px] mb-[24px] sm:mb-[36px]">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-[12px] sm:gap-0 mb-[16px]">
-          <h2 className="font-sans font-semibold text-[18px] sm:text-[20px] leading-[27px] sm:leading-[30px] text-[#1c1f23] tracking-tight m-0">
+          <h2 className="font-sans font-semibold text-[16px] leading-[24px] text-[#1c1f23] tracking-tight m-0">
             My Offers
           </h2>
           <button
@@ -729,7 +729,7 @@ export function DashboardPage({
       {false && (
         <div className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[20px] sm:p-[24px]">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-[12px] sm:gap-0 mb-[16px]">
-            <h2 className="font-sans font-semibold text-[18px] sm:text-[20px] leading-[27px] sm:leading-[30px] text-[#1c1f23] tracking-tight m-0">
+            <h2 className="font-sans font-semibold text-[16px] leading-[24px] text-[#1c1f23] tracking-tight m-0">
               A/B Tests
             </h2>
             <button

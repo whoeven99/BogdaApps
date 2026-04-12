@@ -316,9 +316,69 @@ function getCurrentOffer(offersConfig) {
   return null;
 }
 
+window.__ciwiBundleState = window.__ciwiBundleState || { selectedCount: null };
+
+function updateThemeQuantityInput(count) {
+  const form = getAddToCartForm();
+  if (form) {
+    let qtyInput = form.querySelector('input[name="quantity"]');
+    if (!qtyInput) {
+      const formId = form.getAttribute("id");
+      if (formId) {
+        qtyInput = document.querySelector(`input[name="quantity"][form="${formId}"]`);
+      }
+    }
+    if (!qtyInput) {
+      qtyInput = document.createElement("input");
+      qtyInput.type = "hidden";
+      qtyInput.name = "quantity";
+      form.appendChild(qtyInput);
+    }
+    qtyInput.value = count;
+    qtyInput.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+}
+
+window.ciwiSelectBundleOption = function(count) {
+  if (window.__ciwiBundleState) {
+    window.__ciwiBundleState.selectedCount = count;
+  }
+  updateThemeQuantityInput(count);
+  const currentOffer = getCurrentOffer(offersConfigCache);
+  const wrap = document.querySelector(".ciwi-bundle-wrapper");
+  if (wrap && currentOffer) {
+    const html = renderBundlePreviewHtml(currentOffer);
+    if (html) wrap.innerHTML = html;
+  }
+};
+
+window.ciwiHandleBundleAddToCart = function() {
+  const count = window.__ciwiBundleState?.selectedCount || 1;
+  updateThemeQuantityInput(count);
+  const form = getAddToCartForm();
+  
+  if (form) {
+    const addBtn = form.querySelector("button[type='submit'], [name='add']");
+    if (addBtn) {
+      addBtn.click();
+    } else {
+      form.submit();
+    }
+  } else {
+    console.error("[ciwi] Add to cart form not found");
+  }
+};
+
 function renderBundlePreviewHtml(offer) {
   const discountRules = parseDiscountRulesJson(offer?.discountRulesJson);
   if (!discountRules.length) return "";
+
+  if (!window.__ciwiBundleState.selectedCount) {
+    // 默认选中第一个配置的折扣选项（或者可以选 1，按需求默认选中配置项）
+    window.__ciwiBundleState.selectedCount = discountRules[0]?.count || 1;
+    setTimeout(() => updateThemeQuantityInput(window.__ciwiBundleState.selectedCount), 0);
+  }
+  const selectedCount = window.__ciwiBundleState.selectedCount;
 
   // Extract styles from offer settings, use defaults if missing
   let offerSettings = {};
@@ -346,6 +406,7 @@ function renderBundlePreviewHtml(offer) {
   const unitPrice = getCurrentUnitPrice();
   const items = [
     {
+      count: 1,
       title: "Single",
       subtitle: "Standard price",
       price: formatPrice(unitPrice),
@@ -355,11 +416,11 @@ function renderBundlePreviewHtml(offer) {
       const discountedTotal = originalTotal * (1 - rule.discountPercent / 100);
       const saved = originalTotal - discountedTotal;
       return {
+        count: rule.count,
         title: rule.title || `${rule.count} items`,
         subtitle: rule.subtitle || `You save ${rule.discountPercent}%`,
         price: formatPrice(discountedTotal),
         original: formatPrice(originalTotal),
-        featured: index === 0,
         badge: index === 0 ? (rule.badge || "Most Popular") : (rule.badge || ""),
         saveLabel: `SAVE ${formatPrice(saved)}`,
       };
@@ -368,16 +429,17 @@ function renderBundlePreviewHtml(offer) {
 
   const itemsHtml = items
     .map((item) => {
-      const featuredClass = item.featured
+      const isSelected = item.count === selectedCount;
+      const featuredClass = isSelected
         ? " create-offer-style-preview-item--featured"
         : "";
-      const featuredStyle = item.featured 
-        ? `border-color: ${esc(accentColor)} !important; background: ${esc(cardBackgroundColor)} !important; box-shadow: 0 8px 18px ${esc(accentColor)}25 !important;`
-        : `border-color: ${esc(borderColor)} !important; background: ${esc(cardBackgroundColor)} !important;`;
+      const featuredStyle = isSelected 
+        ? `border-color: ${esc(accentColor)} !important; background: ${esc(cardBackgroundColor)} !important; box-shadow: 0 8px 18px ${esc(accentColor)}25 !important; cursor: pointer;`
+        : `border-color: ${esc(borderColor)} !important; background: ${esc(cardBackgroundColor)} !important; cursor: pointer;`;
         
-      return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}">
+      return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}" onclick="window.ciwiSelectBundleOption(${item.count})">
       ${
-        item.featured && item.badge
+        isSelected && item.badge
           ? `<div class="create-offer-style-preview-badge" style="background:${esc(accentColor)} !important; color:${esc(labelColor)} !important;">${esc(item.badge)}</div>`
           : ""
       }
@@ -410,7 +472,7 @@ function renderBundlePreviewHtml(offer) {
       ${itemsHtml}
     </div>
     ${countdownHtml}
-    <button class="create-offer-preview-button" onclick="document.querySelector('form[action*=\\'/cart/add\\'] button[type=\\'submit\\'], form[action*=\\'/cart/add\\'] [name=\\'add\\']')?.click()" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
+    <button class="create-offer-preview-button" onclick="window.ciwiHandleBundleAddToCart()" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
       ${esc(buttonText)}
     </button>
   </div>`;
@@ -606,6 +668,7 @@ function tryMount(offer) {
     src.remove();
     attachBundlePriceSync(offer);
     initCountdownTimer();
+    hideThemeQuantitySelectors();
     return "done";
   }
   return "retry";
@@ -623,6 +686,26 @@ function fallbackMount(offer) {
   src.remove();
   attachBundlePriceSync(offer);
   initCountdownTimer();
+  hideThemeQuantitySelectors();
+}
+
+function hideThemeQuantitySelectors() {
+  const selectors = [
+    ".quantity-selector-wrapper",
+    ".product-form__quantity",
+    ".product-quantity",
+    "quantity-input",
+    ".quantity",
+    "[data-product-quantity]"
+  ];
+  for (const sel of selectors) {
+    const els = document.querySelectorAll(sel);
+    els.forEach((el) => {
+      if (el && el.style) {
+        el.style.display = "none";
+      }
+    });
+  }
 }
 
 function initCountdownTimer() {

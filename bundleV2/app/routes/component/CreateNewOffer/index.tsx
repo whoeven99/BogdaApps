@@ -573,7 +573,7 @@ export function CreateNewOffer({
           {submitErrorToast}
         </div>
       )}
-      <div className="sticky top-0 z-[90] bg-[#f4f6f8] pt-4 pb-4 -mt-4 mb-6">
+      <div className="sticky top-0 z-[90] bg-white pt-4 pb-4 -mt-4 mb-6 border-b border-[#e3e8ed]">
         <div>
           <Button
             type="text"
@@ -880,7 +880,7 @@ export function CreateNewOffer({
                     {selectedProductsData.length === 0 ? (
                       <Button
                         size="large"
-                        type="primary"
+                        style={{ backgroundColor: "#008060", borderColor: "#008060", color: "#fff" }}
                         onClick={(e) => {
                           handleSelectProducts();
                           e.preventDefault();
@@ -1817,8 +1817,7 @@ export function CreateNewOffer({
         )}
         <Button
           size="large"
-          type="primary"
-          style={{ background: step === 4 ? "#008060" : undefined }}
+          style={{ backgroundColor: "#008060", borderColor: "#008060", color: "#fff" }}
           disabled={fetcher.state !== "idle"}
           onClick={(e: any) => {
             if (step === 1) {

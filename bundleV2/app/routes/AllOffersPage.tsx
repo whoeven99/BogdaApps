@@ -85,11 +85,11 @@ export function AllOffersPage({ onCreateOffer, offers }: AllOffersPageProps) {
   const getIsToggling = (offerId: string) => togglingIds.includes(offerId);
 
   return (
-    <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px]">
+    <div className="max-w-[1280px] mx-auto pb-[24px]">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-[12px] sm:gap-0 mb-[16px] sm:mb-[24px]">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-[12px] sm:gap-0 mb-[24px]">
         <div>
-          <h1 className="font-sans font-semibold text-[20px] sm:text-[24px] leading-[30px] sm:leading-[36px] text-[#1c1f23] tracking-normal m-0">
+          <h1 className="font-sans font-semibold text-[24px] leading-[32px] text-[#1c1f23] tracking-normal m-0">
             All Offers
           </h1>
           <p className="font-sans font-normal text-[14px] leading-[22.4px] text-[#5c6166] mt-[4px]">
