@@ -15,7 +15,7 @@ import {
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { DashboardPage } from "../DashboardPage";
 import { AllOffersPage } from "../AllOffersPage";
-import { PricingPage } from "../PricingPage";
+import { AnalyticsPage } from "../AnalyticsPage";
 import { CreateNewOffer } from "../component/CreateNewOffer";
 import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
 import prisma from "../../db.server";
@@ -48,7 +48,10 @@ type OfferActionErrorPayload = {
 
 function offerActionErrorResponse(message: string, status: number) {
   return Response.json(
-    { _offerActionError: true as const, message } satisfies OfferActionErrorPayload,
+    {
+      _offerActionError: true as const,
+      message,
+    } satisfies OfferActionErrorPayload,
     { status },
   );
 }
@@ -108,7 +111,9 @@ async function syncShopOffersMetafield(
     if (shopIdJson.errors?.length) {
       return {
         ok: false,
-        message: shopIdJson.errors.map((e) => e.message || "unknown").join("; "),
+        message: shopIdJson.errors
+          .map((e) => e.message || "unknown")
+          .join("; "),
       };
     }
 
@@ -169,8 +174,7 @@ async function syncShopOffersMetafield(
       };
     }
 
-    const userErrors =
-      metafieldsSetJson?.data?.metafieldsSet?.userErrors ?? [];
+    const userErrors = metafieldsSetJson?.data?.metafieldsSet?.userErrors ?? [];
     if (userErrors.length > 0) {
       return {
         ok: false,
@@ -180,8 +184,7 @@ async function syncShopOffersMetafield(
 
     return { ok: true };
   } catch (error) {
-    const msg =
-      error instanceof Error ? error.message : JSON.stringify(error);
+    const msg = error instanceof Error ? error.message : JSON.stringify(error);
     return { ok: false, message: msg || "Metafield 同步异常" };
   }
 }
@@ -278,7 +281,10 @@ const ensureWebPixel = async (admin: any, shop: string) => {
  * Collect objects that look like theme JSON blocks (have string `type`).
  * App embeds may live under `current.blocks` or nested elsewhere in settings_data.
  */
-const collectTypedBlocks = (node: unknown, out: Array<Record<string, any>>): void => {
+const collectTypedBlocks = (
+  node: unknown,
+  out: Array<Record<string, any>>,
+): void => {
   if (node === null || typeof node !== "object") return;
   if (Array.isArray(node)) {
     for (const item of node) collectTypedBlocks(item, out);
@@ -363,10 +369,12 @@ const getThemeExtensionEnabled = async (
 
     const isOurAppBlock = (blockType: string) => {
       if (!appClientId && !extensionHandle) return false;
-      if (appClientId && blockType.includes(`/apps/${appClientId}/`)) return true;
+      if (appClientId && blockType.includes(`/apps/${appClientId}/`))
+        return true;
       if (extensionHandle && blockType.includes(`/apps/${extensionHandle}/`))
         return true;
-      if (appNameSlug && blockType.includes(`/apps/${appNameSlug}/`)) return true;
+      if (appNameSlug && blockType.includes(`/apps/${appNameSlug}/`))
+        return true;
       return false;
     };
 
@@ -508,8 +516,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // product_detail_message.liquid → product-detail-message.js
   // eslint-disable-next-line no-undef
   const apiKey = process.env.SHOPIFY_API_KEY || "";
-  const appDisplayName =
-    process.env.SHOPIFY_APP_NAME || process.env.APP_NAME;
+  const appDisplayName = process.env.SHOPIFY_APP_NAME || process.env.APP_NAME;
   const themeExtensionEnabled = await getThemeExtensionEnabled(
     admin,
     "bundlev2-theme-product-custom",
@@ -579,13 +586,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const cartTitleRaw = String(formData.get("cartTitle") || "Bundle Discount");
     const cartTitle = cartTitleRaw.trim();
     const offerType = String(formData.get("offerType") || "").trim();
-    const layoutFormat = String(formData.get("layoutFormat") || "")
-      .trim() || "vertical";
+    const layoutFormat =
+      String(formData.get("layoutFormat") || "").trim() || "vertical";
     const startTimeRaw = String(formData.get("startTime") || "");
     const endTimeRaw = String(formData.get("endTime") || "");
-    const selectedProductsJson = String(formData.get("selectedProductsJson") || "");
+    const selectedProductsJson = String(
+      formData.get("selectedProductsJson") || "",
+    );
     const discountRulesJson = String(formData.get("discountRulesJson") || "");
-    
+
     // Status is checked, defaults to false if not provided or explicitly 'false'
     const statusRaw = String(formData.get("status") || "");
     const status = statusRaw === "true";
@@ -624,10 +633,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       String(formData.get("buttonPrimaryColor") || ""),
       "#008060",
     );
-    
+
     const titleFontSize = Number(formData.get("titleFontSize")) || 14;
     const titleFontWeight = String(formData.get("titleFontWeight") || "600");
-    const buttonText = String(formData.get("buttonText") || "Add to Cart").trim();
+    const buttonText = String(
+      formData.get("buttonText") || "Add to Cart",
+    ).trim();
     const enableCountdown = String(formData.get("enableCountdown")) === "true";
 
     const title = String(formData.get("title") || "Bundle & Save").trim();
@@ -739,10 +750,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             offerSettingsJson,
           },
         });
-        return offerActionErrorResponse(
-          "创建 Offer 失败，请稍后重试。",
-          500,
-        );
+        return offerActionErrorResponse("创建 Offer 失败，请稍后重试。", 500);
       }
     } else {
       if (!idRaw) {
@@ -779,10 +787,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             offerSettingsJson,
           },
         });
-        return offerActionErrorResponse(
-          "更新 Offer 失败，请稍后重试。",
-          500,
-        );
+        return offerActionErrorResponse("更新 Offer 失败，请稍后重试。", 500);
       }
     }
 
@@ -800,7 +805,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     invalidateShopOffersCache(shopName);
 
-    return Response.json({ success: true, toast: url.searchParams.get("toast") });
+    return Response.json({
+      success: true,
+      toast: url.searchParams.get("toast"),
+    });
   }
 
   if (intent === "toggle-offer-status") {
@@ -982,7 +990,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   });
 };
 
-type HomeTabKey = "dashboard" | "offers" | "pricing";
+type HomeTabKey = "dashboard" | "offers" | "analytics";
 
 export default function Index() {
   const { offers, storeProducts, shop, apiKey, themeExtensionEnabled } =
@@ -1038,97 +1046,98 @@ export default function Index() {
             {toastMessage}
           </div>
         )}
-      {/* Tabs */}
-      {!showCreateOffer && (
-        <nav className="bg-white flex flex-col sm:flex-row gap-[8px] sm:gap-[16px] items-stretch sm:items-start pb-0 px-[16px] pt-[16px] rounded-[8px] mb-[16px] sm:mb-[24px]">
-          <button
-            type="button"
-            onClick={() => {
-              setShowCreateOffer(false);
-              setActiveTab("dashboard");
-            }}
-            className={`rounded-[4px] px-[12px] py-[7px] text-center sm:text-left cursor-pointer bg-transparent ${
-              activeTab === "dashboard" ? "bg-[#dfe3e8]" : ""
-            }`}
-          >
-            <span
-              className={`font-['Inter'] leading-[25.6px] text-[16px] tracking-[-0.3125px] ${
-                activeTab === "dashboard"
-                  ? "font-semibold text-[#202223]"
-                  : "font-normal text-[#6d7175]"
+        {/* Tabs */}
+        {!showCreateOffer && (
+          <nav className="bg-white flex flex-col sm:flex-row gap-[8px] sm:gap-[16px] items-stretch sm:items-start pb-0 px-[16px] pt-[16px] rounded-[8px] mb-[16px] sm:mb-[24px]">
+            <button
+              type="button"
+              onClick={() => {
+                setShowCreateOffer(false);
+                setActiveTab("dashboard");
+              }}
+              className={`rounded-[4px] px-[12px] py-[7px] text-center sm:text-left cursor-pointer bg-transparent ${
+                activeTab === "dashboard" ? "bg-[#dfe3e8]" : ""
               }`}
             >
-              Dashboard
-            </span>
-          </button>
+              <span
+                className={`font-['Inter'] leading-[25.6px] text-[16px] tracking-[-0.3125px] ${
+                  activeTab === "dashboard"
+                    ? "font-semibold text-[#202223]"
+                    : "font-normal text-[#6d7175]"
+                }`}
+              >
+                Dashboard
+              </span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              setShowCreateOffer(false);
+            <button
+              type="button"
+              onClick={() => {
+                setShowCreateOffer(false);
+                setActiveTab("offers");
+              }}
+              className={`rounded-[4px] px-[12px] py-[7px] text-center sm:text-left cursor-pointer bg-transparent ${
+                activeTab === "offers" ? "bg-[#dfe3e8]" : ""
+              }`}
+            >
+              <span
+                className={`font-['Inter'] leading-[25.6px] text-[16px] tracking-[-0.3125px] ${
+                  activeTab === "offers"
+                    ? "font-semibold text-[#202223]"
+                    : "font-normal text-[#6d7175]"
+                }`}
+              >
+                All Offers
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setShowCreateOffer(false);
+                setActiveTab("analytics");
+              }}
+              className={`rounded-[4px] px-[12px] py-[7px] text-center sm:text-left cursor-pointer bg-transparent ${
+                activeTab === "analytics" ? "bg-[#dfe3e8]" : ""
+              }`}
+            >
+              <span
+                className={`font-['Inter'] leading-[25.6px] text-[16px] tracking-[-0.3125px] ${
+                  activeTab === "analytics"
+                    ? "font-semibold text-[#202223]"
+                    : "font-normal text-[#6d7175]"
+                }`}
+              >
+                Analytics
+              </span>
+            </button>
+          </nav>
+        )}
+
+        {/* Tab content */}
+        {activeTab === "dashboard" && !showCreateOffer && (
+          <DashboardPage
+            offers={offers}
+            storeProducts={storeProducts}
+            shop={shop}
+            apiKey={apiKey}
+            themeExtensionEnabled={themeExtensionEnabled}
+            onViewAllOffers={() => setActiveTab("offers")}
+            onViewAnalytics={() => setActiveTab("analytics")}
+            onCreateOffer={() => {
+              setShowCreateOffer(true);
               setActiveTab("offers");
             }}
-            className={`rounded-[4px] px-[12px] py-[7px] text-center sm:text-left cursor-pointer bg-transparent ${
-              activeTab === "offers" ? "bg-[#dfe3e8]" : ""
-            }`}
-          >
-            <span
-              className={`font-['Inter'] leading-[25.6px] text-[16px] tracking-[-0.3125px] ${
-                activeTab === "offers"
-                  ? "font-semibold text-[#202223]"
-                  : "font-normal text-[#6d7175]"
-              }`}
-            >
-              All Offers
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setShowCreateOffer(false);
-              setActiveTab("pricing");
-            }}
-            className={`rounded-[4px] px-[12px] py-[7px] text-center sm:text-left cursor-pointer bg-transparent ${
-              activeTab === "pricing" ? "bg-[#dfe3e8]" : ""
-            }`}
-          >
-            <span
-              className={`font-['Inter'] leading-[25.6px] text-[16px] tracking-[-0.3125px] ${
-                activeTab === "pricing"
-                  ? "font-semibold text-[#202223]"
-                  : "font-normal text-[#6d7175]"
-              }`}
-            >
-              Pricing
-            </span>
-          </button>
-        </nav>
-      )}
-
-      {/* Tab content */}
-      {activeTab === "dashboard" && !showCreateOffer && (
-        <DashboardPage
-          offers={offers}
-          storeProducts={storeProducts}
-          shop={shop}
-          apiKey={apiKey}
-          themeExtensionEnabled={themeExtensionEnabled}
-          onViewAllOffers={() => setActiveTab("offers")}
-          onCreateOffer={() => {
-            setShowCreateOffer(true);
-            setActiveTab("offers");
-          }}
-        />
-      )}
-      {activeTab === "offers" && !showCreateOffer && (
-        <AllOffersPage
-          offers={offers}
-          onCreateOffer={() => setShowCreateOffer(true)}
-        />
-      )}
-      {activeTab === "offers" && showCreateOffer && (
-        <CreateNewOffer
+          />
+        )}
+        {activeTab === "offers" && !showCreateOffer && (
+          <AllOffersPage
+            offers={offers}
+            onCreateOffer={() => setShowCreateOffer(true)}
+          />
+        )}
+        {activeTab === "offers" && showCreateOffer && (
+          <CreateNewOffer
             onBack={() => setShowCreateOffer(false)}
             storeProducts={storeProducts}
             existingOffers={offers.map((o) => ({
@@ -1138,8 +1147,10 @@ export default function Index() {
               offerType: o.offerType,
             }))}
           />
-      )}
-      {activeTab === "pricing" && <PricingPage />}
+        )}
+        {activeTab === "analytics" && (
+          <AnalyticsPage shop={shop} offers={offers} />
+        )}
       </div>
     </AppProvider>
   );

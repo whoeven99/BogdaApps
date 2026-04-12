@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
-import { Form, useNavigation, useSearchParams, useActionData } from "react-router";
+import {
+  Form,
+  useNavigation,
+  useSearchParams,
+  useActionData,
+} from "react-router";
 import {
   ArrowDown,
   ArrowUp,
@@ -18,6 +23,7 @@ import type { IndexLoaderData } from "./_index/route";
 
 interface DashboardPageProps {
   onViewAllOffers?: () => void;
+  onViewAnalytics?: () => void;
   onCreateOffer?: () => void;
   offers?: IndexLoaderData["offers"];
   storeProducts?: IndexLoaderData["storeProducts"];
@@ -83,14 +89,27 @@ const mockAbTests = [
 
 function ChevronRightIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M6 12L10 8L6 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M6 12L10 8L6 4"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
 
 export function DashboardPage({
   onViewAllOffers,
+  onViewAnalytics,
   onCreateOffer,
   offers,
   storeProducts = [],
@@ -142,7 +161,8 @@ export function DashboardPage({
       if (o.isActive) activeOffers += 1;
     });
 
-    const avgConversion = totalExposure > 0 ? (totalAddToCart / totalExposure) * 100 : 0;
+    const avgConversion =
+      totalExposure > 0 ? (totalAddToCart / totalExposure) * 100 : 0;
 
     return {
       totalGmv: `$${totalGmv.toLocaleString()}`,
@@ -161,9 +181,7 @@ export function DashboardPage({
       const intent = navigation.formData.get("intent");
       const id = navigation.formData.get("offerId");
       if (intent === "toggle-offer-status" && typeof id === "string" && id) {
-        setTogglingIds((prev) =>
-          prev.includes(id) ? prev : [...prev, id],
-        );
+        setTogglingIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
       }
     } else if (navigation.state === "idle" && togglingIds.length > 0) {
       const timer = setTimeout(() => {
@@ -176,7 +194,7 @@ export function DashboardPage({
   const getIsToggling = (offerId: string) => togglingIds.includes(offerId);
 
   const handleViewDetails = () => {
-    onViewAllOffers?.();
+    onViewAnalytics?.();
   };
   const handleCreateOfferClick = () => {
     if (onCreateOffer) {
@@ -351,21 +369,23 @@ export function DashboardPage({
               <h3 className="font-['Inter'] font-semibold text-[28px] leading-[42px] text-[#202223] tracking-[0.3828px] m-0">
                 {realOverview.avgConversion}
               </h3>
-              <span className={`font-['Inter'] font-normal text-[14px] leading-[22.4px] tracking-[-0.1504px] ${realOverview.conversionTrendColor}`}>
+              <span
+                className={`font-['Inter'] font-normal text-[14px] leading-[22.4px] tracking-[-0.1504px] ${realOverview.conversionTrendColor}`}
+              >
                 {realOverview.conversionTrendLabel}
               </span>
             </div>
           </div>
-          
+
           <div className="mt-[24px] pt-[20px] border-t border-[#dfe3e8]">
-             <h3 className="font-['Inter'] font-medium text-[16px] leading-[24px] text-[#202223] tracking-[-0.3125px] mb-[16px]">
-               GMV Trend (Last 7 Days)
-             </h3>
-             <BasicLineChart 
-                Xdata={["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]}
-                Ydata={[120, 200, 150, 80, 70, 110, 130]}
-                height={260}
-             />
+            <h3 className="font-['Inter'] font-medium text-[16px] leading-[24px] text-[#202223] tracking-[-0.3125px] mb-[16px]">
+              GMV Trend (Last 7 Days)
+            </h3>
+            <BasicLineChart
+              Xdata={["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]}
+              Ydata={[120, 200, 150, 80, 70, 110, 130]}
+              height={260}
+            />
           </div>
         </div>
 
@@ -487,7 +507,11 @@ export function DashboardPage({
                     </td>
                     <td className="p-[12px] border-b border-[#dfe3e8]">
                       <Form method="post">
-                        <input type="hidden" name="intent" value="toggle-offer-status" />
+                        <input
+                          type="hidden"
+                          name="intent"
+                          value="toggle-offer-status"
+                        />
                         <input type="hidden" name="offerId" value={offer.id} />
                         <input
                           type="hidden"
@@ -506,7 +530,9 @@ export function DashboardPage({
                               isToggling ? "animate-pulse" : ""
                             }`}
                             style={{
-                              backgroundColor: offer.isActive ? "#008060" : "#c4cdd5",
+                              backgroundColor: offer.isActive
+                                ? "#008060"
+                                : "#c4cdd5",
                             }}
                           >
                             <span
@@ -518,7 +544,9 @@ export function DashboardPage({
                           </span>
                           <span
                             className="text-[14px] font-medium"
-                            style={{ color: offer.isActive ? "#108043" : "#6d7175" }}
+                            style={{
+                              color: offer.isActive ? "#108043" : "#6d7175",
+                            }}
                           >
                             {isToggling ? "Updating..." : statusLabel}
                           </span>
@@ -581,14 +609,17 @@ export function DashboardPage({
               No offers yet. Create your first offer to see it here.
             </div>
           ) : (
-              visibleOffers.map((offer) => {
-                const isToggling = getIsToggling(offer.id);
-                const statusLabel = offer.isActive ? "Active" : "Paused";
-                const gmvDisplay = `$${offer.gmv.toLocaleString()}`;
-                const conversionDisplay = `${offer.conversion.toFixed(1)}%`;
+            visibleOffers.map((offer) => {
+              const isToggling = getIsToggling(offer.id);
+              const statusLabel = offer.isActive ? "Active" : "Paused";
+              const gmvDisplay = `$${offer.gmv.toLocaleString()}`;
+              const conversionDisplay = `${offer.conversion.toFixed(1)}%`;
 
-                return (
-                  <div key={offer.id} className="border border-[#dfe3e8] rounded-[8px] p-[16px]">
+              return (
+                <div
+                  key={offer.id}
+                  className="border border-[#dfe3e8] rounded-[8px] p-[16px]"
+                >
                   <div className="flex items-start justify-between mb-[12px]">
                     <div className="flex items-center gap-[8px] flex-wrap">
                       <span className="font-['Inter'] font-medium text-[16px] text-[#202223]">
@@ -597,7 +628,11 @@ export function DashboardPage({
                     </div>
                   </div>
                   <Form method="post">
-                    <input type="hidden" name="intent" value="toggle-offer-status" />
+                    <input
+                      type="hidden"
+                      name="intent"
+                      value="toggle-offer-status"
+                    />
                     <input type="hidden" name="offerId" value={offer.id} />
                     <input
                       type="hidden"
@@ -615,7 +650,11 @@ export function DashboardPage({
                         className={`relative inline-block w-[44px] h-[24px] rounded-[12px] transition-colors duration-200 ${
                           isToggling ? "animate-pulse" : ""
                         }`}
-                        style={{ backgroundColor: offer.isActive ? "#008060" : "#c4cdd5" }}
+                        style={{
+                          backgroundColor: offer.isActive
+                            ? "#008060"
+                            : "#c4cdd5",
+                        }}
                       >
                         <span
                           className={`absolute top-[2px] w-[20px] h-[20px] bg-white rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.2)] transition-all duration-200 ${
@@ -626,7 +665,9 @@ export function DashboardPage({
                       </span>
                       <span
                         className="text-[14px] font-medium"
-                        style={{ color: offer.isActive ? "#108043" : "#6d7175" }}
+                        style={{
+                          color: offer.isActive ? "#108043" : "#6d7175",
+                        }}
                       >
                         {isToggling ? "Updating..." : statusLabel}
                       </span>
@@ -634,11 +675,17 @@ export function DashboardPage({
                   </Form>
                   <div className="grid grid-cols-2 gap-[12px] mb-[12px]">
                     <div>
-                      <div className="text-[12px] text-[#6d7175] mb-[4px]">GMV</div>
-                      <div className="text-[14px] font-medium text-[#202223]">{gmvDisplay}</div>
+                      <div className="text-[12px] text-[#6d7175] mb-[4px]">
+                        GMV
+                      </div>
+                      <div className="text-[14px] font-medium text-[#202223]">
+                        {gmvDisplay}
+                      </div>
                     </div>
                     <div>
-                      <div className="text-[12px] text-[#6d7175] mb-[4px]">Conversion</div>
+                      <div className="text-[12px] text-[#6d7175] mb-[4px]">
+                        Conversion
+                      </div>
                       <div className="text-[14px] font-medium text-[#202223]">
                         {conversionDisplay}
                       </div>
@@ -748,16 +795,24 @@ export function DashboardPage({
                     <div className="flex items-center gap-[8px]">
                       <span
                         className="relative inline-block w-[44px] h-[24px] rounded-[12px] cursor-pointer"
-                        style={{ backgroundColor: test.status === "Running" ? "#008060" : "#c4cdd5" }}
+                        style={{
+                          backgroundColor:
+                            test.status === "Running" ? "#008060" : "#c4cdd5",
+                        }}
                       >
                         <span
                           className="absolute top-[2px] w-[20px] h-[20px] bg-white rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.2)]"
-                          style={{ left: test.status === "Running" ? "22px" : "2px" }}
+                          style={{
+                            left: test.status === "Running" ? "22px" : "2px",
+                          }}
                         />
                       </span>
                       <span
                         className="text-[14px] font-medium"
-                        style={{ color: test.status === "Running" ? "#108043" : "#6d7175" }}
+                        style={{
+                          color:
+                            test.status === "Running" ? "#108043" : "#6d7175",
+                        }}
                       >
                         {test.status}
                       </span>
@@ -775,9 +830,15 @@ export function DashboardPage({
                   <td className="p-[12px] border-b border-[#dfe3e8]">
                     <span
                       className="font-['Inter'] font-semibold text-[14px] leading-[22.4px] tracking-[-0.1504px] flex items-center gap-[4px]"
-                      style={{ color: test.improvement >= 0 ? "#108043" : "#d72c0d" }}
+                      style={{
+                        color: test.improvement >= 0 ? "#108043" : "#d72c0d",
+                      }}
                     >
-                      {test.improvement >= 0 ? <ArrowUp size={14} /> : <ArrowDown size={14} />}
+                      {test.improvement >= 0 ? (
+                        <ArrowUp size={14} />
+                      ) : (
+                        <ArrowDown size={14} />
+                      )}
                       {Math.abs(test.improvement)}%
                     </span>
                   </td>
@@ -788,7 +849,11 @@ export function DashboardPage({
                     <span
                       style={{
                         color:
-                          test.confidence >= 95 ? "#108043" : test.confidence >= 80 ? "#6d7175" : "#d72c0d",
+                          test.confidence >= 95
+                            ? "#108043"
+                            : test.confidence >= 80
+                              ? "#6d7175"
+                              : "#d72c0d",
                         fontWeight: test.confidence >= 95 ? 600 : 400,
                       }}
                     >
@@ -827,47 +892,74 @@ export function DashboardPage({
 
           <div className="md:hidden space-y-[12px]">
             {mockAbTests.map((test) => (
-              <div key={test.id} className="border border-[#dfe3e8] rounded-[8px] p-[16px]">
+              <div
+                key={test.id}
+                className="border border-[#dfe3e8] rounded-[8px] p-[16px]"
+              >
                 <div className="mb-[12px]">
-                  <span className="font-['Inter'] font-medium text-[16px] text-[#202223]">{test.name}</span>
+                  <span className="font-['Inter'] font-medium text-[16px] text-[#202223]">
+                    {test.name}
+                  </span>
                 </div>
                 <div className="flex items-center gap-[8px] mb-[12px]">
                   <span
                     className="relative inline-block w-[44px] h-[24px] rounded-[12px]"
-                    style={{ backgroundColor: test.status === "Running" ? "#008060" : "#c4cdd5" }}
+                    style={{
+                      backgroundColor:
+                        test.status === "Running" ? "#008060" : "#c4cdd5",
+                    }}
                   >
                     <span
                       className="absolute top-[2px] w-[20px] h-[20px] bg-white rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.2)]"
-                      style={{ left: test.status === "Running" ? "22px" : "2px" }}
+                      style={{
+                        left: test.status === "Running" ? "22px" : "2px",
+                      }}
                     />
                   </span>
                   <span
                     className="text-[14px] font-medium"
-                    style={{ color: test.status === "Running" ? "#108043" : "#6d7175" }}
+                    style={{
+                      color: test.status === "Running" ? "#108043" : "#6d7175",
+                    }}
                   >
                     {test.status}
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-[12px] mb-[12px]">
                   <div>
-                    <div className="text-[12px] text-[#6d7175] mb-[4px]">PV</div>
-                    <div className="text-[14px] font-medium text-[#202223]">{test.pv}</div>
-                  </div>
-                  <div>
-                    <div className="text-[12px] text-[#6d7175] mb-[4px]">Extra GMV</div>
-                    <div className="text-[14px] font-medium text-[#202223]">{test.extraGMV}</div>
-                  </div>
-                  <div>
-                    <div className="text-[12px] text-[#6d7175] mb-[4px]">GMV Improvement</div>
-                    <div
-                      className={`text-[14px] font-medium ${test.improvement > 0 ? "text-[#108043]" : "text-[#d72c0d]"}`}
-                    >
-                      {test.improvement > 0 ? "↑" : "↓"} {Math.abs(test.improvement)}%
+                    <div className="text-[12px] text-[#6d7175] mb-[4px]">
+                      PV
+                    </div>
+                    <div className="text-[14px] font-medium text-[#202223]">
+                      {test.pv}
                     </div>
                   </div>
                   <div>
-                    <div className="text-[12px] text-[#6d7175] mb-[4px]">Confidence</div>
-                    <div className="text-[14px] font-medium text-[#202223]">{test.confidence}%</div>
+                    <div className="text-[12px] text-[#6d7175] mb-[4px]">
+                      Extra GMV
+                    </div>
+                    <div className="text-[14px] font-medium text-[#202223]">
+                      {test.extraGMV}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[12px] text-[#6d7175] mb-[4px]">
+                      GMV Improvement
+                    </div>
+                    <div
+                      className={`text-[14px] font-medium ${test.improvement > 0 ? "text-[#108043]" : "text-[#d72c0d]"}`}
+                    >
+                      {test.improvement > 0 ? "↑" : "↓"}{" "}
+                      {Math.abs(test.improvement)}%
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[12px] text-[#6d7175] mb-[4px]">
+                      Confidence
+                    </div>
+                    <div className="text-[14px] font-medium text-[#202223]">
+                      {test.confidence}%
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-[8px] pt-[12px] border-t border-[#dfe3e8]">
