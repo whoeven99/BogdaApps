@@ -89,24 +89,24 @@ export function AllOffersPage({ onCreateOffer, offers }: AllOffersPageProps) {
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-[12px] sm:gap-0 mb-[16px] sm:mb-[24px]">
         <div>
-          <h1 className="font-['Inter'] font-semibold text-[20px] sm:text-[24px] leading-[30px] sm:leading-[36px] text-[#202223] tracking-[0.0703px] m-0">
+          <h1 className="font-sans font-semibold text-[20px] sm:text-[24px] leading-[30px] sm:leading-[36px] text-[#1c1f23] tracking-normal m-0">
             All Offers
           </h1>
-          <p className="font-['Inter'] font-normal text-[14px] leading-[22.4px] text-[#6d7175] mt-[4px]">
+          <p className="font-sans font-normal text-[14px] leading-[22.4px] text-[#5c6166] mt-[4px]">
             Manage all your bundle offers
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-[8px] sm:gap-[12px] w-full sm:w-auto">
           <button
             type="button"
-            className="bg-[#f4f6f8] text-[#202223] px-[16px] py-[8px] rounded-[6px] font-['Inter'] font-medium text-[14px] leading-[21px] tracking-[-0.1504px] border border-[#c4cdd5] cursor-pointer hover:bg-[#e4e5e7] transition-colors"
+            className="bg-white text-[#1c1f23] px-[16px] py-[8px] rounded-[8px] font-medium text-[14px] border border-[#d5d9dd] shadow-sm hover:bg-[#f4f6f8] transition-all cursor-pointer"
             onClick={handleShowGuide}
           >
             Show Guide
           </button>
           <button
             type="button"
-            className="bg-[#008060] text-white px-[16px] py-[8px] rounded-[6px] font-['Inter'] font-medium text-[14px] leading-[21px] tracking-[-0.1504px] border-0 cursor-pointer hover:bg-[#006e52] transition-colors"
+            className="bg-[#008060] text-white px-[16px] py-[8px] rounded-[8px] font-medium text-[14px] shadow-sm hover:bg-[#006e52] transition-all border-0 cursor-pointer"
             onClick={handleCreateOffer}
           >
             Create New Offer
@@ -115,32 +115,32 @@ export function AllOffersPage({ onCreateOffer, offers }: AllOffersPageProps) {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-[8px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] p-[20px]">
+      <div className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[24px]">
         <table className="w-full border-collapse">
           <thead>
             <tr>
-              <th className="text-left p-[12px] border-b border-[#dfe3e8] text-[13px] text-[#6d7175] font-['Inter'] font-semibold">
+              <th className="text-left p-[12px] border-b border-[#f0f2f4] text-[13px] text-[#5c6166] font-sans font-semibold">
                 Offer Name
               </th>
-              <th className="text-left p-[12px] border-b border-[#dfe3e8] text-[13px] text-[#6d7175] font-['Inter'] font-semibold">
+              <th className="text-left p-[12px] border-b border-[#f0f2f4] text-[13px] text-[#5c6166] font-sans font-semibold">
                 Status
               </th>
-              <th className="text-left p-[12px] border-b border-[#dfe3e8] text-[13px] text-[#6d7175] font-['Inter'] font-semibold">
+              <th className="text-left p-[12px] border-b border-[#f0f2f4] text-[13px] text-[#5c6166] font-sans font-semibold">
                 Exposure PV
               </th>
-              <th className="text-left p-[12px] border-b border-[#dfe3e8] text-[13px] text-[#6d7175] font-['Inter'] font-semibold">
+              <th className="text-left p-[12px] border-b border-[#f0f2f4] text-[13px] text-[#5c6166] font-sans font-semibold">
                 Add to Cart PV
               </th>
-              <th className="text-left p-[12px] border-b border-[#dfe3e8] text-[13px] text-[#6d7175] font-['Inter'] font-semibold">
+              <th className="text-left p-[12px] border-b border-[#f0f2f4] text-[13px] text-[#5c6166] font-sans font-semibold">
                 GMV
               </th>
-              <th className="text-left p-[12px] border-b border-[#dfe3e8] text-[13px] text-[#6d7175] font-['Inter'] font-semibold">
+              <th className="text-left p-[12px] border-b border-[#f0f2f4] text-[13px] text-[#5c6166] font-sans font-semibold">
                 Conversion
               </th>
-              <th className="text-left p-[12px] border-b border-[#dfe3e8] text-[13px] text-[#6d7175] font-['Inter'] font-semibold">
+              <th className="text-left p-[12px] border-b border-[#f0f2f4] text-[13px] text-[#5c6166] font-sans font-semibold">
                 Created
               </th>
-              <th className="text-left p-[12px] border-b border-[#dfe3e8] text-[13px] text-[#6d7175] font-['Inter'] font-semibold">
+              <th className="text-left p-[12px] border-b border-[#f0f2f4] text-[13px] text-[#5c6166] font-sans font-semibold">
                 Actions
               </th>
             </tr>
@@ -150,7 +150,7 @@ export function AllOffersPage({ onCreateOffer, offers }: AllOffersPageProps) {
               <tr>
                 <td
                   colSpan={8}
-                  className="p-[12px] border-b border-[#dfe3e8] text-[14px] text-[#6d7175] font-['Inter']"
+                  className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#5c6166] font-sans"
                 >
                   No offers yet. Create your first offer to see it here.
                 </td>
@@ -167,12 +167,12 @@ export function AllOffersPage({ onCreateOffer, offers }: AllOffersPageProps) {
 
                 return (
                   <tr key={offer.id}>
-                <td className="p-[12px] border-b border-[#dfe3e8] text-[14px] text-[#202223] font-['Inter']">
+                <td className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#1c1f23] font-sans">
                   <div className="flex items-center gap-[8px]">
                     {offer.name}
                   </div>
                 </td>
-                <td className="p-[12px] border-b border-[#dfe3e8]">
+                <td className="p-[12px] border-b border-[#f0f2f4]">
                   <Form method="post">
                     <input type="hidden" name="intent" value="toggle-offer-status" />
                     <input type="hidden" name="offerId" value={offer.id} />
@@ -215,26 +215,26 @@ export function AllOffersPage({ onCreateOffer, offers }: AllOffersPageProps) {
                     </button>
                   </Form>
                 </td>
-                <td className="p-[12px] border-b border-[#dfe3e8] text-[14px] text-[#202223] font-['Inter']">
+                <td className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#1c1f23] font-sans">
                   {offer.exposurePV.toLocaleString()}
                 </td>
-                <td className="p-[12px] border-b border-[#dfe3e8] text-[14px] text-[#202223] font-['Inter']">
+                <td className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#1c1f23] font-sans">
                   {offer.addToCartPV.toLocaleString()}
                 </td>
-                <td className="p-[12px] border-b border-[#dfe3e8] text-[14px] text-[#202223] font-['Inter']">
+                <td className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#1c1f23] font-sans">
                   {gmvDisplay}
                 </td>
-                <td className="p-[12px] border-b border-[#dfe3e8] text-[14px] text-[#202223] font-['Inter']">
+                <td className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#1c1f23] font-sans">
                   {conversionDisplay}
                 </td>
-                <td className="p-[12px] border-b border-[#dfe3e8] text-[14px] text-[#6d7175] font-['Inter']">
+                <td className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#5c6166] font-sans">
                   {createdDisplay}
                 </td>
-                <td className="p-[12px] border-b border-[#dfe3e8]">
+                <td className="p-[12px] border-b border-[#f0f2f4]">
                   <div className="flex items-center gap-[8px]">
                     <button
                       type="button"
-                      className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[4px] rounded-[4px] hover:bg-[rgba(0,128,96,0.1)] transition-colors"
+                      className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[6px] rounded-[6px] hover:bg-[#f0f9f6] transition-all"
                       onClick={handleEdit}
                       title="Edit"
                     >
@@ -242,7 +242,7 @@ export function AllOffersPage({ onCreateOffer, offers }: AllOffersPageProps) {
                     </button>
                     <button
                       type="button"
-                      className="text-[#6d7175] bg-transparent border-0 cursor-pointer hover:text-[#d72c0d] p-[4px] rounded-[4px] hover:bg-[rgba(215,44,13,0.1)] transition-colors"
+                      className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#d72c0d] p-[6px] rounded-[6px] hover:bg-[#fef3f2] transition-all"
                       title="Delete"
                       onClick={() => setDeletingOffer(offer)}
                     >
@@ -260,13 +260,13 @@ export function AllOffersPage({ onCreateOffer, offers }: AllOffersPageProps) {
 
       {deletingOffer && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.4)]">
-          <div className="bg-white rounded-[12px] shadow-[0_4px_16px_rgba(0,0,0,0.24)] max-w-[400px] w-[90%] p-[20px]">
-            <h2 className="font-['Inter'] font-semibold text-[18px] leading-[27px] text-[#202223] mb-[8px]">
+          <div className="bg-white rounded-[16px] shadow-[0_8px_24px_rgba(0,0,0,0.12)] max-w-[400px] w-[90%] p-[24px]">
+            <h2 className="font-sans font-semibold text-[18px] leading-[27px] text-[#1c1f23] mb-[8px]">
               Delete offer
             </h2>
-            <p className="font-['Inter'] text-[14px] leading-[21px] text-[#6d7175] mb-[16px]">
+            <p className="font-sans text-[14px] leading-[21px] text-[#5c6166] mb-[16px]">
               Are you sure you want to delete offer{" "}
-              <span className="font-semibold text-[#202223]">
+              <span className="font-semibold text-[#1c1f23]">
                 {deletingOffer.name}
               </span>
               ? This action cannot be undone.
@@ -274,7 +274,7 @@ export function AllOffersPage({ onCreateOffer, offers }: AllOffersPageProps) {
             <div className="flex justify-end gap-[8px]">
               <button
                 type="button"
-                className="px-[12px] py-[6px] rounded-[6px] border border-[#dfe3e8] bg-white text-[#202223] text-[14px] font-['Inter'] hover:bg-[#f4f6f8]"
+                className="px-[12px] py-[6px] rounded-[6px] border border-[#dfe3e8] bg-white text-[#1c1f23] text-[14px] font-sans hover:bg-[#f4f6f8]"
                 onClick={() => setDeletingOffer(null)}
               >
                 Cancel
@@ -288,7 +288,7 @@ export function AllOffersPage({ onCreateOffer, offers }: AllOffersPageProps) {
                 />
                 <button
                   type="submit"
-                  className="px-[12px] py-[6px] rounded-[6px] bg-[#d72c0d] text-white text-[14px] font-['Inter'] hover:bg-[#bc2200]"
+                  className="px-[12px] py-[6px] rounded-[6px] bg-[#d72c0d] text-white text-[14px] font-sans hover:bg-[#bc2200]"
                 >
                   Delete
                 </button>

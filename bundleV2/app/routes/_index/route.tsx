@@ -1117,29 +1117,23 @@ export default function Index() {
     <AppProvider embedded apiKey={apiKey}>
       <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px] relative">
         {toastMessage && (
-          <div className="fixed z-50 top-4 left-1/2 -translate-x-1/2 bg-[#108043] text-white px-4 py-2 rounded shadow-lg text-sm font-['Inter']">
+          <div className="fixed z-50 top-4 left-1/2 -translate-x-1/2 bg-[#108043] text-white px-4 py-2 rounded shadow-lg text-sm font-sans">
             {toastMessage}
           </div>
         )}
         {/* Tabs */}
         {!showCreateOffer && (
-          <nav className="bg-white flex flex-col sm:flex-row gap-[8px] sm:gap-[16px] items-stretch sm:items-start pb-0 px-[16px] pt-[16px] rounded-[8px] mb-[16px] sm:mb-[24px]">
+          <nav className="bg-white flex flex-col sm:flex-row gap-[8px] sm:gap-[16px] items-stretch sm:items-start pb-0 px-[16px] pt-[16px] rounded-[12px] border border-[#e3e8ed] shadow-sm mb-[16px] sm:mb-[24px]">
             <button
               type="button"
               onClick={() => {
                 setShowCreateOffer(false);
                 setActiveTab("dashboard");
               }}
-              className={`rounded-[4px] px-[12px] py-[7px] text-center sm:text-left cursor-pointer bg-transparent ${
-                activeTab === "dashboard" ? "bg-[#dfe3e8]" : ""
-              }`}
+              className={`rounded-[8px] px-[16px] py-[8px] text-center sm:text-left cursor-pointer transition-all ${activeTab === "dashboard" ? "bg-[#f4f6f8] shadow-sm border border-[#e3e8ed]" : "bg-transparent border border-transparent hover:bg-[#f9fafb]"}`}
             >
               <span
-                className={`font-['Inter'] leading-[25.6px] text-[16px] tracking-[-0.3125px] ${
-                  activeTab === "dashboard"
-                    ? "font-semibold text-[#202223]"
-                    : "font-normal text-[#6d7175]"
-                }`}
+                className={`font-sans leading-[24px] text-[15px] tracking-normal ${activeTab === "dashboard" ? "font-semibold text-[#1c1f23]" : "font-medium text-[#5c6166]"}`}
               >
                 Dashboard
               </span>
@@ -1151,16 +1145,10 @@ export default function Index() {
                 setShowCreateOffer(false);
                 setActiveTab("offers");
               }}
-              className={`rounded-[4px] px-[12px] py-[7px] text-center sm:text-left cursor-pointer bg-transparent ${
-                activeTab === "offers" ? "bg-[#dfe3e8]" : ""
-              }`}
+              className={`rounded-[8px] px-[16px] py-[8px] text-center sm:text-left cursor-pointer transition-all ${activeTab === "offers" ? "bg-[#f4f6f8] shadow-sm border border-[#e3e8ed]" : "bg-transparent border border-transparent hover:bg-[#f9fafb]"}`}
             >
               <span
-                className={`font-['Inter'] leading-[25.6px] text-[16px] tracking-[-0.3125px] ${
-                  activeTab === "offers"
-                    ? "font-semibold text-[#202223]"
-                    : "font-normal text-[#6d7175]"
-                }`}
+                className={`font-sans leading-[24px] text-[15px] tracking-normal ${activeTab === "offers" ? "font-semibold text-[#1c1f23]" : "font-medium text-[#5c6166]"}`}
               >
                 All Offers
               </span>
@@ -1172,16 +1160,10 @@ export default function Index() {
                 setShowCreateOffer(false);
                 setActiveTab("analytics");
               }}
-              className={`rounded-[4px] px-[12px] py-[7px] text-center sm:text-left cursor-pointer bg-transparent ${
-                activeTab === "analytics" ? "bg-[#dfe3e8]" : ""
-              }`}
+              className={`rounded-[8px] px-[16px] py-[8px] text-center sm:text-left cursor-pointer transition-all ${activeTab === "analytics" ? "bg-[#f4f6f8] shadow-sm border border-[#e3e8ed]" : "bg-transparent border border-transparent hover:bg-[#f9fafb]"}`}
             >
               <span
-                className={`font-['Inter'] leading-[25.6px] text-[16px] tracking-[-0.3125px] ${
-                  activeTab === "analytics"
-                    ? "font-semibold text-[#202223]"
-                    : "font-normal text-[#6d7175]"
-                }`}
+                className={`font-sans leading-[24px] text-[15px] tracking-normal ${activeTab === "analytics" ? "font-semibold text-[#1c1f23]" : "font-medium text-[#5c6166]"}`}
               >
                 Analytics
               </span>

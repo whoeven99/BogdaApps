@@ -114,7 +114,7 @@ export function AnalyticsPage({ shop, offers }: AnalyticsPageProps) {
   return (
     <div className="max-w-[1280px] mx-auto pb-[24px]">
       <div className="mb-[24px]">
-        <h1 className="text-[24px] font-semibold text-[#202223] m-0">
+        <h1 className="text-[24px] font-semibold text-[#1c1f23] m-0">
           Analytics
         </h1>
       </div>
@@ -138,51 +138,51 @@ export function AnalyticsPage({ shop, offers }: AnalyticsPageProps) {
       {/* Metrics Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-[16px] mb-[24px]">
         {/* Visitors */}
-        <div className="bg-white rounded-[8px] shadow-[0_1px_3px_rgba(0,0,0,0.1)] p-[20px]">
+        <div className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[24px]">
           <div className="flex items-center justify-between mb-[12px]">
-            <span className="font-['Inter'] font-normal text-[14px] text-[#6d7175]">
+            <span className="font-sans font-normal text-[14px] text-[#5c6166]">
               Visitors
             </span>
-            <CircleHelp size={16} className="text-[#6d7175]" />
+            <CircleHelp size={16} className="text-[#5c6166]" />
           </div>
-          <h3 className="font-['Inter'] font-semibold text-[24px] text-[#202223] m-0">
+          <h3 className="font-sans font-semibold text-[24px] text-[#1c1f23] m-0">
             {analyticsData.visitors.toLocaleString()}
           </h3>
         </div>
 
         {/* Bundle orders */}
-        <div className="bg-white rounded-[8px] shadow-[0_1px_3px_rgba(0,0,0,0.1)] p-[20px]">
+        <div className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[24px]">
           <div className="flex items-center justify-between mb-[12px]">
-            <span className="font-['Inter'] font-normal text-[14px] text-[#6d7175]">
+            <span className="font-sans font-normal text-[14px] text-[#5c6166]">
               Bundle orders
             </span>
-            <CircleHelp size={16} className="text-[#6d7175]" />
+            <CircleHelp size={16} className="text-[#5c6166]" />
           </div>
-          <h3 className="font-['Inter'] font-semibold text-[24px] text-[#202223] m-0">
+          <h3 className="font-sans font-semibold text-[24px] text-[#1c1f23] m-0">
             {analyticsData.bundleOrders.toLocaleString()}
           </h3>
         </div>
 
         {/* Conversion to bundle */}
-        <div className="bg-white rounded-[8px] shadow-[0_1px_3px_rgba(0,0,0,0.1)] p-[20px]">
+        <div className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[24px]">
           <div className="flex items-center justify-between mb-[12px]">
-            <span className="font-['Inter'] font-normal text-[14px] text-[#6d7175]">
+            <span className="font-sans font-normal text-[14px] text-[#5c6166]">
               Conversion to bundle
             </span>
-            <CircleHelp size={16} className="text-[#6d7175]" />
+            <CircleHelp size={16} className="text-[#5c6166]" />
           </div>
-          <h3 className="font-['Inter'] font-semibold text-[24px] text-[#202223] m-0">
+          <h3 className="font-sans font-semibold text-[24px] text-[#1c1f23] m-0">
             {analyticsData.conversionRate.toFixed(2)}%
           </h3>
         </div>
       </div>
 
       {/* Daily added revenue - Line Chart */}
-      <div className="bg-white rounded-[8px] shadow-[0_1px_3px_rgba(0,0,0,0.1)] p-[24px]">
-        <h3 className="font-['Inter'] font-semibold text-[16px] text-[#202223] m-0 mb-[8px]">
+      <div className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[24px]">
+        <h3 className="font-sans font-semibold text-[16px] text-[#1c1f23] m-0 mb-[8px]">
           Daily added revenue
         </h3>
-        <p className="font-['Inter'] font-normal text-[13px] text-[#6d7175] mb-[24px]">
+        <p className="font-sans font-normal text-[13px] text-[#5c6166] mb-[24px]">
           See how much additional revenue you're making with this app every day.
         </p>
         <BasicLineChart
