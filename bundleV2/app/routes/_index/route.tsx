@@ -476,35 +476,36 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.error("Failed to get cached shop offers", error);
   }
 
-  const productsResponse = await admin.graphql(
-    `#graphql
-      query AppProducts {
-        products(first: 100) {
-          edges {
-            node {
-              id
-              title
-              featuredImage {
-                url
-              }
-              variants(first: 1) {
-                edges {
-                  node {
-                    price
+  let productsResponse;
+  let productsJson;
+  try {
+    productsResponse = await admin.graphql(
+      `#graphql
+        query AppProducts {
+          products(first: 100) {
+            edges {
+              node {
+                id
+                title
+                featuredImage {
+                  url
+                }
+                variants(first: 1) {
+                  edges {
+                    node {
+                      price
+                    }
                   }
                 }
               }
             }
           }
         }
-      }
-    `,
-  );
-  let productsJson;
-  try {
+      `,
+    );
     productsJson = await productsResponse.json();
   } catch (error) {
-    console.error("Failed to parse products GraphQL response", error);
+    console.error("Failed to fetch or parse products GraphQL response", error);
     productsJson = {};
   }
   const productEdges =
@@ -883,10 +884,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     const nextStatus = nextStatusRaw === "true";
 
-    const updatedOffer = await prismaAny.offer.update({
-      where: { id: idRaw },
-      data: { status: nextStatus },
-    });
+    let updatedOffer;
+    try {
+      updatedOffer = await prismaAny.offer.update({
+        where: { id: idRaw },
+        data: { status: nextStatus },
+      });
+    } catch (error) {
+      console.error("toggle-offer-status update failed", error);
+      return offerActionErrorResponse("Toggle status failed.", 500);
+    }
 
     // 同步 metafield，保证前端/扩展端实时生效
     try {
@@ -968,14 +975,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const prismaAny: any = prisma;
 
     // 删除前先拿到 shopName（用于同步 metafield）
-    const offerToDelete = await prismaAny.offer.findUnique({
-      where: { id: idRaw },
-    });
-    const shopNameToSync = offerToDelete?.shopName as string | undefined;
+    let shopNameToSync: string | undefined;
+    try {
+      const offerToDelete = await prismaAny.offer.findUnique({
+        where: { id: idRaw },
+      });
+      shopNameToSync = offerToDelete?.shopName as string | undefined;
 
-    await prismaAny.offer.delete({
-      where: { id: idRaw },
-    });
+      await prismaAny.offer.delete({
+        where: { id: idRaw },
+      });
+    } catch (error) {
+      console.error("delete-offer failed", error);
+      return offerActionErrorResponse("Delete offer failed.", 500);
+    }
 
     // 同步 metafield，保证扩展端不再使用已删除 offer
     try {
