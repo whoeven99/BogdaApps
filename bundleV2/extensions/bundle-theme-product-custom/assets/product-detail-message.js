@@ -297,6 +297,8 @@ function getCurrentOffer(offersConfig) {
 
   for (const offer of offers) {
     if (!offer || typeof offer !== "object") continue;
+    if (offer.status === false) continue;
+    
     const discountRules = parseDiscountRulesJson(offer.discountRulesJson);
     if (!discountRules.length) continue;
 
@@ -362,13 +364,13 @@ function renderBundlePreviewHtml(offer) {
         ? " create-offer-style-preview-item--featured"
         : "";
       const featuredStyle = item.featured 
-        ? `border-color: ${accentColor}; background-color: ${cardBackgroundColor}; box-shadow: 0 8px 18px ${accentColor}25;`
-        : `background-color: ${cardBackgroundColor};`;
+        ? `border-color: ${esc(accentColor)} !important; background: ${esc(cardBackgroundColor)} !important; box-shadow: 0 8px 18px ${esc(accentColor)}25 !important;`
+        : `background: ${esc(cardBackgroundColor)} !important;`;
         
       return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}">
       ${
         item.featured && item.badge
-          ? `<div class="create-offer-style-preview-badge" style="background:${accentColor};">${esc(item.badge)}</div>`
+          ? `<div class="create-offer-style-preview-badge" style="background:${esc(accentColor)} !important;">${esc(item.badge)}</div>`
           : ""
       }
       <div class="create-offer-style-preview-item-title">${esc(item.title)}</div>
@@ -389,7 +391,7 @@ function renderBundlePreviewHtml(offer) {
     .join("");
 
   return `<div class="create-offer-preview-card">
-    <div class="create-offer-style-preview-header" style="color:${accentColor};">${esc(widgetTitle)}</div>
+    <div class="create-offer-style-preview-header" style="color:${esc(accentColor)} !important;">${esc(widgetTitle)}</div>
     <div class="create-offer-style-preview-list create-offer-style-preview-list--${layoutFormat}">
       ${itemsHtml}
     </div>

@@ -51,11 +51,14 @@ export function renderBundlePreviewHtml({
 
   const itemsHtml = PREVIEW_ITEMS.map((item) => {
     const featuredClass = item.featured ? " create-offer-style-preview-item--featured" : "";
-    const borderStyle = item.featured ? `border-color:${esc(accentColor)};` : "";
-    return `<div class="create-offer-style-preview-item${featuredClass}" style="background:${esc(cardBackgroundColor)};${borderStyle}">
+    const featuredStyle = item.featured 
+      ? `border-color: ${esc(accentColor)} !important; background: ${esc(cardBackgroundColor)} !important; box-shadow: 0 8px 18px ${esc(accentColor)}25 !important;`
+      : `background: ${esc(cardBackgroundColor)} !important;`;
+      
+    return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}">
       ${
         item.featured && item.badge
-          ? `<div class="create-offer-style-preview-badge" style="background:${esc(accentColor)};">${esc(item.badge)}</div>`
+          ? `<div class="create-offer-style-preview-badge" style="background:${esc(accentColor)} !important;">${esc(item.badge)}</div>`
           : ""
       }
       <div class="create-offer-style-preview-item-title">${esc(item.title)}</div>
@@ -66,7 +69,7 @@ export function renderBundlePreviewHtml({
   }).join("");
 
   return `<div class="create-offer-preview-card">
-    <div class="create-offer-style-preview-header" style="color:${esc(accentColor)};">${esc(title)}</div>
+    <div class="create-offer-style-preview-header" style="color:${esc(accentColor)} !important;">${esc(title)}</div>
     <div class="create-offer-style-preview-list create-offer-style-preview-list--${safeLayout}">
       ${itemsHtml}
     </div>
