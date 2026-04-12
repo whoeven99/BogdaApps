@@ -46,6 +46,7 @@
   },
   "devDependencies": {
     "@shopify/api-codegen-preset": "^1.2.0",
+    "@shopify/cli": "^3.93.2",
     "@shopify/polaris-types": "^1.0.1",
     "@shopify/shopify_function": "~2.0.0",
     "@shopify/web-pixels-extension": "^2.18.0",
