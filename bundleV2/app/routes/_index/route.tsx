@@ -582,6 +582,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const endTimeRaw = String(formData.get("endTime") || "");
     const selectedProductsJson = String(formData.get("selectedProductsJson") || "");
     const discountRulesJson = String(formData.get("discountRulesJson") || "");
+    
+    // Status is checked, defaults to false if not provided or explicitly 'false'
+    const statusRaw = String(formData.get("status") || "");
+    const status = statusRaw === "true";
 
     const totalBudget = formData.get("totalBudget");
     const dailyBudget = formData.get("dailyBudget");
@@ -668,6 +672,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       offerType,
       startTime,
       endTime,
+      status,
       offerSettingsJson,
       selectedProductsJson: selectedProductsJson || null,
       discountRulesJson: discountRulesJson || null,
@@ -1085,10 +1090,10 @@ export default function Index() {
       )}
       {activeTab === "offers" && showCreateOffer && (
         <CreateNewOffer
-          onBack={() => setShowCreateOffer(false)}
-          storeProducts={storeProducts}
-          existingOffers={offers.map((o) => ({ id: o.id, name: o.name }))}
-        />
+            onBack={() => setShowCreateOffer(false)}
+            storeProducts={storeProducts}
+            existingOffers={offers.map((o) => ({ id: o.id, name: o.name }))}
+          />
       )}
       {activeTab === "pricing" && <PricingPage />}
       </div>

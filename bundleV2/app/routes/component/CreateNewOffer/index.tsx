@@ -31,6 +31,7 @@ interface InitialOffer {
   endTime: string;
   selectedProductsJson: string | null;
   offerSettingsJson: string | null;
+  status: boolean;
 }
 
 interface CreateNewOfferProps {
@@ -389,6 +390,10 @@ export function CreateNewOffer({
   const [discountRules, setDiscountRules] = useState<DiscountRule[]>(() =>
     parseDiscountRules(initialOffer?.discountRulesJson),
   );
+  const [status, setStatus] = useState<boolean>(
+    initialOffer ? initialOffer.status : true
+  );
+
   const normalizedDiscountRules = sanitizeDiscountRules(discountRules);
   const featuredRule = normalizedDiscountRules[0];
 
@@ -475,9 +480,36 @@ export function CreateNewOffer({
           >
             ← Back
           </button>
-          <h1 className="polaris-page__title">
-            {initialOffer ? "Edit Offer" : "Create New Offer"}
-          </h1>
+          <div className="flex items-center justify-between w-full gap-[16px]">
+            <h1 className="polaris-page__title m-0">
+              {initialOffer ? "Edit Offer" : "Create New Offer"}
+            </h1>
+            <div className="flex items-center gap-[8px]">
+              <span className="text-[14px] text-[#6d7175] font-medium">Status:</span>
+              <button
+                type="button"
+                onClick={() => setStatus(!status)}
+                className="flex items-center gap-[8px] bg-transparent border-0 p-0 cursor-pointer"
+              >
+                <span
+                  className="relative inline-block w-[44px] h-[24px] rounded-[12px] transition-colors duration-200"
+                  style={{
+                    backgroundColor: status ? "#008060" : "#c4cdd5",
+                  }}
+                >
+                  <span
+                    className="absolute top-[2px] w-[20px] h-[20px] bg-white rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.2)] transition-all duration-200"
+                    style={{
+                      left: status ? "22px" : "2px",
+                    }}
+                  />
+                </span>
+                <span className="text-[14px] font-medium min-w-[50px] text-left" style={{ color: status ? "#008060" : "#6d7175" }}>
+                  {status ? "Active" : "Paused"}
+                </span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -489,6 +521,7 @@ export function CreateNewOffer({
       {initialOffer && (
         <input type="hidden" name="offerId" value={initialOffer.id} />
       )}
+      <input type="hidden" name="status" value={status ? "true" : "false"} />
       {/* 始终提交的核心字段（即使对应输入步骤已切换隐藏） */}
       {/* 使用 offerName 避免与表单语义字段 name 冲突；中间空格由服务端 trim 首尾后落库 */}
       <input type="hidden" name="offerName" value={offerName} />
