@@ -27,6 +27,7 @@ import {
 type OfferListItem = {
   id: string;
   name: string;
+  cartTitle: string;
   offerType: string;
   startTime: string;
   endTime: string;
@@ -575,6 +576,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       formData.get("offerName") ?? formData.get("name") ?? "",
     );
     const name = nameRaw.trim();
+    const cartTitleRaw = String(formData.get("cartTitle") || "Bundle Discount");
+    const cartTitle = cartTitleRaw.trim();
     const offerType = String(formData.get("offerType") || "").trim();
     const layoutFormat = String(formData.get("layoutFormat") || "")
       .trim() || "vertical";
@@ -669,6 +672,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       shopName,
       // 去掉首尾空白，保留名称中间空格（避免编码/解析边界问题）
       name,
+      cartTitle,
       offerType,
       startTime,
       endTime,
@@ -1098,7 +1102,12 @@ export default function Index() {
         <CreateNewOffer
             onBack={() => setShowCreateOffer(false)}
             storeProducts={storeProducts}
-            existingOffers={offers.map((o) => ({ id: o.id, name: o.name }))}
+            existingOffers={offers.map((o) => ({
+              id: o.id,
+              name: o.name,
+              cartTitle: o.cartTitle,
+              offerType: o.offerType,
+            }))}
           />
       )}
       {activeTab === "pricing" && <PricingPage />}

@@ -30,6 +30,7 @@ type OfferMetafieldPayload = {
   offers?: Array<{
     id?: string;
     name?: string;
+    cartTitle?: string;
     status?: boolean;
     selectedProductsJson?: string | null;
     discountRulesJson?: string | null;
@@ -146,7 +147,7 @@ export function cartLinesDiscountsGenerateRun(
     }
 
     const candidate: ProductDiscountCandidate = {
-      message: suitOffer.name,
+      message: suitOffer.cartTitle || "Bundle Discount",
       targets: [
         {
           cartLine: {

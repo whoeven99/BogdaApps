@@ -25,6 +25,7 @@ type Product = {
 interface InitialOffer {
   id: string;
   name: string;
+  cartTitle: string;
   offerType: string;
   discountRulesJson: string | null;
   startTime: string;
@@ -321,7 +322,9 @@ export function CreateNewOffer({
     initialOffer?.offerType ?? "quantity-breaks-same",
   );
   const [offerName, setOfferName] = useState(initialOffer?.name ?? "");
+  const [cartTitle, setCartTitle] = useState(initialOffer?.cartTitle ?? "Bundle Discount");
   const [offerNameError, setOfferNameError] = useState("");
+  const [cartTitleError, setCartTitleError] = useState("");
   const [startTime, setStartTime] = useState(
     initialOffer
       ? formatForDateTimeLocal(initialOffer.startTime)
@@ -443,6 +446,14 @@ export function CreateNewOffer({
         }
 
         let hasError = false;
+        if (!offerName.trim()) {
+          setOfferNameError("Offer Name is required.");
+          hasError = true;
+        }
+        if (!cartTitle.trim()) {
+          setCartTitleError("Display Title is required.");
+          hasError = true;
+        }
         if (!startTime) {
           setStartTimeError("Start Time is required.");
           hasError = true;
@@ -525,6 +536,7 @@ export function CreateNewOffer({
       {/* 始终提交的核心字段（即使对应输入步骤已切换隐藏） */}
       {/* 使用 offerName 避免与表单语义字段 name 冲突；中间空格由服务端 trim 首尾后落库 */}
       <input type="hidden" name="offerName" value={offerName} />
+      <input type="hidden" name="cartTitle" value={cartTitle} />
       <input type="hidden" name="title" value={widgetTitle} />
       <input type="hidden" name="offerType" value={offerType} />
       <input type="hidden" name="layoutFormat" value={layoutFormat} />
@@ -623,6 +635,29 @@ export function CreateNewOffer({
                         </option>
                       ))}
                     </select>
+                  </label>
+                  <label className="create-offer-label mt-[16px]">
+                    Display Title (Cart & Checkout)
+                    <input
+                      type="text"
+                      placeholder="e.g., Bundle Discount"
+                      className="create-offer-input"
+                      value={cartTitle}
+                      onChange={(e) => {
+                        setCartTitle(e.target.value);
+                        if (cartTitleError && e.target.value.trim()) {
+                          setCartTitleError("");
+                        }
+                      }}
+                    />
+                    <div className="text-[12px] text-[#6d7175] mt-[4px]">
+                      This is the discount name shown to customers in their cart and checkout.
+                    </div>
+                    {cartTitleError && (
+                      <div className="create-offer-error-text">
+                        {cartTitleError}
+                      </div>
+                    )}
                   </label>
                 </div>
               </div>
