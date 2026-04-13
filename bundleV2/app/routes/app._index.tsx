@@ -7,6 +7,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 
 const { Text } = Typography;
 
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
 
