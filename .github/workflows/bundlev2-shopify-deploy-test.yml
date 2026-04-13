@@ -7,12 +7,7 @@ name: bundleV2 – Shopify App Deploy (Test)
 
 on:
   workflow_dispatch:
-    inputs:
-      render_branch:
-        description: "Render 构建使用的 Git 分支（留空则使用「Use workflow from」所选分支）"
-        required: false
-        default: ""
-        type: string
+
 
 defaults:
   run:
@@ -29,6 +24,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -60,21 +56,20 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          # 与本次要部署的代码一致；Render Create Deploy 对 branch 支持不可靠，下面用 commitId 触发
+          ref: ${{ github.ref }}
 
       - name: Deploy to Render Test
         env:
           RENDER_API_KEY: ${{ secrets.RENDER_APIKEY }}
           RENDER_SERVICE_ID: srv-d72ffhdm5p6s73d0pa4g
         run: |
-          BRANCH="${{ github.event.inputs.render_branch }}"
-          if [ -z "$BRANCH" ]; then
-            BRANCH="${{ github.ref_name }}"
-          fi
-          echo "Deploying branch: $BRANCH to Render (bundleV2 test)"
+          COMMIT="$(git rev-parse HEAD)"
+          echo "Triggering Render deploy for commit: $COMMIT ($(git log -1 --oneline))"
           RESPONSE=$(curl -s -o response.json -w "%{http_code}" -X POST "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
             -H "Authorization: Bearer $RENDER_API_KEY" \
             -H "Content-Type: application/json" \
-            -d "{\"branch\": \"$BRANCH\"}")
+            -d "{\"commitId\": \"$COMMIT\"}")
           if [ "$RESPONSE" -eq 200 ] || [ "$RESPONSE" -eq 201 ]; then
             echo "Deploy to test Render triggered successfully. HTTP status: $RESPONSE"
           else
