@@ -61,3 +61,28 @@ model Offer {
 
   @@unique([shopName, name])
 }
+
+/// 商家在应用内「发起订阅」（appSubscriptionCreate 成功、跳转确认页）时写入一条
+model BillingInitLog {
+  id                    String   @id @default(cuid())
+  shopName              String
+  /// starter | professional | enterprise
+  planId                String
+  /// monthly | yearly
+  cycle                 String
+  /// 传给 Shopify 的订阅名称（与 Pricing 展示一致）
+  subscriptionName      String
+  amount                Float
+  currencyCode          String   @default("USD")
+  /// Shopify 返回的 AppSubscription GID（待商家确认前即可拿到）
+  shopifySubscriptionId String?
+  /// `app_subscriptions/update` 推送的 status（如 ACTIVE、DECLINED、PENDING）
+  subscriptionStatus          String?
+  subscriptionStatusUpdatedAt DateTime?
+  testCharge            Boolean  @default(false)
+  createdAt             DateTime @default(now())
+
+  @@index([shopName])
+  @@index([createdAt])
+  @@index([shopifySubscriptionId])
+}
