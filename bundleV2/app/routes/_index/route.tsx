@@ -24,6 +24,18 @@ import {
   getCachedShopOffers,
   invalidateShopOffersCache,
 } from "../../shopOffersCache.server";
+import {
+  BILLING_PLANS,
+  billingIsTestCharge,
+  buildBillingReturnUrl,
+  isBillingCycle,
+  isBillingPlanId,
+  subscriptionDisplayName,
+} from "../../billing";
+import {
+  createRecurringSubscription,
+  fetchActiveSubscriptions,
+} from "../../billing.server";
 
 type OfferListItem = {
   id: string;
@@ -210,6 +222,8 @@ export type IndexLoaderData = {
   shop: string;
   apiKey: string;
   themeExtensionEnabled: boolean;
+  billingSubscriptions: Array<{ name: string; status: string }>;
+  billingTestMode: boolean;
 };
 
 const ensureWebPixel = async (admin: any, shop: string) => {
@@ -588,6 +602,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.error("Failed to fetch shop markets", error);
   }
 
+  let billingSubscriptions: Array<{ name: string; status: string }> = [];
+  try {
+    billingSubscriptions = await fetchActiveSubscriptions(admin);
+  } catch (error) {
+    console.error("[billing] loader fetch failed", error);
+  }
+
   return Response.json({
     offers,
     storeProducts,
@@ -595,14 +616,68 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     shop: session.shop,
     apiKey,
     themeExtensionEnabled,
+    billingSubscriptions,
+    billingTestMode: billingIsTestCharge(),
   } satisfies IndexLoaderData);
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
   const formData = await request.formData();
-  let intent = formData.get("intent");
   const prismaAny: any = prisma;
+  let intent = formData.get("intent");
+
+  if (intent === "billing-subscribe") {
+    const plan = String(formData.get("plan") || "");
+    const cycle = String(formData.get("cycle") || "");
+    if (!isBillingPlanId(plan) || !isBillingCycle(cycle)) {
+      return Response.json(
+        { ok: false as const, error: "无效的套餐或计费周期。" },
+        { status: 400 },
+      );
+    }
+    const name = subscriptionDisplayName(plan, cycle);
+    const { monthlyUsd, yearlyUsd } = BILLING_PLANS[plan];
+    const amount = cycle === "monthly" ? monthlyUsd : yearlyUsd;
+    const interval = cycle === "monthly" ? "EVERY_30_DAYS" : "ANNUAL";
+    const returnUrl = buildBillingReturnUrl(request);
+    const result = await createRecurringSubscription(admin, {
+      name,
+      amount,
+      interval,
+      returnUrl,
+      trialDays: 14,
+    });
+    if (!result.ok) {
+      return Response.json(
+        { ok: false as const, error: result.error },
+        { status: 400 },
+      );
+    }
+
+    try {
+      await prismaAny.billingInitLog.create({
+        data: {
+          shopName: session.shop,
+          planId: plan,
+          cycle,
+          subscriptionName: name,
+          amount,
+          currencyCode: "USD",
+          shopifySubscriptionId: result.shopifySubscriptionId,
+          testCharge: billingIsTestCharge(),
+        },
+      });
+    } catch (logError) {
+      console.error("[billing] BillingInitLog create failed", logError);
+    }
+
+    return Response.json({
+      ok: true as const,
+      confirmationUrl: result.confirmationUrl,
+      testCharge: billingIsTestCharge(),
+    });
+  }
 
   const isTransientDbWriteError = (error: unknown) => {
     const message =
@@ -1066,8 +1141,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 type HomeTabKey = "dashboard" | "offers" | "analytics" | "pricing";
 
 export default function Index() {
-  const { offers, storeProducts, markets, shop, apiKey, themeExtensionEnabled } =
-    useLoaderData() as IndexLoaderData;
+  const {
+    offers,
+    storeProducts,
+    markets,
+    shop,
+    apiKey,
+    themeExtensionEnabled,
+    billingSubscriptions,
+    billingTestMode,
+  } = useLoaderData() as IndexLoaderData;
   const actionData = useActionData() as { toast?: string } | undefined;
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -1076,6 +1159,17 @@ export default function Index() {
   const [showCreateOffer, setShowCreateOffer] = useState(false);
 
   const toast = searchParams.get("toast") || actionData?.toast;
+
+  useEffect(() => {
+    if (searchParams.get("billing_return") !== "1") return;
+    setActiveTab("pricing");
+    const next = new URLSearchParams(searchParams);
+    next.delete("billing_return");
+    navigate(
+      { search: next.toString() ? `?${next.toString()}` : "" },
+      { replace: true },
+    );
+  }, [searchParams, navigate]);
 
   useEffect(() => {
     if (toast === "create-success") {
@@ -1224,7 +1318,10 @@ export default function Index() {
           <AnalyticsPage shop={shop} offers={offers} />
         )}
         {activeTab === "pricing" && (
-          <PricingPage />
+          <PricingPage
+            activeSubscriptions={billingSubscriptions}
+            billingTestMode={billingTestMode}
+          />
         )}
       </div>
     </AppProvider>
