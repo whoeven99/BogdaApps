@@ -6,13 +6,8 @@
 name: bundleV2 – Shopify App Deploy (Test)
 
 on:
+  # 仅手动：仓库 Actions → 本 workflow → Run workflow（可选分支）
   workflow_dispatch:
-    inputs:
-      branch:
-        description: "部署到 Render 的分支（留空则使用 master）"
-        required: false
-        default: "master"
-        type: string
 
 defaults:
   run:
@@ -66,10 +61,7 @@ jobs:
           RENDER_API_KEY: ${{ secrets.RENDER_APIKEY }}
           RENDER_SERVICE_ID: srv-d72ffhdm5p6s73d0pa4g
         run: |
-          BRANCH="${{ github.event.inputs.branch }}"
-          if [ -z "$BRANCH" ]; then
-            BRANCH="master"
-          fi
+          BRANCH="${{ github.ref_name }}"
           echo "Deploying branch: $BRANCH to Render (bundleV2 test)"
           RESPONSE=$(curl -s -o response.json -w "%{http_code}" -X POST "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
             -H "Authorization: Bearer $RENDER_API_KEY" \
