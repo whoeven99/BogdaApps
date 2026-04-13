@@ -1,13 +1,16 @@
 # bundleV2：使用 test 配置执行 shopify app deploy，并触发 Render 测试环境部署。
-# 所需 GitHub Environment「ShopifyConfig」下的 Secrets：
+# 所需 GitHub Environment（如 TestEnvGithubConfig）下的 Secrets：
 #   SHOPIFY_CLI_PARTNERS_TOKEN
-#   RENDER_API_KEY
-#   RENDER_TEST_SERVICE_ID
+#   RENDER_API_KEY / RENDER_APIKEY、RENDER_SERVICE_ID（按你 workflow 里实际引用）
+# 说明：Prisma Migrate CLI 在 provider=sqlite 下只接受 file: 的 DATABASE_URL，不能对 Turso 用 prisma migrate deploy；
+# Turso 结构变更请本地 migrate dev 生成 SQL 后，用 Turso CLI 等方式执行 prisma/migrations/*/migration.sql。
 name: bundleV2 – Shopify App Deploy (Test)
 
 on:
+  push:
+    branches:
+      - allen
   workflow_dispatch:
-
 
 defaults:
   run:
