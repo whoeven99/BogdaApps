@@ -1,16 +1,37 @@
 // PricingPage.tsx
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useFetcher } from "react-router";
 import "../styles/tailwind.css";
 import "../styles/polaris-custom.css";
+import type { BillingPlanId } from "../billing";
+import { subscriptionDisplayName } from "../billing";
 
-const plans = [
+type BillingSubscribeJson =
+  | { ok: true; confirmationUrl: string; testCharge?: boolean }
+  | { ok: false; error?: string };
+
+const plans: Array<{
+  id: BillingPlanId;
+  name: string;
+  monthlyPrice: string;
+  yearlyPrice: string;
+  features: string[];
+  popular?: boolean;
+}> = [
   {
+    id: "starter",
     name: "Starter",
     monthlyPrice: "$29",
     yearlyPrice: "$290",
-    features: ["Up to 5 active offers", "1,000 orders/month", "Basic analytics", "Email support"],
+    features: [
+      "Up to 5 active offers",
+      "1,000 orders/month",
+      "Basic analytics",
+      "Email support",
+    ],
   },
   {
+    id: "professional",
     name: "Professional",
     monthlyPrice: "$79",
     yearlyPrice: "$790",
@@ -24,6 +45,7 @@ const plans = [
     ],
   },
   {
+    id: "enterprise",
     name: "Enterprise",
     monthlyPrice: "$199",
     yearlyPrice: "$1,990",
@@ -38,8 +60,44 @@ const plans = [
   },
 ];
 
-export function PricingPage() {
-  const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
+export type PricingPageProps = {
+  activeSubscriptions: Array<{ name: string; status: string }>;
+  billingTestMode: boolean;
+};
+
+export function PricingPage({
+  activeSubscriptions,
+  billingTestMode,
+}: PricingPageProps) {
+  const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">(
+    "monthly",
+  );
+  const fetcher = useFetcher<BillingSubscribeJson>();
+
+  useEffect(() => {
+    const data = fetcher.data;
+    if (!data || !data.ok || !data.confirmationUrl) return;
+    const url = data.confirmationUrl;
+    if (window.top && window.top !== window.self) {
+      window.top.location.href = url;
+    } else {
+      window.location.href = url;
+    }
+  }, [fetcher.data]);
+
+  const fetcherError =
+    fetcher.data && "ok" in fetcher.data && fetcher.data.ok === false
+      ? fetcher.data.error || "订阅创建失败"
+      : null;
+
+  const isCurrentPlan = (planId: BillingPlanId) => {
+    const expectedName = subscriptionDisplayName(planId, billingCycle);
+    return activeSubscriptions.some(
+      (s) => s.status === "ACTIVE" && s.name === expectedName,
+    );
+  };
+
+  const hasAnyActive = activeSubscriptions.some((s) => s.status === "ACTIVE");
 
   return (
     <div className="polaris-page">
@@ -56,12 +114,54 @@ export function PricingPage() {
         </div>
       </div>
 
+      {billingTestMode && (
+        <div
+          className="polaris-card"
+          style={{
+            marginBottom: 16,
+            padding: 12,
+            background: "#fff5e6",
+            border: "1px solid #ffc453",
+          }}
+        >
+          <p className="polaris-text-body-sm" style={{ margin: 0 }}>
+            开发环境：计费为 <strong>测试模式</strong>（test charge），不会产生真实扣款。
+          </p>
+        </div>
+      )}
+
+      {fetcherError && (
+        <div
+          className="polaris-card"
+          style={{
+            marginBottom: 16,
+            padding: 12,
+            background: "#fed3d1",
+            border: "1px solid #d72c0c",
+          }}
+        >
+          <p className="polaris-text-body-sm" style={{ margin: 0, color: "#6b2916" }}>
+            {fetcherError}
+          </p>
+        </div>
+      )}
+
+      {hasAnyActive && (
+        <div className="polaris-card" style={{ marginBottom: 16, padding: 12 }}>
+          <p className="polaris-text-body-sm" style={{ margin: 0 }}>
+            当前店铺已有生效中的应用订阅。若需更换套餐，请在 Shopify
+            后台的「设置 → 应用和销售渠道」中管理该应用订阅，或选择其他周期/套餐发起新订阅（以 Shopify
+            规则为准）。
+          </p>
+        </div>
+      )}
+
       <div style={{ textAlign: "center", marginBottom: "40px" }}>
         <h2 className="polaris-text-heading-lg" style={{ marginBottom: "8px" }}>
           Choose the perfect plan for your business
         </h2>
         <p className="polaris-text-subdued">
-          All plans include 14-day free trial. No credit card required.
+          含 14 天试用（通过 Shopify 结算）。点击按钮将跳转至 Shopify 后台确认订阅。
         </p>
 
         {/* Billing Cycle Toggle */}
@@ -143,6 +243,7 @@ export function PricingPage() {
       <div className="polaris-grid grid grid-cols-1 md:grid-cols-3 gap-[16px] sm:gap-[24px]">
         {plans.map((plan, index) => {
           const yearlyNumber = parseInt(plan.yearlyPrice.replace(/[$,]/g, ""), 10);
+          const current = isCurrentPlan(plan.id);
           return (
             <div
               key={index}
@@ -212,13 +313,23 @@ export function PricingPage() {
                   ))}
                 </ul>
 
-                <button
-                  type="button"
-                  className="polaris-button"
-                  style={{ width: "100%", marginTop: "auto" }}
-                >
-                  Start Free Trial
-                </button>
+                <fetcher.Form method="post" style={{ width: "100%", marginTop: "auto" }}>
+                  <input type="hidden" name="intent" value="billing-subscribe" />
+                  <input type="hidden" name="plan" value={plan.id} />
+                  <input type="hidden" name="cycle" value={billingCycle} />
+                  <button
+                    type="submit"
+                    className="polaris-button"
+                    style={{ width: "100%" }}
+                    disabled={fetcher.state !== "idle" || current}
+                  >
+                    {current
+                      ? "当前套餐"
+                      : fetcher.state !== "idle"
+                        ? "处理中…"
+                        : "在 Shopify 中订阅"}
+                  </button>
+                </fetcher.Form>
               </div>
             </div>
           );
