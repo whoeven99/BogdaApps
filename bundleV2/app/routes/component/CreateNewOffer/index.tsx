@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import "./CreateNewOffer.css";
 import BundlePreview from "./BundlePreview";
+import { PreviewItem } from "./bundlePreviewShared";
 
 type DiscountRule = {
   // 数量阈值：例如 count=2 表示“买 2 件及以上”生效
@@ -488,6 +489,30 @@ export function CreateNewOffer({
   const normalizedDiscountRules = sanitizeDiscountRules(discountRules);
   const featuredRule = normalizedDiscountRules[0];
 
+  const previewItems: PreviewItem[] = [
+    {
+      id: "single",
+      title: "Single",
+      subtitle: "Standard price",
+      price: formatPreviewPrice(baseUnitPrice),
+    },
+    ...normalizedDiscountRules.map((rule, index) => {
+      const originalTotal = rule.count * baseUnitPrice;
+      const discountedTotal = originalTotal * (1 - rule.discountPercent / 100);
+      const saved = originalTotal - discountedTotal;
+      return {
+        id: `tier-${rule.count}`,
+        title: rule.title || `${rule.count} items`,
+        subtitle: rule.subtitle || `You save ${rule.discountPercent}%`,
+        price: formatPreviewPrice(discountedTotal),
+        original: formatPreviewPrice(originalTotal),
+        featured: index === 0,
+        badge: index === 0 ? (rule.badge || "Most Popular") : (rule.badge || ""),
+        saveLabel: `SAVE ${formatPreviewPrice(saved)}`,
+      };
+    }),
+  ];
+
   const steps = [
     "Basic Information",
     "Products & Discounts",
@@ -778,74 +803,20 @@ export function CreateNewOffer({
                   }
                 </p>
 
-                <div className="create-offer-preview-card">
-                  {offerType === "quantity-breaks-same" && (
-                    <>
-                      <div
-                        className="create-offer-pricing-card create-offer-pricing-card--readonly"
-                      >
-                        <div className="create-offer-pricing-header">
-                          <input
-                            type="radio"
-                            checked={false}
-                            readOnly
-                            disabled
-                            className="create-offer-radio"
-                          />
-                          <div className="create-offer-pricing-title">
-                            <strong>Single</strong>
-                            <div className="create-offer-pricing-subtitle">
-                              Standard price
-                            </div>
-                          </div>
-                          <strong className="create-offer-pricing-price">
-                            {formatPreviewPrice(baseUnitPrice)}
-                          </strong>
-                        </div>
-                      </div>
-                      <div
-                        className="create-offer-pricing-card create-offer-pricing-card--primary create-offer-pricing-card--readonly create-offer-pricing-card--selected"
-                      >
-                        <div className="create-offer-pricing-badge">
-                          Most Popular
-                        </div>
-                        <div className="create-offer-pricing-header">
-                          <input
-                            type="radio"
-                            checked={true}
-                            readOnly
-                            disabled
-                            className="create-offer-radio"
-                          />
-                          <div className="create-offer-pricing-title">
-                            <div className="create-offer-pricing-meta">
-                              <strong>Duo</strong>
-                              <span className="create-offer-pricing-save">
-                                SAVE €19,50
-                              </span>
-                            </div>
-                            <div className="create-offer-pricing-subtitle">
-                              You save 15%
-                            </div>
-                          </div>
-                          <div className="create-offer-pricing-right">
-                            <strong className="create-offer-pricing-price">
-                              €110,50
-                            </strong>
-                            <div className="create-offer-pricing-original">
-                              €130,00
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="create-offer-pricing-footer">
-                        <strong>
-                          Quantity breaks for the same product
-                        </strong>
-                      </div>
-                    </>
-                  )}
-                </div>
+                <BundlePreview
+                  layoutFormat={layoutFormat}
+                  cardBackgroundColor={cardBackgroundColor}
+                  accentColor={accentColor}
+                  borderColor={borderColor}
+                  labelColor={labelColor}
+                  titleFontSize={titleFontSize}
+                  titleFontWeight={titleFontWeight}
+                  titleColor={titleColor}
+                  buttonText={buttonText}
+                  buttonPrimaryColor={buttonPrimaryColor}
+                  title={widgetTitle}
+                  items={previewItems}
+                />
                 <p className="text-[12px] text-[#5c6166] mt-3 italic font-normal">
                   Note: This is a live preview. Changes will update in real-time when state is connected.
                 </p>
@@ -1090,133 +1061,20 @@ export function CreateNewOffer({
                       )?.description
                     }
                   </p>
-                  <div className="create-offer-preview-card">
-                    {offerType === "quantity-breaks-same" && (
-                      <>
-                        <div
-                              className="create-offer-pricing-card create-offer-pricing-card--readonly"
-                        >
-                          <div className="create-offer-pricing-header">
-                            <input
-                              type="radio"
-                                  checked={false}
-                              readOnly
-                              disabled
-                              className="create-offer-radio"
-                            />
-                            <div className="create-offer-pricing-title">
-                              <strong>Single</strong>
-                              <div className="create-offer-pricing-subtitle">
-                                Standard price
-                              </div>
-                            </div>
-                            <strong className="create-offer-pricing-price">
-                              {formatPreviewPrice(baseUnitPrice)}
-                            </strong>
-                          </div>
-                        </div>
-                        {featuredRule && (
-                          <div
-                            className="create-offer-pricing-card create-offer-pricing-card--primary create-offer-pricing-card--readonly create-offer-pricing-card--selected"
-                          >
-                            <div className="create-offer-pricing-badge">
-                              {featuredRule.badge || "Most Popular"}
-                            </div>
-                            <div className="create-offer-pricing-header">
-                              <input
-                                type="radio"
-                                checked={true}
-                                readOnly
-                                disabled
-                                className="create-offer-radio"
-                              />
-                              <div className="create-offer-pricing-title">
-                                <div className="create-offer-pricing-meta">
-                                  <strong>{featuredRule.title || `${featuredRule.count} items`}</strong>
-                                  <span className="create-offer-pricing-save">
-                                    SAVE{" "}
-                                    {formatPreviewPrice(
-                                      featuredRule.count *
-                                        baseUnitPrice *
-                                        (featuredRule.discountPercent / 100),
-                                    )}
-                                  </span>
-                                </div>
-                                <div className="create-offer-pricing-subtitle">
-                                  {featuredRule.subtitle || `You save ${featuredRule.discountPercent}%`}
-                                </div>
-                              </div>
-                              <div className="create-offer-pricing-right">
-                                <strong className="create-offer-pricing-price">
-                                  {formatPreviewPrice(
-                                    featuredRule.count *
-                                      baseUnitPrice *
-                                      (1 - featuredRule.discountPercent / 100),
-                                  )}
-                                </strong>
-                                <div className="create-offer-pricing-original">
-                                  {formatPreviewPrice(
-                                    featuredRule.count * baseUnitPrice,
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                        {normalizedDiscountRules.slice(1).map((rule) => {
-                          const originalTotal = rule.count * baseUnitPrice;
-                          const discountedTotal =
-                            originalTotal * (1 - rule.discountPercent / 100);
-                          const saved = originalTotal - discountedTotal;
-                          return (
-                            <div
-                              key={`preview-tier-${rule.count}`}
-                              className="create-offer-pricing-card create-offer-pricing-card--readonly"
-                            >
-                              {rule.badge && (
-                                <div className="create-offer-pricing-badge" style={{ backgroundColor: "#000" }}>
-                                  {rule.badge}
-                                </div>
-                              )}
-                              <div className="create-offer-pricing-header">
-                                <input
-                                  type="radio"
-                                  checked={false}
-                                  readOnly
-                                  disabled
-                                  className="create-offer-radio"
-                                />
-                                <div className="create-offer-pricing-title">
-                                  <div className="create-offer-pricing-meta">
-                                    <strong>{rule.title || `${rule.count} items`}</strong>
-                                    <span className="create-offer-pricing-save">
-                                      SAVE {formatPreviewPrice(saved)}
-                                    </span>
-                                  </div>
-                                  <div className="create-offer-pricing-subtitle">
-                                    {rule.subtitle || `You save ${rule.discountPercent}%`}
-                                  </div>
-                                </div>
-                                <div className="create-offer-pricing-right">
-                                  <strong className="create-offer-pricing-price">
-                                    {formatPreviewPrice(discountedTotal)}
-                                  </strong>
-                                  <div className="create-offer-pricing-original">
-                                    {formatPreviewPrice(originalTotal)}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                        <div className="create-offer-pricing-footer">
-                          <strong>
-                            Quantity breaks for the same product
-                          </strong>
-                        </div>
-                      </>
-                    )}
-                  </div>
+                  <BundlePreview
+                    layoutFormat={layoutFormat}
+                    cardBackgroundColor={cardBackgroundColor}
+                    accentColor={accentColor}
+                    borderColor={borderColor}
+                    labelColor={labelColor}
+                    titleFontSize={titleFontSize}
+                    titleFontWeight={titleFontWeight}
+                    titleColor={titleColor}
+                    buttonText={buttonText}
+                    buttonPrimaryColor={buttonPrimaryColor}
+                    title={widgetTitle}
+                    items={previewItems}
+                  />
                   <p className="text-[12px] text-[#5c6166] mt-3 italic font-normal">
                     Note: This is a live preview. Changes will update in real-time when state is connected.
                   </p>

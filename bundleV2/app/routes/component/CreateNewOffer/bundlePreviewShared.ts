@@ -1,6 +1,6 @@
-type LayoutFormat = "vertical" | "horizontal" | "card" | "compact";
+export type LayoutFormat = "vertical" | "horizontal" | "card" | "compact";
 
-type PreviewItem = {
+export type PreviewItem = {
   id: string;
   title: string;
   subtitle: string;
@@ -8,9 +8,10 @@ type PreviewItem = {
   original?: string;
   featured?: boolean;
   badge?: string;
+  saveLabel?: string;
 };
 
-const PREVIEW_ITEMS: PreviewItem[] = [
+export const PREVIEW_ITEMS: PreviewItem[] = [
   { id: "single", title: "Single", subtitle: "Standard price", price: "€65,00" },
   {
     id: "duo",
@@ -20,9 +21,10 @@ const PREVIEW_ITEMS: PreviewItem[] = [
     original: "€130,00",
     featured: true,
     badge: "Most Popular",
+    saveLabel: "SAVE €19,50"
   },
-  { id: "trio", title: "Trio", subtitle: "Extra savings", price: "€149,00" },
-  { id: "pack4", title: "Pack of 4", subtitle: "Best value", price: "€185,00" },
+  { id: "trio", title: "Trio", subtitle: "Extra savings", price: "€149,00", original: "€195,00", saveLabel: "SAVE €46,00" },
+  { id: "pack4", title: "Pack of 4", subtitle: "Best value", price: "€185,00", original: "€260,00", saveLabel: "SAVE €75,00" },
 ];
 
 function esc(value: unknown) {
@@ -46,6 +48,7 @@ export function renderBundlePreviewHtml({
   titleColor = "#111111",
   buttonText = "Add to Cart",
   buttonPrimaryColor = "#008060",
+  items = PREVIEW_ITEMS,
 }: {
   title?: string;
   layoutFormat?: LayoutFormat;
@@ -58,16 +61,17 @@ export function renderBundlePreviewHtml({
   titleColor?: string;
   buttonText?: string;
   buttonPrimaryColor?: string;
+  items?: PreviewItem[];
 } = {}) {
   const safeLayout: LayoutFormat = ["vertical", "horizontal", "card", "compact"].includes(layoutFormat)
     ? layoutFormat
     : "vertical";
 
-  const itemsHtml = PREVIEW_ITEMS.map((item) => {
+  const itemsHtml = items.map((item) => {
     const featuredClass = item.featured ? " create-offer-style-preview-item--featured" : "";
     const featuredStyle = item.featured 
-      ? `border-color: ${esc(accentColor)} !important; background: ${esc(cardBackgroundColor)} !important; box-shadow: 0 8px 18px ${esc(accentColor)}25 !important;`
-      : `border-color: ${esc(borderColor)} !important; background: ${esc(cardBackgroundColor)} !important;`;
+      ? `border-color: ${esc(accentColor)} !important; background: ${esc(cardBackgroundColor)} !important; box-shadow: 0 8px 18px ${esc(accentColor)}25 !important; cursor: pointer;`
+      : `border-color: ${esc(borderColor)} !important; background: ${esc(cardBackgroundColor)} !important; cursor: pointer;`;
       
     return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}">
       ${
@@ -77,8 +81,17 @@ export function renderBundlePreviewHtml({
       }
       <div class="create-offer-style-preview-item-title">${esc(item.title)}</div>
       <div class="create-offer-style-preview-item-subtitle">${esc(item.subtitle)}</div>
+      ${
+        item.saveLabel
+          ? `<div class="create-offer-style-preview-item-subtitle">${esc(item.saveLabel)}</div>`
+          : ""
+      }
       <div class="create-offer-style-preview-item-price">${esc(item.price)}</div>
-      ${item.original ? `<div class="create-offer-style-preview-item-original">${esc(item.original)}</div>` : ""}
+      ${
+        item.original
+          ? `<div class="create-offer-style-preview-item-original">${esc(item.original)}</div>`
+          : ""
+      }
     </div>`;
   }).join("");
 
@@ -87,7 +100,7 @@ export function renderBundlePreviewHtml({
     <div class="create-offer-style-preview-list create-offer-style-preview-list--${safeLayout}">
       ${itemsHtml}
     </div>
-    <button class="create-offer-preview-button" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
+    <button class="create-offer-preview-button" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)} !important; color: white !important; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
       ${esc(buttonText)}
     </button>
   </div>`;

@@ -1,4 +1,4 @@
-import { renderBundlePreviewHtml } from "./bundlePreviewShared";
+import { renderBundlePreviewHtml, PreviewItem } from "./bundlePreviewShared";
 
 type Props = {
   layoutFormat: "vertical" | "horizontal" | "card" | "compact";
@@ -12,6 +12,7 @@ type Props = {
   buttonText?: string;
   buttonPrimaryColor?: string;
   title?: string;
+  items?: PreviewItem[];
 };
 
 export default function BundlePreview({
@@ -26,6 +27,7 @@ export default function BundlePreview({
   buttonText,
   buttonPrimaryColor,
   title = "Bundle & Save",
+  items,
 }: Props) {
   const html = renderBundlePreviewHtml({
     title,
@@ -39,6 +41,7 @@ export default function BundlePreview({
     titleColor,
     buttonText,
     buttonPrimaryColor,
+    items,
   });
 
   return <div dangerouslySetInnerHTML={{ __html: html }} />;

@@ -111,14 +111,10 @@
 
 /* Preview card */
 .create-offer-preview-card {
-  width: 100%;
-  min-height: 300px;
   border: 1px solid #dfe3e8;
   border-radius: 8px;
-  padding: 16px;
+  padding: 10px;
   background: #ffffff;
-  display: flex;
-  flex-direction: column;
 }
 
 /* Pricing preview cards */
