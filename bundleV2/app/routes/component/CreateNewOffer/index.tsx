@@ -596,7 +596,7 @@ export function CreateNewOffer({
           {submitErrorToast}
         </div>
       )}
-      <div className="sticky top-0 z-[90] bg-white pt-4 pb-4 -mt-4 mb-6 border-b border-[#e3e8ed]">
+      <div className="mb-6">
         <div>
           <Button
             type="text"
@@ -840,7 +840,7 @@ export function CreateNewOffer({
                     {selectedProductsData.length === 0 ? (
                       <Button
                         size="large"
-                        style={{ backgroundColor: "#008060", borderColor: "#008060", color: "#fff" }}
+                        className="text-[#008060] border-[#008060] hover:text-[#006e52] hover:border-[#006e52] hover:bg-[#f0f9f6]"
                         onClick={(e) => {
                           handleSelectProducts();
                           e.preventDefault();
@@ -915,7 +915,7 @@ export function CreateNewOffer({
 
                   <div>
                     <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                      Buy more, save more
+                      Discount Setting
                     </h3>
                     {discountRules.map((rule, index) => (
                       <div className="create-offer-discount-card" key={`${rule.count}-${index}`}>
@@ -1507,7 +1507,7 @@ export function CreateNewOffer({
                     <DatePicker
                       size="large"
                       showTime
-                      className="mt-1 w-full"
+                      className="mt-1 w-full text-[14px]"
                       value={startTime && dayjs(startTime).isValid() ? dayjs(startTime) : null}
                       onChange={(date) => {
                         const val = date ? date.toISOString() : '';

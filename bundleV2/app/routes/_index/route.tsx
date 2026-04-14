@@ -1157,6 +1157,7 @@ export default function Index() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<HomeTabKey>("dashboard");
   const [showCreateOffer, setShowCreateOffer] = useState(false);
+  const [editingOfferId, setEditingOfferId] = useState<string | null>(null);
 
   const toast = searchParams.get("toast") || actionData?.toast;
 
@@ -1175,12 +1176,15 @@ export default function Index() {
     if (toast === "create-success") {
       setToastMessage("Offer 创建成功");
       setShowCreateOffer(false);
+      setEditingOfferId(null);
     } else if (toast === "update-success") {
       setToastMessage("Offer 更新成功");
       setShowCreateOffer(false);
+      setEditingOfferId(null);
     } else if (toast === "delete-success") {
       setToastMessage("Offer 删除成功");
       setShowCreateOffer(false);
+      setEditingOfferId(null);
     } else if (toast === "toggle-success") {
       setToastMessage("Offer 状态已更新");
     } else {
@@ -1261,25 +1265,11 @@ export default function Index() {
               </span>
             </button>
 
-            <button
-              type="button"
-              onClick={() => {
-                setShowCreateOffer(false);
-                setActiveTab("pricing");
-              }}
-              className={`px-[16px] py-[12px] text-center sm:text-left cursor-pointer transition-all border-b-2 ${activeTab === "pricing" ? "border-[#008060] text-[#1c1f23]" : "border-transparent hover:border-[#8c9196] text-[#5c6166]"}`}
-            >
-              <span
-                className={`font-sans leading-[24px] text-[14px] font-medium tracking-normal ${activeTab === "pricing" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
-              >
-                Pricing
-              </span>
-            </button>
           </nav>
         )}
 
         {/* Tab content */}
-        {activeTab === "dashboard" && !showCreateOffer && (
+        {activeTab === "dashboard" && !showCreateOffer && !editingOfferId && (
           <DashboardPage
             offers={offers}
             storeProducts={storeProducts}
@@ -1291,19 +1281,31 @@ export default function Index() {
             onViewAnalytics={() => setActiveTab("analytics")}
             onCreateOffer={() => {
               setShowCreateOffer(true);
+              setEditingOfferId(null);
               setActiveTab("offers");
             }}
           />
         )}
-        {activeTab === "offers" && !showCreateOffer && (
+        {activeTab === "offers" && !showCreateOffer && !editingOfferId && (
           <AllOffersPage
             offers={offers}
-            onCreateOffer={() => setShowCreateOffer(true)}
+            onCreateOffer={() => {
+              setShowCreateOffer(true);
+              setEditingOfferId(null);
+            }}
+            onEditOffer={(id) => {
+              setEditingOfferId(id);
+              setShowCreateOffer(false);
+            }}
           />
         )}
-        {activeTab === "offers" && showCreateOffer && (
+        {(showCreateOffer || editingOfferId) && (
           <CreateNewOffer
-            onBack={() => setShowCreateOffer(false)}
+            onBack={() => {
+              setShowCreateOffer(false);
+              setEditingOfferId(null);
+            }}
+            initialOffer={editingOfferId ? offers.find(o => o.id === editingOfferId) as any : undefined}
             storeProducts={storeProducts}
             markets={markets}
             existingOffers={offers.map((o) => ({

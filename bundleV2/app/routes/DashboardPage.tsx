@@ -197,7 +197,6 @@ export function DashboardPage({
     }
   };
   const handleViewAllAbTests = () => {}; // mock
-  const handleNeedHelp = () => {}; // mock
   const handleThemeExtensionToggle = () => {
     const storeHandle = shop.replace(".myshopify.com", "");
     const appEmbed = `${apiKey}/product_detail_message`;
@@ -404,13 +403,6 @@ export function DashboardPage({
               }`}
             >
               {themeExtensionEnabled ? "Disable" : "Enable"}
-            </button>
-            <button
-              type="button"
-              className="bg-white border border-[#dfe3e8] px-[16px] py-[8px] rounded-[6px] font-sans font-medium text-[14px] leading-[21px] text-[#1c1f23] tracking-normal cursor-pointer hover:bg-[#f4f6f8] transition-colors w-full"
-              onClick={handleNeedHelp}
-            >
-              Need help?
             </button>
           </div>
         </div>

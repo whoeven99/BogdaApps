@@ -216,7 +216,7 @@ export default function Index() {
             </p>
           </div>
 
-          {/* Enable/Disable and Need help buttons */}
+          {/* Enable/Disable button */}
           <div className="!flex !flex-col !gap-[12px]">
             <Button
               type={isThemeExtensionEnabled ? "default" : "primary"}

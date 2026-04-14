@@ -18,17 +18,22 @@ type AllOffersRow = {
 
 interface AllOffersPageProps {
   onCreateOffer?: () => void;
+  onEditOffer?: (id: string) => void;
   offers?: IndexLoaderData["offers"];
 }
 
-export function AllOffersPage({ onCreateOffer, offers }: AllOffersPageProps) {
+export function AllOffersPage({ onCreateOffer, onEditOffer, offers }: AllOffersPageProps) {
   const handleShowGuide = () => {};
   const handleCreateOffer = () => {
     if (onCreateOffer) {
       onCreateOffer();
     }
   };
-  const handleEdit = () => {};
+  const handleEdit = (id: string) => {
+    if (onEditOffer) {
+      onEditOffer(id);
+    }
+  };
   const handleDelete = () => {};
 
   const rows: AllOffersRow[] = (offers ?? []).map((offer) => {
@@ -235,7 +240,7 @@ export function AllOffersPage({ onCreateOffer, offers }: AllOffersPageProps) {
                     <button
                       type="button"
                       className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[6px] rounded-[6px] hover:bg-[#f0f9f6] transition-all"
-                      onClick={handleEdit}
+                      onClick={() => handleEdit(offer.id)}
                       title="Edit"
                     >
                       <Pencil size={16} />
