@@ -1218,7 +1218,7 @@ export default function Index() {
           </div>
         )}
         {/* Tabs */}
-        {!showCreateOffer && (
+        {!showCreateOffer && !editingOfferId && (
           <nav className="flex flex-col sm:flex-row gap-[8px] sm:gap-[16px] items-stretch sm:items-start pb-0 mb-[16px] sm:mb-[24px] border-b border-[#e3e8ed]">
             <button
               type="button"
