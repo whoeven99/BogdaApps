@@ -365,6 +365,12 @@ export function CreateNewOffer({
     initialOffer?.offerType ?? "quantity-breaks-same",
   );
   const [offerName, setOfferName] = useState(initialOffer?.name ?? "");
+  
+  useEffect(() => {
+    if (!initialOffer?.name) {
+      setOfferName(`#offer ${dayjs().format('YYYY-MM-DD HH:mm:ss')}`);
+    }
+  }, [initialOffer?.name]);
   const [cartTitle, setCartTitle] = useState(initialOffer?.cartTitle ?? "Bundle Discount");
   const [offerNameError, setOfferNameError] = useState("");
   const [cartTitleError, setCartTitleError] = useState("");
