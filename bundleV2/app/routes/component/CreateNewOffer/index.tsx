@@ -1360,6 +1360,7 @@ export function CreateNewOffer({
                   buttonText={buttonText}
                   buttonPrimaryColor={buttonPrimaryColor}
                   title={widgetTitle}
+                  items={previewItems}
                 />
                 <p className="text-[12px] text-[#5c6166] mt-3 italic font-normal">
                   Note: This is a live preview. Changes will update in real-time when state is connected.
