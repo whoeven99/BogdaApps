@@ -1209,7 +1209,7 @@ export default function Index() {
     <AppProvider embedded apiKey={apiKey}>
       <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px] relative">
         {toastMessage && (
-          <div className="fixed z-50 top-4 left-1/2 -translate-x-1/2 bg-[#108043] text-white px-4 py-2 rounded shadow-lg text-sm font-sans">
+          <div className="fixed z-50 top-4 left-1/2 -translate-x-1/2 bg-[#108043] !text-white px-4 py-2 rounded shadow-lg text-sm font-sans">
             {toastMessage}
           </div>
         )}

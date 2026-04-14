@@ -400,7 +400,7 @@ export function DashboardPage({
               className={`px-[16px] py-[8px] rounded-[6px] font-sans font-medium text-[14px] leading-[21px] tracking-normal cursor-pointer transition-colors w-full border-0 ${
                 themeExtensionEnabled
                   ? "bg-white border border-[#dfe3e8] text-[#d72c0d] hover:bg-[#fef3f2]"
-                  : "bg-[#008060] text-white hover:bg-[#006e52]"
+                  : "bg-[#008060] !text-white hover:bg-[#006e52]"
               }`}
             >
               {themeExtensionEnabled ? "Disable" : "Enable"}
@@ -424,7 +424,7 @@ export function DashboardPage({
           </h2>
           <button
             type="button"
-            className="w-full sm:w-auto bg-[#008060] text-white px-[16px] py-[8px] rounded-[8px] font-medium text-[14px] shadow-sm hover:bg-[#006e52] transition-all border-0 cursor-pointer"
+            className="w-full sm:w-auto bg-[#008060] !text-white px-[16px] py-[8px] rounded-[8px] font-medium text-[14px] shadow-sm hover:bg-[#006e52] transition-all border-0 cursor-pointer"
             onClick={handleCreateOfferClick}
           >
             Create New Offer
@@ -722,7 +722,7 @@ export function DashboardPage({
             </h2>
             <button
               type="button"
-              className="w-full sm:w-auto bg-[#008060] text-white px-[16px] py-[8px] rounded-[8px] font-medium text-[14px] shadow-sm hover:bg-[#006e52] transition-all border-0 cursor-pointer"
+              className="w-full sm:w-auto bg-[#008060] !text-white px-[16px] py-[8px] rounded-[8px] font-medium text-[14px] shadow-sm hover:bg-[#006e52] transition-all border-0 cursor-pointer"
               onClick={handleCreateAbTest}
             >
               Create A/B Test
@@ -1003,7 +1003,7 @@ export function DashboardPage({
                 <input type="hidden" name="offerId" value={deletingOffer.id} />
                 <button
                   type="submit"
-                  className="px-[12px] py-[6px] rounded-[6px] bg-[#d72c0d] text-white text-[14px] font-sans hover:bg-[#bc2200]"
+                  className="px-[12px] py-[6px] rounded-[6px] bg-[#d72c0d] !text-white text-[14px] font-sans hover:bg-[#bc2200]"
                 >
                   Delete
                 </button>

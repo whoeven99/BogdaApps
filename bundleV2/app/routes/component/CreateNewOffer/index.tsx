@@ -565,7 +565,7 @@ export function CreateNewOffer({
     >
       {submitErrorToast && (
         <div
-          className="fixed z-50 top-4 left-1/2 -translate-x-1/2 bg-[#d72c0d] text-white px-4 py-2 rounded shadow-lg text-sm font-sans max-w-[min(520px,calc(100vw-32px))] text-center"
+          className="fixed z-50 top-4 left-1/2 -translate-x-1/2 bg-[#d72c0d] !text-white px-4 py-2 rounded shadow-lg text-sm font-sans max-w-[min(520px,calc(100vw-32px))] text-center"
           role="alert"
         >
           {submitErrorToast}
@@ -656,7 +656,7 @@ export function CreateNewOffer({
                 tabIndex={isClickable ? 0 : -1}
                 className={`flex-1 py-[10px] px-2 sm:p-[12px] rounded-md text-center text-[13px] sm:text-[14px] font-medium transition-colors ${
                   isActive
-                    ? "bg-[#008060] text-white"
+                    ? "bg-[#008060] !text-white"
                     : "bg-[#f4f6f8] text-[#5c6166]"
                 } ${
                   isClickable

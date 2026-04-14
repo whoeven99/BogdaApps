@@ -106,7 +106,7 @@ export function AllOffersPage({ onCreateOffer, offers }: AllOffersPageProps) {
           </button>
           <button
             type="button"
-            className="bg-[#008060] text-white px-[16px] py-[8px] rounded-[8px] font-medium text-[14px] shadow-sm hover:bg-[#006e52] transition-all border-0 cursor-pointer"
+            className="bg-[#008060] !text-white px-[16px] py-[8px] rounded-[8px] font-medium text-[14px] shadow-sm hover:bg-[#006e52] transition-all border-0 cursor-pointer"
             onClick={handleCreateOffer}
           >
             Create New Offer
@@ -288,7 +288,7 @@ export function AllOffersPage({ onCreateOffer, offers }: AllOffersPageProps) {
                 />
                 <button
                   type="submit"
-                  className="px-[12px] py-[6px] rounded-[6px] bg-[#d72c0d] text-white text-[14px] font-sans hover:bg-[#bc2200]"
+                  className="px-[12px] py-[6px] rounded-[6px] bg-[#d72c0d] !text-white text-[14px] font-sans hover:bg-[#bc2200]"
                 >
                   Delete
                 </button>
