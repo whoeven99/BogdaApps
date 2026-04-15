@@ -1,7 +1,7 @@
 import { Select } from "antd";
 import { CircleHelp } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import BasicLineChart from "../components/basicLineChart";
+import BasicLineChart from "../component/BasicLineChart/BasicLineChart";
 
 interface AnalyticsDataType {
   visitors: number;
