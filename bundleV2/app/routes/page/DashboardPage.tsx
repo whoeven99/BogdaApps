@@ -21,6 +21,7 @@ interface DashboardPageProps {
   onViewAnalytics?: () => void;
   onCreateOffer?: () => void;
   offers?: IndexLoaderData["offers"];
+  offersLoading?: boolean;
   storeProducts?: IndexLoaderData["storeProducts"];
   markets?: IndexLoaderData["markets"];
   shop: string;
@@ -97,6 +98,7 @@ export function DashboardPage({
   onViewAnalytics,
   onCreateOffer,
   offers,
+  offersLoading = false,
   storeProducts = [],
   markets = [],
   shop,
@@ -471,7 +473,16 @@ export function DashboardPage({
             </tr>
           </thead>
           <tbody>
-            {visibleOffers.length === 0 ? (
+            {offersLoading ? (
+              <tr>
+                <td
+                  colSpan={7}
+                  className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#5c6166] font-sans"
+                >
+                  Loading offers...
+                </td>
+              </tr>
+            ) : visibleOffers.length === 0 ? (
               <tr>
                 <td
                   colSpan={7}
@@ -593,7 +604,11 @@ export function DashboardPage({
         </table>
 
         <div className="md:hidden space-y-[12px]">
-          {visibleOffers.length === 0 ? (
+          {offersLoading ? (
+            <div className="border border-[#dfe3e8] rounded-[8px] p-[16px] text-[14px] text-[#5c6166] font-sans">
+              Loading offers...
+            </div>
+          ) : visibleOffers.length === 0 ? (
             <div className="border border-[#dfe3e8] rounded-[8px] p-[16px] text-[14px] text-[#5c6166] font-sans">
               No offers yet. Create your first offer to see it here.
             </div>
