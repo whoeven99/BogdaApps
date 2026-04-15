@@ -87,11 +87,10 @@ const ensureWebPixel = async (admin: any, shop: string) => {
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
 
-  try {
-    await ensureWebPixel(admin, session.shop);
-  } catch (error) {
+  // 不等待 web pixel 初始化完成，优先返回页面所需数据。
+  void ensureWebPixel(admin, session.shop).catch((error) => {
     console.error("Failed to ensure web pixel exists", error);
-  }
+  });
 
   // eslint-disable-next-line no-undef
   return { apiKey: process.env.SHOPIFY_API_KEY || "" };
