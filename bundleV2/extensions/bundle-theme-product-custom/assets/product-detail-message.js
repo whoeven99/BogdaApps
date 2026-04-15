@@ -246,6 +246,7 @@ function parseDiscountRulesJson(discountRulesJson) {
         title: item.title || "",
         subtitle: item.subtitle || "",
         badge: item.badge || "",
+        isDefault: !!item.isDefault,
       };
       })
       .filter(Boolean)
@@ -374,8 +375,8 @@ function renderBundlePreviewHtml(offer) {
   if (!discountRules.length) return "";
 
   if (!window.__ciwiBundleState.selectedCount) {
-    // 默认选中第一个配置的折扣选项（或者可以选 1，按需求默认选中配置项）
-    window.__ciwiBundleState.selectedCount = discountRules[0]?.count || 1;
+    const defaultRule = discountRules.find(r => r.isDefault);
+    window.__ciwiBundleState.selectedCount = defaultRule ? defaultRule.count : (discountRules[0]?.count || 1);
     setTimeout(() => updateThemeQuantityInput(window.__ciwiBundleState.selectedCount), 0);
   }
   const selectedCount = window.__ciwiBundleState.selectedCount;
@@ -414,13 +415,15 @@ function renderBundlePreviewHtml(offer) {
       const originalTotal = unitPrice * rule.count;
       const discountedTotal = originalTotal * (1 - rule.discountPercent / 100);
       const saved = originalTotal - discountedTotal;
+      const hasDefault = discountRules.some(r => r.isDefault);
+      const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
       return {
         count: rule.count,
         title: rule.title || `${rule.count} items`,
         subtitle: rule.subtitle || `You save ${rule.discountPercent}%`,
         price: formatPrice(discountedTotal),
         original: formatPrice(originalTotal),
-        badge: index === 0 ? (rule.badge || "Most Popular") : (rule.badge || ""),
+        badge: rule.badge || (isFeatured ? "Most Popular" : ""),
         saveLabel: `SAVE ${formatPrice(saved)}`,
       };
     }),
@@ -438,7 +441,7 @@ function renderBundlePreviewHtml(offer) {
         
       return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}" onclick="window.ciwiSelectBundleOption(${item.count})">
       ${
-        isSelected && item.badge
+        item.badge
           ? `<div class="create-offer-style-preview-badge" style="background:${esc(accentColor)} !important; color:${esc(labelColor)} !important;">${esc(item.badge)}</div>`
           : ""
       }

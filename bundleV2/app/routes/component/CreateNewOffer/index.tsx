@@ -16,6 +16,7 @@ type DiscountRule = {
   title?: string;
   subtitle?: string;
   badge?: string;
+  isDefault?: boolean;
 };
 
 type Product = {
@@ -256,6 +257,7 @@ function parseDiscountRules(
           title: (item as { title?: string }).title || "",
           subtitle: (item as { subtitle?: string }).subtitle || "",
           badge: (item as { badge?: string }).badge || "",
+          isDefault: !!(item as { isDefault?: boolean }).isDefault,
         } as DiscountRule;
       })
       .filter((x): x is DiscountRule => x !== null)
@@ -276,6 +278,7 @@ function buildDiscountRulesJson(tiers: DiscountRule[]): DiscountRule[] {
       title: tier.title || "",
       subtitle: tier.subtitle || "",
       badge: tier.badge || "",
+      isDefault: !!tier.isDefault,
     });
   }
 
@@ -299,6 +302,7 @@ function sanitizeDiscountRules(tiers: DiscountRule[]): DiscountRule[] {
         title: tier.title || "",
         subtitle: tier.subtitle || "",
         badge: tier.badge || "",
+        isDefault: !!tier.isDefault,
       }
     );
   }
@@ -495,6 +499,8 @@ export function CreateNewOffer({
   const normalizedDiscountRules = sanitizeDiscountRules(discountRules);
   const featuredRule = normalizedDiscountRules[0];
 
+  const hasDefault = normalizedDiscountRules.some(r => r.isDefault);
+
   const previewItems: PreviewItem[] = [
     {
       id: "single",
@@ -506,14 +512,15 @@ export function CreateNewOffer({
       const originalTotal = rule.count * baseUnitPrice;
       const discountedTotal = originalTotal * (1 - rule.discountPercent / 100);
       const saved = originalTotal - discountedTotal;
+      const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
       return {
         id: `tier-${rule.count}`,
         title: rule.title || `${rule.count} items`,
         subtitle: rule.subtitle || `You save ${rule.discountPercent}%`,
         price: formatPreviewPrice(discountedTotal),
         original: formatPreviewPrice(originalTotal),
-        featured: index === 0,
-        badge: index === 0 ? (rule.badge || "Most Popular") : (rule.badge || ""),
+        featured: isFeatured,
+        badge: rule.badge || (isFeatured ? "Most Popular" : ""),
         saveLabel: `SAVE ${formatPreviewPrice(saved)}`,
       };
     }),
@@ -1021,7 +1028,21 @@ export function CreateNewOffer({
                             </label>
                           </div>
                           
-                          <div className="create-offer-discount-form-row" style={{ marginTop: '12px' }}>
+                          <div className="create-offer-discount-form-row" style={{ marginTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Checkbox
+                              checked={!!rule.isDefault}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setDiscountRules((prev) =>
+                                  prev.map((r, i) => ({
+                                    ...r,
+                                    isDefault: checked ? i === index : false,
+                                  }))
+                                );
+                              }}
+                            >
+                              Set as Default Selected
+                            </Checkbox>
                             <Button
                               danger
                               onClick={() => {

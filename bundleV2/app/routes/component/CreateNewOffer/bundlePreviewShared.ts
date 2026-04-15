@@ -75,7 +75,7 @@ export function renderBundlePreviewHtml({
       
     return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}">
       ${
-        item.featured && item.badge
+        item.badge
           ? `<div class="create-offer-style-preview-badge" style="background:${esc(accentColor)} !important; color:${esc(labelColor)} !important;">${esc(item.badge)}</div>`
           : ""
       }
