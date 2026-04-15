@@ -6,11 +6,41 @@
   data-ciwi-selectors="{{ block.settings.anchor_selector | escape }}"
 ></div>
 
+<script id="ciwi-bundles-config" type="application/json">
+  {
+    "shopifyDomain": "{{ shop.domain }}",
+    "moneyFormat": "{{ shop.money_format | escape }}",
+    "productId": {{ product.id | default: "null" }},
+    "variantIds": [
+      {% for item in product.variants %}
+        {{ item.id }}{% unless forloop.last %},{% endunless %}
+      {% endfor %}
+    ],
+    "marketId": {{ localization.market.id | default: "null" }},
+    {% for item in product.variants %}
+      "{{ item.id }}": {
+        "available": {{ item.available | default: false }},
+        "compareAtPrice": {{ item.compare_at_price | json }},
+        "price": {{ item.price | json }},
+        "inventoryQuantity": {{ item.inventory_quantity | default: 0 }},
+        "inventoryPolicy": {{ item.inventory_policy | json }}
+      },
+    {% endfor %}
+    {% if product.variants[0] %}
+      "compareAtPrice": {{ product.variants[0].compare_at_price | json }},
+      "price": {{ product.variants[0].price | json }},
+    {% endif %}
+    "currencySymbol": "{{ localization.country.currency.symbol | escape }}"
+  }
+</script>
+
 {% if shop.metafields.ciwi_bundle and shop.metafields.ciwi_bundle["ciwi-bundle-offers"] %}
   <script id="ciwi-bundle-offers" type="application/json">
     {{ shop.metafields.ciwi_bundle["ciwi-bundle-offers"].value }}
   </script>
 {% endif %}
+
+<script src="{{ 'product-detail-message.js' | asset_url }}" defer></script>
 
 {% schema %}
 {
@@ -20,7 +50,6 @@
     "templates": ["product"]
   },
   "stylesheet": "product-detail-message.css",
-  "javascript": "product-detail-message.js",
   "settings": [
     {
       "type": "text",

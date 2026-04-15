@@ -40,7 +40,6 @@ const plans: Array<{
       "Up to 20 active offers",
       "10,000 orders/month",
       "Advanced analytics",
-      "A/B testing",
       "Priority support",
     ],
   },
@@ -53,7 +52,6 @@ const plans: Array<{
       "Unlimited offers",
       "Unlimited orders",
       "Custom analytics",
-      "A/B testing",
       "Dedicated support",
       "White label",
     ],
@@ -100,16 +98,9 @@ export function PricingPage({
   const hasAnyActive = activeSubscriptions.some((s) => s.status === "ACTIVE");
 
   return (
-    <div className="polaris-page">
-      <div className="polaris-page__header">
+    <div className="polaris-page" style={{ maxWidth: 1000, margin: "0 auto" }}>
+      <div className="polaris-page__header" style={{ marginBottom: "20px" }}>
         <div>
-          <button
-            type="button"
-            className="polaris-button polaris-button--plain"
-            onClick={() => setBillingCycle("monthly")}
-          >
-            ← Back
-          </button>
           <h1 className="polaris-page__title">Pricing Plans</h1>
         </div>
       </div>

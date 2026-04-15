@@ -7,6 +7,7 @@ import type {
 import { Outlet, useFetcher, useLoaderData, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
+import { ConfigProvider } from "antd";
 
 import { authenticate } from "../shopify.server";
 
@@ -127,18 +128,33 @@ export default function App() {
 
   return (
     <AppProvider embedded apiKey={apiKey}>
+      <ConfigProvider
+        theme={{
+          token: {
+            colorPrimary: "#008060",
+            colorPrimaryHover: "#006e52",
+            colorPrimaryActive: "#005c43",
+            colorLink: "#008060",
+            colorLinkHover: "#006e52",
+            colorLinkActive: "#005c43",
+          },
+        }}
+      >
       <s-app-nav>
         <s-link href="/app">Home</s-link>
         <s-link href="/app/additional">Additional page</s-link>
       </s-app-nav>
       <Outlet />
+          </ConfigProvider>
     </AppProvider>
   );
 }
 
 // Shopify needs React Router to catch some thrown responses, so that their headers are included in the response.
 export function ErrorBoundary() {
-  return boundary.error(useRouteError());
+  const error = useRouteError();
+  console.error("App boundary error:", error);
+  return boundary.error(error);
 }
 
 export const headers: HeadersFunction = (headersArgs) => {

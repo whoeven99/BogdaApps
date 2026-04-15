@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  useActionData,
   useLoaderData,
   useNavigate,
   useSearchParams,
@@ -7,7 +8,6 @@ import {
   type HeadersFunction,
   type LoaderFunctionArgs,
 } from "react-router";
-import { redirect } from "react-router";
 import {
   authenticate,
   ensureCartLinesAutomaticDiscount,
@@ -15,9 +15,10 @@ import {
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { DashboardPage } from "../DashboardPage";
 import { AllOffersPage } from "../AllOffersPage";
+import { AnalyticsPage } from "../AnalyticsPage";
 import { PricingPage } from "../PricingPage";
 import { CreateNewOffer } from "../component/CreateNewOffer";
-import { Prisma } from "@prisma/client";
+import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
 import prisma from "../../db.server";
 import {
   getCachedShopOffers,
@@ -39,6 +40,7 @@ import {
 type OfferListItem = {
   id: string;
   name: string;
+  cartTitle: string;
   offerType: string;
   startTime: string;
   endTime: string;
@@ -59,7 +61,10 @@ type OfferActionErrorPayload = {
 
 function offerActionErrorResponse(message: string, status: number) {
   return Response.json(
-    { _offerActionError: true as const, message } satisfies OfferActionErrorPayload,
+    {
+      _offerActionError: true as const,
+      message,
+    } satisfies OfferActionErrorPayload,
     { status },
   );
 }
@@ -119,7 +124,9 @@ async function syncShopOffersMetafield(
     if (shopIdJson.errors?.length) {
       return {
         ok: false,
-        message: shopIdJson.errors.map((e) => e.message || "unknown").join("; "),
+        message: shopIdJson.errors
+          .map((e) => e.message || "unknown")
+          .join("; "),
       };
     }
 
@@ -180,8 +187,7 @@ async function syncShopOffersMetafield(
       };
     }
 
-    const userErrors =
-      metafieldsSetJson?.data?.metafieldsSet?.userErrors ?? [];
+    const userErrors = metafieldsSetJson?.data?.metafieldsSet?.userErrors ?? [];
     if (userErrors.length > 0) {
       return {
         ok: false,
@@ -191,8 +197,7 @@ async function syncShopOffersMetafield(
 
     return { ok: true };
   } catch (error) {
-    const msg =
-      error instanceof Error ? error.message : JSON.stringify(error);
+    const msg = error instanceof Error ? error.message : JSON.stringify(error);
     return { ok: false, message: msg || "Metafield 同步异常" };
   }
 }
@@ -204,9 +209,16 @@ export type StoreProductItem = {
   image: string;
 };
 
+export type MarketItem = {
+  id: string;
+  name: string;
+  handle: string;
+};
+
 export type IndexLoaderData = {
   offers: OfferListItem[];
   storeProducts: StoreProductItem[];
+  markets: MarketItem[];
   shop: string;
   apiKey: string;
   themeExtensionEnabled: boolean;
@@ -291,7 +303,10 @@ const ensureWebPixel = async (admin: any, shop: string) => {
  * Collect objects that look like theme JSON blocks (have string `type`).
  * App embeds may live under `current.blocks` or nested elsewhere in settings_data.
  */
-const collectTypedBlocks = (node: unknown, out: Array<Record<string, any>>): void => {
+const collectTypedBlocks = (
+  node: unknown,
+  out: Array<Record<string, any>>,
+): void => {
   if (node === null || typeof node !== "object") return;
   if (Array.isArray(node)) {
     for (const item of node) collectTypedBlocks(item, out);
@@ -358,7 +373,14 @@ const getThemeExtensionEnabled = async (
     const normalizedContent = content
       .replace(/\/\*[\s\S]*?\*\//g, "")
       .replace(/^\s*\/\/.*$/gm, "");
-    const settingsData = JSON.parse(normalizedContent);
+
+    let settingsData;
+    try {
+      settingsData = JSON.parse(normalizedContent);
+    } catch (e) {
+      console.error("[theme-extension] failed to parse settings_data.json", e);
+      return false;
+    }
     const blockEntries: Array<Record<string, any>> = [];
     collectTypedBlocks(settingsData, blockEntries);
 
@@ -376,10 +398,12 @@ const getThemeExtensionEnabled = async (
 
     const isOurAppBlock = (blockType: string) => {
       if (!appClientId && !extensionHandle) return false;
-      if (appClientId && blockType.includes(`/apps/${appClientId}/`)) return true;
+      if (appClientId && blockType.includes(`/apps/${appClientId}/`))
+        return true;
       if (extensionHandle && blockType.includes(`/apps/${extensionHandle}/`))
         return true;
-      if (appNameSlug && blockType.includes(`/apps/${appNameSlug}/`)) return true;
+      if (appNameSlug && blockType.includes(`/apps/${appNameSlug}/`))
+        return true;
       return false;
     };
 
@@ -443,6 +467,8 @@ function normalizeOfferNameKey(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+import { AppProvider } from "@shopify/shopify-app-react-router/react";
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
 
@@ -457,34 +483,46 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.error("Failed to ensure automatic app discount exists", error);
   }
 
-  const prismaOffers = await getCachedShopOffers(session.shop);
-  const offers = prismaOffers as unknown as OfferListItem[];
+  let offers: OfferListItem[] = [];
+  try {
+    const prismaOffers = await getCachedShopOffers(session.shop);
+    offers = prismaOffers as unknown as OfferListItem[];
+  } catch (error) {
+    console.error("Failed to get cached shop offers", error);
+  }
 
-  const productsResponse = await admin.graphql(
-    `#graphql
-      query AppProducts {
-        products(first: 100) {
-          edges {
-            node {
-              id
-              title
-              featuredImage {
-                url
-              }
-              variants(first: 1) {
-                edges {
-                  node {
-                    price
+  let productsResponse;
+  let productsJson;
+  try {
+    productsResponse = await admin.graphql(
+      `#graphql
+        query AppProducts {
+          products(first: 100) {
+            edges {
+              node {
+                id
+                title
+                featuredImage {
+                  url
+                }
+                variants(first: 1) {
+                  edges {
+                    node {
+                      price
+                    }
                   }
                 }
               }
             }
           }
         }
-      }
-    `,
-  );
-  const productsJson = await productsResponse.json();
+      `,
+    );
+    productsJson = await productsResponse.json();
+  } catch (error) {
+    console.error("Failed to fetch or parse products GraphQL response", error);
+    productsJson = {};
+  }
   const productEdges =
     (productsJson?.data?.products?.edges as
       | Array<{
@@ -519,15 +557,50 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // product_detail_message.liquid → product-detail-message.js
   // eslint-disable-next-line no-undef
   const apiKey = process.env.SHOPIFY_API_KEY || "";
-  const appDisplayName =
-    process.env.SHOPIFY_APP_NAME || process.env.APP_NAME;
-  const themeExtensionEnabled = await getThemeExtensionEnabled(
-    admin,
-    "bundlev2-theme-product-custom",
-    "product_detail_message",
-    apiKey,
-    appDisplayName,
-  );
+  const appDisplayName = process.env.SHOPIFY_APP_NAME || process.env.APP_NAME;
+  let themeExtensionEnabled = false;
+  try {
+    themeExtensionEnabled = await getThemeExtensionEnabled(
+      admin,
+      "bundlev2-theme-product-custom",
+      "product_detail_message",
+      apiKey,
+      appDisplayName,
+    );
+  } catch (error) {
+    console.error("Failed to check theme extension status", error);
+  }
+
+  let markets: MarketItem[] = [];
+  try {
+    const marketsResponse = await admin.graphql(
+      `#graphql
+        query ShopMarkets {
+          markets(first: 250) {
+            edges {
+              node {
+                id
+                name
+                handle
+              }
+            }
+          }
+        }
+      `
+    );
+    const marketsJson = (await marketsResponse.json()) as any;
+    if (marketsJson.errors) {
+      console.error("GraphQL errors fetching markets:", marketsJson.errors);
+    }
+    const marketEdges = marketsJson?.data?.markets?.edges || [];
+    markets = marketEdges.map((edge: any) => ({
+      id: edge.node.id,
+      name: edge.node.name,
+      handle: edge.node.handle,
+    }));
+  } catch (error) {
+    console.error("Failed to fetch shop markets", error);
+  }
 
   let billingSubscriptions: Array<{ name: string; status: string }> = [];
   try {
@@ -539,9 +612,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return Response.json({
     offers,
     storeProducts,
+    markets,
     shop: session.shop,
-    themeExtensionEnabled,
     apiKey,
+    themeExtensionEnabled,
     billingSubscriptions,
     billingTestMode: billingIsTestCharge(),
   } satisfies IndexLoaderData);
@@ -644,17 +718,22 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (intent === "create-offer" || intent === "update-offer") {
     const idRaw = String(formData.get("offerId") || "").trim();
-    const nameRaw = String(
-      formData.get("offerName") ?? formData.get("name") ?? "",
-    );
-    const name = nameRaw.trim();
+    const nameRaw = String(formData.get("offerName") || "").trim();
+    const name = nameRaw; // fallback logic removed as requested by original form code handling offerName properly
+    const cartTitle = String(formData.get("cartTitle") || "Bundle Discount").trim();
     const offerType = String(formData.get("offerType") || "").trim();
-    const layoutFormat = String(formData.get("layoutFormat") || "")
-      .trim() || "vertical";
-    const startTimeRaw = String(formData.get("startTime") || "");
-    const endTimeRaw = String(formData.get("endTime") || "");
-    const selectedProductsJson = String(formData.get("selectedProductsJson") || "");
+    const layoutFormat =
+      String(formData.get("layoutFormat") || "").trim() || "vertical";
+    const startTimeRaw = String(formData.get("startTime") || "").trim();
+    const endTimeRaw = String(formData.get("endTime") || "").trim();
+    const selectedProductsJson = String(
+      formData.get("selectedProductsJson") || "",
+    );
     const discountRulesJson = String(formData.get("discountRulesJson") || "");
+
+    // Status is checked, defaults to false if not provided or explicitly 'false'
+    const statusRaw = String(formData.get("status") || "");
+    const status = statusRaw === "true";
 
     const totalBudget = formData.get("totalBudget");
     const dailyBudget = formData.get("dailyBudget");
@@ -674,8 +753,33 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       String(formData.get("cardBackgroundColor") || ""),
       "#ffffff",
     );
+    const borderColor = sanitizeHexColorParam(
+      String(formData.get("borderColor") || ""),
+      "#dfe3e8",
+    );
+    const labelColor = sanitizeHexColorParam(
+      String(formData.get("labelColor") || ""),
+      "#ffffff",
+    );
+    const titleColor = sanitizeHexColorParam(
+      String(formData.get("titleColor") || ""),
+      "#111111",
+    );
+    const buttonPrimaryColor = sanitizeHexColorParam(
+      String(formData.get("buttonPrimaryColor") || ""),
+      "#008060",
+    );
+
+    const titleFontSize = Number(formData.get("titleFontSize")) || 14;
+    const titleFontWeight = String(formData.get("titleFontWeight") || "600");
+    const buttonText = String(
+      formData.get("buttonText") || "Add to Cart",
+    ).trim();
+
+    const title = String(formData.get("title") || "Bundle & Save").trim();
 
     const offerSettingsJson = JSON.stringify({
+      title,
       layoutFormat,
       totalBudget: totalBudget ? Number(totalBudget) : null,
       dailyBudget: dailyBudget ? Number(dailyBudget) : null,
@@ -686,6 +790,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       usageLimitPerCustomer,
       accentColor,
       cardBackgroundColor,
+      borderColor,
+      labelColor,
+      titleColor,
+      buttonPrimaryColor,
+      titleFontSize,
+      titleFontWeight,
+      buttonText,
     });
 
     // Store which Shopify shop this offer belongs to.
@@ -708,7 +819,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return offerActionErrorResponse("请填写 Offer 名称。", 400);
     }
     if (!startTimeRaw || !endTimeRaw) {
-      return offerActionErrorResponse("请填写开始时间与结束时间。", 400);
+      return offerActionErrorResponse("请填写有效的开始时间与结束时间。", 400);
+    }
+
+    const startTime = new Date(startTimeRaw);
+    const endTime = new Date(endTimeRaw);
+
+    if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
+      return offerActionErrorResponse("请填写有效的开始时间与结束时间。", 400);
     }
 
     const nameKey = normalizeOfferNameKey(name);
@@ -728,16 +846,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       );
     }
 
-    const startTime = new Date(startTimeRaw);
-    const endTime = new Date(endTimeRaw);
-
     const data = {
       shopName,
       // 去掉首尾空白，保留名称中间空格（避免编码/解析边界问题）
       name,
+      cartTitle,
       offerType,
       startTime,
       endTime,
+      status,
       offerSettingsJson,
       selectedProductsJson: selectedProductsJson || null,
       discountRulesJson: discountRulesJson || null,
@@ -749,9 +866,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       try {
         await writeOfferWithRetry(() => prismaAny.offer.create({ data }));
         url.searchParams.set("toast", "create-success");
-      } catch (error) {
+      } catch (error: any) {
         if (
-          error instanceof Prisma.PrismaClientKnownRequestError &&
           error.code === "P2002"
         ) {
           return offerActionErrorResponse(
@@ -771,10 +887,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             offerSettingsJson,
           },
         });
-        return offerActionErrorResponse(
-          "创建 Offer 失败，请稍后重试。",
-          500,
-        );
+        return offerActionErrorResponse("创建 Offer 失败，请稍后重试。", 500);
       }
     } else {
       if (!idRaw) {
@@ -788,9 +901,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           }),
         );
         url.searchParams.set("toast", "update-success");
-      } catch (error) {
+      } catch (error: any) {
         if (
-          error instanceof Prisma.PrismaClientKnownRequestError &&
           error.code === "P2002"
         ) {
           return offerActionErrorResponse(
@@ -811,10 +923,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             offerSettingsJson,
           },
         });
-        return offerActionErrorResponse(
-          "更新 Offer 失败，请稍后重试。",
-          500,
-        );
+        return offerActionErrorResponse("更新 Offer 失败，请稍后重试。", 500);
       }
     }
 
@@ -832,7 +941,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     invalidateShopOffersCache(shopName);
 
-    return redirect(url.pathname + "?" + url.searchParams.toString());
+    return Response.json({
+      success: true,
+      toast: url.searchParams.get("toast"),
+    });
   }
 
   if (intent === "toggle-offer-status") {
@@ -845,10 +957,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     const nextStatus = nextStatusRaw === "true";
 
-    const updatedOffer = await prismaAny.offer.update({
-      where: { id: idRaw },
-      data: { status: nextStatus },
-    });
+    let updatedOffer;
+    try {
+      updatedOffer = await prismaAny.offer.update({
+        where: { id: idRaw },
+        data: { status: nextStatus },
+      });
+    } catch (error) {
+      console.error("toggle-offer-status update failed", error);
+      return offerActionErrorResponse("Toggle status failed.", 500);
+    }
 
     // 同步 metafield，保证前端/扩展端实时生效
     try {
@@ -918,10 +1036,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       invalidateShopOffersCache(String(updatedOffer.shopName));
     }
 
-    const url = new URL(request.url);
-    url.searchParams.set("toast", "toggle-success");
-
-    return redirect(url.pathname + "?" + url.searchParams.toString());
+    return Response.json({ success: true, toast: "toggle-success" });
   }
 
   if (intent === "delete-offer") {
@@ -933,14 +1048,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const prismaAny: any = prisma;
 
     // 删除前先拿到 shopName（用于同步 metafield）
-    const offerToDelete = await prismaAny.offer.findUnique({
-      where: { id: idRaw },
-    });
-    const shopNameToSync = offerToDelete?.shopName as string | undefined;
+    let shopNameToSync: string | undefined;
+    try {
+      const offerToDelete = await prismaAny.offer.findUnique({
+        where: { id: idRaw },
+      });
+      shopNameToSync = offerToDelete?.shopName as string | undefined;
 
-    await prismaAny.offer.delete({
-      where: { id: idRaw },
-    });
+      await prismaAny.offer.delete({
+        where: { id: idRaw },
+      });
+    } catch (error) {
+      console.error("delete-offer failed", error);
+      return offerActionErrorResponse("Delete offer failed.", 500);
+    }
 
     // 同步 metafield，保证扩展端不再使用已删除 offer
     try {
@@ -1009,10 +1130,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       invalidateShopOffersCache(shopNameToSync);
     }
 
-    const url = new URL(request.url);
-    url.searchParams.set("toast", "delete-success");
-
-    return redirect(url.pathname + "?" + url.searchParams.toString());
+    return Response.json({ success: true, toast: "delete-success" });
   }
 
   return new Response(`Unknown intent: ${String(intent || "")}`, {
@@ -1020,25 +1138,28 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   });
 };
 
-type HomeTabKey = "dashboard" | "offers" | "pricing";
+type HomeTabKey = "dashboard" | "offers" | "analytics" | "pricing";
 
 export default function Index() {
   const {
     offers,
     storeProducts,
+    markets,
     shop,
     apiKey,
     themeExtensionEnabled,
     billingSubscriptions,
     billingTestMode,
   } = useLoaderData() as IndexLoaderData;
+  const actionData = useActionData() as { toast?: string } | undefined;
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<HomeTabKey>("dashboard");
   const [showCreateOffer, setShowCreateOffer] = useState(false);
+  const [editingOfferId, setEditingOfferId] = useState<string | null>(null);
 
-  const toast = searchParams.get("toast");
+  const toast = searchParams.get("toast") || actionData?.toast;
 
   useEffect(() => {
     if (searchParams.get("billing_return") !== "1") return;
@@ -1055,15 +1176,15 @@ export default function Index() {
     if (toast === "create-success") {
       setToastMessage("Offer 创建成功");
       setShowCreateOffer(false);
-      setActiveTab("dashboard");
+      setEditingOfferId(null);
     } else if (toast === "update-success") {
       setToastMessage("Offer 更新成功");
       setShowCreateOffer(false);
-      setActiveTab("dashboard");
+      setEditingOfferId(null);
     } else if (toast === "delete-success") {
       setToastMessage("Offer 删除成功");
       setShowCreateOffer(false);
-      setActiveTab("dashboard");
+      setEditingOfferId(null);
     } else if (toast === "toggle-success") {
       setToastMessage("Offer 状态已更新");
     } else {
@@ -1089,109 +1210,123 @@ export default function Index() {
   }, [toast, toastMessage, navigate, searchParams]);
 
   return (
-    <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px] relative">
-      {toastMessage && (
-        <div className="fixed z-50 top-4 left-1/2 -translate-x-1/2 bg-[#108043] text-white px-4 py-2 rounded shadow-lg text-sm font-['Inter']">
-          {toastMessage}
-        </div>
-      )}
-      {/* Tabs */}
-      <nav className="bg-white flex flex-col sm:flex-row gap-[8px] sm:gap-[16px] items-stretch sm:items-start pb-0 px-[16px] pt-[16px] rounded-[8px] mb-[16px] sm:mb-[24px]">
-        <button
-          type="button"
-          onClick={() => {
-            setShowCreateOffer(false);
-            setActiveTab("dashboard");
-          }}
-          className={`rounded-[4px] px-[12px] py-[7px] text-center sm:text-left cursor-pointer bg-transparent ${
-            activeTab === "dashboard" ? "bg-[#dfe3e8]" : ""
-          }`}
-        >
-          <span
-            className={`font-['Inter'] leading-[25.6px] text-[16px] tracking-[-0.3125px] ${
-              activeTab === "dashboard"
-                ? "font-semibold text-[#202223]"
-                : "font-normal text-[#6d7175]"
-            }`}
-          >
-            Dashboard
-          </span>
-        </button>
+    <AppProvider embedded apiKey={apiKey}>
+      <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px] relative">
+        {toastMessage && (
+          <div className="fixed z-50 top-4 left-1/2 -translate-x-1/2 bg-[#108043] !text-white px-4 py-2 rounded shadow-lg text-sm font-sans">
+            {toastMessage}
+          </div>
+        )}
+        {/* Tabs */}
+        {!showCreateOffer && !editingOfferId && (
+          <nav className="flex flex-col sm:flex-row gap-[8px] sm:gap-[16px] items-stretch sm:items-start pb-0 mb-[16px] sm:mb-[24px] border-b border-[#e3e8ed]">
+            <button
+              type="button"
+              onClick={() => {
+                setShowCreateOffer(false);
+                setActiveTab("dashboard");
+              }}
+              className={`px-[16px] py-[12px] text-center sm:text-left cursor-pointer transition-all border-b-2 ${activeTab === "dashboard" ? "border-[#008060] text-[#1c1f23]" : "border-transparent hover:border-[#8c9196] text-[#5c6166]"}`}
+            >
+              <span
+                className={`font-sans leading-[24px] text-[14px] font-medium tracking-normal ${activeTab === "dashboard" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
+              >
+                Dashboard
+              </span>
+            </button>
 
-        <button
-          type="button"
-          onClick={() => {
-            setShowCreateOffer(false);
-            setActiveTab("offers");
-          }}
-          className={`rounded-[4px] px-[12px] py-[7px] text-center sm:text-left cursor-pointer bg-transparent ${
-            activeTab === "offers" ? "bg-[#dfe3e8]" : ""
-          }`}
-        >
-          <span
-            className={`font-['Inter'] leading-[25.6px] text-[16px] tracking-[-0.3125px] ${
-              activeTab === "offers"
-                ? "font-semibold text-[#202223]"
-                : "font-normal text-[#6d7175]"
-            }`}
-          >
-            All Offers
-          </span>
-        </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowCreateOffer(false);
+                setActiveTab("offers");
+              }}
+              className={`px-[16px] py-[12px] text-center sm:text-left cursor-pointer transition-all border-b-2 ${activeTab === "offers" ? "border-[#008060] text-[#1c1f23]" : "border-transparent hover:border-[#8c9196] text-[#5c6166]"}`}
+            >
+              <span
+                className={`font-sans leading-[24px] text-[14px] font-medium tracking-normal ${activeTab === "offers" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
+              >
+                All Offers
+              </span>
+            </button>
 
-        <button
-          type="button"
-          onClick={() => {
-            setShowCreateOffer(false);
-            setActiveTab("pricing");
-          }}
-          className={`rounded-[4px] px-[12px] py-[7px] text-center sm:text-left cursor-pointer bg-transparent ${
-            activeTab === "pricing" ? "bg-[#dfe3e8]" : ""
-          }`}
-        >
-          <span
-            className={`font-['Inter'] leading-[25.6px] text-[16px] tracking-[-0.3125px] ${
-              activeTab === "pricing"
-                ? "font-semibold text-[#202223]"
-                : "font-normal text-[#6d7175]"
-            }`}
-          >
-            Pricing
-          </span>
-        </button>
-      </nav>
+            <button
+              type="button"
+              onClick={() => {
+                setShowCreateOffer(false);
+                setActiveTab("analytics");
+              }}
+              className={`px-[16px] py-[12px] text-center sm:text-left cursor-pointer transition-all border-b-2 ${activeTab === "analytics" ? "border-[#008060] text-[#1c1f23]" : "border-transparent hover:border-[#8c9196] text-[#5c6166]"}`}
+            >
+              <span
+                className={`font-sans leading-[24px] text-[14px] font-medium tracking-normal ${activeTab === "analytics" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
+              >
+                Analytics
+              </span>
+            </button>
 
-      {/* Tab content */}
-      {activeTab === "dashboard" && (
-        <DashboardPage
-          offers={offers}
-          storeProducts={storeProducts}
-          shop={shop}
-          apiKey={apiKey}
-          themeExtensionEnabled={themeExtensionEnabled}
-          onViewAllOffers={() => setActiveTab("offers")}
-        />
-      )}
-      {activeTab === "offers" && !showCreateOffer && (
-        <AllOffersPage
-          offers={offers}
-          onCreateOffer={() => setShowCreateOffer(true)}
-        />
-      )}
-      {activeTab === "offers" && showCreateOffer && (
-        <CreateNewOffer
-          onBack={() => setShowCreateOffer(false)}
-          storeProducts={storeProducts}
-          existingOffers={offers.map((o) => ({ id: o.id, name: o.name }))}
-        />
-      )}
-      {activeTab === "pricing" && (
-        <PricingPage
-          activeSubscriptions={billingSubscriptions}
-          billingTestMode={billingTestMode}
-        />
-      )}
-    </div>
+          </nav>
+        )}
+
+        {/* Tab content */}
+        {activeTab === "dashboard" && !showCreateOffer && !editingOfferId && (
+          <DashboardPage
+            offers={offers}
+            storeProducts={storeProducts}
+            markets={markets}
+            shop={shop}
+            apiKey={apiKey}
+            themeExtensionEnabled={themeExtensionEnabled}
+            onViewAllOffers={() => setActiveTab("offers")}
+            onViewAnalytics={() => setActiveTab("analytics")}
+            onCreateOffer={() => {
+              setShowCreateOffer(true);
+              setEditingOfferId(null);
+              setActiveTab("offers");
+            }}
+          />
+        )}
+        {activeTab === "offers" && !showCreateOffer && !editingOfferId && (
+          <AllOffersPage
+            offers={offers}
+            onCreateOffer={() => {
+              setShowCreateOffer(true);
+              setEditingOfferId(null);
+            }}
+            onEditOffer={(id) => {
+              setEditingOfferId(id);
+              setShowCreateOffer(false);
+            }}
+          />
+        )}
+        {(showCreateOffer || editingOfferId) && (
+          <CreateNewOffer
+            onBack={() => {
+              setShowCreateOffer(false);
+              setEditingOfferId(null);
+            }}
+            initialOffer={editingOfferId ? offers.find(o => o.id === editingOfferId) as any : undefined}
+            storeProducts={storeProducts}
+            markets={markets}
+            existingOffers={offers.map((o) => ({
+              id: o.id,
+              name: o.name,
+              cartTitle: o.cartTitle,
+              offerType: o.offerType,
+            }))}
+          />
+        )}
+        {activeTab === "analytics" && (
+          <AnalyticsPage shop={shop} offers={offers} />
+        )}
+        {activeTab === "pricing" && (
+          <PricingPage
+            activeSubscriptions={billingSubscriptions}
+            billingTestMode={billingTestMode}
+          />
+        )}
+      </div>
+    </AppProvider>
   );
 }
 

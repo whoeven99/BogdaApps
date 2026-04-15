@@ -1,12 +1,12 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import "../styles/tailwind.css";
-import "antd/dist/reset.css";
 import { Typography, Button, Switch, Modal, Space } from "antd";
 import { Trash2, Pencil } from "lucide-react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
 const { Text } = Typography;
+
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
@@ -51,7 +51,7 @@ export default function Index() {
     <div className="!max-w-[1280px] !mx-auto !px-[16px] !sm:px-[24px] !pt-[16px] !sm:pt-[24px]">
       {/* Header */}
       <div className="!mb-[16px] !sm:mb-[24px]">
-        <h1 className="!font-['Inter'] !font-semibold !text-[20px] !sm:text-[24px] !leading-[30px] !sm:leading-[36px] !text-[#202223] !tracking-[0.0703px] !m-0">
+        <h1 className="!font-sans !font-semibold !text-[20px] !sm:text-[24px] !leading-[30px] !sm:leading-[36px] !text-[#1c1f23] !tracking-normal !m-0">
           Dashboard
         </h1>
       </div>
@@ -60,7 +60,7 @@ export default function Index() {
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-[16px] sm:gap-[24px] mb-[24px] sm:mb-[36px]">
         {/* GMV Overview Card */}
         <div
-          className="bg-white !rounded-[8px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] p-[20px]"
+          className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[24px]"
           style={{
             backgroundColor: "#ffffff",
             borderRadius: 8,
@@ -69,10 +69,13 @@ export default function Index() {
           }}
         >
           <div className="!flex !items-center !justify-between !mb-[16px]">
-            <h2 className="!font-['Inter'] !font-semibold !text-[20px] !leading-[30px] !text-[#202223] !tracking-[-0.4492px] !m-0">
+            <h2 className="!font-sans !font-semibold !text-[20px] !leading-[30px] !text-[#1c1f23] !tracking-tight !m-0">
               GMV Overview
             </h2>
-            <Button type="text" className="!font-['Inter'] !font-medium !text-[14px]">
+            <Button
+              type="text"
+              className="!font-sans !font-medium !text-[14px]"
+            >
               View Details
               <svg
                 width="16"
@@ -95,21 +98,21 @@ export default function Index() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-[16px] sm:gap-[20px]">
             {/* Total GMV */}
             <div className="!flex !flex-col !gap-[16px]">
-              <span className="!font-['Inter'] !font-normal !text-[14px] !leading-[22.4px] !text-[#6d7175] !tracking-[-0.1504px]">
+              <span className="!font-sans !font-normal !text-[14px] !leading-[22.4px] !text-[#5c6166] !tracking-normal">
                 Total GMV
               </span>
-              <h3 className="!font-['Inter'] !font-semibold !text-[28px] !leading-[42px] !text-[#202223] !tracking-[0.3828px] !m-0">
+              <h3 className="!font-sans !font-semibold !text-[28px] !leading-[42px] !text-[#1c1f23] !tracking-wide !m-0">
                 ${mockOverviewData.totalGmv.toLocaleString()}
               </h3>
               <span
-                className="!font-['Inter'] !font-normal !text-[14px] !leading-[22.4px] !tracking-[-0.1504px]"
+                className="!font-sans !font-normal !text-[14px] !leading-[22.4px] !tracking-normal"
                 style={{
                   color:
                     mockOverviewData.gmvGrowthRate === 0
                       ? "#916a00"
                       : mockOverviewData.gmvGrowthRate > 0
-                      ? "#108043"
-                      : "#D93025",
+                        ? "#108043"
+                        : "#D93025",
                 }}
               >
                 ↑ +{mockOverviewData.gmvGrowthRate}% from last month
@@ -118,21 +121,21 @@ export default function Index() {
 
             {/* Bundle Orders */}
             <div className="!flex !flex-col !gap-[16px]">
-              <span className="!font-['Inter'] !font-normal !text-[14px] !leading-[22.4px] !text-[#6d7175] !tracking-[-0.1504px]">
+              <span className="!font-sans !font-normal !text-[14px] !leading-[22.4px] !text-[#5c6166] !tracking-normal">
                 Bundle Orders
               </span>
-              <h3 className="!font-['Inter'] !font-semibold !text-[28px] !leading-[42px] !text-[#202223] !tracking-[0.3828px] !m-0">
+              <h3 className="!font-sans !font-semibold !text-[28px] !leading-[42px] !text-[#1c1f23] !tracking-wide !m-0">
                 {mockOverviewData.bundleOrders}
               </h3>
               <span
-                className="!font-['Inter'] !font-normal !text-[14px] !leading-[22.4px] !tracking-[-0.1504px]"
+                className="!font-sans !font-normal !text-[14px] !leading-[22.4px] !tracking-normal"
                 style={{
                   color:
                     mockOverviewData.bundleOrdersGrowthRate === 0
                       ? "#916a00"
                       : mockOverviewData.bundleOrdersGrowthRate > 0
-                      ? "#108043"
-                      : "#D93025",
+                        ? "#108043"
+                        : "#D93025",
                 }}
               >
                 ↑ +{mockOverviewData.bundleOrdersGrowthRate}% from last month
@@ -141,21 +144,21 @@ export default function Index() {
 
             {/* Avg. Conversion */}
             <div className="!flex !flex-col !gap-[16px]">
-              <span className="!font-['Inter'] !font-normal !text-[14px] !leading-[22.4px] !text-[#6d7175] !tracking-[-0.1504px]">
+              <span className="!font-sans !font-normal !text-[14px] !leading-[22.4px] !text-[#5c6166] !tracking-normal">
                 Avg. Conversion
               </span>
-              <h3 className="!font-['Inter'] !font-semibold !text-[28px] !leading-[42px] !text-[#202223] !tracking-[0.3828px] !m-0">
+              <h3 className="!font-sans !font-semibold !text-[28px] !leading-[42px] !text-[#1c1f23] !tracking-wide !m-0">
                 {mockOverviewData.avgConversionRate}%
               </h3>
               <span
-                className="!font-['Inter'] !font-normal !text-[14px] !leading-[22.4px] !tracking-[-0.1504px]"
+                className="!font-sans !font-normal !text-[14px] !leading-[22.4px] !tracking-normal"
                 style={{
                   color:
                     mockOverviewData.conversionTrend === 0
                       ? "#916a00"
                       : mockOverviewData.conversionTrend > 0
-                      ? "#108043"
-                      : "#D93025",
+                        ? "#108043"
+                        : "#D93025",
                 }}
               >
                 ↑ +{mockOverviewData.conversionTrend}% from last month
@@ -166,7 +169,7 @@ export default function Index() {
 
         {/* Theme Extension Widget */}
         <div
-          className="bg-white !rounded-[8px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] p-[20px]"
+          className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[24px]"
           style={{
             display: "flex",
             flexDirection: "column",
@@ -180,7 +183,7 @@ export default function Index() {
           {/* Header with Active Status */}
           <div>
             <div className="!flex !items-center !justify-between !mb-[16px]">
-              <h2 className="!font-['Inter'] !font-semibold !text-[20px] !leading-[30px] !text-[#202223] !tracking-[-0.4492px] !m-0">
+              <h2 className="!font-sans !font-semibold !text-[20px] !leading-[30px] !text-[#1c1f23] !tracking-tight !m-0">
                 Theme extension
               </h2>
               <div
@@ -194,8 +197,10 @@ export default function Index() {
                   }`}
                 ></div>
                 <span
-                  className={`!font-['Inter'] !font-medium !text-[14px] !leading-[21px] !tracking-[-0.1504px] ${
-                    isThemeExtensionEnabled ? "!text-[#108043]" : "!text-[#6d7175]"
+                  className={`!font-sans !font-medium !text-[14px] !leading-[21px] !tracking-normal ${
+                    isThemeExtensionEnabled
+                      ? "!text-[#108043]"
+                      : "!text-[#5c6166]"
                   }`}
                 >
                   {isThemeExtensionEnabled ? "Active" : "Inactive"}
@@ -204,18 +209,18 @@ export default function Index() {
             </div>
 
             {/* Description */}
-            <p className="!font-['Inter'] !font-normal !text-[16px] !leading-[25.6px] !text-[#202223] !tracking-[-0.3125px] !mb-[20px]">
+            <p className="!font-sans !font-normal !text-[16px] !leading-[25.6px] !text-[#1c1f23] !tracking-normal !mb-[20px]">
               {isThemeExtensionEnabled
                 ? "Bundles widget is visible in product pages."
                 : "Bundles widget is currently disabled."}
             </p>
           </div>
 
-          {/* Enable/Disable and Need help buttons */}
+          {/* Enable/Disable button */}
           <div className="!flex !flex-col !gap-[12px]">
             <Button
               type={isThemeExtensionEnabled ? "default" : "primary"}
-              className="!font-['Inter'] !font-medium !text-[14px]"
+              className="!font-sans !font-medium !text-[14px]"
             >
               {isThemeExtensionEnabled ? "Disable" : "Enable"}
             </Button>
@@ -225,7 +230,7 @@ export default function Index() {
 
       {/* My Offers Card - Full Width */}
       <div
-        className="!bg-white !rounded-[8px] !shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] !p-[16px] sm:!p-[20px] !mb-[24px] sm:!mb-[36px]"
+        className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[20px] sm:p-[24px] !mb-[24px] sm:!mb-[36px]"
         style={{
           backgroundColor: "#ffffff",
           borderRadius: 8,
@@ -234,10 +239,13 @@ export default function Index() {
         }}
       >
         <div className="!flex !flex-col sm:!flex-row !items-start sm:!items-center !justify-between !gap-[12px] sm:!gap-0 !mb-[16px]">
-          <h2 className="!font-['Inter'] !font-semibold !text-[18px] sm:!text-[20px] !leading-[27px] sm:!leading-[30px] !text-[#202223] !tracking-[-0.4492px] !m-0">
+          <h2 className="!font-sans !font-semibold !text-[18px] sm:!text-[20px] !leading-[27px] sm:!leading-[30px] !text-[#1c1f23] !tracking-tight !m-0">
             My Offers
           </h2>
-          <Button type="primary" className="!font-['Inter'] !font-medium !text-[14px]">
+          <Button
+            type="primary"
+            className="!font-sans !font-medium !text-[14px]"
+          >
             Create New Offer
           </Button>
         </div>
@@ -246,25 +254,25 @@ export default function Index() {
         <table className="hidden md:table w-full border-collapse">
           <thead>
             <tr>
-              <th className="!text-left !p-[12px] !border-b !border-[#dfe3e8] !font-['Inter'] !font-semibold !text-[13px] !leading-[20.8px] !text-[#6d7175] !tracking-[-0.0762px]">
+              <th className="!text-left !p-[12px] border-b border-[#f0f2f4] !font-sans !font-semibold !text-[13px] !leading-[20.8px] !text-[#5c6166] !tracking-normal">
                 Offer Name
               </th>
-              <th className="!text-left !p-[12px] !border-b !border-[#dfe3e8] !font-['Inter'] !font-semibold !text-[13px] !leading-[20.8px] !text-[#6d7175] !tracking-[-0.0762px]">
+              <th className="!text-left !p-[12px] border-b border-[#f0f2f4] !font-sans !font-semibold !text-[13px] !leading-[20.8px] !text-[#5c6166] !tracking-normal">
                 Status
               </th>
-              <th className="!text-left !p-[12px] !border-b !border-[#dfe3e8] !font-['Inter'] !font-semibold !text-[13px] !leading-[20.8px] !text-[#6d7175] !tracking-[-0.0762px]">
+              <th className="!text-left !p-[12px] border-b border-[#f0f2f4] !font-sans !font-semibold !text-[13px] !leading-[20.8px] !text-[#5c6166] !tracking-normal">
                 Exposure PV
               </th>
-              <th className="!text-left !p-[12px] !border-b !border-[#dfe3e8] !font-['Inter'] !font-semibold !text-[13px] !leading-[20.8px] !text-[#6d7175] !tracking-[-0.0762px]">
+              <th className="!text-left !p-[12px] border-b border-[#f0f2f4] !font-sans !font-semibold !text-[13px] !leading-[20.8px] !text-[#5c6166] !tracking-normal">
                 Add to Cart PV
               </th>
-              <th className="!text-left !p-[12px] !border-b !border-[#dfe3e8] !font-['Inter'] !font-semibold !text-[13px] !leading-[20.8px] !text-[#6d7175] !tracking-[-0.0762px]">
+              <th className="!text-left !p-[12px] border-b border-[#f0f2f4] !font-sans !font-semibold !text-[13px] !leading-[20.8px] !text-[#5c6166] !tracking-normal">
                 GMV
               </th>
-              <th className="!text-left !p-[12px] !border-b !border-[#dfe3e8] !font-['Inter'] !font-semibold !text-[13px] !leading-[20.8px] !text-[#6d7175] !tracking-[-0.0762px]">
+              <th className="!text-left !p-[12px] border-b border-[#f0f2f4] !font-sans !font-semibold !text-[13px] !leading-[20.8px] !text-[#5c6166] !tracking-normal">
                 Conversion
               </th>
-              <th className="!text-left !p-[12px] !border-b !border-[#dfe3e8] !font-['Inter'] !font-semibold !text-[13px] !leading-[20.8px] !text-[#6d7175] !tracking-[-0.0762px]">
+              <th className="!text-left !p-[12px] border-b border-[#f0f2f4] !font-sans !font-semibold !text-[13px] !leading-[20.8px] !text-[#5c6166] !tracking-normal">
                 Actions
               </th>
             </tr>
@@ -272,7 +280,7 @@ export default function Index() {
           <tbody>
             {mockOffers.map((offer) => (
               <tr key={offer.id}>
-                <td className="!p-[12px] !border-b !border-[#dfe3e8] !font-['Inter'] !font-normal !text-[14px] !leading-[22.4px] !text-[#202223] !tracking-[-0.1504px]">
+                <td className="!p-[12px] border-b border-[#f0f2f4] !font-sans !font-normal !text-[14px] !leading-[22.4px] !text-[#1c1f23] !tracking-normal">
                   <div
                     style={{
                       display: "flex",
@@ -283,7 +291,7 @@ export default function Index() {
                     {offer.name}
                   </div>
                 </td>
-                <td className="!p-[12px] !border-b !border-[#dfe3e8]">
+                <td className="!p-[12px] border-b border-[#f0f2f4]">
                   <div
                     style={{
                       display: "flex",
@@ -295,7 +303,8 @@ export default function Index() {
                     <span
                       style={{
                         fontSize: "14px",
-                        color: offer.status === "ACTIVE" ? "#108043" : "#6d7175",
+                        color:
+                          offer.status === "ACTIVE" ? "#108043" : "#6d7175",
                         fontWeight: 500,
                       }}
                     >
@@ -303,19 +312,19 @@ export default function Index() {
                     </span>
                   </div>
                 </td>
-                <td className="!p-[12px] !border-b !border-[#dfe3e8] !font-['Inter'] !font-normal !text-[14px] !leading-[22.4px] !text-[#202223] !tracking-[-0.1504px]">
+                <td className="!p-[12px] border-b border-[#f0f2f4] !font-sans !font-normal !text-[14px] !leading-[22.4px] !text-[#1c1f23] !tracking-normal">
                   {offer.exposurePV.toLocaleString()}
                 </td>
-                <td className="!p-[12px] !border-b !border-[#dfe3e8] !font-['Inter'] !font-normal !text-[14px] !leading-[22.4px] !text-[#202223] !tracking-[-0.1504px]">
+                <td className="!p-[12px] border-b border-[#f0f2f4] !font-sans !font-normal !text-[14px] !leading-[22.4px] !text-[#1c1f23] !tracking-normal">
                   {offer.addToCartPV.toLocaleString()}
                 </td>
-                <td className="!p-[12px] !border-b !border-[#dfe3e8] !font-['Inter'] !font-normal !text-[14px] !leading-[22.4px] !text-[#202223] !tracking-[-0.1504px]">
+                <td className="!p-[12px] border-b border-[#f0f2f4] !font-sans !font-normal !text-[14px] !leading-[22.4px] !text-[#1c1f23] !tracking-normal">
                   ${offer.gmv.toLocaleString()}
                 </td>
-                <td className="!p-[12px] !border-b !border-[#dfe3e8] !font-['Inter'] !font-normal !text-[14px] !leading-[22.4px] !text-[#202223] !tracking-[-0.1504px]">
+                <td className="!p-[12px] border-b border-[#f0f2f4] !font-sans !font-normal !text-[14px] !leading-[22.4px] !text-[#1c1f23] !tracking-normal">
                   {offer.conversion}
                 </td>
-                <td className="!p-[12px] !border-b !border-[#dfe3e8]">
+                <td className="!p-[12px] border-b border-[#f0f2f4]">
                   <div className="!flex !items-center !gap-[8px]">
                     <Button type="text" title="Edit">
                       <Pencil size={16} />
@@ -339,7 +348,7 @@ export default function Index() {
             >
               <div className="!flex !items-start !justify-between !mb-[12px]">
                 <div className="flex items-center gap-[8px] flex-wrap">
-                  <span className="font-['Inter'] font-medium text-[16px] text-[#202223]">
+                  <span className="font-sans font-medium text-[16px] text-[#1c1f23]">
                     {offer.name}
                   </span>
                   <span
@@ -374,16 +383,16 @@ export default function Index() {
 
               <div className="!grid !grid-cols-2 !gap-[12px] !mb-[12px]">
                 <div>
-                  <div className="text-[12px] text-[#6d7175] mb-[4px]">GMV</div>
-                  <div className="text-[14px] font-medium text-[#202223]">
+                  <div className="text-[12px] text-[#5c6166] mb-[4px]">GMV</div>
+                  <div className="text-[14px] font-medium text-[#1c1f23]">
                     ${offer.gmv.toLocaleString()}
                   </div>
                 </div>
                 <div>
-                  <div className="text-[12px] text-[#6d7175] mb-[4px]">
+                  <div className="text-[12px] text-[#5c6166] mb-[4px]">
                     Conversion
                   </div>
-                  <div className="text-[14px] font-medium text-[#202223]">
+                  <div className="text-[14px] font-medium text-[#1c1f23]">
                     {offer.conversion}
                   </div>
                 </div>
@@ -403,7 +412,7 @@ export default function Index() {
 
         {/* View All Button at Bottom */}
         <div className="flex !justify-center !mt-[16px] !sm:mt-[20px] !pt-[16px] !border-t !border-[#dfe3e8]">
-          <button className="!text-[#008060] !font-['Inter'] !font-medium !text-[14px] !leading-[21px] !tracking-[-0.1504px] !bg-transparent !border-0 !cursor-pointer !hover:!bg-[rgba(0,128,96,0.1)] !px-[16px] !py-[8px] !rounded-[6px]">
+          <button className="text-[#008060] font-medium text-[14px] bg-transparent hover:bg-[#f0f9f6] px-[16px] py-[8px] rounded-[8px] transition-all border-0 cursor-pointer">
             View All Offers
           </button>
         </div>

@@ -42,6 +42,7 @@ model Offer {
 
   // Basic Information
   name      String
+  cartTitle String @default("Bundle Discount")
   offerType String
 
   // Products & Discounts

@@ -11,6 +11,7 @@ const RETRY_MS = 12_000;
 let offersConfigCache = null;
 let priceSyncController = null;
 let bundlePriceDebounceT = null;
+let currentMainForm = null;
 
 function esc(value) {
   return String(value ?? "")
@@ -21,8 +22,73 @@ function esc(value) {
     .replace(/'/g, "&#39;");
 }
 
-function formatEuro(value) {
-  return `€${Number(value).toFixed(2).replace(".", ",")}`;
+function detectNumberFormat(moneyFormat, price) {
+  let number = price.toString();
+
+  let [integerPart, decimalPart = "00"] = number.split(".");
+  decimalPart = Number(`0.${decimalPart}`).toFixed(2).slice(2);
+  switch (true) {
+    case moneyFormat.includes("amount_no_decimals"):
+      return formatWithComma(integerPart, "");
+    case moneyFormat.includes("amount_with_comma_separator"):
+      return formatWithCommaAndCommaDecimal(integerPart, decimalPart);
+    case moneyFormat.includes("amount_no_decimals_with_comma_separator"):
+      return formatWithCommaAndCommaDecimal(integerPart, "");
+    case moneyFormat.includes("amount_with_apostrophe_separator"):
+      return formatWithApostrophe(integerPart, decimalPart);
+    case moneyFormat.includes("amount_no_decimals_with_space_separator"):
+      return formatWithSpace(integerPart, "");
+    case moneyFormat.includes("amount_with_space_separator"):
+      return formatWithSpace(integerPart, decimalPart);
+    case moneyFormat.includes("amount_with_period_and_space_separator"):
+      return formatWithSpaceAndPeriod(integerPart, decimalPart);
+    case moneyFormat.includes("amount"):
+      return formatWithComma(integerPart, decimalPart);
+    default:
+      return number;
+  }
+}
+
+function formatWithComma(integerPart, decimalPart) {
+  integerPart = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return decimalPart ? `${integerPart}.${decimalPart}` : integerPart;
+}
+
+function formatWithCommaAndCommaDecimal(integerPart, decimalPart) {
+  integerPart = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return decimalPart ? `${integerPart},${decimalPart}` : integerPart;
+}
+
+function formatWithApostrophe(integerPart, decimalPart) {
+  integerPart = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, "'");
+  return decimalPart ? `${integerPart}.${decimalPart}` : integerPart;
+}
+
+function formatWithSpace(integerPart, decimalPart) {
+  integerPart = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  return decimalPart ? `${integerPart},${decimalPart}` : integerPart;
+}
+
+function formatWithSpaceAndPeriod(integerPart, decimalPart) {
+  integerPart = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  return decimalPart ? `${integerPart}.${decimalPart}` : integerPart;
+}
+
+function formatPrice(value) {
+  const configEl = document.getElementById("ciwi-bundles-config");
+  let currencySymbol = "€";
+  let moneyFormat = "amount_with_comma_separator";
+
+  if (configEl) {
+    try {
+      const config = JSON.parse(configEl.textContent || "{}");
+      if (config.currencySymbol) currencySymbol = config.currencySymbol;
+      if (config.moneyFormat) moneyFormat = config.moneyFormat;
+    } catch (e) {}
+  }
+  
+  const formattedNumber = detectNumberFormat(moneyFormat, Number(value).toFixed(2));
+  return `${currencySymbol}${formattedNumber}`;
 }
 
 function normalizePriceNumber(value) {
@@ -72,6 +138,9 @@ function parseMoneyFromDomString(text) {
 }
 
 function getAddToCartForm() {
+  if (currentMainForm && document.body.contains(currentMainForm)) {
+    return currentMainForm;
+  }
   return document.querySelector("form[action*='/cart/add']");
 }
 
@@ -176,9 +245,13 @@ function parseDiscountRulesJson(discountRulesJson) {
         if (!Number.isFinite(count) || count < 1) return null;
         if (!Number.isFinite(discountPercent)) return null;
         return {
-          count: Math.trunc(count),
-          discountPercent: Math.max(0, Math.min(100, discountPercent)),
-        };
+        count: Math.trunc(count),
+        discountPercent: Math.max(0, Math.min(100, discountPercent)),
+        title: item.title || "",
+        subtitle: item.subtitle || "",
+        badge: item.badge || "",
+        isDefault: !!item.isDefault,
+      };
       })
       .filter(Boolean)
       .sort((a, b) => a.count - b.count);
@@ -229,6 +302,8 @@ function getCurrentOffer(offersConfig) {
 
   for (const offer of offers) {
     if (!offer || typeof offer !== "object") continue;
+    if (offer.status === false) continue;
+    
     const discountRules = parseDiscountRulesJson(offer.discountRulesJson);
     if (!discountRules.length) continue;
 
@@ -246,43 +321,155 @@ function getCurrentOffer(offersConfig) {
   return null;
 }
 
+window.__ciwiBundleState = window.__ciwiBundleState || { selectedCount: null };
+
+function updateThemeQuantityInput(count) {
+  const form = getAddToCartForm();
+  if (form) {
+    // 1. 找到表单内所有名为 quantity 的输入框
+    const innerQtyInputs = Array.from(form.querySelectorAll('[name="quantity"]'));
+    
+    // 2. 找到通过 form 属性关联的 quantity 输入框
+    const formId = form.getAttribute("id");
+    const linkedQtyInputs = formId
+      ? Array.from(document.querySelectorAll(`[name="quantity"][form="${formId}"]`))
+      : [];
+
+    const allQtyInputs = [...innerQtyInputs, ...linkedQtyInputs];
+
+    // 3. 如果都没有，则创建一个隐藏的输入框
+    if (allQtyInputs.length === 0) {
+      const newQtyInput = document.createElement("input");
+      newQtyInput.type = "hidden";
+      newQtyInput.name = "quantity";
+      newQtyInput.value = count;
+      form.appendChild(newQtyInput);
+      allQtyInputs.push(newQtyInput);
+    }
+
+    // 4. 更新所有找到的输入框
+    allQtyInputs.forEach((input) => {
+      input.value = count;
+      // 触发 change 和 input 事件，以兼容不同主题的事件监听
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
+}
+
+window.ciwiSelectBundleOption = function(count) {
+  if (window.__ciwiBundleState) {
+    window.__ciwiBundleState.selectedCount = count;
+  }
+  updateThemeQuantityInput(count);
+  const currentOffer = getCurrentOffer(offersConfigCache);
+  const wrap = document.querySelector(".ciwi-bundle-wrapper");
+  if (wrap && currentOffer) {
+    const html = renderBundlePreviewHtml(currentOffer);
+    if (html) wrap.innerHTML = html;
+  }
+};
+
+window.ciwiHandleBundleAddToCart = function() {
+  const count = window.__ciwiBundleState?.selectedCount || 1;
+  updateThemeQuantityInput(count);
+  const form = getAddToCartForm();
+  
+  if (form) {
+    // 优先尝试寻找表单内部的提交按钮或带有 name="add" 的按钮
+    let addBtn = form.querySelector("button[type='submit'], button[name='add'], input[type='submit'], input[name='add'], [name='add']");
+    
+    // 如果找不到，可能通过 form 属性关联在外部
+    if (!addBtn) {
+      const formId = form.getAttribute("id");
+      if (formId) {
+        addBtn = document.querySelector(`button[type='submit'][form='${formId}'], button[name='add'][form='${formId}'], input[type='submit'][form='${formId}'], input[name='add'][form='${formId}']`);
+      }
+    }
+
+    if (addBtn) {
+      addBtn.click();
+    } else {
+      form.submit();
+    }
+  } else {
+    console.error("[ciwi] Add to cart form not found");
+  }
+};
+
 function renderBundlePreviewHtml(offer) {
   const discountRules = parseDiscountRulesJson(offer?.discountRulesJson);
   if (!discountRules.length) return "";
 
-  const layoutFormat = "vertical";
+  if (!window.__ciwiBundleState.selectedCount) {
+    const defaultRule = discountRules.find(r => r.isDefault);
+    window.__ciwiBundleState.selectedCount = defaultRule ? defaultRule.count : (discountRules[0]?.count || 1);
+    setTimeout(() => updateThemeQuantityInput(window.__ciwiBundleState.selectedCount), 0);
+  }
+  const selectedCount = window.__ciwiBundleState.selectedCount;
+
+  // Extract styles from offer settings, use defaults if missing
+  let offerSettings = {};
+  try {
+    if (offer?.offerSettingsJson) {
+      offerSettings = JSON.parse(offer.offerSettingsJson);
+    }
+  } catch (e) {
+    console.error("[ciwi] failed to parse offerSettingsJson", e);
+  }
+  
+  const layoutFormat = offerSettings.layoutFormat || "vertical";
+  const accentColor = offerSettings.accentColor || "#008060";
+  const cardBackgroundColor = offerSettings.cardBackgroundColor || "#ffffff";
+  const borderColor = offerSettings.borderColor || "#dfe3e8";
+  const labelColor = offerSettings.labelColor || "#ffffff";
+  const titleFontSize = offerSettings.titleFontSize || 14;
+  const titleFontWeight = offerSettings.titleFontWeight || "600";
+  const titleColor = offerSettings.titleColor || "#111111";
+  const buttonText = offerSettings.buttonText || "Add to Cart";
+  const buttonPrimaryColor = offerSettings.buttonPrimaryColor || "#008060";
+  const widgetTitle = offerSettings.title || "Bundle & Save";
+
   const unitPrice = getCurrentUnitPrice();
   const items = [
     {
+      count: 1,
       title: "Single",
       subtitle: "Standard price",
-      price: formatEuro(unitPrice),
+      price: formatPrice(unitPrice),
     },
     ...discountRules.map((rule, index) => {
       const originalTotal = unitPrice * rule.count;
       const discountedTotal = originalTotal * (1 - rule.discountPercent / 100);
       const saved = originalTotal - discountedTotal;
+      const hasDefault = discountRules.some(r => r.isDefault);
+      const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
       return {
-        title: `${rule.count} items`,
-        subtitle: `You save ${rule.discountPercent}%`,
-        price: formatEuro(discountedTotal),
-        original: formatEuro(originalTotal),
-        featured: index === 0,
-        badge: index === 0 ? "Most Popular" : "",
-        saveLabel: `SAVE ${formatEuro(saved)}`,
+        count: rule.count,
+        title: rule.title || `${rule.count} items`,
+        subtitle: rule.subtitle || `You save ${rule.discountPercent}%`,
+        price: formatPrice(discountedTotal),
+        original: formatPrice(originalTotal),
+        badge: rule.badge || (isFeatured ? "Most Popular" : ""),
+        saveLabel: `SAVE ${formatPrice(saved)}`,
       };
     }),
   ];
 
   const itemsHtml = items
     .map((item) => {
-      const featuredClass = item.featured
+      const isSelected = item.count === selectedCount;
+      const featuredClass = isSelected
         ? " create-offer-style-preview-item--featured"
         : "";
-      return `<div class="create-offer-style-preview-item${featuredClass}" style="background:#ffffff;">
+      const featuredStyle = isSelected 
+        ? `border-color: ${esc(accentColor)} !important; background: ${esc(cardBackgroundColor)} !important; box-shadow: 0 8px 18px ${esc(accentColor)}25 !important; cursor: pointer;`
+        : `border-color: ${esc(borderColor)} !important; background: ${esc(cardBackgroundColor)} !important; cursor: pointer;`;
+        
+      return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}" onclick="window.ciwiSelectBundleOption(${item.count})">
       ${
-        item.featured && item.badge
-          ? `<div class="create-offer-style-preview-badge" style="background:#111111;">${esc(item.badge)}</div>`
+        item.badge
+          ? `<div class="create-offer-style-preview-badge" style="background:${esc(accentColor)} !important; color:${esc(labelColor)} !important;">${esc(item.badge)}</div>`
           : ""
       }
       <div class="create-offer-style-preview-item-title">${esc(item.title)}</div>
@@ -303,10 +490,13 @@ function renderBundlePreviewHtml(offer) {
     .join("");
 
   return `<div class="create-offer-preview-card">
-    <div class="create-offer-style-preview-header" style="color:#111111;">Bundle & Save</div>
+    <div class="create-offer-style-preview-header" style="color:${esc(titleColor)} !important; font-size: ${esc(titleFontSize)}px !important; font-weight: ${esc(titleFontWeight)} !important;">${esc(widgetTitle)}</div>
     <div class="create-offer-style-preview-list create-offer-style-preview-list--${layoutFormat}">
       ${itemsHtml}
     </div>
+    <button class="create-offer-preview-button" onclick="window.ciwiHandleBundleAddToCart()" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
+      ${esc(buttonText)}
+    </button>
   </div>`;
 }
 
@@ -367,6 +557,7 @@ function insertNearAddToCart(node, selectors) {
   if (!hit) return false;
 
   const { container, form } = hit;
+  currentMainForm = form;
   const addBtn = form.querySelector("[name='add'], button[type='submit']");
   const buyNowBtn = container.querySelector(
     ".shopify-payment-button, shopify-buy-it-now-button, [data-shopify='payment-button']",
@@ -432,6 +623,7 @@ function scheduleBundlePriceRefresh(offer) {
     if (!wrap) return;
     const html = renderBundlePreviewHtml(offer);
     if (html) wrap.innerHTML = html;
+    hideThemeQuantitySelectors();
   }, 64);
 }
 
@@ -499,6 +691,7 @@ function tryMount(offer) {
   if (insertNearAddToCart(section, selectors)) {
     src.remove();
     attachBundlePriceSync(offer);
+    hideThemeQuantitySelectors();
     return "done";
   }
   return "retry";
@@ -514,7 +707,32 @@ function fallbackMount(offer) {
   const main = document.querySelector("main") || document.body;
   main.appendChild(section);
   src.remove();
+
+  if (!currentMainForm) {
+    currentMainForm = document.querySelector("form[action*='/cart/add']");
+  }
+
   attachBundlePriceSync(offer);
+  hideThemeQuantitySelectors();
+}
+
+function hideThemeQuantitySelectors() {
+  const selectors = [
+    ".quantity-selector-wrapper",
+    ".product-form__quantity",
+    ".product-quantity",
+    "quantity-input",
+    ".quantity",
+    "[data-product-quantity]"
+  ];
+  for (const sel of selectors) {
+    const els = document.querySelectorAll(sel);
+    els.forEach((el) => {
+      if (el && el.style) {
+        el.style.display = "none";
+      }
+    });
+  }
 }
 
 function run() {
