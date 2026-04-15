@@ -1,9 +1,9 @@
 // AllOffersPage.tsx
 import { useEffect, useState } from "react";
-import "../styles/tailwind.css";
+import "../../styles/tailwind.css";
 import { Trash2, Pencil } from "lucide-react";
 import { Form, useNavigation, useSearchParams, useActionData } from "react-router";
-import type { IndexLoaderData } from "./_index/route";
+import type { IndexLoaderData } from "../_index/route";
 
 type AllOffersRow = {
   id: string;
