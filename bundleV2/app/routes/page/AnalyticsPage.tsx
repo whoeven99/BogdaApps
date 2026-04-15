@@ -58,28 +58,59 @@ export function AnalyticsPage({ shop, offers }: AnalyticsPageProps) {
           now.getTime() - selectedTimeRange * 24 * 60 * 60 * 1000,
         );
 
-        const query = new URLSearchParams({
+        const overviewQuery = new URLSearchParams({
           mode: "overview",
           shopName: shop,
           from: from.toISOString(),
           to: now.toISOString(),
           bundleId: selectedOffer === "all" ? "" : selectedOffer,
         });
-
-        const response = await fetch(`/webpixerToAli?${query.toString()}`, {
-          method: "GET",
-          signal: controller.signal,
+        const trendQuery = new URLSearchParams({
+          mode: "trend",
+          shopName: shop,
+          from: from.toISOString(),
+          to: now.toISOString(),
+          bundleId: selectedOffer === "all" ? "" : selectedOffer,
         });
 
-        const data = await response.json();
+        const [overviewResponse, trendResponse] = await Promise.all([
+          fetch(`/webpixerToAli?${overviewQuery.toString()}`, {
+            method: "GET",
+            signal: controller.signal,
+          }),
+          fetch(`/webpixerToAli?${trendQuery.toString()}`, {
+            method: "GET",
+            signal: controller.signal,
+          }),
+        ]);
 
-        if (response.ok && data.success && data.metrics) {
-          const m = data.metrics;
+        const overviewData = await overviewResponse.json();
+        const trendData = await trendResponse.json();
+
+        if (overviewResponse.ok && overviewData.success && overviewData.metrics) {
+          const m = overviewData.metrics;
           setAnalyticsData({
             visitors: m.visitor || 0,
             bundleOrders: m.bundleOrders || 0,
             conversionRate: m.conversion || 0,
           });
+        }
+
+        if (trendResponse.ok && trendData.success && Array.isArray(trendData.series)) {
+          const xData = trendData.series.map((item: { date?: string }) => {
+            const d = new Date(String(item.date || ""));
+            if (Number.isNaN(d.getTime())) return String(item.date || "");
+            return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+          });
+          const yData = trendData.series.map((item: { gmv?: number }) =>
+            Number(item.gmv) || 0,
+          );
+          setBasicLineChartData({
+            Xdata: xData,
+            Ydata: yData,
+          });
+        } else {
+          setBasicLineChartData({ Xdata: [], Ydata: [] });
         }
       } catch (error: any) {
         if (error.name === "AbortError") return;
@@ -91,25 +122,6 @@ export function AnalyticsPage({ shop, offers }: AnalyticsPageProps) {
 
     return () => controller.abort();
   }, [shop, selectedTimeRange, selectedOffer]);
-
-  // Mock trend data for now until webpixerToAli supports trend queries
-  useEffect(() => {
-    const mockDates = Array.from({ length: selectedTimeRange }, (_, i) => {
-      const d = new Date();
-      d.setDate(d.getDate() - (selectedTimeRange - 1 - i));
-      return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    });
-
-    const mockValues = Array.from(
-      { length: selectedTimeRange },
-      () => Math.floor(Math.random() * 500) + 100,
-    );
-
-    setBasicLineChartData({
-      Xdata: mockDates,
-      Ydata: mockValues,
-    });
-  }, [selectedTimeRange]);
 
   return (
     <div className="max-w-[1280px] mx-auto pb-[24px]">

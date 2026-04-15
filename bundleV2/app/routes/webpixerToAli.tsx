@@ -44,6 +44,11 @@ type OverviewMetrics = {
   orderPv: number;
 };
 
+type DailyGmvPoint = {
+  date: string;
+  gmv: number;
+};
+
 const NO_BUNDLE_TITLE = "NO_BUNDLE_TITLE";
 
 function parseTime(input: unknown): number | null {
@@ -116,6 +121,58 @@ function getTotalPrice(extra: Record<string, unknown>): number {
   if (!totalPrice || typeof totalPrice !== "object") return 0;
   const amount = (totalPrice as Record<string, unknown>).amount;
   return toNumber(amount);
+}
+
+function formatDayKey(input: Date): string {
+  const y = input.getUTCFullYear();
+  const m = String(input.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(input.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function buildDailyGmvTrend(
+  logs: SlsLogLike[],
+  shopName: string,
+  fromDate: Date,
+  toDate: Date,
+): DailyGmvPoint[] {
+  const dayGmv = new Map<string, number>();
+
+  for (const rawLog of logs) {
+    const content = extractLogContent(rawLog);
+    if (!content.shopName || content.shopName !== shopName) continue;
+
+    const timestampMs =
+      parseTime(rawLog.time) ?? parseTime(rawLog.timestamp) ?? parseTime(rawLog.__time__);
+    if (!timestampMs) continue;
+    if (timestampMs < fromDate.getTime() || timestampMs > toDate.getTime()) continue;
+    if (content.event !== "checkout_completed") continue;
+
+    const extra = parseExtra(content.extra);
+    if (!hasBundle(extra)) continue;
+
+    const amount = getTotalPrice(extra);
+    if (!Number.isFinite(amount) || amount <= 0) continue;
+
+    const dayKey = formatDayKey(new Date(timestampMs));
+    dayGmv.set(dayKey, (dayGmv.get(dayKey) ?? 0) + amount);
+  }
+
+  const series: DailyGmvPoint[] = [];
+  const cursor = new Date(fromDate);
+  cursor.setUTCHours(0, 0, 0, 0);
+  const toDay = new Date(toDate);
+  toDay.setUTCHours(0, 0, 0, 0);
+  while (cursor.getTime() <= toDay.getTime()) {
+    const dayKey = formatDayKey(cursor);
+    series.push({
+      date: dayKey,
+      gmv: Number((dayGmv.get(dayKey) ?? 0).toFixed(2)),
+    });
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+
+  return series;
 }
 
 function buildOverviewMetrics(
@@ -328,6 +385,84 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             order: orderAgg,
             bundleOrder: bundleOrderAgg,
             gmv: gmvAgg,
+          },
+        }),
+        {
+          status: 200,
+          headers: corsHeaders,
+        },
+      );
+    } catch (error) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: String(error),
+        }),
+        {
+          status: 500,
+          headers: corsHeaders,
+        },
+      );
+    }
+  }
+
+  if (request.method === "GET" && url.searchParams.get("mode") === "trend") {
+    const shopName = String(url.searchParams.get("shopName") || "");
+    const fromRaw = url.searchParams.get("from");
+    const toRaw = url.searchParams.get("to");
+    const now = new Date();
+    const defaultFrom = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const fromDate = fromRaw ? new Date(fromRaw) : defaultFrom;
+    const toDate = toRaw ? new Date(toRaw) : now;
+
+    if (!shopName) {
+      return new Response(
+        JSON.stringify({ success: false, message: "shopName is required" }),
+        { status: 400, headers: corsHeaders },
+      );
+    }
+    if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+      return new Response(
+        JSON.stringify({ success: false, message: "invalid from/to date" }),
+        { status: 400, headers: corsHeaders },
+      );
+    }
+
+    const sls = createSlsClient();
+    if (!sls) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message:
+            "Missing Alibaba Log credentials (ALIBABA_CLOUD_ACCESS_KEY_ID, ALIBABA_CLOUD_ACCESS_KEY_SECRET, ALIBABA_CLOUD_ENDPOINT)",
+        }),
+        { status: 503, headers: corsHeaders },
+      );
+    }
+
+    try {
+      const safeShopName = escapeSlsString(shopName);
+      const query =
+        `__topic__: "checkout_completed" and shopName: "${safeShopName}" and extra: "bundle" and not extra: "NO_BUNDLE_TITLE"`;
+      const resp = (await sls.getLogs(projectName(), logstoreName(), fromDate, toDate, {
+        query,
+        line: 1000,
+        reverse: false,
+      })) as unknown;
+      const logs = Array.isArray(resp)
+        ? (resp as SlsLogLike[])
+        : Array.isArray((resp as { logs?: unknown })?.logs)
+          ? (((resp as { logs?: unknown[] }).logs ?? []) as SlsLogLike[])
+          : [];
+
+      const series = buildDailyGmvTrend(logs, shopName, fromDate, toDate);
+      return new Response(
+        JSON.stringify({
+          success: true,
+          series,
+          range: {
+            from: fromDate.toISOString(),
+            to: toDate.toISOString(),
           },
         }),
         {
