@@ -13,11 +13,11 @@ import {
   ensureCartLinesAutomaticDiscount,
 } from "../../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { DashboardPage } from "../DashboardPage";
-import { AllOffersPage } from "../AllOffersPage";
-import { AnalyticsPage } from "../AnalyticsPage";
-import { PricingPage } from "../PricingPage";
-import { CreateNewOffer } from "../component/CreateNewOffer";
+import { DashboardPage } from "../page/DashboardPage";
+import { AllOffersPage } from "../page/AllOffersPage";
+import { AnalyticsPage } from "../page/AnalyticsPage";
+import { PricingPage } from "../page/PricingPage";
+import { CreateNewOffer } from "../component/CreateNewOffer/CreateNewOffer";
 import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
 import prisma from "../../db.server";
 import {
@@ -134,7 +134,7 @@ async function syncShopOffersMetafield(
     if (!shopId) {
       return {
         ok: false,
-        message: "æ— æ³•è§£æåº—é“º IDï¼ŒMetafield æœªå†™å…¥ã€‚",
+        message: "æ? æ³?è§£æ?åº?é?º IDï¼?Metafield æ?ªå??å?¥ã??",
       };
     }
 
@@ -198,7 +198,7 @@ async function syncShopOffersMetafield(
     return { ok: true };
   } catch (error) {
     const msg = error instanceof Error ? error.message : JSON.stringify(error);
-    return { ok: false, message: msg || "Metafield åŒæ­¥å¼‚å¸¸" };
+    return { ok: false, message: msg || "Metafield å?æ­¥å¼?å¸¸" };
   }
 }
 
@@ -322,7 +322,7 @@ const collectTypedBlocks = (
 };
 
 /**
- * App embed status for a single theme extension block (e.g. product_detail_message â†’ product-detail-message.js).
+ * App embed status for a single theme extension block (e.g. product_detail_message â?? product-detail-message.js).
  * Matches editor deep-link form: `appEmbed={client_id}/{blockHandle}` e.g. `1cdf.../product_detail_message`.
  * `type` in JSON may be `.../apps/{client_id}/blocks/{handle}/...` or `.../apps/{client_id}/{handle}/...`.
  */
@@ -331,7 +331,7 @@ const getThemeExtensionEnabled = async (
   extensionHandle: string,
   /** Liquid filename base, e.g. product_detail_message for product_detail_message.liquid */
   blockHandle: string,
-  /** SHOPIFY_API_KEY / app client id â€” required to match real storefront block types */
+  /** SHOPIFY_API_KEY / app client id â?? required to match real storefront block types */
   appClientId: string,
   /** App display name from shopify.app.*.toml (will be normalized to slug for matching) */
   appName?: string,
@@ -462,7 +462,7 @@ const getThemeExtensionEnabled = async (
   return false;
 };
 
-/** åŒä¸€åº—é“ºå†…åç§°å»é‡ï¼šå¿½ç•¥å¤§å°å†™ä¸è¿ç»­ç©ºç™½ */
+/** å?ä¸?åº?é?ºå??åç§°å?»é?ï¼?å¿½ç?¥å¤§å°å??ä¸?è¿?ç»­ç©ºç?½ */
 function normalizeOfferNameKey(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
@@ -548,13 +548,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       return {
         id: node.id,
         name: node.title,
-        price: priceRaw ? `â‚¬${priceRaw}` : "â‚¬0.00",
+        price: priceRaw ? `â?¬${priceRaw}` : "â?¬0.00",
         image: image || "https://via.placeholder.com/60",
       };
     })
     .filter((item): item is StoreProductItem => item !== null);
 
-  // product_detail_message.liquid â†’ product-detail-message.js
+  // product_detail_message.liquid â?? product-detail-message.js
   // eslint-disable-next-line no-undef
   const apiKey = process.env.SHOPIFY_API_KEY || "";
   const appDisplayName = process.env.SHOPIFY_APP_NAME || process.env.APP_NAME;
@@ -632,7 +632,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const cycle = String(formData.get("cycle") || "");
     if (!isBillingPlanId(plan) || !isBillingCycle(cycle)) {
       return Response.json(
-        { ok: false as const, error: "æ— æ•ˆçš„å¥—é¤æˆ–è®¡è´¹å‘¨æœŸã€‚" },
+        { ok: false as const, error: "æ? æ??ç??å¥?é¤æ??è®¡è´¹å?¨æ??ã??" },
         { status: 400 },
       );
     }
@@ -710,7 +710,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   console.log("action intent", intent);
 
-  // å…¼å®¹ fallbackï¼šå¦‚æœæ²¡æœ‰æ˜¾å¼ intentï¼Œä½†æœ‰ offerIdï¼Œåˆ™è§†ä¸ºæ›´æ–°ï¼Œå¦åˆ™è§†ä¸ºåˆ›å»º
+  // å?¼å®¹ fallbackï¼?å¦?æ??æ²¡æ??æ?¾å¼ intentï¼?ä½?æ?? offerIdï¼?å??è§?ä¸ºæ?´æ?°ï¼?å¦å??è§?ä¸ºå??å»º
   if (!intent) {
     const hasId = formData.get("offerId");
     intent = hasId ? "update-offer" : "create-offer";
@@ -816,17 +816,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     if (!name) {
-      return offerActionErrorResponse("è¯·å¡«å†™ Offer åç§°ã€‚", 400);
+      return offerActionErrorResponse("è¯·å¡«å?? Offer åç§°ã??", 400);
     }
     if (!startTimeRaw || !endTimeRaw) {
-      return offerActionErrorResponse("è¯·å¡«å†™æœ‰æ•ˆçš„å¼€å§‹æ—¶é—´ä¸ç»“æŸæ—¶é—´ã€‚", 400);
+      return offerActionErrorResponse("è¯·å¡«å??æ??æ??ç??å¼?å§?æ?¶é?´ä¸?ç»?æ?æ?¶é?´ã??", 400);
     }
 
     const startTime = new Date(startTimeRaw);
     const endTime = new Date(endTimeRaw);
 
     if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
-      return offerActionErrorResponse("è¯·å¡«å†™æœ‰æ•ˆçš„å¼€å§‹æ—¶é—´ä¸ç»“æŸæ—¶é—´ã€‚", 400);
+      return offerActionErrorResponse("è¯·å¡«å??æ??æ??ç??å¼?å§?æ?¶é?´ä¸?ç»?æ?æ?¶é?´ã??", 400);
     }
 
     const nameKey = normalizeOfferNameKey(name);
@@ -841,14 +841,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
     if (nameTaken) {
       return offerActionErrorResponse(
-        "è¯¥åº—é“ºä¸‹å·²å­˜åœ¨åŒå Offerï¼Œè¯·æ›´æ¢åç§°ã€‚",
+        "è¯¥åº?é?ºä¸?å·²å­?å?¨å?å Offerï¼?è¯·æ?´æ¢åç§°ã??",
         409,
       );
     }
 
     const data = {
       shopName,
-      // å»æ‰é¦–å°¾ç©ºç™½ï¼Œä¿ç•™åç§°ä¸­é—´ç©ºæ ¼ï¼ˆé¿å…ç¼–ç /è§£æè¾¹ç•Œé—®é¢˜ï¼‰
+      // å?»æ??é¦?å°¾ç©ºç?½ï¼?ä¿ç??åç§°ä¸­é?´ç©ºæ ¼ï¼?é¿å?ç¼?ç /è§£æ?è¾¹ç??é?®é¢?ï¼?
       name,
       cartTitle,
       offerType,
@@ -871,7 +871,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           error.code === "P2002"
         ) {
           return offerActionErrorResponse(
-            "è¯¥åº—é“ºä¸‹å·²å­˜åœ¨åŒå Offerï¼Œè¯·æ›´æ¢åç§°ã€‚",
+            "è¯¥åº?é?ºä¸?å·²å­?å?¨å?å Offerï¼?è¯·æ?´æ¢åç§°ã??",
             409,
           );
         }
@@ -887,11 +887,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             offerSettingsJson,
           },
         });
-        return offerActionErrorResponse("åˆ›å»º Offer å¤±è´¥ï¼Œè¯·ç¨åé‡è¯•ã€‚", 500);
+        return offerActionErrorResponse("å??å»º Offer å¤±è´¥ï¼?è¯·ç¨å?é?è¯?ã??", 500);
       }
     } else {
       if (!idRaw) {
-        return offerActionErrorResponse("ç¼ºå°‘ Offer IDï¼Œæ— æ³•æ›´æ–°ã€‚", 400);
+        return offerActionErrorResponse("ç¼ºå°? Offer IDï¼?æ? æ³?æ?´æ?°ã??", 400);
       }
       try {
         await writeOfferWithRetry(() =>
@@ -906,7 +906,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           error.code === "P2002"
         ) {
           return offerActionErrorResponse(
-            "è¯¥åº—é“ºä¸‹å·²å­˜åœ¨åŒå Offerï¼Œè¯·æ›´æ¢åç§°ã€‚",
+            "è¯¥åº?é?ºä¸?å·²å­?å?¨å?å Offerï¼?è¯·æ?´æ¢åç§°ã??",
             409,
           );
         }
@@ -923,7 +923,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             offerSettingsJson,
           },
         });
-        return offerActionErrorResponse("æ›´æ–° Offer å¤±è´¥ï¼Œè¯·ç¨åé‡è¯•ã€‚", 500);
+        return offerActionErrorResponse("æ?´æ?° Offer å¤±è´¥ï¼?è¯·ç¨å?é?è¯?ã??", 500);
       }
     }
 
@@ -934,7 +934,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         message: syncResult.message,
       });
       return offerActionErrorResponse(
-        `åŒæ­¥åˆ°åº—é“ºå¤±è´¥ï¼ˆä¸»é¢˜/æŠ˜æ‰£ä¾èµ–æ­¤æ•°æ®ï¼‰ï¼š${syncResult.message}`,
+        `å?æ­¥å?°åº?é?ºå¤±è´¥ï¼?ä¸»é¢?/æ??æ?£ä¾èµ?æ­¤æ?°æ®ï¼?ï¼?${syncResult.message}`,
         502,
       );
     }
@@ -968,7 +968,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return offerActionErrorResponse("Toggle status failed.", 500);
     }
 
-    // åŒæ­¥ metafieldï¼Œä¿è¯å‰ç«¯/æ‰©å±•ç«¯å®æ—¶ç”Ÿæ•ˆ
+    // å?æ­¥ metafieldï¼?ä¿è¯å?ç«¯/æ?©å±?ç«¯å®?æ?¶ç??æ??
     try {
       const shopNameToSync = updatedOffer?.shopName as string | undefined;
       if (shopNameToSync) {
@@ -1047,7 +1047,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     const prismaAny: any = prisma;
 
-    // åˆ é™¤å‰å…ˆæ‹¿åˆ° shopNameï¼ˆç”¨äºåŒæ­¥ metafieldï¼‰
+    // å? é?¤å?å??æ?¿å?° shopNameï¼?ç?¨äº?å?æ­¥ metafieldï¼?
     let shopNameToSync: string | undefined;
     try {
       const offerToDelete = await prismaAny.offer.findUnique({
@@ -1063,7 +1063,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return offerActionErrorResponse("Delete offer failed.", 500);
     }
 
-    // åŒæ­¥ metafieldï¼Œä¿è¯æ‰©å±•ç«¯ä¸å†ä½¿ç”¨å·²åˆ é™¤ offer
+    // å?æ­¥ metafieldï¼?ä¿è¯æ?©å±?ç«¯ä¸å?ä½¿ç?¨å·²å? é?¤ offer
     try {
       if (shopNameToSync) {
         const shopOffers = (await prismaAny.offer.findMany({
@@ -1174,19 +1174,19 @@ export default function Index() {
 
   useEffect(() => {
     if (toast === "create-success") {
-      setToastMessage("Offer åˆ›å»ºæˆåŠŸ");
+      setToastMessage("Offer å??å»ºæ?å??");
       setShowCreateOffer(false);
       setEditingOfferId(null);
     } else if (toast === "update-success") {
-      setToastMessage("Offer æ›´æ–°æˆåŠŸ");
+      setToastMessage("Offer æ?´æ?°æ?å??");
       setShowCreateOffer(false);
       setEditingOfferId(null);
     } else if (toast === "delete-success") {
-      setToastMessage("Offer åˆ é™¤æˆåŠŸ");
+      setToastMessage("Offer å? é?¤æ?å??");
       setShowCreateOffer(false);
       setEditingOfferId(null);
     } else if (toast === "toggle-success") {
-      setToastMessage("Offer çŠ¶æ€å·²æ›´æ–°");
+      setToastMessage("Offer ç?¶æ?å·²æ?´æ?°");
     } else {
       setToastMessage(null);
     }

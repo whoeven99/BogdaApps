@@ -6,8 +6,8 @@ import {
   X,
 } from "lucide-react";
 import "./CreateNewOffer.css";
-import BundlePreview from "./BundlePreview";
-import { PreviewItem } from "./bundlePreviewShared";
+import BundlePreview from "../BundlePreview/BundlePreview";
+import { PreviewItem } from "../BundlePreview/bundlePreviewShared";
 
 type DiscountRule = {
   // 数量阈值：例如 count=2 表示“买 2 件及以上”生效

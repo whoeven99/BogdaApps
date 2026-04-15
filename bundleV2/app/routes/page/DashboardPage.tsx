@@ -13,7 +13,7 @@ import {
   Trash2,
 } from "lucide-react";
 import "../styles/tailwind.css";
-import { CreateNewOffer } from "./component/CreateNewOffer";
+import { CreateNewOffer } from "../component/CreateNewOffer/CreateNewOffer";
 import type { IndexLoaderData } from "./_index/route";
 
 interface DashboardPageProps {
