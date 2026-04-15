@@ -11,6 +11,7 @@ const RETRY_MS = 12_000;
 let offersConfigCache = null;
 let priceSyncController = null;
 let bundlePriceDebounceT = null;
+let currentMainForm = null;
 
 function esc(value) {
   return String(value ?? "")
@@ -137,6 +138,9 @@ function parseMoneyFromDomString(text) {
 }
 
 function getAddToCartForm() {
+  if (currentMainForm && document.body.contains(currentMainForm)) {
+    return currentMainForm;
+  }
   return document.querySelector("form[action*='/cart/add']");
 }
 
@@ -322,21 +326,34 @@ window.__ciwiBundleState = window.__ciwiBundleState || { selectedCount: null };
 function updateThemeQuantityInput(count) {
   const form = getAddToCartForm();
   if (form) {
-    let qtyInput = form.querySelector('input[name="quantity"]');
-    if (!qtyInput) {
-      const formId = form.getAttribute("id");
-      if (formId) {
-        qtyInput = document.querySelector(`input[name="quantity"][form="${formId}"]`);
-      }
+    // 1. 找到表单内所有名为 quantity 的输入框
+    const innerQtyInputs = Array.from(form.querySelectorAll('[name="quantity"]'));
+    
+    // 2. 找到通过 form 属性关联的 quantity 输入框
+    const formId = form.getAttribute("id");
+    const linkedQtyInputs = formId
+      ? Array.from(document.querySelectorAll(`[name="quantity"][form="${formId}"]`))
+      : [];
+
+    const allQtyInputs = [...innerQtyInputs, ...linkedQtyInputs];
+
+    // 3. 如果都没有，则创建一个隐藏的输入框
+    if (allQtyInputs.length === 0) {
+      const newQtyInput = document.createElement("input");
+      newQtyInput.type = "hidden";
+      newQtyInput.name = "quantity";
+      newQtyInput.value = count;
+      form.appendChild(newQtyInput);
+      allQtyInputs.push(newQtyInput);
     }
-    if (!qtyInput) {
-      qtyInput = document.createElement("input");
-      qtyInput.type = "hidden";
-      qtyInput.name = "quantity";
-      form.appendChild(qtyInput);
-    }
-    qtyInput.value = count;
-    qtyInput.dispatchEvent(new Event("change", { bubbles: true }));
+
+    // 4. 更新所有找到的输入框
+    allQtyInputs.forEach((input) => {
+      input.value = count;
+      // 触发 change 和 input 事件，以兼容不同主题的事件监听
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
   }
 }
 
@@ -359,7 +376,17 @@ window.ciwiHandleBundleAddToCart = function() {
   const form = getAddToCartForm();
   
   if (form) {
-    const addBtn = form.querySelector("button[type='submit'], [name='add']");
+    // 优先尝试寻找表单内部的提交按钮或带有 name="add" 的按钮
+    let addBtn = form.querySelector("button[type='submit'], button[name='add'], input[type='submit'], input[name='add'], [name='add']");
+    
+    // 如果找不到，可能通过 form 属性关联在外部
+    if (!addBtn) {
+      const formId = form.getAttribute("id");
+      if (formId) {
+        addBtn = document.querySelector(`button[type='submit'][form='${formId}'], button[name='add'][form='${formId}'], input[type='submit'][form='${formId}'], input[name='add'][form='${formId}']`);
+      }
+    }
+
     if (addBtn) {
       addBtn.click();
     } else {
@@ -530,6 +557,7 @@ function insertNearAddToCart(node, selectors) {
   if (!hit) return false;
 
   const { container, form } = hit;
+  currentMainForm = form;
   const addBtn = form.querySelector("[name='add'], button[type='submit']");
   const buyNowBtn = container.querySelector(
     ".shopify-payment-button, shopify-buy-it-now-button, [data-shopify='payment-button']",
@@ -679,6 +707,11 @@ function fallbackMount(offer) {
   const main = document.querySelector("main") || document.body;
   main.appendChild(section);
   src.remove();
+
+  if (!currentMainForm) {
+    currentMainForm = document.querySelector("form[action*='/cart/add']");
+  }
+
   attachBundlePriceSync(offer);
   hideThemeQuantitySelectors();
 }
