@@ -3,3 +3,7 @@ build
 public/build
 */*.yml
 .shopify
+.testprogram
+extensions/**/generated
+extensions/**/assets/*.js
+extensions/**/dist

@@ -36,6 +36,12 @@ import {
   createRecurringSubscription,
   fetchActiveSubscriptions,
 } from "../../billing.server";
+import {
+  OFFER_TEXT_LIMITS,
+  clampNumber,
+  sanitizeHexColor,
+  sanitizeSingleLineText,
+} from "../../utils/offerParsing";
 
 type OfferListItem = {
   id: string;
@@ -73,16 +79,7 @@ function sanitizeHexColorParam(
   raw: string | null | undefined,
   fallback: string,
 ): string {
-  const t = String(raw ?? "").trim();
-  if (/^#[0-9A-Fa-f]{6}$/.test(t)) return t.toLowerCase();
-  if (/^#[0-9A-Fa-f]{3}$/.test(t)) {
-    const r = t[1];
-    const g = t[2];
-    const b = t[3];
-    return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
-  }
-  if (/^#[0-9A-Fa-f]{8}$/.test(t)) return `#${t.slice(1, 7)}`.toLowerCase();
-  return fallback;
+  return sanitizeHexColor(raw, fallback);
 }
 
 type ShopOffersMetafieldSyncResult =
@@ -718,12 +715,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (intent === "create-offer" || intent === "update-offer") {
     const idRaw = String(formData.get("offerId") || "").trim();
-    const nameRaw = String(formData.get("offerName") || "").trim();
-    const name = nameRaw; // fallback logic removed as requested by original form code handling offerName properly
-    const cartTitle = String(formData.get("cartTitle") || "Bundle Discount").trim();
+    const nameRaw = String(formData.get("offerName") || "");
+    const name = sanitizeSingleLineText(
+      nameRaw,
+      OFFER_TEXT_LIMITS.offerName,
+    );
+    const cartTitle = sanitizeSingleLineText(
+      formData.get("cartTitle"),
+      OFFER_TEXT_LIMITS.cartTitle,
+      "Bundle Discount",
+    );
     const offerType = String(formData.get("offerType") || "").trim();
-    const layoutFormat =
-      String(formData.get("layoutFormat") || "").trim() || "vertical";
+    const layoutFormatRaw = String(formData.get("layoutFormat") || "").trim();
+    const layoutFormat = ["vertical", "horizontal", "card", "compact"].includes(
+      layoutFormatRaw,
+    )
+      ? layoutFormatRaw
+      : "vertical";
     const startTimeRaw = String(formData.get("startTime") || "").trim();
     const endTimeRaw = String(formData.get("endTime") || "").trim();
     const selectedProductsJson = String(
@@ -735,8 +743,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const statusRaw = String(formData.get("status") || "");
     const status = statusRaw === "true";
 
-    const totalBudget = formData.get("totalBudget");
-    const dailyBudget = formData.get("dailyBudget");
+    const totalBudgetRaw = formData.get("totalBudget");
+    const dailyBudgetRaw = formData.get("dailyBudget");
 
     const customerSegments = formData.getAll("customerSegments") as string[];
     const markets = formData.getAll("markets") as string[];
@@ -770,19 +778,41 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       "#008060",
     );
 
-    const titleFontSize = Number(formData.get("titleFontSize")) || 14;
-    const titleFontWeight = String(formData.get("titleFontWeight") || "600");
-    const buttonText = String(
-      formData.get("buttonText") || "Add to Cart",
-    ).trim();
+    const titleFontSize = clampNumber(formData.get("titleFontSize"), 10, 36, 14);
+    const titleFontWeightRaw = String(formData.get("titleFontWeight") || "600").trim();
+    const titleFontWeight = ["400", "500", "600", "700"].includes(titleFontWeightRaw)
+      ? titleFontWeightRaw
+      : "600";
+    const buttonText = sanitizeSingleLineText(
+      formData.get("buttonText"),
+      OFFER_TEXT_LIMITS.buttonText,
+      "Add to Cart",
+    );
 
-    const title = String(formData.get("title") || "Bundle & Save").trim();
+    const title = sanitizeSingleLineText(
+      formData.get("title"),
+      OFFER_TEXT_LIMITS.widgetTitle,
+      "Bundle & Save",
+    );
+
+    if (selectedProductsJson.length > 50_000) {
+      return offerActionErrorResponse("选品数据过大，请减少选择的商品数量。", 400);
+    }
+    if (discountRulesJson.length > 50_000) {
+      return offerActionErrorResponse("折扣规则数据过大，请减少规则数量。", 400);
+    }
 
     const offerSettingsJson = JSON.stringify({
       title,
       layoutFormat,
-      totalBudget: totalBudget ? Number(totalBudget) : null,
-      dailyBudget: dailyBudget ? Number(dailyBudget) : null,
+      totalBudget:
+        typeof totalBudgetRaw === "string" && totalBudgetRaw.trim()
+          ? Math.max(0, clampNumber(totalBudgetRaw, 0, Number.MAX_SAFE_INTEGER, 0))
+          : null,
+      dailyBudget:
+        typeof dailyBudgetRaw === "string" && dailyBudgetRaw.trim()
+          ? Math.max(0, clampNumber(dailyBudgetRaw, 0, Number.MAX_SAFE_INTEGER, 0))
+          : null,
       customerSegments: customerSegments.length
         ? customerSegments.join(",")
         : null,
@@ -818,6 +848,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (!name) {
       return offerActionErrorResponse("请填写 Offer 名称。", 400);
     }
+    if (!cartTitle) {
+      return offerActionErrorResponse("请填写 Display Title。", 400);
+    }
     if (!startTimeRaw || !endTimeRaw) {
       return offerActionErrorResponse("请填写有效的开始时间与结束时间。", 400);
     }
@@ -827,6 +860,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
       return offerActionErrorResponse("请填写有效的开始时间与结束时间。", 400);
+    }
+    if (endTime.getTime() <= startTime.getTime()) {
+      return offerActionErrorResponse("结束时间必须晚于开始时间。", 400);
     }
 
     const nameKey = normalizeOfferNameKey(name);

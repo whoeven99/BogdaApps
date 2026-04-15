@@ -124,7 +124,7 @@ export default function App() {
       { intent: "ensure-web-pixel" },
       { method: "POST" },
     );
-  }, []);
+  }, [ensureWebPixelFetcher]);
 
   return (
     <AppProvider embedded apiKey={apiKey}>

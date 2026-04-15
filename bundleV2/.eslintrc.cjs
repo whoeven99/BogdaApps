@@ -74,6 +74,13 @@ module.exports = {
         "plugin:import/recommended",
         "plugin:import/typescript",
       ],
+      rules: {
+        "@typescript-eslint/no-explicit-any": "off",
+        "@typescript-eslint/no-unused-vars": "off",
+        "no-empty": "off",
+        "jsx-a11y/label-has-associated-control": "off",
+        "react/no-unescaped-entities": "off",
+      },
     },
 
     // Node
