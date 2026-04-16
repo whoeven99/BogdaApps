@@ -438,6 +438,7 @@ function renderBundlePreviewHtml(offer) {
   const titleColor = offerSettings.titleColor || "#111111";
   const buttonText = offerSettings.buttonText || "Add to Cart";
   const buttonPrimaryColor = offerSettings.buttonPrimaryColor || "#008060";
+  const showCustomButton = offerSettings.showCustomButton !== false;
   const widgetTitle = offerSettings.title || "Bundle & Save";
 
   const unitPrice = getCurrentUnitPrice();
@@ -504,9 +505,9 @@ function renderBundlePreviewHtml(offer) {
     <div class="create-offer-style-preview-list create-offer-style-preview-list--${layoutFormat}">
       ${itemsHtml}
     </div>
-    <button class="create-offer-preview-button" onclick="window.ciwiHandleBundleAddToCart()" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
+    ${showCustomButton ? `<button class="create-offer-preview-button" onclick="window.ciwiHandleBundleAddToCart()" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
       ${esc(buttonText)}
-    </button>
+    </button>` : ""}
   </div>`;
 }
 

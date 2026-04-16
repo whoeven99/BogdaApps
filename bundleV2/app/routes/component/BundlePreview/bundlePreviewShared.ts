@@ -48,6 +48,7 @@ export function renderBundlePreviewHtml({
   titleColor = "#111111",
   buttonText = "Add to Cart",
   buttonPrimaryColor = "#008060",
+  showCustomButton = true,
   items = PREVIEW_ITEMS,
 }: {
   title?: string;
@@ -61,6 +62,7 @@ export function renderBundlePreviewHtml({
   titleColor?: string;
   buttonText?: string;
   buttonPrimaryColor?: string;
+  showCustomButton?: boolean;
   items?: PreviewItem[];
 } = {}) {
   const safeLayout: LayoutFormat = ["vertical", "horizontal", "card", "compact"].includes(layoutFormat)
@@ -100,8 +102,8 @@ export function renderBundlePreviewHtml({
     <div class="create-offer-style-preview-list create-offer-style-preview-list--${safeLayout}">
       ${itemsHtml}
     </div>
-    <button class="create-offer-preview-button" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)} !important; color: white !important; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
+    ${showCustomButton ? `<button class="create-offer-preview-button" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)} !important; color: white !important; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
       ${esc(buttonText)}
-    </button>
+    </button>` : ''}
   </div>`;
 }

@@ -823,6 +823,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       OFFER_TEXT_LIMITS.buttonText,
       "Add to Cart",
     );
+    const showCustomButtonRaw = String(formData.get("showCustomButton") || "");
+    const showCustomButton = showCustomButtonRaw !== "false";
 
     const title = sanitizeSingleLineText(
       formData.get("title"),
@@ -862,6 +864,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       titleFontSize,
       titleFontWeight,
       buttonText,
+      showCustomButton,
     });
 
     // Store which Shopify shop this offer belongs to.

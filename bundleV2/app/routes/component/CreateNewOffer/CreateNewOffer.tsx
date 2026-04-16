@@ -238,6 +238,7 @@ export function CreateNewOffer({
   const [labelColor, setLabelColor] = useState(offerSettings.labelColor);
   const [buttonText, setButtonText] = useState(offerSettings.buttonText);
   const [buttonPrimaryColor, setButtonPrimaryColor] = useState(offerSettings.buttonPrimaryColor);
+  const [showCustomButton, setShowCustomButton] = useState(offerSettings.showCustomButton);
   const [widgetTitle, setWidgetTitle] = useState(offerSettings.title);
   const [customerSegments, setCustomerSegments] = useState<string[]>(
     offerSettings.customerSegments ? offerSettings.customerSegments.split(",") : ["all"]
@@ -475,6 +476,7 @@ export function CreateNewOffer({
       <input type="hidden" name="labelColor" value={labelColor} />
       <input type="hidden" name="buttonText" value={buttonText} />
       <input type="hidden" name="buttonPrimaryColor" value={buttonPrimaryColor} />
+      <input type="hidden" name="showCustomButton" value={showCustomButton ? "true" : "false"} />
       <input
         type="hidden"
         name="cardBackgroundColor"
@@ -652,6 +654,7 @@ export function CreateNewOffer({
                   titleColor={titleColor}
                   buttonText={buttonText}
                   buttonPrimaryColor={buttonPrimaryColor}
+                  showCustomButton={showCustomButton}
                   title={widgetTitle}
                   items={previewItems}
                 />
@@ -922,10 +925,11 @@ export function CreateNewOffer({
                     titleFontSize={titleFontSize}
                     titleFontWeight={titleFontWeight}
                     titleColor={titleColor}
-                    buttonText={buttonText}
-                    buttonPrimaryColor={buttonPrimaryColor}
-                    title={widgetTitle}
-                    items={previewItems}
+                  buttonText={buttonText}
+                  buttonPrimaryColor={buttonPrimaryColor}
+                  showCustomButton={showCustomButton}
+                  title={widgetTitle}
+                  items={previewItems}
                   />
                   <p className="text-[12px] text-[#5c6166] mt-3 italic font-normal">
                     Note: This is a live preview. Changes will update in real-time when state is connected.
@@ -1170,30 +1174,47 @@ export function CreateNewOffer({
                   <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
                     Button Style & Extra
                   </h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <label className="block text-[14px] font-medium text-[#1c1f23]">
-                      Button Text
-                      <Input
-                        size="large"
-                        value={buttonText}
-                        onChange={(e) =>
-                          setButtonText(e.target.value.replace(/[\r\n]+/g, " "))
-                        }
-                        className="mt-1"
-                        maxLength={OFFER_TEXT_LIMITS.buttonText}
-                        showCount
-                      />
-                    </label>
-                    <label className="block text-[14px] font-medium text-[#1c1f23]">
-                      Button Color
-                      <input
-                        type="color"
-                        value={buttonPrimaryColor}
-                        onChange={(e) => setButtonPrimaryColor(e.target.value)}
-                        className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1 cursor-pointer"
-                      />
-                    </label>
+                  <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg mb-4">
+                    <div>
+                      <div className="text-[14px] font-medium text-[#1c1f23]">
+                        Show App's Add to Cart Button
+                      </div>
+                      <div className="text-[13px] text-[#5c6166]">
+                        If disabled, customers will use your theme's native Add to Cart button.
+                      </div>
+                    </div>
+                    <Switch
+                      checked={showCustomButton}
+                      onChange={(checked) => setShowCustomButton(checked)}
+                    />
                   </div>
+                  
+                  {showCustomButton && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <label className="block text-[14px] font-medium text-[#1c1f23]">
+                        Button Text
+                        <Input
+                          size="large"
+                          value={buttonText}
+                          onChange={(e) =>
+                            setButtonText(e.target.value.replace(/[\r\n]+/g, " "))
+                          }
+                          className="mt-1"
+                          maxLength={OFFER_TEXT_LIMITS.buttonText}
+                          showCount
+                        />
+                      </label>
+                      <label className="block text-[14px] font-medium text-[#1c1f23]">
+                        Button Color
+                        <input
+                          type="color"
+                          value={buttonPrimaryColor}
+                          onChange={(e) => setButtonPrimaryColor(e.target.value)}
+                          className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1 cursor-pointer"
+                        />
+                      </label>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1219,6 +1240,7 @@ export function CreateNewOffer({
                   titleColor={titleColor}
                   buttonText={buttonText}
                   buttonPrimaryColor={buttonPrimaryColor}
+                  showCustomButton={showCustomButton}
                   title={widgetTitle}
                   items={previewItems}
                 />
