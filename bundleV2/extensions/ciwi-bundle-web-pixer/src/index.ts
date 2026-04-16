@@ -9,13 +9,11 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 register(({ analytics, browser, settings }) => {
   const { shopName, server } = settings;
 
-  analytics.subscribe("product_viewed", async (event) => {
-    console.log("[product_viewed] received event:", JSON.stringify(event, null, 2));
+  analytics.subscribe("product_viewed", async (event) => {  
     await sleep(500);
 
     // Get offer name from sessionStorage, which is set when the offer is rendered.
     const offerName = (await browser.sessionStorage.getItem("current-ciwi-offer-name")) || "NO_BUNDLE_TITLE";
-    console.log("[product_viewed] received offerName:", offerName);
 
     WebpixerToAli({
       server,
@@ -35,11 +33,8 @@ register(({ analytics, browser, settings }) => {
   });
 
   analytics.subscribe("product_added_to_cart", async (event) => {
-    console.log("[product_added_to_cart] received event:", JSON.stringify(event, null, 2));
-
     // Get offer name from sessionStorage, which is set when the offer is rendered.
-    const offerName = (await browser.sessionStorage.getItem("current-ciwi-offer-name")) || "NO_BUNDLE_TITLE";
-    console.log("[product_added_to_cart] received offerName:", offerName);
+    const offerName = (await browser.sessionStorage.getItem("current-ciwi-offer-name")) || "NO_BUNDLE_TITLE";  
 
     WebpixerToAli({
       server,

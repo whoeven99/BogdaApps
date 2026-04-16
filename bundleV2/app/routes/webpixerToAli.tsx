@@ -141,9 +141,6 @@ function buildDailyGmvTrend(
   fromDate: Date,
   toDate: Date,
 ): DailyGmvPoint[] {
-  // 打印从SLS接收到的原始聚合数据
-  console.log("[buildDailyGmvTrend] Raw SLS query result", queryResult);
-
   // 使用Map来存储每日的GMV总额。键是日期字符串（如 '2023-10-26'），值是累计的GMV
   const dailyGmv = new Map<string, number>();
 
@@ -162,9 +159,6 @@ function buildDailyGmvTrend(
     // 如果Map中还没有这一天的记录，会使用 (dailyGmv.get(dayKey) ?? 0) 初始化为0
     dailyGmv.set(dayKey, (dailyGmv.get(dayKey) ?? 0) + amount);
   }
-
-  // 打印处理后的每日GMV数据，以便调试
-  console.log("[buildDailyGmvTrend] Processed daily GMV totals", Object.fromEntries(dailyGmv));
 
   // 初始化一个数组来存储最终的时间序列数据点
   const series: DailyGmvPoint[] = [];
@@ -192,9 +186,6 @@ function buildDailyGmvTrend(
     // 将日期向前推一天，继续下一轮循环
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
-
-  // 打印最终生成的时间序列数据
-  console.log("[buildDailyGmvTrend] Final GMV series", series);
 
   // 返回构建好的时间序列
   return series;
