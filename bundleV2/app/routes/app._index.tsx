@@ -2,7 +2,7 @@ import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { useLoaderData } from "react-router";
 import "../styles/tailwind.css";
 import { Typography, Button, Switch, Modal, Space } from "antd";
-import { Trash2, Pencil } from "lucide-react";
+import { Trash2, Pencil, Info } from "lucide-react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { parseDiscountRules } from "../utils/offerParsing";
@@ -103,9 +103,18 @@ export default function Index() {
           }}
         >
           <div className="!flex !items-center !justify-between !mb-[16px]">
-            <h2 className="!font-sans !font-semibold !text-[20px] !leading-[30px] !text-[#1c1f23] !tracking-tight !m-0">
-              GMV Overview
-            </h2>
+            <div className="!flex !items-center !gap-[8px]">
+              <h2 className="!font-sans !font-semibold !text-[20px] !leading-[30px] !text-[#1c1f23] !tracking-tight !m-0">
+                GMV Overview
+              </h2>
+              <div className="group relative flex items-center">
+                <Info className="w-[16px] h-[16px] text-[#8a919e] cursor-help" />
+                <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-[8px] hidden group-hover:block w-max max-w-[250px] bg-[#1c1f23] text-white text-[12px] leading-[18px] px-[12px] py-[8px] rounded-[8px] shadow-lg z-10 text-center">
+                  Data accumulated over the last 30 days
+                  <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-[#1c1f23]"></div>
+                </div>
+              </div>
+            </div>
             <Button
               type="text"
               className="!font-sans !font-medium !text-[14px]"

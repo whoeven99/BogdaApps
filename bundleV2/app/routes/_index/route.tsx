@@ -823,6 +823,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       OFFER_TEXT_LIMITS.buttonText,
       "Add to Cart",
     );
+    const showCustomButtonRaw = String(formData.get("showCustomButton") || "");
+    const showCustomButton = showCustomButtonRaw !== "false";
 
     const title = sanitizeSingleLineText(
       formData.get("title"),
@@ -862,6 +864,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       titleFontSize,
       titleFontWeight,
       buttonText,
+      showCustomButton,
     });
 
     // Store which Shopify shop this offer belongs to.
@@ -936,7 +939,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (intent === "create-offer") {
       try {
         await writeOfferWithRetry(() => prismaAny.offer.create({ data }));
-        url.searchParams.set("toast", "create-success");
+        url.searchParams.set("toast", `create-success-${Date.now()}`);
       } catch (error: any) {
         if (
           error.code === "P2002"
@@ -971,7 +974,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             data,
           }),
         );
-        url.searchParams.set("toast", "update-success");
+        url.searchParams.set("toast", `update-success-${Date.now()}`);
       } catch (error: any) {
         if (
           error.code === "P2002"
@@ -1107,7 +1110,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       invalidateShopOffersCache(String(updatedOffer.shopName));
     }
 
-    return Response.json({ success: true, toast: "toggle-success" });
+    return Response.json({ success: true, toast: `toggle-success-${Date.now()}` });
   }
 
   if (intent === "delete-offer") {
@@ -1201,7 +1204,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       invalidateShopOffersCache(shopNameToSync);
     }
 
-    return Response.json({ success: true, toast: "delete-success" });
+    return Response.json({ success: true, toast: `delete-success-${Date.now()}` });
   }
 
   return new Response(`Unknown intent: ${String(intent || "")}`, {
@@ -1255,19 +1258,19 @@ export default function Index() {
   }, [searchParams, navigate]);
 
   useEffect(() => {
-    if (toast === "create-success") {
+    if (toast?.startsWith("create-success")) {
       setToastMessage("Offer created successfully");
       setShowCreateOffer(false);
       setEditingOfferId(null);
-    } else if (toast === "update-success") {
+    } else if (toast?.startsWith("update-success")) {
       setToastMessage("Offer updated successfully");
       setShowCreateOffer(false);
       setEditingOfferId(null);
-    } else if (toast === "delete-success") {
+    } else if (toast?.startsWith("delete-success")) {
       setToastMessage("Offer deleted successfully");
       setShowCreateOffer(false);
       setEditingOfferId(null);
-    } else if (toast === "toggle-success") {
+    } else if (toast?.startsWith("toggle-success")) {
       setToastMessage("Offer status updated successfully");
     } else {
       setToastMessage(null);
@@ -1299,11 +1302,14 @@ export default function Index() {
 
   useEffect(() => {
     const shouldRefresh =
-      toast === "create-success" ||
-      toast === "update-success" ||
-      toast === "delete-success" ||
-      toast === "toggle-success";
-    if (!shouldRefresh) return;
+      toast?.startsWith("create-success") ||
+      toast?.startsWith("update-success") ||
+      toast?.startsWith("delete-success") ||
+      toast?.startsWith("toggle-success");
+    if (!shouldRefresh) {
+      lastOffersRefreshToastRef.current = null;
+      return;
+    }
     if (lastOffersRefreshToastRef.current === toast) return;
     if (offersFetcher.state !== "idle") return;
     lastOffersRefreshToastRef.current = toast || null;

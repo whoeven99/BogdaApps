@@ -11,6 +11,7 @@ type Props = {
   titleColor?: string;
   buttonText?: string;
   buttonPrimaryColor?: string;
+  showCustomButton?: boolean;
   title?: string;
   items?: PreviewItem[];
 };
@@ -26,6 +27,7 @@ export default function BundlePreview({
   titleColor,
   buttonText,
   buttonPrimaryColor,
+  showCustomButton,
   title = "Bundle & Save",
   items,
 }: Props) {
@@ -41,6 +43,7 @@ export default function BundlePreview({
     titleColor,
     buttonText,
     buttonPrimaryColor,
+    showCustomButton,
     items,
   });
 

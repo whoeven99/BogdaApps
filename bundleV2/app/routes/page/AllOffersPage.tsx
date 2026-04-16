@@ -74,7 +74,7 @@ export function AllOffersPage({
   const toast = searchParams.get("toast") || actionData?.toast;
 
   useEffect(() => {
-    if (toast === "delete-success") {
+    if (toast?.startsWith("delete-success")) {
       setDeletingOffer(null);
     }
   }, [toast]);

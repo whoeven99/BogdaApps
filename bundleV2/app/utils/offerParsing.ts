@@ -83,6 +83,7 @@ export type OfferSettings = {
   labelColor: string;
   buttonText: string;
   buttonPrimaryColor: string;
+  showCustomButton: boolean;
 };
 
 export function parseOfferSettings(offerSettingsJson?: string | null): OfferSettings {
@@ -104,6 +105,7 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
       labelColor: "#ffffff",
       buttonText: "Add to Cart",
       buttonPrimaryColor: "#008060",
+      showCustomButton: true,
     };
   }
 
@@ -145,6 +147,7 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
       labelColor: sanitizeHexColor(parsed.labelColor, "#ffffff"),
       buttonText: parsed.buttonText || "Add to Cart",
       buttonPrimaryColor: sanitizeHexColor(parsed.buttonPrimaryColor, "#008060"),
+      showCustomButton: parsed.showCustomButton !== false,
     };
   } catch {
     return parseOfferSettings(null);
