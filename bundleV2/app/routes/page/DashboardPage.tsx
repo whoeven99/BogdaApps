@@ -15,6 +15,7 @@ import {
 import "../../styles/tailwind.css";
 import { CreateNewOffer } from "../component/CreateNewOffer/CreateNewOffer";
 import type { IndexLoaderData } from "../_index/route";
+import { parseDiscountRules } from "../../utils/offerParsing";
 
 interface DashboardPageProps {
   onViewAllOffers?: () => void;
@@ -32,7 +33,12 @@ interface DashboardPageProps {
 type DashboardOfferRow = {
   id: string;
   name: string;
+  cartTitle: string;
+  offerType: string;
+  discountRulesJson: string | null;
   isActive: boolean;
+  createdAt: string | Date | undefined;
+  updatedAt: string | Date | undefined;
   exposurePV: number;
   addToCartPV: number;
   gmv: number;
@@ -120,6 +126,8 @@ export function DashboardPage({
 
   const offerRows: DashboardOfferRow[] = (offers ?? []).map((offer) => {
     const isActive = !!offer.status;
+    const createdAt = offer.createdAt;
+    const updatedAt = offer.updatedAt;
     const exposurePV = offer.exposurePV ?? 0;
     const addToCartPV = offer.addToCartPV ?? 0;
     const gmv = offer.gmv ?? 0;
@@ -128,7 +136,12 @@ export function DashboardPage({
     return {
       id: offer.id,
       name: offer.name,
+      cartTitle: offer.cartTitle,
+      offerType: offer.offerType,
+      discountRulesJson: offer.discountRulesJson,
       isActive,
+      createdAt,
+      updatedAt,
       exposurePV,
       addToCartPV,
       gmv,
@@ -453,19 +466,22 @@ export function DashboardPage({
                 Offer Name
               </th>
               <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
+                Display name
+              </th>
+              <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
+                Discount type
+              </th>
+              <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
+                Discount rules
+              </th>
+              <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
                 Status
               </th>
               <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
-                Exposure PV
+                Create time
               </th>
               <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
-                Add to Cart PV
-              </th>
-              <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
-                GMV
-              </th>
-              <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
-                Conversion
+                Update time
               </th>
               <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
                 Actions
@@ -476,7 +492,7 @@ export function DashboardPage({
             {offersLoading ? (
               <tr>
                 <td
-                  colSpan={7}
+                  colSpan={8}
                   className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#5c6166] font-sans"
                 >
                   Loading offers...
@@ -485,7 +501,7 @@ export function DashboardPage({
             ) : visibleOffers.length === 0 ? (
               <tr>
                 <td
-                  colSpan={7}
+                  colSpan={8}
                   className="p-[12px] border-b border-[#f0f2f4] font-sans text-[14px] leading-[22.4px] text-[#5c6166] tracking-normal"
                 >
                   No offers yet. Create your first offer to see it here.
@@ -495,8 +511,19 @@ export function DashboardPage({
               visibleOffers.map((offer) => {
                 const isToggling = getIsToggling(offer.id);
                 const statusLabel = offer.isActive ? "Active" : "Paused";
-                const gmvDisplay = `$${offer.gmv.toLocaleString()}`;
-                const conversionDisplay = `${offer.conversion.toFixed(1)}%`;
+                const displayType = offer.offerType === "quantity-breaks-same" ? "Quantity breaks" : offer.offerType;
+                
+                const rules = parseDiscountRules(offer.discountRulesJson);
+                const rulesText = rules.length > 0 
+                  ? rules.map(r => `Buy ${r.count} Get ${r.discountPercent}% Off`).join(", ")
+                  : "-";
+                  
+                const formatTime = (timeStr: string | Date | undefined) => {
+                  if (!timeStr) return "-";
+                  const d = new Date(timeStr);
+                  if (isNaN(d.getTime())) return "-";
+                  return d.toISOString().replace("T", " ").slice(0, 19);
+                };
 
                 return (
                   <tr key={offer.id}>
@@ -504,6 +531,15 @@ export function DashboardPage({
                       <div className="flex items-center gap-[8px]">
                         {offer.name}
                       </div>
+                    </td>
+                    <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
+                      {offer.cartTitle}
+                    </td>
+                    <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
+                      {displayType}
+                    </td>
+                    <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
+                      {rulesText}
                     </td>
                     <td className="p-[12px] border-b border-[#f0f2f4]">
                       <Form method="post">
@@ -554,16 +590,10 @@ export function DashboardPage({
                       </Form>
                     </td>
                     <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
-                      {offer.exposurePV.toLocaleString()}
+                      {formatTime(offer.createdAt)}
                     </td>
                     <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
-                      {offer.addToCartPV.toLocaleString()}
-                    </td>
-                    <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
-                      {gmvDisplay}
-                    </td>
-                    <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
-                      {conversionDisplay}
+                      {formatTime(offer.updatedAt)}
                     </td>
                     <td className="p-[12px] border-b border-[#f0f2f4]">
                       <div className="flex items-center gap-[8px]">

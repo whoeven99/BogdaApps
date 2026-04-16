@@ -59,6 +59,8 @@ type OfferListItem = {
   addToCartPV?: number | null;
   gmv?: number | null;
   conversion?: number | null;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
 };
 
 type OfferActionErrorPayload = {
