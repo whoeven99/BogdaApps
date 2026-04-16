@@ -1426,6 +1426,9 @@ export default function Index() {
             offers={offers}
             offersLoading={isOffersLoading}
             ianaTimezone={ianaTimezone}
+            themeExtensionEnabled={themeExtensionEnabled}
+            shop={shop}
+            apiKey={apiKey}
             onCreateOffer={() => {
               setShowCreateOffer(true);
               setEditingOfferId(null);
