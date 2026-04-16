@@ -1,9 +1,3 @@
-# bundleV2：使用 test 配置执行 shopify app deploy，并触发 Render 测试环境部署。
-# 所需 GitHub Environment（如 TestEnvGithubConfig）下的 Secrets：
-#   SHOPIFY_CLI_PARTNERS_TOKEN
-#   RENDER_API_KEY / RENDER_APIKEY、RENDER_SERVICE_ID（按你 workflow 里实际引用）
-# 说明：Prisma Migrate CLI 在 provider=sqlite 下只接受 file: 的 DATABASE_URL，不能对 Turso 用 prisma migrate deploy；
-# Turso 结构变更请本地 migrate dev 生成 SQL 后，用 Turso CLI 等方式执行 prisma/migrations/*/migration.sql。
 name: bundleV2 – Shopify App Deploy (Prod)
 
 on:
@@ -85,13 +79,15 @@ jobs:
         if: ${{ success() }}
         env:
           FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+          PR_TITLE: ${{ github.event.pull_request.title || '' }}
+          PR_BODY: ${{ github.event.pull_request.body || '' }}
         run: |
           if [ -z "$FEISHU_WEBHOOK_URL" ]; then
             echo "FEISHU_WEBHOOK_URL is not set, skip Feishu notification."
             exit 0
           fi
 
-          MESSAGE="Render PROD deploy triggered successfully for ${GITHUB_REPOSITORY}@${GITHUB_SHA} by ${GITHUB_ACTOR}. Run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          MESSAGE="Bundle PROD deploy 发布中, by ${GITHUB_ACTOR}.\n发布内容：${PR_BODY}\n查看状态: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           PAYLOAD=$(printf '{"msg_type":"text","content":{"text":"%s"}}' "$MESSAGE")
 
           curl -sS -X POST "$FEISHU_WEBHOOK_URL" \
