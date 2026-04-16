@@ -11,6 +11,7 @@ register(({ analytics, browser, settings }) => {
     await sleep(500);
     const bundleIdJSONString =
       (await browser.sessionStorage.getItem("current-ciwi-bundle-rule")) || "{}";
+    console.log("[product_viewed] received bundleIdJSONString:", browser.sessionStorage || "{}");
     const bundleIdJSON = JSON.parse(bundleIdJSONString);
     console.log("[product_viewed] sending extra:", JSON.stringify(bundleIdJSON, null, 2));
     WebpixerToAli({
