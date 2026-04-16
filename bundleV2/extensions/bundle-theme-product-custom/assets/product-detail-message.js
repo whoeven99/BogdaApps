@@ -898,6 +898,11 @@ function run() {
       return;
     }
 
+    // Set offer name to sessionStorage for tracking.
+    const offerName = currentOffer.offerName || `Bundle-${currentOffer.id}`;
+    console.log("[ciwi] setting offerName:", offerName);
+    sessionStorage.setItem("current-ciwi-offer-name", offerName);
+
     if (tryMount(currentOffer) === "done") return;
 
     const started = Date.now();

@@ -1,6 +1,9 @@
 import { register } from "@shopify/web-pixels-extension";
 import { WebpixerToAli } from "./api";
 
+// Shopify Product GID prefix
+const SHOPIFY_PRODUCT_GID_PREFIX = "gid://shopify/Product/";
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 register(({ analytics, browser, settings }) => {
@@ -9,11 +12,11 @@ register(({ analytics, browser, settings }) => {
   analytics.subscribe("product_viewed", async (event) => {
     console.log("[product_viewed] received event:", JSON.stringify(event, null, 2));
     await sleep(500);
-    const bundleIdJSONString =
-      (await browser.sessionStorage.getItem("current-ciwi-bundle-rule")) || "{}";
-    console.log("[product_viewed] received bundleIdJSONString:", browser.sessionStorage || "{}");
-    const bundleIdJSON = JSON.parse(bundleIdJSONString);
-    console.log("[product_viewed] sending extra:", JSON.stringify(bundleIdJSON, null, 2));
+
+    // Get offer name from sessionStorage, which is set when the offer is rendered.
+    const offerName = (await browser.sessionStorage.getItem("current-ciwi-offer-name")) || "NO_BUNDLE_TITLE";
+    console.log("[product_viewed] received offerName:", offerName);
+
     WebpixerToAli({
       server,
       event: "product_viewed",
@@ -22,10 +25,9 @@ register(({ analytics, browser, settings }) => {
       extra: JSON.stringify({
         bundle: [
           {
-            id: event.data.productVariant?.id || "",
-            title:
-              bundleIdJSON[event.data.productVariant?.id || ""] ||
-              "NO_BUNDLE_TITLE",
+            // Use product GID for tracking, not variant ID.
+            id: event.data.productVariant?.product?.id ? `${SHOPIFY_PRODUCT_GID_PREFIX}${event.data.productVariant.product.id}` : "",
+            title: offerName,
           },
         ],
       }),
@@ -34,10 +36,11 @@ register(({ analytics, browser, settings }) => {
 
   analytics.subscribe("product_added_to_cart", async (event) => {
     console.log("[product_added_to_cart] received event:", JSON.stringify(event, null, 2));
-    const bundleIdJSONString =
-      (await browser.sessionStorage.getItem("current-ciwi-bundle-rule")) || "{}";
-    const bundleIdJSON = JSON.parse(bundleIdJSONString);
-    console.log("[product_added_to_cart] sending extra:", JSON.stringify(bundleIdJSON, null, 2));
+
+    // Get offer name from sessionStorage, which is set when the offer is rendered.
+    const offerName = (await browser.sessionStorage.getItem("current-ciwi-offer-name")) || "NO_BUNDLE_TITLE";
+    console.log("[product_added_to_cart] received offerName:", offerName);
+
     WebpixerToAli({
       server,
       event: "product_added_to_cart",
@@ -46,10 +49,9 @@ register(({ analytics, browser, settings }) => {
       extra: JSON.stringify({
         bundle: [
           {
-            id: event.data.cartLine?.merchandise?.id || "",
-            title:
-              bundleIdJSON[event.data.cartLine?.merchandise?.id || ""] ||
-              "NO_BUNDLE_TITLE",
+            // Use product GID for tracking, not variant ID.
+            id: event.data.cartLine?.merchandise?.product?.id ? `${SHOPIFY_PRODUCT_GID_PREFIX}${event.data.cartLine.merchandise.product.id}` : "",
+            title: offerName,
           },
         ],
       }),
@@ -70,7 +72,7 @@ register(({ analytics, browser, settings }) => {
               item?.discountAllocations[0]?.discountApplication.title ??
               "NO_BUNDLE_TITLE";
             const price = item?.finalLinePrice || {};
-            const id = String(item?.variant?.id) || "";
+            const id = item?.variant?.product?.id ? `${SHOPIFY_PRODUCT_GID_PREFIX}${item.variant.product.id}` : "";
             return {
               id,
               price,
@@ -96,7 +98,7 @@ register(({ analytics, browser, settings }) => {
               item?.discountAllocations[0]?.discountApplication.title ??
               "NO_BUNDLE_TITLE";
             const price = item?.finalLinePrice || {};
-            const id = String(item?.variant?.id) || "";
+            const id = item?.variant?.product?.id ? `${SHOPIFY_PRODUCT_GID_PREFIX}${item.variant.product.id}` : "";
             return {
               id,
               price,
