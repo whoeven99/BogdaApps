@@ -45,8 +45,8 @@ jobs:
       - name: Deploy
         env:
           SHOPIFY_CLI_PARTNERS_TOKEN: ${{ secrets.SHOPIFY_CLI_PARTNERS_TOKEN }}
-          # 与 bundleV2/shopify.app.test.toml 中 client_id 一致
-          SHOPIFY_API_KEY: ab25ea895c6df574ae9ff70e9c7731c5
+          # 与 bundleV2/shopify.app.prod.toml 中 client_id 一致
+          SHOPIFY_API_KEY: bfc13ad696f2a8d2a77ba6eee1e26966
         run: shopify app deploy -c shopify.app.prod.toml -f
 
   deploy_render:
@@ -80,3 +80,20 @@ jobs:
             cat response.json
             exit 1
           fi
+
+      - name: Notify Feishu on Render deploy success
+        if: ${{ success() }}
+        env:
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+        run: |
+          if [ -z "$FEISHU_WEBHOOK_URL" ]; then
+            echo "FEISHU_WEBHOOK_URL is not set, skip Feishu notification."
+            exit 0
+          fi
+
+          MESSAGE="Render PROD deploy triggered successfully for ${GITHUB_REPOSITORY}@${GITHUB_SHA} by ${GITHUB_ACTOR}. Run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          PAYLOAD=$(printf '{"msg_type":"text","content":{"text":"%s"}}' "$MESSAGE")
+
+          curl -sS -X POST "$FEISHU_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD"
