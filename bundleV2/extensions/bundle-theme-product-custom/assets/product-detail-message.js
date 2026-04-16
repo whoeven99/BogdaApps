@@ -93,6 +93,43 @@ function formatPrice(value) {
   return `${currencySymbol}${formattedNumber}`;
 }
 
+function toCents(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.round(n * 100);
+}
+
+function fromCents(cents) {
+  const n = Number(cents);
+  if (!Number.isFinite(n)) return 0;
+  return n / 100;
+}
+
+/**
+ * 公共金额计算：与 cart function 对齐
+ * 规则：先计算单件折后价（分）并取整，再乘数量。
+ */
+function calculateBundleAmounts(unitPrice, quantity, discountPercent) {
+  const safeQty = Math.max(1, Math.trunc(Number(quantity) || 1));
+  const safeDiscountPercent = Math.max(0, Math.min(100, Number(discountPercent) || 0));
+  const unitPriceCents = toCents(unitPrice);
+  const originalTotalCents = unitPriceCents * safeQty;
+  const discountedUnitCents = Math.round(
+    unitPriceCents * (1 - safeDiscountPercent / 100),
+  );
+  const discountedTotalCents = discountedUnitCents * safeQty;
+  const savedCents = originalTotalCents - discountedTotalCents;
+
+  return {
+    originalTotalCents,
+    discountedTotalCents,
+    savedCents,
+    originalTotal: fromCents(originalTotalCents),
+    discountedTotal: fromCents(discountedTotalCents),
+    saved: fromCents(savedCents),
+  };
+}
+
 function normalizePriceNumber(value) {
   if (value == null) return null;
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -473,6 +510,7 @@ function renderBundlePreviewHtml(offer) {
   const widgetTitle = offerSettings.title || "Bundle & Save";
 
   const unitPrice = getCurrentUnitPrice();
+  const hasDefault = discountRules.some((r) => r.isDefault);
   const items = [
     {
       count: 1,
@@ -481,10 +519,11 @@ function renderBundlePreviewHtml(offer) {
       price: formatPrice(unitPrice),
     },
     ...discountRules.map((rule, index) => {
-      const originalTotal = unitPrice * rule.count;
-      const discountedTotal = originalTotal * (1 - rule.discountPercent / 100);
-      const saved = originalTotal - discountedTotal;
-      const hasDefault = discountRules.some(r => r.isDefault);
+      const { originalTotal, discountedTotal, saved } = calculateBundleAmounts(
+        unitPrice,
+        rule.count,
+        rule.discountPercent,
+      );
       const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
       return {
         count: rule.count,
