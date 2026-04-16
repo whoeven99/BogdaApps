@@ -454,8 +454,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         : Array.isArray((resp as { logs?: unknown })?.logs)
           ? (((resp as { logs?: unknown[] }).logs ?? []) as SlsLogLike[])
           : [];
-
+      console.log("[web-pixel-TEST] webpixerToAli getLogs", {
+        query,
+        line: 1000,
+        reverse: false,
+        from: fromDate.toISOString(),
+        to: toDate.toISOString(),
+        logsCount: logs.length,
+      });
       const series = buildDailyGmvTrend(logs, shopName, fromDate, toDate);
+      console.log("[web-pixel-TEST] webpixerToAli buildDailyGmvTrend", {
+        series,
+      });
       return new Response(
         JSON.stringify({
           success: true,
