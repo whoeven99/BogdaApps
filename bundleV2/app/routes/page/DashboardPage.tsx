@@ -11,6 +11,7 @@ import {
   ChartBar,
   Pencil,
   Trash2,
+  Info,
 } from "lucide-react";
 import "../../styles/tailwind.css";
 import { CreateNewOffer } from "../component/CreateNewOffer/CreateNewOffer";
@@ -256,7 +257,7 @@ export function DashboardPage({
   useEffect(() => {
     const controller = new AbortController();
     const now = new Date();
-    const from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
     const query = new URLSearchParams({
       mode: "overview",
@@ -358,9 +359,18 @@ export function DashboardPage({
         {/* GMV Overview Card */}
         <div className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[24px]">
           <div className="flex items-center justify-between mb-[16px]">
-            <h2 className="font-sans font-semibold text-[20px] leading-[30px] text-[#1c1f23] tracking-tight m-0">
-              GMV Overview
-            </h2>
+            <div className="flex items-center gap-[8px]">
+              <h2 className="font-sans font-semibold text-[20px] leading-[30px] text-[#1c1f23] tracking-tight m-0">
+                GMV Overview
+              </h2>
+              <div className="group relative flex items-center">
+                <Info className="w-[16px] h-[16px] text-[#8a919e] cursor-help" />
+                <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-[8px] hidden group-hover:block w-max max-w-[250px] bg-[#1c1f23] text-white text-[12px] leading-[18px] px-[12px] py-[8px] rounded-[8px] shadow-lg z-10 text-center">
+                  Data accumulated over the last 30 days
+                  <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-[#1c1f23]"></div>
+                </div>
+              </div>
+            </div>
             <button
               type="button"
               className="text-[#008060] font-medium text-[14px] bg-transparent hover:bg-[#f0f9f6] px-[12px] py-[6px] rounded-[8px] flex items-center gap-[6px] transition-all border-0 cursor-pointer"
