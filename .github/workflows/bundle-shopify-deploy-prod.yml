@@ -4,12 +4,12 @@
 #   RENDER_API_KEY / RENDER_APIKEY、RENDER_SERVICE_ID（按你 workflow 里实际引用）
 # 说明：Prisma Migrate CLI 在 provider=sqlite 下只接受 file: 的 DATABASE_URL，不能对 Turso 用 prisma migrate deploy；
 # Turso 结构变更请本地 migrate dev 生成 SQL 后，用 Turso CLI 等方式执行 prisma/migrations/*/migration.sql。
-name: bundleV2 – Shopify App Deploy (Test)
+name: bundleV2 – Shopify App Deploy (Prod)
 
 on:
   push:
     branches:
-      - allen
+      - master
   workflow_dispatch:
 
 defaults:
@@ -18,7 +18,7 @@ defaults:
 
 jobs:
   deploy_shopify:
-    name: Shopify app deploy (test.toml)
+    name: Shopify app deploy (prod.toml)
     runs-on: ubuntu-latest
     environment: CommonShopifyRenderConfig
 
@@ -47,10 +47,10 @@ jobs:
           SHOPIFY_CLI_PARTNERS_TOKEN: ${{ secrets.SHOPIFY_CLI_PARTNERS_TOKEN }}
           # 与 bundleV2/shopify.app.test.toml 中 client_id 一致
           SHOPIFY_API_KEY: ab25ea895c6df574ae9ff70e9c7731c5
-        run: shopify app deploy -c shopify.app.test.toml -f
+        run: shopify app deploy -c shopify.app.prod.toml -f
 
   deploy_render:
-    name: Trigger Render deploy (Test)
+    name: Trigger Render deploy (PROD)
     runs-on: ubuntu-latest
     environment: CommonShopifyRenderConfig
 
@@ -62,10 +62,10 @@ jobs:
           # 与本次要部署的代码一致；Render Create Deploy 对 branch 支持不可靠，下面用 commitId 触发
           ref: ${{ github.ref }}
 
-      - name: Deploy to Render Test
+      - name: Deploy to Render PROD
         env:
           RENDER_API_KEY: ${{ secrets.RENDER_APIKEY }}
-          RENDER_SERVICE_ID: srv-d72ffhdm5p6s73d0pa4g
+          RENDER_SERVICE_ID: srv-d5tgbkcr85hc73f7s48g
         run: |
           COMMIT="$(git rev-parse HEAD)"
           echo "Triggering Render deploy for commit: $COMMIT ($(git log -1 --oneline))"
@@ -74,7 +74,7 @@ jobs:
             -H "Content-Type: application/json" \
             -d "{\"commitId\": \"$COMMIT\"}")
           if [ "$RESPONSE" -eq 200 ] || [ "$RESPONSE" -eq 201 ]; then
-            echo "Deploy to test Render triggered successfully. HTTP status: $RESPONSE"
+            echo "Deploy to prod Render triggered successfully. HTTP status: $RESPONSE"
           else
             echo "Failed to trigger deployment. HTTP status: $RESPONSE"
             cat response.json
