@@ -126,7 +126,7 @@ export function AllOffersPage({
 
   return (
     <div className="max-w-[1280px] mx-auto pb-[24px]">
-      {!themeExtensionEnabled && rows.length > 0 && !hideBanner && (
+      {!themeExtensionEnabled && !hideBanner && (
         <div className="bg-[#fff4f4] border border-[#ffc9c9] rounded-[8px] p-[16px] mb-[24px] flex items-start justify-between">
           <div className="flex gap-[12px]">
             <div className="text-[#d72c0d] mt-[2px]">
@@ -274,15 +274,7 @@ export function AllOffersPage({
                       {rulesText}
                     </td>
                     <td className="p-[12px] border-b border-[#f0f2f4]">
-                      <Form
-                        method="post"
-                        onSubmit={(e) => {
-                          if (!themeExtensionEnabled) {
-                            e.preventDefault();
-                            setShowThemeExtensionModal(true);
-                          }
-                        }}
-                      >
+                      <Form method="post">
                         <input type="hidden" name="intent" value="toggle-offer-status" />
                         <input type="hidden" name="offerId" value={offer.id} />
                         <input
@@ -293,6 +285,12 @@ export function AllOffersPage({
                         <button
                           type="submit"
                           disabled={isToggling}
+                          onClick={(e) => {
+                            if (!themeExtensionEnabled) {
+                              e.preventDefault();
+                              setShowThemeExtensionModal(true);
+                            }
+                          }}
                           className={`flex items-center gap-[8px] bg-transparent border-0 p-0 cursor-pointer ${
                             isToggling ? "opacity-70 cursor-default" : ""
                           }`}
