@@ -581,20 +581,50 @@ function renderBundlePreviewHtml(offer) {
   </div>`;
 }
 
-function readOffersConfigFromMetafield() {
-  const metaEl = document.getElementById("ciwi-bundle-offers");
+function parseCiwiMetafieldScript(scriptId) {
+  const metaEl = document.getElementById(scriptId);
   if (!metaEl) return null;
 
-  try {
-    let raw = (metaEl.innerText || metaEl.textContent || "").trim();
-    if (!raw) return null;
+  let raw = (metaEl.innerText || metaEl.textContent || "").trim();
+  if (!raw) return null;
 
-    // 与 bundle-cart.js 一致：兼容 Ruby hash 风格的字符串化输出
-    if (raw.startsWith('"') && raw.endsWith('"')) {
-      raw = raw.slice(1, -1);
+  // 与 bundle-cart.js 一致：兼容 Ruby hash 风格的字符串化输出
+  if (raw.startsWith('"') && raw.endsWith('"')) {
+    raw = raw.slice(1, -1);
+  }
+  const jsonLike = raw.replace(/=>/g, ":").replace(/\bnil\b/g, "null");
+  return JSON.parse(jsonLike);
+}
+
+function getOffersUpdatedAtMs(payload) {
+  const updatedAtRaw = payload?.updatedAt;
+  if (!updatedAtRaw || typeof updatedAtRaw !== "string") return 0;
+  const ts = Date.parse(updatedAtRaw);
+  return Number.isFinite(ts) ? ts : 0;
+}
+
+function readOffersConfigFromMetafield() {
+  try {
+    const activeEnvPayload = parseCiwiMetafieldScript("ciwi-bundle-offers-active-env");
+    const activeEnv = activeEnvPayload?.env === "prod" ? "prod" : activeEnvPayload?.env === "test" ? "test" : null;
+
+    const envPayloads = {
+      prod: parseCiwiMetafieldScript("ciwi-bundle-offers-prod"),
+      test: parseCiwiMetafieldScript("ciwi-bundle-offers-test"),
+    };
+
+    if (activeEnv && envPayloads[activeEnv]) {
+      return envPayloads[activeEnv];
     }
-    const jsonLike = raw.replace(/=>/g, ":").replace(/\bnil\b/g, "null");
-    return JSON.parse(jsonLike);
+
+    const newestEnv = ["prod", "test"].sort(
+      (a, b) => getOffersUpdatedAtMs(envPayloads[b]) - getOffersUpdatedAtMs(envPayloads[a]),
+    )[0];
+    if (newestEnv && envPayloads[newestEnv]) {
+      return envPayloads[newestEnv];
+    }
+
+    return parseCiwiMetafieldScript("ciwi-bundle-offers");
   } catch (e) {
     console.error("[ciwi] Failed to parse ciwi-bundle-offers metafield", e);
     return null;
