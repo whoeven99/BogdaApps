@@ -84,7 +84,9 @@ function formatPrice(value) {
       const config = JSON.parse(configEl.textContent || "{}");
       if (config.currencySymbol) currencySymbol = config.currencySymbol;
       if (config.moneyFormat) moneyFormat = config.moneyFormat;
-    } catch (e) {}
+    } catch (e) {
+      // ignore JSON parse error
+    }
   }
   
   const formattedNumber = detectNumberFormat(moneyFormat, Number(value).toFixed(2));
