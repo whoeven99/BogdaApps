@@ -8,6 +8,7 @@ const DEFAULT_SELECTORS = [
 ];
 
 const RETRY_MS = 12_000;
+const SESSION_STORAGE_BUNDLE_RULE_KEY = "current-ciwi-bundle-rule";
 let offersConfigCache = null;
 let priceSyncController = null;
 let bundlePriceDebounceT = null;
@@ -359,6 +360,54 @@ function getCurrentProductGid() {
   return `gid://shopify/Product/${productId}`;
 }
 
+function getOfferBundleTitle(offer) {
+  if (!offer || typeof offer !== "object") return "NO_BUNDLE_TITLE";
+  const offerId = offer.offerId || offer.id || "";
+  const offerName = (offer.offerName || offer.name || offer.title || "").trim();
+  if (offerName) return offerName;
+  if (offerId) return `#Bundle ${offerId}`;
+  return "NO_BUNDLE_TITLE";
+}
+
+function readSessionStorageJson(key, fallback) {
+  try {
+    const raw = window.sessionStorage.getItem(key);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") return parsed;
+    return fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function syncCurrentBundleToSessionStorage(offer) {
+  const variantId = getSelectedVariantId();
+  if (!variantId) return;
+
+  const offerId = String(offer?.offerId || offer?.id || "");
+  const bundleTitle = getOfferBundleTitle(offer);
+  const currentProductGid = getCurrentProductGid() || "";
+  const data = readSessionStorageJson(SESSION_STORAGE_BUNDLE_RULE_KEY, {});
+  data[variantId] = {
+    title: bundleTitle,
+    offerId,
+    offerName: bundleTitle,
+    productId: currentProductGid,
+    variantId,
+    source: "bundle-theme-product-custom",
+  };
+
+  try {
+    window.sessionStorage.setItem(
+      SESSION_STORAGE_BUNDLE_RULE_KEY,
+      JSON.stringify(data),
+    );
+  } catch (error) {
+    console.error("[ciwi] failed to persist bundle session data", error);
+  }
+}
+
 function getCurrentOffer(offersConfig) {
   const offers = Array.isArray(offersConfig?.offers) ? offersConfig.offers : [];
   const currentProductGid = getCurrentProductGid();
@@ -441,6 +490,9 @@ window.ciwiSelectBundleOption = function(count) {
   }
   updateThemeQuantityInput(count);
   const currentOffer = getCurrentOffer(offersConfigCache);
+  if (currentOffer) {
+    syncCurrentBundleToSessionStorage(currentOffer);
+  }
   const wrap = document.querySelector(".ciwi-bundle-wrapper");
   if (wrap && currentOffer) {
     const html = renderBundlePreviewHtml(currentOffer);
@@ -771,6 +823,7 @@ function scheduleBundlePriceRefresh(offer) {
     } else {
       wrap.style.display = "none";
     }
+    syncCurrentBundleToSessionStorage(offer);
     hideThemeQuantitySelectors();
   }, 64);
 }
@@ -897,6 +950,7 @@ function run() {
       console.log("[ciwi] no active env offers after enabled checks, skip bundle UI");
       return;
     }
+    syncCurrentBundleToSessionStorage(currentOffer);
 
     if (tryMount(currentOffer) === "done") return;
 
