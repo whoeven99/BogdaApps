@@ -386,7 +386,7 @@ export function DashboardPage({
                 <button
                   type="button"
                   onClick={handleThemeExtensionToggle}
-                  className="bg-[#008060] !text-white px-[12px] py-[6px] rounded-[6px] font-medium text-[14px] shadow-sm hover:bg-[#006e52] transition-all border-0 cursor-pointer"
+                  className="bg-transparent text-[#1c1f23] px-[12px] py-[6px] rounded-[6px] font-normal text-[16px] border border-[#1c1f23] hover:bg-black/5 transition-all cursor-pointer"
                 >
                   Activate Theme Extension
                 </button>
@@ -500,10 +500,10 @@ export function DashboardPage({
             <button
               type="button"
               onClick={handleThemeExtensionToggle}
-              className={`px-[16px] py-[8px] rounded-[6px] font-sans font-medium text-[14px] leading-[21px] tracking-normal cursor-pointer transition-colors w-full border-0 ${
+              className={`px-[16px] py-[8px] rounded-[6px] font-sans font-normal text-[16px] leading-[24px] tracking-normal cursor-pointer transition-colors w-full border ${
                 themeExtensionEnabled
-                  ? "bg-white border border-[#dfe3e8] text-[#d72c0d] hover:bg-[#fef3f2]"
-                  : "bg-[#008060] !text-white hover:bg-[#006e52]"
+                  ? "bg-white border-[#dfe3e8] text-[#d72c0d] hover:bg-[#fef3f2]"
+                  : "bg-transparent border-[#1c1f23] text-[#1c1f23] hover:bg-black/5"
               }`}
             >
               {themeExtensionEnabled ? "Disable" : "Enable"}
