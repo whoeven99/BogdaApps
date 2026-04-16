@@ -7,10 +7,12 @@ register(({ analytics, browser, settings }) => {
   const { shopName, server } = settings;
 
   analytics.subscribe("product_viewed", async (event) => {
+    console.log("[product_viewed] received event:", JSON.stringify(event, null, 2));
     await sleep(500);
     const bundleIdJSONString =
       (await browser.sessionStorage.getItem("current-ciwi-bundle-rule")) || "{}";
     const bundleIdJSON = JSON.parse(bundleIdJSONString);
+    console.log("[product_viewed] sending extra:", JSON.stringify(bundleIdJSON, null, 2));
     WebpixerToAli({
       server,
       event: "product_viewed",
@@ -30,9 +32,11 @@ register(({ analytics, browser, settings }) => {
   });
 
   analytics.subscribe("product_added_to_cart", async (event) => {
+    console.log("[product_added_to_cart] received event:", JSON.stringify(event, null, 2));
     const bundleIdJSONString =
       (await browser.sessionStorage.getItem("current-ciwi-bundle-rule")) || "{}";
     const bundleIdJSON = JSON.parse(bundleIdJSONString);
+    console.log("[product_added_to_cart] sending extra:", JSON.stringify(bundleIdJSON, null, 2));
     WebpixerToAli({
       server,
       event: "product_added_to_cart",
