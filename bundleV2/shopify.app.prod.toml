@@ -1,0 +1,32 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "bfc13ad696f2a8d2a77ba6eee1e26966"
+name = "Ciwi.ai:Bundle"
+application_url = "https://bogdaapps-rh3r.onrender.com"
+embedded = true
+
+[webhooks]
+api_version = "2025-10"
+
+  [[webhooks.subscriptions]]
+  topics = [
+  "app/uninstalled",
+  "app_subscriptions/update",
+  "app_purchases_one_time/update"
+]
+  uri = "/webhooks"
+  compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "write_metaobject_definitions,write_metaobjects,write_products,write_discounts,read_products,write_pixels,read_customer_events,read_themes,read_markets"
+
+[auth]
+redirect_urls = [
+  "https://bogdaapps-rh3r.onrender.com/auth/callback",
+  "https://bogdaapps-rh3r.onrender.com/auth/shopify/callback",
+  "https://bogdaapps-rh3r.onrender.com/api/auth/callback"
+]
+
+[pos]
+embedded = false

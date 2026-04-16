@@ -42,17 +42,34 @@ type Offer = NonNullable<OfferMetafieldPayload["offers"]>[number];
 export function bundleCartDiscountGenerateRun(
   input: CartInput,
 ): CartLinesDiscountsGenerateRunResult {
+  const shopAny = input.shop as unknown as {
+    metafield?: { jsonValue?: unknown; type?: string } | null;
+    offersProd?: { jsonValue?: unknown; type?: string } | null;
+    offersTest?: { jsonValue?: unknown; type?: string } | null;
+    offersActiveEnv?: { jsonValue?: unknown; type?: string } | null;
+  };
+  const activeEnv = (shopAny.offersActiveEnv?.jsonValue as { env?: string } | null | undefined)?.env;
+  const envPayload =
+    activeEnv === "prod"
+      ? (shopAny.offersProd?.jsonValue as OfferMetafieldPayload | null | undefined)
+      : activeEnv === "test"
+        ? (shopAny.offersTest?.jsonValue as OfferMetafieldPayload | null | undefined)
+        : null;
+
   log("run_start", {
     cartLineCount: input.cart.lines.length,
     discountClasses: input.discount.discountClasses,
     metafieldPresent: Boolean(input.shop.metafield),
     metafieldType: input.shop.metafield?.type ?? null,
+    activeEnv: activeEnv ?? null,
+    hasProdOffers: Boolean(shopAny.offersProd?.jsonValue),
+    hasTestOffers: Boolean(shopAny.offersTest?.jsonValue),
   });
 
-  const offersPayload = input.shop.metafield?.jsonValue as
+  const offersPayload = (envPayload ?? (input.shop.metafield?.jsonValue as
     | OfferMetafieldPayload
     | null
-    | undefined;
+    | undefined));
   const offers = offersPayload?.offers ?? [];
 
   log("metafield_offers", {

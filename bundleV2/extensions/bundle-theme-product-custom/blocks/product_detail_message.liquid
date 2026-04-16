@@ -34,10 +34,30 @@
   }
 </script>
 
-{% if shop.metafields.ciwi_bundle and shop.metafields.ciwi_bundle["ciwi-bundle-offers"] %}
-  <script id="ciwi-bundle-offers" type="application/json">
-    {{ shop.metafields.ciwi_bundle["ciwi-bundle-offers"].value }}
-  </script>
+{% if shop.metafields.ciwi_bundle %}
+  {% if shop.metafields.ciwi_bundle["ciwi-bundle-offers-active-env"] %}
+    <script id="ciwi-bundle-offers-active-env" type="application/json">
+      {{ shop.metafields.ciwi_bundle["ciwi-bundle-offers-active-env"].value }}
+    </script>
+  {% endif %}
+
+  {% if shop.metafields.ciwi_bundle["ciwi-bundle-offers-prod"] %}
+    <script id="ciwi-bundle-offers-prod" type="application/json">
+      {{ shop.metafields.ciwi_bundle["ciwi-bundle-offers-prod"].value }}
+    </script>
+  {% endif %}
+
+  {% if shop.metafields.ciwi_bundle["ciwi-bundle-offers-test"] %}
+    <script id="ciwi-bundle-offers-test" type="application/json">
+      {{ shop.metafields.ciwi_bundle["ciwi-bundle-offers-test"].value }}
+    </script>
+  {% endif %}
+
+  {% if shop.metafields.ciwi_bundle["ciwi-bundle-offers"] %}
+    <script id="ciwi-bundle-offers" type="application/json">
+      {{ shop.metafields.ciwi_bundle["ciwi-bundle-offers"].value }}
+    </script>
+  {% endif %}
 {% endif %}
 
 <script src="{{ 'product-detail-message.js' | asset_url }}" defer></script>

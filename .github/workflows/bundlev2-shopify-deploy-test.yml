@@ -20,7 +20,7 @@ jobs:
   deploy_shopify:
     name: Shopify app deploy (test.toml)
     runs-on: ubuntu-latest
-    environment: TestEnvGithubConfig
+    environment: CommonShopifyRenderConfig
 
     steps:
       - name: Checkout
@@ -52,7 +52,7 @@ jobs:
   deploy_render:
     name: Trigger Render deploy (Test)
     runs-on: ubuntu-latest
-    environment: TestEnvGithubConfig
+    environment: CommonShopifyRenderConfig
 
     steps:
       - name: Checkout
