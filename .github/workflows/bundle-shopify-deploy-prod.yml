@@ -79,7 +79,6 @@ jobs:
         if: ${{ success() }}
         env:
           FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
-          PR_TITLE: ${{ github.event.pull_request.title || '' }}
           PR_BODY: ${{ github.event.pull_request.body || '' }}
         run: |
           if [ -z "$FEISHU_WEBHOOK_URL" ]; then
