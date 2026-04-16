@@ -337,7 +337,8 @@ function updateThemeQuantityInput(count) {
       ? Array.from(document.querySelectorAll(`[name="quantity"][form="${formId}"]`))
       : [];
 
-    const allQtyInputs = [...innerQtyInputs, ...linkedQtyInputs];
+    // 去重，防止同一元素既在表单内又带有 form 属性
+    const allQtyInputs = Array.from(new Set([...innerQtyInputs, ...linkedQtyInputs]));
 
     // 3. 如果都没有，则创建一个隐藏的输入框
     if (allQtyInputs.length === 0) {
@@ -349,12 +350,19 @@ function updateThemeQuantityInput(count) {
       allQtyInputs.push(newQtyInput);
     }
 
-    // 4. 更新所有找到的输入框
-    allQtyInputs.forEach((input) => {
+    // 4. 更新所有找到的输入框，但禁用多余的，防止重复提交导致数量翻倍
+    allQtyInputs.forEach((input, index) => {
       input.value = count;
-      // 触发 change 和 input 事件，以兼容不同主题的事件监听
-      input.dispatchEvent(new Event("change", { bubbles: true }));
-      input.dispatchEvent(new Event("input", { bubbles: true }));
+      if (index === 0) {
+        input.disabled = false;
+        // 触发 change 和 input 事件，以兼容不同主题的事件监听
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      } else {
+        // 如果有多个 quantity 输入框（如桌面端和移动端各一个），只保留第一个有效
+        // 防止主题的 AJAX 提交脚本收集到多个 quantity 字段并相加（如 4 + 4 = 8）
+        input.disabled = true;
+      }
     });
   }
 }
