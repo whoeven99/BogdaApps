@@ -603,20 +603,51 @@ function getOffersUpdatedAtMs(payload) {
   return Number.isFinite(ts) ? ts : 0;
 }
 
+function readEnvEnabledState() {
+  try {
+    const prodPayload = parseCiwiMetafieldScript("ciwi-bundle-enabled-prod");
+    const testPayload = parseCiwiMetafieldScript("ciwi-bundle-enabled-test");
+    const readBool = (payload) =>
+      payload && typeof payload === "object" && typeof payload.enabled === "boolean"
+        ? payload.enabled
+        : null;
+
+    return {
+      prodEnabled: readBool(prodPayload),
+      testEnabled: readBool(testPayload),
+    };
+  } catch (e) {
+    console.error("[ciwi] Failed to parse ciwi-bundle-enabled metafield", e);
+    return {
+      prodEnabled: null,
+      testEnabled: null,
+    };
+  }
+}
+
 function readOffersConfigFromMetafield() {
   try {
-    const activeEnvPayload = parseCiwiMetafieldScript("ciwi-bundle-offers-active-env");
-    const activeEnv = activeEnvPayload?.env === "prod" ? "prod" : activeEnvPayload?.env === "test" ? "test" : null;
-
     const envPayloads = {
       prod: parseCiwiMetafieldScript("ciwi-bundle-offers-prod"),
       test: parseCiwiMetafieldScript("ciwi-bundle-offers-test"),
     };
+    const { prodEnabled, testEnabled } = readEnvEnabledState();
+    const prodOpen = prodEnabled === true;
+    const testOpen = testEnabled === true;
 
-    if (activeEnv && envPayloads[activeEnv]) {
-      return envPayloads[activeEnv];
+    if (!prodOpen && !testOpen) {
+      return null;
     }
 
+    if (prodOpen && !testOpen) {
+      return envPayloads.prod || null;
+    }
+
+    if (!prodOpen && testOpen) {
+      return envPayloads.test || null;
+    }
+
+    // prod/test 都开启时，按最新 updatedAt 选择。
     const newestEnv = ["prod", "test"].sort(
       (a, b) => getOffersUpdatedAtMs(envPayloads[b]) - getOffersUpdatedAtMs(envPayloads[a]),
     )[0];
@@ -624,7 +655,7 @@ function readOffersConfigFromMetafield() {
       return envPayloads[newestEnv];
     }
 
-    return parseCiwiMetafieldScript("ciwi-bundle-offers");
+    return null;
   } catch (e) {
     console.error("[ciwi] Failed to parse ciwi-bundle-offers metafield", e);
     return null;
@@ -863,6 +894,7 @@ function run() {
 
     const currentOffer = getCurrentOffer(offersConfigCache);
     if (!currentOffer) {
+      console.log("[ciwi] no active env offers after enabled checks, skip bundle UI");
       return;
     }
 
