@@ -1,9 +1,9 @@
 // AllOffersPage.tsx
 import { useEffect, useState } from "react";
-import "../styles/tailwind.css";
+import "../../styles/tailwind.css";
 import { Trash2, Pencil } from "lucide-react";
 import { Form, useNavigation, useSearchParams, useActionData } from "react-router";
-import type { IndexLoaderData } from "./_index/route";
+import type { IndexLoaderData } from "../_index/route";
 
 type AllOffersRow = {
   id: string;
@@ -20,9 +20,15 @@ interface AllOffersPageProps {
   onCreateOffer?: () => void;
   onEditOffer?: (id: string) => void;
   offers?: IndexLoaderData["offers"];
+  offersLoading?: boolean;
 }
 
-export function AllOffersPage({ onCreateOffer, onEditOffer, offers }: AllOffersPageProps) {
+export function AllOffersPage({
+  onCreateOffer,
+  onEditOffer,
+  offers,
+  offersLoading = false,
+}: AllOffersPageProps) {
   const handleShowGuide = () => {};
   const handleCreateOffer = () => {
     if (onCreateOffer) {
@@ -151,7 +157,16 @@ export function AllOffersPage({ onCreateOffer, onEditOffer, offers }: AllOffersP
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 ? (
+            {offersLoading ? (
+              <tr>
+                <td
+                  colSpan={8}
+                  className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#5c6166] font-sans"
+                >
+                  Loading offers...
+                </td>
+              </tr>
+            ) : rows.length === 0 ? (
               <tr>
                 <td
                   colSpan={8}

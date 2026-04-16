@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   useActionData,
+  useFetcher,
   useLoaderData,
   useNavigate,
   useSearchParams,
@@ -13,11 +14,11 @@ import {
   ensureCartLinesAutomaticDiscount,
 } from "../../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { DashboardPage } from "../DashboardPage";
-import { AllOffersPage } from "../AllOffersPage";
-import { AnalyticsPage } from "../AnalyticsPage";
-import { PricingPage } from "../PricingPage";
-import { CreateNewOffer } from "../component/CreateNewOffer";
+import { DashboardPage } from "../page/DashboardPage";
+import { AllOffersPage } from "../page/AllOffersPage";
+import { AnalyticsPage } from "../page/AnalyticsPage";
+import { PricingPage } from "../page/PricingPage";
+import { CreateNewOffer } from "../component/CreateNewOffer/CreateNewOffer";
 import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
 import prisma from "../../db.server";
 import {
@@ -131,7 +132,7 @@ async function syncShopOffersMetafield(
     if (!shopId) {
       return {
         ok: false,
-        message: "无法解析店铺 ID，Metafield 未写入。",
+        message: "?????????????? ID??Metafield ????????????",
       };
     }
 
@@ -195,7 +196,7 @@ async function syncShopOffersMetafield(
     return { ok: true };
   } catch (error) {
     const msg = error instanceof Error ? error.message : JSON.stringify(error);
-    return { ok: false, message: msg || "Metafield 同步异常" };
+    return { ok: false, message: msg || "Metafield ??????" };
   }
 }
 
@@ -213,8 +214,8 @@ export type MarketItem = {
 };
 
 export type IndexLoaderData = {
-  offers: OfferListItem[];
-  storeProducts: StoreProductItem[];
+  offers?: OfferListItem[];
+  storeProducts?: StoreProductItem[];
   markets: MarketItem[];
   shop: string;
   apiKey: string;
@@ -222,6 +223,82 @@ export type IndexLoaderData = {
   billingSubscriptions: Array<{ name: string; status: string }>;
   billingTestMode: boolean;
 };
+
+async function fetchShopOffers(shop: string): Promise<OfferListItem[]> {
+  try {
+    const prismaOffers = await getCachedShopOffers(shop);
+    return prismaOffers as unknown as OfferListItem[];
+  } catch (error) {
+    console.error("Failed to get cached shop offers", error);
+    return [];
+  }
+}
+
+async function fetchStoreProducts(admin: any): Promise<StoreProductItem[]> {
+  let productsResponse;
+  let productsJson;
+  try {
+    productsResponse = await admin.graphql(
+      `#graphql
+        query AppProducts {
+          products(first: 100) {
+            edges {
+              node {
+                id
+                title
+                featuredImage {
+                  url
+                }
+                variants(first: 1) {
+                  edges {
+                    node {
+                      price
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      `,
+    );
+    productsJson = await productsResponse.json();
+  } catch (error) {
+    console.error("Failed to fetch or parse products GraphQL response", error);
+    return [];
+  }
+
+  const productEdges =
+    (productsJson?.data?.products?.edges as
+      | Array<{
+          node?: {
+            id?: string;
+            title?: string;
+            featuredImage?: { url?: string | null } | null;
+            variants?: {
+              edges?: Array<{ node?: { price?: string | null } | null }>;
+            } | null;
+          } | null;
+        }>
+      | undefined) ?? [];
+
+  return productEdges
+    .map((edge) => {
+      const node = edge?.node;
+      const priceRaw = node?.variants?.edges?.[0]?.node?.price;
+      const image = node?.featuredImage?.url;
+      if (!node?.id || !node.title) {
+        return null;
+      }
+      return {
+        id: node.id,
+        name: node.title,
+        price: priceRaw ? `???${priceRaw}` : "???0.00",
+        image: image || "https://via.placeholder.com/60",
+      };
+    })
+    .filter((item): item is StoreProductItem => item !== null);
+}
 
 const ensureWebPixel = async (admin: any, shop: string) => {
   let currentWebPixelId: string | undefined;
@@ -319,7 +396,7 @@ const collectTypedBlocks = (
 };
 
 /**
- * App embed status for a single theme extension block (e.g. product_detail_message → product-detail-message.js).
+ * App embed status for a single theme extension block (e.g. product_detail_message ??? product-detail-message.js).
  * Matches editor deep-link form: `appEmbed={client_id}/{blockHandle}` e.g. `1cdf.../product_detail_message`.
  * `type` in JSON may be `.../apps/{client_id}/blocks/{handle}/...` or `.../apps/{client_id}/{handle}/...`.
  */
@@ -328,7 +405,7 @@ const getThemeExtensionEnabled = async (
   extensionHandle: string,
   /** Liquid filename base, e.g. product_detail_message for product_detail_message.liquid */
   blockHandle: string,
-  /** SHOPIFY_API_KEY / app client id — required to match real storefront block types */
+  /** SHOPIFY_API_KEY / app client id ??? required to match real storefront block types */
   appClientId: string,
   /** App display name from shopify.app.*.toml (will be normalized to slug for matching) */
   appName?: string,
@@ -459,7 +536,7 @@ const getThemeExtensionEnabled = async (
   return false;
 };
 
-/** 同一店铺内名称去重：忽略大小写与连续空白 */
+/** ???????????????????????????????????????? */
 function normalizeOfferNameKey(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
@@ -469,89 +546,15 @@ import { AppProvider } from "@shopify/shopify-app-react-router/react";
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
 
-  try {
-    await ensureWebPixel(admin, session.shop);
-  } catch (error) {
+  // ????????????????????????
+  void ensureWebPixel(admin, session.shop).catch((error) => {
     console.error("Failed to ensure web pixel exists", error);
-  }
-  try {
-    await ensureCartLinesAutomaticDiscount(admin);
-  } catch (error) {
+  });
+  void ensureCartLinesAutomaticDiscount(admin).catch((error) => {
     console.error("Failed to ensure automatic app discount exists", error);
-  }
+  });
 
-  let offers: OfferListItem[] = [];
-  try {
-    const prismaOffers = await getCachedShopOffers(session.shop);
-    offers = prismaOffers as unknown as OfferListItem[];
-  } catch (error) {
-    console.error("Failed to get cached shop offers", error);
-  }
-
-  let productsResponse;
-  let productsJson;
-  try {
-    productsResponse = await admin.graphql(
-      `#graphql
-        query AppProducts {
-          products(first: 100) {
-            edges {
-              node {
-                id
-                title
-                featuredImage {
-                  url
-                }
-                variants(first: 1) {
-                  edges {
-                    node {
-                      price
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      `,
-    );
-    productsJson = await productsResponse.json();
-  } catch (error) {
-    console.error("Failed to fetch or parse products GraphQL response", error);
-    productsJson = {};
-  }
-  const productEdges =
-    (productsJson?.data?.products?.edges as
-      | Array<{
-          node?: {
-            id?: string;
-            title?: string;
-            featuredImage?: { url?: string | null } | null;
-            variants?: {
-              edges?: Array<{ node?: { price?: string | null } | null }>;
-            } | null;
-          } | null;
-        }>
-      | undefined) ?? [];
-
-  const storeProducts: StoreProductItem[] = productEdges
-    .map((edge) => {
-      const node = edge?.node;
-      const priceRaw = node?.variants?.edges?.[0]?.node?.price;
-      const image = node?.featuredImage?.url;
-      if (!node?.id || !node.title) {
-        return null;
-      }
-      return {
-        id: node.id,
-        name: node.title,
-        price: priceRaw ? `€${priceRaw}` : "€0.00",
-        image: image || "https://via.placeholder.com/60",
-      };
-    })
-    .filter((item): item is StoreProductItem => item !== null);
-
-  // product_detail_message.liquid → product-detail-message.js
+  // product_detail_message.liquid ??? product-detail-message.js
   // eslint-disable-next-line no-undef
   const apiKey = process.env.SHOPIFY_API_KEY || "";
   const appDisplayName = process.env.SHOPIFY_APP_NAME || process.env.APP_NAME;
@@ -607,8 +610,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   return Response.json({
-    offers,
-    storeProducts,
     markets,
     shop: session.shop,
     apiKey,
@@ -624,12 +625,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const prismaAny: any = prisma;
   let intent = formData.get("intent");
 
+  if (intent === "load-store-products") {
+    const storeProducts = await fetchStoreProducts(admin);
+    return Response.json({ storeProducts });
+  }
+  if (intent === "load-offers") {
+    const offers = await fetchShopOffers(session.shop);
+    return Response.json({ offers });
+  }
+
   if (intent === "billing-subscribe") {
     const plan = String(formData.get("plan") || "");
     const cycle = String(formData.get("cycle") || "");
     if (!isBillingPlanId(plan) || !isBillingCycle(cycle)) {
       return Response.json(
-        { ok: false as const, error: "无效的套餐或计费周期。" },
+        { ok: false as const, error: "??????????????????????????" },
         { status: 400 },
       );
     }
@@ -707,7 +717,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   console.log("action intent", intent);
 
-  // 兼容 fallback：如果没有显式 intent，但有 offerId，则视为更新，否则视为创建
+  // ???? fallback??????????????? intent??????? offerId???????????????????????????
   if (!intent) {
     const hasId = formData.get("offerId");
     intent = hasId ? "update-offer" : "create-offer";
@@ -846,20 +856,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     if (!name) {
-      return offerActionErrorResponse("请填写 Offer 名称。", 400);
+      return offerActionErrorResponse("????? Offer ?????", 400);
     }
     if (!cartTitle) {
       return offerActionErrorResponse("请填写 Display Title。", 400);
     }
     if (!startTimeRaw || !endTimeRaw) {
-      return offerActionErrorResponse("请填写有效的开始时间与结束时间。", 400);
+      return offerActionErrorResponse("???????????????????????????????????????", 400);
     }
 
     const startTime = new Date(startTimeRaw);
     const endTime = new Date(endTimeRaw);
 
     if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
-      return offerActionErrorResponse("请填写有效的开始时间与结束时间。", 400);
+      return offerActionErrorResponse("???????????????????????????????????????", 400);
     }
     if (endTime.getTime() <= startTime.getTime()) {
       return offerActionErrorResponse("结束时间必须晚于开始时间。", 400);
@@ -877,14 +887,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
     if (nameTaken) {
       return offerActionErrorResponse(
-        "该店铺下已存在同名 Offer，请更换名称。",
+        "????????????????? Offer????????????",
         409,
       );
     }
 
     const data = {
       shopName,
-      // 去掉首尾空白，保留名称中间空格（避免编码/解析边界问题）
+      // ????????????????????????????????????/???????????????
       name,
       cartTitle,
       offerType,
@@ -907,7 +917,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           error.code === "P2002"
         ) {
           return offerActionErrorResponse(
-            "该店铺下已存在同名 Offer，请更换名称。",
+            "????????????????? Offer????????????",
             409,
           );
         }
@@ -923,11 +933,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             offerSettingsJson,
           },
         });
-        return offerActionErrorResponse("创建 Offer 失败，请稍后重试。", 500);
+        return offerActionErrorResponse("???? Offer ????????????????", 500);
       }
     } else {
       if (!idRaw) {
-        return offerActionErrorResponse("缺少 Offer ID，无法更新。", 400);
+        return offerActionErrorResponse("??? Offer ID????????????????", 400);
       }
       try {
         await writeOfferWithRetry(() =>
@@ -942,7 +952,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           error.code === "P2002"
         ) {
           return offerActionErrorResponse(
-            "该店铺下已存在同名 Offer，请更换名称。",
+            "????????????????? Offer????????????",
             409,
           );
         }
@@ -959,7 +969,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             offerSettingsJson,
           },
         });
-        return offerActionErrorResponse("更新 Offer 失败，请稍后重试。", 500);
+        return offerActionErrorResponse("?????? Offer ????????????????", 500);
       }
     }
 
@@ -970,7 +980,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         message: syncResult.message,
       });
       return offerActionErrorResponse(
-        `同步到店铺失败（主题/折扣依赖此数据）：${syncResult.message}`,
+        `??????????????????/??????????????????${syncResult.message}`,
         502,
       );
     }
@@ -1004,7 +1014,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return offerActionErrorResponse("Toggle status failed.", 500);
     }
 
-    // 同步 metafield，保证前端/扩展端实时生效
+    // ??? metafield????????/?????????????????
     try {
       const shopNameToSync = updatedOffer?.shopName as string | undefined;
       if (shopNameToSync) {
@@ -1083,7 +1093,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     const prismaAny: any = prisma;
 
-    // 删除前先拿到 shopName（用于同步 metafield）
+    // ?????????????????? shopName?????????? metafield??
     let shopNameToSync: string | undefined;
     try {
       const offerToDelete = await prismaAny.offer.findUnique({
@@ -1099,7 +1109,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return offerActionErrorResponse("Delete offer failed.", 500);
     }
 
-    // 同步 metafield，保证扩展端不再使用已删除 offer
+    // ??? metafield????????????????????????? offer
     try {
       if (shopNameToSync) {
         const shopOffers = (await prismaAny.offer.findMany({
@@ -1178,8 +1188,6 @@ type HomeTabKey = "dashboard" | "offers" | "analytics" | "pricing";
 
 export default function Index() {
   const {
-    offers,
-    storeProducts,
     markets,
     shop,
     apiKey,
@@ -1194,6 +1202,18 @@ export default function Index() {
   const [activeTab, setActiveTab] = useState<HomeTabKey>("dashboard");
   const [showCreateOffer, setShowCreateOffer] = useState(false);
   const [editingOfferId, setEditingOfferId] = useState<string | null>(null);
+  const offersFetcher = useFetcher<{ offers: OfferListItem[] }>();
+  const storeProductsFetcher = useFetcher<{ storeProducts: StoreProductItem[] }>();
+  const lastOffersRefreshToastRef = useRef<string | null>(null);
+
+  const offers = offersFetcher.data?.offers ?? [];
+  const storeProducts = storeProductsFetcher.data?.storeProducts ?? [];
+  const isOffersLoading =
+    !offersFetcher.data?.offers && offersFetcher.state !== "idle";
+  const isStoreProductsLoading =
+    (showCreateOffer || !!editingOfferId) &&
+    !storeProductsFetcher.data?.storeProducts &&
+    storeProductsFetcher.state !== "idle";
 
   const toast = searchParams.get("toast") || actionData?.toast;
 
@@ -1210,19 +1230,19 @@ export default function Index() {
 
   useEffect(() => {
     if (toast === "create-success") {
-      setToastMessage("Offer 创建成功");
+      setToastMessage("Offer ??????????");
       setShowCreateOffer(false);
       setEditingOfferId(null);
     } else if (toast === "update-success") {
-      setToastMessage("Offer 更新成功");
+      setToastMessage("Offer ????????????");
       setShowCreateOffer(false);
       setEditingOfferId(null);
     } else if (toast === "delete-success") {
-      setToastMessage("Offer 删除成功");
+      setToastMessage("Offer ????????????");
       setShowCreateOffer(false);
       setEditingOfferId(null);
     } else if (toast === "toggle-success") {
-      setToastMessage("Offer 状态已更新");
+      setToastMessage("Offer ?????????????");
     } else {
       setToastMessage(null);
     }
@@ -1244,6 +1264,43 @@ export default function Index() {
 
     return () => clearTimeout(timer);
   }, [toast, toastMessage, navigate, searchParams]);
+
+  useEffect(() => {
+    if (offersFetcher.data?.offers) return;
+    if (offersFetcher.state !== "idle") return;
+    offersFetcher.submit({ intent: "load-offers" }, { method: "post" });
+  }, [offersFetcher, offersFetcher.data, offersFetcher.state]);
+
+  useEffect(() => {
+    const shouldRefresh =
+      toast === "create-success" ||
+      toast === "update-success" ||
+      toast === "delete-success" ||
+      toast === "toggle-success";
+    if (!shouldRefresh) return;
+    if (lastOffersRefreshToastRef.current === toast) return;
+    if (offersFetcher.state !== "idle") return;
+    lastOffersRefreshToastRef.current = toast || null;
+    offersFetcher.submit({ intent: "load-offers" }, { method: "post" });
+  }, [toast, offersFetcher, offersFetcher.state]);
+
+  useEffect(() => {
+    const shouldLoadStoreProducts = showCreateOffer || !!editingOfferId;
+    if (!shouldLoadStoreProducts) return;
+    if (storeProductsFetcher.data?.storeProducts) return;
+    if (storeProductsFetcher.state !== "idle") return;
+
+    storeProductsFetcher.submit(
+      { intent: "load-store-products" },
+      { method: "post" },
+    );
+  }, [
+    showCreateOffer,
+    editingOfferId,
+    storeProductsFetcher,
+    storeProductsFetcher.data,
+    storeProductsFetcher.state,
+  ]);
 
   return (
     <AppProvider embedded apiKey={apiKey}>
@@ -1308,6 +1365,7 @@ export default function Index() {
         {activeTab === "dashboard" && !showCreateOffer && !editingOfferId && (
           <DashboardPage
             offers={offers}
+            offersLoading={isOffersLoading}
             storeProducts={storeProducts}
             markets={markets}
             shop={shop}
@@ -1325,6 +1383,7 @@ export default function Index() {
         {activeTab === "offers" && !showCreateOffer && !editingOfferId && (
           <AllOffersPage
             offers={offers}
+            offersLoading={isOffersLoading}
             onCreateOffer={() => {
               setShowCreateOffer(true);
               setEditingOfferId(null);
@@ -1335,23 +1394,36 @@ export default function Index() {
             }}
           />
         )}
-        {(showCreateOffer || editingOfferId) && (
-          <CreateNewOffer
-            onBack={() => {
-              setShowCreateOffer(false);
-              setEditingOfferId(null);
-            }}
-            initialOffer={editingOfferId ? offers.find(o => o.id === editingOfferId) as any : undefined}
-            storeProducts={storeProducts}
-            markets={markets}
-            existingOffers={offers.map((o) => ({
-              id: o.id,
-              name: o.name,
-              cartTitle: o.cartTitle,
-              offerType: o.offerType,
-            }))}
-          />
-        )}
+        {(showCreateOffer || editingOfferId) &&
+          (isStoreProductsLoading ? (
+            <div className="bg-white rounded-[12px] border border-[#e3e8ed] p-[24px] shadow-sm">
+              <div className="animate-pulse space-y-[12px]">
+                <div className="h-[24px] w-[220px] bg-[#f1f2f4] rounded-[6px]" />
+                <div className="h-[16px] w-[320px] bg-[#f1f2f4] rounded-[6px]" />
+                <div className="h-[16px] w-[280px] bg-[#f1f2f4] rounded-[6px]" />
+                <div className="h-[120px] w-full bg-[#f1f2f4] rounded-[8px]" />
+              </div>
+              <p className="mt-[12px] text-[13px] text-[#6d7175]">
+                Loading products for offer editor...
+              </p>
+            </div>
+          ) : (
+            <CreateNewOffer
+              onBack={() => {
+                setShowCreateOffer(false);
+                setEditingOfferId(null);
+              }}
+              initialOffer={editingOfferId ? offers.find(o => o.id === editingOfferId) as any : undefined}
+              storeProducts={storeProducts}
+              markets={markets}
+              existingOffers={offers.map((o) => ({
+                id: o.id,
+                name: o.name,
+                cartTitle: o.cartTitle,
+                offerType: o.offerType,
+              }))}
+            />
+          ))}
         {activeTab === "analytics" && (
           <AnalyticsPage shop={shop} offers={offers} />
         )}

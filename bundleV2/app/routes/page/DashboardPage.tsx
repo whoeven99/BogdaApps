@@ -12,15 +12,16 @@ import {
   Pencil,
   Trash2,
 } from "lucide-react";
-import "../styles/tailwind.css";
-import { CreateNewOffer } from "./component/CreateNewOffer";
-import type { IndexLoaderData } from "./_index/route";
+import "../../styles/tailwind.css";
+import { CreateNewOffer } from "../component/CreateNewOffer/CreateNewOffer";
+import type { IndexLoaderData } from "../_index/route";
 
 interface DashboardPageProps {
   onViewAllOffers?: () => void;
   onViewAnalytics?: () => void;
   onCreateOffer?: () => void;
   offers?: IndexLoaderData["offers"];
+  offersLoading?: boolean;
   storeProducts?: IndexLoaderData["storeProducts"];
   markets?: IndexLoaderData["markets"];
   shop: string;
@@ -97,6 +98,7 @@ export function DashboardPage({
   onViewAnalytics,
   onCreateOffer,
   offers,
+  offersLoading = false,
   storeProducts = [],
   markets = [],
   shop,
@@ -112,6 +114,9 @@ export function DashboardPage({
     null,
   );
   const [togglingIds, setTogglingIds] = useState<string[]>([]);
+  const [overviewMetrics, setOverviewMetrics] = useState<GmvOverviewMetrics | null>(
+    null,
+  );
 
   const offerRows: DashboardOfferRow[] = (offers ?? []).map((offer) => {
     const isActive = !!offer.status;
@@ -134,7 +139,7 @@ export function DashboardPage({
   const visibleOffers = offerRows.slice(0, 4);
 
   // 计算真实 Overview 数据
-  const realOverview = (() => {
+  const fallbackOverview = (() => {
     let totalGmv = 0;
     let totalExposure = 0;
     let totalAddToCart = 0;
@@ -158,6 +163,21 @@ export function DashboardPage({
       activeOffersTrend: "currently running",
       avgConversion: `${avgConversion.toFixed(1)}%`,
       conversionTrendLabel: "Overall avg",
+      conversionTrendColor: "text-[#916a00]" as const,
+    };
+  })();
+
+  const cardOverview = (() => {
+    if (!overviewMetrics) return fallbackOverview;
+
+    return {
+      totalGmv: `$${overviewMetrics.totalGmv.toLocaleString()}`,
+      gmvTrend: "+0.0%",
+      gmvTrendLabel: "from last month",
+      activeOffers: overviewMetrics.bundleOrders,
+      activeOffersTrend: "bundle orders",
+      avgConversion: `${(overviewMetrics.conversion * 100).toFixed(1)}%`,
+      conversionTrendLabel: `Exposure ${overviewMetrics.exposurePv.toLocaleString()} / Orders ${overviewMetrics.orderPv.toLocaleString()}`,
       conversionTrendColor: "text-[#916a00]" as const,
     };
   })();
@@ -259,8 +279,11 @@ export function DashboardPage({
           exposurePv: data.metrics?.exposurePv ?? 0,
           orderPv: data.metrics?.orderPv ?? 0,
         });
+
+        setOverviewMetrics(data.metrics ?? null);
       } catch (error) {
         if (controller.signal.aborted) return;
+        setOverviewMetrics(null);
         console.error("[dashboard][gmv-overview] query exception", {
           shop,
           error: String(error),
@@ -331,21 +354,21 @@ export function DashboardPage({
                 Total GMV
               </span>
               <h3 className="font-sans font-semibold text-[28px] leading-[42px] text-[#1c1f23] tracking-wide m-0">
-                {realOverview.totalGmv}
+                {cardOverview.totalGmv}
               </h3>
               <span className="font-sans font-normal text-[14px] leading-[22.4px] text-[#108043] tracking-normal">
-                {realOverview.gmvTrend} {realOverview.gmvTrendLabel}
+                {cardOverview.gmvTrend} {cardOverview.gmvTrendLabel}
               </span>
             </div>
             <div className="flex flex-col gap-[16px]">
               <span className="font-sans font-normal text-[14px] leading-[22.4px] text-[#5c6166] tracking-normal">
-                Active Offers
+                Bundle Orders
               </span>
               <h3 className="font-sans font-semibold text-[28px] leading-[42px] text-[#1c1f23] tracking-wide m-0">
-                {realOverview.activeOffers}
+                {cardOverview.activeOffers}
               </h3>
               <span className="font-sans font-normal text-[14px] leading-[22.4px] text-[#108043] tracking-normal">
-                {realOverview.activeOffersTrend}
+                {cardOverview.activeOffersTrend}
               </span>
             </div>
             <div className="flex flex-col gap-[16px]">
@@ -353,12 +376,12 @@ export function DashboardPage({
                 Avg. Conversion
               </span>
               <h3 className="font-sans font-semibold text-[28px] leading-[42px] text-[#1c1f23] tracking-wide m-0">
-                {realOverview.avgConversion}
+                {cardOverview.avgConversion}
               </h3>
               <span
-                className={`font-sans font-normal text-[14px] leading-[22.4px] tracking-normal ${realOverview.conversionTrendColor}`}
+                className={`font-sans font-normal text-[14px] leading-[22.4px] tracking-normal ${cardOverview.conversionTrendColor}`}
               >
-                {realOverview.conversionTrendLabel}
+                {cardOverview.conversionTrendLabel}
               </span>
             </div>
           </div>
@@ -450,7 +473,16 @@ export function DashboardPage({
             </tr>
           </thead>
           <tbody>
-            {visibleOffers.length === 0 ? (
+            {offersLoading ? (
+              <tr>
+                <td
+                  colSpan={7}
+                  className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#5c6166] font-sans"
+                >
+                  Loading offers...
+                </td>
+              </tr>
+            ) : visibleOffers.length === 0 ? (
               <tr>
                 <td
                   colSpan={7}
@@ -572,7 +604,11 @@ export function DashboardPage({
         </table>
 
         <div className="md:hidden space-y-[12px]">
-          {visibleOffers.length === 0 ? (
+          {offersLoading ? (
+            <div className="border border-[#dfe3e8] rounded-[8px] p-[16px] text-[14px] text-[#5c6166] font-sans">
+              Loading offers...
+            </div>
+          ) : visibleOffers.length === 0 ? (
             <div className="border border-[#dfe3e8] rounded-[8px] p-[16px] text-[14px] text-[#5c6166] font-sans">
               No offers yet. Create your first offer to see it here.
             </div>

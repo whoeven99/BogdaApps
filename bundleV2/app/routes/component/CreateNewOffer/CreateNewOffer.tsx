@@ -6,8 +6,8 @@ import {
   X,
 } from "lucide-react";
 import "./CreateNewOffer.css";
-import BundlePreview from "./BundlePreview";
-import { PreviewItem } from "./bundlePreviewShared";
+import BundlePreview from "../BundlePreview/BundlePreview";
+import { PreviewItem } from "../BundlePreview/bundlePreviewShared";
 import {
   OFFER_TEXT_LIMITS,
   normalizeOfferNameKey,

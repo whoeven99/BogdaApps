@@ -39,7 +39,7 @@ type OfferMetafieldPayload = {
 
 type Offer = NonNullable<OfferMetafieldPayload["offers"]>[number];
 
-export function cartLinesDiscountsGenerateRun(
+export function bundleCartDiscountGenerateRun(
   input: CartInput,
 ): CartLinesDiscountsGenerateRunResult {
   log("run_start", {

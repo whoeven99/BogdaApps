@@ -1,10 +1,10 @@
 // PricingPage.tsx
 import { useEffect, useState } from "react";
 import { useFetcher } from "react-router";
-import "../styles/tailwind.css";
-import "../styles/polaris-custom.css";
-import type { BillingPlanId } from "../billing";
-import { subscriptionDisplayName } from "../billing";
+import "../../styles/tailwind.css";
+import "../../styles/polaris-custom.css";
+import type { BillingPlanId } from "../../billing";
+import { subscriptionDisplayName } from "../../billing";
 
 type BillingSubscribeJson =
   | { ok: true; confirmationUrl: string; testCharge?: boolean }

@@ -2898,9 +2898,9 @@ capital-case@^1.0.4:
     tslib "^2.0.3"
     upper-case-first "^2.0.2"
 
-"cart-lines-10-percent-discount-function@file:/Users/cedric/Documents/GitHub/BogdaApps/bundleV2/extensions/cart-lines-10-percent-discount-function":
+"bundle-cart-discount-function@file:/Users/cedric/Documents/GitHub/BogdaApps/bundleV2/extensions/bundle-cart-discount-function":
   version "0.0.1"
-  resolved "file:extensions/cart-lines-10-percent-discount-function"
+  resolved "file:extensions/bundle-cart-discount-function"
   dependencies:
     "@shopify/shopify_function" "2.0.0"
 
@@ -7048,3 +7048,4 @@ zrender@6.0.0:
   integrity sha512-41dFXEEXuJpNecuUQq6JlbybmnHaqqpGlbH1yxnA5V9MMP4SbohSVZsJIwz+zdjQXSSlR1Vc34EgH1zxyTDvhg==
   dependencies:
     tslib "2.3.0"
+
