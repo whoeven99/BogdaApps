@@ -42,17 +42,80 @@ type Offer = NonNullable<OfferMetafieldPayload["offers"]>[number];
 export function bundleCartDiscountGenerateRun(
   input: CartInput,
 ): CartLinesDiscountsGenerateRunResult {
+  const shopAny = input.shop as unknown as {
+    metafield?: { jsonValue?: unknown; type?: string } | null;
+    offersProd?: { jsonValue?: unknown; type?: string } | null;
+    offersTest?: { jsonValue?: unknown; type?: string } | null;
+    offersActiveEnv?: { jsonValue?: unknown; type?: string } | null;
+    bundleEnabledProd?: { jsonValue?: unknown; type?: string } | null;
+    bundleEnabledTest?: { jsonValue?: unknown; type?: string } | null;
+  };
+  const bundleEnabledProdPayload = shopAny.bundleEnabledProd?.jsonValue as
+    | { enabled?: boolean }
+    | null
+    | undefined;
+  const bundleEnabledTestPayload = shopAny.bundleEnabledTest?.jsonValue as
+    | { enabled?: boolean }
+    | null
+    | undefined;
+  const prodEnabled = bundleEnabledProdPayload?.enabled === true;
+  const testEnabled = bundleEnabledTestPayload?.enabled === true;
+
+  const offersProdPayload = shopAny.offersProd?.jsonValue as
+    | OfferMetafieldPayload
+    | null
+    | undefined;
+  const offersTestPayload = shopAny.offersTest?.jsonValue as
+    | OfferMetafieldPayload
+    | null
+    | undefined;
+
+  const toUpdatedAtMs = (payload: OfferMetafieldPayload | null | undefined): number => {
+    const raw = payload?.updatedAt;
+    if (!raw || typeof raw !== "string") return 0;
+    const ts = Date.parse(raw);
+    return Number.isFinite(ts) ? ts : 0;
+  };
+
+  let selectedEnv: "prod" | "test" | null = null;
+  let offersPayload: OfferMetafieldPayload | null | undefined = null;
+  if (!prodEnabled && !testEnabled) {
+    selectedEnv = null;
+    offersPayload = null;
+  } else if (prodEnabled && !testEnabled) {
+    selectedEnv = "prod";
+    offersPayload = offersProdPayload;
+  } else if (!prodEnabled && testEnabled) {
+    selectedEnv = "test";
+    offersPayload = offersTestPayload;
+  } else {
+    const prodTs = toUpdatedAtMs(offersProdPayload);
+    const testTs = toUpdatedAtMs(offersTestPayload);
+    if (prodTs >= testTs) {
+      selectedEnv = "prod";
+      offersPayload = offersProdPayload;
+    } else {
+      selectedEnv = "test";
+      offersPayload = offersTestPayload;
+    }
+  }
+
   log("run_start", {
     cartLineCount: input.cart.lines.length,
     discountClasses: input.discount.discountClasses,
     metafieldPresent: Boolean(input.shop.metafield),
     metafieldType: input.shop.metafield?.type ?? null,
+    prodEnabled,
+    testEnabled,
+    selectedEnv,
+    hasProdOffers: Boolean(shopAny.offersProd?.jsonValue),
+    hasTestOffers: Boolean(shopAny.offersTest?.jsonValue),
   });
 
-  const offersPayload = input.shop.metafield?.jsonValue as
-    | OfferMetafieldPayload
-    | null
-    | undefined;
+  if (!offersPayload) {
+    log("early_exit", { reason: "bundle_disabled_or_no_selected_env_payload" });
+    return { operations: [] };
+  }
   const offers = offersPayload?.offers ?? [];
 
   log("metafield_offers", {

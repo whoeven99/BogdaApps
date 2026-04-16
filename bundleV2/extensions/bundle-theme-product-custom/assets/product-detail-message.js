@@ -93,6 +93,43 @@ function formatPrice(value) {
   return `${currencySymbol}${formattedNumber}`;
 }
 
+function toCents(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.round(n * 100);
+}
+
+function fromCents(cents) {
+  const n = Number(cents);
+  if (!Number.isFinite(n)) return 0;
+  return n / 100;
+}
+
+/**
+ * 公共金额计算：与 cart function 对齐
+ * 规则：先计算单件折后价（分）并取整，再乘数量。
+ */
+function calculateBundleAmounts(unitPrice, quantity, discountPercent) {
+  const safeQty = Math.max(1, Math.trunc(Number(quantity) || 1));
+  const safeDiscountPercent = Math.max(0, Math.min(100, Number(discountPercent) || 0));
+  const unitPriceCents = toCents(unitPrice);
+  const originalTotalCents = unitPriceCents * safeQty;
+  const discountedUnitCents = Math.round(
+    unitPriceCents * (1 - safeDiscountPercent / 100),
+  );
+  const discountedTotalCents = discountedUnitCents * safeQty;
+  const savedCents = originalTotalCents - discountedTotalCents;
+
+  return {
+    originalTotalCents,
+    discountedTotalCents,
+    savedCents,
+    originalTotal: fromCents(originalTotalCents),
+    discountedTotal: fromCents(discountedTotalCents),
+    saved: fromCents(savedCents),
+  };
+}
+
 function normalizePriceNumber(value) {
   if (value == null) return null;
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -473,6 +510,7 @@ function renderBundlePreviewHtml(offer) {
   const widgetTitle = offerSettings.title || "Bundle & Save";
 
   const unitPrice = getCurrentUnitPrice();
+  const hasDefault = discountRules.some((r) => r.isDefault);
   const items = [
     {
       count: 1,
@@ -481,10 +519,11 @@ function renderBundlePreviewHtml(offer) {
       price: formatPrice(unitPrice),
     },
     ...discountRules.map((rule, index) => {
-      const originalTotal = unitPrice * rule.count;
-      const discountedTotal = originalTotal * (1 - rule.discountPercent / 100);
-      const saved = originalTotal - discountedTotal;
-      const hasDefault = discountRules.some(r => r.isDefault);
+      const { originalTotal, discountedTotal, saved } = calculateBundleAmounts(
+        unitPrice,
+        rule.count,
+        rule.discountPercent,
+      );
       const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
       return {
         count: rule.count,
@@ -542,20 +581,81 @@ function renderBundlePreviewHtml(offer) {
   </div>`;
 }
 
-function readOffersConfigFromMetafield() {
-  const metaEl = document.getElementById("ciwi-bundle-offers");
+function parseCiwiMetafieldScript(scriptId) {
+  const metaEl = document.getElementById(scriptId);
   if (!metaEl) return null;
 
-  try {
-    let raw = (metaEl.innerText || metaEl.textContent || "").trim();
-    if (!raw) return null;
+  let raw = (metaEl.innerText || metaEl.textContent || "").trim();
+  if (!raw) return null;
 
-    // 与 bundle-cart.js 一致：兼容 Ruby hash 风格的字符串化输出
-    if (raw.startsWith('"') && raw.endsWith('"')) {
-      raw = raw.slice(1, -1);
+  // 与 bundle-cart.js 一致：兼容 Ruby hash 风格的字符串化输出
+  if (raw.startsWith('"') && raw.endsWith('"')) {
+    raw = raw.slice(1, -1);
+  }
+  const jsonLike = raw.replace(/=>/g, ":").replace(/\bnil\b/g, "null");
+  return JSON.parse(jsonLike);
+}
+
+function getOffersUpdatedAtMs(payload) {
+  const updatedAtRaw = payload?.updatedAt;
+  if (!updatedAtRaw || typeof updatedAtRaw !== "string") return 0;
+  const ts = Date.parse(updatedAtRaw);
+  return Number.isFinite(ts) ? ts : 0;
+}
+
+function readEnvEnabledState() {
+  try {
+    const prodPayload = parseCiwiMetafieldScript("ciwi-bundle-enabled-prod");
+    const testPayload = parseCiwiMetafieldScript("ciwi-bundle-enabled-test");
+    const readBool = (payload) =>
+      payload && typeof payload === "object" && typeof payload.enabled === "boolean"
+        ? payload.enabled
+        : null;
+
+    return {
+      prodEnabled: readBool(prodPayload),
+      testEnabled: readBool(testPayload),
+    };
+  } catch (e) {
+    console.error("[ciwi] Failed to parse ciwi-bundle-enabled metafield", e);
+    return {
+      prodEnabled: null,
+      testEnabled: null,
+    };
+  }
+}
+
+function readOffersConfigFromMetafield() {
+  try {
+    const envPayloads = {
+      prod: parseCiwiMetafieldScript("ciwi-bundle-offers-prod"),
+      test: parseCiwiMetafieldScript("ciwi-bundle-offers-test"),
+    };
+    const { prodEnabled, testEnabled } = readEnvEnabledState();
+    const prodOpen = prodEnabled === true;
+    const testOpen = testEnabled === true;
+
+    if (!prodOpen && !testOpen) {
+      return null;
     }
-    const jsonLike = raw.replace(/=>/g, ":").replace(/\bnil\b/g, "null");
-    return JSON.parse(jsonLike);
+
+    if (prodOpen && !testOpen) {
+      return envPayloads.prod || null;
+    }
+
+    if (!prodOpen && testOpen) {
+      return envPayloads.test || null;
+    }
+
+    // prod/test 都开启时，按最新 updatedAt 选择。
+    const newestEnv = ["prod", "test"].sort(
+      (a, b) => getOffersUpdatedAtMs(envPayloads[b]) - getOffersUpdatedAtMs(envPayloads[a]),
+    )[0];
+    if (newestEnv && envPayloads[newestEnv]) {
+      return envPayloads[newestEnv];
+    }
+
+    return null;
   } catch (e) {
     console.error("[ciwi] Failed to parse ciwi-bundle-offers metafield", e);
     return null;
@@ -794,6 +894,7 @@ function run() {
 
     const currentOffer = getCurrentOffer(offersConfigCache);
     if (!currentOffer) {
+      console.log("[ciwi] no active env offers after enabled checks, skip bundle UI");
       return;
     }
 
