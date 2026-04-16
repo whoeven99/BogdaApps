@@ -12,9 +12,10 @@ interface AnalyticsDataType {
 interface AnalyticsPageProps {
   shop: string;
   offers: Array<{ id: string; name: string }>;
+  defaultOfferId?: string | null;
 }
 
-export function AnalyticsPage({ shop, offers }: AnalyticsPageProps) {
+export function AnalyticsPage({ shop, offers, defaultOfferId }: AnalyticsPageProps) {
   const [analyticsData, setAnalyticsData] = useState<AnalyticsDataType>({
     visitors: 0,
     bundleOrders: 0,
@@ -36,7 +37,15 @@ export function AnalyticsPage({ shop, offers }: AnalyticsPageProps) {
     { label: "Last 60d", value: 60 },
   ];
 
-  const [selectedOffer, setSelectedOffer] = useState<string>("all");
+  const [selectedOffer, setSelectedOffer] = useState<string>(defaultOfferId || "all");
+
+  useEffect(() => {
+    if (defaultOfferId) {
+      setSelectedOffer(defaultOfferId);
+    } else {
+      setSelectedOffer("all");
+    }
+  }, [defaultOfferId]);
   const offerOptions = useMemo(() => {
     const allOption = [{ label: "All bundle deals", value: "all" }];
     return [
