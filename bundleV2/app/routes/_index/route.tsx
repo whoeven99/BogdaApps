@@ -89,6 +89,63 @@ type ShopOffersMetafieldSyncResult =
   | { ok: true }
   | { ok: false; message: string };
 
+const BUNDLE_METAFIELD_NAMESPACE = "ciwi_bundle";
+const BUNDLE_METAFIELD_BASE_KEY = "ciwi-bundle-offers";
+const BUNDLE_METAFIELD_ACTIVE_ENV_KEY = "ciwi-bundle-offers-active-env";
+const PROD_SHOPIFY_API_KEY = "bfc13ad696f2a8d2a77ba6eee1e26966";
+const TEST_SHOPIFY_API_KEY = "ab25ea895c6df574ae9ff70e9c7731c5";
+
+type BundleEnvironment = "prod" | "test";
+
+function resolveBundleEnvironment(): BundleEnvironment {
+  const explicit =
+    String(process.env.BUNDLE_ENV || process.env.APP_ENV || "")
+      .trim()
+      .toLowerCase();
+  if (explicit === "prod" || explicit === "production") return "prod";
+  if (explicit === "test" || explicit === "staging") return "test";
+
+  const apiKey = String(process.env.SHOPIFY_API_KEY || "").trim();
+  if (apiKey === PROD_SHOPIFY_API_KEY) return "prod";
+  if (apiKey === TEST_SHOPIFY_API_KEY) return "test";
+
+  return process.env.NODE_ENV === "production" ? "prod" : "test";
+}
+
+function buildOfferMetafieldsInput(ownerId: string, offersPayload: string) {
+  const env = resolveBundleEnvironment();
+  const envOfferKey = `${BUNDLE_METAFIELD_BASE_KEY}-${env}`;
+  const activeEnvPayload = JSON.stringify({
+    env,
+    updatedAt: new Date().toISOString(),
+  });
+
+  return [
+    {
+      ownerId,
+      namespace: BUNDLE_METAFIELD_NAMESPACE,
+      key: envOfferKey,
+      type: "json",
+      value: offersPayload,
+    },
+    {
+      ownerId,
+      namespace: BUNDLE_METAFIELD_NAMESPACE,
+      key: BUNDLE_METAFIELD_ACTIVE_ENV_KEY,
+      type: "json",
+      value: activeEnvPayload,
+    },
+    // 兼容历史读路径，避免函数/主题未更新时出现空数据。
+    {
+      ownerId,
+      namespace: BUNDLE_METAFIELD_NAMESPACE,
+      key: BUNDLE_METAFIELD_BASE_KEY,
+      type: "json",
+      value: offersPayload,
+    },
+  ];
+}
+
 async function syncShopOffersMetafield(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   admin: any,
@@ -156,15 +213,7 @@ async function syncShopOffersMetafield(
     `,
       {
         variables: {
-          metafields: [
-            {
-              ownerId: shopId,
-              namespace: "ciwi_bundle",
-              key: "ciwi-bundle-offers",
-              type: "json",
-              value: metafieldValue,
-            },
-          ],
+          metafields: buildOfferMetafieldsInput(shopId, metafieldValue),
         },
       },
     );
@@ -1046,60 +1095,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     try {
       const shopNameToSync = updatedOffer?.shopName as string | undefined;
       if (shopNameToSync) {
-        const shopOffers = (await prismaAny.offer.findMany({
-          where: { shopName: shopNameToSync },
-          orderBy: { createdAt: "desc" },
-        })) as OfferListItem[];
-
-        const metafieldValue = JSON.stringify({
-          updatedAt: new Date().toISOString(),
-          offers: shopOffers,
-        });
-
-        const shopIdResponse = await admin.graphql(
-          `#graphql
-          query ShopId {
-            shop {
-              id
-            }
-          }
-        `,
-        );
-
-        const shopIdJson = await shopIdResponse.json();
-        const shopId = shopIdJson?.data?.shop?.id as string | undefined;
-
-        if (shopId) {
-          await admin.graphql(
-            `#graphql
-            mutation MetafieldsSet($metafields: [MetafieldsSetInput!]!) {
-              metafieldsSet(metafields: $metafields) {
-                metafields {
-                  id
-                  key
-                  namespace
-                }
-                userErrors {
-                  field
-                  message
-                }
-              }
-            }
-          `,
-            {
-              variables: {
-                metafields: [
-                  {
-                    ownerId: shopId,
-                    namespace: "ciwi_bundle",
-                    key: "ciwi-bundle-offers",
-                    type: "json",
-                    value: metafieldValue,
-                  },
-                ],
-              },
-            },
-          );
+        const syncResult = await syncShopOffersMetafield(admin, shopNameToSync);
+        if (!syncResult.ok) {
+          console.error("Failed to sync offers metafield after toggle", {
+            shopNameToSync,
+            message: syncResult.message,
+          });
         }
       }
     } catch (error) {
@@ -1140,60 +1141,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // Sync metafield after deleting offer
     try {
       if (shopNameToSync) {
-        const shopOffers = (await prismaAny.offer.findMany({
-          where: { shopName: shopNameToSync },
-          orderBy: { createdAt: "desc" },
-        })) as OfferListItem[];
-
-        const metafieldValue = JSON.stringify({
-          updatedAt: new Date().toISOString(),
-          offers: shopOffers,
-        });
-
-        const shopIdResponse = await admin.graphql(
-          `#graphql
-          query ShopId {
-            shop {
-              id
-            }
-          }
-        `,
-        );
-
-        const shopIdJson = await shopIdResponse.json();
-        const shopId = shopIdJson?.data?.shop?.id as string | undefined;
-
-        if (shopId) {
-          await admin.graphql(
-            `#graphql
-            mutation MetafieldsSet($metafields: [MetafieldsSetInput!]!) {
-              metafieldsSet(metafields: $metafields) {
-                metafields {
-                  id
-                  key
-                  namespace
-                }
-                userErrors {
-                  field
-                  message
-                }
-              }
-            }
-          `,
-            {
-              variables: {
-                metafields: [
-                  {
-                    ownerId: shopId,
-                    namespace: "ciwi_bundle",
-                    key: "ciwi-bundle-offers",
-                    type: "json",
-                    value: metafieldValue,
-                  },
-                ],
-              },
-            },
-          );
+        const syncResult = await syncShopOffersMetafield(admin, shopNameToSync);
+        if (!syncResult.ok) {
+          console.error("Failed to sync offers metafield after delete", {
+            shopNameToSync,
+            message: syncResult.message,
+          });
         }
       }
     } catch (error) {
