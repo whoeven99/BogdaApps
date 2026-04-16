@@ -370,10 +370,32 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       });
 
       const safeShopName = escapeSlsString(shopName);
-      const exposureSql = `__topic__: "product_viewed" and shopName: "${safeShopName}" | SELECT COUNT(1) AS exposure_pv, COUNT(DISTINCT clientId) AS exposure_uv`;
-      const orderSql = `__topic__: "checkout_completed" and shopName: "${safeShopName}" | SELECT COUNT(1) AS order_pv`;
-      const bundleOrderSql = `__topic__: "checkout_completed" and shopName: "${safeShopName}" and extra: "bundle" and not extra: "NO_BUNDLE_TITLE" | SELECT COUNT(1) AS bundle_orders`;
-      const gmvSql = `__topic__: "checkout_completed" and shopName: "${safeShopName}" and extra: "bundle" and not extra: "NO_BUNDLE_TITLE" | SELECT SUM(CAST(REGEXP_EXTRACT(extra, '"amount":"([0-9.]+)"', 1) AS DOUBLE)) AS total_gmv`;
+      const bundleName = url.searchParams.get("name");
+      const safeBundleName = bundleName ? escapeSlsString(bundleName) : null;
+
+      let exposureSql = `__topic__: "product_viewed" and shopName: "${safeShopName}"`;
+      if (safeBundleName) {
+        exposureSql += ` and extra: "${safeBundleName}"`;
+      }
+      exposureSql += ` | SELECT COUNT(1) AS exposure_pv, COUNT(DISTINCT clientId) AS exposure_uv`;
+
+      let orderSql = `__topic__: "checkout_completed" and shopName: "${safeShopName}"`;
+      if (safeBundleName) {
+        orderSql += ` and extra: "${safeBundleName}"`;
+      }
+      orderSql += ` | SELECT COUNT(1) AS order_pv`;
+
+      let bundleOrderSql = `__topic__: "checkout_completed" and shopName: "${safeShopName}" and extra: "bundle" and not extra: "NO_BUNDLE_TITLE"`;
+      if (safeBundleName) {
+        bundleOrderSql += ` and extra: "${safeBundleName}"`;
+      }
+      bundleOrderSql += ` | SELECT COUNT(1) AS bundle_orders`;
+
+      let gmvSql = `__topic__: "checkout_completed" and shopName: "${safeShopName}" and extra: "bundle" and not extra: "NO_BUNDLE_TITLE"`;
+      if (safeBundleName) {
+        gmvSql += ` and extra: "${safeBundleName}"`;
+      }
+      gmvSql += ` | SELECT SUM(CAST(REGEXP_EXTRACT(extra, '"amount":"([0-9.]+)"', 1) AS DOUBLE)) AS total_gmv`;
 
       const [exposureAgg, orderAgg, bundleOrderAgg, gmvAgg] = await Promise.all([
         runSlsSql(sls, fromDate, toDate, exposureSql, "exposure"),

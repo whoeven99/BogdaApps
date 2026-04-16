@@ -73,6 +73,7 @@ export function AnalyticsPage({ shop, offers }: AnalyticsPageProps) {
         });
 
         if (selectedOffer !== "all") {
+          overviewQuery.set("name", selectedOffer);
           trendQuery.set("name", selectedOffer);
         }
 
