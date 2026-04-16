@@ -4,16 +4,23 @@ import "../../styles/tailwind.css";
 import { Trash2, Pencil } from "lucide-react";
 import { Form, useNavigation, useSearchParams, useActionData } from "react-router";
 import type { IndexLoaderData } from "../_index/route";
+import { parseDiscountRules } from "../../utils/offerParsing";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 type AllOffersRow = {
   id: string;
   name: string;
+  cartTitle: string;
+  offerType: string;
+  discountRulesJson: string | null;
   isActive: boolean;
-  exposurePV: number;
-  addToCartPV: number;
-  gmv: number;
-  conversion: number;
-  createdAt: string;
+  createdAt: string | Date | undefined;
+  updatedAt: string | Date | undefined;
 };
 
 interface AllOffersPageProps {
@@ -21,13 +28,15 @@ interface AllOffersPageProps {
   onEditOffer?: (id: string) => void;
   offers?: IndexLoaderData["offers"];
   offersLoading?: boolean;
+  ianaTimezone?: string;
 }
 
 export function AllOffersPage({
   onCreateOffer,
   onEditOffer,
-  offers,
+  offers = [],
   offersLoading = false,
+  ianaTimezone = "UTC",
 }: AllOffersPageProps) {
   const handleShowGuide = () => {};
   const handleCreateOffer = () => {
@@ -43,22 +52,16 @@ export function AllOffersPage({
   const handleDelete = () => {};
 
   const rows: AllOffersRow[] = (offers ?? []).map((offer) => {
-  const isActive = !!offer.status;
-    const exposurePV = offer.exposurePV ?? 0;
-    const addToCartPV = offer.addToCartPV ?? 0;
-    const gmv = offer.gmv ?? 0;
-    const conversion = offer.conversion ?? 0;
-    const createdAt = offer.startTime ?? "";
-
+    const isActive = !!offer.status;
     return {
       id: offer.id,
       name: offer.name,
-    isActive,
-      exposurePV,
-      addToCartPV,
-      gmv,
-      conversion,
-      createdAt,
+      cartTitle: offer.cartTitle,
+      offerType: offer.offerType,
+      discountRulesJson: offer.discountRulesJson,
+      isActive,
+      createdAt: offer.createdAt,
+      updatedAt: offer.updatedAt,
     };
   });
 
@@ -71,7 +74,7 @@ export function AllOffersPage({
   const toast = searchParams.get("toast") || actionData?.toast;
 
   useEffect(() => {
-    if (toast === "delete-success") {
+    if (toast?.startsWith("delete-success")) {
       setDeletingOffer(null);
     }
   }, [toast]);
@@ -134,22 +137,22 @@ export function AllOffersPage({
                 Offer Name
               </th>
               <th className="text-left p-[12px] border-b border-[#f0f2f4] text-[13px] text-[#5c6166] font-sans font-semibold">
+                Display name
+              </th>
+              <th className="text-left p-[12px] border-b border-[#f0f2f4] text-[13px] text-[#5c6166] font-sans font-semibold">
+                Discount type
+              </th>
+              <th className="text-left p-[12px] border-b border-[#f0f2f4] text-[13px] text-[#5c6166] font-sans font-semibold">
+                Discount rules
+              </th>
+              <th className="text-left p-[12px] border-b border-[#f0f2f4] text-[13px] text-[#5c6166] font-sans font-semibold">
                 Status
               </th>
               <th className="text-left p-[12px] border-b border-[#f0f2f4] text-[13px] text-[#5c6166] font-sans font-semibold">
-                Exposure PV
+                Create time
               </th>
               <th className="text-left p-[12px] border-b border-[#f0f2f4] text-[13px] text-[#5c6166] font-sans font-semibold">
-                Add to Cart PV
-              </th>
-              <th className="text-left p-[12px] border-b border-[#f0f2f4] text-[13px] text-[#5c6166] font-sans font-semibold">
-                GMV
-              </th>
-              <th className="text-left p-[12px] border-b border-[#f0f2f4] text-[13px] text-[#5c6166] font-sans font-semibold">
-                Conversion
-              </th>
-              <th className="text-left p-[12px] border-b border-[#f0f2f4] text-[13px] text-[#5c6166] font-sans font-semibold">
-                Created
+                Update time
               </th>
               <th className="text-left p-[12px] border-b border-[#f0f2f4] text-[13px] text-[#5c6166] font-sans font-semibold">
                 Actions
@@ -179,78 +182,87 @@ export function AllOffersPage({
               rows.map((offer) => {
                 const isToggling = getIsToggling(offer.id);
                 const statusLabel = offer.isActive ? "Active" : "Paused";
-                const gmvDisplay = `$${offer.gmv.toLocaleString()}`;
-                const conversionDisplay = `${offer.conversion.toFixed(1)}%`;
-                const createdDisplay = offer.createdAt
-                  ? new Date(offer.createdAt).toISOString().slice(0, 10)
+                const displayType = offer.offerType === "quantity-breaks-same" ? "Quantity breaks" : offer.offerType;
+                
+                const rules = parseDiscountRules(offer.discountRulesJson);
+                const rulesText = rules.length > 0 
+                  ? rules.map(r => `Buy ${r.count} Get ${r.discountPercent}% Off`).join(", ")
                   : "-";
+                  
+                const formatTime = (timeStr: string | Date | undefined) => {
+                  if (!timeStr) return "-";
+                  const d = dayjs(timeStr);
+                  if (!d.isValid()) return "-";
+                  return d.tz(ianaTimezone).format("YYYY-MM-DD HH:mm:ss");
+                };
 
                 return (
                   <tr key={offer.id}>
-                <td className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#1c1f23] font-sans">
-                  <div className="flex items-center gap-[8px]">
-                    {offer.name}
-                  </div>
-                </td>
-                <td className="p-[12px] border-b border-[#f0f2f4]">
-                  <Form method="post">
-                    <input type="hidden" name="intent" value="toggle-offer-status" />
-                    <input type="hidden" name="offerId" value={offer.id} />
-                    <input
-                      type="hidden"
-                      name="nextStatus"
-                      value={offer.isActive ? "false" : "true"}
-                    />
-                    <button
-                      type="submit"
-                      disabled={isToggling}
-                      className={`flex items-center gap-[8px] bg-transparent border-0 p-0 cursor-pointer ${
-                        isToggling ? "opacity-70 cursor-default" : ""
-                      }`}
-                    >
-                      <span
-                        className={`relative inline-block w-[44px] h-[24px] rounded-[12px] transition-colors duration-200 ${
-                          isToggling ? "animate-pulse" : ""
-                        }`}
-                        style={{
-                          backgroundColor: offer.isActive ? "#008060" : "#c4cdd5",
-                        }}
-                      >
-                        <span
-                          className={`absolute top-[2px] w-[20px] h-[20px] bg-white rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.2)] transition-all duration-200 ${
-                            isToggling ? "animate-pulse" : ""
-                          }`}
-                          style={{ left: offer.isActive ? "22px" : "2px" }}
+                    <td className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#1c1f23] font-sans">
+                      <div className="flex items-center gap-[8px]">
+                        {offer.name}
+                      </div>
+                    </td>
+                    <td className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#1c1f23] font-sans">
+                      {offer.cartTitle}
+                    </td>
+                    <td className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#1c1f23] font-sans">
+                      {displayType}
+                    </td>
+                    <td className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#1c1f23] font-sans">
+                      {rulesText}
+                    </td>
+                    <td className="p-[12px] border-b border-[#f0f2f4]">
+                      <Form method="post">
+                        <input type="hidden" name="intent" value="toggle-offer-status" />
+                        <input type="hidden" name="offerId" value={offer.id} />
+                        <input
+                          type="hidden"
+                          name="nextStatus"
+                          value={offer.isActive ? "false" : "true"}
                         />
-                      </span>
-                      <span
-                        style={{
-                          fontSize: 14,
-                          color: offer.isActive ? "#108043" : "#6d7175",
-                          fontWeight: 500,
-                        }}
-                      >
-                        {isToggling ? "Updating..." : statusLabel}
-                      </span>
-                    </button>
-                  </Form>
-                </td>
-                <td className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#1c1f23] font-sans">
-                  {offer.exposurePV.toLocaleString()}
-                </td>
-                <td className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#1c1f23] font-sans">
-                  {offer.addToCartPV.toLocaleString()}
-                </td>
-                <td className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#1c1f23] font-sans">
-                  {gmvDisplay}
-                </td>
-                <td className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#1c1f23] font-sans">
-                  {conversionDisplay}
-                </td>
-                <td className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#5c6166] font-sans">
-                  {createdDisplay}
-                </td>
-                <td className="p-[12px] border-b border-[#f0f2f4]">
+                        <button
+                          type="submit"
+                          disabled={isToggling}
+                          className={`flex items-center gap-[8px] bg-transparent border-0 p-0 cursor-pointer ${
+                            isToggling ? "opacity-70 cursor-default" : ""
+                          }`}
+                        >
+                          <span
+                            className={`relative inline-block w-[44px] h-[24px] rounded-[12px] transition-colors duration-200 ${
+                              isToggling ? "animate-pulse" : ""
+                            }`}
+                            style={{
+                              backgroundColor: offer.isActive
+                                ? "#008060"
+                                : "#c4cdd5",
+                            }}
+                          >
+                            <span
+                              className={`absolute top-[2px] w-[20px] h-[20px] bg-white rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.2)] transition-all duration-200 ${
+                                isToggling ? "animate-pulse" : ""
+                              }`}
+                              style={{ left: offer.isActive ? "22px" : "2px" }}
+                            />
+                          </span>
+                          <span
+                            className="text-[14px] font-medium"
+                            style={{
+                              color: offer.isActive ? "#108043" : "#6d7175",
+                            }}
+                          >
+                            {isToggling ? "Updating..." : statusLabel}
+                          </span>
+                        </button>
+                      </Form>
+                    </td>
+                    <td className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#1c1f23] font-sans">
+                      {formatTime(offer.createdAt)}
+                    </td>
+                    <td className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#1c1f23] font-sans">
+                      {formatTime(offer.updatedAt)}
+                    </td>
+                    <td className="p-[12px] border-b border-[#f0f2f4]">
                   <div className="flex items-center gap-[8px]">
                     <button
                       type="button"

@@ -278,7 +278,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const fromRaw = url.searchParams.get("from");
     const toRaw = url.searchParams.get("to");
     const now = new Date();
-    const defaultFrom = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const defaultFrom = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     const fromDate = fromRaw ? new Date(fromRaw) : defaultFrom;
     const toDate = toRaw ? new Date(toRaw) : now;
 

@@ -84,7 +84,9 @@ function formatPrice(value) {
       const config = JSON.parse(configEl.textContent || "{}");
       if (config.currencySymbol) currencySymbol = config.currencySymbol;
       if (config.moneyFormat) moneyFormat = config.moneyFormat;
-    } catch (e) {}
+    } catch (e) {
+      // ignore JSON parse error
+    }
   }
   
   const formattedNumber = detectNumberFormat(moneyFormat, Number(value).toFixed(2));
@@ -149,6 +151,37 @@ function getSelectedVariantId() {
   const input = form?.querySelector("input[name='id']");
   if (!input) return "";
   return String(input.value || "").trim();
+}
+
+function isCurrentVariantAvailable() {
+  const selectedVariantId = getSelectedVariantId();
+  const configEl = document.getElementById("ciwi-bundles-config");
+  if (configEl) {
+    try {
+      const config = JSON.parse(configEl.textContent || "{}");
+      if (config.variants && Array.isArray(config.variants)) {
+        // If there's a selected variant, find it
+        if (selectedVariantId) {
+          const v = config.variants.find(v => String(v.id) === selectedVariantId);
+          if (v) return v.available;
+        }
+        // If no explicit variant id found in form but variants exist, check the first one (or default)
+        return config.variants[0]?.available ?? true;
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+  // Fallback to ShopifyAnalytics
+  const productMeta = window?.ShopifyAnalytics?.meta?.product;
+  if (productMeta && typeof productMeta === "object" && Array.isArray(productMeta.variants)) {
+    if (selectedVariantId) {
+      const v = productMeta.variants.find(v => String(v.id) === selectedVariantId);
+      if (v && v.available !== undefined) return v.available;
+    }
+  }
+  // If we can't determine, assume available
+  return true;
 }
 
 function isPriceElementVisible(el) {
@@ -335,7 +368,8 @@ function updateThemeQuantityInput(count) {
       ? Array.from(document.querySelectorAll(`[name="quantity"][form="${formId}"]`))
       : [];
 
-    const allQtyInputs = [...innerQtyInputs, ...linkedQtyInputs];
+    // 去重，防止同一元素既在表单内又带有 form 属性
+    const allQtyInputs = Array.from(new Set([...innerQtyInputs, ...linkedQtyInputs]));
 
     // 3. 如果都没有，则创建一个隐藏的输入框
     if (allQtyInputs.length === 0) {
@@ -347,12 +381,19 @@ function updateThemeQuantityInput(count) {
       allQtyInputs.push(newQtyInput);
     }
 
-    // 4. 更新所有找到的输入框
-    allQtyInputs.forEach((input) => {
+    // 4. 更新所有找到的输入框，但禁用多余的，防止重复提交导致数量翻倍
+    allQtyInputs.forEach((input, index) => {
       input.value = count;
-      // 触发 change 和 input 事件，以兼容不同主题的事件监听
-      input.dispatchEvent(new Event("change", { bubbles: true }));
-      input.dispatchEvent(new Event("input", { bubbles: true }));
+      if (index === 0) {
+        input.disabled = false;
+        // 触发 change 和 input 事件，以兼容不同主题的事件监听
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      } else {
+        // 如果有多个 quantity 输入框（如桌面端和移动端各一个），只保留第一个有效
+        // 防止主题的 AJAX 提交脚本收集到多个 quantity 字段并相加（如 4 + 4 = 8）
+        input.disabled = true;
+      }
     });
   }
 }
@@ -428,6 +469,7 @@ function renderBundlePreviewHtml(offer) {
   const titleColor = offerSettings.titleColor || "#111111";
   const buttonText = offerSettings.buttonText || "Add to Cart";
   const buttonPrimaryColor = offerSettings.buttonPrimaryColor || "#008060";
+  const showCustomButton = offerSettings.showCustomButton !== false;
   const widgetTitle = offerSettings.title || "Bundle & Save";
 
   const unitPrice = getCurrentUnitPrice();
@@ -494,9 +536,9 @@ function renderBundlePreviewHtml(offer) {
     <div class="create-offer-style-preview-list create-offer-style-preview-list--${layoutFormat}">
       ${itemsHtml}
     </div>
-    <button class="create-offer-preview-button" onclick="window.ciwiHandleBundleAddToCart()" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
+    ${showCustomButton ? `<button class="create-offer-preview-button" onclick="window.ciwiHandleBundleAddToCart()" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
       ${esc(buttonText)}
-    </button>
+    </button>` : ""}
   </div>`;
 }
 
@@ -610,6 +652,7 @@ function buildBundleUi(offer) {
   wrapper.className = "ciwi-bundle-wrapper";
   wrapper.innerHTML = renderBundlePreviewHtml(offer);
   if (!wrapper.innerHTML.trim()) return null;
+  wrapper.style.display = isCurrentVariantAvailable() ? "block" : "none";
   return wrapper;
 }
 
@@ -622,7 +665,12 @@ function scheduleBundlePriceRefresh(offer) {
     const wrap = document.querySelector(".ciwi-bundle-wrapper");
     if (!wrap) return;
     const html = renderBundlePreviewHtml(offer);
-    if (html) wrap.innerHTML = html;
+    if (html) {
+      wrap.innerHTML = html;
+      wrap.style.display = isCurrentVariantAvailable() ? "block" : "none";
+    } else {
+      wrap.style.display = "none";
+    }
     hideThemeQuantitySelectors();
   }, 64);
 }

@@ -87,13 +87,33 @@ const ensureWebPixel = async (admin: any, shop: string) => {
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
 
+  // 获取商店的时区信息
+  let ianaTimezone = "UTC";
+  try {
+    const tzResponse = await admin.graphql(
+      `#graphql
+        query ShopTimezone {
+          shop {
+            ianaTimezone
+          }
+        }
+      `,
+    );
+    const tzJson = await tzResponse.json();
+    if (tzJson?.data?.shop?.ianaTimezone) {
+      ianaTimezone = tzJson.data.shop.ianaTimezone;
+    }
+  } catch (error) {
+    console.error("Failed to fetch shop timezone", error);
+  }
+
   // 不等待 web pixel 初始化完成，优先返回页面所需数据。
   void ensureWebPixel(admin, session.shop).catch((error) => {
     console.error("Failed to ensure web pixel exists", error);
   });
 
   // eslint-disable-next-line no-undef
-  return { apiKey: process.env.SHOPIFY_API_KEY || "" };
+  return { apiKey: process.env.SHOPIFY_API_KEY || "", ianaTimezone };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -115,7 +135,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function App() {
-  const { apiKey } = useLoaderData<typeof loader>();
+  const { apiKey, ianaTimezone } = useLoaderData<typeof loader>();
   const ensureWebPixelFetcher = useFetcher<{ ok: boolean; error?: string }>();
 
   useEffect(() => {
@@ -123,7 +143,7 @@ export default function App() {
       { intent: "ensure-web-pixel" },
       { method: "POST" },
     );
-  }, []);
+  }, [ensureWebPixelFetcher]);
 
   return (
     <AppProvider embedded apiKey={apiKey}>
@@ -143,7 +163,7 @@ export default function App() {
         <s-link href="/app">Home</s-link>
         <s-link href="/app/additional">Additional page</s-link>
       </s-app-nav>
-      <Outlet />
+      <Outlet context={{ ianaTimezone }} />
           </ConfigProvider>
     </AppProvider>
   );

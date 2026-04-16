@@ -2,12 +2,24 @@ import { useEffect, useRef, useState } from "react";
 import { useFetcher, useNavigate, useSearchParams } from "react-router";
 import { Button, Input, Select, Switch, Checkbox, DatePicker } from "antd";
 import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
 import {
   X,
 } from "lucide-react";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 import "./CreateNewOffer.css";
 import BundlePreview from "../BundlePreview/BundlePreview";
 import { PreviewItem } from "../BundlePreview/bundlePreviewShared";
+import {
+  OFFER_TEXT_LIMITS,
+  normalizeOfferNameKey,
+  parseDiscountRules,
+  parseOfferSettings,
+  parseSelectedProductIds,
+} from "../../../utils/offerParsing";
 
 type DiscountRule = {
   // 数量阈值：例如 count=2 表示“买 2 件及以上”生效
@@ -52,6 +64,7 @@ interface CreateNewOfferProps {
   markets?: MarketItem[];
   /** 当前店铺已有 offers，用于名称重复校验（与后台 normalize 规则一致） */
   existingOffers?: Array<{ id: string; name: string }>;
+  ianaTimezone?: string;
 }
 
 /** 与 `_index/route` action 错误响应一致，避免从 route 循环引用 */
@@ -68,203 +81,10 @@ function isOfferActionErrorBody(data: unknown): data is OfferActionErrorBody {
   );
 }
 
-function normalizeOfferNameKey(value: string): string {
-  return value.trim().toLowerCase().replace(/\s+/g, " ");
-}
-
 function formatForDateTimeLocal(value: string | Date) {
   const d = typeof value === "string" ? new Date(value) : value;
   if (isNaN(d.getTime())) return "";
   return d.toISOString();
-}
-
-function parseSelectedProductIds(
-  selectedProductsJson?: string | null,
-): string[] {
-  if (!selectedProductsJson) return [];
-
-  try {
-    const parsed = JSON.parse(selectedProductsJson);
-    if (!Array.isArray(parsed)) return [];
-
-    // 兼容：
-    // - 新格式：["gid://shopify/Product/xxx", ...]
-    // - 旧格式：[{ id: "gid://shopify/Product/xxx", name, price, image }, ...]
-    const ids: string[] = [];
-    for (const item of parsed) {
-      if (typeof item === "string") {
-        ids.push(item);
-        continue;
-      }
-
-      if (item && typeof item === "object") {
-        const id = (item as { id?: unknown }).id;
-        if (typeof id === "string") ids.push(id);
-        else if (typeof id === "number") ids.push(String(id));
-      }
-    }
-
-    return ids;
-  } catch {
-    return [];
-  }
-}
-
-function sanitizeHexColor(raw: unknown, fallback: string): string {
-  const t = String(raw ?? "").trim();
-  if (/^#[0-9A-Fa-f]{6}$/.test(t)) return t.toLowerCase();
-  if (/^#[0-9A-Fa-f]{3}$/.test(t)) {
-    const r = t[1];
-    const g = t[2];
-    const b = t[3];
-    return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
-  }
-  if (/^#[0-9A-Fa-f]{8}$/.test(t)) return `#${t.slice(1, 7)}`.toLowerCase();
-  return fallback;
-}
-
-function parseOfferSettings(
-  offerSettingsJson?: string | null,
-): {
-  title: string;
-  layoutFormat: "vertical" | "horizontal" | "card" | "compact";
-  totalBudget: number | null;
-  dailyBudget: number | null;
-  customerSegments: string | null;
-  markets: string | null;
-  usageLimitPerCustomer: string;
-  accentColor: string;
-  cardBackgroundColor: string;
-  titleFontSize: number;
-  titleFontWeight: string;
-  titleColor: string;
-  borderColor: string;
-  labelColor: string;
-  buttonText: string;
-  buttonPrimaryColor: string;
-} {
-  if (!offerSettingsJson) {
-    return {
-      title: "Bundle & Save",
-      layoutFormat: "vertical",
-      totalBudget: null,
-      dailyBudget: null,
-      customerSegments: null,
-      markets: null,
-      usageLimitPerCustomer: "unlimited",
-      accentColor: "#008060",
-      cardBackgroundColor: "#ffffff",
-      titleFontSize: 14,
-      titleFontWeight: "600",
-      titleColor: "#111111",
-      borderColor: "#dfe3e8",
-      labelColor: "#ffffff",
-      buttonText: "Add to Cart",
-      buttonPrimaryColor: "#008060",
-    };
-  }
-
-  try {
-    const parsed = JSON.parse(offerSettingsJson) as Partial<{
-      title: string;
-      layoutFormat: "vertical" | "horizontal" | "card" | "compact";
-      totalBudget: number | null;
-      dailyBudget: number | null;
-      customerSegments: string | null;
-      markets: string | null;
-      usageLimitPerCustomer: string;
-      accentColor?: string;
-      cardBackgroundColor?: string;
-      titleFontSize?: number;
-      titleFontWeight?: string;
-      titleColor?: string;
-      borderColor?: string;
-      labelColor?: string;
-      buttonText?: string;
-      buttonPrimaryColor?: string;
-    }>;
-
-    return {
-      title: parsed.title || "Bundle & Save",
-      layoutFormat: parsed.layoutFormat ?? "vertical",
-      totalBudget:
-        parsed.totalBudget !== undefined ? parsed.totalBudget : null,
-      dailyBudget:
-        parsed.dailyBudget !== undefined ? parsed.dailyBudget : null,
-      customerSegments:
-        parsed.customerSegments !== undefined
-          ? parsed.customerSegments
-          : null,
-      markets: parsed.markets !== undefined ? parsed.markets : null,
-      usageLimitPerCustomer:
-        parsed.usageLimitPerCustomer ?? "unlimited",
-      accentColor: sanitizeHexColor(parsed.accentColor, "#008060"),
-      cardBackgroundColor: sanitizeHexColor(
-        parsed.cardBackgroundColor,
-        "#ffffff",
-      ),
-      titleFontSize: parsed.titleFontSize ?? 14,
-      titleFontWeight: parsed.titleFontWeight ?? "600",
-      titleColor: sanitizeHexColor(parsed.titleColor, "#111111"),
-      borderColor: sanitizeHexColor(parsed.borderColor, "#dfe3e8"),
-      labelColor: sanitizeHexColor(parsed.labelColor, "#ffffff"),
-      buttonText: parsed.buttonText || "Add to Cart",
-      buttonPrimaryColor: sanitizeHexColor(parsed.buttonPrimaryColor, "#008060"),
-    };
-  } catch {
-    return {
-      title: "Bundle & Save",
-      layoutFormat: "vertical",
-      totalBudget: null,
-      dailyBudget: null,
-      customerSegments: null,
-      markets: null,
-      usageLimitPerCustomer: "unlimited",
-      accentColor: "#008060",
-      cardBackgroundColor: "#ffffff",
-      titleFontSize: 14,
-      titleFontWeight: "600",
-      titleColor: "#111111",
-      borderColor: "#dfe3e8",
-      labelColor: "#ffffff",
-      buttonText: "Add to Cart",
-      buttonPrimaryColor: "#008060",
-    };
-  }
-}
-
-function parseDiscountRules(
-  discountRulesJson?: string | null,
-): DiscountRule[] {
-  if (!discountRulesJson) return [];
-
-  try {
-    const parsed = JSON.parse(discountRulesJson) as unknown;
-    if (!Array.isArray(parsed)) return [];
-
-    return parsed
-      .map((item) => {
-        if (!item || typeof item !== "object") return null;
-        const count = Number((item as { count?: unknown }).count);
-        const discountPercent = Number(
-          (item as { discountPercent?: unknown }).discountPercent,
-        );
-        if (!Number.isFinite(count) || count < 1) return null;
-        if (!Number.isFinite(discountPercent)) return null;
-        return {
-          count: Math.trunc(count),
-          discountPercent: Math.max(0, Math.min(100, discountPercent)),
-          title: (item as { title?: string }).title || "",
-          subtitle: (item as { subtitle?: string }).subtitle || "",
-          badge: (item as { badge?: string }).badge || "",
-          isDefault: !!(item as { isDefault?: boolean }).isDefault,
-        } as DiscountRule;
-      })
-      .filter((x): x is DiscountRule => x !== null)
-      .sort((a, b) => a.count - b.count);
-  } catch {
-    return [];
-  }
 }
 
 function buildDiscountRulesJson(tiers: DiscountRule[]): DiscountRule[] {
@@ -317,6 +137,7 @@ export function CreateNewOffer({
   storeProducts = [],
   markets: shopMarkets = [],
   existingOffers = [],
+  ianaTimezone = "UTC",
 }: CreateNewOfferProps) {
   const fetcher = useFetcher();
   const navigate = useNavigate();
@@ -372,9 +193,9 @@ export function CreateNewOffer({
   
   useEffect(() => {
     if (!initialOffer?.name) {
-      setOfferName(`#offer ${dayjs().format('YYYY-MM-DD HH:mm:ss')}`);
+      setOfferName(`#offer ${dayjs().tz(ianaTimezone).format('YYYY-MM-DD HH:mm:ss')}`);
     }
-  }, [initialOffer?.name]);
+  }, [initialOffer?.name, ianaTimezone]);
   const [cartTitle, setCartTitle] = useState(initialOffer?.cartTitle ?? "Bundle Discount");
   const [offerNameError, setOfferNameError] = useState("");
   const [cartTitleError, setCartTitleError] = useState("");
@@ -417,6 +238,7 @@ export function CreateNewOffer({
   const [labelColor, setLabelColor] = useState(offerSettings.labelColor);
   const [buttonText, setButtonText] = useState(offerSettings.buttonText);
   const [buttonPrimaryColor, setButtonPrimaryColor] = useState(offerSettings.buttonPrimaryColor);
+  const [showCustomButton, setShowCustomButton] = useState(offerSettings.showCustomButton);
   const [widgetTitle, setWidgetTitle] = useState(offerSettings.title);
   const [customerSegments, setCustomerSegments] = useState<string[]>(
     offerSettings.customerSegments ? offerSettings.customerSegments.split(",") : ["all"]
@@ -603,7 +425,7 @@ export function CreateNewOffer({
     >
       {submitErrorToast && (
         <div
-          className="fixed z-50 top-4 left-1/2 -translate-x-1/2 bg-[#d72c0d] !text-white px-4 py-2 rounded shadow-lg text-sm font-sans max-w-[min(520px,calc(100vw-32px))] text-center"
+          className="fixed z-50 top-4 left-1/2 -translate-x-1/2 bg-[rgba(0,0,0,0.75)] backdrop-blur-sm !text-white px-4 py-2 rounded shadow-lg text-sm font-sans max-w-[min(520px,calc(100vw-32px))] text-center"
           role="alert"
         >
           {submitErrorToast}
@@ -654,6 +476,7 @@ export function CreateNewOffer({
       <input type="hidden" name="labelColor" value={labelColor} />
       <input type="hidden" name="buttonText" value={buttonText} />
       <input type="hidden" name="buttonPrimaryColor" value={buttonPrimaryColor} />
+      <input type="hidden" name="showCustomButton" value={showCustomButton ? "true" : "false"} />
       <input
         type="hidden"
         name="cardBackgroundColor"
@@ -742,12 +565,14 @@ export function CreateNewOffer({
                           placeholder="e.g., Summer Bundle Deal"
                           value={offerName}
                           onChange={(e) => {
-                            setOfferName(e.target.value);
+                            setOfferName(e.target.value.replace(/[\r\n]+/g, " "));
                             if (offerNameError && e.target.value.trim()) {
                               setOfferNameError("");
                             }
                           }}
                           status={offerNameError ? "error" : ""}
+                          maxLength={OFFER_TEXT_LIMITS.offerName}
+                          showCount
                         />
                       </label>
                       {offerNameError && (
@@ -783,12 +608,14 @@ export function CreateNewOffer({
                           placeholder="e.g., Bundle Discount"
                           value={cartTitle}
                           onChange={(e) => {
-                            setCartTitle(e.target.value);
+                            setCartTitle(e.target.value.replace(/[\r\n]+/g, " "));
                             if (cartTitleError && e.target.value.trim()) {
                               setCartTitleError("");
                             }
                           }}
                           status={cartTitleError ? "error" : ""}
+                          maxLength={OFFER_TEXT_LIMITS.cartTitle}
+                          showCount
                         />
                       </label>
                       <div className="text-[13px] text-[#5c6166] mt-1">
@@ -827,6 +654,7 @@ export function CreateNewOffer({
                   titleColor={titleColor}
                   buttonText={buttonText}
                   buttonPrimaryColor={buttonPrimaryColor}
+                  showCustomButton={showCustomButton}
                   title={widgetTitle}
                   items={previewItems}
                 />
@@ -1097,10 +925,11 @@ export function CreateNewOffer({
                     titleFontSize={titleFontSize}
                     titleFontWeight={titleFontWeight}
                     titleColor={titleColor}
-                    buttonText={buttonText}
-                    buttonPrimaryColor={buttonPrimaryColor}
-                    title={widgetTitle}
-                    items={previewItems}
+                  buttonText={buttonText}
+                  buttonPrimaryColor={buttonPrimaryColor}
+                  showCustomButton={showCustomButton}
+                  title={widgetTitle}
+                  items={previewItems}
                   />
                   <p className="text-[12px] text-[#5c6166] mt-3 italic font-normal">
                     Note: This is a live preview. Changes will update in real-time when state is connected.
@@ -1128,7 +957,11 @@ export function CreateNewOffer({
                     size="large"
                     value={widgetTitle}
                     placeholder="e.g. Bundle & Save"
-                    onChange={(e) => setWidgetTitle(e.target.value)}
+                    onChange={(e) =>
+                      setWidgetTitle(e.target.value.replace(/[\r\n]+/g, " "))
+                    }
+                    maxLength={OFFER_TEXT_LIMITS.widgetTitle}
+                    showCount
                   />
                   <p className="text-[13px] text-[#5c6166] mt-1">
                     The main heading displayed above your bundle options
@@ -1341,26 +1174,47 @@ export function CreateNewOffer({
                   <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
                     Button Style & Extra
                   </h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <label className="block text-[14px] font-medium text-[#1c1f23]">
-                      Button Text
-                      <Input
-                        size="large"
-                        value={buttonText}
-                        onChange={(e) => setButtonText(e.target.value)}
-                        className="mt-1"
-                      />
-                    </label>
-                    <label className="block text-[14px] font-medium text-[#1c1f23]">
-                      Button Color
-                      <input
-                        type="color"
-                        value={buttonPrimaryColor}
-                        onChange={(e) => setButtonPrimaryColor(e.target.value)}
-                        className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1 cursor-pointer"
-                      />
-                    </label>
+                  <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg mb-4">
+                    <div>
+                      <div className="text-[14px] font-medium text-[#1c1f23]">
+                        Show App's Add to Cart Button
+                      </div>
+                      <div className="text-[13px] text-[#5c6166]">
+                        If disabled, customers will use your theme's native Add to Cart button.
+                      </div>
+                    </div>
+                    <Switch
+                      checked={showCustomButton}
+                      onChange={(checked) => setShowCustomButton(checked)}
+                    />
                   </div>
+                  
+                  {showCustomButton && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <label className="block text-[14px] font-medium text-[#1c1f23]">
+                        Button Text
+                        <Input
+                          size="large"
+                          value={buttonText}
+                          onChange={(e) =>
+                            setButtonText(e.target.value.replace(/[\r\n]+/g, " "))
+                          }
+                          className="mt-1"
+                          maxLength={OFFER_TEXT_LIMITS.buttonText}
+                          showCount
+                        />
+                      </label>
+                      <label className="block text-[14px] font-medium text-[#1c1f23]">
+                        Button Color
+                        <input
+                          type="color"
+                          value={buttonPrimaryColor}
+                          onChange={(e) => setButtonPrimaryColor(e.target.value)}
+                          className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1 cursor-pointer"
+                        />
+                      </label>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1386,6 +1240,7 @@ export function CreateNewOffer({
                   titleColor={titleColor}
                   buttonText={buttonText}
                   buttonPrimaryColor={buttonPrimaryColor}
+                  showCustomButton={showCustomButton}
                   title={widgetTitle}
                   items={previewItems}
                 />
@@ -1534,9 +1389,10 @@ export function CreateNewOffer({
                     Start Time
                     <DatePicker
                       size="large"
-                      showTime
+                      showTime={{ format: 'HH:mm' }}
+                      format="YYYY-MM-DD HH:mm"
                       className="mt-1 w-full text-[14px]"
-                      value={startTime && dayjs(startTime).isValid() ? dayjs(startTime) : null}
+                      value={startTime && dayjs(startTime).isValid() ? dayjs(startTime).tz(ianaTimezone) : null}
                       onChange={(date) => {
                         const val = date ? date.toISOString() : '';
                         setStartTime(val);
@@ -1561,9 +1417,10 @@ export function CreateNewOffer({
                     End Time
                     <DatePicker
                       size="large"
-                      showTime
+                      showTime={{ format: 'HH:mm' }}
+                      format="YYYY-MM-DD HH:mm"
                       className="mt-1 w-full"
-                      value={endTime && dayjs(endTime).isValid() ? dayjs(endTime) : null}
+                      value={endTime && dayjs(endTime).isValid() ? dayjs(endTime).tz(ianaTimezone) : null}
                       onChange={(date) => {
                         const val = date ? date.toISOString() : '';
                         setEndTime(val);
@@ -1748,4 +1605,3 @@ export function CreateNewOffer({
     </fetcher.Form>
   );
 }
-

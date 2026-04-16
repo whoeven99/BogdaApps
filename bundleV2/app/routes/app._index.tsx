@@ -1,17 +1,40 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
+import { useLoaderData } from "react-router";
 import "../styles/tailwind.css";
 import { Typography, Button, Switch, Modal, Space } from "antd";
-import { Trash2, Pencil } from "lucide-react";
+import { Trash2, Pencil, Info } from "lucide-react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { parseDiscountRules } from "../utils/offerParsing";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 const { Text } = Typography;
 
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
-
-  return null;
+  const { admin } = await authenticate.admin(request);
+  let ianaTimezone = "UTC";
+  try {
+    const tzResponse = await admin.graphql(`
+      query ShopTimezone {
+        shop {
+          ianaTimezone
+        }
+      }
+    `);
+    const tzJson = await tzResponse.json();
+    if (tzJson?.data?.shop?.ianaTimezone) {
+      ianaTimezone = tzJson.data.shop.ianaTimezone;
+    }
+  } catch (error) {
+    console.error("Failed to fetch shop timezone", error);
+  }
+  return { ianaTimezone };
 };
 
 const mockOverviewData = {
@@ -27,24 +50,35 @@ const mockOffers = [
   {
     id: "gid://shopify/DiscountAutomaticNode/1",
     name: "Summer Bundle",
+    cartTitle: "Summer Special",
+    offerType: "quantity-breaks-same",
+    discountRulesJson: '[{"count":2,"discountPercent":10}]',
     status: "ACTIVE",
     exposurePV: 45230,
     addToCartPV: 8920,
     gmv: 12430,
     conversion: "3.2%",
+    createdAt: "2024-05-01T10:00:00Z",
+    updatedAt: "2024-05-02T12:00:00Z",
   },
   {
     id: "gid://shopify/DiscountAutomaticNode/2",
     name: "Winter Sale Pack",
+    cartTitle: "Winter Discount",
+    offerType: "quantity-breaks-same",
+    discountRulesJson: '[{"count":3,"discountPercent":15}]',
     status: "PAUSED",
     exposurePV: 38150,
     addToCartPV: 7200,
     gmv: 8920,
     conversion: "2.8%",
+    createdAt: "2024-11-01T10:00:00Z",
+    updatedAt: "2024-11-05T12:00:00Z",
   },
 ];
 
 export default function Index() {
+  const { ianaTimezone } = useLoaderData<typeof loader>();
   const isThemeExtensionEnabled = true;
 
   return (
@@ -69,9 +103,18 @@ export default function Index() {
           }}
         >
           <div className="!flex !items-center !justify-between !mb-[16px]">
-            <h2 className="!font-sans !font-semibold !text-[20px] !leading-[30px] !text-[#1c1f23] !tracking-tight !m-0">
-              GMV Overview
-            </h2>
+            <div className="!flex !items-center !gap-[8px]">
+              <h2 className="!font-sans !font-semibold !text-[20px] !leading-[30px] !text-[#1c1f23] !tracking-tight !m-0">
+                GMV Overview
+              </h2>
+              <div className="group relative flex items-center">
+                <Info className="w-[16px] h-[16px] text-[#8a919e] cursor-help" />
+                <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-[8px] hidden group-hover:block w-max max-w-[250px] bg-[#1c1f23] text-white text-[12px] leading-[18px] px-[12px] py-[8px] rounded-[8px] shadow-lg z-10 text-center">
+                  Data accumulated over the last 30 days
+                  <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-[#1c1f23]"></div>
+                </div>
+              </div>
+            </div>
             <Button
               type="text"
               className="!font-sans !font-medium !text-[14px]"
@@ -258,19 +301,22 @@ export default function Index() {
                 Offer Name
               </th>
               <th className="!text-left !p-[12px] border-b border-[#f0f2f4] !font-sans !font-semibold !text-[13px] !leading-[20.8px] !text-[#5c6166] !tracking-normal">
+                Display name
+              </th>
+              <th className="!text-left !p-[12px] border-b border-[#f0f2f4] !font-sans !font-semibold !text-[13px] !leading-[20.8px] !text-[#5c6166] !tracking-normal">
+                Discount type
+              </th>
+              <th className="!text-left !p-[12px] border-b border-[#f0f2f4] !font-sans !font-semibold !text-[13px] !leading-[20.8px] !text-[#5c6166] !tracking-normal">
+                Discount rules
+              </th>
+              <th className="!text-left !p-[12px] border-b border-[#f0f2f4] !font-sans !font-semibold !text-[13px] !leading-[20.8px] !text-[#5c6166] !tracking-normal">
                 Status
               </th>
               <th className="!text-left !p-[12px] border-b border-[#f0f2f4] !font-sans !font-semibold !text-[13px] !leading-[20.8px] !text-[#5c6166] !tracking-normal">
-                Exposure PV
+                Create time
               </th>
               <th className="!text-left !p-[12px] border-b border-[#f0f2f4] !font-sans !font-semibold !text-[13px] !leading-[20.8px] !text-[#5c6166] !tracking-normal">
-                Add to Cart PV
-              </th>
-              <th className="!text-left !p-[12px] border-b border-[#f0f2f4] !font-sans !font-semibold !text-[13px] !leading-[20.8px] !text-[#5c6166] !tracking-normal">
-                GMV
-              </th>
-              <th className="!text-left !p-[12px] border-b border-[#f0f2f4] !font-sans !font-semibold !text-[13px] !leading-[20.8px] !text-[#5c6166] !tracking-normal">
-                Conversion
+                Update time
               </th>
               <th className="!text-left !p-[12px] border-b border-[#f0f2f4] !font-sans !font-semibold !text-[13px] !leading-[20.8px] !text-[#5c6166] !tracking-normal">
                 Actions
@@ -278,136 +324,163 @@ export default function Index() {
             </tr>
           </thead>
           <tbody>
-            {mockOffers.map((offer) => (
-              <tr key={offer.id}>
-                <td className="!p-[12px] border-b border-[#f0f2f4] !font-sans !font-normal !text-[14px] !leading-[22.4px] !text-[#1c1f23] !tracking-normal">
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                    }}
-                  >
-                    {offer.name}
-                  </div>
-                </td>
-                <td className="!p-[12px] border-b border-[#f0f2f4]">
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                    }}
-                  >
-                    <Switch checked={offer.status === "ACTIVE"} />
-                    <span
+            {mockOffers.map((offer) => {
+              const displayType = offer.offerType === "quantity-breaks-same" ? "Quantity breaks" : offer.offerType;
+              const rules = parseDiscountRules(offer.discountRulesJson);
+              const rulesText = rules.length > 0 
+                ? rules.map(r => `Buy ${r.count} Get ${r.discountPercent}% Off`).join(", ")
+                : "-";
+              const formatTime = (timeStr: string | Date | undefined) => {
+                if (!timeStr) return "-";
+                const d = dayjs(timeStr);
+                if (!d.isValid()) return "-";
+                return d.tz(ianaTimezone).format("YYYY-MM-DD HH:mm:ss");
+              };
+
+              return (
+                <tr key={offer.id}>
+                  <td className="!p-[12px] border-b border-[#f0f2f4] !font-sans !font-normal !text-[14px] !leading-[22.4px] !text-[#1c1f23] !tracking-normal">
+                    <div
                       style={{
-                        fontSize: "14px",
-                        color:
-                          offer.status === "ACTIVE" ? "#108043" : "#6d7175",
-                        fontWeight: 500,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
                       }}
                     >
-                      {offer.status}
-                    </span>
-                  </div>
-                </td>
-                <td className="!p-[12px] border-b border-[#f0f2f4] !font-sans !font-normal !text-[14px] !leading-[22.4px] !text-[#1c1f23] !tracking-normal">
-                  {offer.exposurePV.toLocaleString()}
-                </td>
-                <td className="!p-[12px] border-b border-[#f0f2f4] !font-sans !font-normal !text-[14px] !leading-[22.4px] !text-[#1c1f23] !tracking-normal">
-                  {offer.addToCartPV.toLocaleString()}
-                </td>
-                <td className="!p-[12px] border-b border-[#f0f2f4] !font-sans !font-normal !text-[14px] !leading-[22.4px] !text-[#1c1f23] !tracking-normal">
-                  ${offer.gmv.toLocaleString()}
-                </td>
-                <td className="!p-[12px] border-b border-[#f0f2f4] !font-sans !font-normal !text-[14px] !leading-[22.4px] !text-[#1c1f23] !tracking-normal">
-                  {offer.conversion}
-                </td>
-                <td className="!p-[12px] border-b border-[#f0f2f4]">
-                  <div className="!flex !items-center !gap-[8px]">
-                    <Button type="text" title="Edit">
-                      <Pencil size={16} />
-                    </Button>
-                    <Button type="text" title="Delete">
-                      <Trash2 size={16} />
-                    </Button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+                      {offer.name}
+                    </div>
+                  </td>
+                  <td className="!p-[12px] border-b border-[#f0f2f4] !font-sans !font-normal !text-[14px] !leading-[22.4px] !text-[#1c1f23] !tracking-normal">
+                    {offer.cartTitle}
+                  </td>
+                  <td className="!p-[12px] border-b border-[#f0f2f4] !font-sans !font-normal !text-[14px] !leading-[22.4px] !text-[#1c1f23] !tracking-normal">
+                    {displayType}
+                  </td>
+                  <td className="!p-[12px] border-b border-[#f0f2f4] !font-sans !font-normal !text-[14px] !leading-[22.4px] !text-[#1c1f23] !tracking-normal">
+                    {rulesText}
+                  </td>
+                  <td className="!p-[12px] border-b border-[#f0f2f4]">
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                      }}
+                    >
+                      <Switch checked={offer.status === "ACTIVE"} />
+                      <span
+                        style={{
+                          fontSize: "14px",
+                          color:
+                            offer.status === "ACTIVE" ? "#108043" : "#6d7175",
+                          fontWeight: 500,
+                        }}
+                      >
+                        {offer.status}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="!p-[12px] border-b border-[#f0f2f4] !font-sans !font-normal !text-[14px] !leading-[22.4px] !text-[#1c1f23] !tracking-normal">
+                    {formatTime(offer.createdAt)}
+                  </td>
+                  <td className="!p-[12px] border-b border-[#f0f2f4] !font-sans !font-normal !text-[14px] !leading-[22.4px] !text-[#1c1f23] !tracking-normal">
+                    {formatTime(offer.updatedAt)}
+                  </td>
+                  <td className="!p-[12px] border-b border-[#f0f2f4]">
+                    <div className="!flex !items-center !gap-[8px]">
+                      <Button type="text" title="Edit">
+                        <Pencil size={16} />
+                      </Button>
+                      <Button type="text" title="Delete">
+                        <Trash2 size={16} />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
 
         {/* Mobile Cards */}
         <div className="md:hidden space-y-[12px]">
-          {mockOffers.map((offer) => (
-            <div
-              key={offer.id}
-              className="!border !border-[#dfe3e8] !rounded-[8px] !p-[16px]"
-            >
-              <div className="!flex !items-start !justify-between !mb-[12px]">
-                <div className="flex items-center gap-[8px] flex-wrap">
-                  <span className="font-sans font-medium text-[16px] text-[#1c1f23]">
-                    {offer.name}
-                  </span>
+          {mockOffers.map((offer) => {
+            const displayType = offer.offerType === "quantity-breaks-same" ? "Quantity breaks" : offer.offerType;
+            const rules = parseDiscountRules(offer.discountRulesJson);
+            const rulesText = rules.length > 0 
+              ? rules.map(r => `Buy ${r.count} Get ${r.discountPercent}% Off`).join(", ")
+              : "-";
+            const formatTime = (timeStr: string | Date | undefined) => {
+              if (!timeStr) return "-";
+              const d = dayjs(timeStr);
+              if (!d.isValid()) return "-";
+              return d.tz(ianaTimezone).format("YYYY-MM-DD HH:mm:ss");
+            };
+
+            return (
+              <div
+                key={offer.id}
+                className="!border !border-[#dfe3e8] !rounded-[8px] !p-[16px]"
+              >
+                <div className="!flex !items-start !justify-between !mb-[12px]">
+                  <div className="flex items-center gap-[8px] flex-wrap">
+                    <span className="font-sans font-medium text-[16px] text-[#1c1f23]">
+                      {offer.name}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="!flex !items-center !gap-[8px] !mb-[12px]">
+                  <Switch checked={offer.status === "ACTIVE"} />
                   <span
                     style={{
-                      backgroundColor: "#00A47C",
-                      color: "white",
-                      fontSize: "10px",
-                      fontWeight: 600,
-                      padding: "2px 6px",
-                      borderRadius: "4px",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.5px",
+                      fontSize: "14px",
+                      color: offer.status === "ACTIVE" ? "#108043" : "#6d7175",
+                      fontWeight: 500,
                     }}
                   >
-                    NEW
+                    {offer.status}
                   </span>
                 </div>
-              </div>
 
-              <div className="!flex !items-center !gap-[8px] !mb-[12px]">
-                <Switch checked={offer.status === "ACTIVE"} />
-                <span
-                  style={{
-                    fontSize: "14px",
-                    color: offer.status === "ACTIVE" ? "#108043" : "#6d7175",
-                    fontWeight: 500,
-                  }}
-                >
-                  {offer.status}
-                </span>
-              </div>
-
-              <div className="!grid !grid-cols-2 !gap-[12px] !mb-[12px]">
-                <div>
-                  <div className="text-[12px] text-[#5c6166] mb-[4px]">GMV</div>
-                  <div className="text-[14px] font-medium text-[#1c1f23]">
-                    ${offer.gmv.toLocaleString()}
+                <div className="!grid !grid-cols-2 !gap-[12px] !mb-[12px]">
+                  <div>
+                    <div className="text-[12px] text-[#5c6166] mb-[4px]">Display name</div>
+                    <div className="text-[14px] font-medium text-[#1c1f23]">
+                      {offer.cartTitle}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[12px] text-[#5c6166] mb-[4px]">Discount type</div>
+                    <div className="text-[14px] font-medium text-[#1c1f23]">
+                      {displayType}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[12px] text-[#5c6166] mb-[4px]">Discount rules</div>
+                    <div className="text-[14px] font-medium text-[#1c1f23]">
+                      {rulesText}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[12px] text-[#5c6166] mb-[4px]">Create time</div>
+                    <div className="text-[14px] font-medium text-[#1c1f23]">
+                      {formatTime(offer.createdAt)}
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <div className="text-[12px] text-[#5c6166] mb-[4px]">
-                    Conversion
-                  </div>
-                  <div className="text-[14px] font-medium text-[#1c1f23]">
-                    {offer.conversion}
-                  </div>
+
+                <div className="!flex !items-center !gap-[8px] !pt-[12px] !border-t !border-[#dfe3e8]">
+                  <Button type="text" title="Edit">
+                    <Pencil size={18} />
+                  </Button>
+                  <Button type="text" title="Delete">
+                    <Trash2 size={18} />
+                  </Button>
                 </div>
               </div>
-
-              <div className="!flex !items-center !gap-[8px] !pt-[12px] !border-t !border-[#dfe3e8]">
-                <Button type="text" title="Edit">
-                  <Pencil size={18} />
-                </Button>
-                <Button type="text" title="Delete">
-                  <Trash2 size={18} />
-                </Button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* View All Button at Bottom */}

@@ -15,3 +15,4 @@
 **/.turbo/
 **/.cache/
 .DS_Store
+/bundleV2/.testprogram

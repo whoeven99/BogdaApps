@@ -37,6 +37,12 @@ import {
   createRecurringSubscription,
   fetchActiveSubscriptions,
 } from "../../billing.server";
+import {
+  OFFER_TEXT_LIMITS,
+  clampNumber,
+  sanitizeHexColor,
+  sanitizeSingleLineText,
+} from "../../utils/offerParsing";
 
 type OfferListItem = {
   id: string;
@@ -53,6 +59,8 @@ type OfferListItem = {
   addToCartPV?: number | null;
   gmv?: number | null;
   conversion?: number | null;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
 };
 
 type OfferActionErrorPayload = {
@@ -74,16 +82,7 @@ function sanitizeHexColorParam(
   raw: string | null | undefined,
   fallback: string,
 ): string {
-  const t = String(raw ?? "").trim();
-  if (/^#[0-9A-Fa-f]{6}$/.test(t)) return t.toLowerCase();
-  if (/^#[0-9A-Fa-f]{3}$/.test(t)) {
-    const r = t[1];
-    const g = t[2];
-    const b = t[3];
-    return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
-  }
-  if (/^#[0-9A-Fa-f]{8}$/.test(t)) return `#${t.slice(1, 7)}`.toLowerCase();
-  return fallback;
+  return sanitizeHexColor(raw, fallback);
 }
 
 type ShopOffersMetafieldSyncResult =
@@ -135,7 +134,7 @@ async function syncShopOffersMetafield(
     if (!shopId) {
       return {
         ok: false,
-        message: "?????????????? ID??Metafield ????????????",
+        message: "Failed to get shop ID, Metafield update failed",
       };
     }
 
@@ -199,7 +198,7 @@ async function syncShopOffersMetafield(
     return { ok: true };
   } catch (error) {
     const msg = error instanceof Error ? error.message : JSON.stringify(error);
-    return { ok: false, message: msg || "Metafield ??????" };
+    return { ok: false, message: msg || "Metafield sync failed" };
   }
 }
 
@@ -222,6 +221,7 @@ export type IndexLoaderData = {
   markets: MarketItem[];
   shop: string;
   apiKey: string;
+  ianaTimezone: string;
   themeExtensionEnabled: boolean;
   billingSubscriptions: Array<{ name: string; status: string }>;
   billingTestMode: boolean;
@@ -296,7 +296,7 @@ async function fetchStoreProducts(admin: any): Promise<StoreProductItem[]> {
       return {
         id: node.id,
         name: node.title,
-        price: priceRaw ? `???${priceRaw}` : "???0.00",
+        price: priceRaw ? `$${priceRaw}` : "$0.00",
         image: image || "https://via.placeholder.com/60",
       };
     })
@@ -399,7 +399,7 @@ const collectTypedBlocks = (
 };
 
 /**
- * App embed status for a single theme extension block (e.g. product_detail_message ??? product-detail-message.js).
+ * App embed status for a single theme extension block (e.g. product_detail_message -> product-detail-message.js).
  * Matches editor deep-link form: `appEmbed={client_id}/{blockHandle}` e.g. `1cdf.../product_detail_message`.
  * `type` in JSON may be `.../apps/{client_id}/blocks/{handle}/...` or `.../apps/{client_id}/{handle}/...`.
  */
@@ -408,7 +408,7 @@ const getThemeExtensionEnabled = async (
   extensionHandle: string,
   /** Liquid filename base, e.g. product_detail_message for product_detail_message.liquid */
   blockHandle: string,
-  /** SHOPIFY_API_KEY / app client id ??? required to match real storefront block types */
+  /** SHOPIFY_API_KEY / app client id - required to match real storefront block types */
   appClientId: string,
   /** App display name from shopify.app.*.toml (will be normalized to slug for matching) */
   appName?: string,
@@ -539,7 +539,7 @@ const getThemeExtensionEnabled = async (
   return false;
 };
 
-/** ???????????????????????????????????????? */
+/** Normalize offer name to a unique key */
 function normalizeOfferNameKey(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
@@ -549,7 +549,7 @@ import { AppProvider } from "@shopify/shopify-app-react-router/react";
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
 
-  // ????????????????????????
+  // Ensure web pixel exists
   void ensureWebPixel(admin, session.shop).catch((error) => {
     console.error("Failed to ensure web pixel exists", error);
   });
@@ -557,10 +557,31 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.error("Failed to ensure automatic app discount exists", error);
   });
 
-  // product_detail_message.liquid ??? product-detail-message.js
+  // product_detail_message.liquid -> product-detail-message.js
   // eslint-disable-next-line no-undef
   const apiKey = process.env.SHOPIFY_API_KEY || "";
   const appDisplayName = process.env.SHOPIFY_APP_NAME || process.env.APP_NAME;
+
+  // 获取商店时区
+  let ianaTimezone = "UTC";
+  try {
+    const tzResponse = await admin.graphql(
+      `#graphql
+        query ShopTimezone {
+          shop {
+            ianaTimezone
+          }
+        }
+      `,
+    );
+    const tzJson = await tzResponse.json();
+    if (tzJson?.data?.shop?.ianaTimezone) {
+      ianaTimezone = tzJson.data.shop.ianaTimezone;
+    }
+  } catch (error) {
+    console.error("Failed to fetch shop timezone", error);
+  }
+
   let themeExtensionEnabled = false;
   try {
     themeExtensionEnabled = await getThemeExtensionEnabled(
@@ -616,6 +637,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     markets,
     shop: session.shop,
     apiKey,
+    ianaTimezone,
     themeExtensionEnabled,
     billingSubscriptions,
     billingTestMode: billingIsTestCharge(),
@@ -642,7 +664,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const cycle = String(formData.get("cycle") || "");
     if (!isBillingPlanId(plan) || !isBillingCycle(cycle)) {
       return Response.json(
-        { ok: false as const, error: "??????????????????????????" },
+        { ok: false as const, error: "Invalid billing plan or cycle" },
         { status: 400 },
       );
     }
@@ -720,7 +742,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   console.log("action intent", intent);
 
-  // ???? fallback??????????????? intent??????? offerId???????????????????????????
+  // Return error if action fails
   if (!intent) {
     const hasId = formData.get("offerId");
     intent = hasId ? "update-offer" : "create-offer";
@@ -728,12 +750,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (intent === "create-offer" || intent === "update-offer") {
     const idRaw = String(formData.get("offerId") || "").trim();
-    const nameRaw = String(formData.get("offerName") || "").trim();
-    const name = nameRaw; // fallback logic removed as requested by original form code handling offerName properly
-    const cartTitle = String(formData.get("cartTitle") || "Bundle Discount").trim();
+    const nameRaw = String(formData.get("offerName") || "");
+    const name = sanitizeSingleLineText(
+      nameRaw,
+      OFFER_TEXT_LIMITS.offerName,
+    );
+    const cartTitle = sanitizeSingleLineText(
+      formData.get("cartTitle"),
+      OFFER_TEXT_LIMITS.cartTitle,
+      "Bundle Discount",
+    );
     const offerType = String(formData.get("offerType") || "").trim();
-    const layoutFormat =
-      String(formData.get("layoutFormat") || "").trim() || "vertical";
+    const layoutFormatRaw = String(formData.get("layoutFormat") || "").trim();
+    const layoutFormat = ["vertical", "horizontal", "card", "compact"].includes(
+      layoutFormatRaw,
+    )
+      ? layoutFormatRaw
+      : "vertical";
     const startTimeRaw = String(formData.get("startTime") || "").trim();
     const endTimeRaw = String(formData.get("endTime") || "").trim();
     const selectedProductsJson = String(
@@ -745,8 +778,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const statusRaw = String(formData.get("status") || "");
     const status = statusRaw === "true";
 
-    const totalBudget = formData.get("totalBudget");
-    const dailyBudget = formData.get("dailyBudget");
+    const totalBudgetRaw = formData.get("totalBudget");
+    const dailyBudgetRaw = formData.get("dailyBudget");
 
     const customerSegments = formData.getAll("customerSegments") as string[];
     const markets = formData.getAll("markets") as string[];
@@ -780,19 +813,43 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       "#008060",
     );
 
-    const titleFontSize = Number(formData.get("titleFontSize")) || 14;
-    const titleFontWeight = String(formData.get("titleFontWeight") || "600");
-    const buttonText = String(
-      formData.get("buttonText") || "Add to Cart",
-    ).trim();
+    const titleFontSize = clampNumber(formData.get("titleFontSize"), 10, 36, 14);
+    const titleFontWeightRaw = String(formData.get("titleFontWeight") || "600").trim();
+    const titleFontWeight = ["400", "500", "600", "700"].includes(titleFontWeightRaw)
+      ? titleFontWeightRaw
+      : "600";
+    const buttonText = sanitizeSingleLineText(
+      formData.get("buttonText"),
+      OFFER_TEXT_LIMITS.buttonText,
+      "Add to Cart",
+    );
+    const showCustomButtonRaw = String(formData.get("showCustomButton") || "");
+    const showCustomButton = showCustomButtonRaw !== "false";
 
-    const title = String(formData.get("title") || "Bundle & Save").trim();
+    const title = sanitizeSingleLineText(
+      formData.get("title"),
+      OFFER_TEXT_LIMITS.widgetTitle,
+      "Bundle & Save",
+    );
+
+    if (selectedProductsJson.length > 50_000) {
+      return offerActionErrorResponse("Selected products data is too large. Please reduce the number of products.", 400);
+    }
+    if (discountRulesJson.length > 50_000) {
+      return offerActionErrorResponse("Discount rules data is too large. Please reduce the number of rules.", 400);
+    }
 
     const offerSettingsJson = JSON.stringify({
       title,
       layoutFormat,
-      totalBudget: totalBudget ? Number(totalBudget) : null,
-      dailyBudget: dailyBudget ? Number(dailyBudget) : null,
+      totalBudget:
+        typeof totalBudgetRaw === "string" && totalBudgetRaw.trim()
+          ? Math.max(0, clampNumber(totalBudgetRaw, 0, Number.MAX_SAFE_INTEGER, 0))
+          : null,
+      dailyBudget:
+        typeof dailyBudgetRaw === "string" && dailyBudgetRaw.trim()
+          ? Math.max(0, clampNumber(dailyBudgetRaw, 0, Number.MAX_SAFE_INTEGER, 0))
+          : null,
       customerSegments: customerSegments.length
         ? customerSegments.join(",")
         : null,
@@ -807,6 +864,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       titleFontSize,
       titleFontWeight,
       buttonText,
+      showCustomButton,
     });
 
     // Store which Shopify shop this offer belongs to.
@@ -826,17 +884,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     if (!name) {
-      return offerActionErrorResponse("????? Offer ?????", 400);
+      return offerActionErrorResponse("Please enter an offer name.", 400);
+    }
+    if (!cartTitle) {
+      return offerActionErrorResponse("Please enter a display title.", 400);
     }
     if (!startTimeRaw || !endTimeRaw) {
-      return offerActionErrorResponse("???????????????????????????????????????", 400);
+      return offerActionErrorResponse("Start time and end time are required.", 400);
     }
 
     const startTime = new Date(startTimeRaw);
     const endTime = new Date(endTimeRaw);
 
     if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
-      return offerActionErrorResponse("???????????????????????????????????????", 400);
+      return offerActionErrorResponse("Invalid start or end time format.", 400);
+    }
+    if (endTime.getTime() <= startTime.getTime()) {
+      return offerActionErrorResponse("End time must be after start time.", 400);
     }
 
     const nameKey = normalizeOfferNameKey(name);
@@ -851,14 +915,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
     if (nameTaken) {
       return offerActionErrorResponse(
-        "????????????????? Offer????????????",
+        "An offer with this name already exists. Please choose a different name.",
         409,
       );
     }
 
     const data = {
       shopName,
-      // ????????????????????????????????????/???????????????
+      // name 被作为唯一标识
       name,
       cartTitle,
       offerType,
@@ -875,13 +939,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (intent === "create-offer") {
       try {
         await writeOfferWithRetry(() => prismaAny.offer.create({ data }));
-        url.searchParams.set("toast", "create-success");
+        url.searchParams.set("toast", `create-success-${Date.now()}`);
       } catch (error: any) {
         if (
           error.code === "P2002"
         ) {
           return offerActionErrorResponse(
-            "????????????????? Offer????????????",
+            "An offer with this name already exists. Please choose a different name.",
             409,
           );
         }
@@ -897,11 +961,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             offerSettingsJson,
           },
         });
-        return offerActionErrorResponse("???? Offer ????????????????", 500);
+        return offerActionErrorResponse("Failed to create offer. Please try again later.", 500);
       }
     } else {
       if (!idRaw) {
-        return offerActionErrorResponse("??? Offer ID????????????????", 400);
+        return offerActionErrorResponse("Missing offer ID, cannot update.", 400);
       }
       try {
         await writeOfferWithRetry(() =>
@@ -910,13 +974,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             data,
           }),
         );
-        url.searchParams.set("toast", "update-success");
+        url.searchParams.set("toast", `update-success-${Date.now()}`);
       } catch (error: any) {
         if (
           error.code === "P2002"
         ) {
           return offerActionErrorResponse(
-            "????????????????? Offer????????????",
+            "An offer with this name already exists. Please choose a different name.",
             409,
           );
         }
@@ -933,7 +997,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             offerSettingsJson,
           },
         });
-        return offerActionErrorResponse("?????? Offer ????????????????", 500);
+        return offerActionErrorResponse("Failed to update offer. Please try again later.", 500);
       }
     }
 
@@ -944,7 +1008,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         message: syncResult.message,
       });
       return offerActionErrorResponse(
-        `??????????????????/??????????????????${syncResult.message}`,
+        `Failed to sync data: ${syncResult.message}`,
         502,
       );
     }
@@ -978,7 +1042,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return offerActionErrorResponse("Toggle status failed.", 500);
     }
 
-    // ??? metafield????????/?????????????????
+    // Sync metafield
     try {
       const shopNameToSync = updatedOffer?.shopName as string | undefined;
       if (shopNameToSync) {
@@ -1046,7 +1110,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       invalidateShopOffersCache(String(updatedOffer.shopName));
     }
 
-    return Response.json({ success: true, toast: "toggle-success" });
+    return Response.json({ success: true, toast: `toggle-success-${Date.now()}` });
   }
 
   if (intent === "delete-offer") {
@@ -1057,7 +1121,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     const prismaAny: any = prisma;
 
-    // ?????????????????? shopName?????????? metafield??
+    // Find shopName to sync metafield
     let shopNameToSync: string | undefined;
     try {
       const offerToDelete = await prismaAny.offer.findUnique({
@@ -1073,7 +1137,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return offerActionErrorResponse("Delete offer failed.", 500);
     }
 
-    // ??? metafield????????????????????????? offer
+    // Sync metafield after deleting offer
     try {
       if (shopNameToSync) {
         const shopOffers = (await prismaAny.offer.findMany({
@@ -1140,7 +1204,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       invalidateShopOffersCache(shopNameToSync);
     }
 
-    return Response.json({ success: true, toast: "delete-success" });
+    return Response.json({ success: true, toast: `delete-success-${Date.now()}` });
   }
 
   return new Response(`Unknown intent: ${String(intent || "")}`, {
@@ -1155,6 +1219,7 @@ export default function Index() {
     markets,
     shop,
     apiKey,
+    ianaTimezone,
     themeExtensionEnabled,
     billingSubscriptions,
     billingTestMode,
@@ -1193,20 +1258,20 @@ export default function Index() {
   }, [searchParams, navigate]);
 
   useEffect(() => {
-    if (toast === "create-success") {
-      setToastMessage("Offer ??????????");
+    if (toast?.startsWith("create-success")) {
+      setToastMessage("Offer created successfully");
       setShowCreateOffer(false);
       setEditingOfferId(null);
-    } else if (toast === "update-success") {
-      setToastMessage("Offer ????????????");
+    } else if (toast?.startsWith("update-success")) {
+      setToastMessage("Offer updated successfully");
       setShowCreateOffer(false);
       setEditingOfferId(null);
-    } else if (toast === "delete-success") {
-      setToastMessage("Offer ????????????");
+    } else if (toast?.startsWith("delete-success")) {
+      setToastMessage("Offer deleted successfully");
       setShowCreateOffer(false);
       setEditingOfferId(null);
-    } else if (toast === "toggle-success") {
-      setToastMessage("Offer ?????????????");
+    } else if (toast?.startsWith("toggle-success")) {
+      setToastMessage("Offer status updated successfully");
     } else {
       setToastMessage(null);
     }
@@ -1237,11 +1302,14 @@ export default function Index() {
 
   useEffect(() => {
     const shouldRefresh =
-      toast === "create-success" ||
-      toast === "update-success" ||
-      toast === "delete-success" ||
-      toast === "toggle-success";
-    if (!shouldRefresh) return;
+      toast?.startsWith("create-success") ||
+      toast?.startsWith("update-success") ||
+      toast?.startsWith("delete-success") ||
+      toast?.startsWith("toggle-success");
+    if (!shouldRefresh) {
+      lastOffersRefreshToastRef.current = null;
+      return;
+    }
     if (lastOffersRefreshToastRef.current === toast) return;
     if (offersFetcher.state !== "idle") return;
     lastOffersRefreshToastRef.current = toast || null;
@@ -1270,7 +1338,7 @@ export default function Index() {
     <AppProvider embedded apiKey={apiKey}>
       <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px] relative">
         {toastMessage && (
-          <div className="fixed z-50 top-4 left-1/2 -translate-x-1/2 bg-[#108043] !text-white px-4 py-2 rounded shadow-lg text-sm font-sans">
+          <div className="fixed z-50 top-4 left-1/2 -translate-x-1/2 bg-[rgba(0,0,0,0.75)] backdrop-blur-sm !text-white px-4 py-2 rounded shadow-lg text-sm font-sans">
             {toastMessage}
           </div>
         )}
@@ -1334,6 +1402,7 @@ export default function Index() {
             markets={markets}
             shop={shop}
             apiKey={apiKey}
+            ianaTimezone={ianaTimezone}
             themeExtensionEnabled={themeExtensionEnabled}
             onViewAllOffers={() => setActiveTab("offers")}
             onViewAnalytics={() => setActiveTab("analytics")}
@@ -1348,6 +1417,7 @@ export default function Index() {
           <AllOffersPage
             offers={offers}
             offersLoading={isOffersLoading}
+            ianaTimezone={ianaTimezone}
             onCreateOffer={() => {
               setShowCreateOffer(true);
               setEditingOfferId(null);

@@ -11,10 +11,18 @@ import {
   ChartBar,
   Pencil,
   Trash2,
+  Info,
 } from "lucide-react";
 import "../../styles/tailwind.css";
 import { CreateNewOffer } from "../component/CreateNewOffer/CreateNewOffer";
 import type { IndexLoaderData } from "../_index/route";
+import { parseDiscountRules } from "../../utils/offerParsing";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 interface DashboardPageProps {
   onViewAllOffers?: () => void;
@@ -26,13 +34,19 @@ interface DashboardPageProps {
   markets?: IndexLoaderData["markets"];
   shop: string;
   apiKey: string;
+  ianaTimezone: string;
   themeExtensionEnabled: boolean;
 }
 
 type DashboardOfferRow = {
   id: string;
   name: string;
+  cartTitle: string;
+  offerType: string;
+  discountRulesJson: string | null;
   isActive: boolean;
+  createdAt: string | Date | undefined;
+  updatedAt: string | Date | undefined;
   exposurePV: number;
   addToCartPV: number;
   gmv: number;
@@ -103,6 +117,7 @@ export function DashboardPage({
   markets = [],
   shop,
   apiKey,
+  ianaTimezone,
   themeExtensionEnabled,
 }: DashboardPageProps) {
   const [searchParams] = useSearchParams();
@@ -120,6 +135,8 @@ export function DashboardPage({
 
   const offerRows: DashboardOfferRow[] = (offers ?? []).map((offer) => {
     const isActive = !!offer.status;
+    const createdAt = offer.createdAt;
+    const updatedAt = offer.updatedAt;
     const exposurePV = offer.exposurePV ?? 0;
     const addToCartPV = offer.addToCartPV ?? 0;
     const gmv = offer.gmv ?? 0;
@@ -128,7 +145,12 @@ export function DashboardPage({
     return {
       id: offer.id,
       name: offer.name,
+      cartTitle: offer.cartTitle,
+      offerType: offer.offerType,
+      discountRulesJson: offer.discountRulesJson,
       isActive,
+      createdAt,
+      updatedAt,
       exposurePV,
       addToCartPV,
       gmv,
@@ -227,7 +249,7 @@ export function DashboardPage({
   const toast = searchParams.get("toast") || actionData?.toast;
 
   useEffect(() => {
-    if (toast === "delete-success") {
+    if (toast?.startsWith("delete-success")) {
       setDeletingOffer(null);
     }
   }, [toast]);
@@ -235,7 +257,7 @@ export function DashboardPage({
   useEffect(() => {
     const controller = new AbortController();
     const now = new Date();
-    const from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
     const query = new URLSearchParams({
       mode: "overview",
@@ -298,9 +320,9 @@ export function DashboardPage({
 
   useEffect(() => {
     if (
-      toast === "create-success" ||
-      toast === "update-success" ||
-      toast === "delete-success"
+      toast?.startsWith("create-success") ||
+      toast?.startsWith("update-success") ||
+      toast?.startsWith("delete-success")
     ) {
       setShowCreateOffer(false);
       setDeletingOffer(null);
@@ -320,6 +342,7 @@ export function DashboardPage({
           initialOffer={editingOffer}
           storeProducts={storeProducts}
           markets={markets}
+          ianaTimezone={ianaTimezone}
           existingOffers={(offers ?? []).map((o) => ({
             id: o.id,
             name: o.name,
@@ -336,9 +359,18 @@ export function DashboardPage({
         {/* GMV Overview Card */}
         <div className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[24px]">
           <div className="flex items-center justify-between mb-[16px]">
-            <h2 className="font-sans font-semibold text-[20px] leading-[30px] text-[#1c1f23] tracking-tight m-0">
-              GMV Overview
-            </h2>
+            <div className="flex items-center gap-[8px]">
+              <h2 className="font-sans font-semibold text-[20px] leading-[30px] text-[#1c1f23] tracking-tight m-0">
+                GMV Overview
+              </h2>
+              <div className="group relative flex items-center">
+                <Info className="w-[16px] h-[16px] text-[#8a919e] cursor-help" />
+                <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-[8px] hidden group-hover:block w-max max-w-[250px] bg-[#1c1f23] text-white text-[12px] leading-[18px] px-[12px] py-[8px] rounded-[8px] shadow-lg z-10 text-center">
+                  Data accumulated over the last 30 days
+                  <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-[#1c1f23]"></div>
+                </div>
+              </div>
+            </div>
             <button
               type="button"
               className="text-[#008060] font-medium text-[14px] bg-transparent hover:bg-[#f0f9f6] px-[12px] py-[6px] rounded-[8px] flex items-center gap-[6px] transition-all border-0 cursor-pointer"
@@ -453,19 +485,22 @@ export function DashboardPage({
                 Offer Name
               </th>
               <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
+                Display name
+              </th>
+              <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
+                Discount type
+              </th>
+              <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
+                Discount rules
+              </th>
+              <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
                 Status
               </th>
               <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
-                Exposure PV
+                Create time
               </th>
               <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
-                Add to Cart PV
-              </th>
-              <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
-                GMV
-              </th>
-              <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
-                Conversion
+                Update time
               </th>
               <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
                 Actions
@@ -476,7 +511,7 @@ export function DashboardPage({
             {offersLoading ? (
               <tr>
                 <td
-                  colSpan={7}
+                  colSpan={8}
                   className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#5c6166] font-sans"
                 >
                   Loading offers...
@@ -485,7 +520,7 @@ export function DashboardPage({
             ) : visibleOffers.length === 0 ? (
               <tr>
                 <td
-                  colSpan={7}
+                  colSpan={8}
                   className="p-[12px] border-b border-[#f0f2f4] font-sans text-[14px] leading-[22.4px] text-[#5c6166] tracking-normal"
                 >
                   No offers yet. Create your first offer to see it here.
@@ -495,8 +530,19 @@ export function DashboardPage({
               visibleOffers.map((offer) => {
                 const isToggling = getIsToggling(offer.id);
                 const statusLabel = offer.isActive ? "Active" : "Paused";
-                const gmvDisplay = `$${offer.gmv.toLocaleString()}`;
-                const conversionDisplay = `${offer.conversion.toFixed(1)}%`;
+                const displayType = offer.offerType === "quantity-breaks-same" ? "Quantity breaks" : offer.offerType;
+                
+                const rules = parseDiscountRules(offer.discountRulesJson);
+                const rulesText = rules.length > 0 
+                  ? rules.map(r => `Buy ${r.count} Get ${r.discountPercent}% Off`).join(", ")
+                  : "-";
+                  
+                const formatTime = (timeStr: string | Date | undefined) => {
+                  if (!timeStr) return "-";
+                  const d = dayjs(timeStr);
+                  if (!d.isValid()) return "-";
+                  return d.tz(ianaTimezone).format("YYYY-MM-DD HH:mm:ss");
+                };
 
                 return (
                   <tr key={offer.id}>
@@ -504,6 +550,15 @@ export function DashboardPage({
                       <div className="flex items-center gap-[8px]">
                         {offer.name}
                       </div>
+                    </td>
+                    <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
+                      {offer.cartTitle}
+                    </td>
+                    <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
+                      {displayType}
+                    </td>
+                    <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
+                      {rulesText}
                     </td>
                     <td className="p-[12px] border-b border-[#f0f2f4]">
                       <Form method="post">
@@ -554,16 +609,10 @@ export function DashboardPage({
                       </Form>
                     </td>
                     <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
-                      {offer.exposurePV.toLocaleString()}
+                      {formatTime(offer.createdAt)}
                     </td>
                     <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
-                      {offer.addToCartPV.toLocaleString()}
-                    </td>
-                    <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
-                      {gmvDisplay}
-                    </td>
-                    <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
-                      {conversionDisplay}
+                      {formatTime(offer.updatedAt)}
                     </td>
                     <td className="p-[12px] border-b border-[#f0f2f4]">
                       <div className="flex items-center gap-[8px]">
