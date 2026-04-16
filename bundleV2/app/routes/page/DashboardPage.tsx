@@ -12,6 +12,8 @@ import {
   Pencil,
   Trash2,
   Info,
+  X,
+  AlertCircle,
 } from "lucide-react";
 import "../../styles/tailwind.css";
 import { CreateNewOffer } from "../component/CreateNewOffer/CreateNewOffer";
@@ -26,7 +28,7 @@ dayjs.extend(timezone);
 
 interface DashboardPageProps {
   onViewAllOffers?: () => void;
-  onViewAnalytics?: () => void;
+  onViewAnalytics?: (offerId?: string) => void;
   onCreateOffer?: () => void;
   offers?: IndexLoaderData["offers"];
   offersLoading?: boolean;
@@ -132,6 +134,19 @@ export function DashboardPage({
   const [overviewMetrics, setOverviewMetrics] = useState<GmvOverviewMetrics | null>(
     null,
   );
+
+  const [showThemeExtensionModal, setShowThemeExtensionModal] = useState(false);
+  const [hideBanner, setHideBanner] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("hideThemeExtensionBanner") === "true";
+    }
+    return false;
+  });
+
+  const handleCloseBanner = () => {
+    setHideBanner(true);
+    localStorage.setItem("hideThemeExtensionBanner", "true");
+  };
 
   const offerRows: DashboardOfferRow[] = (offers ?? []).map((offer) => {
     const isActive = !!offer.status;
@@ -354,6 +369,40 @@ export function DashboardPage({
 
   return (
     <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px]">
+      {!themeExtensionEnabled && visibleOffers.length > 0 && !hideBanner && (
+        <div className="bg-[#fff4f4] border border-[#ffc9c9] rounded-[8px] p-[16px] mb-[24px] flex items-start justify-between">
+          <div className="flex gap-[12px]">
+            <div className="text-[#d72c0d] mt-[2px]">
+              <AlertCircle size={20} />
+            </div>
+            <div>
+              <h3 className="font-sans font-semibold text-[14px] leading-[20px] text-[#1c1f23] mb-[4px] m-0">
+                Action required: Activate Theme Extension
+              </h3>
+              <p className="font-sans text-[14px] leading-[20px] text-[#5c6166] m-0">
+                Your offer has been created, but it won't be visible on your store until you activate the theme extension.
+              </p>
+              <div className="mt-[12px]">
+                <button
+                  type="button"
+                  onClick={handleThemeExtensionToggle}
+                  className="bg-[#008060] !text-white px-[12px] py-[6px] rounded-[6px] font-medium text-[14px] shadow-sm hover:bg-[#006e52] transition-all border-0 cursor-pointer"
+                >
+                  Activate Theme Extension
+                </button>
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleCloseBanner}
+            className="text-[#5c6166] hover:text-[#1c1f23] bg-transparent border-0 cursor-pointer p-[4px]"
+          >
+            <X size={20} />
+          </button>
+        </div>
+      )}
+
       {/* GMV Overview + Theme Extension */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-[16px] sm:gap-[24px] mb-[24px] sm:mb-[36px]">
         {/* GMV Overview Card */}
@@ -529,7 +578,8 @@ export function DashboardPage({
             ) : (
               visibleOffers.map((offer) => {
                 const isToggling = getIsToggling(offer.id);
-                const statusLabel = offer.isActive ? "Active" : "Paused";
+                const displayIsActive = themeExtensionEnabled ? offer.isActive : false;
+                const statusLabel = displayIsActive ? "Active" : "Inactive";
                 const displayType = offer.offerType === "quantity-breaks-same" ? "Quantity breaks" : offer.offerType;
                 
                 const rules = parseDiscountRules(offer.discountRulesJson);
@@ -561,7 +611,15 @@ export function DashboardPage({
                       {rulesText}
                     </td>
                     <td className="p-[12px] border-b border-[#f0f2f4]">
-                      <Form method="post">
+                      <Form
+                        method="post"
+                        onSubmit={(e) => {
+                          if (!themeExtensionEnabled) {
+                            e.preventDefault();
+                            setShowThemeExtensionModal(true);
+                          }
+                        }}
+                      >
                         <input
                           type="hidden"
                           name="intent"
@@ -585,7 +643,7 @@ export function DashboardPage({
                               isToggling ? "animate-pulse" : ""
                             }`}
                             style={{
-                              backgroundColor: offer.isActive
+                              backgroundColor: displayIsActive
                                 ? "#008060"
                                 : "#c4cdd5",
                             }}
@@ -594,13 +652,13 @@ export function DashboardPage({
                               className={`absolute top-[2px] w-[20px] h-[20px] bg-white rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.2)] transition-all duration-200 ${
                                 isToggling ? "animate-pulse" : ""
                               }`}
-                              style={{ left: offer.isActive ? "22px" : "2px" }}
+                              style={{ left: displayIsActive ? "22px" : "2px" }}
                             />
                           </span>
                           <span
                             className="text-[14px] font-medium"
                             style={{
-                              color: offer.isActive ? "#108043" : "#6d7175",
+                              color: displayIsActive ? "#108043" : "#6d7175",
                             }}
                           >
                             {isToggling ? "Updating..." : statusLabel}
@@ -620,7 +678,7 @@ export function DashboardPage({
                           type="button"
                           className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[6px] rounded-[6px] hover:bg-[#f0f9f6] transition-all"
                           title="View Details"
-                          onClick={handleViewAllOffers}
+                          onClick={() => onViewAnalytics?.(offer.id)}
                         >
                           <ChartBar size={16} />
                         </button>
@@ -664,7 +722,8 @@ export function DashboardPage({
           ) : (
             visibleOffers.map((offer) => {
               const isToggling = getIsToggling(offer.id);
-              const statusLabel = offer.isActive ? "Active" : "Paused";
+              const displayIsActive = themeExtensionEnabled ? offer.isActive : false;
+              const statusLabel = displayIsActive ? "Active" : "Inactive";
               const gmvDisplay = `$${offer.gmv.toLocaleString()}`;
               const conversionDisplay = `${offer.conversion.toFixed(1)}%`;
 
@@ -680,7 +739,15 @@ export function DashboardPage({
                       </span>
                     </div>
                   </div>
-                  <Form method="post">
+                  <Form
+                    method="post"
+                    onSubmit={(e) => {
+                      if (!themeExtensionEnabled) {
+                        e.preventDefault();
+                        setShowThemeExtensionModal(true);
+                      }
+                    }}
+                  >
                     <input
                       type="hidden"
                       name="intent"
@@ -704,7 +771,7 @@ export function DashboardPage({
                           isToggling ? "animate-pulse" : ""
                         }`}
                         style={{
-                          backgroundColor: offer.isActive
+                          backgroundColor: displayIsActive
                             ? "#008060"
                             : "#c4cdd5",
                         }}
@@ -713,13 +780,13 @@ export function DashboardPage({
                           className={`absolute top-[2px] w-[20px] h-[20px] bg-white rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.2)] transition-all duration-200 ${
                             isToggling ? "animate-pulse" : ""
                           }`}
-                          style={{ left: offer.isActive ? "22px" : "2px" }}
+                          style={{ left: displayIsActive ? "22px" : "2px" }}
                         />
                       </span>
                       <span
                         className="text-[14px] font-medium"
                         style={{
-                          color: offer.isActive ? "#108043" : "#6d7175",
+                          color: displayIsActive ? "#108043" : "#6d7175",
                         }}
                       >
                         {isToggling ? "Updating..." : statusLabel}
@@ -749,7 +816,7 @@ export function DashboardPage({
                       type="button"
                       className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[8px] rounded-[8px] hover:bg-[#f0f9f6] transition-all"
                       title="View Details"
-                      onClick={handleViewAllOffers}
+                      onClick={() => onViewAnalytics?.(offer.id)}
                     >
                       <ChartBar size={18} />
                     </button>
@@ -1085,6 +1152,38 @@ export function DashboardPage({
                   Delete
                 </button>
               </Form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showThemeExtensionModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.4)]">
+          <div className="bg-white rounded-[16px] shadow-[0_8px_24px_rgba(0,0,0,0.12)] max-w-[400px] w-[90%] p-[24px]">
+            <h2 className="font-sans font-semibold text-[18px] leading-[27px] text-[#1c1f23] mb-[8px]">
+              Activate Theme Extension
+            </h2>
+            <p className="font-sans text-[14px] leading-[21px] text-[#5c6166] mb-[16px]">
+              You need to activate the theme extension first before you can turn on any offers.
+            </p>
+            <div className="flex justify-end gap-[8px]">
+              <button
+                type="button"
+                className="px-[12px] py-[6px] rounded-[6px] border border-[#dfe3e8] bg-white text-[#1c1f23] text-[14px] font-sans hover:bg-[#f4f6f8]"
+                onClick={() => setShowThemeExtensionModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowThemeExtensionModal(false);
+                  handleThemeExtensionToggle();
+                }}
+                className="px-[12px] py-[6px] rounded-[6px] bg-[#008060] !text-white text-[14px] font-sans hover:bg-[#006e52]"
+              >
+                Activate Now
+              </button>
             </div>
           </div>
         </div>
