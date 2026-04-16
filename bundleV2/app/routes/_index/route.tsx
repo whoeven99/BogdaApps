@@ -92,6 +92,8 @@ type ShopOffersMetafieldSyncResult =
 const BUNDLE_METAFIELD_NAMESPACE = "ciwi_bundle";
 const BUNDLE_METAFIELD_BASE_KEY = "ciwi-bundle-offers";
 const BUNDLE_METAFIELD_ACTIVE_ENV_KEY = "ciwi-bundle-offers-active-env";
+const BUNDLE_METAFIELD_ENABLED_PROD_KEY = "ciwi-bundle-enabled-prod";
+const BUNDLE_METAFIELD_ENABLED_TEST_KEY = "ciwi-bundle-enabled-test";
 const PROD_SHOPIFY_API_KEY = "bfc13ad696f2a8d2a77ba6eee1e26966";
 const TEST_SHOPIFY_API_KEY = "ab25ea895c6df574ae9ff70e9c7731c5";
 
@@ -112,9 +114,17 @@ function resolveBundleEnvironment(): BundleEnvironment {
   return process.env.NODE_ENV === "production" ? "prod" : "test";
 }
 
-function buildOfferMetafieldsInput(ownerId: string, offersPayload: string) {
+function buildOfferMetafieldsInput(
+  ownerId: string,
+  offersPayload: string,
+  themeExtensionEnabled: boolean,
+) {
   const env = resolveBundleEnvironment();
   const envOfferKey = `${BUNDLE_METAFIELD_BASE_KEY}-${env}`;
+  const envEnabledKey =
+    env === "prod"
+      ? BUNDLE_METAFIELD_ENABLED_PROD_KEY
+      : BUNDLE_METAFIELD_ENABLED_TEST_KEY;
   const activeEnvPayload = JSON.stringify({
     env,
     updatedAt: new Date().toISOString(),
@@ -135,6 +145,17 @@ function buildOfferMetafieldsInput(ownerId: string, offersPayload: string) {
       type: "json",
       value: activeEnvPayload,
     },
+    {
+      ownerId,
+      namespace: BUNDLE_METAFIELD_NAMESPACE,
+      key: envEnabledKey,
+      type: "json",
+      value: JSON.stringify({
+        enabled: themeExtensionEnabled,
+        env,
+        updatedAt: new Date().toISOString(),
+      }),
+    },
     // 兼容历史读路径，避免函数/主题未更新时出现空数据。
     {
       ownerId,
@@ -150,6 +171,7 @@ async function syncShopOffersMetafield(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   admin: any,
   shopNameToSync: string,
+  themeExtensionEnabled: boolean,
 ): Promise<ShopOffersMetafieldSyncResult> {
   const prismaAny: any = prisma;
   try {
@@ -213,7 +235,11 @@ async function syncShopOffersMetafield(
     `,
       {
         variables: {
-          metafields: buildOfferMetafieldsInput(shopId, metafieldValue),
+          metafields: buildOfferMetafieldsInput(
+            shopId,
+            metafieldValue,
+            themeExtensionEnabled,
+          ),
         },
       },
     );
@@ -588,6 +614,82 @@ const getThemeExtensionEnabled = async (
   return false;
 };
 
+async function getCurrentThemeExtensionEnabled(admin: any): Promise<boolean> {
+  const apiKey = process.env.SHOPIFY_API_KEY || "";
+  const appDisplayName = process.env.SHOPIFY_APP_NAME || process.env.APP_NAME;
+  try {
+    return await getThemeExtensionEnabled(
+      admin,
+      "bundlev2-theme-product-custom",
+      "product_detail_message",
+      apiKey,
+      appDisplayName,
+    );
+  } catch (error) {
+    console.error("Failed to check theme extension status", error);
+    return false;
+  }
+}
+
+async function syncBundleEnabledMetafield(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  admin: any,
+  themeExtensionEnabled: boolean,
+): Promise<void> {
+  try {
+    const env = resolveBundleEnvironment();
+    const envEnabledKey =
+      env === "prod"
+        ? BUNDLE_METAFIELD_ENABLED_PROD_KEY
+        : BUNDLE_METAFIELD_ENABLED_TEST_KEY;
+    const shopIdResponse = await admin.graphql(
+      `#graphql
+      query ShopId {
+        shop {
+          id
+        }
+      }
+    `,
+    );
+    const shopIdJson = (await shopIdResponse.json()) as {
+      data?: { shop?: { id?: string } };
+    };
+    const shopId = shopIdJson?.data?.shop?.id;
+    if (!shopId) return;
+
+    await admin.graphql(
+      `#graphql
+      mutation MetafieldsSet($metafields: [MetafieldsSetInput!]!) {
+        metafieldsSet(metafields: $metafields) {
+          userErrors {
+            message
+          }
+        }
+      }
+    `,
+      {
+        variables: {
+          metafields: [
+            {
+              ownerId: shopId,
+              namespace: BUNDLE_METAFIELD_NAMESPACE,
+              key: envEnabledKey,
+              type: "json",
+              value: JSON.stringify({
+                enabled: themeExtensionEnabled,
+                env,
+                updatedAt: new Date().toISOString(),
+              }),
+            },
+          ],
+        },
+      },
+    );
+  } catch (error) {
+    console.error("Failed to sync bundle enabled metafield", error);
+  }
+}
+
 /** Normalize offer name to a unique key */
 function normalizeOfferNameKey(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
@@ -606,10 +708,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.error("Failed to ensure automatic app discount exists", error);
   });
 
-  // product_detail_message.liquid -> product-detail-message.js
   // eslint-disable-next-line no-undef
   const apiKey = process.env.SHOPIFY_API_KEY || "";
-  const appDisplayName = process.env.SHOPIFY_APP_NAME || process.env.APP_NAME;
 
   // 获取商店时区
   let ianaTimezone = "UTC";
@@ -632,17 +732,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   let themeExtensionEnabled = false;
-  try {
-    themeExtensionEnabled = await getThemeExtensionEnabled(
-      admin,
-      "bundlev2-theme-product-custom",
-      "product_detail_message",
-      apiKey,
-      appDisplayName,
-    );
-  } catch (error) {
-    console.error("Failed to check theme extension status", error);
-  }
+  themeExtensionEnabled = await getCurrentThemeExtensionEnabled(admin);
+  void syncBundleEnabledMetafield(admin, themeExtensionEnabled);
 
   let markets: MarketItem[] = [];
   try {
@@ -1050,7 +1141,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     }
 
-    const syncResult = await syncShopOffersMetafield(admin, shopName);
+    const themeExtensionEnabled = await getCurrentThemeExtensionEnabled(admin);
+    const syncResult = await syncShopOffersMetafield(
+      admin,
+      shopName,
+      themeExtensionEnabled,
+    );
     if (!syncResult.ok) {
       console.error("syncShopOffersMetafield failed after offer write", {
         shopName,
@@ -1095,7 +1191,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     try {
       const shopNameToSync = updatedOffer?.shopName as string | undefined;
       if (shopNameToSync) {
-        const syncResult = await syncShopOffersMetafield(admin, shopNameToSync);
+        const themeExtensionEnabled = await getCurrentThemeExtensionEnabled(admin);
+        const syncResult = await syncShopOffersMetafield(
+          admin,
+          shopNameToSync,
+          themeExtensionEnabled,
+        );
         if (!syncResult.ok) {
           console.error("Failed to sync offers metafield after toggle", {
             shopNameToSync,
@@ -1141,7 +1242,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // Sync metafield after deleting offer
     try {
       if (shopNameToSync) {
-        const syncResult = await syncShopOffersMetafield(admin, shopNameToSync);
+        const themeExtensionEnabled = await getCurrentThemeExtensionEnabled(admin);
+        const syncResult = await syncShopOffersMetafield(
+          admin,
+          shopNameToSync,
+          themeExtensionEnabled,
+        );
         if (!syncResult.ok) {
           console.error("Failed to sync offers metafield after delete", {
             shopNameToSync,
