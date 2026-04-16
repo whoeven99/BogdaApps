@@ -43,7 +43,7 @@ export function AnalyticsPage({ shop, offers }: AnalyticsPageProps) {
       ...allOption,
       ...(offers || []).map((offer) => ({
         label: offer.name,
-        value: offer.id,
+        value: offer.name,
       })),
     ];
   }, [offers]);
@@ -63,15 +63,18 @@ export function AnalyticsPage({ shop, offers }: AnalyticsPageProps) {
           shopName: shop,
           from: from.toISOString(),
           to: now.toISOString(),
-          bundleId: selectedOffer === "all" ? "" : selectedOffer,
         });
+
         const trendQuery = new URLSearchParams({
           mode: "trend",
           shopName: shop,
           from: from.toISOString(),
           to: now.toISOString(),
-          bundleId: selectedOffer === "all" ? "" : selectedOffer,
         });
+
+        if (selectedOffer !== "all") {
+          trendQuery.set("name", selectedOffer);
+        }
 
         const [overviewResponse, trendResponse] = await Promise.all([
           fetch(`/webpixerToAli?${overviewQuery.toString()}`, {

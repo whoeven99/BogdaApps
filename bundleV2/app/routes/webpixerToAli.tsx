@@ -130,48 +130,73 @@ function formatDayKey(input: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+type SlsSqlQueryResult = {
+  day: string;
+  currency: string;
+  total_amount: number;
+};
+
 function buildDailyGmvTrend(
-  logs: SlsLogLike[],
-  shopName: string,
+  queryResult: SlsSqlQueryResult[],
   fromDate: Date,
   toDate: Date,
 ): DailyGmvPoint[] {
-  const dayGmv = new Map<string, number>();
+  // 打印从SLS接收到的原始聚合数据
+  console.log("[buildDailyGmvTrend] Raw SLS query result", queryResult);
 
-  for (const rawLog of logs) {
-    const content = extractLogContent(rawLog);
-    if (!content.shopName || content.shopName !== shopName) continue;
+  // 使用Map来存储每日的GMV总额。键是日期字符串（如 '2023-10-26'），值是累计的GMV
+  const dailyGmv = new Map<string, number>();
 
-    const timestampMs =
-      parseTime(rawLog.time) ?? parseTime(rawLog.timestamp) ?? parseTime(rawLog.__time__);
-    if (!timestampMs) continue;
-    if (timestampMs < fromDate.getTime() || timestampMs > toDate.getTime()) continue;
-    if (content.event !== "checkout_completed") continue;
+  // 遍历SLS返回的每一行聚合数据
+  for (const row of queryResult) {
+    // 从行数据中安全地提取日期和销售额
+    const dayKey = row.day;
+    const amount = Number(row.total_amount) || 0;
 
-    const extra = parseExtra(content.extra);
-    if (!hasBundle(extra)) continue;
+    // 如果日期或金额无效，则跳过此行
+    if (!dayKey || !amount) {
+      continue;
+    }
 
-    const amount = getTotalPrice(extra);
-    if (!Number.isFinite(amount) || amount <= 0) continue;
-
-    const dayKey = formatDayKey(new Date(timestampMs));
-    dayGmv.set(dayKey, (dayGmv.get(dayKey) ?? 0) + amount);
+    // 将当前行的销售额累加到对应日期的GMV总额中
+    // 如果Map中还没有这一天的记录，会使用 (dailyGmv.get(dayKey) ?? 0) 初始化为0
+    dailyGmv.set(dayKey, (dailyGmv.get(dayKey) ?? 0) + amount);
   }
 
+  // 打印处理后的每日GMV数据，以便调试
+  console.log("[buildDailyGmvTrend] Processed daily GMV totals", Object.fromEntries(dailyGmv));
+
+  // 初始化一个数组来存储最终的时间序列数据点
   const series: DailyGmvPoint[] = [];
+  // 创建一个日期对象，用于在指定的时间范围内迭代
   const cursor = new Date(fromDate);
-  cursor.setUTCHours(0, 0, 0, 0);
+  cursor.setUTCHours(0, 0, 0, 0); // 标准化到当天的开始
+
   const toDay = new Date(toDate);
-  toDay.setUTCHours(0, 0, 0, 0);
+  toDay.setUTCHours(0, 0, 0, 0); // 标准化到查询结束日期的开始
+
+  // 循环遍历从开始日期到结束日期的每一天
   while (cursor.getTime() <= toDay.getTime()) {
+    // 将当前日期格式化为 'YYYY-MM-DD' 格式的字符串
     const dayKey = formatDayKey(cursor);
+    // 从Map中获取当天的GMV，如果当天没有销售额，则默认为0
+    const gmv = dailyGmv.get(dayKey) ?? 0;
+
+    // 将日期和对应的GMV作为一个数据点添加到时间序列数组中
+    // gmv.toFixed(2)确保金额格式为两位小数
     series.push({
       date: dayKey,
-      gmv: Number((dayGmv.get(dayKey) ?? 0).toFixed(2)),
+      gmv: Number(gmv.toFixed(2)),
     });
+
+    // 将日期向前推一天，继续下一轮循环
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
 
+  // 打印最终生成的时间序列数据
+  console.log("[buildDailyGmvTrend] Final GMV series", series);
+
+  // 返回构建好的时间序列
   return series;
 }
 
@@ -442,30 +467,38 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
     try {
       const safeShopName = escapeSlsString(shopName);
-      const query =
-        `__topic__: "checkout_completed" and shopName: "${safeShopName}" and extra: "bundle" and not extra: "NO_BUNDLE_TITLE"`;
+      const bundleName = url.searchParams.get("name");
+      const safeBundleName = bundleName ? escapeSlsString(bundleName) : null;
+
+      let query = `__topic__: "checkout_completed" and shopName: "${safeShopName}" and extra: "bundle" and not extra: "NO_BUNDLE_TITLE"`;
+
+      if (safeBundleName) {
+        query += ` and extra: "${safeBundleName}"`;
+      }
+
+      query += ` | set session mode=scan; SELECT date_format(from_unixtime(__time__), '%Y-%m-%d') as day, JSON_EXTRACT_SCALAR(extra, '$.totalPrice.currencyCode') as currency, sum(cast(JSON_EXTRACT_SCALAR(extra, '$.totalPrice.amount') as double)) as total_amount FROM log GROUP BY day, currency ORDER BY day, currency`;
+
       const resp = (await sls.getLogs(projectName(), logstoreName(), fromDate, toDate, {
         query,
         line: 1000,
         reverse: false,
       })) as unknown;
-      const logs = Array.isArray(resp)
-        ? (resp as SlsLogLike[])
+
+      const queryResult = (Array.isArray(resp)
+        ? resp
         : Array.isArray((resp as { logs?: unknown })?.logs)
-          ? (((resp as { logs?: unknown[] }).logs ?? []) as SlsLogLike[])
-          : [];
+          ? (resp as { logs: unknown[] }).logs
+          : []) as { day: string; currency: string; total_amount: number }[];
+
       console.log("[web-pixel-TEST] webpixerToAli getLogs", {
         query,
-        line: 1000,
-        reverse: false,
         from: fromDate.toISOString(),
         to: toDate.toISOString(),
-        logsCount: logs.length,
+        logsCount: queryResult.length,
+        logs: queryResult,
       });
-      const series = buildDailyGmvTrend(logs, shopName, fromDate, toDate);
-      console.log("[web-pixel-TEST] webpixerToAli buildDailyGmvTrend", {
-        series,
-      });
+
+      const series = buildDailyGmvTrend(queryResult, fromDate, toDate);
       return new Response(
         JSON.stringify({
           success: true,
