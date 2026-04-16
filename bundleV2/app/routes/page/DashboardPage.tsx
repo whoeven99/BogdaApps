@@ -248,7 +248,7 @@ export function DashboardPage({
   const toast = searchParams.get("toast") || actionData?.toast;
 
   useEffect(() => {
-    if (toast === "delete-success") {
+    if (toast?.startsWith("delete-success")) {
       setDeletingOffer(null);
     }
   }, [toast]);
@@ -319,9 +319,9 @@ export function DashboardPage({
 
   useEffect(() => {
     if (
-      toast === "create-success" ||
-      toast === "update-success" ||
-      toast === "delete-success"
+      toast?.startsWith("create-success") ||
+      toast?.startsWith("update-success") ||
+      toast?.startsWith("delete-success")
     ) {
       setShowCreateOffer(false);
       setDeletingOffer(null);
