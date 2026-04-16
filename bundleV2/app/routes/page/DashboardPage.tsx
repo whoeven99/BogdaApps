@@ -674,6 +674,7 @@ export function DashboardPage({
                     </td>
                     <td className="p-[12px] border-b border-[#f0f2f4]">
                       <div className="flex items-center gap-[8px]">
+                        {/* 
                         <button
                           type="button"
                           className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[6px] rounded-[6px] hover:bg-[#f0f9f6] transition-all"
@@ -682,6 +683,7 @@ export function DashboardPage({
                         >
                           <ChartBar size={16} />
                         </button>
+                        */}
                         <button
                           type="button"
                           className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[6px] rounded-[6px] hover:bg-[#f0f9f6] transition-all"
@@ -812,6 +814,7 @@ export function DashboardPage({
                     </div>
                   </div>
                   <div className="flex items-center gap-[8px] pt-[12px] border-t border-[#dfe3e8]">
+                    {/* 
                     <button
                       type="button"
                       className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[8px] rounded-[8px] hover:bg-[#f0f9f6] transition-all"
@@ -820,6 +823,7 @@ export function DashboardPage({
                     >
                       <ChartBar size={18} />
                     </button>
+                    */}
                     <button
                       type="button"
                       className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[8px] rounded-[8px] hover:bg-[#f0f9f6] transition-all"
@@ -982,6 +986,7 @@ export function DashboardPage({
                   </td>
                   <td className="p-[12px] border-b border-[#f0f2f4]">
                     <div className="flex items-center gap-[8px]">
+                      {/*
                       <button
                         type="button"
                         className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[6px] rounded-[6px] hover:bg-[#f0f9f6] transition-all"
@@ -989,6 +994,7 @@ export function DashboardPage({
                       >
                         <ChartBar size={16} />
                       </button>
+                      */}
                       <button
                         type="button"
                         className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[6px] rounded-[6px] hover:bg-[#f0f9f6] transition-all"
@@ -1083,6 +1089,7 @@ export function DashboardPage({
                   </div>
                 </div>
                 <div className="flex items-center gap-[8px] pt-[12px] border-t border-[#dfe3e8]">
+                  {/*
                   <button
                     type="button"
                     className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[8px] rounded-[8px] hover:bg-[#f0f9f6] transition-all"
@@ -1090,6 +1097,7 @@ export function DashboardPage({
                   >
                     <ChartBar size={18} />
                   </button>
+                  */}
                   <button
                     type="button"
                     className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[8px] rounded-[8px] hover:bg-[#f0f9f6] transition-all"
