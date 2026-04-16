@@ -154,7 +154,7 @@ jobs:
             RELEASE_CONTENT="${RELEASE_CONTENT}\n描述: ${COMMIT_BODY}"
           fi
 
-          MESSAGE="Bundle PROD deploy 成功, by ${GITHUB_ACTOR}.\n最终状态: ${RENDER_FINAL_STATUS}\n发布内容：\n${RELEASE_CONTENT}\nRender: ${RENDER_DEPLOY_URL}\nRun: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          MESSAGE="Bundle PROD deploy 成功, by ${GITHUB_ACTOR}.\n最终状态: ${RENDER_FINAL_STATUS}\n发布内容：${COMMIT_BODY}"
           PAYLOAD=$(printf '{"msg_type":"text","content":{"text":"%s"}}' "$MESSAGE")
 
           curl -sS -X POST "$FEISHU_WEBHOOK_URL" \
