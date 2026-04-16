@@ -14,19 +14,22 @@
       {% endfor %}
     ],
     "marketId": {{ localization.market.id | default: "null" }},
-    {% for item in product.variants %}
-      "{{ item.id }}": {
-        "available": {{ item.available | default: false }},
-        "compareAtPrice": {{ item.compare_at_price | json }},
-        "price": {{ item.price | json }},
-        "inventoryQuantity": {{ item.inventory_quantity | default: 0 }},
-        "inventoryPolicy": {{ item.inventory_policy | json }}
-      },
-    {% endfor %}
-    {% if product.variants[0] %}
+    "variants": [
+      {% for item in product.variants %}
+        {
+          "id": "{{ item.id }}",
+          "available": {% if item.available %}true{% else %}false{% endif %},
+          "compareAtPrice": {{ item.compare_at_price | json }},
+          "price": {{ item.price | json }},
+          "inventoryQuantity": {{ item.inventory_quantity | default: 0 }},
+          "inventoryPolicy": {{ item.inventory_policy | json }}
+        }{% unless forloop.last %},{% endunless %}
+      {% endfor %}
+    ],
+    "firstVariant": {
       "compareAtPrice": {{ product.variants[0].compare_at_price | json }},
-      "price": {{ product.variants[0].price | json }},
-    {% endif %}
+      "price": {{ product.variants[0].price | json }}
+    },
     "currencySymbol": "{{ localization.country.currency.symbol | escape }}"
   }
 </script>

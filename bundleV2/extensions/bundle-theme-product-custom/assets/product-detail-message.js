@@ -153,6 +153,37 @@ function getSelectedVariantId() {
   return String(input.value || "").trim();
 }
 
+function isCurrentVariantAvailable() {
+  const selectedVariantId = getSelectedVariantId();
+  const configEl = document.getElementById("ciwi-bundles-config");
+  if (configEl) {
+    try {
+      const config = JSON.parse(configEl.textContent || "{}");
+      if (config.variants && Array.isArray(config.variants)) {
+        // If there's a selected variant, find it
+        if (selectedVariantId) {
+          const v = config.variants.find(v => String(v.id) === selectedVariantId);
+          if (v) return v.available;
+        }
+        // If no explicit variant id found in form but variants exist, check the first one (or default)
+        return config.variants[0]?.available ?? true;
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+  // Fallback to ShopifyAnalytics
+  const productMeta = window?.ShopifyAnalytics?.meta?.product;
+  if (productMeta && typeof productMeta === "object" && Array.isArray(productMeta.variants)) {
+    if (selectedVariantId) {
+      const v = productMeta.variants.find(v => String(v.id) === selectedVariantId);
+      if (v && v.available !== undefined) return v.available;
+    }
+  }
+  // If we can't determine, assume available
+  return true;
+}
+
 function isPriceElementVisible(el) {
   if (!el || !(el instanceof Element)) return false;
   const st = window.getComputedStyle(el);
@@ -621,6 +652,7 @@ function buildBundleUi(offer) {
   wrapper.className = "ciwi-bundle-wrapper";
   wrapper.innerHTML = renderBundlePreviewHtml(offer);
   if (!wrapper.innerHTML.trim()) return null;
+  wrapper.style.display = isCurrentVariantAvailable() ? "block" : "none";
   return wrapper;
 }
 
@@ -633,7 +665,12 @@ function scheduleBundlePriceRefresh(offer) {
     const wrap = document.querySelector(".ciwi-bundle-wrapper");
     if (!wrap) return;
     const html = renderBundlePreviewHtml(offer);
-    if (html) wrap.innerHTML = html;
+    if (html) {
+      wrap.innerHTML = html;
+      wrap.style.display = isCurrentVariantAvailable() ? "block" : "none";
+    } else {
+      wrap.style.display = "none";
+    }
     hideThemeQuantitySelectors();
   }, 64);
 }
