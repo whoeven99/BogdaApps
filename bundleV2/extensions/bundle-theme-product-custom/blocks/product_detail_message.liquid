@@ -35,6 +35,18 @@
 </script>
 
 {% if shop.metafields.ciwi_bundle %}
+  {% if shop.metafields.ciwi_bundle["ciwi-bundle-enabled-prod"] %}
+    <script id="ciwi-bundle-enabled-prod" type="application/json">
+      {{ shop.metafields.ciwi_bundle["ciwi-bundle-enabled-prod"].value }}
+    </script>
+  {% endif %}
+
+  {% if shop.metafields.ciwi_bundle["ciwi-bundle-enabled-test"] %}
+    <script id="ciwi-bundle-enabled-test" type="application/json">
+      {{ shop.metafields.ciwi_bundle["ciwi-bundle-enabled-test"].value }}
+    </script>
+  {% endif %}
+
   {% if shop.metafields.ciwi_bundle["ciwi-bundle-offers-active-env"] %}
     <script id="ciwi-bundle-offers-active-env" type="application/json">
       {{ shop.metafields.ciwi_bundle["ciwi-bundle-offers-active-env"].value }}
