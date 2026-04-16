@@ -1,18 +1,40 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
+import { useLoaderData } from "react-router";
 import "../styles/tailwind.css";
 import { Typography, Button, Switch, Modal, Space } from "antd";
 import { Trash2, Pencil } from "lucide-react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { parseDiscountRules } from "../utils/offerParsing";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 const { Text } = Typography;
 
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
-
-  return null;
+  const { admin } = await authenticate.admin(request);
+  let ianaTimezone = "UTC";
+  try {
+    const tzResponse = await admin.graphql(`
+      query ShopTimezone {
+        shop {
+          ianaTimezone
+        }
+      }
+    `);
+    const tzJson = await tzResponse.json();
+    if (tzJson?.data?.shop?.ianaTimezone) {
+      ianaTimezone = tzJson.data.shop.ianaTimezone;
+    }
+  } catch (error) {
+    console.error("Failed to fetch shop timezone", error);
+  }
+  return { ianaTimezone };
 };
 
 const mockOverviewData = {
@@ -56,6 +78,7 @@ const mockOffers = [
 ];
 
 export default function Index() {
+  const { ianaTimezone } = useLoaderData<typeof loader>();
   const isThemeExtensionEnabled = true;
 
   return (
@@ -300,9 +323,9 @@ export default function Index() {
                 : "-";
               const formatTime = (timeStr: string | Date | undefined) => {
                 if (!timeStr) return "-";
-                const d = new Date(timeStr);
-                if (isNaN(d.getTime())) return "-";
-                return d.toISOString().replace("T", " ").slice(0, 19);
+                const d = dayjs(timeStr);
+                if (!d.isValid()) return "-";
+                return d.tz(ianaTimezone).format("YYYY-MM-DD HH:mm:ss");
               };
 
               return (
@@ -380,9 +403,9 @@ export default function Index() {
               : "-";
             const formatTime = (timeStr: string | Date | undefined) => {
               if (!timeStr) return "-";
-              const d = new Date(timeStr);
-              if (isNaN(d.getTime())) return "-";
-              return d.toISOString().replace("T", " ").slice(0, 19);
+              const d = dayjs(timeStr);
+              if (!d.isValid()) return "-";
+              return d.tz(ianaTimezone).format("YYYY-MM-DD HH:mm:ss");
             };
 
             return (

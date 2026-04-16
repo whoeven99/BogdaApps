@@ -221,6 +221,7 @@ export type IndexLoaderData = {
   markets: MarketItem[];
   shop: string;
   apiKey: string;
+  ianaTimezone: string;
   themeExtensionEnabled: boolean;
   billingSubscriptions: Array<{ name: string; status: string }>;
   billingTestMode: boolean;
@@ -560,6 +561,27 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // eslint-disable-next-line no-undef
   const apiKey = process.env.SHOPIFY_API_KEY || "";
   const appDisplayName = process.env.SHOPIFY_APP_NAME || process.env.APP_NAME;
+
+  // 获取商店时区
+  let ianaTimezone = "UTC";
+  try {
+    const tzResponse = await admin.graphql(
+      `#graphql
+        query ShopTimezone {
+          shop {
+            ianaTimezone
+          }
+        }
+      `,
+    );
+    const tzJson = await tzResponse.json();
+    if (tzJson?.data?.shop?.ianaTimezone) {
+      ianaTimezone = tzJson.data.shop.ianaTimezone;
+    }
+  } catch (error) {
+    console.error("Failed to fetch shop timezone", error);
+  }
+
   let themeExtensionEnabled = false;
   try {
     themeExtensionEnabled = await getThemeExtensionEnabled(
@@ -615,6 +637,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     markets,
     shop: session.shop,
     apiKey,
+    ianaTimezone,
     themeExtensionEnabled,
     billingSubscriptions,
     billingTestMode: billingIsTestCharge(),
@@ -1193,6 +1216,7 @@ export default function Index() {
     markets,
     shop,
     apiKey,
+    ianaTimezone,
     themeExtensionEnabled,
     billingSubscriptions,
     billingTestMode,
@@ -1372,6 +1396,7 @@ export default function Index() {
             markets={markets}
             shop={shop}
             apiKey={apiKey}
+            ianaTimezone={ianaTimezone}
             themeExtensionEnabled={themeExtensionEnabled}
             onViewAllOffers={() => setActiveTab("offers")}
             onViewAnalytics={() => setActiveTab("analytics")}
@@ -1386,6 +1411,7 @@ export default function Index() {
           <AllOffersPage
             offers={offers}
             offersLoading={isOffersLoading}
+            ianaTimezone={ianaTimezone}
             onCreateOffer={() => {
               setShowCreateOffer(true);
               setEditingOfferId(null);

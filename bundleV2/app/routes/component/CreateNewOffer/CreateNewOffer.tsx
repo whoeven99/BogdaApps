@@ -2,9 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { useFetcher, useNavigate, useSearchParams } from "react-router";
 import { Button, Input, Select, Switch, Checkbox, DatePicker } from "antd";
 import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
 import {
   X,
 } from "lucide-react";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 import "./CreateNewOffer.css";
 import BundlePreview from "../BundlePreview/BundlePreview";
 import { PreviewItem } from "../BundlePreview/bundlePreviewShared";
@@ -59,6 +64,7 @@ interface CreateNewOfferProps {
   markets?: MarketItem[];
   /** 当前店铺已有 offers，用于名称重复校验（与后台 normalize 规则一致） */
   existingOffers?: Array<{ id: string; name: string }>;
+  ianaTimezone?: string;
 }
 
 /** 与 `_index/route` action 错误响应一致，避免从 route 循环引用 */
@@ -131,6 +137,7 @@ export function CreateNewOffer({
   storeProducts = [],
   markets: shopMarkets = [],
   existingOffers = [],
+  ianaTimezone = "UTC",
 }: CreateNewOfferProps) {
   const fetcher = useFetcher();
   const navigate = useNavigate();
@@ -1362,7 +1369,7 @@ export function CreateNewOffer({
                       size="large"
                       showTime
                       className="mt-1 w-full text-[14px]"
-                      value={startTime && dayjs(startTime).isValid() ? dayjs(startTime) : null}
+                      value={startTime && dayjs(startTime).isValid() ? dayjs(startTime).tz(ianaTimezone) : null}
                       onChange={(date) => {
                         const val = date ? date.toISOString() : '';
                         setStartTime(val);
@@ -1389,7 +1396,7 @@ export function CreateNewOffer({
                       size="large"
                       showTime
                       className="mt-1 w-full"
-                      value={endTime && dayjs(endTime).isValid() ? dayjs(endTime) : null}
+                      value={endTime && dayjs(endTime).isValid() ? dayjs(endTime).tz(ianaTimezone) : null}
                       onChange={(date) => {
                         const val = date ? date.toISOString() : '';
                         setEndTime(val);

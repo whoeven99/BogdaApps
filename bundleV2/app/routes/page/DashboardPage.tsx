@@ -16,6 +16,12 @@ import "../../styles/tailwind.css";
 import { CreateNewOffer } from "../component/CreateNewOffer/CreateNewOffer";
 import type { IndexLoaderData } from "../_index/route";
 import { parseDiscountRules } from "../../utils/offerParsing";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 interface DashboardPageProps {
   onViewAllOffers?: () => void;
@@ -27,6 +33,7 @@ interface DashboardPageProps {
   markets?: IndexLoaderData["markets"];
   shop: string;
   apiKey: string;
+  ianaTimezone: string;
   themeExtensionEnabled: boolean;
 }
 
@@ -109,6 +116,7 @@ export function DashboardPage({
   markets = [],
   shop,
   apiKey,
+  ianaTimezone,
   themeExtensionEnabled,
 }: DashboardPageProps) {
   const [searchParams] = useSearchParams();
@@ -333,6 +341,7 @@ export function DashboardPage({
           initialOffer={editingOffer}
           storeProducts={storeProducts}
           markets={markets}
+          ianaTimezone={ianaTimezone}
           existingOffers={(offers ?? []).map((o) => ({
             id: o.id,
             name: o.name,
@@ -520,9 +529,9 @@ export function DashboardPage({
                   
                 const formatTime = (timeStr: string | Date | undefined) => {
                   if (!timeStr) return "-";
-                  const d = new Date(timeStr);
-                  if (isNaN(d.getTime())) return "-";
-                  return d.toISOString().replace("T", " ").slice(0, 19);
+                  const d = dayjs(timeStr);
+                  if (!d.isValid()) return "-";
+                  return d.tz(ianaTimezone).format("YYYY-MM-DD HH:mm:ss");
                 };
 
                 return (

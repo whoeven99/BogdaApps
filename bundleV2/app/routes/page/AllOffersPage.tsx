@@ -5,6 +5,12 @@ import { Trash2, Pencil } from "lucide-react";
 import { Form, useNavigation, useSearchParams, useActionData } from "react-router";
 import type { IndexLoaderData } from "../_index/route";
 import { parseDiscountRules } from "../../utils/offerParsing";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 type AllOffersRow = {
   id: string;
@@ -22,13 +28,15 @@ interface AllOffersPageProps {
   onEditOffer?: (id: string) => void;
   offers?: IndexLoaderData["offers"];
   offersLoading?: boolean;
+  ianaTimezone?: string;
 }
 
 export function AllOffersPage({
   onCreateOffer,
   onEditOffer,
-  offers,
+  offers = [],
   offersLoading = false,
+  ianaTimezone = "UTC",
 }: AllOffersPageProps) {
   const handleShowGuide = () => {};
   const handleCreateOffer = () => {
@@ -183,9 +191,9 @@ export function AllOffersPage({
                   
                 const formatTime = (timeStr: string | Date | undefined) => {
                   if (!timeStr) return "-";
-                  const d = new Date(timeStr);
-                  if (isNaN(d.getTime())) return "-";
-                  return d.toISOString().replace("T", " ").slice(0, 19);
+                  const d = dayjs(timeStr);
+                  if (!d.isValid()) return "-";
+                  return d.tz(ianaTimezone).format("YYYY-MM-DD HH:mm:ss");
                 };
 
                 return (
