@@ -26,7 +26,7 @@ dayjs.extend(timezone);
 
 interface DashboardPageProps {
   onViewAllOffers?: () => void;
-  onViewAnalytics?: () => void;
+  onViewAnalytics?: (offerId?: string) => void;
   onCreateOffer?: () => void;
   offers?: IndexLoaderData["offers"];
   offersLoading?: boolean;
@@ -620,7 +620,7 @@ export function DashboardPage({
                           type="button"
                           className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[6px] rounded-[6px] hover:bg-[#f0f9f6] transition-all"
                           title="View Details"
-                          onClick={handleViewAllOffers}
+                          onClick={() => onViewAnalytics?.(offer.id)}
                         >
                           <ChartBar size={16} />
                         </button>
@@ -749,7 +749,7 @@ export function DashboardPage({
                       type="button"
                       className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[8px] rounded-[8px] hover:bg-[#f0f9f6] transition-all"
                       title="View Details"
-                      onClick={handleViewAllOffers}
+                      onClick={() => onViewAnalytics?.(offer.id)}
                     >
                       <ChartBar size={18} />
                     </button>
