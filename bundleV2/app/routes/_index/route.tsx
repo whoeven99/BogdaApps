@@ -1290,6 +1290,7 @@ export default function Index() {
   const [activeTab, setActiveTab] = useState<HomeTabKey>("dashboard");
   const [showCreateOffer, setShowCreateOffer] = useState(false);
   const [editingOfferId, setEditingOfferId] = useState<string | null>(null);
+  const [analyticsOfferId, setAnalyticsOfferId] = useState<string | null>(null);
   const offersFetcher = useFetcher<{ offers: OfferListItem[] }>();
   const storeProductsFetcher = useFetcher<{ storeProducts: StoreProductItem[] }>();
   const lastOffersRefreshToastRef = useRef<string | null>(null);
@@ -1464,7 +1465,14 @@ export default function Index() {
             ianaTimezone={ianaTimezone}
             themeExtensionEnabled={themeExtensionEnabled}
             onViewAllOffers={() => setActiveTab("offers")}
-            onViewAnalytics={() => setActiveTab("analytics")}
+            onViewAnalytics={(offerId) => {
+              if (offerId) {
+                setAnalyticsOfferId(offerId);
+              } else {
+                setAnalyticsOfferId(null);
+              }
+              setActiveTab("analytics");
+            }}
             onCreateOffer={() => {
               setShowCreateOffer(true);
               setEditingOfferId(null);
@@ -1477,6 +1485,9 @@ export default function Index() {
             offers={offers}
             offersLoading={isOffersLoading}
             ianaTimezone={ianaTimezone}
+            themeExtensionEnabled={themeExtensionEnabled}
+            shop={shop}
+            apiKey={apiKey}
             onCreateOffer={() => {
               setShowCreateOffer(true);
               setEditingOfferId(null);
@@ -1518,7 +1529,11 @@ export default function Index() {
             />
           ))}
         {activeTab === "analytics" && (
-          <AnalyticsPage shop={shop} offers={offers} />
+          <AnalyticsPage 
+            shop={shop} 
+            offers={offers} 
+            defaultOfferId={analyticsOfferId} 
+          />
         )}
         {activeTab === "pricing" && (
           <PricingPage
