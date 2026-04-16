@@ -193,9 +193,9 @@ export function CreateNewOffer({
   
   useEffect(() => {
     if (!initialOffer?.name) {
-      setOfferName(`#offer ${dayjs().format('YYYY-MM-DD HH:mm:ss')}`);
+      setOfferName(`#offer ${dayjs().tz(ianaTimezone).format('YYYY-MM-DD HH:mm:ss')}`);
     }
-  }, [initialOffer?.name]);
+  }, [initialOffer?.name, ianaTimezone]);
   const [cartTitle, setCartTitle] = useState(initialOffer?.cartTitle ?? "Bundle Discount");
   const [offerNameError, setOfferNameError] = useState("");
   const [cartTitleError, setCartTitleError] = useState("");
@@ -1367,7 +1367,8 @@ export function CreateNewOffer({
                     Start Time
                     <DatePicker
                       size="large"
-                      showTime
+                      showTime={{ format: 'HH:mm' }}
+                      format="YYYY-MM-DD HH:mm"
                       className="mt-1 w-full text-[14px]"
                       value={startTime && dayjs(startTime).isValid() ? dayjs(startTime).tz(ianaTimezone) : null}
                       onChange={(date) => {
@@ -1394,7 +1395,8 @@ export function CreateNewOffer({
                     End Time
                     <DatePicker
                       size="large"
-                      showTime
+                      showTime={{ format: 'HH:mm' }}
+                      format="YYYY-MM-DD HH:mm"
                       className="mt-1 w-full"
                       value={endTime && dayjs(endTime).isValid() ? dayjs(endTime).tz(ianaTimezone) : null}
                       onChange={(date) => {
