@@ -132,7 +132,7 @@ async function syncShopOffersMetafield(
     if (!shopId) {
       return {
         ok: false,
-        message: "?????????????? ID??Metafield ????????????",
+        message: "Failed to get shop ID, Metafield update failed",
       };
     }
 
@@ -196,7 +196,7 @@ async function syncShopOffersMetafield(
     return { ok: true };
   } catch (error) {
     const msg = error instanceof Error ? error.message : JSON.stringify(error);
-    return { ok: false, message: msg || "Metafield ??????" };
+    return { ok: false, message: msg || "Metafield sync failed" };
   }
 }
 
@@ -293,7 +293,7 @@ async function fetchStoreProducts(admin: any): Promise<StoreProductItem[]> {
       return {
         id: node.id,
         name: node.title,
-        price: priceRaw ? `???${priceRaw}` : "???0.00",
+        price: priceRaw ? `$${priceRaw}` : "$0.00",
         image: image || "https://via.placeholder.com/60",
       };
     })
@@ -396,7 +396,7 @@ const collectTypedBlocks = (
 };
 
 /**
- * App embed status for a single theme extension block (e.g. product_detail_message ??? product-detail-message.js).
+ * App embed status for a single theme extension block (e.g. product_detail_message -> product-detail-message.js).
  * Matches editor deep-link form: `appEmbed={client_id}/{blockHandle}` e.g. `1cdf.../product_detail_message`.
  * `type` in JSON may be `.../apps/{client_id}/blocks/{handle}/...` or `.../apps/{client_id}/{handle}/...`.
  */
@@ -405,7 +405,7 @@ const getThemeExtensionEnabled = async (
   extensionHandle: string,
   /** Liquid filename base, e.g. product_detail_message for product_detail_message.liquid */
   blockHandle: string,
-  /** SHOPIFY_API_KEY / app client id ??? required to match real storefront block types */
+  /** SHOPIFY_API_KEY / app client id - required to match real storefront block types */
   appClientId: string,
   /** App display name from shopify.app.*.toml (will be normalized to slug for matching) */
   appName?: string,
@@ -536,7 +536,7 @@ const getThemeExtensionEnabled = async (
   return false;
 };
 
-/** ???????????????????????????????????????? */
+/** Normalize offer name to a unique key */
 function normalizeOfferNameKey(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
@@ -546,7 +546,7 @@ import { AppProvider } from "@shopify/shopify-app-react-router/react";
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
 
-  // ????????????????????????
+  // Ensure web pixel exists
   void ensureWebPixel(admin, session.shop).catch((error) => {
     console.error("Failed to ensure web pixel exists", error);
   });
@@ -554,7 +554,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.error("Failed to ensure automatic app discount exists", error);
   });
 
-  // product_detail_message.liquid ??? product-detail-message.js
+  // product_detail_message.liquid -> product-detail-message.js
   // eslint-disable-next-line no-undef
   const apiKey = process.env.SHOPIFY_API_KEY || "";
   const appDisplayName = process.env.SHOPIFY_APP_NAME || process.env.APP_NAME;
@@ -639,7 +639,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const cycle = String(formData.get("cycle") || "");
     if (!isBillingPlanId(plan) || !isBillingCycle(cycle)) {
       return Response.json(
-        { ok: false as const, error: "??????????????????????????" },
+        { ok: false as const, error: "Invalid billing plan or cycle" },
         { status: 400 },
       );
     }
@@ -717,7 +717,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   console.log("action intent", intent);
 
-  // ???? fallback??????????????? intent??????? offerId???????????????????????????
+  // Return error if action fails
   if (!intent) {
     const hasId = formData.get("offerId");
     intent = hasId ? "update-offer" : "create-offer";
@@ -806,10 +806,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
 
     if (selectedProductsJson.length > 50_000) {
-      return offerActionErrorResponse("选品数据过大，请减少选择的商品数量。", 400);
+      return offerActionErrorResponse("Selected products data is too large. Please reduce the number of products.", 400);
     }
     if (discountRulesJson.length > 50_000) {
-      return offerActionErrorResponse("折扣规则数据过大，请减少规则数量。", 400);
+      return offerActionErrorResponse("Discount rules data is too large. Please reduce the number of rules.", 400);
     }
 
     const offerSettingsJson = JSON.stringify({
@@ -856,23 +856,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     if (!name) {
-      return offerActionErrorResponse("????? Offer ?????", 400);
+      return offerActionErrorResponse("Please enter an offer name.", 400);
     }
     if (!cartTitle) {
-      return offerActionErrorResponse("请填写 Display Title。", 400);
+      return offerActionErrorResponse("Please enter a display title.", 400);
     }
     if (!startTimeRaw || !endTimeRaw) {
-      return offerActionErrorResponse("???????????????????????????????????????", 400);
+      return offerActionErrorResponse("Start time and end time are required.", 400);
     }
 
     const startTime = new Date(startTimeRaw);
     const endTime = new Date(endTimeRaw);
 
     if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
-      return offerActionErrorResponse("???????????????????????????????????????", 400);
+      return offerActionErrorResponse("Invalid start or end time format.", 400);
     }
     if (endTime.getTime() <= startTime.getTime()) {
-      return offerActionErrorResponse("结束时间必须晚于开始时间。", 400);
+      return offerActionErrorResponse("End time must be after start time.", 400);
     }
 
     const nameKey = normalizeOfferNameKey(name);
@@ -887,14 +887,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
     if (nameTaken) {
       return offerActionErrorResponse(
-        "????????????????? Offer????????????",
+        "An offer with this name already exists. Please choose a different name.",
         409,
       );
     }
 
     const data = {
       shopName,
-      // ????????????????????????????????????/???????????????
+      // name 被作为唯一标识
       name,
       cartTitle,
       offerType,
@@ -917,7 +917,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           error.code === "P2002"
         ) {
           return offerActionErrorResponse(
-            "????????????????? Offer????????????",
+            "An offer with this name already exists. Please choose a different name.",
             409,
           );
         }
@@ -933,11 +933,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             offerSettingsJson,
           },
         });
-        return offerActionErrorResponse("???? Offer ????????????????", 500);
+        return offerActionErrorResponse("Failed to create offer. Please try again later.", 500);
       }
     } else {
       if (!idRaw) {
-        return offerActionErrorResponse("??? Offer ID????????????????", 400);
+        return offerActionErrorResponse("Missing offer ID, cannot update.", 400);
       }
       try {
         await writeOfferWithRetry(() =>
@@ -952,7 +952,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           error.code === "P2002"
         ) {
           return offerActionErrorResponse(
-            "????????????????? Offer????????????",
+            "An offer with this name already exists. Please choose a different name.",
             409,
           );
         }
@@ -969,7 +969,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             offerSettingsJson,
           },
         });
-        return offerActionErrorResponse("?????? Offer ????????????????", 500);
+        return offerActionErrorResponse("Failed to update offer. Please try again later.", 500);
       }
     }
 
@@ -980,7 +980,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         message: syncResult.message,
       });
       return offerActionErrorResponse(
-        `??????????????????/??????????????????${syncResult.message}`,
+        `Failed to sync data: ${syncResult.message}`,
         502,
       );
     }
@@ -1014,7 +1014,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return offerActionErrorResponse("Toggle status failed.", 500);
     }
 
-    // ??? metafield????????/?????????????????
+    // Sync metafield
     try {
       const shopNameToSync = updatedOffer?.shopName as string | undefined;
       if (shopNameToSync) {
@@ -1093,7 +1093,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     const prismaAny: any = prisma;
 
-    // ?????????????????? shopName?????????? metafield??
+    // Find shopName to sync metafield
     let shopNameToSync: string | undefined;
     try {
       const offerToDelete = await prismaAny.offer.findUnique({
@@ -1109,7 +1109,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return offerActionErrorResponse("Delete offer failed.", 500);
     }
 
-    // ??? metafield????????????????????????? offer
+    // Sync metafield after deleting offer
     try {
       if (shopNameToSync) {
         const shopOffers = (await prismaAny.offer.findMany({
@@ -1230,19 +1230,19 @@ export default function Index() {
 
   useEffect(() => {
     if (toast === "create-success") {
-      setToastMessage("Offer ??????????");
+      setToastMessage("Offer created successfully");
       setShowCreateOffer(false);
       setEditingOfferId(null);
     } else if (toast === "update-success") {
-      setToastMessage("Offer ????????????");
+      setToastMessage("Offer updated successfully");
       setShowCreateOffer(false);
       setEditingOfferId(null);
     } else if (toast === "delete-success") {
-      setToastMessage("Offer ????????????");
+      setToastMessage("Offer deleted successfully");
       setShowCreateOffer(false);
       setEditingOfferId(null);
     } else if (toast === "toggle-success") {
-      setToastMessage("Offer ?????????????");
+      setToastMessage("Offer status updated successfully");
     } else {
       setToastMessage(null);
     }
@@ -1306,7 +1306,7 @@ export default function Index() {
     <AppProvider embedded apiKey={apiKey}>
       <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px] relative">
         {toastMessage && (
-          <div className="fixed z-50 top-4 left-1/2 -translate-x-1/2 bg-[#108043] !text-white px-4 py-2 rounded shadow-lg text-sm font-sans">
+          <div className="fixed z-50 top-4 left-1/2 -translate-x-1/2 bg-[rgba(0,0,0,0.75)] backdrop-blur-sm !text-white px-4 py-2 rounded shadow-lg text-sm font-sans">
             {toastMessage}
           </div>
         )}

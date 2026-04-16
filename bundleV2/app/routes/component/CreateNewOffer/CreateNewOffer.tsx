@@ -417,7 +417,7 @@ export function CreateNewOffer({
     >
       {submitErrorToast && (
         <div
-          className="fixed z-50 top-4 left-1/2 -translate-x-1/2 bg-[#d72c0d] !text-white px-4 py-2 rounded shadow-lg text-sm font-sans max-w-[min(520px,calc(100vw-32px))] text-center"
+          className="fixed z-50 top-4 left-1/2 -translate-x-1/2 bg-[rgba(0,0,0,0.75)] backdrop-blur-sm !text-white px-4 py-2 rounded shadow-lg text-sm font-sans max-w-[min(520px,calc(100vw-32px))] text-center"
           role="alert"
         >
           {submitErrorToast}

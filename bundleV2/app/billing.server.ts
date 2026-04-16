@@ -138,7 +138,7 @@ export async function createRecurringSubscription(
 
   const confirmationUrl = payload?.confirmationUrl;
   if (!confirmationUrl) {
-    return { ok: false, error: "未返回确认链接（confirmationUrl）。" };
+    return { ok: false, error: "No confirmation URL returned." };
   }
 
   const shopifySubscriptionId =

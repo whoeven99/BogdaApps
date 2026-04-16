@@ -85,7 +85,7 @@ export function PricingPage({
 
   const fetcherError =
     fetcher.data && "ok" in fetcher.data && fetcher.data.ok === false
-      ? fetcher.data.error || "订阅创建失败"
+      ? fetcher.data.error || "Failed to create subscription"
       : null;
 
   const isCurrentPlan = (planId: BillingPlanId) => {
@@ -116,7 +116,7 @@ export function PricingPage({
           }}
         >
           <p className="polaris-text-body-sm" style={{ margin: 0 }}>
-            开发环境：计费为 <strong>测试模式</strong>（test charge），不会产生真实扣款。
+            Development environment: Billing is in <strong>test mode</strong> (test charge) and will not incur real charges.
           </p>
         </div>
       )}
@@ -140,9 +140,7 @@ export function PricingPage({
       {hasAnyActive && (
         <div className="polaris-card" style={{ marginBottom: 16, padding: 12 }}>
           <p className="polaris-text-body-sm" style={{ margin: 0 }}>
-            当前店铺已有生效中的应用订阅。若需更换套餐，请在 Shopify
-            后台的「设置 → 应用和销售渠道」中管理该应用订阅，或选择其他周期/套餐发起新订阅（以 Shopify
-            规则为准）。
+            This store already has an active app subscription. To change your plan, please manage your app subscription in the Shopify admin under "Settings → Apps and sales channels", or select a different billing cycle/plan to start a new subscription (subject to Shopify rules).
           </p>
         </div>
       )}
@@ -152,7 +150,7 @@ export function PricingPage({
           Choose the perfect plan for your business
         </h2>
         <p className="polaris-text-subdued">
-          含 14 天试用（通过 Shopify 结算）。点击按钮将跳转至 Shopify 后台确认订阅。
+          Includes a 14-day free trial (billed through Shopify). Clicking the button will redirect you to the Shopify admin to confirm the subscription.
         </p>
 
         {/* Billing Cycle Toggle */}
@@ -315,10 +313,10 @@ export function PricingPage({
                     disabled={fetcher.state !== "idle" || current}
                   >
                     {current
-                      ? "当前套餐"
+                      ? "Current Plan"
                       : fetcher.state !== "idle"
-                        ? "处理中…"
-                        : "在 Shopify 中订阅"}
+                        ? "Processing..."
+                        : "Subscribe in Shopify"}
                   </button>
                 </fetcher.Form>
               </div>
