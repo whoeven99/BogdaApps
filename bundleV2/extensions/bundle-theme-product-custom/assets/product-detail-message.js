@@ -899,7 +899,8 @@ function run() {
     }
 
     // Set offer name to sessionStorage for tracking.
-    const offerName = currentOffer.offerName || `Bundle-${currentOffer.id}`;
+    console.log("[ciwi] currentOffer:", currentOffer);
+    const offerName = currentOffer.name || `Bundle-${currentOffer.id}`;
     console.log("[ciwi] setting offerName:", offerName);
     sessionStorage.setItem("current-ciwi-offer-name", offerName);
 
