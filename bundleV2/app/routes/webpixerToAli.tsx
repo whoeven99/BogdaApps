@@ -26,6 +26,13 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
+export const options = () => {
+  return new Response(null, {
+    status: 204,
+    headers: corsHeaders,
+  });
+};
+
 type SlsContentItem = { key?: unknown; value?: unknown };
 type SlsLogLike = {
   contents?: SlsContentItem[];
@@ -291,12 +298,6 @@ async function runSlsSql(
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
-  if (request.method === "OPTIONS") {
-    return new Response(null, {
-      status: 200,
-      headers: corsHeaders,
-    });
-  }
 
   if (request.method === "GET" && url.searchParams.get("mode") === "overview") {
     const shopName = String(url.searchParams.get("shopName") || "");
