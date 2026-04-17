@@ -14,7 +14,7 @@ register(({ analytics, browser, settings }) => {
 
     // Get offer name from sessionStorage, which is set when the offer is rendered.
     const offerName = (await browser.sessionStorage.getItem("current-ciwi-offer-name")) || "NO_BUNDLE_TITLE";
-
+    console.log("sessionStorage", browser.sessionStorage);
     WebpixerToAli({
       server,
       event: "product_viewed",
@@ -34,8 +34,9 @@ register(({ analytics, browser, settings }) => {
 
   analytics.subscribe("product_added_to_cart", async (event) => {
     // Get offer name from sessionStorage, which is set when the offer is rendered.
+    console.log("product_added_to_cart", event);
     const offerName = (await browser.sessionStorage.getItem("current-ciwi-offer-name")) || "NO_BUNDLE_TITLE";  
-
+    console.log("sessionStorage", browser.sessionStorage);
     WebpixerToAli({
       server,
       event: "product_added_to_cart",
