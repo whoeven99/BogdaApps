@@ -21,25 +21,49 @@ if (process.env.NODE_ENV === "prod" || process.env.NODE_ENV === "test") {
 
 let bogdaRateCache: Record<string, string> | null = null;
 
-async function preloadBogdaRate() {
-  if (bogdaRateCache) {
-    return;
-  }
+async function updateBogdaRate() {
   try {
     const rate = await redis.hgetall("bogda:rate");
     if (rate && Object.keys(rate).length > 0) {
       bogdaRateCache = rate;
-      console.log("[redis] Bogda rate loaded from Redis.", bogdaRateCache);
+      console.log("[redis] Bogda rate cache updated from Redis.", bogdaRateCache);
     } else {
-        console.log("[redis] No bogda:rate found in Redis or the hash is empty.");
+      console.log(
+        "[redis] No bogda:rate found in Redis or the hash is empty. Cache not updated.",
+      );
     }
   } catch (error) {
-    console.error("[redis] Failed to load bogda rate from Redis:", error);
+    console.error("[redis] Failed to update bogda rate from Redis:", error);
   }
 }
 
-// 在模块首次加载时预加载数据。
-preloadBogdaRate();
+function scheduleDailyUpdate() {
+  const now = new Date();
+
+  // 计算明天 00:05:00 (UTC)
+  const tomorrow = new Date(now);
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+  tomorrow.setUTCHours(0, 5, 0, 0);
+
+  const timeToMidnight = tomorrow.getTime() - now.getTime();
+
+  console.log(
+    `[redis] Next bogda rate update scheduled in ${
+      timeToMidnight / (1000 * 60 * 60)
+    } hours.`,
+  );
+
+  setTimeout(() => {
+    updateBogdaRate();
+    
+    // 之后每24小时执行一次
+    setInterval(updateBogdaRate, 24 * 60 * 60 * 1000);
+  }, timeToMidnight);
+}
+
+// 在模块首次加载时预加载数据，并安排每日更新。
+updateBogdaRate();
+scheduleDailyUpdate();
 
 export function getBogdaRate() {
   return bogdaRateCache;
