@@ -46,6 +46,7 @@ type DashboardOfferRow = {
   cartTitle: string;
   offerType: string;
   discountRulesJson: string | null;
+  offerSettingsJson: string | null;
   isActive: boolean;
   createdAt: string | Date | undefined;
   updatedAt: string | Date | undefined;
@@ -163,6 +164,7 @@ export function DashboardPage({
       cartTitle: offer.cartTitle,
       offerType: offer.offerType,
       discountRulesJson: offer.discountRulesJson,
+      offerSettingsJson: offer.offerSettingsJson,
       isActive,
       createdAt,
       updatedAt,
@@ -591,7 +593,14 @@ export function DashboardPage({
                   if (!timeStr) return "-";
                   const d = dayjs(timeStr);
                   if (!d.isValid()) return "-";
-                  return d.tz(ianaTimezone).format("YYYY-MM-DD HH:mm:ss");
+                  let tz = ianaTimezone;
+                  try {
+                    if (offer.offerSettingsJson) {
+                      const parsed = JSON.parse(offer.offerSettingsJson);
+                      if (parsed.scheduleTimezone) tz = parsed.scheduleTimezone;
+                    }
+                  } catch (e) {}
+                  return d.tz(tz).format("YYYY-MM-DD HH:mm:ss") + ` (UTC${d.tz(tz).format('Z')})`;
                 };
 
                 return (

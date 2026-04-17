@@ -334,7 +334,14 @@ export default function Index() {
                 if (!timeStr) return "-";
                 const d = dayjs(timeStr);
                 if (!d.isValid()) return "-";
-                return d.tz(ianaTimezone).format("YYYY-MM-DD HH:mm:ss");
+                let tz = ianaTimezone;
+                try {
+                  if ((offer as any).offerSettingsJson) {
+                    const parsed = JSON.parse((offer as any).offerSettingsJson);
+                    if (parsed.scheduleTimezone) tz = parsed.scheduleTimezone;
+                  }
+                } catch (e) {}
+                return d.tz(tz).format("YYYY-MM-DD HH:mm:ss") + ` (UTC${d.tz(tz).format('Z')})`;
               };
 
               return (
@@ -414,7 +421,14 @@ export default function Index() {
               if (!timeStr) return "-";
               const d = dayjs(timeStr);
               if (!d.isValid()) return "-";
-              return d.tz(ianaTimezone).format("YYYY-MM-DD HH:mm:ss");
+              let tz = ianaTimezone;
+              try {
+                if ((offer as any).offerSettingsJson) {
+                  const parsed = JSON.parse((offer as any).offerSettingsJson);
+                  if (parsed.scheduleTimezone) tz = parsed.scheduleTimezone;
+                }
+              } catch (e) {}
+              return d.tz(tz).format("YYYY-MM-DD HH:mm:ss") + ` (UTC${d.tz(tz).format('Z')})`;
             };
 
             return (

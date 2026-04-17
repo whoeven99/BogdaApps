@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { useFetcher, useNavigate, useSearchParams } from "react-router";
-import { Button, Input, Select, Switch, Checkbox, DatePicker, Modal } from "antd";
+import { Button, Input, Select, Switch, Checkbox, DatePicker, Modal, message } from "antd";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -214,6 +214,25 @@ export function CreateNewOffer({
   const offerSettings = parseOfferSettings(
     initialOffer?.offerSettingsJson,
   );
+
+  const [scheduleTimezone, setScheduleTimezone] = useState(
+    offerSettings.scheduleTimezone || ianaTimezone
+  );
+
+  const tzOptions = useMemo(() => {
+    try {
+      const tzs = Intl.supportedValuesOf('timeZone');
+      return tzs.map(tz => {
+        const offset = dayjs().tz(tz).format('Z');
+        return { value: tz, label: `(UTC${offset}) ${tz}` };
+      });
+    } catch (e) {
+      return [
+        { value: 'UTC', label: '(UTC+00:00) UTC' },
+        { value: ianaTimezone, label: `(UTC${dayjs().tz(ianaTimezone).format('Z')}) ${ianaTimezone}` }
+      ];
+    }
+  }, [ianaTimezone]);
 
   const [totalBudget, setTotalBudget] = useState(
     offerSettings.totalBudget != null
@@ -490,6 +509,7 @@ export function CreateNewOffer({
       <input type="hidden" name="title" value={widgetTitle} />
       <input type="hidden" name="offerType" value={offerType} />
       <input type="hidden" name="layoutFormat" value={layoutFormat} />
+      <input type="hidden" name="scheduleTimezone" value={scheduleTimezone} />
       <input type="hidden" name="accentColor" value={accentColor} />
       <input type="hidden" name="titleFontSize" value={titleFontSize} />
       <input type="hidden" name="titleFontWeight" value={titleFontWeight} />
@@ -1414,9 +1434,22 @@ export function CreateNewOffer({
               </div>
 
               <div className="mb-8">
-                <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                  Schedule
-                </h3>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-[14px] font-medium text-[#1c1f23] flex items-center">
+                    Schedule
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[13px] text-[#5c6166]">Timezone:</span>
+                    <Select
+                      size="small"
+                      showSearch
+                      className="w-[240px]"
+                      value={scheduleTimezone}
+                      onChange={setScheduleTimezone}
+                      options={tzOptions}
+                    />
+                  </div>
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                   <label className="block text-[14px] font-medium text-[#1c1f23]">
                     Start Time
@@ -1425,9 +1458,9 @@ export function CreateNewOffer({
                       showTime={{ format: 'HH:mm' }}
                       format="YYYY-MM-DD HH:mm"
                       className="mt-1 w-full text-[14px]"
-                      value={startTime && dayjs(startTime).isValid() ? dayjs(startTime).tz(ianaTimezone) : null}
+                      value={startTime && dayjs(startTime).isValid() ? dayjs(startTime).tz(scheduleTimezone) : null}
                       onChange={(date) => {
-                        const val = date ? date.toISOString() : '';
+                        const val = date ? dayjs.tz(date.format('YYYY-MM-DD HH:mm:ss'), scheduleTimezone).toISOString() : '';
                         setStartTime(val);
                         if (startTimeError && val) {
                           setStartTimeError("");
@@ -1453,9 +1486,9 @@ export function CreateNewOffer({
                       showTime={{ format: 'HH:mm' }}
                       format="YYYY-MM-DD HH:mm"
                       className="mt-1 w-full"
-                      value={endTime && dayjs(endTime).isValid() ? dayjs(endTime).tz(ianaTimezone) : null}
+                      value={endTime && dayjs(endTime).isValid() ? dayjs(endTime).tz(scheduleTimezone) : null}
                       onChange={(date) => {
-                        const val = date ? date.toISOString() : '';
+                        const val = date ? dayjs.tz(date.format('YYYY-MM-DD HH:mm:ss'), scheduleTimezone).toISOString() : '';
                         setEndTime(val);
                         if (endTimeError && val) {
                           setEndTimeError("");
@@ -1589,6 +1622,17 @@ export function CreateNewOffer({
               }
               setOfferNameError("");
               setStep(2);
+              e.preventDefault();
+              return;
+            }
+
+            if (step === 2) {
+              if (selectedProductsData.length === 0) {
+                message.error("Please select at least one product.");
+                e.preventDefault();
+                return;
+              }
+              setStep(3);
               e.preventDefault();
               return;
             }

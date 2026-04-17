@@ -84,6 +84,7 @@ export type OfferSettings = {
   buttonText: string;
   buttonPrimaryColor: string;
   showCustomButton: boolean;
+  scheduleTimezone?: string;
 };
 
 export function parseOfferSettings(offerSettingsJson?: string | null): OfferSettings {
@@ -106,6 +107,7 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
       buttonText: "Add to Cart",
       buttonPrimaryColor: "#008060",
       showCustomButton: true,
+      scheduleTimezone: undefined,
     };
   }
 
@@ -148,6 +150,7 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
       buttonText: parsed.buttonText || "Add to Cart",
       buttonPrimaryColor: sanitizeHexColor(parsed.buttonPrimaryColor, "#008060"),
       showCustomButton: parsed.showCustomButton !== false,
+      scheduleTimezone: parsed.scheduleTimezone,
     };
   } catch {
     return parseOfferSettings(null);
