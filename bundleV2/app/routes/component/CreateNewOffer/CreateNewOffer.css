@@ -442,8 +442,8 @@
 }
 
 .create-offer-discount-form-row--inline {
-  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
-  align-items: end;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
 }
 
 .create-offer-add-tier-button,

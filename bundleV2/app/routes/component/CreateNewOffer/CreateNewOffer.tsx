@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useFetcher, useNavigate, useSearchParams } from "react-router";
-import { Button, Input, Select, Switch, Checkbox, DatePicker } from "antd";
+import { Button, Input, Select, Switch, Checkbox, DatePicker, Modal } from "antd";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -144,6 +144,7 @@ export function CreateNewOffer({
   const [searchParams] = useSearchParams();
   const [submitErrorToast, setSubmitErrorToast] = useState<string | null>(null);
   const wasSubmittingRef = useRef(false);
+  const confirmedHighDiscountRef = useRef(false);
 
   useEffect(() => {
     if (fetcher.state === "submitting") {
@@ -420,6 +421,27 @@ export function CreateNewOffer({
         }
         if (hasError) {
           e.preventDefault();
+          return;
+        }
+
+        const hasHighDiscount = normalizedDiscountRules.some(r => r.discountPercent >= 90);
+        if (hasHighDiscount && !confirmedHighDiscountRef.current) {
+          e.preventDefault();
+          Modal.confirm({
+            title: "High Discount Warning",
+            content: "You have set a discount of 90% or more. This means the product is nearly free. Are you sure you want to proceed?",
+            okText: "Yes, proceed",
+            cancelText: "Cancel",
+            onOk: () => {
+              confirmedHighDiscountRef.current = true;
+              // form elements trigger re-submit
+              e.target.requestSubmit();
+            },
+            onCancel: () => {
+              confirmedHighDiscountRef.current = false;
+            }
+          });
+          return;
         }
       }}
     >
@@ -797,9 +819,10 @@ export function CreateNewOffer({
                                 value={rule.discountPercent}
                                 onChange={(e) => {
                                   const parsedValue = Number(e.target.value);
+                                  if (parsedValue > 100) return; // Do not allow entering > 100
                                   const nextPercent =
                                     Number.isFinite(parsedValue) && parsedValue >= 0
-                                      ? Math.max(0, Math.min(100, parsedValue))
+                                      ? parsedValue
                                       : 0;
                                   setDiscountRules((prev) =>
                                     prev.map((r, i) =>
@@ -810,6 +833,16 @@ export function CreateNewOffer({
                                   );
                                 }}
                               />
+                              {rule.discountPercent > 50 && rule.discountPercent < 90 && (
+                                <div className="text-[#faad14] text-[12px] mt-1 font-normal">
+                                  A discount over 50% may result in losses. Please double-check.
+                                </div>
+                              )}
+                              {rule.discountPercent >= 90 && (
+                                <div className="text-[#ff4d4f] text-[12px] mt-1 font-normal">
+                                  A discount of 90% or more means the product is nearly free.
+                                </div>
+                              )}
                             </label>
                           </div>
                           

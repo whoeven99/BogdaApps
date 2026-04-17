@@ -167,6 +167,8 @@ export default function App() {
       <div className="py-8 text-center text-sm text-[#666]">
         <a 
           href="mailto:support@ciwi.ai" 
+          target="_blank" 
+          rel="noopener noreferrer" 
           className="mx-3 text-[#666] hover:text-[#008060] transition-colors"
         >
           Contact Us

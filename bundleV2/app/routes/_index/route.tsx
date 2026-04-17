@@ -1396,8 +1396,9 @@ export default function Index() {
 
   return (
     <AppProvider embedded apiKey={apiKey}>
-      <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px] relative">
-        {toastMessage && (
+      <div className="flex flex-col min-h-screen">
+        <div className="flex-1 max-w-[1280px] w-full mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px] relative">
+          {toastMessage && (
           <div className="fixed z-50 top-4 left-1/2 -translate-x-1/2 bg-[rgba(0,0,0,0.75)] backdrop-blur-sm !text-white px-4 py-2 rounded shadow-lg text-sm font-sans">
             {toastMessage}
           </div>
@@ -1541,6 +1542,26 @@ export default function Index() {
             billingTestMode={billingTestMode}
           />
         )}
+        </div>
+        <div className="py-8 text-center text-sm text-[#666] w-full">
+          <a 
+            href="mailto:support@ciwi.ai" 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            className="mx-3 text-[#666] hover:text-[#008060] transition-colors"
+          >
+            Contact Us
+          </a>
+          |
+          <a 
+            href="https://iw73s3ld6wy.feishu.cn/wiki/UEumwgOLJi90rEknevWcZp7HnQg?from=from_copylink" 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            className="mx-3 text-[#666] hover:text-[#008060] transition-colors"
+          >
+            User Guide
+          </a>
+        </div>
       </div>
     </AppProvider>
   );
