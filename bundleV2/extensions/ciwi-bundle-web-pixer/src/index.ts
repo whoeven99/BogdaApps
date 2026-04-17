@@ -48,6 +48,12 @@ register(({ analytics, browser, settings }) => {
             // Use product GID for tracking, not variant ID.
             id: event.data.cartLine?.merchandise?.product?.id ? `${SHOPIFY_PRODUCT_GID_PREFIX}${event.data.cartLine.merchandise.product.id}` : "",
             title: offerName,
+            totalAmount: event.data.cartLine?.cost?.totalAmount,
+            product: {
+              id: event.data.cartLine?.merchandise?.product?.id,
+              title: event.data.cartLine?.merchandise?.product?.title,
+              variantTitle: event.data.cartLine?.merchandise?.title,
+            },
           },
         ],
       }),
