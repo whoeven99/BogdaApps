@@ -386,7 +386,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
       let exposureSql = `__topic__: "product_viewed" and shopName: "${safeShopName}"`;
       if (safeBundleName) {
-        exposureSql += ` and extra: "${safeBundleName}"`;
+        if (safeBundleName === "bundle") {
+          exposureSql += ' and extra: "bundle" and not extra: "NO_BUNDLE_TITLE"';
+        } else {
+          exposureSql += ` and extra: "${safeBundleName}"`;
+        }
       }
       exposureSql += ` | SELECT COUNT(1) AS exposure_pv, COUNT(DISTINCT clientId) AS exposure_uv`;
 
