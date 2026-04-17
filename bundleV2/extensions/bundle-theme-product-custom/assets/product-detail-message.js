@@ -268,18 +268,37 @@ function getUnitPriceFromProductDom() {
 }
 
 function getCurrentUnitPrice() {
-  const productMeta = window?.ShopifyAnalytics?.meta?.product;
   const selectedVariantId = getSelectedVariantId();
+  const configEl = document.getElementById("ciwi-bundles-config");
+  if (configEl) {
+    try {
+      const config = JSON.parse(configEl.textContent || "{}");
+      const variants = Array.isArray(config?.variants) ? config.variants : [];
+      if (selectedVariantId && variants.length) {
+        const matched = variants.find(
+          (v) => String(v?.id || "") === selectedVariantId,
+        );
+        const matchedPrice = normalizePriceNumber(matched?.price);
+        if (matchedPrice != null) return matchedPrice;
+      }
+      const firstVariantPrice = normalizePriceNumber(variants[0]?.price);
+      if (firstVariantPrice != null) return firstVariantPrice;
+    } catch {
+      // ignore config parse error
+    }
+  }
+
+  const productMeta = window?.ShopifyAnalytics?.meta?.product;
   const variants =
     productMeta && typeof productMeta === "object" && Array.isArray(productMeta.variants)
       ? productMeta.variants
       : [];
 
-  // 1) 页面上顾客看到的单价（随变体/样式切换更新，优先）
+  // 2) 页面上顾客看到的单价（兜底）
   const domPrice = getUnitPriceFromProductDom();
   if (domPrice != null) return domPrice;
 
-  // 2) Analytics 里按当前 variant id 匹配
+  // 3) Analytics 里按当前 variant id 匹配
   if (productMeta && typeof productMeta === "object") {
     if (selectedVariantId && variants.length) {
       const matched = variants.find(
