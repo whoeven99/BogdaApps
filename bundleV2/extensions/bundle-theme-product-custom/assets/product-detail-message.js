@@ -374,6 +374,7 @@ function getCurrentOffer(offersConfig) {
   const offers = Array.isArray(offersConfig?.offers) ? offersConfig.offers : [];
   const currentProductGid = getCurrentProductGid();
   const currentMarketId = getCurrentMarketId();
+  const now = Date.now();
 
   console.log("[ciwi] offers total:", offers.length, "currentProductGid:", currentProductGid, "currentMarketId:", currentMarketId);
 
@@ -386,6 +387,21 @@ function getCurrentOffer(offersConfig) {
     if (!offer || typeof offer !== "object") continue;
     if (offer.status === false) continue;
     
+    // Check schedule
+    if (offer.startTime) {
+      const startTimeMs = Date.parse(offer.startTime);
+      if (Number.isFinite(startTimeMs) && now < startTimeMs) {
+        continue;
+      }
+    }
+
+    if (offer.endTime) {
+      const endTimeMs = Date.parse(offer.endTime);
+      if (Number.isFinite(endTimeMs) && now > endTimeMs) {
+        continue;
+      }
+    }
+
     // Check market filter
     if (currentMarketId && offer.offerSettingsJson) {
       try {

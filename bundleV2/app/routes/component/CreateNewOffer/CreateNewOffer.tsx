@@ -435,6 +435,9 @@ export function CreateNewOffer({
         } else if (endTime && (!dayjs(endTime).isValid() || endTime === "")) {
           setEndTimeError("Invalid end time format.");
           hasError = true;
+        } else if (startTime && endTime && dayjs(endTime).isBefore(dayjs(startTime))) {
+          setEndTimeError("End time must be after start time.");
+          hasError = true;
         } else {
           setEndTimeError("");
         }
@@ -1462,8 +1465,11 @@ export function CreateNewOffer({
                       onChange={(date) => {
                         const val = date ? dayjs.tz(date.format('YYYY-MM-DD HH:mm:ss'), scheduleTimezone).toISOString() : '';
                         setStartTime(val);
-                        if (startTimeError && val) {
+                        if (val && endTime && dayjs(endTime).isBefore(dayjs(val))) {
+                          setStartTimeError("Start time must be before end time.");
+                        } else {
                           setStartTimeError("");
+                          setEndTimeError("");
                         }
                       }}
                       status={startTimeError ? "error" : ""}
@@ -1490,8 +1496,11 @@ export function CreateNewOffer({
                       onChange={(date) => {
                         const val = date ? dayjs.tz(date.format('YYYY-MM-DD HH:mm:ss'), scheduleTimezone).toISOString() : '';
                         setEndTime(val);
-                        if (endTimeError && val) {
+                        if (val && startTime && dayjs(val).isBefore(dayjs(startTime))) {
+                          setEndTimeError("End time must be after start time.");
+                        } else {
                           setEndTimeError("");
+                          setStartTimeError("");
                         }
                       }}
                       status={endTimeError ? "error" : ""}

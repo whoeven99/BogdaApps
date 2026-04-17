@@ -32,6 +32,8 @@ type OfferMetafieldPayload = {
     name?: string;
     cartTitle?: string;
     status?: boolean;
+    startTime?: string;
+    endTime?: string;
     selectedProductsJson?: string | null;
     discountRulesJson?: string | null;
     offerSettingsJson?: string | null;
@@ -356,10 +358,28 @@ const findOffer = (
   marketId: string | undefined,
   offers: Offer[],
 ): Offer | null => {
+  const now = Date.now();
+
   for (const offer of offers) {
     if (offer.status === false) {
       log("offer_skip_disabled", { offerId: offer.id, name: offer.name });
       continue;
+    }
+
+    if (offer.startTime) {
+      const startTimeMs = Date.parse(offer.startTime);
+      if (Number.isFinite(startTimeMs) && now < startTimeMs) {
+        log("offer_skip_before_start", { offerId: offer.id, name: offer.name, startTime: offer.startTime });
+        continue;
+      }
+    }
+
+    if (offer.endTime) {
+      const endTimeMs = Date.parse(offer.endTime);
+      if (Number.isFinite(endTimeMs) && now > endTimeMs) {
+        log("offer_skip_after_end", { offerId: offer.id, name: offer.name, endTime: offer.endTime });
+        continue;
+      }
     }
 
     if (marketId && offer.offerSettingsJson) {
