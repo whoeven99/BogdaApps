@@ -466,7 +466,7 @@ export function DashboardPage({
                 }}
               >
                 {gmvGrowthRate !== 0 && `${gmvGrowthRateArrow} `}
-                {gmvGrowthRate >= 0 ? "+" : ""}{Math.abs(gmvGrowthRate).toFixed(1)}% from last month
+                {gmvGrowthRate >= 0 ? "+" : ""}{Math.abs(gmvGrowthRate).toFixed(2)}% from last month
               </span>
             </div>
 
@@ -486,14 +486,14 @@ export function DashboardPage({
                 Avg. Conversion
               </span>
               <h3 className="font-sans font-semibold text-[28px] leading-[42px] text-[#1c1f23] tracking-wide m-0">
-                {bundleOrders > 0
-                  ? `${((productViewed / bundleOrders) * 100).toFixed(2)}%`
+                {productViewed > 0
+                  ? `${((bundleOrders / productViewed) * 100).toFixed(2)}%`
                   : "0.00%"}
               </h3>
               <span
                 className="font-sans font-normal text-[14px] leading-[22.4px] tracking-normal"
               >
-                Exposure {productViewed} / Orders {bundleOrders}
+                Orders {bundleOrders} / Exposure {productViewed}
               </span>
             </div>
           </div>

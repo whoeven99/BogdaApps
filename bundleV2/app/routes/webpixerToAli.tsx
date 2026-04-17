@@ -687,10 +687,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       const gmvPrevious30Days = calculateGmvFromSqlResult(gmvPrevious30DaysResult);
 
       let gmvGrowthRate = 0;
-      if (gmvPrevious30Days > 0) {
+      if (gmvPrevious30Days <= 0 && totalGmv > 0) {
+        gmvGrowthRate = totalGmv;
+      } else if (gmvPrevious30Days > 0 && totalGmv <= 0) {
+        gmvGrowthRate = totalGmv - gmvPrevious30Days;
+      } else if (gmvPrevious30Days > 0) {
         gmvGrowthRate = ((totalGmv - gmvPrevious30Days) / gmvPrevious30Days) * 100;
-      } else if (totalGmv > 0) {
-        gmvGrowthRate = 100;
       }
 
       return new Response(
