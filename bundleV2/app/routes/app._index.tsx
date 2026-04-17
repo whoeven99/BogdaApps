@@ -99,27 +99,41 @@ export default function Index() {
   const { ianaTimezone, totalGmv, gmvGrowthRate, session } = useLoaderData<typeof loader>();
   const isThemeExtensionEnabled = true;
   const [bundleOrders, setBundleOrders] = useState(0);
+  const [productViewed, setProductViewed] = useState(0);
 
   useEffect(() => {
-    const fetchBundleOrders = async () => {
+    const fetchData = async () => {
       try {
         const url = new URL(window.location.href);
-        const overviewUrl = `${url.origin}/webpixerToAli?mode=dashboard-overview-bundle-orders&shopName=${session.shop}`;
-        const response = await fetch(overviewUrl);
+        const bundleOrdersUrl = `${url.origin}/webpixerToAli?mode=dashboard-overview-bundle-orders&shopName=${session.shop}`;
+        const productViewedUrl = `${url.origin}/webpixerToAli?mode=dashboard-overview-product-viewed&shopName=${session.shop}`;
 
-        if (response.ok) {
-          const data = await response.json();
+        const [bundleOrdersResponse, productViewedResponse] = await Promise.all([
+          fetch(bundleOrdersUrl),
+          fetch(productViewedUrl),
+        ]);
+
+        if (bundleOrdersResponse.ok) {
+          const data = await bundleOrdersResponse.json();
           if (data.success) {
             console.log("[ZZ-Test] Fetched bundle orders:", data.totalCount);
             setBundleOrders(data.totalCount || 0);
           }
         }
+
+        if (productViewedResponse.ok) {
+          const data = await productViewedResponse.json();
+           console.log("[ZZ-Test] Fetched productViewed:", data.totalCount);
+          if (data.success) {
+            setProductViewed(data.totalCount || 0);
+          }
+        }
       } catch (error) {
-        console.error("[ZZ-Test] Failed to fetch bundle orders:", error);
+        console.error("Failed to fetch dashboard data:", error);
       }
     };
 
-    fetchBundleOrders();
+    fetchData();
   }, [session.shop]);
 
   const gmvGrowthRateColor =
@@ -219,20 +233,14 @@ export default function Index() {
                 Avg. Conversion
               </span>
               <h3 className="!font-sans !font-semibold !text-[28px] !leading-[42px] !text-[#1c1f23] !tracking-wide !m-0">
-                {mockOverviewData.avgConversionRate}%
+                {bundleOrders > 0
+                  ? `${((productViewed / bundleOrders) * 100).toFixed(2)}%`
+                  : "0.00%"}
               </h3>
               <span
                 className="!font-sans !font-normal !text-[14px] !leading-[22.4px] !tracking-normal"
-                style={{
-                  color:
-                    mockOverviewData.conversionTrend === 0
-                      ? "#916a00"
-                      : mockOverviewData.conversionTrend > 0
-                        ? "#108043"
-                        : "#D93025",
-                }}
               >
-                ↑ +{mockOverviewData.conversionTrend}% from last month
+                Exposure {productViewed} / Orders {bundleOrders}
               </span>
             </div>
           </div>

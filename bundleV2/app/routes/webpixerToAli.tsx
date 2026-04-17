@@ -560,6 +560,66 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
 
+  if (
+    request.method === "GET" &&
+    url.searchParams.get("mode") === "dashboard-overview-product-viewed"
+  ) {
+    const shopName = String(url.searchParams.get("shopName") || "");
+    if (!shopName) {
+      return new Response(
+        JSON.stringify({ success: false, message: "shopName is required" }),
+        { status: 400, headers: corsHeaders },
+      );
+    }
+
+    const sls = createSlsClient();
+    if (!sls) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: "Missing Alibaba Log credentials",
+        }),
+        { status: 503, headers: corsHeaders },
+      );
+    }
+
+    try {
+      const today = new Date();
+      const prior30 = new Date(new Date().setDate(today.getDate() - 30));
+      const safeShopName = escapeSlsString(shopName);
+
+      const productViewedSql = `__topic__: "product_viewed" and shopName: "${safeShopName}" and extra: "bundle" and not extra: "NO_BUNDLE_TITLE" | SELECT COUNT(*) AS total_count FROM log`;
+
+      const [productViewedLast30DaysAgg] = await Promise.all([
+        runSlsSql(sls, prior30, today, productViewedSql, "product-viewed-last-30d"),
+      ]);
+
+      const totalCount = toNumber(productViewedLast30DaysAgg.total_count);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          totalCount,
+        }),
+        {
+          status: 200,
+          headers: corsHeaders,
+        },
+      );
+    } catch (error) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: String(error),
+        }),
+        {
+          status: 500,
+          headers: corsHeaders,
+        },
+      );
+    }
+  }
+
   if (request.method === "GET" && url.searchParams.get("mode") === "dashboard-overview-gmv") {
     const shopName = String(url.searchParams.get("shopName") || "");
     if (!shopName) {
