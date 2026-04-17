@@ -14,7 +14,7 @@ register(({ analytics, browser, settings }) => {
 
     // Get offer name from sessionStorage, which is set when the offer is rendered.
     const offerName = (await browser.sessionStorage.getItem("current-ciwi-offer-name")) || "NO_BUNDLE_TITLE";
-
+    console.log("sessionStorage", browser.sessionStorage);
     WebpixerToAli({
       server,
       event: "product_viewed",
@@ -34,8 +34,9 @@ register(({ analytics, browser, settings }) => {
 
   analytics.subscribe("product_added_to_cart", async (event) => {
     // Get offer name from sessionStorage, which is set when the offer is rendered.
+    console.log("product_added_to_cart", event);
     const offerName = (await browser.sessionStorage.getItem("current-ciwi-offer-name")) || "NO_BUNDLE_TITLE";  
-
+    console.log("sessionStorage", browser.sessionStorage);
     WebpixerToAli({
       server,
       event: "product_added_to_cart",
@@ -47,6 +48,12 @@ register(({ analytics, browser, settings }) => {
             // Use product GID for tracking, not variant ID.
             id: event.data.cartLine?.merchandise?.product?.id ? `${SHOPIFY_PRODUCT_GID_PREFIX}${event.data.cartLine.merchandise.product.id}` : "",
             title: offerName,
+            totalAmount: event.data.cartLine?.cost?.totalAmount,
+            product: {
+              id: event.data.cartLine?.merchandise?.product?.id,
+              title: event.data.cartLine?.merchandise?.product?.title,
+              variantTitle: event.data.cartLine?.merchandise?.title,
+            },
           },
         ],
       }),

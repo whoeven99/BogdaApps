@@ -1,5 +1,6 @@
 import Client from "@alicloud/log";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import { getBogdaRate } from "../redis.server";
 
 /** 勿在模块顶层 new Client：无凭证时 @alicloud/log 会抛错，导致整条路由 SSR 加载失败。 */
 function createSlsClient(): Client | null {
@@ -141,24 +142,40 @@ function buildDailyGmvTrend(
   fromDate: Date,
   toDate: Date,
 ): DailyGmvPoint[] {
+  // 打印从SLS接收到的原始聚合数据
+  console.log("[buildDailyGmvTrend] Raw SLS query result", queryResult);
+
   // 使用Map来存储每日的GMV总额。键是日期字符串（如 '2023-10-26'），值是累计的GMV
   const dailyGmv = new Map<string, number>();
-
+  const rates = getBogdaRate();
+  const usdRate = rates ? parseFloat(rates["USD"]) : null;
   // 遍历SLS返回的每一行聚合数据
   for (const row of queryResult) {
     // 从行数据中安全地提取日期和销售额
     const dayKey = row.day;
-    const amount = Number(row.total_amount) || 0;
-
+    let amount = Number(row.total_amount) || 0;
+    const currency = row.currency;
     // 如果日期或金额无效，则跳过此行
     if (!dayKey || !amount) {
       continue;
     }
 
+    if (currency !== "USD" && rates && usdRate && rates[currency]) {
+      const currencyRate = parseFloat(rates[currency]);
+      if (!isNaN(currencyRate) && currencyRate > 0) {
+        amount = (amount / currencyRate) * usdRate;
+      }
+    }
     // 将当前行的销售额累加到对应日期的GMV总额中
     // 如果Map中还没有这一天的记录，会使用 (dailyGmv.get(dayKey) ?? 0) 初始化为0
     dailyGmv.set(dayKey, (dailyGmv.get(dayKey) ?? 0) + amount);
   }
+
+  // 打印处理后的每日GMV数据，以便调试
+  console.log(
+    "[buildDailyGmvTrend] Processed daily GMV totals",
+    Object.fromEntries(dailyGmv),
+  );
 
   // 初始化一个数组来存储最终的时间序列数据点
   const series: DailyGmvPoint[] = [];
@@ -186,6 +203,9 @@ function buildDailyGmvTrend(
     // 将日期向前推一天，继续下一轮循环
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
+
+  // 打印最终生成的时间序列数据
+  console.log("[buildDailyGmvTrend] Final GMV series", series);
 
   // 返回构建好的时间序列
   return series;
@@ -489,7 +509,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         query += ` and extra: "${safeBundleName}"`;
       }
 
-      query += ` | set session mode=scan; SELECT date_format(from_unixtime(__time__), '%Y-%m-%d') as day, JSON_EXTRACT_SCALAR(extra, '$.totalPrice.currencyCode') as currency, sum(cast(JSON_EXTRACT_SCALAR(extra, '$.totalPrice.amount') as double)) as total_amount FROM log GROUP BY day, currency ORDER BY day, currency`;
+      query += ` | set session mode=scan; SELECT date_format(from_unixtime(__time__), '%Y-%m-%d') as day, JSON_EXTRACT_SCALAR(extra, '$.bundle[0].price.currencyCode') as currency, sum(cast(JSON_EXTRACT_SCALAR(extra, '$.bundle[0].price.amount') as double)) as total_amount FROM log GROUP BY day, currency ORDER BY day, currency`;
 
       const resp = (await sls.getLogs(projectName(), logstoreName(), fromDate, toDate, {
         query,
