@@ -359,11 +359,23 @@ function getCurrentProductGid() {
   return `gid://shopify/Product/${productId}`;
 }
 
+function getCurrentMarketId() {
+  const configEl = document.getElementById("ciwi-bundles-config");
+  if (configEl) {
+    try {
+      const config = JSON.parse(configEl.textContent || "{}");
+      if (config.marketId) return String(config.marketId);
+    } catch (e) {}
+  }
+  return null;
+}
+
 function getCurrentOffer(offersConfig) {
   const offers = Array.isArray(offersConfig?.offers) ? offersConfig.offers : [];
   const currentProductGid = getCurrentProductGid();
+  const currentMarketId = getCurrentMarketId();
 
-  console.log("[ciwi] offers total:", offers.length, "currentProductGid:", currentProductGid);
+  console.log("[ciwi] offers total:", offers.length, "currentProductGid:", currentProductGid, "currentMarketId:", currentMarketId);
 
   if (!offers.length) {
     console.log("[ciwi] no offers in metafield — skip bundle UI");
@@ -374,6 +386,22 @@ function getCurrentOffer(offersConfig) {
     if (!offer || typeof offer !== "object") continue;
     if (offer.status === false) continue;
     
+    // Check market filter
+    if (currentMarketId && offer.offerSettingsJson) {
+      try {
+        const settings = JSON.parse(offer.offerSettingsJson);
+        const offerMarkets = settings.markets;
+        if (typeof offerMarkets === "string" && offerMarkets !== "all" && offerMarkets.trim() !== "") {
+          const allowedMarkets = offerMarkets.split(",").map(m => m.trim());
+          if (!allowedMarkets.includes(currentMarketId)) {
+            continue;
+          }
+        }
+      } catch (e) {
+        // ignore parse error
+      }
+    }
+
     const discountRules = parseDiscountRulesJson(offer.discountRulesJson);
     if (!discountRules.length) continue;
 

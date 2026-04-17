@@ -51,6 +51,11 @@ query CartInput {
       type
     }
   }
+  localization {
+    market {
+      id
+    }
+  }
   discount {
     discountClasses
   }
