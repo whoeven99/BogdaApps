@@ -52,7 +52,7 @@ export function AnalyticsPage({ shop, offers, defaultOfferId }: AnalyticsPagePro
       ...allOption,
       ...(offers || []).map((offer) => ({
         label: offer.name,
-        value: offer.id,
+        value: offer.name,
       })),
     ];
   }, [offers]);
@@ -72,15 +72,18 @@ export function AnalyticsPage({ shop, offers, defaultOfferId }: AnalyticsPagePro
           shopName: shop,
           from: from.toISOString(),
           to: now.toISOString(),
-          bundleId: selectedOffer === "all" ? "" : selectedOffer,
         });
+
         const trendQuery = new URLSearchParams({
           mode: "trend",
           shopName: shop,
           from: from.toISOString(),
           to: now.toISOString(),
-          bundleId: selectedOffer === "all" ? "" : selectedOffer,
         });
+
+        const name = selectedOffer === 'all' ? 'bundle' : selectedOffer;
+        overviewQuery.set("name", name);
+        trendQuery.set("name", name);
 
         const [overviewResponse, trendResponse] = await Promise.all([
           fetch(`/webpixerToAli?${overviewQuery.toString()}`, {
@@ -193,7 +196,7 @@ export function AnalyticsPage({ shop, offers, defaultOfferId }: AnalyticsPagePro
             <CircleHelp size={16} className="text-[#5c6166]" />
           </div>
           <h3 className="font-sans font-semibold text-[20px] text-[#1c1f23] m-0">
-            {analyticsData.conversionRate.toFixed(2)}%
+                        {(analyticsData.conversionRate * 100).toFixed(2)}%
           </h3>
         </div>
       </div>

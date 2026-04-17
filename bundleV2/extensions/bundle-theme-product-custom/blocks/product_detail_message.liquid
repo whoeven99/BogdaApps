@@ -13,7 +13,7 @@
         {{ item.id }}{% unless forloop.last %},{% endunless %}
       {% endfor %}
     ],
-    "marketId": {{ localization.market.id | default: "null" }},
+    "marketId": {{ localization.market.id | json }},
     "variants": [
       {% for item in product.variants %}
         {

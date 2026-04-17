@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { useFetcher, useNavigate, useSearchParams } from "react-router";
-import { Button, Input, Select, Switch, Checkbox, DatePicker } from "antd";
+import { Button, Input, Select, Switch, Checkbox, DatePicker, Modal, message } from "antd";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -144,6 +144,7 @@ export function CreateNewOffer({
   const [searchParams] = useSearchParams();
   const [submitErrorToast, setSubmitErrorToast] = useState<string | null>(null);
   const wasSubmittingRef = useRef(false);
+  const confirmedHighDiscountRef = useRef(false);
 
   useEffect(() => {
     if (fetcher.state === "submitting") {
@@ -213,6 +214,38 @@ export function CreateNewOffer({
   const offerSettings = parseOfferSettings(
     initialOffer?.offerSettingsJson,
   );
+
+  const [scheduleTimezone, setScheduleTimezone] = useState(
+    offerSettings.scheduleTimezone || ianaTimezone
+  );
+
+  const tzOptions = useMemo(() => {
+    try {
+      const tzs = Intl.supportedValuesOf('timeZone');
+      const uniqueOptions = new Map<string, { value: string, label: string, offset: number }>();
+      
+      tzs.forEach(tz => {
+        const offsetString = dayjs().tz(tz).format('Z');
+        const offsetMinutes = dayjs().tz(tz).utcOffset();
+        const label = `(UTC${offsetString}) ${tz}`;
+        uniqueOptions.set(label, { value: tz, label, offset: offsetMinutes });
+      });
+
+      const sortedOptions = Array.from(uniqueOptions.values()).sort((a, b) => {
+        if (a.offset !== b.offset) {
+          return a.offset - b.offset;
+        }
+        return a.value.localeCompare(b.value);
+      });
+
+      return sortedOptions.map(opt => ({ value: opt.value, label: opt.label }));
+    } catch (e) {
+      return [
+        { value: 'UTC', label: '(UTC+00:00) UTC' },
+        { value: ianaTimezone, label: `(UTC${dayjs().tz(ianaTimezone).format('Z')}) ${ianaTimezone}` }
+      ];
+    }
+  }, [ianaTimezone]);
 
   const [totalBudget, setTotalBudget] = useState(
     offerSettings.totalBudget != null
@@ -415,11 +448,35 @@ export function CreateNewOffer({
         } else if (endTime && (!dayjs(endTime).isValid() || endTime === "")) {
           setEndTimeError("Invalid end time format.");
           hasError = true;
+        } else if (startTime && endTime && dayjs(endTime).isBefore(dayjs(startTime))) {
+          setEndTimeError("End time must be after start time.");
+          hasError = true;
         } else {
           setEndTimeError("");
         }
         if (hasError) {
           e.preventDefault();
+          return;
+        }
+
+        const hasHighDiscount = normalizedDiscountRules.some(r => r.discountPercent >= 90);
+        if (hasHighDiscount && !confirmedHighDiscountRef.current) {
+          e.preventDefault();
+          Modal.confirm({
+            title: "High Discount Warning",
+            content: "You have set a discount of 90% or more. This means the product is nearly free. Are you sure you want to proceed?",
+            okText: "Yes, proceed",
+            cancelText: "Cancel",
+            onOk: () => {
+              confirmedHighDiscountRef.current = true;
+              // form elements trigger re-submit
+              e.target.requestSubmit();
+            },
+            onCancel: () => {
+              confirmedHighDiscountRef.current = false;
+            }
+          });
+          return;
         }
       }}
     >
@@ -468,6 +525,7 @@ export function CreateNewOffer({
       <input type="hidden" name="title" value={widgetTitle} />
       <input type="hidden" name="offerType" value={offerType} />
       <input type="hidden" name="layoutFormat" value={layoutFormat} />
+      <input type="hidden" name="scheduleTimezone" value={scheduleTimezone} />
       <input type="hidden" name="accentColor" value={accentColor} />
       <input type="hidden" name="titleFontSize" value={titleFontSize} />
       <input type="hidden" name="titleFontWeight" value={titleFontWeight} />
@@ -797,9 +855,10 @@ export function CreateNewOffer({
                                 value={rule.discountPercent}
                                 onChange={(e) => {
                                   const parsedValue = Number(e.target.value);
+                                  if (parsedValue > 100) return; // Do not allow entering > 100
                                   const nextPercent =
                                     Number.isFinite(parsedValue) && parsedValue >= 0
-                                      ? Math.max(0, Math.min(100, parsedValue))
+                                      ? parsedValue
                                       : 0;
                                   setDiscountRules((prev) =>
                                     prev.map((r, i) =>
@@ -810,6 +869,16 @@ export function CreateNewOffer({
                                   );
                                 }}
                               />
+                              {rule.discountPercent > 50 && rule.discountPercent < 90 && (
+                                <div className="text-[#faad14] text-[12px] mt-1 font-normal">
+                                  A discount over 50% may result in losses. Please double-check.
+                                </div>
+                              )}
+                              {rule.discountPercent >= 90 && (
+                                <div className="text-[#ff4d4f] text-[12px] mt-1 font-normal">
+                                  A discount of 90% or more means the product is nearly free.
+                                </div>
+                              )}
                             </label>
                           </div>
                           
@@ -1381,9 +1450,22 @@ export function CreateNewOffer({
               </div>
 
               <div className="mb-8">
-                <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                  Schedule
-                </h3>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-[14px] font-medium text-[#1c1f23] flex items-center">
+                    Schedule
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[13px] text-[#5c6166]">Timezone:</span>
+                    <Select
+                      size="small"
+                      showSearch
+                      className="w-[240px]"
+                      value={scheduleTimezone}
+                      onChange={setScheduleTimezone}
+                      options={tzOptions}
+                    />
+                  </div>
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                   <label className="block text-[14px] font-medium text-[#1c1f23]">
                     Start Time
@@ -1392,12 +1474,15 @@ export function CreateNewOffer({
                       showTime={{ format: 'HH:mm' }}
                       format="YYYY-MM-DD HH:mm"
                       className="mt-1 w-full text-[14px]"
-                      value={startTime && dayjs(startTime).isValid() ? dayjs(startTime).tz(ianaTimezone) : null}
+                      value={startTime && dayjs(startTime).isValid() ? dayjs(startTime).tz(scheduleTimezone) : null}
                       onChange={(date) => {
-                        const val = date ? date.toISOString() : '';
+                        const val = date ? dayjs.tz(date.format('YYYY-MM-DD HH:mm:ss'), scheduleTimezone).toISOString() : '';
                         setStartTime(val);
-                        if (startTimeError && val) {
+                        if (val && endTime && dayjs(endTime).isBefore(dayjs(val))) {
+                          setStartTimeError("Start time must be before end time.");
+                        } else {
                           setStartTimeError("");
+                          setEndTimeError("");
                         }
                       }}
                       status={startTimeError ? "error" : ""}
@@ -1420,12 +1505,15 @@ export function CreateNewOffer({
                       showTime={{ format: 'HH:mm' }}
                       format="YYYY-MM-DD HH:mm"
                       className="mt-1 w-full"
-                      value={endTime && dayjs(endTime).isValid() ? dayjs(endTime).tz(ianaTimezone) : null}
+                      value={endTime && dayjs(endTime).isValid() ? dayjs(endTime).tz(scheduleTimezone) : null}
                       onChange={(date) => {
-                        const val = date ? date.toISOString() : '';
+                        const val = date ? dayjs.tz(date.format('YYYY-MM-DD HH:mm:ss'), scheduleTimezone).toISOString() : '';
                         setEndTime(val);
-                        if (endTimeError && val) {
+                        if (val && startTime && dayjs(val).isBefore(dayjs(startTime))) {
+                          setEndTimeError("End time must be after start time.");
+                        } else {
                           setEndTimeError("");
+                          setStartTimeError("");
                         }
                       }}
                       status={endTimeError ? "error" : ""}
@@ -1556,6 +1644,17 @@ export function CreateNewOffer({
               }
               setOfferNameError("");
               setStep(2);
+              e.preventDefault();
+              return;
+            }
+
+            if (step === 2) {
+              if (selectedProductsData.length === 0) {
+                message.error("Please select at least one product.");
+                e.preventDefault();
+                return;
+              }
+              setStep(3);
               e.preventDefault();
               return;
             }

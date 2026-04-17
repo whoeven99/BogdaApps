@@ -46,6 +46,7 @@ type DashboardOfferRow = {
   cartTitle: string;
   offerType: string;
   discountRulesJson: string | null;
+  offerSettingsJson: string | null;
   isActive: boolean;
   createdAt: string | Date | undefined;
   updatedAt: string | Date | undefined;
@@ -134,6 +135,17 @@ export function DashboardPage({
   const [overviewMetrics, setOverviewMetrics] = useState<GmvOverviewMetrics | null>(
     null,
   );
+  const [totalGmv, setTotalGmv] = useState(0);
+  const [gmvGrowthRate, setGmvGrowthRate] = useState(0);
+  const [bundleOrders, setBundleOrders] = useState(0);
+  const [productViewed, setProductViewed] = useState(0);
+
+  const mockOverviewData = {
+    bundleOrders: 320,
+    bundleOrdersGrowthRate: 8.5,
+    avgConversionRate: 3.2,
+    conversionTrend: 4.1,
+  };
 
   const [showThemeExtensionModal, setShowThemeExtensionModal] = useState(false);
   const [hideBanner, setHideBanner] = useState(() => {
@@ -163,6 +175,7 @@ export function DashboardPage({
       cartTitle: offer.cartTitle,
       offerType: offer.offerType,
       discountRulesJson: offer.discountRulesJson,
+      offerSettingsJson: offer.offerSettingsJson,
       isActive,
       createdAt,
       updatedAt,
@@ -218,6 +231,10 @@ export function DashboardPage({
       conversionTrendColor: "text-[#916a00]" as const,
     };
   })();
+
+    const gmvGrowthRateColor =
+    gmvGrowthRate === 0 ? "#916a00" : gmvGrowthRate > 0 ? "#108043" : "#D93025";
+  const gmvGrowthRateArrow = gmvGrowthRate >= 0 ? "↑" : "↓";
 
   useEffect(() => {
     if (navigation.state === "submitting" && navigation.formData) {
@@ -283,54 +300,59 @@ export function DashboardPage({
 
     const run = async () => {
       try {
-        const response = await fetch(`/webpixerToAli?${query.toString()}`, {
-          method: "GET",
-          signal: controller.signal,
-        });
-        const data = (await response.json().catch(() => ({}))) as {
-          success?: boolean;
-          message?: string;
-          metrics?: GmvOverviewMetrics;
-          range?: { from?: string; to?: string };
-          logsFetched?: number;
-        };
-
-        if (!response.ok || !data.success) {
-          console.error("[dashboard][gmv-overview] query failed", {
-            status: response.status,
-            message: data?.message || "unknown error",
-            shop,
-            range: data?.range,
-          });
-          return;
+        const overviewUrl = `/webpixerToAli?mode=dashboard-overview-gmv&shopName=${shop}`;
+        const response = await fetch(overviewUrl);
+        
+        if (response.ok) {
+          const data = await response.json();
+          console.log("[ZZ-Test] overview-gmv data: ", data)
+          if (data.success) {
+            setTotalGmv(data.totalGmv || 0);
+            setGmvGrowthRate(data.gmvGrowthRate || 0);
+          }
         }
-
-        console.log("[dashboard][gmv-overview] metrics", {
-          shop,
-          range: data.range,
-          logsFetched: data.logsFetched ?? 0,
-          totalGmv: data.metrics?.totalGmv ?? 0,
-          conversion: data.metrics?.conversion ?? 0,
-          visitor: data.metrics?.visitor ?? 0,
-          bundleOrders: data.metrics?.bundleOrders ?? 0,
-          exposurePv: data.metrics?.exposurePv ?? 0,
-          orderPv: data.metrics?.orderPv ?? 0,
-        });
-
-        setOverviewMetrics(data.metrics ?? null);
       } catch (error) {
-        if (controller.signal.aborted) return;
-        setOverviewMetrics(null);
-        console.error("[dashboard][gmv-overview] query exception", {
-          shop,
-          error: String(error),
-        });
+        console.error("Failed to fetch dashboard overview data", error);
       }
     };
 
     run();
 
     return () => controller.abort();
+  }, [shop]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const bundleOrdersUrl = `/webpixerToAli?mode=dashboard-overview-bundle-orders&shopName=${shop}`;
+        const productViewedUrl = `/webpixerToAli?mode=dashboard-overview-product-viewed&shopName=${shop}`;
+
+        const [bundleOrdersResponse, productViewedResponse] = await Promise.all([
+          fetch(bundleOrdersUrl),
+          fetch(productViewedUrl),
+        ]);
+
+        if (bundleOrdersResponse.ok) {
+          const data = await bundleOrdersResponse.json();
+          if (data.success) {
+            console.log("[ZZ-Test] Fetched bundle orders:", data.totalCount);
+            setBundleOrders(data.totalCount || 0);
+          }
+        }
+
+        if (productViewedResponse.ok) {
+          const data = await productViewedResponse.json();
+           console.log("[ZZ-Test] Fetched productViewed:", data.totalCount);
+          if (data.success) {
+            setProductViewed(data.totalCount || 0);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch dashboard data:", error);
+      }
+    };
+
+    fetchData();
   }, [shop]);
 
   useEffect(() => {
@@ -369,7 +391,7 @@ export function DashboardPage({
 
   return (
     <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px]">
-      {!themeExtensionEnabled && visibleOffers.length > 0 && !hideBanner && (
+      {!themeExtensionEnabled && !hideBanner && (
         <div className="bg-[#fff4f4] border border-[#ffc9c9] rounded-[8px] p-[16px] mb-[24px] flex items-start justify-between">
           <div className="flex gap-[12px]">
             <div className="text-[#d72c0d] mt-[2px]">
@@ -386,7 +408,7 @@ export function DashboardPage({
                 <button
                   type="button"
                   onClick={handleThemeExtensionToggle}
-                  className="bg-[#008060] !text-white px-[12px] py-[6px] rounded-[6px] font-medium text-[14px] shadow-sm hover:bg-[#006e52] transition-all border-0 cursor-pointer"
+                  className="bg-transparent text-[#1c1f23] px-[12px] py-[6px] rounded-[6px] font-normal text-[16px] border border-[#1c1f23] hover:bg-black/5 transition-all cursor-pointer"
                 >
                   Activate Theme Extension
                 </button>
@@ -435,34 +457,43 @@ export function DashboardPage({
                 Total GMV
               </span>
               <h3 className="font-sans font-semibold text-[28px] leading-[42px] text-[#1c1f23] tracking-wide m-0">
-                {cardOverview.totalGmv}
+                ${totalGmv.toFixed(2)}
               </h3>
-              <span className="font-sans font-normal text-[14px] leading-[22.4px] text-[#108043] tracking-normal">
-                {cardOverview.gmvTrend} {cardOverview.gmvTrendLabel}
+              <span
+                className="font-sans font-normal text-[14px] leading-[22.4px] text-[#108043] tracking-normal"
+                style={{
+                  color: gmvGrowthRateColor,
+                }}
+              >
+                {gmvGrowthRate !== 0 && `${gmvGrowthRateArrow} `}
+                {gmvGrowthRate >= 0 ? "+" : ""}{Math.abs(gmvGrowthRate).toFixed(2)}% from last month
               </span>
             </div>
-            <div className="flex flex-col gap-[16px]">
+
+            {/* Bundle Orders */}
+           <div className="flex flex-col gap-[16px]">
               <span className="font-sans font-normal text-[14px] leading-[22.4px] text-[#5c6166] tracking-normal">
                 Bundle Orders
               </span>
               <h3 className="font-sans font-semibold text-[28px] leading-[42px] text-[#1c1f23] tracking-wide m-0">
-                {cardOverview.activeOffers}
+                {bundleOrders}
               </h3>
-              <span className="font-sans font-normal text-[14px] leading-[22.4px] text-[#108043] tracking-normal">
-                {cardOverview.activeOffersTrend}
-              </span>
             </div>
+
+            {/* Avg. Conversion */}
             <div className="flex flex-col gap-[16px]">
               <span className="font-sans font-normal text-[14px] leading-[22.4px] text-[#5c6166] tracking-normal">
                 Avg. Conversion
               </span>
               <h3 className="font-sans font-semibold text-[28px] leading-[42px] text-[#1c1f23] tracking-wide m-0">
-                {cardOverview.avgConversion}
+                {productViewed > 0
+                  ? `${((bundleOrders / productViewed) * 100).toFixed(2)}%`
+                  : "0.00%"}
               </h3>
               <span
-                className={`font-sans font-normal text-[14px] leading-[22.4px] tracking-normal ${cardOverview.conversionTrendColor}`}
+                className="font-sans font-normal text-[14px] leading-[22.4px] tracking-normal"
               >
-                {cardOverview.conversionTrendLabel}
+                Orders {bundleOrders} / Exposure {productViewed}
               </span>
             </div>
           </div>
@@ -500,10 +531,10 @@ export function DashboardPage({
             <button
               type="button"
               onClick={handleThemeExtensionToggle}
-              className={`px-[16px] py-[8px] rounded-[6px] font-sans font-medium text-[14px] leading-[21px] tracking-normal cursor-pointer transition-colors w-full border-0 ${
+              className={`px-[16px] py-[8px] rounded-[6px] font-sans font-normal text-[16px] leading-[24px] tracking-normal cursor-pointer transition-colors w-full border ${
                 themeExtensionEnabled
-                  ? "bg-white border border-[#dfe3e8] text-[#d72c0d] hover:bg-[#fef3f2]"
-                  : "bg-[#008060] !text-white hover:bg-[#006e52]"
+                  ? "bg-white border-[#dfe3e8] text-[#d72c0d] hover:bg-[#fef3f2]"
+                  : "bg-transparent border-[#1c1f23] text-[#1c1f23] hover:bg-black/5"
               }`}
             >
               {themeExtensionEnabled ? "Disable" : "Enable"}
@@ -591,7 +622,14 @@ export function DashboardPage({
                   if (!timeStr) return "-";
                   const d = dayjs(timeStr);
                   if (!d.isValid()) return "-";
-                  return d.tz(ianaTimezone).format("YYYY-MM-DD HH:mm:ss");
+                  let tz = ianaTimezone;
+                  try {
+                    if (offer.offerSettingsJson) {
+                      const parsed = JSON.parse(offer.offerSettingsJson);
+                      if (parsed.scheduleTimezone) tz = parsed.scheduleTimezone;
+                    }
+                  } catch (e) {}
+                  return d.tz(tz).format("YYYY-MM-DD HH:mm:ss") + ` (UTC${d.tz(tz).format('Z')})`;
                 };
 
                 return (
@@ -611,15 +649,7 @@ export function DashboardPage({
                       {rulesText}
                     </td>
                     <td className="p-[12px] border-b border-[#f0f2f4]">
-                      <Form
-                        method="post"
-                        onSubmit={(e) => {
-                          if (!themeExtensionEnabled) {
-                            e.preventDefault();
-                            setShowThemeExtensionModal(true);
-                          }
-                        }}
-                      >
+                      <Form method="post">
                         <input
                           type="hidden"
                           name="intent"
@@ -634,6 +664,12 @@ export function DashboardPage({
                         <button
                           type="submit"
                           disabled={isToggling}
+                          onClick={(e) => {
+                            if (!themeExtensionEnabled) {
+                              e.preventDefault();
+                              setShowThemeExtensionModal(true);
+                            }
+                          }}
                           className={`flex items-center gap-[8px] bg-transparent border-0 p-0 cursor-pointer ${
                             isToggling ? "opacity-70 cursor-default" : ""
                           }`}
@@ -741,15 +777,7 @@ export function DashboardPage({
                       </span>
                     </div>
                   </div>
-                  <Form
-                    method="post"
-                    onSubmit={(e) => {
-                      if (!themeExtensionEnabled) {
-                        e.preventDefault();
-                        setShowThemeExtensionModal(true);
-                      }
-                    }}
-                  >
+                  <Form method="post">
                     <input
                       type="hidden"
                       name="intent"
@@ -764,6 +792,12 @@ export function DashboardPage({
                     <button
                       type="submit"
                       disabled={isToggling}
+                      onClick={(e) => {
+                        if (!themeExtensionEnabled) {
+                          e.preventDefault();
+                          setShowThemeExtensionModal(true);
+                        }
+                      }}
                       className={`flex items-center gap-[8px] mb-[12px] bg-transparent border-0 p-0 cursor-pointer ${
                         isToggling ? "opacity-70 cursor-default" : ""
                       }`}
