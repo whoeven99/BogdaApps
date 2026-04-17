@@ -388,7 +388,8 @@ const findOffer = (
         const offerMarkets = settings.markets;
         if (typeof offerMarkets === "string" && offerMarkets !== "all" && offerMarkets.trim() !== "") {
           const allowedMarkets = offerMarkets.split(",").map((m: string) => m.trim());
-          if (!allowedMarkets.includes(marketId)) {
+          const matchMarket = allowedMarkets.some(m => m === marketId || m.endsWith(`/${marketId}`));
+          if (!matchMarket) {
             log("offer_skip_market_mismatch", { offerId: offer.id, name: offer.name, marketId, allowedMarkets });
             continue;
           }

@@ -409,7 +409,8 @@ function getCurrentOffer(offersConfig) {
         const offerMarkets = settings.markets;
         if (typeof offerMarkets === "string" && offerMarkets !== "all" && offerMarkets.trim() !== "") {
           const allowedMarkets = offerMarkets.split(",").map(m => m.trim());
-          if (!allowedMarkets.includes(currentMarketId)) {
+          const matchMarket = allowedMarkets.some(m => m === currentMarketId || m.endsWith(`/${currentMarketId}`));
+          if (!matchMarket) {
             continue;
           }
         }
