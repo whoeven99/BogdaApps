@@ -1542,6 +1542,23 @@ export default function Index() {
           />
         )}
       </div>
+      <div className="py-8 text-center text-sm text-[#666]">
+        <a 
+          href="mailto:support@ciwi.ai" 
+          className="mx-3 text-[#666] hover:text-[#008060] transition-colors"
+        >
+          Contact Us
+        </a>
+        |
+        <a 
+          href="https://iw73s3ld6wy.feishu.cn/wiki/UEumwgOLJi90rEknevWcZp7HnQg?from=from_copylink" 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="mx-3 text-[#666] hover:text-[#008060] transition-colors"
+        >
+          User Guide
+        </a>
+      </div>
     </AppProvider>
   );
 }
