@@ -390,6 +390,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       }
       exposureSql += ` | SELECT COUNT(1) AS exposure_pv, COUNT(DISTINCT clientId) AS exposure_uv`;
 
+      let bundleExposureSql = `__topic__: "product_viewed" and shopName: "${safeShopName}" and extra: "bundle" and not extra: "NO_BUNDLE_TITLE"`;
+      if (safeBundleName) {
+        bundleExposureSql += ` and extra: "${safeBundleName}"`;
+      }
+      bundleExposureSql += ` | SELECT COUNT(*) AS total_count`;
+
       let orderSql = `__topic__: "checkout_completed" and shopName: "${safeShopName}"`;
       if (safeBundleName) {
         orderSql += ` and extra: "${safeBundleName}"`;
@@ -408,8 +414,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       }
       gmvSql += ` | SELECT SUM(CAST(REGEXP_EXTRACT(extra, '"amount":"([0-9.]+)"', 1) AS DOUBLE)) AS total_gmv`;
 
-      const [exposureAgg, orderAgg, bundleOrderAgg, gmvAgg] = await Promise.all([
+      const [exposureAgg, bundleExposureAgg, orderAgg, bundleOrderAgg, gmvAgg] = await Promise.all([
         runSlsSql(sls, fromDate, toDate, exposureSql, "exposure"),
+        runSlsSql(sls, fromDate, toDate, bundleExposureSql, "bundle-exposure"),
         runSlsSql(sls, fromDate, toDate, orderSql, "order"),
         runSlsSql(sls, fromDate, toDate, bundleOrderSql, "bundle-order"),
         runSlsSql(sls, fromDate, toDate, gmvSql, "gmv"),
