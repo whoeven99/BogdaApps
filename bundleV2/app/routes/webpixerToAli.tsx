@@ -653,17 +653,40 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       const prior60 = new Date(new Date().setDate(today.getDate() - 60));
       const safeShopName = escapeSlsString(shopName);
 
-      const gmvSql = `__topic__: "checkout_completed" and shopName: "${safeShopName}" and extra: "bundle" and not extra: "NO_BUNDLE_TITLE" | SELECT SUM(CAST(REGEXP_EXTRACT(extra, '"amount":"([0-9.]+)"', 1) AS DOUBLE)) AS total_gmv`;
+      const gmvSql = `__topic__: "checkout_completed" and shopName: "${safeShopName}" and extra: "bundle" and not extra: "NO_BUNDLE_TITLE" | set session mode=scan; SELECT JSON_EXTRACT_SCALAR(extra, '$.totalPrice.currencyCode') as currency, sum(cast(JSON_EXTRACT_SCALAR(extra, '$.totalPrice.amount') as double)) as total_amount FROM log GROUP BY currency`;
 
-      const [gmvLast30DaysAgg, gmvPrevious30DaysAgg] = await Promise.all([
-        runSlsSql(sls, prior30, today, gmvSql, "gmv-last-30d"),
-        runSlsSql(sls, prior60, prior30, gmvSql, "gmv-prev-30d"),
+      const calculateGmvFromSqlResult = (queryResult: { currency: string; total_amount: number }[]): number => {
+        const rates = getBogdaRate();
+        const usdRate = rates ? parseFloat(rates["USD"]) : null;
+        let totalGmv = 0;
+
+        for (const row of queryResult) {
+          let amount = Number(row.total_amount) || 0;
+          const currency = row.currency;
+
+          if (currency && currency !== "USD" && rates && usdRate && rates[currency]) {
+            const currencyRate = parseFloat(rates[currency]);
+            if (!isNaN(currencyRate) && currencyRate > 0) {
+              amount = (amount / currencyRate) * usdRate;
+            }
+          }
+          totalGmv += amount;
+        }
+        return totalGmv;
+      };
+
+      const [gmvLast30DaysResp, gmvPrevious30DaysResp] = await Promise.all([
+        sls.getLogs(projectName(), logstoreName(), prior30, today, { query: gmvSql, line: 100, reverse: false }),
+        sls.getLogs(projectName(), logstoreName(), prior60, prior30, { query: gmvSql, line: 100, reverse: false }),
       ]);
 
-      const totalGmv = toNumber(gmvLast30DaysAgg.total_gmv);
-      const gmvPrevious30Days = toNumber(gmvPrevious30DaysAgg.total_gmv);
-      let gmvGrowthRate = 0;
+      const gmvLast30DaysResult = (Array.isArray(gmvLast30DaysResp) ? gmvLast30DaysResp : (gmvLast30DaysResp as any)?.logs ?? []) as { currency: string; total_amount: number }[];
+      const gmvPrevious30DaysResult = (Array.isArray(gmvPrevious30DaysResp) ? gmvPrevious30DaysResp : (gmvPrevious30DaysResp as any)?.logs ?? []) as { currency: string; total_amount: number }[];
 
+      const totalGmv = calculateGmvFromSqlResult(gmvLast30DaysResult);
+      const gmvPrevious30Days = calculateGmvFromSqlResult(gmvPrevious30DaysResult);
+
+      let gmvGrowthRate = 0;
       if (gmvPrevious30Days > 0) {
         gmvGrowthRate = ((totalGmv - gmvPrevious30Days) / gmvPrevious30Days) * 100;
       } else if (totalGmv > 0) {

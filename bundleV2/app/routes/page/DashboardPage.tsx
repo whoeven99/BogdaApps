@@ -138,6 +138,7 @@ export function DashboardPage({
   const [totalGmv, setTotalGmv] = useState(0);
   const [gmvGrowthRate, setGmvGrowthRate] = useState(0);
   const [bundleOrders, setBundleOrders] = useState(0);
+  const [productViewed, setProductViewed] = useState(0);
 
   const mockOverviewData = {
     bundleOrders: 320,
@@ -301,9 +302,10 @@ export function DashboardPage({
       try {
         const overviewUrl = `/webpixerToAli?mode=dashboard-overview-gmv&shopName=${shop}`;
         const response = await fetch(overviewUrl);
-        console.log("[ZZ-Test] response: ", response)
+        
         if (response.ok) {
           const data = await response.json();
+          console.log("[ZZ-Test] overview-gmv data: ", data)
           if (data.success) {
             setTotalGmv(data.totalGmv || 0);
             setGmvGrowthRate(data.gmvGrowthRate || 0);
@@ -320,24 +322,37 @@ export function DashboardPage({
   }, [shop]);
 
   useEffect(() => {
-    const fetchBundleOrders = async () => {
+    const fetchData = async () => {
       try {
-        const overviewUrl = `/webpixerToAli?mode=dashboard-overview-bundle-orders&shopName=${shop}`;
-        const response = await fetch(overviewUrl);
+        const bundleOrdersUrl = `/webpixerToAli?mode=dashboard-overview-bundle-orders&shopName=${shop}`;
+        const productViewedUrl = `/webpixerToAli?mode=dashboard-overview-product-viewed&shopName=${shop}`;
 
-        if (response.ok) {
-          const data = await response.json();
+        const [bundleOrdersResponse, productViewedResponse] = await Promise.all([
+          fetch(bundleOrdersUrl),
+          fetch(productViewedUrl),
+        ]);
+
+        if (bundleOrdersResponse.ok) {
+          const data = await bundleOrdersResponse.json();
           if (data.success) {
             console.log("[ZZ-Test] Fetched bundle orders:", data.totalCount);
             setBundleOrders(data.totalCount || 0);
           }
         }
+
+        if (productViewedResponse.ok) {
+          const data = await productViewedResponse.json();
+           console.log("[ZZ-Test] Fetched productViewed:", data.totalCount);
+          if (data.success) {
+            setProductViewed(data.totalCount || 0);
+          }
+        }
       } catch (error) {
-        console.error("[ZZ-Test] Failed to fetch bundle orders:", error);
+        console.error("Failed to fetch dashboard data:", error);
       }
     };
 
-    fetchBundleOrders();
+    fetchData();
   }, [shop]);
 
   useEffect(() => {
@@ -471,20 +486,14 @@ export function DashboardPage({
                 Avg. Conversion
               </span>
               <h3 className="font-sans font-semibold text-[28px] leading-[42px] text-[#1c1f23] tracking-wide m-0">
-                {mockOverviewData.avgConversionRate}%
+                {bundleOrders > 0
+                  ? `${((productViewed / bundleOrders) * 100).toFixed(2)}%`
+                  : "0.00%"}
               </h3>
               <span
                 className="font-sans font-normal text-[14px] leading-[22.4px] tracking-normal"
-                style={{
-                  color:
-                    mockOverviewData.conversionTrend === 0
-                      ? "#916a00"
-                      : mockOverviewData.conversionTrend > 0
-                        ? "#108043"
-                        : "#D93025",
-                }}
               >
-                ↑ +{mockOverviewData.conversionTrend}% from last month
+                Exposure {productViewed} / Orders {bundleOrders}
               </span>
             </div>
           </div>
