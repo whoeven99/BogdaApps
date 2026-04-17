@@ -40,11 +40,11 @@ const getBundlePayloadByVariantId = (
       console.log("[ZZ-Test] record: ", record)
       return {
         id: variantId || "",
-        title: String(record.name || record.offerName || "NO_BUNDLE_TITLE"),
+        title: String(record.title || "NO_BUNDLE_TITLE"),
         offerName: String(record.offerName || ""),
         offerId: String(record.offerId || ""),
         productId: String(record.productId || ""),
-        variantId: String(record.variantId || ""),
+        variantId: variantId || "",
         source: String(record.source || ""),
       };
     }
@@ -61,17 +61,15 @@ const mergeCheckoutBundle = (
   bundleSessionData: Record<string, unknown>,
 ) => {
   const id = String(item?.variant?.id || "");
-  const titleFromDiscount =
-    item?.discountAllocations?.[0]?.discountApplication?.title || "";
   const price = item?.finalLinePrice || {};
   const sessionBundle = getBundlePayloadByVariantId(bundleSessionData, id);
   const hasSessionBundle = sessionBundle.title !== "NO_BUNDLE_TITLE";
-  console.log("[ZZ-Test] titleFromDiscount: ", titleFromDiscount)
   console.log("[ZZ-Test] sessionBundle: ", sessionBundle)
+  console.log("[ZZ-Test] item: ", item)
   return {
     id,
     price,
-    title: titleFromDiscount || sessionBundle.title || "NO_BUNDLE_TITLE",
+    title: hasSessionBundle ? sessionBundle.title : "NO_BUNDLE_TITLE",
     offerId: hasSessionBundle ? sessionBundle.offerId || "" : "",
     productId: hasSessionBundle ? sessionBundle.productId || "" : "",
     variantId: hasSessionBundle ? sessionBundle.variantId || id : id,
