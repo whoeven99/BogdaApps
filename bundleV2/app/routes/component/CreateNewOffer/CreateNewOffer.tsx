@@ -222,10 +222,23 @@ export function CreateNewOffer({
   const tzOptions = useMemo(() => {
     try {
       const tzs = Intl.supportedValuesOf('timeZone');
-      return tzs.map(tz => {
-        const offset = dayjs().tz(tz).format('Z');
-        return { value: tz, label: `(UTC${offset}) ${tz}` };
+      const uniqueOptions = new Map<string, { value: string, label: string, offset: number }>();
+      
+      tzs.forEach(tz => {
+        const offsetString = dayjs().tz(tz).format('Z');
+        const offsetMinutes = dayjs().tz(tz).utcOffset();
+        const label = `(UTC${offsetString}) ${tz}`;
+        uniqueOptions.set(label, { value: tz, label, offset: offsetMinutes });
       });
+
+      const sortedOptions = Array.from(uniqueOptions.values()).sort((a, b) => {
+        if (a.offset !== b.offset) {
+          return a.offset - b.offset;
+        }
+        return a.value.localeCompare(b.value);
+      });
+
+      return sortedOptions.map(opt => ({ value: opt.value, label: opt.label }));
     } catch (e) {
       return [
         { value: 'UTC', label: '(UTC+00:00) UTC' },
@@ -434,6 +447,9 @@ export function CreateNewOffer({
           hasError = true;
         } else if (endTime && (!dayjs(endTime).isValid() || endTime === "")) {
           setEndTimeError("Invalid end time format.");
+          hasError = true;
+        } else if (startTime && endTime && dayjs(endTime).isBefore(dayjs(startTime))) {
+          setEndTimeError("End time must be after start time.");
           hasError = true;
         } else {
           setEndTimeError("");
@@ -1462,8 +1478,11 @@ export function CreateNewOffer({
                       onChange={(date) => {
                         const val = date ? dayjs.tz(date.format('YYYY-MM-DD HH:mm:ss'), scheduleTimezone).toISOString() : '';
                         setStartTime(val);
-                        if (startTimeError && val) {
+                        if (val && endTime && dayjs(endTime).isBefore(dayjs(val))) {
+                          setStartTimeError("Start time must be before end time.");
+                        } else {
                           setStartTimeError("");
+                          setEndTimeError("");
                         }
                       }}
                       status={startTimeError ? "error" : ""}
@@ -1490,8 +1509,11 @@ export function CreateNewOffer({
                       onChange={(date) => {
                         const val = date ? dayjs.tz(date.format('YYYY-MM-DD HH:mm:ss'), scheduleTimezone).toISOString() : '';
                         setEndTime(val);
-                        if (endTimeError && val) {
+                        if (val && startTime && dayjs(val).isBefore(dayjs(startTime))) {
+                          setEndTimeError("End time must be after start time.");
+                        } else {
                           setEndTimeError("");
+                          setStartTimeError("");
                         }
                       }}
                       status={endTimeError ? "error" : ""}

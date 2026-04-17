@@ -374,6 +374,7 @@ function getCurrentOffer(offersConfig) {
   const offers = Array.isArray(offersConfig?.offers) ? offersConfig.offers : [];
   const currentProductGid = getCurrentProductGid();
   const currentMarketId = getCurrentMarketId();
+  const now = Date.now();
 
   console.log("[ciwi] offers total:", offers.length, "currentProductGid:", currentProductGid, "currentMarketId:", currentMarketId);
 
@@ -384,8 +385,28 @@ function getCurrentOffer(offersConfig) {
 
   for (const offer of offers) {
     if (!offer || typeof offer !== "object") continue;
-    if (offer.status === false) continue;
+    if (offer.status === false) {
+      console.log("[ciwi] offer skipped: status is false", offer.id);
+      continue;
+    }
     
+    // Check schedule
+    if (offer.startTime) {
+      const startTimeMs = Date.parse(offer.startTime);
+      if (Number.isFinite(startTimeMs) && now < startTimeMs) {
+        console.log("[ciwi] offer skipped: not started yet", offer.id, offer.startTime);
+        continue;
+      }
+    }
+
+    if (offer.endTime) {
+      const endTimeMs = Date.parse(offer.endTime);
+      if (Number.isFinite(endTimeMs) && now > endTimeMs) {
+        console.log("[ciwi] offer skipped: already ended", offer.id, offer.endTime);
+        continue;
+      }
+    }
+
     // Check market filter
     if (currentMarketId && offer.offerSettingsJson) {
       try {
@@ -393,7 +414,9 @@ function getCurrentOffer(offersConfig) {
         const offerMarkets = settings.markets;
         if (typeof offerMarkets === "string" && offerMarkets !== "all" && offerMarkets.trim() !== "") {
           const allowedMarkets = offerMarkets.split(",").map(m => m.trim());
-          if (!allowedMarkets.includes(currentMarketId)) {
+          const matchMarket = allowedMarkets.some(m => m === currentMarketId || m.endsWith(`/${currentMarketId}`));
+          if (!matchMarket) {
+            console.log("[ciwi] offer skipped: market mismatch", offer.id, "allowed:", allowedMarkets, "current:", currentMarketId);
             continue;
           }
         }
@@ -403,13 +426,22 @@ function getCurrentOffer(offersConfig) {
     }
 
     const discountRules = parseDiscountRulesJson(offer.discountRulesJson);
-    if (!discountRules.length) continue;
+    if (!discountRules.length) {
+      console.log("[ciwi] offer skipped: no valid discount rules", offer.id);
+      continue;
+    }
 
     const selectedIds = parseSelectedProductIds(offer.selectedProductsJson);
     // 指定了商品列表时，仅当前商品命中才展示
     if (selectedIds.length > 0) {
-      if (!currentProductGid) continue;
-      if (!selectedIds.includes(currentProductGid)) continue;
+      if (!currentProductGid) {
+        console.log("[ciwi] offer skipped: requires specific products but current product GID is null", offer.id);
+        continue;
+      }
+      if (!selectedIds.includes(currentProductGid)) {
+        console.log("[ciwi] offer skipped: current product not in selected list", offer.id, currentProductGid, selectedIds);
+        continue;
+      }
     }
 
     return offer;
