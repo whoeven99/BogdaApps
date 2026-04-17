@@ -381,7 +381,6 @@ function getCurrentProductGid() {
   return `gid://shopify/Product/${productId}`;
 }
 
-<<<<<<< HEAD
 function getCurrentMarketId() {
   const configEl = document.getElementById("ciwi-bundles-config");
   if (configEl) {
@@ -391,7 +390,8 @@ function getCurrentMarketId() {
     } catch (e) {}
   }
   return null;
-=======
+}
+
 function getOfferBundleTitle(offer) {
   if (!offer || typeof offer !== "object") return "NO_BUNDLE_TITLE";
   const offerId = offer.offerId || offer.id || "";
@@ -438,7 +438,6 @@ function syncCurrentBundleToSessionStorage(offer) {
   } catch (error) {
     console.error("[ciwi] failed to persist bundle session data", error);
   }
->>>>>>> master
 }
 
 function getCurrentOffer(offersConfig) {
