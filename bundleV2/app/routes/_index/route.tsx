@@ -972,6 +972,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       "Bundle & Save",
     );
 
+    const scheduleTimezoneRaw = String(formData.get("scheduleTimezone") || "").trim();
+
     if (selectedProductsJson.length > 50_000) {
       return offerActionErrorResponse("Selected products data is too large. Please reduce the number of products.", 400);
     }
@@ -1005,6 +1007,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       titleFontWeight,
       buttonText,
       showCustomButton,
+      scheduleTimezone: scheduleTimezoneRaw || undefined,
     });
 
     // Store which Shopify shop this offer belongs to.
