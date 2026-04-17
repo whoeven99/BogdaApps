@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { useFetcher, useNavigate, useSearchParams } from "react-router";
-import { Button, Input, Select, Switch, Checkbox, DatePicker, Modal } from "antd";
+import { Button, Input, Select, Switch, Checkbox, DatePicker, Modal, message } from "antd";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -1622,6 +1622,17 @@ export function CreateNewOffer({
               }
               setOfferNameError("");
               setStep(2);
+              e.preventDefault();
+              return;
+            }
+
+            if (step === 2) {
+              if (selectedProductsData.length === 0) {
+                message.error("Please select at least one product.");
+                e.preventDefault();
+                return;
+              }
+              setStep(3);
               e.preventDefault();
               return;
             }
