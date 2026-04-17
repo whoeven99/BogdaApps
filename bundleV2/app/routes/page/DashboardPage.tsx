@@ -457,7 +457,7 @@ export function DashboardPage({
                 Total GMV
               </span>
               <h3 className="font-sans font-semibold text-[28px] leading-[42px] text-[#1c1f23] tracking-wide m-0">
-                ${totalGmv.toLocaleString()}
+                ${totalGmv.toFixed(2)}
               </h3>
               <span
                 className="font-sans font-normal text-[14px] leading-[22.4px] text-[#108043] tracking-normal"
