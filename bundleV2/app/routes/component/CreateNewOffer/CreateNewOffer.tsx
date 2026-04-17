@@ -222,10 +222,23 @@ export function CreateNewOffer({
   const tzOptions = useMemo(() => {
     try {
       const tzs = Intl.supportedValuesOf('timeZone');
-      return tzs.map(tz => {
-        const offset = dayjs().tz(tz).format('Z');
-        return { value: tz, label: `(UTC${offset}) ${tz}` };
+      const uniqueOptions = new Map<string, { value: string, label: string, offset: number }>();
+      
+      tzs.forEach(tz => {
+        const offsetString = dayjs().tz(tz).format('Z');
+        const offsetMinutes = dayjs().tz(tz).utcOffset();
+        const label = `(UTC${offsetString}) ${tz}`;
+        uniqueOptions.set(label, { value: tz, label, offset: offsetMinutes });
       });
+
+      const sortedOptions = Array.from(uniqueOptions.values()).sort((a, b) => {
+        if (a.offset !== b.offset) {
+          return a.offset - b.offset;
+        }
+        return a.value.localeCompare(b.value);
+      });
+
+      return sortedOptions.map(opt => ({ value: opt.value, label: opt.label }));
     } catch (e) {
       return [
         { value: 'UTC', label: '(UTC+00:00) UTC' },
