@@ -13,8 +13,8 @@ const Login: React.FC = () => {
   const handleLogin = async () => {
     setLoading(true);
     
-    const hardcodedUsername = 'notification@ciwi.ai';
-    const hardcodedPassword = 'Ciwi.AI-2026!';
+    const hardcodedUsername = import.meta.env.VITE_USERNAME;
+    const hardcodedPassword = import.meta.env.VITE_PASSWORD;
 
     if (username === hardcodedUsername && password === hardcodedPassword) {
       sessionStorage.setItem('isAuthenticated', 'true');
