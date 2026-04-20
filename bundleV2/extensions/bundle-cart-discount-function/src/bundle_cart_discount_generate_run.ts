@@ -25,6 +25,40 @@ function log(step: string, detail?: unknown): void {
   }
 }
 
+function summarizeMetafield(
+  mf: { jsonValue?: unknown; value?: unknown; type?: string } | null | undefined,
+): {
+  present: boolean;
+  type: string | null;
+  hasJsonValue: boolean;
+  jsonValueType: string | null;
+  jsonValueKeys?: string[];
+  rawValueLength: number;
+} {
+  const jsonValue = mf?.jsonValue;
+  const rawValue = typeof mf?.value === "string" ? mf.value : "";
+  const jsonValueType =
+    jsonValue === null
+      ? "null"
+      : Array.isArray(jsonValue)
+        ? "array"
+        : typeof jsonValue === "object"
+          ? "object"
+          : typeof jsonValue;
+
+  return {
+    present: Boolean(mf),
+    type: mf?.type ?? null,
+    hasJsonValue: jsonValue !== undefined && jsonValue !== null,
+    jsonValueType: jsonValue === undefined ? null : jsonValueType,
+    jsonValueKeys:
+      jsonValue && typeof jsonValue === "object" && !Array.isArray(jsonValue)
+        ? Object.keys(jsonValue as Record<string, unknown>).slice(0, 20)
+        : undefined,
+    rawValueLength: rawValue.length,
+  };
+}
+
 type OfferMetafieldPayload = {
   updatedAt?: string;
   offers?: Array<{
@@ -53,6 +87,32 @@ export function bundleCartDiscountGenerateRun(
     bundleEnabledProd?: { jsonValue?: unknown; type?: string } | null;
     bundleEnabledTest?: { jsonValue?: unknown; type?: string } | null;
   };
+  log("shop_metafields_snapshot", {
+    offersProd: summarizeMetafield(
+      shopAny.offersProd as
+        | { jsonValue?: unknown; value?: unknown; type?: string }
+        | null
+        | undefined,
+    ),
+    offersTest: summarizeMetafield(
+      shopAny.offersTest as
+        | { jsonValue?: unknown; value?: unknown; type?: string }
+        | null
+        | undefined,
+    ),
+    bundleEnabledProd: summarizeMetafield(
+      shopAny.bundleEnabledProd as
+        | { jsonValue?: unknown; value?: unknown; type?: string }
+        | null
+        | undefined,
+    ),
+    bundleEnabledTest: summarizeMetafield(
+      shopAny.bundleEnabledTest as
+        | { jsonValue?: unknown; value?: unknown; type?: string }
+        | null
+        | undefined,
+    ),
+  });
   const bundleEnabledProdPayload = shopAny.bundleEnabledProd?.jsonValue as
     | { enabled?: boolean }
     | null
