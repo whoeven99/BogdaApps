@@ -383,7 +383,7 @@ const DebugPrompt: React.FC = () => {
               <Col span={24}>
                 <Card title="测试数据集 (JSON 数组)" bordered={false} className="inner-card">
                   <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-                    配置一个包含多个测试对象的 JSON 数组。对象的 key 需与 Prompt 中的变量名 {{`{{key}}`}} 对应。
+                    配置一个包含多个测试对象的 JSON 数组。对象的 key 需与 Prompt 中的变量名 {"{{key}}"} 对应。
                   </Text>
                   <TextArea
                     value={testDatasetStr}
@@ -434,7 +434,7 @@ const DebugPrompt: React.FC = () => {
             <Card title="输入待翻译 HTML" size="small">
               <TextArea value={translation} onChange={(e) => setTranslation(e.target.value)} autoSize={{ minRows: 4 }} />
               <Button type="primary" onClick={handleHtmlToJson} loading={htmlToJsonLoading} style={{ marginTop: 10 }} icon={<Html5Outlined />}>
-                HTML -> JSON
+                HTML -{">"} JSON
               </Button>
             </Card>
           </Col>
