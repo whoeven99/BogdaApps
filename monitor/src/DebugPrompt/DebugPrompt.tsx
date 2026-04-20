@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Button, Card, Col, Drawer, Input, message, Row, Select, Tabs, Table, Space, Rate, Typography, Tag, Slider, InputNumber, Divider } from 'antd';
+import { Button, Card, Col, Drawer, Input, message, Row, Select, Tabs, Table, Space, Rate, Typography, Tag, Slider, InputNumber, Divider, Switch } from 'antd';
 import { RobotOutlined, Html5Outlined, DiffOutlined, DownloadOutlined, PlayCircleOutlined, SettingOutlined, EditOutlined, FunctionOutlined, SendOutlined, SyncOutlined, PictureOutlined } from '@ant-design/icons';
 import './DebugPrompt.css';
 import { httpPost } from "../utils/HttpUtils";
