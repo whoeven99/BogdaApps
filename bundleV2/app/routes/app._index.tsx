@@ -116,14 +116,12 @@ export default function Index() {
         if (bundleOrdersResponse.ok) {
           const data = await bundleOrdersResponse.json();
           if (data.success) {
-            console.log("[ZZ-Test] Fetched bundle orders:", data.totalCount);
             setBundleOrders(data.totalCount || 0);
           }
         }
 
         if (productViewedResponse.ok) {
           const data = await productViewedResponse.json();
-           console.log("[ZZ-Test] Fetched productViewed:", data.totalCount);
           if (data.success) {
             setProductViewed(data.totalCount || 0);
           }
