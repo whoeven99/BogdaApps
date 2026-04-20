@@ -9,12 +9,10 @@ const { TabPane } = Tabs;
 const { Text, Title } = Typography;
 
 const MODEL_OPTIONS = [
-  { value: 'AliYun', label: '豆包·1.5·Pro·视觉理解' }, // Updated label for visual similarity, assuming Aliyun mapped
-  { value: 'qwen-max', label: '阿里云(qwen-max)' },
-  { value: 'gpt', label: 'ChatGpt' },
-  { value: 'DeepL', label: 'DeepL' },
-  { value: 'gemini-2.5-flash-image', label: 'Gemini图片翻译' },
-  { value: 'gemini-2.5-flash', label: 'Gemini文本翻译' },
+  { value: 'kimi-k2-0905-preview', label: 'kimi-k2.5' },
+  { value: 'gemini-3-pro-preview', label: 'gemini-3-flash-preview' },
+  { value: 'qwen-plus', label: 'qwen-max' },
+  { value: 'gpt-4.1', label: 'gpt-4.1' },
 ];
 
 const extractVariables = (text: string) => {
@@ -40,7 +38,7 @@ const DebugPrompt: React.FC = () => {
   const [prompt, setPrompt] = useState('# 角色\n你是一个图片分析大师，可以通过用户输入的图片解析图片的内容。\n\n## 技能: 分析图片, 给出建议\n根据用户的问题{{query}}，结合用户传入的图片，为用户分析图片，给出合理的指引。对于不同主题，需要能够体现图片的含义，猜测用户询问该图片的目的等。\n回复使用以下格式 (内容可以合理使用 emoji 表情, 让内容更生动):\n\n## 输出格式\n#### 基本信息\n- 🎨 图片解析内容：\n- 🎨 图片主题：\n- 🎨 图片可能来自于：\n- 🎨 其他解释：\n\n## 限制:\n- 所输出的内容必须按照给定的格式进行组织，不能偏离框架要求。');
   const [variableNames, setVariableNames] = useState<string[]>(['query']);
   const [variables, setVariables] = useState<Record<string, string>>({});
-  const [models, setModels] = useState<string[]>(['AliYun']);
+  const [models, setModels] = useState<string[]>(['kimi-k2-0905-preview']);
   const [targetLanguage, setTargetLanguage] = useState('');
   const [picUrl, setPicUrl] = useState('');
   const [activeTab, setActiveTab] = useState('single');
@@ -104,7 +102,17 @@ const DebugPrompt: React.FC = () => {
     modelsToRun.forEach(async (m) => {
       setLoadingModels(prev => ({ ...prev, [m]: true }));
       try {
-        const payload = { prompt: finalPrompt, target: targetLanguage, json: htmlToJson, model: m, picUrl };
+        const payload = { 
+          prompt: finalPrompt, 
+          target: targetLanguage, 
+          json: htmlToJson, 
+          model: m, 
+          picUrl,
+          temperature,
+          topP,
+          presencePenalty,
+          maxTokens
+        };
         const response = await httpPost("production", '/promptTest', JSON.stringify(payload));
         setApiResponses(prev => ({ ...prev, [m]: response }));
       } catch (err) {
@@ -169,7 +177,11 @@ const DebugPrompt: React.FC = () => {
               target: targetLanguage, 
               json: htmlToJson, 
               model: m, 
-              picUrl 
+              picUrl,
+              temperature,
+              topP,
+              presencePenalty,
+              maxTokens
             }));
             rowResult.modelResponses[m] = response;
           } catch(e) {
