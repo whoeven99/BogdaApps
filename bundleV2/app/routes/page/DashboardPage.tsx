@@ -305,7 +305,6 @@ export function DashboardPage({
         
         if (response.ok) {
           const data = await response.json();
-          console.log("[ZZ-Test] overview-gmv data: ", data)
           if (data.success) {
             setTotalGmv(data.totalGmv || 0);
             setGmvGrowthRate(data.gmvGrowthRate || 0);
@@ -335,14 +334,12 @@ export function DashboardPage({
         if (bundleOrdersResponse.ok) {
           const data = await bundleOrdersResponse.json();
           if (data.success) {
-            console.log("[ZZ-Test] Fetched bundle orders:", data.totalCount);
             setBundleOrders(data.totalCount || 0);
           }
         }
 
         if (productViewedResponse.ok) {
           const data = await productViewedResponse.json();
-           console.log("[ZZ-Test] Fetched productViewed:", data.totalCount);
           if (data.success) {
             setProductViewed(data.totalCount || 0);
           }

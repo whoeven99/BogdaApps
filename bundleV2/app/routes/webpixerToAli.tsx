@@ -142,9 +142,6 @@ function buildDailyGmvTrend(
   fromDate: Date,
   toDate: Date,
 ): DailyGmvPoint[] {
-  // 打印从SLS接收到的原始聚合数据
-  console.log("[buildDailyGmvTrend] Raw SLS query result", queryResult);
-
   // 使用Map来存储每日的GMV总额。键是日期字符串（如 '2023-10-26'），值是累计的GMV
   const dailyGmv = new Map<string, number>();
   const rates = getBogdaRate();
@@ -203,9 +200,6 @@ function buildDailyGmvTrend(
     // 将日期向前推一天，继续下一轮循环
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
-
-  // 打印最终生成的时间序列数据
-  console.log("[buildDailyGmvTrend] Final GMV series", series);
 
   // 返回构建好的时间序列
   return series;
@@ -534,14 +528,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           ? (resp as { logs: unknown[] }).logs
           : []) as { day: string; currency: string; total_amount: number }[];
 
-      console.log("[web-pixel-TEST] webpixerToAli getLogs", {
-        query,
-        from: fromDate.toISOString(),
-        to: toDate.toISOString(),
-        logsCount: queryResult.length,
-        logs: queryResult,
-      });
-
       const series = buildDailyGmvTrend(queryResult, fromDate, toDate);
       return new Response(
         JSON.stringify({
@@ -759,10 +745,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       ]);
 
       const totalCount = toNumber(bundleOrdersLast30DaysAgg.total_count);
-      console.log("[ZZ-Test] bundleOrders", {
-        totalCount,
-        
-      });
       return new Response(
         JSON.stringify({
           success: true,
