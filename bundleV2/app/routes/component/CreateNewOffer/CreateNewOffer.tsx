@@ -123,6 +123,33 @@ function buildDiscountRulesJson(tiers: DiscountRule[]): DiscountRule[] {
     );
 }
 
+function calculatePreviewBundleAmounts(
+  unitPrice: number,
+  quantity: number,
+  discountPercent: number,
+) {
+  const MONEY_SCALE = 10000;
+  const safeQty = Math.max(1, Math.trunc(Number(quantity) || 1));
+  const safeDiscountPercent = Math.max(
+    0,
+    Math.min(100, Number(discountPercent) || 0),
+  );
+  const unitPriceScaled = Math.round(unitPrice * MONEY_SCALE);
+  const originalTotalScaled = unitPriceScaled * safeQty;
+  const discountedTotalScaled = Math.round(
+    originalTotalScaled * (1 - safeDiscountPercent / 100),
+  );
+  const originalTotal = Math.round(originalTotalScaled / (MONEY_SCALE / 100)) / 100;
+  const discountedTotal =
+    Math.round(discountedTotalScaled / (MONEY_SCALE / 100)) / 100;
+
+  return {
+    originalTotal,
+    discountedTotal,
+    saved: originalTotal - discountedTotal,
+  };
+}
+
 function sanitizeDiscountRules(tiers: DiscountRule[]): DiscountRule[] {
   const dedupedByCount = new Map<number, DiscountRule>();
   for (const tier of tiers) {
@@ -393,13 +420,16 @@ export function CreateNewOffer({
         {
           id: "bxgy-single",
           title: `Buy ${rule.buyQuantity} Get ${rule.getQuantity}`,
-          subtitle: rule.discountPercent === 100 ? "Y items FREE" : `Save ${rule.discountPercent}% on Y items`,
+          subtitle:
+            rule.discountPercent === 100
+              ? "Y items FREE"
+              : `Save ${rule.discountPercent}% on Y items`,
           price: formatPreviewPrice(baseUnitPrice * rule.buyQuantity),
           badge: rule.badge || "BXGY",
-        }
+        },
       ];
     }
-    
+
     return [
       {
         id: "single",
@@ -408,9 +438,12 @@ export function CreateNewOffer({
         price: formatPreviewPrice(baseUnitPrice),
       },
       ...normalizedDiscountRules.map((rule, index) => {
-        const originalTotal = rule.count * baseUnitPrice;
-        const discountedTotal = originalTotal * (1 - rule.discountPercent / 100);
-        const saved = originalTotal - discountedTotal;
+        const { originalTotal, discountedTotal, saved } =
+          calculatePreviewBundleAmounts(
+            baseUnitPrice,
+            rule.count,
+            rule.discountPercent,
+          );
         const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
         return {
           id: `tier-${rule.count}`,
@@ -418,15 +451,20 @@ export function CreateNewOffer({
           subtitle: rule.subtitle || `You save ${rule.discountPercent}%`,
           price: formatPreviewPrice(discountedTotal),
           original: formatPreviewPrice(originalTotal),
-          badge: rule.badge || (isFeatured ? "Popular" : ""),
-          isFeatured,
+          featured: isFeatured,
+          badge: rule.badge || (isFeatured ? "Most Popular" : ""),
+          saveLabel: `SAVE ${formatPreviewPrice(saved)}`,
         };
-      })
+      }),
     ];
-  }, [offerType, bxgyDiscountRules, normalizedDiscountRules, baseUnitPrice, formatPreviewPrice]);
-      
-    }),
-  ];
+  }, [
+    offerType,
+    bxgyDiscountRules,
+    normalizedDiscountRules,
+    baseUnitPrice,
+    formatPreviewPrice,
+    hasDefault,
+  ]);
 
   const steps = [
     "Basic Information",
@@ -686,7 +724,8 @@ export function CreateNewOffer({
                           placeholder="e.g., Summer Bundle Deal"
                           value={offerName}
                           onChange={(e) => {
-                            setOfferName(e.target.value.replace(/[\r\n]+/g, " "));
+                            setOfferName(e.target.value.replace(/[
+]+/g, " "));
                             if (offerNameError && e.target.value.trim()) {
                               setOfferNameError("");
                             }
@@ -729,7 +768,8 @@ export function CreateNewOffer({
                           placeholder="e.g., Bundle Discount"
                           value={cartTitle}
                           onChange={(e) => {
-                            setCartTitle(e.target.value.replace(/[\r\n]+/g, " "));
+                            setCartTitle(e.target.value.replace(/[
+]+/g, " "));
                             if (cartTitleError && e.target.value.trim()) {
                               setCartTitleError("");
                             }
@@ -1220,7 +1260,7 @@ export function CreateNewOffer({
                           </div>
                         </div>
                       </div>
-                    ))}
+                    )};
                     <Button
                       type="dashed"
                       className="w-full"
@@ -1236,7 +1276,7 @@ export function CreateNewOffer({
                     >
                       + Add discount tier
                     </Button>
-                  )}
+                 )
                 </div>
                 </div>
 
@@ -1293,7 +1333,8 @@ export function CreateNewOffer({
                     value={widgetTitle}
                     placeholder="e.g. Bundle & Save"
                     onChange={(e) =>
-                      setWidgetTitle(e.target.value.replace(/[\r\n]+/g, " "))
+                      setWidgetTitle(e.target.value.replace(/[
+]+/g, " "))
                     }
                     maxLength={OFFER_TEXT_LIMITS.widgetTitle}
                     showCount
@@ -1532,7 +1573,8 @@ export function CreateNewOffer({
                           size="large"
                           value={buttonText}
                           onChange={(e) =>
-                            setButtonText(e.target.value.replace(/[\r\n]+/g, " "))
+                            setButtonText(e.target.value.replace(/[
+]+/g, " "))
                           }
                           className="mt-1"
                           maxLength={OFFER_TEXT_LIMITS.buttonText}
