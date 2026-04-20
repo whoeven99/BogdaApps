@@ -346,7 +346,7 @@ const findOffer = (
   marketId: string | undefined,
   offers: Offer[],
 ): Offer | null => {
-  const now = Date.now();
+  const now = new Date().getTime();
 
   for (const offer of offers) {
     if (offer.status === false) {
