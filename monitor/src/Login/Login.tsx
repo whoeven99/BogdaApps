@@ -12,27 +12,18 @@ const Login: React.FC = () => {
 
   const handleLogin = async () => {
     setLoading(true);
-    try {
-      const response = await fetch('/api/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ username, password }),
-      });
+    
+    const hardcodedUsername = 'notification@ciwi.ai';
+    const hardcodedPassword = 'Ciwi.AI-2026!';
 
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        sessionStorage.setItem('isAuthenticated', 'true');
-        message.success('登录成功');
-        navigate('/');
-      } else {
-        message.error(data.message || '账号或密码错误');
-      }
-    } catch (error) {
-      message.error('登录请求失败');
+    if (username === hardcodedUsername && password === hardcodedPassword) {
+      sessionStorage.setItem('isAuthenticated', 'true');
+      message.success('登录成功');
+      navigate('/');
+    } else {
+      message.error('账号或密码错误');
     }
+    
     setLoading(false);
   };
 
