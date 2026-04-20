@@ -750,7 +750,7 @@ export function CreateNewOffer({
                           size="large"
                           value={offerType}
                           onChange={(val) => setOfferType(val)}
-                          disabled
+                          disabled={!!initialOffer}
                           className="w-full"
                           options={offerTypes.map(t => ({ label: t.name, value: t.id }))}
                         />
