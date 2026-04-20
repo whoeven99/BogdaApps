@@ -1956,10 +1956,18 @@ export function CreateNewOffer({
             }
 
             if (step === 2) {
-              if (selectedProductsData.length === 0) {
-                message.error("Please select at least one product.");
-                e.preventDefault();
-                return;
+              if (offerType === "bxgy") {
+                if (buyProducts.length === 0 || getProducts.length === 0) {
+                  message.error("Please select both Buy and Get products for a BXGY offer.");
+                  e.preventDefault();
+                  return;
+                }
+              } else {
+                if (selectedProductsData.length === 0) {
+                  message.error("Please select at least one product.");
+                  e.preventDefault();
+                  return;
+                }
               }
               setStep(3);
               e.preventDefault();
