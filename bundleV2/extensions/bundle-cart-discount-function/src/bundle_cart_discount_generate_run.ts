@@ -366,6 +366,39 @@ const findOffer = (
       continue;
     }
 
+    if (offer.startTime) {
+      const startTimeMs = Date.parse(offer.startTime);
+      if (Number.isFinite(startTimeMs) && now < startTimeMs) {
+        log("offer_skip_before_start", { offerId: offer.id, name: offer.name, startTime: offer.startTime });
+        continue;
+      }
+    }
+
+    if (offer.endTime) {
+      const endTimeMs = Date.parse(offer.endTime);
+      if (Number.isFinite(endTimeMs) && now > endTimeMs) {
+        log("offer_skip_after_end", { offerId: offer.id, name: offer.name, endTime: offer.endTime });
+        continue;
+      }
+    }
+
+    if (marketId && offer.offerSettingsJson) {
+      try {
+        const settings = JSON.parse(offer.offerSettingsJson);
+        const offerMarkets = settings.markets;
+        if (typeof offerMarkets === "string" && offerMarkets !== "all" && offerMarkets.trim() !== "") {
+          const allowedMarkets = offerMarkets.split(",").map((m: string) => m.trim());
+          const matchMarket = allowedMarkets.some(m => m === marketId || m.endsWith(`/${marketId}`));
+          if (!matchMarket) {
+            log("offer_skip_market_mismatch", { offerId: offer.id, name: offer.name, marketId, allowedMarkets });
+            continue;
+          }
+        }
+      } catch (e) {
+        // ignore parse error
+      }
+    }
+    
     const discountTiers = parseDiscountRulesJson(offer.discountRulesJson);
     if (discountTiers.length === 0) {
       log("offer_skip_no_rules", { offerId: offer.id, name: offer.name });
