@@ -337,6 +337,22 @@ const parseSelectedIds = (selectedProductsJson?: string | null): string[] => {
   }
 };
 
+function resolveNowMs(): number | null {
+  const candidates = [
+    Date.now(),
+    new Date().getTime(),
+    Date.parse(new Date().toISOString()),
+  ];
+
+  for (const value of candidates) {
+    if (Number.isFinite(value) && value > 0) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
 /**
  * selectedProductsJson 存的是 Product GID（与主题端、后台一致），需用购物车行的 product.id / variant.id 匹配，不能用 CartLine.id。
  */
@@ -346,7 +362,8 @@ const findOffer = (
   marketId: string | undefined,
   offers: Offer[],
 ): Offer | null => {
-  const now = new Date().getTime();
+  const nowMs = resolveNowMs();
+  const nowIso = nowMs ? new Date(nowMs).toISOString() : null;
 
   for (const offer of offers) {
     if (offer.status === false) {
@@ -360,12 +377,19 @@ const findOffer = (
         offerId: offer.id,
         name: offer.name,
         startTime: offer.startTime,
-        nowIso: new Date(now).toISOString(),
-        nowMs: now,
+        nowIso,
+        nowMs,
         startTimeMs: Number.isFinite(startTimeMs) ? startTimeMs : null,
-        isBeforeStart: Number.isFinite(startTimeMs) ? now < startTimeMs : null,
+        isBeforeStart:
+          Number.isFinite(startTimeMs) && nowMs !== null ? nowMs < startTimeMs : null,
       });
-      if (Number.isFinite(startTimeMs) && now < startTimeMs) {
+      if (nowMs === null) {
+        log("offer_time_unavailable_skip_start_check", {
+          offerId: offer.id,
+          name: offer.name,
+          startTime: offer.startTime,
+        });
+      } else if (Number.isFinite(startTimeMs) && nowMs < startTimeMs) {
         log("offer_skip_before_start", { offerId: offer.id, name: offer.name, startTime: offer.startTime });
         continue;
       }
@@ -373,7 +397,13 @@ const findOffer = (
 
     if (offer.endTime) {
       const endTimeMs = Date.parse(offer.endTime);
-      if (Number.isFinite(endTimeMs) && now > endTimeMs) {
+      if (nowMs === null) {
+        log("offer_time_unavailable_skip_end_check", {
+          offerId: offer.id,
+          name: offer.name,
+          endTime: offer.endTime,
+        });
+      } else if (Number.isFinite(endTimeMs) && nowMs > endTimeMs) {
         log("offer_skip_after_end", { offerId: offer.id, name: offer.name, endTime: offer.endTime });
         continue;
       }
