@@ -32,8 +32,11 @@ type OfferMetafieldPayload = {
     name?: string;
     cartTitle?: string;
     status?: boolean;
+    startTime?: string;
+    endTime?: string;
     selectedProductsJson?: string | null;
     discountRulesJson?: string | null;
+    offerSettingsJson?: string | null;
   }>;
 };
 
@@ -162,12 +165,14 @@ export function bundleCartDiscountGenerateRun(
     const quantity = line.quantity;
     const productId = line.merchandise.product?.id;
     const variantId = line.merchandise.id;
+    const marketId = input.localization?.market?.id;
 
     log("line_evaluate", {
       cartLineId: lineId,
       quantity,
       productId,
       variantId,
+      marketId,
     });
 
     if (!lineId || !quantity) {
@@ -175,7 +180,7 @@ export function bundleCartDiscountGenerateRun(
       continue;
     }
 
-    const suitOffer = findOffer(productId, variantId, offers);
+    const suitOffer = findOffer(productId, variantId, marketId, offers);
     if (!suitOffer) {
       log("line_no_matching_offer", {
         cartLineId: lineId,
@@ -350,8 +355,11 @@ const parseSelectedIds = (selectedProductsJson?: string | null): string[] => {
 const findOffer = (
   productId: string | undefined,
   variantId: string | undefined,
+  marketId: string | undefined,
   offers: Offer[],
 ): Offer | null => {
+  const now = Date.now();
+
   for (const offer of offers) {
     if (offer.status === false) {
       log("offer_skip_disabled", { offerId: offer.id, name: offer.name });

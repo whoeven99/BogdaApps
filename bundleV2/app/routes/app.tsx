@@ -164,7 +164,26 @@ export default function App() {
         <s-link href="/app/additional">Additional page</s-link>
       </s-app-nav>
       <Outlet context={{ ianaTimezone }} />
-          </ConfigProvider>
+      <div className="py-8 text-center text-sm text-[#666]">
+        <a 
+          href="mailto:support@ciwi.ai" 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="mx-3 text-[#666] hover:text-[#008060] transition-colors"
+        >
+          Contact Us
+        </a>
+        |
+        <a 
+          href="https://iw73s3ld6wy.feishu.cn/wiki/UEumwgOLJi90rEknevWcZp7HnQg?from=from_copylink" 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="mx-3 text-[#666] hover:text-[#008060] transition-colors"
+        >
+          User Guide
+        </a>
+      </div>
+    </ConfigProvider>
     </AppProvider>
   );
 }
