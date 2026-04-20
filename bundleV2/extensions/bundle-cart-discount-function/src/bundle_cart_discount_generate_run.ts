@@ -356,6 +356,15 @@ const findOffer = (
 
     if (offer.startTime) {
       const startTimeMs = Date.parse(offer.startTime);
+      log("offer_start_time_check", {
+        offerId: offer.id,
+        name: offer.name,
+        startTime: offer.startTime,
+        nowIso: new Date(now).toISOString(),
+        nowMs: now,
+        startTimeMs: Number.isFinite(startTimeMs) ? startTimeMs : null,
+        isBeforeStart: Number.isFinite(startTimeMs) ? now < startTimeMs : null,
+      });
       if (Number.isFinite(startTimeMs) && now < startTimeMs) {
         log("offer_skip_before_start", { offerId: offer.id, name: offer.name, startTime: offer.startTime });
         continue;
