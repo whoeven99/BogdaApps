@@ -734,6 +734,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   let themeExtensionEnabled = false;
   themeExtensionEnabled = await getCurrentThemeExtensionEnabled(admin);
   void syncBundleEnabledMetafield(admin, themeExtensionEnabled);
+  void syncShopOffersMetafield(admin, session.shop, themeExtensionEnabled).catch((error) => {
+    console.error("Failed to sync shop offers metafield in loader", error);
+  });
 
   let markets: MarketItem[] = [];
   try {
