@@ -724,8 +724,7 @@ export function CreateNewOffer({
                           placeholder="e.g., Summer Bundle Deal"
                           value={offerName}
                           onChange={(e) => {
-                            setOfferName(e.target.value.replace(/[
-]+/g, " "));
+                            setOfferName(e.target.value.replace(/[]+/g, " "));
                             if (offerNameError && e.target.value.trim()) {
                               setOfferNameError("");
                             }
@@ -768,8 +767,7 @@ export function CreateNewOffer({
                           placeholder="e.g., Bundle Discount"
                           value={cartTitle}
                           onChange={(e) => {
-                            setCartTitle(e.target.value.replace(/[
-]+/g, " "));
+                            setCartTitle(e.target.value.replace(/[]+/g, " "));
                             if (cartTitleError && e.target.value.trim()) {
                               setCartTitleError("");
                             }
@@ -1333,8 +1331,7 @@ export function CreateNewOffer({
                     value={widgetTitle}
                     placeholder="e.g. Bundle & Save"
                     onChange={(e) =>
-                      setWidgetTitle(e.target.value.replace(/[
-]+/g, " "))
+                      setWidgetTitle(e.target.value.replace(/[]+/g, " "))
                     }
                     maxLength={OFFER_TEXT_LIMITS.widgetTitle}
                     showCount
@@ -1573,8 +1570,7 @@ export function CreateNewOffer({
                           size="large"
                           value={buttonText}
                           onChange={(e) =>
-                            setButtonText(e.target.value.replace(/[
-]+/g, " "))
+                            setButtonText(e.target.value.replace(/[]+/g, " "))
                           }
                           className="mt-1"
                           maxLength={OFFER_TEXT_LIMITS.buttonText}
