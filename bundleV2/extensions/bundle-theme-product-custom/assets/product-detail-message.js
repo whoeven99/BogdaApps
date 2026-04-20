@@ -362,6 +362,55 @@ function parseDiscountRulesJson(discountRulesJson) {
   }
 }
 
+function parseBxgyDiscountRulesJson(discountRulesJson) {
+  try {
+    let parsed = discountRulesJson;
+    if (typeof parsed === "string") {
+      if (!parsed.trim()) return [];
+      parsed = JSON.parse(parsed);
+    }
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => {
+        if (!item || typeof item !== "object") return null;
+        const buyQuantity = Number(item.buyQuantity);
+        const getQuantity = Number(item.getQuantity);
+        const discountPercent = Number(item.discountPercent);
+
+        if (!Number.isFinite(buyQuantity) || buyQuantity < 1) return null;
+        if (!Number.isFinite(getQuantity) || getQuantity < 1) return null;
+        if (
+          !Number.isFinite(discountPercent) ||
+          discountPercent < 0 ||
+          discountPercent > 100
+        )
+          return null;
+
+        const buyProductIds = Array.isArray(item.buyProductIds)
+          ? item.buyProductIds.map(String)
+          : [];
+        const getProductIds = Array.isArray(item.getProductIds)
+          ? item.getProductIds.map(String)
+          : [];
+
+        return {
+          buyQuantity: Math.trunc(buyQuantity),
+          getQuantity: Math.trunc(getQuantity),
+          discountPercent: discountPercent,
+          buyProductIds: buyProductIds,
+          getProductIds: getProductIds,
+          title: item.title || "",
+          subtitle: item.subtitle || "",
+          badge: item.badge || "",
+          maxUsesPerOrder: Number(item.maxUsesPerOrder) || 1,
+        };
+      })
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 function parseSelectedProductIds(selectedProductsJson) {
   if (typeof selectedProductsJson !== "string" || !selectedProductsJson.trim()) {
     return [];
@@ -505,22 +554,42 @@ function getCurrentOffer(offersConfig) {
       }
     }
 
-    const discountRules = parseDiscountRulesJson(offer.discountRulesJson);
-    if (!discountRules.length) {
-      console.log("[ciwi] offer skipped: no valid discount rules", offer.id);
-      continue;
-    }
-
-    const selectedIds = parseSelectedProductIds(offer.selectedProductsJson);
-    // 指定了商品列表时，仅当前商品命中才展示
-    if (selectedIds.length > 0) {
-      if (!currentProductGid) {
-        console.log("[ciwi] offer skipped: requires specific products but current product GID is null", offer.id);
+    if (offer.offerType === 'bxgy') {
+      const bxgyRules = parseBxgyDiscountRulesJson(offer.discountRulesJson);
+      if (!bxgyRules.length) {
+        console.log("[ciwi] offer skipped: no valid bxgy discount rules", offer.id);
         continue;
       }
-      if (!selectedIds.includes(currentProductGid)) {
-        console.log("[ciwi] offer skipped: current product not in selected list", offer.id, currentProductGid, selectedIds);
+      const rule = bxgyRules[0];
+      if (!rule.buyProductIds || rule.buyProductIds.length === 0) {
+        console.log("[ciwi] bxgy offer skipped: buyProductIds is empty", offer.id);
         continue;
+      }
+      if (!currentProductGid) {
+        console.log("[ciwi] bxgy offer skipped: current product GID is null", offer.id);
+        continue;
+      }
+      if (!rule.buyProductIds.includes(currentProductGid)) {
+        console.log("[ciwi] bxgy offer skipped: current product not in buy list", offer.id, currentProductGid);
+        continue;
+      }
+    } else {
+      // quantity-breaks-same
+      const discountRules = parseDiscountRulesJson(offer.discountRulesJson);
+      if (!discountRules.length) {
+        console.log("[ciwi] offer skipped: no valid quantity discount rules", offer.id);
+        continue;
+      }
+      const selectedIds = parseSelectedProductIds(offer.selectedProductsJson);
+      if (selectedIds.length > 0) {
+        if (!currentProductGid) {
+          console.log("[ciwi] offer skipped: requires specific products but current product GID is null", offer.id);
+          continue;
+        }
+        if (!selectedIds.includes(currentProductGid)) {
+          console.log("[ciwi] offer skipped: current product not in selected list", offer.id, currentProductGid, selectedIds);
+          continue;
+        }
       }
     }
 
@@ -619,6 +688,47 @@ window.ciwiHandleBundleAddToCart = function() {
 };
 
 function renderBundlePreviewHtml(offer) {
+  // BXGY offer type support
+  if (offer.offerType === 'bxgy') {
+    const bxgyRules = parseBxgyDiscountRulesJson(offer?.discountRulesJson);
+    if (!bxgyRules.length) return "";
+    const rule = bxgyRules[0];
+
+    let offerSettings = {};
+    try {
+      if (offer?.offerSettingsJson) {
+        offerSettings = JSON.parse(offer.offerSettingsJson);
+      }
+    } catch (e) {
+      console.error("[ciwi] failed to parse offerSettingsJson", e);
+    }
+
+    const widgetTitle = offerSettings.title || "Special Offer";
+    const accentColor = offerSettings.accentColor || "#008060";
+    const titleColor = offerSettings.titleColor || "#111111";
+    const titleFontSize = offerSettings.titleFontSize || 16;
+    const titleFontWeight = offerSettings.titleFontWeight || "600";
+
+    const title = rule.title || `Buy ${rule.buyQuantity}, Get ${rule.getQuantity}`;
+    let subtitle = rule.subtitle || "";
+    if (!subtitle) {
+      subtitle =
+        rule.discountPercent === 100
+          ? `Get ${rule.getQuantity} item(s) FREE`
+          : `Get ${rule.getQuantity} item(s) with ${rule.discountPercent}% OFF`;
+    }
+
+    return `<div class="create-offer-preview-card">
+      <div class="create-offer-style-preview-header" style="color:${esc(titleColor)} !important; font-size: ${esc(titleFontSize)}px !important; font-weight: ${esc(titleFontWeight)} !important;">${esc(widgetTitle)}</div>
+      <div class="ciwi-bxgy-info-card" style="border: 1px solid ${esc(accentColor)}; padding: 16px; border-radius: 8px; text-align: center; margin-top: 12px;">
+          <h3 style="font-size: 1.1em; font-weight: 600; margin: 0 0 8px 0;">${esc(title)}</h3>
+          <p style="margin: 0; font-size: 0.9em;">${esc(subtitle)}</p>
+          <p style="margin: 8px 0 0 0; font-size: 0.85em; opacity: 0.8;">The discount will be applied automatically in your cart.</p>
+      </div>
+    </div>`;
+  }
+  
+  // Existing logic for quantity breaks
   const discountRules = parseDiscountRulesJson(offer?.discountRulesJson);
   if (!discountRules.length) return "";
 
@@ -982,8 +1092,10 @@ function tryMount(offer) {
 
   if (insertNearAddToCart(section, selectors)) {
     src.remove();
-    attachBundlePriceSync(offer);
-    hideThemeQuantitySelectors();
+    if (offer.offerType !== 'bxgy') {
+      attachBundlePriceSync(offer);
+      hideThemeQuantitySelectors();
+    }
     return "done";
   }
   return "retry";
@@ -1004,8 +1116,10 @@ function fallbackMount(offer) {
     currentMainForm = document.querySelector("form[action*='/cart/add']");
   }
 
-  attachBundlePriceSync(offer);
-  hideThemeQuantitySelectors();
+  if (offer.offerType !== 'bxgy') {
+    attachBundlePriceSync(offer);
+    hideThemeQuantitySelectors();
+  }
 }
 
 function hideThemeQuantitySelectors() {

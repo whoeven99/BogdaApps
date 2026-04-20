@@ -402,8 +402,37 @@ export function CreateNewOffer({
   const [bxgyDiscountRules, setBxgyDiscountRules] = useState<BxgyDiscountRule[]>(
     parseBxgyDiscountRules(initialOffer?.discountRulesJson),
   );
-  const [buyProducts, setBuyProducts] = useState<string[]>([]);
-  const [getProducts, setGetProducts] = useState<string[]>([]);
+  const [buyProducts, setBuyProducts] = useState<string[]>(() => {
+    if (initialOffer?.offerType !== 'bxgy' || !initialOffer.selectedProductsJson) return [];
+    try {
+      const parsed = JSON.parse(initialOffer.selectedProductsJson);
+      return Array.isArray(parsed.buyProducts) ? parsed.buyProducts.map(String) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+  const [getProducts, setGetProducts] = useState<string[]>(() => {
+    if (initialOffer?.offerType !== 'bxgy' || !initialOffer.selectedProductsJson) return [];
+    try {
+      const parsed = JSON.parse(initialOffer.selectedProductsJson);
+      return Array.isArray(parsed.getProducts) ? parsed.getProducts.map(String) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    if (offerType === 'bxgy') {
+      setBxgyDiscountRules(prev =>
+        prev.map(rule => ({
+          ...rule,
+          buyProductIds: buyProducts,
+          getProductIds: getProducts,
+        })),
+      );
+    }
+  }, [buyProducts, getProducts, offerType]);
+
   const [status, setStatus] = useState<boolean>(
     initialOffer ? initialOffer.status : true
   );
