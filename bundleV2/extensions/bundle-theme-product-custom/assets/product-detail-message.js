@@ -373,10 +373,12 @@ function parseBxgyDiscountRulesJson(discountRulesJson) {
     return parsed
       .map((item) => {
         if (!item || typeof item !== "object") return null;
+        const count = Number(item.count);
         const buyQuantity = Number(item.buyQuantity);
         const getQuantity = Number(item.getQuantity);
         const discountPercent = Number(item.discountPercent);
 
+        if (!Number.isFinite(count) || count < 1) return null;
         if (!Number.isFinite(buyQuantity) || buyQuantity < 1) return null;
         if (!Number.isFinite(getQuantity) || getQuantity < 1) return null;
         if (
@@ -394,6 +396,7 @@ function parseBxgyDiscountRulesJson(discountRulesJson) {
           : [];
 
         return {
+          count: Math.trunc(count),
           buyQuantity: Math.trunc(buyQuantity),
           getQuantity: Math.trunc(getQuantity),
           discountPercent: discountPercent,
@@ -403,9 +406,11 @@ function parseBxgyDiscountRulesJson(discountRulesJson) {
           subtitle: item.subtitle || "",
           badge: item.badge || "",
           maxUsesPerOrder: Number(item.maxUsesPerOrder) || 1,
+          isDefault: !!item.isDefault,
         };
       })
-      .filter(Boolean);
+      .filter(Boolean)
+      .sort((a, b) => a.count - b.count);
   } catch {
     return [];
   }
@@ -561,6 +566,10 @@ function getCurrentOffer(offersConfig) {
         continue;
       }
       const rule = bxgyRules[0];
+      if (!rule.count) {
+        console.log("[ciwi] bxgy offer skipped: count is invalid", offer.id);
+        continue;
+      }
       if (!rule.buyProductIds || rule.buyProductIds.length === 0) {
         console.log("[ciwi] bxgy offer skipped: buyProductIds is empty", offer.id);
         continue;
@@ -688,11 +697,17 @@ window.ciwiHandleBundleAddToCart = function() {
 };
 
 function renderBundlePreviewHtml(offer) {
-  // BXGY offer type support
+  // BXGY offer type support — quantity-break-style tier cards
   if (offer.offerType === 'bxgy') {
     const bxgyRules = parseBxgyDiscountRulesJson(offer?.discountRulesJson);
     if (!bxgyRules.length) return "";
-    const rule = bxgyRules[0];
+
+    if (!window.__ciwiBundleState.selectedCount) {
+      const defaultRule = bxgyRules.find(r => r.isDefault);
+      window.__ciwiBundleState.selectedCount = defaultRule ? defaultRule.count : (bxgyRules[0]?.count || 1);
+      setTimeout(() => updateThemeQuantityInput(window.__ciwiBundleState.selectedCount), 0);
+    }
+    const selectedCount = window.__ciwiBundleState.selectedCount;
 
     let offerSettings = {};
     try {
@@ -703,28 +718,71 @@ function renderBundlePreviewHtml(offer) {
       console.error("[ciwi] failed to parse offerSettingsJson", e);
     }
 
-    const widgetTitle = offerSettings.title || "Special Offer";
+    const layoutFormat = offerSettings.layoutFormat || "vertical";
     const accentColor = offerSettings.accentColor || "#008060";
-    const titleColor = offerSettings.titleColor || "#111111";
-    const titleFontSize = offerSettings.titleFontSize || 16;
+    const cardBackgroundColor = offerSettings.cardBackgroundColor || "#ffffff";
+    const borderColor = offerSettings.borderColor || "#dfe3e8";
+    const labelColor = offerSettings.labelColor || "#ffffff";
+    const titleFontSize = offerSettings.titleFontSize || 14;
     const titleFontWeight = offerSettings.titleFontWeight || "600";
+    const titleColor = offerSettings.titleColor || "#111111";
+    const buttonText = offerSettings.buttonText || "Add to Cart";
+    const buttonPrimaryColor = offerSettings.buttonPrimaryColor || "#008060";
+    const showCustomButton = offerSettings.showCustomButton !== false;
+    const widgetTitle = offerSettings.title || "Bundle & Save";
+    const hasDefault = bxgyRules.some((r) => r.isDefault);
 
-    const title = rule.title || `Buy ${rule.buyQuantity}, Get ${rule.getQuantity}`;
-    let subtitle = rule.subtitle || "";
-    if (!subtitle) {
-      subtitle =
-        rule.discountPercent === 100
-          ? `Get ${rule.getQuantity} item(s) FREE`
-          : `Get ${rule.getQuantity} item(s) with ${rule.discountPercent}% OFF`;
-    }
+    const items = bxgyRules.map((rule, index) => {
+      const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
+      const displayCount = rule.count || 1;
+      return {
+        count: displayCount,
+        title: rule.title || `${displayCount} items`,
+        subtitle: rule.subtitle || `Buy ${rule.buyQuantity}, Get ${rule.getQuantity}`,
+        price: rule.discountPercent === 100
+          ? `${rule.getQuantity} FREE`
+          : `${rule.discountPercent}% OFF`,
+        badge: rule.badge || (isFeatured ? "Most Popular" : ""),
+        saveLabel: `BUY ${rule.buyQuantity} + GET ${rule.getQuantity}`,
+      };
+    });
+
+    const itemsHtml = items
+      .map((item) => {
+        const isSelected = item.count === selectedCount;
+        const featuredClass = isSelected
+          ? " create-offer-style-preview-item--featured"
+          : "";
+        const featuredStyle = isSelected
+          ? `border-color: ${esc(accentColor)} !important; background: ${esc(cardBackgroundColor)} !important; box-shadow: 0 8px 18px ${esc(accentColor)}25 !important; cursor: pointer;`
+          : `border-color: ${esc(borderColor)} !important; background: ${esc(cardBackgroundColor)} !important; cursor: pointer;`;
+
+        return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}" onclick="window.ciwiSelectBundleOption(${item.count})">
+        ${
+          item.badge
+            ? `<div class="create-offer-style-preview-badge" style="background:${esc(accentColor)} !important; color:${esc(labelColor)} !important;">${esc(item.badge)}</div>`
+            : ""
+        }
+        <div class="create-offer-style-preview-item-title">${esc(item.title)}</div>
+        <div class="create-offer-style-preview-item-subtitle">${esc(item.subtitle)}</div>
+        ${
+          item.saveLabel
+            ? `<div class="create-offer-style-preview-item-subtitle">${esc(item.saveLabel)}</div>`
+            : ""
+        }
+        <div class="create-offer-style-preview-item-price">${esc(item.price)}</div>
+      </div>`;
+      })
+      .join("");
 
     return `<div class="create-offer-preview-card">
       <div class="create-offer-style-preview-header" style="color:${esc(titleColor)} !important; font-size: ${esc(titleFontSize)}px !important; font-weight: ${esc(titleFontWeight)} !important;">${esc(widgetTitle)}</div>
-      <div class="ciwi-bxgy-info-card" style="border: 1px solid ${esc(accentColor)}; padding: 16px; border-radius: 8px; text-align: center; margin-top: 12px;">
-          <h3 style="font-size: 1.1em; font-weight: 600; margin: 0 0 8px 0;">${esc(title)}</h3>
-          <p style="margin: 0; font-size: 0.9em;">${esc(subtitle)}</p>
-          <p style="margin: 8px 0 0 0; font-size: 0.85em; opacity: 0.8;">The discount will be applied automatically in your cart.</p>
+      <div class="create-offer-style-preview-list create-offer-style-preview-list--${layoutFormat}">
+        ${itemsHtml}
       </div>
+      ${showCustomButton ? `<button class="create-offer-preview-button" onclick="window.ciwiHandleBundleAddToCart()" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
+        ${esc(buttonText)}
+      </button>` : ""}
     </div>`;
   }
   
@@ -1035,10 +1093,8 @@ function tryMount(offer) {
 
   if (insertNearAddToCart(section, selectors)) {
     src.remove();
-    if (offer.offerType !== 'bxgy') {
-      attachBundlePriceSync(offer);
-      hideThemeQuantitySelectors();
-    }
+    attachBundlePriceSync(offer);
+    hideThemeQuantitySelectors();
     return "done";
   }
   return "retry";
@@ -1059,10 +1115,8 @@ function fallbackMount(offer) {
     currentMainForm = document.querySelector("form[action*='/cart/add']");
   }
 
-  if (offer.offerType !== 'bxgy') {
-    attachBundlePriceSync(offer);
-    hideThemeQuantitySelectors();
-  }
+  attachBundlePriceSync(offer);
+  hideThemeQuantitySelectors();
 }
 
 function hideThemeQuantitySelectors() {

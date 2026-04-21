@@ -20,6 +20,7 @@ import {
   parseBxgyDiscountRules,
   parseOfferSettings,
   parseSelectedProductIds,
+  buildBxgyDiscountRulesJson,
 } from "../../../utils/offerParsing";
 
 type DiscountRule = {
@@ -33,6 +34,8 @@ type DiscountRule = {
 };
 
 type BxgyDiscountRule = {
+  /** Cart quantity threshold (from buy-product list) to trigger this tier */
+  count: number;
   buyQuantity: number;
   getQuantity: number;
   buyProductIds: string[];
@@ -426,6 +429,7 @@ export function CreateNewOffer({
       setBxgyDiscountRules(prev =>
         prev.map(rule => ({
           ...rule,
+          count: rule.count || 1,
           buyProductIds: buyProducts,
           getProductIds: getProducts,
         })),
@@ -444,19 +448,22 @@ export function CreateNewOffer({
 
   const previewItems: PreviewItem[] = useMemo(() => {
     if (offerType === "bxgy" && bxgyDiscountRules.length > 0) {
-      const rule = bxgyDiscountRules[0];
-      return [
-        {
-          id: "bxgy-single",
-          title: `Buy ${rule.buyQuantity} Get ${rule.getQuantity}`,
-          subtitle:
-            rule.discountPercent === 100
-              ? "Y items FREE"
-              : `Save ${rule.discountPercent}% on Y items`,
-          price: formatPreviewPrice(baseUnitPrice * rule.buyQuantity),
-          badge: rule.badge || "BXGY",
-        },
-      ];
+      const hasDefault = bxgyDiscountRules.some(r => r.isDefault);
+      return bxgyDiscountRules.map((rule, index) => {
+        const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
+        const displayCount = rule.count || 1;
+        return {
+          id: `bxgy-tier-${rule.count}`,
+          title: rule.title || `${displayCount} items`,
+          subtitle: rule.subtitle || `Buy ${rule.buyQuantity}, Get ${rule.getQuantity}`,
+          price: rule.discountPercent === 100
+            ? `${rule.getQuantity} FREE`
+            : `${rule.discountPercent}% OFF`,
+          featured: isFeatured,
+          badge: rule.badge || (isFeatured ? "Most Popular" : ""),
+          saveLabel: `BUY ${rule.buyQuantity} + GET ${rule.getQuantity}`,
+        };
+      });
     }
 
     return [
@@ -689,7 +696,7 @@ export function CreateNewOffer({
       <input
         type="hidden"
         name="discountRulesJson"
-        value={JSON.stringify(offerType === "bxgy" ? bxgyDiscountRules : buildDiscountRulesJson(normalizedDiscountRules))}
+        value={JSON.stringify(offerType === "bxgy" ? buildBxgyDiscountRulesJson(bxgyDiscountRules) : buildDiscountRulesJson(normalizedDiscountRules))}
       />
 
       <div className="bg-[#ffffff] rounded-[8px] shadow-[0_1px_3px_rgba(0,0,0,0.1)] p-[20px] mb-[100px]">
@@ -1017,137 +1024,234 @@ export function CreateNewOffer({
                       {offerType === "bxgy" ? "BXGY Rules" : "Discount Setting"}
                     </h3>
                     {offerType === "bxgy" ? (
-                      <div className="create-offer-discount-card">
-                        <div className="create-offer-discount-body">
-                          <div className="create-offer-discount-form-row create-offer-discount-form-row--inline">
-                            <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                              Buy Quantity (X)
-                              <Input
-                                size="large"
-                                type="number"
-                                min={1}
-                                step={1}
-                                className="mt-1"
-                                value={bxgyDiscountRules[0]?.buyQuantity || 1}
-                                onChange={(e) => {
-                                  const parsedValue = Number(e.target.value);
-                                  const nextCount =
-                                    Number.isFinite(parsedValue) && parsedValue >= 1
-                                      ? Math.trunc(parsedValue)
-                                      : 1;
-                                  setBxgyDiscountRules(prev => prev.length > 0 
-                                    ? [{ ...prev[0], buyQuantity: nextCount }]
-                                    : [{ 
-                                        buyQuantity: nextCount,
-                                        getQuantity: 1,
-                                        buyProductIds: buyProducts,
-                                        getProductIds: getProducts,
-                                        discountPercent: 100,
-                                        maxUsesPerOrder: 1
-                                      }]
-                                  );
-                                }}
-                              />
-                            </label>
-                            <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                              Get Quantity (Y)
-                              <Input
-                                size="large"
-                                type="number"
-                                min={1}
-                                step={1}
-                                className="mt-1"
-                                value={bxgyDiscountRules[0]?.getQuantity || 1}
-                                onChange={(e) => {
-                                  const parsedValue = Number(e.target.value);
-                                  const nextCount =
-                                    Number.isFinite(parsedValue) && parsedValue >= 1
-                                      ? Math.trunc(parsedValue)
-                                      : 1;
-                                  setBxgyDiscountRules(prev => prev.length > 0 
-                                    ? [{ ...prev[0], getQuantity: nextCount }]
-                                    : [{ 
-                                        buyQuantity: 1,
-                                        getQuantity: nextCount,
-                                        buyProductIds: buyProducts,
-                                        getProductIds: getProducts,
-                                        discountPercent: 100,
-                                        maxUsesPerOrder: 1
-                                      }]
-                                  );
-                                }}
-                              />
-                            </label>
-                            <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                              Discount (%)
-                              <Input
-                                size="large"
-                                type="number"
-                                min={0}
-                                max={100}
-                                step={1}
-                                className="mt-1"
-                                value={bxgyDiscountRules[0]?.discountPercent || 100}
-                                onChange={(e) => {
-                                  const parsedValue = Number(e.target.value);
-                                  if (parsedValue > 100) return;
-                                  const nextPercent =
-                                    Number.isFinite(parsedValue) && parsedValue >= 0
-                                      ? parsedValue
-                                      : 100;
-                                  setBxgyDiscountRules(prev => prev.length > 0 
-                                    ? [{ ...prev[0], discountPercent: nextPercent }]
-                                    : [{ 
-                                        buyQuantity: 1,
-                                        getQuantity: 1,
-                                        buyProductIds: buyProducts,
-                                        getProductIds: getProducts,
-                                        discountPercent: nextPercent,
-                                        maxUsesPerOrder: 1
-                                      }]
-                                  );
-                                }}
-                              />
-                              {bxgyDiscountRules[0]?.discountPercent === 100 && (
-                                <div className="text-[#52c41a] text-[12px] mt-1 font-normal">
-                                  Y products will be FREE
-                                </div>
-                              )}
-                            </label>
+                      <>
+                        {bxgyDiscountRules.map((rule, index) => (
+                          <div className="create-offer-discount-card" key={index}>
+                            <div className="create-offer-discount-body">
+                              <div className="create-offer-discount-form-row create-offer-discount-form-row--inline">
+                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                  Cart quantity
+                                  <Input
+                                    size="large"
+                                    type="number"
+                                    min={1}
+                                    step={1}
+                                    className="mt-1"
+                                    value={rule.count}
+                                    onChange={(e) => {
+                                      const parsedValue = Number(e.target.value);
+                                      const nextCount =
+                                        Number.isFinite(parsedValue) && parsedValue >= 1
+                                          ? Math.trunc(parsedValue)
+                                          : 1;
+                                      setBxgyDiscountRules(prev =>
+                                        prev.map((r, i) =>
+                                          i === index ? { ...r, count: nextCount } : r,
+                                        ),
+                                      );
+                                    }}
+                                  />
+                                </label>
+                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                  Buy Quantity (X)
+                                  <Input
+                                    size="large"
+                                    type="number"
+                                    min={1}
+                                    step={1}
+                                    className="mt-1"
+                                    value={rule.buyQuantity}
+                                    onChange={(e) => {
+                                      const parsedValue = Number(e.target.value);
+                                      const nextCount =
+                                        Number.isFinite(parsedValue) && parsedValue >= 1
+                                          ? Math.trunc(parsedValue)
+                                          : 1;
+                                      setBxgyDiscountRules(prev =>
+                                        prev.map((r, i) =>
+                                          i === index ? { ...r, buyQuantity: nextCount } : r,
+                                        ),
+                                      );
+                                    }}
+                                  />
+                                </label>
+                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                  Get Quantity (Y)
+                                  <Input
+                                    size="large"
+                                    type="number"
+                                    min={1}
+                                    step={1}
+                                    className="mt-1"
+                                    value={rule.getQuantity}
+                                    onChange={(e) => {
+                                      const parsedValue = Number(e.target.value);
+                                      const nextCount =
+                                        Number.isFinite(parsedValue) && parsedValue >= 1
+                                          ? Math.trunc(parsedValue)
+                                          : 1;
+                                      setBxgyDiscountRules(prev =>
+                                        prev.map((r, i) =>
+                                          i === index ? { ...r, getQuantity: nextCount } : r,
+                                        ),
+                                      );
+                                    }}
+                                  />
+                                </label>
+                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                  Discount (%)
+                                  <Input
+                                    size="large"
+                                    type="number"
+                                    min={0}
+                                    max={100}
+                                    step={1}
+                                    className="mt-1"
+                                    value={rule.discountPercent}
+                                    onChange={(e) => {
+                                      const parsedValue = Number(e.target.value);
+                                      if (parsedValue > 100) return;
+                                      const nextPercent =
+                                        Number.isFinite(parsedValue) && parsedValue >= 0
+                                          ? parsedValue
+                                          : 0;
+                                      setBxgyDiscountRules(prev =>
+                                        prev.map((r, i) =>
+                                          i === index
+                                            ? { ...r, discountPercent: nextPercent }
+                                            : r,
+                                        ),
+                                      );
+                                    }}
+                                  />
+                                  {rule.discountPercent === 100 && (
+                                    <div className="text-[#52c41a] text-[12px] mt-1 font-normal">
+                                      Y products will be FREE
+                                    </div>
+                                  )}
+                                </label>
+                              </div>
+
+                              <div className="create-offer-discount-form-row" style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                  Title
+                                  <Input
+                                    size="large"
+                                    className="mt-1"
+                                    value={rule.title || ''}
+                                    placeholder="e.g. Duo, Trio"
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setBxgyDiscountRules(prev => prev.map((r, i) => i === index ? { ...r, title: val } : r));
+                                    }}
+                                  />
+                                </label>
+                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                  Subtitle
+                                  <Input
+                                    size="large"
+                                    className="mt-1"
+                                    value={rule.subtitle || ''}
+                                    placeholder="e.g. Buy 2, get 1 free"
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setBxgyDiscountRules(prev => prev.map((r, i) => i === index ? { ...r, subtitle: val } : r));
+                                    }}
+                                  />
+                                </label>
+                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                  Badge
+                                  <Input
+                                    size="large"
+                                    className="mt-1"
+                                    value={rule.badge || ''}
+                                    placeholder="e.g. Most Popular"
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setBxgyDiscountRules(prev => prev.map((r, i) => i === index ? { ...r, badge: val } : r));
+                                    }}
+                                  />
+                                </label>
+                              </div>
+
+                              <div className="create-offer-discount-form-row" style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                  Max Uses Per Order
+                                  <Input
+                                    size="large"
+                                    type="number"
+                                    min={1}
+                                    step={1}
+                                    className="mt-1"
+                                    value={rule.maxUsesPerOrder}
+                                    onChange={(e) => {
+                                      const parsedValue = Number(e.target.value);
+                                      const nextMax =
+                                        Number.isFinite(parsedValue) && parsedValue >= 1
+                                          ? Math.trunc(parsedValue)
+                                          : 1;
+                                      setBxgyDiscountRules(prev =>
+                                        prev.map((r, i) =>
+                                          i === index ? { ...r, maxUsesPerOrder: nextMax } : r,
+                                        ),
+                                      );
+                                    }}
+                                  />
+                                </label>
+                              </div>
+
+                              <div className="create-offer-discount-form-row" style={{ marginTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <Checkbox
+                                  checked={!!rule.isDefault}
+                                  onChange={(e) => {
+                                    const checked = e.target.checked;
+                                    setBxgyDiscountRules(prev =>
+                                      prev.map((r, i) => ({
+                                        ...r,
+                                        isDefault: checked ? i === index : false,
+                                      }))
+                                    );
+                                  }}
+                                >
+                                  Set as Default Selected
+                                </Checkbox>
+                                <Button
+                                  danger
+                                  onClick={() => {
+                                    setBxgyDiscountRules(prev => {
+                                      if (prev.length <= 1) return prev;
+                                      return prev.filter((_, i) => i !== index);
+                                    });
+                                  }}
+                                  disabled={bxgyDiscountRules.length <= 1}
+                                >
+                                  Remove
+                                </Button>
+                              </div>
+                            </div>
                           </div>
-                          <div className="create-offer-discount-form-row" style={{ marginTop: '12px' }}>
-                            <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                              Max Uses Per Order
-                              <Input
-                                size="large"
-                                type="number"
-                                min={1}
-                                step={1}
-                                className="mt-1"
-                                value={bxgyDiscountRules[0]?.maxUsesPerOrder || 1}
-                                onChange={(e) => {
-                                  const parsedValue = Number(e.target.value);
-                                  const nextMax =
-                                    Number.isFinite(parsedValue) && parsedValue >= 1
-                                      ? Math.trunc(parsedValue)
-                                      : 1;
-                                  setBxgyDiscountRules(prev => prev.length > 0 
-                                    ? [{ ...prev[0], maxUsesPerOrder: nextMax }]
-                                    : [{ 
-                                        buyQuantity: 1,
-                                        getQuantity: 1,
-                                        buyProductIds: buyProducts,
-                                        getProductIds: getProducts,
-                                        discountPercent: 100,
-                                        maxUsesPerOrder: nextMax
-                                      }]
-                                  );
-                                }}
-                              />
-                            </label>
-                          </div>
-                        </div>
-                      </div>
+                        ))}
+                        <Button
+                          type="dashed"
+                          className="w-full"
+                          onClick={() => {
+                            setBxgyDiscountRules(prev => {
+                              const maxCount = prev.reduce((max, rule) => Math.max(max, rule.count), 1);
+                              return [...prev, {
+                                count: maxCount + 1,
+                                buyQuantity: 2,
+                                getQuantity: 1,
+                                buyProductIds: buyProducts,
+                                getProductIds: getProducts,
+                                discountPercent: 100,
+                                maxUsesPerOrder: 1,
+                              }];
+                            });
+                          }}
+                        >
+                          + Add BXGY tier
+                        </Button>
+                      </>
                     ) : (
                       <>
                         {discountRules.map((rule, index) => (
