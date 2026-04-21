@@ -400,17 +400,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       }
       orderSql += ` | SELECT COUNT(1) AS order_pv`;
 
-      let bundleOrderSql = `__topic__: "checkout_completed" and shopName: "${safeShopName}" and extra: "bundle" and not extra: "NO_BUNDLE_TITLE"`;
+      let bundleOrderSql = `__topic__: "checkout_completed" and shopName: "${safeShopName}" and extra: "bundle"`;
       if (safeBundleName) {
         bundleOrderSql += ` and extra: "${safeBundleName}"`;
       }
-      bundleOrderSql += ` | SELECT COUNT(1) AS bundle_orders`;
+      bundleOrderSql += ` | set session mode=scan; SELECT COUNT(*) AS bundle_orders FROM log CROSS JOIN UNNEST(CAST(JSON_EXTRACT(extra, '$.bundle') AS ARRAY(JSON))) AS t(bundle_item) WHERE JSON_EXTRACT_SCALAR(bundle_item, '$.title') != 'NO_BUNDLE_TITLE'${safeBundleName ? ` AND JSON_EXTRACT_SCALAR(bundle_item, '$.title') LIKE '%${safeBundleName}%'` : ''}`;
 
-      let gmvSql = `__topic__: "checkout_completed" and shopName: "${safeShopName}" and extra: "bundle" and not extra: "NO_BUNDLE_TITLE"`;
+      let gmvSql = `__topic__: "checkout_completed" and shopName: "${safeShopName}" and extra: "bundle"`;
       if (safeBundleName) {
         gmvSql += ` and extra: "${safeBundleName}"`;
       }
-      gmvSql += ` | SELECT SUM(CAST(REGEXP_EXTRACT(extra, '"amount":"([0-9.]+)"', 1) AS DOUBLE)) AS total_gmv`;
+      gmvSql += ` | set session mode=scan; SELECT ROUND(SUM(CAST(JSON_EXTRACT_SCALAR(bundle_item, '$.price.amount') AS DOUBLE)), 2) AS total_gmv FROM log CROSS JOIN UNNEST(CAST(JSON_EXTRACT(extra, '$.bundle') AS ARRAY(JSON))) AS t(bundle_item) WHERE JSON_EXTRACT_SCALAR(bundle_item, '$.title') != 'NO_BUNDLE_TITLE'${safeBundleName ? ` AND JSON_EXTRACT_SCALAR(bundle_item, '$.title') LIKE '%${safeBundleName}%'` : ''}`;
 
       const [exposureAgg, bundleExposureAgg, orderAgg, bundleOrderAgg, gmvAgg] = await Promise.all([
         runSlsSql(sls, fromDate, toDate, exposureSql, "exposure"),
@@ -508,13 +508,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       const bundleName = url.searchParams.get("name");
       const safeBundleName = bundleName ? escapeSlsString(bundleName) : null;
 
-      let query = `__topic__: "checkout_completed" and shopName: "${safeShopName}" and extra: "bundle" and not extra: "NO_BUNDLE_TITLE"`;
+      let query = `__topic__: "checkout_completed" and shopName: "${safeShopName}" and extra: "bundle"`;
 
       if (safeBundleName) {
         query += ` and extra: "${safeBundleName}"`;
       }
 
-      query += ` | set session mode=scan; SELECT date_format(from_unixtime(__time__), '%Y-%m-%d') as day, JSON_EXTRACT_SCALAR(extra, '$.bundle[0].price.currencyCode') as currency, sum(cast(JSON_EXTRACT_SCALAR(extra, '$.bundle[0].price.amount') as double)) as total_amount FROM log GROUP BY day, currency ORDER BY day, currency`;
+      query += ` | set session mode=scan; SELECT date_format(FROM_UNIXTIME(__time__), '%Y-%m-%d') as day, JSON_EXTRACT_SCALAR(extra, '$.totalPrice.currencyCode') as currency, ROUND(SUM(CAST(JSON_EXTRACT_SCALAR(bundle_item, '$.price.amount') AS DOUBLE)), 2) as total_amount FROM log CROSS JOIN UNNEST(CAST(JSON_EXTRACT(extra, '$.bundle') AS ARRAY(JSON))) AS t(bundle_item) WHERE JSON_EXTRACT_SCALAR(bundle_item, '$.title') != 'NO_BUNDLE_TITLE' AND JSON_EXTRACT_SCALAR(bundle_item, '$.title') LIKE '%${safeBundleName ?? ""}%' GROUP BY date_format(FROM_UNIXTIME(__time__), '%Y-%m-%d'), JSON_EXTRACT_SCALAR(extra, '$.totalPrice.currencyCode') ORDER BY day`;
 
       const resp = (await sls.getLogs(projectName(), logstoreName(), fromDate, toDate, {
         query,
@@ -585,7 +585,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       const prior30 = new Date(new Date().setDate(today.getDate() - 30));
       const safeShopName = escapeSlsString(shopName);
 
-      const productViewedSql = `__topic__: "product_viewed" and shopName: "${safeShopName}" and extra: "bundle" and not extra: "NO_BUNDLE_TITLE" | SELECT COUNT(*) AS total_count FROM log`;
+      const productViewedSql = `__topic__: "product_viewed" and shopName: "${safeShopName}" and extra: "bundle" | set session mode=scan; SELECT COUNT(*) AS total_count FROM log CROSS JOIN UNNEST(CAST(JSON_EXTRACT(extra, '$.bundle') AS ARRAY(JSON))) AS t(bundle_item) WHERE JSON_EXTRACT_SCALAR(bundle_item, '$.title') != 'NO_BUNDLE_TITLE'`;
 
       const [productViewedLast30DaysAgg] = await Promise.all([
         runSlsSql(sls, prior30, today, productViewedSql, "product-viewed-last-30d"),
@@ -643,7 +643,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       const prior60 = new Date(new Date().setDate(today.getDate() - 60));
       const safeShopName = escapeSlsString(shopName);
 
-      const gmvSql = `__topic__: "checkout_completed" and shopName: "${safeShopName}" and extra: "bundle" and not extra: "NO_BUNDLE_TITLE" | set session mode=scan; SELECT JSON_EXTRACT_SCALAR(extra, '$.totalPrice.currencyCode') as currency, sum(cast(JSON_EXTRACT_SCALAR(extra, '$.totalPrice.amount') as double)) as total_amount FROM log GROUP BY currency`;
+      const gmvSql = `__topic__: "checkout_completed" and shopName: "${safeShopName}" and extra: "bundle" | set session mode=scan; SELECT JSON_EXTRACT_SCALAR(extra, '$.totalPrice.currencyCode') as currency, sum(cast(JSON_EXTRACT_SCALAR(extra, '$.totalPrice.amount') as double)) as total_amount FROM log CROSS JOIN UNNEST(CAST(JSON_EXTRACT(extra, '$.bundle') AS ARRAY(JSON))) AS t(bundle_item) WHERE JSON_EXTRACT_SCALAR(bundle_item, '$.title') != 'NO_BUNDLE_TITLE' GROUP BY currency`;
 
       const calculateGmvFromSqlResult = (queryResult: { currency: string; total_amount: number }[]): number => {
         const rates = getBogdaRate();
@@ -738,7 +738,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       const prior30 = new Date(new Date().setDate(today.getDate() - 30));
       const safeShopName = escapeSlsString(shopName);
 
-      const bundleOrdersSql = `__topic__: "checkout_completed" and shopName: "${safeShopName}" and extra: "bundle" and not extra: "NO_BUNDLE_TITLE" | SELECT COUNT(*) AS total_count FROM log`;
+      const bundleOrdersSql = `__topic__: "checkout_completed" and shopName: "${safeShopName}" and extra: "bundle" | set session mode=scan; SELECT COUNT(*) AS total_count FROM log CROSS JOIN UNNEST(CAST(JSON_EXTRACT(extra, '$.bundle') AS ARRAY(JSON))) AS t(bundle_item) WHERE JSON_EXTRACT_SCALAR(bundle_item, '$.title') != 'NO_BUNDLE_TITLE'`;
 
       const [bundleOrdersLast30DaysAgg] = await Promise.all([
         runSlsSql(sls, prior30, today, bundleOrdersSql, "bundle-orders-last-30d"),
