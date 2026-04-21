@@ -743,66 +743,9 @@ function parseCiwiMetafieldScript(scriptId) {
   return JSON.parse(jsonLike);
 }
 
-function getOffersUpdatedAtMs(payload) {
-  const updatedAtRaw = payload?.updatedAt;
-  if (!updatedAtRaw || typeof updatedAtRaw !== "string") return 0;
-  const ts = Date.parse(updatedAtRaw);
-  return Number.isFinite(ts) ? ts : 0;
-}
-
-function readEnvEnabledState() {
-  try {
-    const prodPayload = parseCiwiMetafieldScript("ciwi-bundle-enabled-prod");
-    const testPayload = parseCiwiMetafieldScript("ciwi-bundle-enabled-test");
-    const readBool = (payload) =>
-      payload && typeof payload === "object" && typeof payload.enabled === "boolean"
-        ? payload.enabled
-        : null;
-
-    return {
-      prodEnabled: readBool(prodPayload),
-      testEnabled: readBool(testPayload),
-    };
-  } catch (e) {
-    console.error("[ciwi] Failed to parse ciwi-bundle-enabled metafield", e);
-    return {
-      prodEnabled: null,
-      testEnabled: null,
-    };
-  }
-}
-
 function readOffersConfigFromMetafield() {
   try {
-    const envPayloads = {
-      prod: parseCiwiMetafieldScript("ciwi-bundle-offers-prod"),
-      test: parseCiwiMetafieldScript("ciwi-bundle-offers-test"),
-    };
-    const { prodEnabled, testEnabled } = readEnvEnabledState();
-    const prodOpen = prodEnabled === true;
-    const testOpen = testEnabled === true;
-
-    if (!prodOpen && !testOpen) {
-      return null;
-    }
-
-    if (prodOpen && !testOpen) {
-      return envPayloads.prod || null;
-    }
-
-    if (!prodOpen && testOpen) {
-      return envPayloads.test || null;
-    }
-
-    // prod/test 都开启时，按最新 updatedAt 选择。
-    const newestEnv = ["prod", "test"].sort(
-      (a, b) => getOffersUpdatedAtMs(envPayloads[b]) - getOffersUpdatedAtMs(envPayloads[a]),
-    )[0];
-    if (newestEnv && envPayloads[newestEnv]) {
-      return envPayloads[newestEnv];
-    }
-
-    return null;
+    return parseCiwiMetafieldScript("ciwi-bundle-offers");
   } catch (e) {
     console.error("[ciwi] Failed to parse ciwi-bundle-offers metafield", e);
     return null;
