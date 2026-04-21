@@ -135,17 +135,6 @@ export function DashboardPage({
   const [overviewMetrics, setOverviewMetrics] = useState<GmvOverviewMetrics | null>(
     null,
   );
-  const [totalGmv, setTotalGmv] = useState(0);
-  const [gmvGrowthRate, setGmvGrowthRate] = useState(0);
-  const [bundleOrders, setBundleOrders] = useState(0);
-  const [productViewed, setProductViewed] = useState(0);
-
-  const mockOverviewData = {
-    bundleOrders: 320,
-    bundleOrdersGrowthRate: 8.5,
-    avgConversionRate: 3.2,
-    conversionTrend: 4.1,
-  };
 
   const [showThemeExtensionModal, setShowThemeExtensionModal] = useState(false);
   const [hideBanner, setHideBanner] = useState(() => {
@@ -232,10 +221,6 @@ export function DashboardPage({
     };
   })();
 
-    const gmvGrowthRateColor =
-    gmvGrowthRate === 0 ? "#916a00" : gmvGrowthRate > 0 ? "#108043" : "#D93025";
-  const gmvGrowthRateArrow = gmvGrowthRate >= 0 ? "↑" : "↓";
-
   useEffect(() => {
     if (navigation.state === "submitting" && navigation.formData) {
       const intent = navigation.formData.get("intent");
@@ -300,56 +285,54 @@ export function DashboardPage({
 
     const run = async () => {
       try {
-        const overviewUrl = `/webpixerToAli?mode=dashboard-overview-gmv&shopName=${shop}`;
-        const response = await fetch(overviewUrl);
-        
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success) {
-            setTotalGmv(data.totalGmv || 0);
-            setGmvGrowthRate(data.gmvGrowthRate || 0);
-          }
+        const response = await fetch(`/webpixerToAli?${query.toString()}`, {
+          method: "GET",
+          signal: controller.signal,
+        });
+        const data = (await response.json().catch(() => ({}))) as {
+          success?: boolean;
+          message?: string;
+          metrics?: GmvOverviewMetrics;
+          range?: { from?: string; to?: string };
+          logsFetched?: number;
+        };
+
+        if (!response.ok || !data.success) {
+          console.error("[dashboard][gmv-overview] query failed", {
+            status: response.status,
+            message: data?.message || "unknown error",
+            shop,
+            range: data?.range,
+          });
+          return;
         }
+
+        console.log("[dashboard][gmv-overview] metrics", {
+          shop,
+          range: data.range,
+          logsFetched: data.logsFetched ?? 0,
+          totalGmv: data.metrics?.totalGmv ?? 0,
+          conversion: data.metrics?.conversion ?? 0,
+          visitor: data.metrics?.visitor ?? 0,
+          bundleOrders: data.metrics?.bundleOrders ?? 0,
+          exposurePv: data.metrics?.exposurePv ?? 0,
+          orderPv: data.metrics?.orderPv ?? 0,
+        });
+
+        setOverviewMetrics(data.metrics ?? null);
       } catch (error) {
-        console.error("Failed to fetch dashboard overview data", error);
+        if (controller.signal.aborted) return;
+        setOverviewMetrics(null);
+        console.error("[dashboard][gmv-overview] query exception", {
+          shop,
+          error: String(error),
+        });
       }
     };
 
     run();
 
     return () => controller.abort();
-  }, [shop]);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const bundleOrdersUrl = `/webpixerToAli?mode=dashboard-overview-bundle-orders&shopName=${shop}`;
-        const productViewedUrl = `/webpixerToAli?mode=dashboard-overview-product-viewed&shopName=${shop}`;
-
-        const [bundleOrdersResponse, productViewedResponse] = await Promise.all([
-          fetch(bundleOrdersUrl),
-          fetch(productViewedUrl),
-        ]);
-
-        if (bundleOrdersResponse.ok) {
-          const data = await bundleOrdersResponse.json();
-          if (data.success) {
-            setBundleOrders(data.totalCount || 0);
-          }
-        }
-
-        if (productViewedResponse.ok) {
-          const data = await productViewedResponse.json();
-          if (data.success) {
-            setProductViewed(data.totalCount || 0);
-          }
-        }
-      } catch (error) {
-        console.error("Failed to fetch dashboard data:", error);
-      }
-    };
-
-    fetchData();
   }, [shop]);
 
   useEffect(() => {
@@ -454,43 +437,34 @@ export function DashboardPage({
                 Total GMV
               </span>
               <h3 className="font-sans font-semibold text-[28px] leading-[42px] text-[#1c1f23] tracking-wide m-0">
-                ${totalGmv.toFixed(2)}
+                {cardOverview.totalGmv}
               </h3>
-              <span
-                className="font-sans font-normal text-[14px] leading-[22.4px] text-[#108043] tracking-normal"
-                style={{
-                  color: gmvGrowthRateColor,
-                }}
-              >
-                {gmvGrowthRate !== 0 && `${gmvGrowthRateArrow} `}
-                {gmvGrowthRate >= 0 ? "+" : ""}{Math.abs(gmvGrowthRate).toFixed(2)}% from last month
+              <span className="font-sans font-normal text-[14px] leading-[22.4px] text-[#108043] tracking-normal">
+                {cardOverview.gmvTrend} {cardOverview.gmvTrendLabel}
               </span>
             </div>
-
-            {/* Bundle Orders */}
-           <div className="flex flex-col gap-[16px]">
+            <div className="flex flex-col gap-[16px]">
               <span className="font-sans font-normal text-[14px] leading-[22.4px] text-[#5c6166] tracking-normal">
                 Bundle Orders
               </span>
               <h3 className="font-sans font-semibold text-[28px] leading-[42px] text-[#1c1f23] tracking-wide m-0">
-                {bundleOrders}
+                {cardOverview.activeOffers}
               </h3>
+              <span className="font-sans font-normal text-[14px] leading-[22.4px] text-[#108043] tracking-normal">
+                {cardOverview.activeOffersTrend}
+              </span>
             </div>
-
-            {/* Avg. Conversion */}
             <div className="flex flex-col gap-[16px]">
               <span className="font-sans font-normal text-[14px] leading-[22.4px] text-[#5c6166] tracking-normal">
                 Avg. Conversion
               </span>
               <h3 className="font-sans font-semibold text-[28px] leading-[42px] text-[#1c1f23] tracking-wide m-0">
-                {productViewed > 0
-                  ? `${((bundleOrders / productViewed) * 100).toFixed(2)}%`
-                  : "0.00%"}
+                {cardOverview.avgConversion}
               </h3>
               <span
-                className="font-sans font-normal text-[14px] leading-[22.4px] tracking-normal"
+                className={`font-sans font-normal text-[14px] leading-[22.4px] tracking-normal ${cardOverview.conversionTrendColor}`}
               >
-                Orders {bundleOrders} / Exposure {productViewed}
+                {cardOverview.conversionTrendLabel}
               </span>
             </div>
           </div>

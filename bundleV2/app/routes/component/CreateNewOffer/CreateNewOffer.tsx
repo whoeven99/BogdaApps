@@ -109,6 +109,33 @@ function buildDiscountRulesJson(tiers: DiscountRule[]): DiscountRule[] {
     );
 }
 
+function calculatePreviewBundleAmounts(
+  unitPrice: number,
+  quantity: number,
+  discountPercent: number,
+) {
+  const MONEY_SCALE = 10000;
+  const safeQty = Math.max(1, Math.trunc(Number(quantity) || 1));
+  const safeDiscountPercent = Math.max(
+    0,
+    Math.min(100, Number(discountPercent) || 0),
+  );
+  const unitPriceScaled = Math.round(unitPrice * MONEY_SCALE);
+  const originalTotalScaled = unitPriceScaled * safeQty;
+  const discountedTotalScaled = Math.round(
+    originalTotalScaled * (1 - safeDiscountPercent / 100),
+  );
+  const originalTotal = Math.round(originalTotalScaled / (MONEY_SCALE / 100)) / 100;
+  const discountedTotal =
+    Math.round(discountedTotalScaled / (MONEY_SCALE / 100)) / 100;
+
+  return {
+    originalTotal,
+    discountedTotal,
+    saved: originalTotal - discountedTotal,
+  };
+}
+
 function sanitizeDiscountRules(tiers: DiscountRule[]): DiscountRule[] {
   const dedupedByCount = new Map<number, DiscountRule>();
   for (const tier of tiers) {
@@ -364,9 +391,12 @@ export function CreateNewOffer({
       price: formatPreviewPrice(baseUnitPrice),
     },
     ...normalizedDiscountRules.map((rule, index) => {
-      const originalTotal = rule.count * baseUnitPrice;
-      const discountedTotal = originalTotal * (1 - rule.discountPercent / 100);
-      const saved = originalTotal - discountedTotal;
+      const { originalTotal, discountedTotal, saved } =
+        calculatePreviewBundleAmounts(
+          baseUnitPrice,
+          rule.count,
+          rule.discountPercent,
+        );
       const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
       return {
         id: `tier-${rule.count}`,
