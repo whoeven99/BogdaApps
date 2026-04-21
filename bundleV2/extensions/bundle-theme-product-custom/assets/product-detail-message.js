@@ -591,7 +591,11 @@ window.ciwiSelectBundleOption = function(count) {
   }
 };
 
-window.ciwiHandleBundleAddToCart = function() {
+window.ciwiHandleBundleAddToCart = function(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
   const count = window.__ciwiBundleState?.selectedCount || 1;
   updateThemeQuantityInput(count);
   const form = getAddToCartForm();
@@ -718,7 +722,7 @@ function renderBundlePreviewHtml(offer) {
     <div class="create-offer-style-preview-list create-offer-style-preview-list--${layoutFormat}">
       ${itemsHtml}
     </div>
-    ${showCustomButton ? `<button class="create-offer-preview-button" onclick="window.ciwiHandleBundleAddToCart()" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
+    ${showCustomButton ? `<button type="button" class="create-offer-preview-button" onclick="window.ciwiHandleBundleAddToCart(event)" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
       ${esc(buttonText)}
     </button>` : ""}
   </div>`;
