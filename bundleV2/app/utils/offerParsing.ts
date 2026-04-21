@@ -181,6 +181,19 @@ export type BxgyDiscountRule = {
   isDefault?: boolean;
 };
 
+/** Discount rule for "Quantity breaks for different products" */
+export type DifferentProductsDiscountRule = {
+  /** Cart quantity threshold across all different eligible products */
+  count: number;
+  discountPercent: number;
+  /** Product IDs that are eligible for this offer */
+  productIds: string[];
+  title?: string;
+  subtitle?: string;
+  badge?: string;
+  isDefault?: boolean;
+};
+
 export function parseDiscountRules(discountRulesJson?: string | null): DiscountRule[] {
   if (!discountRulesJson) return [];
 
@@ -218,6 +231,14 @@ export function parseSelectedProductIds(selectedProductsJson?: string | null): s
 
   try {
     const parsed = JSON.parse(selectedProductsJson);
+
+    // New structured format for quantity-breaks-different: { productIds: [...] }
+    if (parsed && typeof parsed === "object" && Array.isArray(parsed.productIds)) {
+      return parsed.productIds
+        .filter((id: unknown) => typeof id === "string")
+        .map(String);
+    }
+
     if (!Array.isArray(parsed)) return [];
 
     const ids: string[] = [];
@@ -309,6 +330,66 @@ export function buildBxgyDiscountRulesJson(tiers: BxgyDiscountRule[]): BxgyDisco
         : [],
       getProductIds: Array.isArray(tier.getProductIds)
         ? tier.getProductIds.filter(id => typeof id === "string")
+        : [],
+      title: tier.title || "",
+      subtitle: tier.subtitle || "",
+      badge: tier.badge || "",
+      isDefault: !!tier.isDefault,
+    });
+  }
+  return Array.from(dedupedByCount.values()).sort((a, b) => a.count - b.count);
+}
+
+export function parseDifferentProductsDiscountRules(
+  discountRulesJson?: string | null,
+): DifferentProductsDiscountRule[] {
+  if (!discountRulesJson) return [];
+
+  try {
+    const parsed = JSON.parse(discountRulesJson) as unknown;
+    if (!Array.isArray(parsed)) return [];
+
+    const out: DifferentProductsDiscountRule[] = [];
+    for (const item of parsed) {
+      if (!item || typeof item !== "object") continue;
+
+      const count = Number((item as { count?: unknown }).count);
+      const discountPercent = Number((item as { discountPercent?: unknown }).discountPercent);
+      if (!Number.isFinite(count) || count < 1) continue;
+      if (!Number.isFinite(discountPercent)) continue;
+
+      const productIds = (item as { productIds?: unknown }).productIds;
+      if (!Array.isArray(productIds) || !productIds.length) continue;
+
+      out.push({
+        count: Math.trunc(count),
+        discountPercent: Math.max(0, Math.min(100, discountPercent)),
+        productIds: productIds.filter((id: unknown) => typeof id === "string") as string[],
+        title: (item as { title?: string }).title || "",
+        subtitle: (item as { subtitle?: string }).subtitle || "",
+        badge: (item as { badge?: string }).badge || "",
+        isDefault: !!(item as { isDefault?: boolean }).isDefault,
+      });
+    }
+    out.sort((a, b) => a.count - b.count);
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+export function buildDifferentProductsDiscountRulesJson(
+  tiers: DifferentProductsDiscountRule[],
+): DifferentProductsDiscountRule[] {
+  const dedupedByCount = new Map<number, DifferentProductsDiscountRule>();
+  for (const tier of tiers) {
+    if (!Number.isFinite(tier.count) || tier.count < 1) continue;
+    if (!Number.isFinite(tier.discountPercent)) continue;
+    dedupedByCount.set(Math.trunc(tier.count), {
+      count: Math.trunc(tier.count),
+      discountPercent: Math.max(0, Math.min(100, tier.discountPercent)),
+      productIds: Array.isArray(tier.productIds)
+        ? tier.productIds.filter((id: unknown) => typeof id === "string")
         : [],
       title: tier.title || "",
       subtitle: tier.subtitle || "",

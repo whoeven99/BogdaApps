@@ -21,6 +21,8 @@ import {
   parseOfferSettings,
   parseSelectedProductIds,
   buildBxgyDiscountRulesJson,
+  parseDifferentProductsDiscountRules,
+  buildDifferentProductsDiscountRulesJson,
 } from "../../../utils/offerParsing";
 
 type DiscountRule = {
@@ -42,6 +44,16 @@ type BxgyDiscountRule = {
   getProductIds: string[];
   discountPercent: number;
   maxUsesPerOrder: number;
+  title?: string;
+  subtitle?: string;
+  badge?: string;
+  isDefault?: boolean;
+};
+
+type DifferentProductsDiscountRule = {
+  count: number;
+  discountPercent: number;
+  productIds: string[];
   title?: string;
   subtitle?: string;
   badge?: string;
@@ -405,6 +417,9 @@ export function CreateNewOffer({
   const [bxgyDiscountRules, setBxgyDiscountRules] = useState<BxgyDiscountRule[]>(
     parseBxgyDiscountRules(initialOffer?.discountRulesJson),
   );
+  const [differentProductsDiscountRules, setDifferentProductsDiscountRules] = useState<DifferentProductsDiscountRule[]>(
+    parseDifferentProductsDiscountRules(initialOffer?.discountRulesJson),
+  );
   const [buyProducts, setBuyProducts] = useState<string[]>(() => {
     if (initialOffer?.offerType !== 'bxgy' || !initialOffer.selectedProductsJson) return [];
     try {
@@ -437,11 +452,32 @@ export function CreateNewOffer({
     }
   }, [buyProducts, getProducts, offerType]);
 
+  useEffect(() => {
+    if (offerType === 'quantity-breaks-different') {
+      setDifferentProductsDiscountRules(prev =>
+        prev.map(rule => ({
+          ...rule,
+          productIds: selectedProductsData.map(p => p.id),
+        })),
+      );
+    }
+  }, [selectedProductsData, offerType]);
+
   const [status, setStatus] = useState<boolean>(
     initialOffer ? initialOffer.status : true
   );
 
   const normalizedDiscountRules = sanitizeDiscountRules(discountRules);
+  const normalizedDiffProductsRules = sanitizeDiscountRules(
+    differentProductsDiscountRules.map((r) => ({
+      count: r.count,
+      discountPercent: r.discountPercent,
+      title: r.title,
+      subtitle: r.subtitle,
+      badge: r.badge,
+      isDefault: r.isDefault,
+    })),
+  );
   const featuredRule = normalizedDiscountRules[0];
 
   const hasDefault = normalizedDiscountRules.some(r => r.isDefault);
@@ -462,6 +498,22 @@ export function CreateNewOffer({
           featured: isFeatured,
           badge: rule.badge || (isFeatured ? "Most Popular" : ""),
           saveLabel: `BUY ${rule.buyQuantity} + GET ${rule.getQuantity}`,
+        };
+      });
+    }
+
+    if (offerType === "quantity-breaks-different" && normalizedDiffProductsRules.length > 0) {
+      const hasDefault = normalizedDiffProductsRules.some(r => r.isDefault);
+      return normalizedDiffProductsRules.map((rule, index) => {
+        const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
+        return {
+          id: `diff-tier-${rule.count}`,
+          title: rule.title || `${rule.count} items`,
+          subtitle: rule.subtitle || `You save ${rule.discountPercent}%`,
+          price: `${rule.discountPercent}% OFF`,
+          featured: isFeatured,
+          badge: rule.badge || (isFeatured ? "Most Popular" : ""),
+          saveLabel: `BUY ${rule.count} + SAVE ${rule.discountPercent}%`,
         };
       });
     }
@@ -496,6 +548,7 @@ export function CreateNewOffer({
   }, [
     offerType,
     bxgyDiscountRules,
+    normalizedDiffProductsRules,
     normalizedDiscountRules,
     baseUnitPrice,
     formatPreviewPrice,
@@ -521,6 +574,12 @@ export function CreateNewOffer({
       name: "Buy X, Get Y (BXGY)",
       description:
         "Buy X products and get Y products with discount (e.g., Buy 2 get 1 free)",
+    },
+    {
+      id: "quantity-breaks-different",
+      name: "Quantity breaks for different products",
+      description:
+        "Offer discounts when customers buy multiple quantities across different products",
     },
   ];
 
@@ -561,6 +620,16 @@ export function CreateNewOffer({
           return;
         }
 
+        if (offerType === "quantity-breaks-different" && selectedProductsData.length === 0) {
+          e.preventDefault();
+          Modal.error({
+            title: "Validation Error",
+            content: "For Quantity Breaks for Different Products offers, you must select at least one product.",
+          });
+          setStep(2);
+          return;
+        }
+
         let hasError = false;
         if (!offerName.trim()) {
           setOfferNameError("Offer Name is required.");
@@ -596,7 +665,13 @@ export function CreateNewOffer({
           return;
         }
 
-        const hasHighDiscount = normalizedDiscountRules.some(r => r.discountPercent >= 90);
+        const activeRules = offerType === "bxgy"
+          ? bxgyDiscountRules
+          : offerType === "quantity-breaks-different"
+          ? normalizedDiffProductsRules
+          : normalizedDiscountRules;
+        const hasHighDiscount = activeRules.some(r => r.discountPercent >= 90);
+
         if (hasHighDiscount && !confirmedHighDiscountRef.current) {
           e.preventDefault();
           Modal.confirm({
@@ -691,12 +766,24 @@ export function CreateNewOffer({
       <input
         type="hidden"
         name="selectedProductsJson"
-        value={JSON.stringify(offerType === "bxgy" ? { buyProducts, getProducts } : selectedProductsData)}
+        value={JSON.stringify(
+          offerType === "bxgy"
+            ? { buyProducts, getProducts }
+            : offerType === "quantity-breaks-different"
+            ? { productIds: selectedProductsData.map((p) => p.id) }
+            : selectedProductsData
+        )}
       />
       <input
         type="hidden"
         name="discountRulesJson"
-        value={JSON.stringify(offerType === "bxgy" ? buildBxgyDiscountRulesJson(bxgyDiscountRules) : buildDiscountRulesJson(normalizedDiscountRules))}
+        value={JSON.stringify(
+          offerType === "bxgy"
+            ? buildBxgyDiscountRulesJson(bxgyDiscountRules)
+            : offerType === "quantity-breaks-different"
+            ? buildDifferentProductsDiscountRulesJson(differentProductsDiscountRules)
+            : buildDiscountRulesJson(normalizedDiscountRules)
+        )}
       />
 
       <div className="bg-[#ffffff] rounded-[8px] shadow-[0_1px_3px_rgba(0,0,0,0.1)] p-[20px] mb-[100px]">
@@ -1021,7 +1108,11 @@ export function CreateNewOffer({
 
                   <div>
                     <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                      {offerType === "bxgy" ? "BXGY Rules" : "Discount Setting"}
+                      {offerType === "bxgy"
+                        ? "BXGY Rules"
+                        : offerType === "quantity-breaks-different"
+                        ? "Discount Tiers"
+                        : "Discount Setting"}
                     </h3>
                     {offerType === "bxgy" ? (
                       <>
@@ -1250,6 +1341,164 @@ export function CreateNewOffer({
                           }}
                         >
                           + Add BXGY tier
+                        </Button>
+                      </>
+                    ) : offerType === "quantity-breaks-different" ? (
+                      <>
+                        {differentProductsDiscountRules.map((rule, index) => (
+                          <div className="create-offer-discount-card" key={index}>
+                            <div className="create-offer-discount-body">
+                              <div className="create-offer-discount-form-row create-offer-discount-form-row--inline">
+                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                  Item quantity
+                                  <Input
+                                    size="large"
+                                    type="number"
+                                    min={1}
+                                    step={1}
+                                    className="mt-1"
+                                    value={rule.count}
+                                    onChange={(e) => {
+                                      const parsedValue = Number(e.target.value);
+                                      const nextCount =
+                                        Number.isFinite(parsedValue) && parsedValue >= 1
+                                          ? Math.trunc(parsedValue)
+                                          : 1;
+                                      setDifferentProductsDiscountRules(prev =>
+                                        prev.map((r, i) =>
+                                          i === index ? { ...r, count: nextCount } : r,
+                                        ),
+                                      );
+                                    }}
+                                  />
+                                </label>
+                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                  Discount (%)
+                                  <Input
+                                    size="large"
+                                    type="number"
+                                    min={0}
+                                    max={100}
+                                    step={1}
+                                    className="mt-1"
+                                    value={rule.discountPercent}
+                                    onChange={(e) => {
+                                      const parsedValue = Number(e.target.value);
+                                      if (parsedValue > 100) return;
+                                      const nextPercent =
+                                        Number.isFinite(parsedValue) && parsedValue >= 0
+                                          ? parsedValue
+                                          : 0;
+                                      setDifferentProductsDiscountRules(prev =>
+                                        prev.map((r, i) =>
+                                          i === index
+                                            ? { ...r, discountPercent: nextPercent }
+                                            : r,
+                                        ),
+                                      );
+                                    }}
+                                  />
+                                  {rule.discountPercent > 50 && rule.discountPercent < 90 && (
+                                    <div className="text-[#faad14] text-[12px] mt-1 font-normal">
+                                      A discount over 50% may result in losses. Please double-check.
+                                    </div>
+                                  )}
+                                  {rule.discountPercent >= 90 && (
+                                    <div className="text-[#ff4d4f] text-[12px] mt-1 font-normal">
+                                      A discount of 90% or more means the product is nearly free.
+                                    </div>
+                                  )}
+                                </label>
+                              </div>
+
+                              <div className="create-offer-discount-form-row" style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                  Title
+                                  <Input
+                                    size="large"
+                                    className="mt-1"
+                                    value={rule.title || ''}
+                                    placeholder="e.g. Duo, Trio"
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setDifferentProductsDiscountRules(prev => prev.map((r, i) => i === index ? { ...r, title: val } : r));
+                                    }}
+                                  />
+                                </label>
+                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                  Subtitle
+                                  <Input
+                                    size="large"
+                                    className="mt-1"
+                                    value={rule.subtitle || ''}
+                                    placeholder="e.g. You save 20%"
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setDifferentProductsDiscountRules(prev => prev.map((r, i) => i === index ? { ...r, subtitle: val } : r));
+                                    }}
+                                  />
+                                </label>
+                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                  Badge
+                                  <Input
+                                    size="large"
+                                    className="mt-1"
+                                    value={rule.badge || ''}
+                                    placeholder="e.g. Most Popular"
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setDifferentProductsDiscountRules(prev => prev.map((r, i) => i === index ? { ...r, badge: val } : r));
+                                    }}
+                                  />
+                                </label>
+                              </div>
+
+                              <div className="create-offer-discount-form-row" style={{ marginTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <Checkbox
+                                  checked={!!rule.isDefault}
+                                  onChange={(e) => {
+                                    const checked = e.target.checked;
+                                    setDifferentProductsDiscountRules(prev =>
+                                      prev.map((r, i) => ({
+                                        ...r,
+                                        isDefault: checked ? i === index : false,
+                                      }))
+                                    );
+                                  }}
+                                >
+                                  Set as Default Selected
+                                </Checkbox>
+                                <Button
+                                  danger
+                                  onClick={() => {
+                                    setDifferentProductsDiscountRules(prev => {
+                                      if (prev.length <= 1) return prev;
+                                      return prev.filter((_, i) => i !== index);
+                                    });
+                                  }}
+                                  disabled={differentProductsDiscountRules.length <= 1}
+                                >
+                                  Remove
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        <Button
+                          type="dashed"
+                          className="w-full"
+                          onClick={() => {
+                            setDifferentProductsDiscountRules(prev => {
+                              const maxCount = prev.reduce((max, rule) => Math.max(max, rule.count), 1);
+                              return [...prev, {
+                                count: maxCount + 1,
+                                discountPercent: 15,
+                                productIds: selectedProductsData.map(p => p.id),
+                              }];
+                            });
+                          }}
+                        >
+                          + Add discount tier
                         </Button>
                       </>
                     ) : (
@@ -2092,6 +2341,12 @@ export function CreateNewOffer({
               if (offerType === "bxgy") {
                 if (buyProducts.length === 0 || getProducts.length === 0) {
                   message.error("Please select both Buy and Get products for a BXGY offer.");
+                  e.preventDefault();
+                  return;
+                }
+              } else if (offerType === "quantity-breaks-different") {
+                if (selectedProductsData.length === 0) {
+                  message.error("Please select at least one product.");
                   e.preventDefault();
                   return;
                 }
