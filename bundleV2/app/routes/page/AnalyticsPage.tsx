@@ -81,10 +81,9 @@ export function AnalyticsPage({ shop, offers, defaultOfferId }: AnalyticsPagePro
           to: now.toISOString(),
         });
 
-        if (selectedOffer !== "all") {
-          overviewQuery.set("name", selectedOffer);
-          trendQuery.set("name", selectedOffer);
-        }
+        const name = selectedOffer === 'all' ? 'bundle' : selectedOffer;
+        overviewQuery.set("name", name);
+        trendQuery.set("name", name);
 
         const [overviewResponse, trendResponse] = await Promise.all([
           fetch(`/webpixerToAli?${overviewQuery.toString()}`, {
@@ -197,7 +196,7 @@ export function AnalyticsPage({ shop, offers, defaultOfferId }: AnalyticsPagePro
             <CircleHelp size={16} className="text-[#5c6166]" />
           </div>
           <h3 className="font-sans font-semibold text-[20px] text-[#1c1f23] m-0">
-            {analyticsData.conversionRate.toFixed(2)}%
+                        {(analyticsData.conversionRate * 100).toFixed(2)}%
           </h3>
         </div>
       </div>
