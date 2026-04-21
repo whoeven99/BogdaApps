@@ -520,7 +520,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         query += ` and extra: "${safeBundleName}"`;
       }
 
-      query += ` | set session mode=scan; SELECT date_format(from_unixtime(__time__), '%Y-%m-%d') as day, JSON_EXTRACT_SCALAR(extra, '$.bundle[0].price.currencyCode') as currency, sum(cast(JSON_EXTRACT_SCALAR(extra, '$.bundle[0].price.amount') as double)) as total_amount FROM log GROUP BY day, currency ORDER BY day, currency`;
+      query += `  | set session mode=scan; SELECT date_format(FROM_UNIXTIME(__time__), '%Y-%m-%d') as day, JSON_EXTRACT_SCALAR(extra, '$.totalPrice.currencyCode') as currency, ROUND(SUM(CAST(JSON_EXTRACT_SCALAR(bundle_item, '$.price.amount') AS DOUBLE)), 2) as total_amount FROM log CROSS JOIN UNNEST(CAST(JSON_EXTRACT(extra, '$.bundle') AS ARRAY(JSON))) AS t(bundle_item) WHERE __topic__ = 'checkout_completed' AND shopName = 'ciwishop.myshopify.com' GROUP BY date_format(FROM_UNIXTIME(__time__), '%Y-%m-%d'), JSON_EXTRACT_SCALAR(extra, '$.totalPrice.currencyCode') ORDER BY day`;
 
       const resp = (await sls.getLogs(projectName(), logstoreName(), fromDate, toDate, {
         query,
