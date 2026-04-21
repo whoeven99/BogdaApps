@@ -17,28 +17,14 @@ import {
   OFFER_TEXT_LIMITS,
   normalizeOfferNameKey,
   parseDiscountRules,
-  parseBxgyDiscountRules,
   parseOfferSettings,
   parseSelectedProductIds,
 } from "../../../utils/offerParsing";
 
 type DiscountRule = {
-  // 数量阈值：例如 count=2 表示"买 2 件及以上"生效
+  // 数量阈值：例如 count=2 表示“买 2 件及以上”生效
   count: number;
   discountPercent: number;
-  title?: string;
-  subtitle?: string;
-  badge?: string;
-  isDefault?: boolean;
-};
-
-type BxgyDiscountRule = {
-  buyQuantity: number;
-  getQuantity: number;
-  buyProductIds: string[];
-  getProductIds: string[];
-  discountPercent: number;
-  maxUsesPerOrder: number;
   title?: string;
   subtitle?: string;
   badge?: string;
@@ -366,16 +352,12 @@ export function CreateNewOffer({
     });
   });
 
-  const handleSelectProducts = async (type: "buy" | "get" | "normal" = "normal") => {
+  const handleSelectProducts = async () => {
     const selected = await (window as any).shopify.resourcePicker({
       type: "product",
       action: "select",
       multiple: true,
-      selectionIds: type === "buy" 
-        ? buyProducts.map((id) => ({ id }))
-        : type === "get"
-        ? getProducts.map((id) => ({ id }))
-        : selectedProductsData.map((p) => ({ id: p.id })),
+      selectionIds: selectedProductsData.map((p) => ({ id: p.id })),
     });
 
     if (selected) {
@@ -386,24 +368,12 @@ export function CreateNewOffer({
         price: item.variants?.[0]?.price || "€0.00",
         variantsCount: item.variants?.length || 1,
       }));
-      
-      if (type === "buy") {
-        setBuyProducts(newData.map((item: any) => item.id));
-      } else if (type === "get") {
-        setGetProducts(newData.map((item: any) => item.id));
-      } else {
-        setSelectedProductsData(newData);
-      }
+      setSelectedProductsData(newData);
     }
   };
   const [discountRules, setDiscountRules] = useState<DiscountRule[]>(() =>
     parseDiscountRules(initialOffer?.discountRulesJson),
   );
-  const [bxgyDiscountRules, setBxgyDiscountRules] = useState<BxgyDiscountRule[]>(
-    parseBxgyDiscountRules(initialOffer?.discountRulesJson),
-  );
-  const [buyProducts, setBuyProducts] = useState<string[]>([]);
-  const [getProducts, setGetProducts] = useState<string[]>([]);
   const [status, setStatus] = useState<boolean>(
     initialOffer ? initialOffer.status : true
   );
@@ -413,58 +383,33 @@ export function CreateNewOffer({
 
   const hasDefault = normalizedDiscountRules.some(r => r.isDefault);
 
-  const previewItems: PreviewItem[] = useMemo(() => {
-    if (offerType === "bxgy" && bxgyDiscountRules.length > 0) {
-      const rule = bxgyDiscountRules[0];
-      return [
-        {
-          id: "bxgy-single",
-          title: `Buy ${rule.buyQuantity} Get ${rule.getQuantity}`,
-          subtitle:
-            rule.discountPercent === 100
-              ? "Y items FREE"
-              : `Save ${rule.discountPercent}% on Y items`,
-          price: formatPreviewPrice(baseUnitPrice * rule.buyQuantity),
-          badge: rule.badge || "BXGY",
-        },
-      ];
-    }
-
-    return [
-      {
-        id: "single",
-        title: "Single",
-        subtitle: "Standard price",
-        price: formatPreviewPrice(baseUnitPrice),
-      },
-      ...normalizedDiscountRules.map((rule, index) => {
-        const { originalTotal, discountedTotal, saved } =
-          calculatePreviewBundleAmounts(
-            baseUnitPrice,
-            rule.count,
-            rule.discountPercent,
-          );
-        const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
-        return {
-          id: `tier-${rule.count}`,
-          title: rule.title || `${rule.count} items`,
-          subtitle: rule.subtitle || `You save ${rule.discountPercent}%`,
-          price: formatPreviewPrice(discountedTotal),
-          original: formatPreviewPrice(originalTotal),
-          featured: isFeatured,
-          badge: rule.badge || (isFeatured ? "Most Popular" : ""),
-          saveLabel: `SAVE ${formatPreviewPrice(saved)}`,
-        };
-      }),
-    ];
-  }, [
-    offerType,
-    bxgyDiscountRules,
-    normalizedDiscountRules,
-    baseUnitPrice,
-    formatPreviewPrice,
-    hasDefault,
-  ]);
+  const previewItems: PreviewItem[] = [
+    {
+      id: "single",
+      title: "Single",
+      subtitle: "Standard price",
+      price: formatPreviewPrice(baseUnitPrice),
+    },
+    ...normalizedDiscountRules.map((rule, index) => {
+      const { originalTotal, discountedTotal, saved } =
+        calculatePreviewBundleAmounts(
+          baseUnitPrice,
+          rule.count,
+          rule.discountPercent,
+        );
+      const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
+      return {
+        id: `tier-${rule.count}`,
+        title: rule.title || `${rule.count} items`,
+        subtitle: rule.subtitle || `You save ${rule.discountPercent}%`,
+        price: formatPreviewPrice(discountedTotal),
+        original: formatPreviewPrice(originalTotal),
+        featured: isFeatured,
+        badge: rule.badge || (isFeatured ? "Most Popular" : ""),
+        saveLabel: `SAVE ${formatPreviewPrice(saved)}`,
+      };
+    }),
+  ];
 
   const steps = [
     "Basic Information",
@@ -479,12 +424,6 @@ export function CreateNewOffer({
       name: "Quantity breaks for the same product",
       description:
         "Offer discounts when customers buy multiple quantities of the same product",
-    },
-    {
-      id: "bxgy",
-      name: "Buy X, Get Y (BXGY)",
-      description:
-        "Buy X products and get Y products with discount (e.g., Buy 2 get 1 free)",
     },
   ];
 
@@ -512,16 +451,6 @@ export function CreateNewOffer({
         // 非最后一步一律不提交：防止 Enter、隐式提交或按钮 type 切换导致误保存
         if (step !== 4) {
           e.preventDefault();
-          return;
-        }
-
-        if (offerType === "bxgy" && (buyProducts.length === 0 || getProducts.length === 0)) {
-          e.preventDefault();
-          Modal.error({
-            title: "Validation Error",
-            content: "For BXGY offers, you must select both Buy Products and Get Products.",
-          });
-          setStep(2);
           return;
         }
 
@@ -655,12 +584,12 @@ export function CreateNewOffer({
       <input
         type="hidden"
         name="selectedProductsJson"
-        value={JSON.stringify(offerType === "bxgy" ? { buyProducts, getProducts } : selectedProductsData)}
+        value={JSON.stringify(selectedProductsData)}
       />
       <input
         type="hidden"
         name="discountRulesJson"
-        value={JSON.stringify(offerType === "bxgy" ? bxgyDiscountRules : buildDiscountRulesJson(normalizedDiscountRules))}
+        value={JSON.stringify(buildDiscountRulesJson(normalizedDiscountRules))}
       />
 
       <div className="bg-[#ffffff] rounded-[8px] shadow-[0_1px_3px_rgba(0,0,0,0.1)] p-[20px] mb-[100px]">
@@ -832,219 +761,114 @@ export function CreateNewOffer({
                     Products & Discounts
                   </h2>
 
-                  {offerType === "bxgy" ? (
-                    <>
-                      <div className="mb-6">
-                        <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                          Buy Products (X)
-                        </h3>
-                        {buyProducts.length === 0 ? (
-                          <Button
-                            size="large"
-                            className="text-[#008060] border-[#008060] hover:text-[#006e52] hover:border-[#006e52] hover:bg-[#f0f9f6]"
-                            onClick={(e) => {
-                              handleSelectProducts("buy");
-                              e.preventDefault();
-                            }}
-                          >
-                            Select buy products
-                          </Button>
-                        ) : (
-                          <div>
-                            <div className="text-[12px] text-[#5c6166] mb-2">
-                              {buyProducts.length} product{buyProducts.length > 1 ? "s" : ""} selected
-                            </div>
-                            <Button
-                              size="small"
-                              onClick={(e) => {
-                                handleSelectProducts("buy");
-                                e.preventDefault();
-                              }}
-                            >
-                              Edit buy products
-                            </Button>
-                          </div>
-                        )}
-                      </div>
+                  <div className="mb-8">
+                    <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
+                      Products eligible for offer
+                    </h3>
 
-                      <div className="mb-8">
-                        <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                          Get Products (Y) 
-                        </h3>
-                        {getProducts.length === 0 ? (
-                          <Button
-                            size="large"
-                            className="text-[#008060] border-[#008060] hover:text-[#006e52] hover:border-[#006e52] hover:bg-[#f0f9f6]"
-                            onClick={(e) => {
-                              handleSelectProducts("get");
-                              e.preventDefault();
-                            }}
-                          >
-                            Select get products
-                          </Button>
-                        ) : (
-                          <div>
-                            <div className="text-[12px] text-[#5c6166] mb-2">
-                              {getProducts.length} product{getProducts.length > 1 ? "s" : ""} selected
-                            </div>
-                            <Button
-                              size="small"
-                              onClick={(e) => {
-                                handleSelectProducts("get");
-                                e.preventDefault();
-                              }}
+                    {selectedProductsData.length === 0 ? (
+                      <Button
+                        size="large"
+                        className="text-[#008060] border-[#008060] hover:text-[#006e52] hover:border-[#006e52] hover:bg-[#f0f9f6]"
+                        onClick={(e) => {
+                          handleSelectProducts();
+                          e.preventDefault();
+                        }}
+                      >
+                        Add products eligible for offer
+                      </Button>
+                    ) : (
+                      <div>
+                        <div className="create-offer-selected-grid">
+                          {selectedProductsData.slice(0, 3).map((product) => (
+                            <div
+                              key={product.id}
+                              className="create-offer-selected-card"
                             >
-                              Edit get products
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="mb-8">
-                      <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                        Products eligible for offer
-                      </h3>
-
-                      {selectedProductsData.length === 0 ? (
+                              <button
+                                type="button"
+                                className="create-offer-selected-remove"
+                                onClick={(e) => {
+                                  setSelectedProductsData(
+                                    selectedProductsData.filter(
+                                      (p) => p.id !== product.id,
+                                    ),
+                                  );
+                                  e.preventDefault();
+                                }}
+                                aria-label={`Remove ${product.title}`}
+                              >
+                                <X size={14} />
+                              </button>
+                              <img
+                                src={product.image}
+                                alt={product.title}
+                                className="create-offer-selected-image"
+                              />
+                              <div className="create-offer-selected-name">
+                                {product.title}
+                              </div>
+                              <div className="create-offer-selected-price">
+                                {product.price}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="create-offer-selected-count">
+                          {selectedProductsData.length} product
+                          {selectedProductsData.length > 1 ? "s" : ""}{" "}
+                          selected
+                          {(() => {
+                            const totalVariants = selectedProductsData.reduce(
+                              (sum, p) => sum + (p.variantsCount || 1),
+                              0
+                            );
+                            return totalVariants > 0
+                              ? ` (${totalVariants} variant${totalVariants > 1 ? "s" : ""})`
+                              : "";
+                          })()}
+                        </div>
                         <Button
-                          size="large"
-                          className="text-[#008060] border-[#008060] hover:text-[#006e52] hover:border-[#006e52] hover:bg-[#f0f9f6]"
+                          type="link"
                           onClick={(e) => {
                             handleSelectProducts();
                             e.preventDefault();
                           }}
+                          className="px-0"
                         >
-                          Add products eligible for offer
+                          Edit products
                         </Button>
-                      ) : (
-                        <div>
-                          <div className="create-offer-selected-grid">
-                            {selectedProductsData.slice(0, 3).map((product) => (
-                              <div
-                                key={product.id}
-                                className="create-offer-selected-card"
-                              >
-                                <button
-                                  type="button"
-                                  className="create-offer-selected-remove"
-                                  onClick={(e) => {
-                                    setSelectedProductsData(
-                                      selectedProductsData.filter(
-                                        (p) => p.id !== product.id,
-                                      ),
-                                    );
-                                    e.preventDefault();
-                                  }}
-                                  aria-label={`Remove ${product.title}`}
-                                >
-                                  <X size={14} />
-                                </button>
-                                <img
-                                  src={product.image}
-                                  alt={product.title}
-                                  className="create-offer-selected-image"
-                                />
-                                <div className="create-offer-selected-name">
-                                  {product.title}
-                                </div>
-                                <div className="create-offer-selected-price">
-                                  {product.price}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                          <div className="create-offer-selected-count">
-                            {selectedProductsData.length} product
-                            {selectedProductsData.length > 1 ? "s" : ""}{" "}
-                            selected
-                            {(() => {
-                              const totalVariants = selectedProductsData.reduce(
-                                (sum, p) => sum + (p.variantsCount || 1),
-                                0
-                              );
-                              return totalVariants > 0
-                                ? ` (${totalVariants} variant${totalVariants > 1 ? "s" : ""})`
-                                : "";
-                            })()}
-                          </div>
-                          <Button
-                            type="link"
-                            onClick={(e) => {
-                              handleSelectProducts();
-                              e.preventDefault();
-                            }}
-                            className="px-0"
-                          >
-                            Edit products
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                      </div>
+                    )}
+                  </div>
 
                   <div>
                     <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                      {offerType === "bxgy" ? "BXGY Rules" : "Discount Setting"}
+                      Discount Setting
                     </h3>
-                    {offerType === "bxgy" ? (
-                      <div className="create-offer-discount-card">
+                    {discountRules.map((rule, index) => (
+                      <div className="create-offer-discount-card" key={`${rule.count}-${index}`}>
                         <div className="create-offer-discount-body">
                           <div className="create-offer-discount-form-row create-offer-discount-form-row--inline">
                             <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                              Buy Quantity (X)
+                              Item quantity
                               <Input
                                 size="large"
                                 type="number"
                                 min={1}
                                 step={1}
                                 className="mt-1"
-                                value={bxgyDiscountRules[0]?.buyQuantity || 1}
+                                value={rule.count}
                                 onChange={(e) => {
                                   const parsedValue = Number(e.target.value);
                                   const nextCount =
                                     Number.isFinite(parsedValue) && parsedValue >= 1
                                       ? Math.trunc(parsedValue)
                                       : 1;
-                                  setBxgyDiscountRules(prev => prev.length > 0 
-                                    ? [{ ...prev[0], buyQuantity: nextCount }]
-                                    : [{ 
-                                        buyQuantity: nextCount,
-                                        getQuantity: 1,
-                                        buyProductIds: buyProducts,
-                                        getProductIds: getProducts,
-                                        discountPercent: 100,
-                                        maxUsesPerOrder: 1
-                                      }]
-                                  );
-                                }}
-                              />
-                            </label>
-                            <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                              Get Quantity (Y)
-                              <Input
-                                size="large"
-                                type="number"
-                                min={1}
-                                step={1}
-                                className="mt-1"
-                                value={bxgyDiscountRules[0]?.getQuantity || 1}
-                                onChange={(e) => {
-                                  const parsedValue = Number(e.target.value);
-                                  const nextCount =
-                                    Number.isFinite(parsedValue) && parsedValue >= 1
-                                      ? Math.trunc(parsedValue)
-                                      : 1;
-                                  setBxgyDiscountRules(prev => prev.length > 0 
-                                    ? [{ ...prev[0], getQuantity: nextCount }]
-                                    : [{ 
-                                        buyQuantity: 1,
-                                        getQuantity: nextCount,
-                                        buyProductIds: buyProducts,
-                                        getProductIds: getProducts,
-                                        discountPercent: 100,
-                                        maxUsesPerOrder: 1
-                                      }]
+                                  setDiscountRules((prev) =>
+                                    prev.map((r, i) =>
+                                      i === index ? { ...r, count: nextCount } : r,
+                                    ),
                                   );
                                 }}
                               />
@@ -1058,227 +882,126 @@ export function CreateNewOffer({
                                 max={100}
                                 step={1}
                                 className="mt-1"
-                                value={bxgyDiscountRules[0]?.discountPercent || 100}
+                                value={rule.discountPercent}
                                 onChange={(e) => {
                                   const parsedValue = Number(e.target.value);
-                                  if (parsedValue > 100) return;
+                                  if (parsedValue > 100) return; // Do not allow entering > 100
                                   const nextPercent =
                                     Number.isFinite(parsedValue) && parsedValue >= 0
                                       ? parsedValue
-                                      : 100;
-                                  setBxgyDiscountRules(prev => prev.length > 0 
-                                    ? [{ ...prev[0], discountPercent: nextPercent }]
-                                    : [{ 
-                                        buyQuantity: 1,
-                                        getQuantity: 1,
-                                        buyProductIds: buyProducts,
-                                        getProductIds: getProducts,
-                                        discountPercent: nextPercent,
-                                        maxUsesPerOrder: 1
-                                      }]
+                                      : 0;
+                                  setDiscountRules((prev) =>
+                                    prev.map((r, i) =>
+                                      i === index
+                                        ? { ...r, discountPercent: nextPercent }
+                                        : r,
+                                    ),
                                   );
                                 }}
                               />
-                              {bxgyDiscountRules[0]?.discountPercent === 100 && (
-                                <div className="text-[#52c41a] text-[12px] mt-1 font-normal">
-                                  Y products will be FREE
+                              {rule.discountPercent > 50 && rule.discountPercent < 90 && (
+                                <div className="text-[#faad14] text-[12px] mt-1 font-normal">
+                                  A discount over 50% may result in losses. Please double-check.
+                                </div>
+                              )}
+                              {rule.discountPercent >= 90 && (
+                                <div className="text-[#ff4d4f] text-[12px] mt-1 font-normal">
+                                  A discount of 90% or more means the product is nearly free.
                                 </div>
                               )}
                             </label>
                           </div>
-                          <div className="create-offer-discount-form-row" style={{ marginTop: '12px' }}>
+                          
+                          {/* 新增的文本配置字段 */}
+                          <div className="create-offer-discount-form-row" style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
                             <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                              Max Uses Per Order
+                              Title
                               <Input
                                 size="large"
-                                type="number"
-                                min={1}
-                                step={1}
                                 className="mt-1"
-                                value={bxgyDiscountRules[0]?.maxUsesPerOrder || 1}
+                                value={rule.title || ''}
+                                placeholder="e.g. Duo, Trio"
                                 onChange={(e) => {
-                                  const parsedValue = Number(e.target.value);
-                                  const nextMax =
-                                    Number.isFinite(parsedValue) && parsedValue >= 1
-                                      ? Math.trunc(parsedValue)
-                                      : 1;
-                                  setBxgyDiscountRules(prev => prev.length > 0 
-                                    ? [{ ...prev[0], maxUsesPerOrder: nextMax }]
-                                    : [{ 
-                                        buyQuantity: 1,
-                                        getQuantity: 1,
-                                        buyProductIds: buyProducts,
-                                        getProductIds: getProducts,
-                                        discountPercent: 100,
-                                        maxUsesPerOrder: nextMax
-                                      }]
-                                  );
+                                  const val = e.target.value;
+                                  setDiscountRules(prev => prev.map((r, i) => i === index ? { ...r, title: val } : r));
+                                }}
+                              />
+                            </label>
+                            <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                              Subtitle
+                              <Input
+                                size="large"
+                                className="mt-1"
+                                value={rule.subtitle || ''}
+                                placeholder="e.g. You save 20%"
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setDiscountRules(prev => prev.map((r, i) => i === index ? { ...r, subtitle: val } : r));
+                                }}
+                              />
+                            </label>
+                            <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                              Badge
+                              <Input
+                                size="large"
+                                className="mt-1"
+                                value={rule.badge || ''}
+                                placeholder="e.g. Most Popular"
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setDiscountRules(prev => prev.map((r, i) => i === index ? { ...r, badge: val } : r));
                                 }}
                               />
                             </label>
                           </div>
+                          
+                          <div className="create-offer-discount-form-row" style={{ marginTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Checkbox
+                              checked={!!rule.isDefault}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setDiscountRules((prev) =>
+                                  prev.map((r, i) => ({
+                                    ...r,
+                                    isDefault: checked ? i === index : false,
+                                  }))
+                                );
+                              }}
+                            >
+                              Set as Default Selected
+                            </Checkbox>
+                            <Button
+                              danger
+                              onClick={() => {
+                                setDiscountRules((prev) => {
+                                  if (prev.length <= 1) return prev;
+                                  return prev.filter((_, i) => i !== index);
+                                });
+                              }}
+                              disabled={discountRules.length <= 1}
+                            >
+                              Remove
+                            </Button>
+                          </div>
                         </div>
                       </div>
-                    ) : (
-                      <>
-                        {discountRules.map((rule, index) => (
-                          <div className="create-offer-discount-card" key={`${rule.count}-${index}`}>
-                            <div className="create-offer-discount-body">
-                              <div className="create-offer-discount-form-row create-offer-discount-form-row--inline">
-                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                                  Item quantity
-                                  <Input
-                                    size="large"
-                                    type="number"
-                                    min={1}
-                                    step={1}
-                                    className="mt-1"
-                                    value={rule.count}
-                                    onChange={(e) => {
-                                      const parsedValue = Number(e.target.value);
-                                      const nextCount =
-                                        Number.isFinite(parsedValue) && parsedValue >= 1
-                                          ? Math.trunc(parsedValue)
-                                          : 1;
-                                      setDiscountRules((prev) =>
-                                        prev.map((r, i) =>
-                                          i === index ? { ...r, count: nextCount } : r,
-                                        ),
-                                      );
-                                    }}
-                                  />
-                                </label>
-                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                                  Discount (%)
-                                  <Input
-                                    size="large"
-                                    type="number"
-                                    min={0}
-                                    max={100}
-                                    step={1}
-                                    className="mt-1"
-                                    value={rule.discountPercent}
-                                    onChange={(e) => {
-                                      const parsedValue = Number(e.target.value);
-                                      if (parsedValue > 100) return; // Do not allow entering > 100
-                                      const nextPercent =
-                                        Number.isFinite(parsedValue) && parsedValue >= 0
-                                          ? parsedValue
-                                          : 0;
-                                      setDiscountRules((prev) =>
-                                        prev.map((r, i) =>
-                                          i === index
-                                            ? { ...r, discountPercent: nextPercent }
-                                            : r,
-                                        ),
-                                      );
-                                    }}
-                                  />
-                                  {rule.discountPercent > 50 && rule.discountPercent < 90 && (
-                                    <div className="text-[#faad14] text-[12px] mt-1 font-normal">
-                                      A discount over 50% may result in losses. Please double-check.
-                                    </div>
-                                  )}
-                                  {rule.discountPercent >= 90 && (
-                                    <div className="text-[#ff4d4f] text-[12px] mt-1 font-normal">
-                                      A discount of 90% or more means the product is nearly free.
-                                    </div>
-                                  )}
-                                </label>
-                              </div>
-
-                              {/* 新增的文本配置字段 */}
-                              <div className="create-offer-discount-form-row" style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
-                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                                  Title
-                                  <Input
-                                    size="large"
-                                    className="mt-1"
-                                    value={rule.title || ''}
-                                    placeholder="e.g. Duo, Trio"
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setDiscountRules(prev => prev.map((r, i) => i === index ? { ...r, title: val } : r));
-                                    }}
-                                  />
-                                </label>
-                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                                  Subtitle
-                                  <Input
-                                    size="large"
-                                    className="mt-1"
-                                    value={rule.subtitle || ''}
-                                    placeholder="e.g. You save 20%"
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setDiscountRules(prev => prev.map((r, i) => i === index ? { ...r, subtitle: val } : r));
-                                    }}
-                                  />
-                                </label>
-                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                                  Badge
-                                  <Input
-                                    size="large"
-                                    className="mt-1"
-                                    value={rule.badge || ''}
-                                    placeholder="e.g. Most Popular"
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setDiscountRules(prev => prev.map((r, i) => i === index ? { ...r, badge: val } : r));
-                                    }}
-                                  />
-                                </label>
-                              </div>
-
-                              <div className="create-offer-discount-form-row" style={{ marginTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <Checkbox
-                                  checked={!!rule.isDefault}
-                                  onChange={(e) => {
-                                    const checked = e.target.checked;
-                                    setDiscountRules((prev) =>
-                                      prev.map((r, i) => ({
-                                        ...r,
-                                        isDefault: checked ? i === index : false,
-                                      }))
-                                    );
-                                  }}
-                                >
-                                  Set as Default Selected
-                                </Checkbox>
-                                <Button
-                                  danger
-                                  onClick={() => {
-                                    setDiscountRules((prev) => {
-                                      if (prev.length <= 1) return prev;
-                                      return prev.filter((_, i) => i !== index);
-                                    });
-                                  }}
-                                  disabled={discountRules.length <= 1}
-                                >
-                                  Remove
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                        <Button
-                          type="dashed"
-                          className="w-full"
-                          onClick={() => {
-                            setDiscountRules((prev) => {
-                              const maxCount = prev.reduce(
-                                (max, rule) => Math.max(max, rule.count),
-                                1,
-                              );
-                              return [...prev, { count: maxCount + 1, discountPercent: 15 }];
-                            });
-                          }}
-                        >
-                          + Add discount tier
-                        </Button>
-                      </>
-                  )}
-                </div>
+                    ))}
+                    <Button
+                      type="dashed"
+                      className="w-full"
+                      onClick={() => {
+                        setDiscountRules((prev) => {
+                          const maxCount = prev.reduce(
+                            (max, rule) => Math.max(max, rule.count),
+                            1,
+                          );
+                          return [...prev, { count: maxCount + 1, discountPercent: 15 }];
+                        });
+                      }}
+                    >
+                      + Add discount tier
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="create-offer-sticky-preview">
