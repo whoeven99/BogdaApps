@@ -37,7 +37,6 @@ const getBundlePayloadByVariantId = (
     }
     if (matched && typeof matched === "object") {
       const record = matched as Record<string, unknown>;
-      console.log("[ZZ-Test] record: ", record)
       return {
         id: variantId || "",
         title: String(record.title || "NO_BUNDLE_TITLE"),
@@ -64,8 +63,6 @@ const mergeCheckoutBundle = (
   const price = item?.finalLinePrice || {};
   const sessionBundle = getBundlePayloadByVariantId(bundleSessionData, id);
   const hasSessionBundle = sessionBundle.title !== "NO_BUNDLE_TITLE";
-  console.log("[ZZ-Test] sessionBundle: ", sessionBundle)
-  console.log("[ZZ-Test] item: ", item)
   return {
     id,
     price,

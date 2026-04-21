@@ -100,6 +100,12 @@ function toCents(value) {
   return Math.round(n * 100);
 }
 
+function toScaledInteger(value, scale) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.round(n * scale);
+}
+
 function fromCents(cents) {
   const n = Number(cents);
   if (!Number.isFinite(n)) return 0;
@@ -107,18 +113,22 @@ function fromCents(cents) {
 }
 
 /**
- * 公共金额计算：与 cart function 对齐
- * 规则：先计算单件折后价（分）并取整，再乘数量。
+ * Use higher precision during intermediate calculations and only round to cents
+ * at the final step so the storefront card stays closer to Shopify cart totals.
  */
 function calculateBundleAmounts(unitPrice, quantity, discountPercent) {
+  const MONEY_SCALE = 10000;
   const safeQty = Math.max(1, Math.trunc(Number(quantity) || 1));
   const safeDiscountPercent = Math.max(0, Math.min(100, Number(discountPercent) || 0));
-  const unitPriceCents = toCents(unitPrice);
-  const originalTotalCents = unitPriceCents * safeQty;
-  const discountedUnitCents = Math.round(
-    unitPriceCents * (1 - safeDiscountPercent / 100),
+  const unitPriceScaled = toScaledInteger(unitPrice, MONEY_SCALE);
+  const originalTotalScaled = unitPriceScaled * safeQty;
+  const discountedTotalScaled = Math.round(
+    originalTotalScaled * (1 - safeDiscountPercent / 100),
   );
-  const discountedTotalCents = discountedUnitCents * safeQty;
+  const originalTotalCents = Math.round(originalTotalScaled / (MONEY_SCALE / 100));
+  const discountedTotalCents = Math.round(
+    discountedTotalScaled / (MONEY_SCALE / 100),
+  );
   const savedCents = originalTotalCents - discountedTotalCents;
 
   return {
@@ -581,7 +591,11 @@ window.ciwiSelectBundleOption = function(count) {
   }
 };
 
-window.ciwiHandleBundleAddToCart = function() {
+window.ciwiHandleBundleAddToCart = function(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
   const count = window.__ciwiBundleState?.selectedCount || 1;
   updateThemeQuantityInput(count);
   const form = getAddToCartForm();
@@ -708,7 +722,7 @@ function renderBundlePreviewHtml(offer) {
     <div class="create-offer-style-preview-list create-offer-style-preview-list--${layoutFormat}">
       ${itemsHtml}
     </div>
-    ${showCustomButton ? `<button class="create-offer-preview-button" onclick="window.ciwiHandleBundleAddToCart()" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
+    ${showCustomButton ? `<button type="button" class="create-offer-preview-button" onclick="window.ciwiHandleBundleAddToCart(event)" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
       ${esc(buttonText)}
     </button>` : ""}
   </div>`;
