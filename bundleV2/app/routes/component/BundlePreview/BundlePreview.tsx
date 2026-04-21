@@ -1,4 +1,4 @@
-import { renderBundlePreviewHtml, PreviewItem } from "./bundlePreviewShared";
+import { renderBundlePreviewHtml, PreviewItem, BundlePreviewProduct } from "./bundlePreviewShared";
 
 type Props = {
   layoutFormat: "vertical" | "horizontal" | "card" | "compact";
@@ -14,6 +14,8 @@ type Props = {
   showCustomButton?: boolean;
   title?: string;
   items?: PreviewItem[];
+  /** Products to display in the bundle preview for quantity-breaks-different */
+  bundleProducts?: BundlePreviewProduct[];
 };
 
 export default function BundlePreview({
@@ -30,6 +32,7 @@ export default function BundlePreview({
   showCustomButton,
   title = "Bundle & Save",
   items,
+  bundleProducts = [],
 }: Props) {
   const html = renderBundlePreviewHtml({
     title,
@@ -45,6 +48,7 @@ export default function BundlePreview({
     buttonPrimaryColor,
     showCustomButton,
     items,
+    bundleProducts,
   });
 
   return <div dangerouslySetInnerHTML={{ __html: html }} />;

@@ -9,6 +9,12 @@ export type PreviewItem = {
   featured?: boolean;
   badge?: string;
   saveLabel?: string;
+  /** Product image URL for quantity-breaks-different preview */
+  image?: string;
+  /** Whether this is a product item (vs a tier item) */
+  isProduct?: boolean;
+  /** Variant title for product items */
+  variantTitle?: string;
 };
 
 export const PREVIEW_ITEMS: PreviewItem[] = [
@@ -26,6 +32,14 @@ export const PREVIEW_ITEMS: PreviewItem[] = [
   { id: "trio", title: "Trio", subtitle: "Extra savings", price: "€149,00", original: "€195,00", saveLabel: "SAVE €46,00" },
   { id: "pack4", title: "Pack of 4", subtitle: "Best value", price: "€185,00", original: "€260,00", saveLabel: "SAVE €75,00" },
 ];
+
+export type BundlePreviewProduct = {
+  id: string;
+  title: string;
+  image: string;
+  price: string;
+  variantTitle?: string;
+};
 
 function esc(value: unknown) {
   return String(value ?? "")
@@ -50,6 +64,7 @@ export function renderBundlePreviewHtml({
   buttonPrimaryColor = "#008060",
   showCustomButton = true,
   items = PREVIEW_ITEMS,
+  bundleProducts = [],
 }: {
   title?: string;
   layoutFormat?: LayoutFormat;
@@ -64,6 +79,7 @@ export function renderBundlePreviewHtml({
   buttonPrimaryColor?: string;
   showCustomButton?: boolean;
   items?: PreviewItem[];
+  bundleProducts?: BundlePreviewProduct[];
 } = {}) {
   const safeLayout: LayoutFormat = ["vertical", "horizontal", "card", "compact"].includes(layoutFormat)
     ? layoutFormat
@@ -71,10 +87,10 @@ export function renderBundlePreviewHtml({
 
   const itemsHtml = items.map((item) => {
     const featuredClass = item.featured ? " create-offer-style-preview-item--featured" : "";
-    const featuredStyle = item.featured 
+    const featuredStyle = item.featured
       ? `border-color: ${esc(accentColor)} !important; background: ${esc(cardBackgroundColor)} !important; box-shadow: 0 8px 18px ${esc(accentColor)}25 !important; cursor: pointer;`
       : `border-color: ${esc(borderColor)} !important; background: ${esc(cardBackgroundColor)} !important; cursor: pointer;`;
-      
+
     return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}">
       ${
         item.badge
@@ -97,8 +113,25 @@ export function renderBundlePreviewHtml({
     </div>`;
   }).join("");
 
+  // Render bundle products section (for quantity-breaks-different)
+  const bundleProductsHtml = bundleProducts.length > 0
+    ? `<div class="create-offer-bundle-products">
+        ${bundleProducts.map(p => `
+          <div class="create-offer-bundle-product">
+            <img src="${esc(p.image)}" alt="${esc(p.title)}" class="create-offer-bundle-product-image" />
+            <div class="create-offer-bundle-product-info">
+              <div class="create-offer-bundle-product-title">${esc(p.title)}</div>
+              ${p.variantTitle ? `<div class="create-offer-bundle-product-variant">${esc(p.variantTitle)}</div>` : ''}
+              <div class="create-offer-bundle-product-price">${esc(p.price)}</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>`
+    : '';
+
   return `<div class="create-offer-preview-card">
     <div class="create-offer-style-preview-header" style="color:${esc(titleColor)} !important; font-size: ${esc(titleFontSize)}px !important; font-weight: ${esc(titleFontWeight)} !important;">${esc(title)}</div>
+    ${bundleProductsHtml}
     <div class="create-offer-style-preview-list create-offer-style-preview-list--${safeLayout}">
       ${itemsHtml}
     </div>

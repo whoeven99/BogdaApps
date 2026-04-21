@@ -23,6 +23,7 @@ import {
   buildBxgyDiscountRulesJson,
   parseDifferentProductsDiscountRules,
   buildDifferentProductsDiscountRulesJson,
+  ProductPricingConfig,
 } from "../../../utils/offerParsing";
 
 type DiscountRule = {
@@ -58,6 +59,8 @@ type DifferentProductsDiscountRule = {
   subtitle?: string;
   badge?: string;
   isDefault?: boolean;
+  /** Per-product pricing configuration for this tier */
+  productPricing?: ProductPricingConfig[];
 };
 
 type Product = {
@@ -344,6 +347,13 @@ export function CreateNewOffer({
     image: string;
     price: string;
     variantsCount: number;
+    /** Selected variants with their pricing */
+    selectedVariants?: {
+      id: string;
+      title: string;
+      price: string;
+      image?: string;
+    }[];
   }[]>(() => {
     const ids = initialOffer?.selectedProductsJson
       ? parseSelectedProductIds(initialOffer.selectedProductsJson)
@@ -394,13 +404,24 @@ export function CreateNewOffer({
     });
 
     if (selected) {
-      const newData = selected.map((item: any) => ({
-        id: item.id,
-        title: item.title,
-        image: item.images?.[0]?.originalSrc || "https://via.placeholder.com/60",
-        price: item.variants?.[0]?.price || "€0.00",
-        variantsCount: item.variants?.length || 1,
-      }));
+      const newData = selected.map((item: any) => {
+        // Collect variants with their prices
+        const variants = item.variants?.slice(0, 6).map((v: any) => ({
+          id: v.id,
+          title: v.title !== "Default Title" ? v.title : "",
+          price: v.price || "€0.00",
+          image: v.image?.originalSrc || item.images?.[0]?.originalSrc || "https://via.placeholder.com/60",
+        })) || [];
+
+        return {
+          id: item.id,
+          title: item.title,
+          image: item.images?.[0]?.originalSrc || "https://via.placeholder.com/60",
+          price: item.variants?.[0]?.price || "€0.00",
+          variantsCount: item.variants?.length || 1,
+          selectedVariants: variants,
+        };
+      });
       
       if (type === "buy") {
         setBuyProducts(newData.map((item: any) => item.id));
@@ -439,6 +460,55 @@ export function CreateNewOffer({
     }
   });
 
+  /** Products selected for Live Preview (can be full products or specific variants) */
+  const [previewProducts, setPreviewProducts] = useState<{
+    id: string;
+    title: string;
+    image: string;
+    price: string;
+    /** Full product ID or variant ID */
+    variantId?: string;
+    /** Display title for variant */
+    variantTitle?: string;
+    /** Original price before discount */
+    originalPrice: string;
+    /** Discounted price */
+    discountedPrice?: string;
+  }[]>(() => {
+    // Initialize from selectedProductsData with first variants
+    return selectedProductsData.slice(0, 4).map((p) => {
+      const variant = p.selectedVariants?.[0];
+      const priceNum = parseFloat((p.price || "0").replace(/[^0-9.-]/g, ""));
+      const discountedPrice = priceNum > 0 ? (priceNum * 0.85).toFixed(2).replace(".", ",") : p.price;
+      return {
+        id: p.id,
+        title: p.title,
+        image: p.image,
+        price: p.price,
+        variantId: variant?.id,
+        variantTitle: variant?.title || "",
+        originalPrice: p.price,
+        discountedPrice: discountedPrice,
+      };
+    });
+  });
+
+  /** Variant selection modal state */
+  const [variantModalVisible, setVariantModalVisible] = useState(false);
+  const [variantModalProduct, setVariantModalProduct] = useState<{
+    id: string;
+    title: string;
+    image: string;
+    price: string;
+    selectedVariants?: {
+      id: string;
+      title: string;
+      price: string;
+      image?: string;
+    }[];
+  } | null>(null);
+  const [variantModalTargetIndex, setVariantModalTargetIndex] = useState<number>(-1);
+
   useEffect(() => {
     if (offerType === 'bxgy') {
       setBxgyDiscountRules(prev =>
@@ -455,10 +525,27 @@ export function CreateNewOffer({
   useEffect(() => {
     if (offerType === 'quantity-breaks-different') {
       setDifferentProductsDiscountRules(prev =>
-        prev.map(rule => ({
-          ...rule,
-          productIds: selectedProductsData.map(p => p.id),
-        })),
+        prev.map(rule => {
+          // Build productPricing from selectedProductsData
+          const productPricing: ProductPricingConfig[] = selectedProductsData.map(p => {
+            // Find existing pricing for this product, or create default
+            const existing = rule.productPricing?.find(pp => pp.productId === p.id);
+            if (existing) return existing;
+            
+            return {
+              productId: p.id,
+              discountType: "percent" as const,
+              discountValue: rule.discountPercent,
+              variantIds: p.selectedVariants?.map(v => v.id),
+            };
+          });
+          
+          return {
+            ...rule,
+            productIds: selectedProductsData.map(p => p.id),
+            productPricing,
+          };
+        }),
       );
     }
   }, [selectedProductsData, offerType]);
@@ -468,15 +555,10 @@ export function CreateNewOffer({
   );
 
   const normalizedDiscountRules = sanitizeDiscountRules(discountRules);
-  const normalizedDiffProductsRules = sanitizeDiscountRules(
-    differentProductsDiscountRules.map((r) => ({
-      count: r.count,
-      discountPercent: r.discountPercent,
-      title: r.title,
-      subtitle: r.subtitle,
-      badge: r.badge,
-      isDefault: r.isDefault,
-    })),
+  const normalizedDiffProductsRules = differentProductsDiscountRules.filter(r =>
+    Number.isFinite(r.count) && r.count >= 1 && Number.isFinite(r.discountPercent)
+  ).sort((a, b) => a.count - b.count).filter((tier, index, arr) =>
+    index === arr.findIndex((x) => x.count === tier.count)
   );
   const featuredRule = normalizedDiscountRules[0];
 
@@ -506,11 +588,49 @@ export function CreateNewOffer({
       const hasDefault = normalizedDiffProductsRules.some(r => r.isDefault);
       return normalizedDiffProductsRules.map((rule, index) => {
         const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
+        // For quantity-breaks-different, show actual products with pricing
+        const tierProducts = previewProducts.slice(0, Math.min(rule.count, previewProducts.length));
+        
+        // Calculate prices for this tier based on productPricing
+        const productPricing = rule.productPricing || [];
+        
+        let totalOriginal = 0;
+        let totalDiscounted = 0;
+        tierProducts.forEach(p => {
+          const priceNum = parseFloat((p.originalPrice || "0").replace(/[^0-9.-]/g, ""));
+          totalOriginal += priceNum;
+          
+          // Find product pricing config
+          const ppConfig = productPricing.find(pp => pp.productId === p.id);
+          let discountedPrice = priceNum;
+          
+          if (ppConfig) {
+            if (ppConfig.discountType === "percent" && ppConfig.discountValue) {
+              discountedPrice = priceNum * (1 - ppConfig.discountValue / 100);
+            } else if (ppConfig.discountType === "fixed" && ppConfig.discountValue) {
+              discountedPrice = Math.max(0, priceNum - ppConfig.discountValue);
+            } else if (ppConfig.discountType === "variant" && ppConfig.variantFixedPrices && p.variantId) {
+              discountedPrice = ppConfig.variantFixedPrices[p.variantId] ?? priceNum;
+            }
+          } else {
+            // Default: apply tier discount percent
+            discountedPrice = priceNum * (1 - rule.discountPercent / 100);
+          }
+          
+          totalDiscounted += discountedPrice;
+        });
+        
+        const saved = totalOriginal - totalDiscounted;
+        const savedFormatted = saved > 0 ? `SAVE €${saved.toFixed(2).replace(".", ",")}` : "";
+        const originalFormatted = totalOriginal > 0 ? `€${totalOriginal.toFixed(2).replace(".", ",")}` : undefined;
+        const discountedFormatted = totalDiscounted > 0 ? `€${totalDiscounted.toFixed(2).replace(".", ",")}` : `€${totalDiscounted.toFixed(2).replace(".", ",")}`;
+        
         return {
           id: `diff-tier-${rule.count}`,
           title: rule.title || `${rule.count} items`,
-          subtitle: rule.subtitle || `You save ${rule.discountPercent}%`,
-          price: `${rule.discountPercent}% OFF`,
+          subtitle: rule.subtitle || (savedFormatted ? savedFormatted : `You save ${rule.discountPercent}%`),
+          price: discountedFormatted,
+          original: originalFormatted,
           featured: isFeatured,
           badge: rule.badge || (isFeatured ? "Most Popular" : ""),
           saveLabel: `BUY ${rule.count} + SAVE ${rule.discountPercent}%`,
@@ -925,21 +1045,146 @@ export function CreateNewOffer({
                   }
                 </p>
 
-                <BundlePreview
-                  layoutFormat={layoutFormat}
-                  cardBackgroundColor={cardBackgroundColor}
-                  accentColor={accentColor}
-                  borderColor={borderColor}
-                  labelColor={labelColor}
-                  titleFontSize={titleFontSize}
-                  titleFontWeight={titleFontWeight}
-                  titleColor={titleColor}
-                  buttonText={buttonText}
-                  buttonPrimaryColor={buttonPrimaryColor}
-                  showCustomButton={showCustomButton}
-                  title={widgetTitle}
-                  items={previewItems}
-                />
+                {/* Product Preview Selector for quantity-breaks-different */}
+                {offerType === "quantity-breaks-different" && (
+                  <div className="mb-4 p-3 border border-[#dfe3e8] rounded-lg bg-[#f9fafb]">
+                    <div className="text-[12px] font-medium text-[#1c1f23] mb-2">
+                      Preview Products (drag to reorder)
+                    </div>
+                    <div className="grid grid-cols-4 gap-2">
+                      {previewProducts.map((product, index) => (
+                        <div
+                          key={`${product.id}-${index}`}
+                          className="relative group cursor-pointer"
+                          onClick={() => {
+                            // Open variant selector if product has variants
+                            const fullProduct = selectedProductsData.find(p => p.id === product.id);
+                            if (fullProduct && (fullProduct.variantsCount || 1) > 1) {
+                              setVariantModalProduct(fullProduct);
+                              setVariantModalTargetIndex(index);
+                              setVariantModalVisible(true);
+                            }
+                          }}
+                        >
+                          <div className="relative">
+                            <img
+                              src={product.image}
+                              alt={product.title}
+                              className="w-full aspect-square object-cover rounded-md border-2 border-[#dfe3e8] group-hover:border-[#008060] transition-colors"
+                              style={{ 
+                                borderColor: index === 0 ? accentColor : undefined,
+                              }}
+                            />
+                            {/* Variant badge */}
+                            {product.variantTitle && (
+                              <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[9px] px-1 py-0.5 truncate rounded-b-md">
+                                {product.variantTitle}
+                              </div>
+                            )}
+                            {/* Product count badge */}
+                            <div className="absolute -top-1 -right-1 bg-[#008060] text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-medium">
+                              {index + 1}
+                            </div>
+                          </div>
+                          <div className="text-[10px] text-[#5c6166] mt-1 truncate text-center">
+                            {product.price}
+                          </div>
+                        </div>
+                      ))}
+                      {/* Add more products placeholder */}
+                      {previewProducts.length < 4 && selectedProductsData.length > previewProducts.length && (
+                        <div
+                          className="aspect-square rounded-md border-2 border-dashed border-[#dfe3e8] flex items-center justify-center cursor-pointer hover:border-[#008060] hover:bg-[#f0f9f6] transition-colors"
+                          onClick={() => {
+                            const nextProduct = selectedProductsData[previewProducts.length];
+                            if (nextProduct) {
+                              const priceNum = parseFloat((nextProduct.price || "0").replace(/[^0-9.-]/g, ""));
+                              const discounted = priceNum > 0 ? (priceNum * 0.85).toFixed(2) : nextProduct.price;
+                              setPreviewProducts([...previewProducts, {
+                                id: nextProduct.id,
+                                title: nextProduct.title,
+                                image: nextProduct.image,
+                                price: nextProduct.price,
+                                variantId: nextProduct.selectedVariants?.[0]?.id,
+                                variantTitle: nextProduct.selectedVariants?.[0]?.title || "",
+                                originalPrice: nextProduct.price,
+                                discountedPrice: discounted,
+                              }]);
+                            }
+                          }}
+                        >
+                          <div className="text-[#6d7175] text-[20px]">+</div>
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-[#6d7175] mt-2">
+                      {selectedProductsData.length > 0 
+                        ? "Click a product to change its variant for the preview"
+                        : "Select products in 'Products eligible for offer' first"}
+                    </p>
+                  </div>
+                )}
+
+                {/* Product Preview Selector for quantity-breaks-same */}
+                {offerType === "quantity-breaks-same" && selectedProductsData.length > 0 && (
+                  <div className="mb-4 p-3 border border-[#dfe3e8] rounded-lg bg-[#f9fafb]">
+                    <div className="text-[12px] font-medium text-[#1c1f23] mb-2">
+                      Preview Product
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={selectedProductsData[0].image}
+                        alt={selectedProductsData[0].title}
+                        className="w-14 h-14 object-cover rounded-md border border-[#dfe3e8]"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[12px] font-medium truncate">{selectedProductsData[0].title}</div>
+                        <div className="text-[11px] text-[#6d7175]">{selectedProductsData[0].price}</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {offerType === "quantity-breaks-different" ? (
+                  <BundlePreview
+                    layoutFormat={layoutFormat}
+                    cardBackgroundColor={cardBackgroundColor}
+                    accentColor={accentColor}
+                    borderColor={borderColor}
+                    labelColor={labelColor}
+                    titleFontSize={titleFontSize}
+                    titleFontWeight={titleFontWeight}
+                    titleColor={titleColor}
+                    buttonText={buttonText}
+                    buttonPrimaryColor={buttonPrimaryColor}
+                    showCustomButton={showCustomButton}
+                    title={widgetTitle}
+                    items={previewItems}
+                    bundleProducts={previewProducts.map(p => ({
+                      id: p.id,
+                      title: p.title,
+                      image: p.image,
+                      price: p.discountedPrice || p.price,
+                      variantTitle: p.variantTitle,
+                    }))}
+                  />
+                ) : (
+                  <BundlePreview
+                    layoutFormat={layoutFormat}
+                    cardBackgroundColor={cardBackgroundColor}
+                    accentColor={accentColor}
+                    borderColor={borderColor}
+                    labelColor={labelColor}
+                    titleFontSize={titleFontSize}
+                    titleFontWeight={titleFontWeight}
+                    titleColor={titleColor}
+                    buttonText={buttonText}
+                    buttonPrimaryColor={buttonPrimaryColor}
+                    showCustomButton={showCustomButton}
+                    title={widgetTitle}
+                    items={previewItems}
+                  />
+                )}
                 <p className="text-[12px] text-[#5c6166] mt-3 italic font-normal">
                   Note: This is a live preview. Changes will update in real-time when state is connected.
                 </p>
@@ -1453,6 +1698,196 @@ export function CreateNewOffer({
                                 </label>
                               </div>
 
+                              {/* Per-Product Pricing Configuration for quantity-breaks-different */}
+                              {selectedProductsData.length > 0 && (
+                                <div style={{ marginTop: '12px', padding: '12px', background: '#f9fafb', borderRadius: '6px', border: '1px solid #dfe3e8' }}>
+                                  <div className="text-[13px] font-medium text-[#1c1f23] mb-2">
+                                    Per-Product Pricing
+                                  </div>
+                                  <p className="text-[11px] text-[#6d7175] mb-3">
+                                    Override the tier discount for specific products
+                                  </p>
+                                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '8px' }}>
+                                    {selectedProductsData.map((product) => {
+                                      const existingPricing = rule.productPricing?.find(pp => pp.productId === product.id);
+                                      const discountType = existingPricing?.discountType || "percent";
+                                      const discountValue = existingPricing?.discountValue ?? rule.discountPercent;
+
+                                      return (
+                                        <div
+                                          key={product.id}
+                                          style={{ padding: '10px', background: 'white', borderRadius: '6px', border: '1px solid #dfe3e8' }}
+                                        >
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                                            <img
+                                              src={product.image}
+                                              alt={product.title}
+                                              style={{ width: '36px', height: '36px', borderRadius: '4px', objectFit: 'cover' }}
+                                            />
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                              <div style={{ fontSize: '12px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                {product.title}
+                                              </div>
+                                              <div style={{ fontSize: '11px', color: '#6d7175' }}>{product.price}</div>
+                                            </div>
+                                          </div>
+                                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                                            <Select
+                                              size="small"
+                                              value={discountType}
+                                              onChange={(val) => {
+                                                setDifferentProductsDiscountRules(prev =>
+                                                  prev.map((r, i) => {
+                                                    if (i !== index) return r;
+                                                    const productPricing = [...(r.productPricing || [])];
+                                                    const existingIdx = productPricing.findIndex(pp => pp.productId === product.id);
+                                                    const newConfig: ProductPricingConfig = {
+                                                      productId: product.id,
+                                                      discountType: val,
+                                                      discountValue: discountValue,
+                                                    };
+                                                    if (existingIdx >= 0) {
+                                                      productPricing[existingIdx] = newConfig;
+                                                    } else {
+                                                      productPricing.push(newConfig);
+                                                    }
+                                                    return { ...r, productPricing };
+                                                  })
+                                                );
+                                              }}
+                                              options={[
+                                                { label: '% Discount', value: 'percent' },
+                                                { label: 'Fixed Off', value: 'fixed' },
+                                                { label: 'Variant Price', value: 'variant' },
+                                              ]}
+                                            />
+                                            {discountType === 'percent' && (
+                                              <Input
+                                                size="small"
+                                                type="number"
+                                                min={0}
+                                                max={100}
+                                                value={discountValue}
+                                                onChange={(e) => {
+                                                  const val = parseFloat(e.target.value) || 0;
+                                                  setDifferentProductsDiscountRules(prev =>
+                                                    prev.map((r, i) => {
+                                                      if (i !== index) return r;
+                                                      const productPricing = [...(r.productPricing || [])];
+                                                      const existingIdx = productPricing.findIndex(pp => pp.productId === product.id);
+                                                      const newConfig: ProductPricingConfig = {
+                                                        productId: product.id,
+                                                        discountType,
+                                                        discountValue: val,
+                                                      };
+                                                      if (existingIdx >= 0) {
+                                                        productPricing[existingIdx] = newConfig;
+                                                      } else {
+                                                        productPricing.push(newConfig);
+                                                      }
+                                                      return { ...r, productPricing };
+                                                    })
+                                                  );
+                                                }}
+                                                suffix="%"
+                                              />
+                                            )}
+                                            {discountType === 'fixed' && (
+                                              <Input
+                                                size="small"
+                                                type="number"
+                                                min={0}
+                                                value={discountValue}
+                                                onChange={(e) => {
+                                                  const val = parseFloat(e.target.value) || 0;
+                                                  setDifferentProductsDiscountRules(prev =>
+                                                    prev.map((r, i) => {
+                                                      if (i !== index) return r;
+                                                      const productPricing = [...(r.productPricing || [])];
+                                                      const existingIdx = productPricing.findIndex(pp => pp.productId === product.id);
+                                                      const newConfig: ProductPricingConfig = {
+                                                        productId: product.id,
+                                                        discountType,
+                                                        discountValue: val,
+                                                      };
+                                                      if (existingIdx >= 0) {
+                                                        productPricing[existingIdx] = newConfig;
+                                                      } else {
+                                                        productPricing.push(newConfig);
+                                                      }
+                                                      return { ...r, productPricing };
+                                                    })
+                                                  );
+                                                }}
+                                                prefix="€"
+                                              />
+                                            )}
+                                            {discountType === 'variant' && (
+                                              <Select
+                                                size="small"
+                                                placeholder="Select variant"
+                                                value={existingPricing?.variantIds?.[0] || undefined}
+                                                onChange={(val) => {
+                                                  setDifferentProductsDiscountRules(prev =>
+                                                    prev.map((r, i) => {
+                                                      if (i !== index) return r;
+                                                      const productPricing = [...(r.productPricing || [])];
+                                                      const existingIdx = productPricing.findIndex(pp => pp.productId === product.id);
+                                                      const newConfig: ProductPricingConfig = {
+                                                        productId: product.id,
+                                                        discountType: 'variant',
+                                                        variantIds: [val],
+                                                        variantFixedPrices: product.selectedVariants?.reduce((acc, v) => {
+                                                          const priceNum = parseFloat((v.price || "0").replace(/[^0-9.-]/g, ""));
+                                                          acc[v.id] = priceNum;
+                                                          return acc;
+                                                        }, {} as Record<string, number>),
+                                                      };
+                                                      if (existingIdx >= 0) {
+                                                        productPricing[existingIdx] = newConfig;
+                                                      } else {
+                                                        productPricing.push(newConfig);
+                                                      }
+                                                      return { ...r, productPricing };
+                                                    })
+                                                  );
+                                                }}
+                                                options={product.selectedVariants?.map(v => ({
+                                                  label: v.title || 'Default',
+                                                  value: v.id,
+                                                })) || []}
+                                              />
+                                            )}
+                                          </div>
+                                          {existingPricing && (
+                                            <Button
+                                              type="link"
+                                              size="small"
+                                              className="px-0 mt-1"
+                                              onClick={() => {
+                                                setDifferentProductsDiscountRules(prev =>
+                                                  prev.map((r, i) => {
+                                                    if (i !== index) return r;
+                                                    return {
+                                                      ...r,
+                                                      productPricing: (r.productPricing || []).filter(
+                                                        pp => pp.productId !== product.id
+                                                      ),
+                                                    };
+                                                  })
+                                                );
+                                              }}
+                                            >
+                                              Reset to tier default
+                                            </Button>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+
                               <div className="create-offer-discount-form-row" style={{ marginTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <Checkbox
                                   checked={!!rule.isDefault}
@@ -1674,21 +2109,46 @@ export function CreateNewOffer({
                       )?.description
                     }
                   </p>
-                  <BundlePreview
-                    layoutFormat={layoutFormat}
-                    cardBackgroundColor={cardBackgroundColor}
-                    accentColor={accentColor}
-                    borderColor={borderColor}
-                    labelColor={labelColor}
-                    titleFontSize={titleFontSize}
-                    titleFontWeight={titleFontWeight}
-                    titleColor={titleColor}
-                  buttonText={buttonText}
-                  buttonPrimaryColor={buttonPrimaryColor}
-                  showCustomButton={showCustomButton}
-                  title={widgetTitle}
-                  items={previewItems}
-                  />
+                  {offerType === "quantity-breaks-different" ? (
+                    <BundlePreview
+                      layoutFormat={layoutFormat}
+                      cardBackgroundColor={cardBackgroundColor}
+                      accentColor={accentColor}
+                      borderColor={borderColor}
+                      labelColor={labelColor}
+                      titleFontSize={titleFontSize}
+                      titleFontWeight={titleFontWeight}
+                      titleColor={titleColor}
+                      buttonText={buttonText}
+                      buttonPrimaryColor={buttonPrimaryColor}
+                      showCustomButton={showCustomButton}
+                      title={widgetTitle}
+                      items={previewItems}
+                      bundleProducts={previewProducts.map(p => ({
+                        id: p.id,
+                        title: p.title,
+                        image: p.image,
+                        price: p.discountedPrice || p.price,
+                        variantTitle: p.variantTitle,
+                      }))}
+                    />
+                  ) : (
+                    <BundlePreview
+                      layoutFormat={layoutFormat}
+                      cardBackgroundColor={cardBackgroundColor}
+                      accentColor={accentColor}
+                      borderColor={borderColor}
+                      labelColor={labelColor}
+                      titleFontSize={titleFontSize}
+                      titleFontWeight={titleFontWeight}
+                      titleColor={titleColor}
+                      buttonText={buttonText}
+                      buttonPrimaryColor={buttonPrimaryColor}
+                      showCustomButton={showCustomButton}
+                      title={widgetTitle}
+                      items={previewItems}
+                    />
+                  )}
                   <p className="text-[12px] text-[#5c6166] mt-3 italic font-normal">
                     Note: This is a live preview. Changes will update in real-time when state is connected.
                   </p>
@@ -1987,21 +2447,46 @@ export function CreateNewOffer({
                     )?.description
                   }
                 </p>
-                <BundlePreview
-                  layoutFormat={layoutFormat}
-                  cardBackgroundColor={cardBackgroundColor}
-                  accentColor={accentColor}
-                  borderColor={borderColor}
-                  labelColor={labelColor}
-                  titleFontSize={titleFontSize}
-                  titleFontWeight={titleFontWeight}
-                  titleColor={titleColor}
-                  buttonText={buttonText}
-                  buttonPrimaryColor={buttonPrimaryColor}
-                  showCustomButton={showCustomButton}
-                  title={widgetTitle}
-                  items={previewItems}
-                />
+                {offerType === "quantity-breaks-different" ? (
+                  <BundlePreview
+                    layoutFormat={layoutFormat}
+                    cardBackgroundColor={cardBackgroundColor}
+                    accentColor={accentColor}
+                    borderColor={borderColor}
+                    labelColor={labelColor}
+                    titleFontSize={titleFontSize}
+                    titleFontWeight={titleFontWeight}
+                    titleColor={titleColor}
+                    buttonText={buttonText}
+                    buttonPrimaryColor={buttonPrimaryColor}
+                    showCustomButton={showCustomButton}
+                    title={widgetTitle}
+                    items={previewItems}
+                    bundleProducts={previewProducts.map(p => ({
+                      id: p.id,
+                      title: p.title,
+                      image: p.image,
+                      price: p.discountedPrice || p.price,
+                      variantTitle: p.variantTitle,
+                    }))}
+                  />
+                ) : (
+                  <BundlePreview
+                    layoutFormat={layoutFormat}
+                    cardBackgroundColor={cardBackgroundColor}
+                    accentColor={accentColor}
+                    borderColor={borderColor}
+                    labelColor={labelColor}
+                    titleFontSize={titleFontSize}
+                    titleFontWeight={titleFontWeight}
+                    titleColor={titleColor}
+                    buttonText={buttonText}
+                    buttonPrimaryColor={buttonPrimaryColor}
+                    showCustomButton={showCustomButton}
+                    title={widgetTitle}
+                    items={previewItems}
+                  />
+                )}
                 <p className="text-[12px] text-[#5c6166] mt-3 italic font-normal">
                   Note: This is a live preview. Changes will update in real-time when state is connected.
                 </p>
@@ -2404,6 +2889,158 @@ export function CreateNewOffer({
               : "Next"}
         </Button>
       </div>
+
+      {/* Variant Selection Modal */}
+      <Modal
+        title={`Select Variant for ${variantModalProduct?.title || ""}`}
+        open={variantModalVisible}
+        onCancel={() => setVariantModalVisible(false)}
+        onOk={() => setVariantModalVisible(false)}
+        footer={null}
+        width={600}
+      >
+        <div className="max-h-[400px] overflow-auto">
+          {variantModalProduct?.selectedVariants?.map((variant) => (
+            <div
+              key={variant.id}
+              className={`flex items-center gap-4 p-3 border rounded-lg mb-2 cursor-pointer transition-colors ${
+                previewProducts[variantModalTargetIndex]?.variantId === variant.id
+                  ? "border-[#008060] bg-[#f0f9f6]"
+                  : "border-[#dfe3e8] hover:border-[#008060]"
+              }`}
+              onClick={() => {
+                if (variantModalTargetIndex >= 0) {
+                  const priceNum = parseFloat((variant.price || "0").replace(/[^0-9.-]/g, ""));
+                  const discounted = priceNum > 0 ? (priceNum * 0.85).toFixed(2) : variant.price;
+                  const updated = [...previewProducts];
+                  updated[variantModalTargetIndex] = {
+                    ...updated[variantModalTargetIndex],
+                    variantId: variant.id,
+                    variantTitle: variant.title,
+                    price: variant.price,
+                    originalPrice: variant.price,
+                    discountedPrice: discounted,
+                  };
+                  setPreviewProducts(updated);
+                }
+                setVariantModalVisible(false);
+              }}
+            >
+              <img
+                src={variant.image}
+                alt={variant.title || "Variant"}
+                className="w-12 h-12 object-cover rounded-md"
+              />
+              <div className="flex-1">
+                <div className="font-medium text-[14px]">
+                  {variant.title || "Default"}
+                </div>
+                <div className="text-[12px] text-[#6d7175]">{variant.price}</div>
+              </div>
+              {previewProducts[variantModalTargetIndex]?.variantId === variant.id && (
+                <div className="text-[#008060] font-medium">Selected</div>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 pt-4 border-t border-[#dfe3e8]">
+          <Button
+            type="link"
+            onClick={() => {
+              // Switch to a different product variant
+              const allProducts = selectedProductsData;
+              const currentProductId = previewProducts[variantModalTargetIndex]?.id;
+              const currentIndex = allProducts.findIndex(p => p.id === currentProductId);
+              if (currentIndex >= 0 && currentIndex < allProducts.length - 1) {
+                const nextProduct = allProducts[currentIndex + 1];
+                const priceNum = parseFloat((nextProduct.price || "0").replace(/[^0-9.-]/g, ""));
+                const discounted = priceNum > 0 ? (priceNum * 0.85).toFixed(2) : nextProduct.price;
+                const updated = [...previewProducts];
+                updated[variantModalTargetIndex] = {
+                  id: nextProduct.id,
+                  title: nextProduct.title,
+                  image: nextProduct.image,
+                  price: nextProduct.price,
+                  variantId: nextProduct.selectedVariants?.[0]?.id,
+                  variantTitle: nextProduct.selectedVariants?.[0]?.title || "",
+                  originalPrice: nextProduct.price,
+                  discountedPrice: discounted,
+                };
+                setPreviewProducts(updated);
+              }
+              setVariantModalVisible(false);
+            }}
+          >
+            Next Product →
+          </Button>
+        </div>
+      </Modal>
+
+      {/* Product Preview Selector Modal for Live Preview - Step 2 */}
+      {step === 2 && offerType === "quantity-breaks-different" && (
+        <div className="mt-4 p-3 border border-[#dfe3e8] rounded-lg bg-[#f9fafb]">
+          <div className="text-[12px] font-medium text-[#1c1f23] mb-2">
+            Configure Products for Live Preview
+          </div>
+          <p className="text-[11px] text-[#6d7175] mb-3">
+            Select which products (or specific variants) appear in the preview below
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {selectedProductsData.slice(0, 8).map((product, index) => {
+              const inPreview = previewProducts.some(p => p.id === product.id);
+              return (
+                <div
+                  key={product.id}
+                  className={`border rounded-lg p-2 cursor-pointer transition-all ${
+                    inPreview
+                      ? "border-[#008060] bg-[#f0f9f6]"
+                      : "border-[#dfe3e8] hover:border-[#008060]"
+                  }`}
+                  onClick={() => {
+                    if (inPreview) {
+                      // Remove from preview
+                      setPreviewProducts(previewProducts.filter(p => p.id !== product.id));
+                    } else if (previewProducts.length < 6) {
+                      // Add to preview
+                      const priceNum = parseFloat((product.price || "0").replace(/[^0-9.-]/g, ""));
+                      const discounted = priceNum > 0 ? (priceNum * 0.85).toFixed(2) : product.price;
+                      setPreviewProducts([...previewProducts, {
+                        id: product.id,
+                        title: product.title,
+                        image: product.image,
+                        price: product.price,
+                        variantId: product.selectedVariants?.[0]?.id,
+                        variantTitle: product.selectedVariants?.[0]?.title || "",
+                        originalPrice: product.price,
+                        discountedPrice: discounted,
+                      }]);
+                    }
+                  }}
+                >
+                  <img
+                    src={product.image}
+                    alt={product.title}
+                    className="w-full aspect-square object-cover rounded-md mb-1"
+                  />
+                  <div className="text-[11px] font-medium truncate">{product.title}</div>
+                  <div className="text-[10px] text-[#6d7175]">{product.price}</div>
+                  {product.variantsCount > 1 && (
+                    <div className="text-[9px] text-[#008060] mt-1">
+                      {product.variantsCount} variants
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {selectedProductsData.length === 0 && (
+            <div className="text-center py-4 text-[#6d7175] text-[13px]">
+              No products selected. Add products above to configure the preview.
+            </div>
+          )}
+        </div>
+      )}
+
     </fetcher.Form>
   );
 }
