@@ -560,6 +560,137 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
 
+  if (request.method === "GET" && url.searchParams.get("mode") === "dashboard-overview-gmv") {
+    const shopName = String(url.searchParams.get("shopName") || "");
+    if (!shopName) {
+      return new Response(
+        JSON.stringify({ success: false, message: "shopName is required" }),
+        { status: 400, headers: corsHeaders },
+      );
+    }
+
+    const sls = createSlsClient();
+    if (!sls) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: "Missing Alibaba Log credentials",
+        }),
+        { status: 503, headers: corsHeaders },
+      );
+    }
+
+    try {
+      const today = new Date();
+      const prior30 = new Date(new Date().setDate(today.getDate() - 30));
+      const prior60 = new Date(new Date().setDate(today.getDate() - 60));
+      const safeShopName = escapeSlsString(shopName);
+
+      const gmvSql = `__topic__: "checkout_completed" and shopName: "${safeShopName}" and extra: "bundle" and not extra: "NO_BUNDLE_TITLE" | SELECT SUM(CAST(REGEXP_EXTRACT(extra, '"amount":"([0-9.]+)"', 1) AS DOUBLE)) AS total_gmv`;
+
+      const [gmvLast30DaysAgg, gmvPrevious30DaysAgg] = await Promise.all([
+        runSlsSql(sls, prior30, today, gmvSql, "gmv-last-30d"),
+        runSlsSql(sls, prior60, prior30, gmvSql, "gmv-prev-30d"),
+      ]);
+
+      const totalGmv = toNumber(gmvLast30DaysAgg.total_gmv);
+      const gmvPrevious30Days = toNumber(gmvPrevious30DaysAgg.total_gmv);
+      let gmvGrowthRate = 0;
+
+      if (gmvPrevious30Days > 0) {
+        gmvGrowthRate = ((totalGmv - gmvPrevious30Days) / gmvPrevious30Days) * 100;
+      } else if (totalGmv > 0) {
+        gmvGrowthRate = 100;
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          totalGmv,
+          gmvGrowthRate,
+        }),
+        {
+          status: 200,
+          headers: corsHeaders,
+        },
+      );
+    } catch (error) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: String(error),
+        }),
+        {
+          status: 500,
+          headers: corsHeaders,
+        },
+      );
+    }
+  }
+
+  if (
+    request.method === "GET" &&
+    url.searchParams.get("mode") === "dashboard-overview-bundle-orders"
+  ) {
+    const shopName = String(url.searchParams.get("shopName") || "");
+    if (!shopName) {
+      return new Response(
+        JSON.stringify({ success: false, message: "shopName is required" }),
+        { status: 400, headers: corsHeaders },
+      );
+    }
+
+    const sls = createSlsClient();
+    if (!sls) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: "Missing Alibaba Log credentials",
+        }),
+        { status: 503, headers: corsHeaders },
+      );
+    }
+
+    try {
+      const today = new Date();
+      const prior30 = new Date(new Date().setDate(today.getDate() - 30));
+      const safeShopName = escapeSlsString(shopName);
+
+      const bundleOrdersSql = `__topic__: "checkout_completed" and shopName: "${safeShopName}" and extra: "bundle" and not extra: "NO_BUNDLE_TITLE" | SELECT COUNT(*) AS total_count FROM log`;
+
+      const [bundleOrdersLast30DaysAgg] = await Promise.all([
+        runSlsSql(sls, prior30, today, bundleOrdersSql, "bundle-orders-last-30d"),
+      ]);
+
+      const totalCount = toNumber(bundleOrdersLast30DaysAgg.total_count);
+      console.log("[ZZ-Test] bundleOrders", {
+        totalCount,
+        
+      });
+      return new Response(
+        JSON.stringify({
+          success: true,
+          totalCount,
+        }),
+        {
+          status: 200,
+          headers: corsHeaders,
+        },
+      );
+    } catch (error) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: String(error),
+        }),
+        {
+          status: 500,
+          headers: corsHeaders,
+        },
+      );
+    }
+  }
+
   return new Response(null, {
     status: 200,
     headers: corsHeaders,

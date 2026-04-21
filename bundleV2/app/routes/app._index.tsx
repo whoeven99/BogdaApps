@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { useLoaderData } from "react-router";
 import "../styles/tailwind.css";
@@ -15,10 +16,12 @@ dayjs.extend(timezone);
 
 const { Text } = Typography;
 
-
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   let ianaTimezone = "UTC";
+  let totalGmv = 0;
+  let gmvGrowthRate = 0;
+
   try {
     const tzResponse = await admin.graphql(`
       query ShopTimezone {
@@ -34,12 +37,27 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   } catch (error) {
     console.error("Failed to fetch shop timezone", error);
   }
-  return { ianaTimezone };
+
+  try {
+    const url = new URL(request.url);
+    const overviewUrl = `${url.origin}/webpixerToAli?mode=dashboard-overview-gmv&shopName=${session.shop}`;
+    const response = await fetch(overviewUrl);
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data.success) {
+        totalGmv = data.totalGmv || 0;
+        gmvGrowthRate = data.gmvGrowthRate || 0;
+      }
+    }
+  } catch (error) {
+    console.error("Failed to fetch dashboard overview data", error);
+  }
+
+  return { ianaTimezone, totalGmv, gmvGrowthRate, session };
 };
 
 const mockOverviewData = {
-  totalGmv: 12430,
-  gmvGrowthRate: 12.3,
   bundleOrders: 320,
   bundleOrdersGrowthRate: 8.5,
   avgConversionRate: 3.2,
@@ -78,8 +96,35 @@ const mockOffers = [
 ];
 
 export default function Index() {
-  const { ianaTimezone } = useLoaderData<typeof loader>();
+  const { ianaTimezone, totalGmv, gmvGrowthRate, session } = useLoaderData<typeof loader>();
   const isThemeExtensionEnabled = true;
+  const [bundleOrders, setBundleOrders] = useState(0);
+
+  useEffect(() => {
+    const fetchBundleOrders = async () => {
+      try {
+        const url = new URL(window.location.href);
+        const overviewUrl = `${url.origin}/webpixerToAli?mode=dashboard-overview-bundle-orders&shopName=${session.shop}`;
+        const response = await fetch(overviewUrl);
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success) {
+            console.log("[ZZ-Test] Fetched bundle orders:", data.totalCount);
+            setBundleOrders(data.totalCount || 0);
+          }
+        }
+      } catch (error) {
+        console.error("[ZZ-Test] Failed to fetch bundle orders:", error);
+      }
+    };
+
+    fetchBundleOrders();
+  }, [session.shop]);
+
+  const gmvGrowthRateColor =
+    gmvGrowthRate === 0 ? "#916a00" : gmvGrowthRate > 0 ? "#108043" : "#D93025";
+  const gmvGrowthRateArrow = gmvGrowthRate >= 0 ? "↑" : "↓";
 
   return (
     <div className="!max-w-[1280px] !mx-auto !px-[16px] !sm:px-[24px] !pt-[16px] !sm:pt-[24px]">
@@ -145,20 +190,16 @@ export default function Index() {
                 Total GMV
               </span>
               <h3 className="!font-sans !font-semibold !text-[28px] !leading-[42px] !text-[#1c1f23] !tracking-wide !m-0">
-                ${mockOverviewData.totalGmv.toLocaleString()}
+                ${totalGmv.toLocaleString()}
               </h3>
               <span
                 className="!font-sans !font-normal !text-[14px] !leading-[22.4px] !tracking-normal"
                 style={{
-                  color:
-                    mockOverviewData.gmvGrowthRate === 0
-                      ? "#916a00"
-                      : mockOverviewData.gmvGrowthRate > 0
-                        ? "#108043"
-                        : "#D93025",
+                  color: gmvGrowthRateColor,
                 }}
               >
-                ↑ +{mockOverviewData.gmvGrowthRate}% from last month
+                {gmvGrowthRate !== 0 && `${gmvGrowthRateArrow} `}
+                {gmvGrowthRate >= 0 ? "+" : ""}{Math.abs(gmvGrowthRate).toFixed(1)}% from last month
               </span>
             </div>
 
@@ -168,21 +209,8 @@ export default function Index() {
                 Bundle Orders
               </span>
               <h3 className="!font-sans !font-semibold !text-[28px] !leading-[42px] !text-[#1c1f23] !tracking-wide !m-0">
-                {mockOverviewData.bundleOrders}
+                {bundleOrders}
               </h3>
-              <span
-                className="!font-sans !font-normal !text-[14px] !leading-[22.4px] !tracking-normal"
-                style={{
-                  color:
-                    mockOverviewData.bundleOrdersGrowthRate === 0
-                      ? "#916a00"
-                      : mockOverviewData.bundleOrdersGrowthRate > 0
-                        ? "#108043"
-                        : "#D93025",
-                }}
-              >
-                ↑ +{mockOverviewData.bundleOrdersGrowthRate}% from last month
-              </span>
             </div>
 
             {/* Avg. Conversion */}
