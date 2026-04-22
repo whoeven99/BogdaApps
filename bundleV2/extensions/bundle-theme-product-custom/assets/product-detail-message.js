@@ -610,6 +610,25 @@ function ensureBundleLineProperties(offer) {
   mk(CIWI_PROP_TIER, String(bar));
 }
 
+/**
+ * 在加购表单 submit 捕获阶段再次写入 bundle 行属性。
+ * 部分主题在更早阶段序列化 FormData，导致仅靠切换档位时写入的隐藏域未进入请求；
+ * 此处保证尽量与结账配送折扣 Function 所需的 __ciwi_* 属性一致。
+ */
+function attachBundleSubmitLinePropsGuard() {
+  const form = getAddToCartForm();
+  if (!form || form.dataset.ciwiBundleSubmitPropsGuard === "1") return;
+  form.dataset.ciwiBundleSubmitPropsGuard = "1";
+  form.addEventListener(
+    "submit",
+    () => {
+      const offer = getCurrentOffer(offersConfigCache);
+      if (offer) ensureBundleLineProperties(offer);
+    },
+    { capture: true },
+  );
+}
+
 function readSessionStorageJson(key, fallback) {
   try {
     const raw = window.sessionStorage.getItem(key);
@@ -1235,6 +1254,8 @@ function attachBundlePriceSync(offer) {
     moPrice.observe(priceRoot, { childList: true, subtree: true, characterData: true });
     signal.addEventListener("abort", () => moPrice.disconnect(), { once: true });
   }
+
+  attachBundleSubmitLinePropsGuard();
 
   queueMicrotask(refresh);
 }

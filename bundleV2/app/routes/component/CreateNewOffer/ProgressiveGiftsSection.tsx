@@ -92,7 +92,9 @@ export function ProgressiveGiftsSection({
         <div>
           <h3 className="text-[16px] font-semibold text-[#1c1f23] m-0">Progressive gifts</h3>
           <p className="text-[13px] text-[#5c6166] m-0 mt-1">
-            阶梯赠品：当前支持「免邮 / Free shipping」奖励；结账时由配送类 Discount Function 生效。
+            阶梯赠品：当前支持「免邮 / Free shipping」奖励；结账时由配送类 Discount Function 生效。免邮依赖商店内已激活的
+            SHIPPING 类自动 App 折扣；若主题未把加购行属性带到结账，Function 会按「商品 + 行数量」推断档位（同一商品多个活动同时开启阶梯赠品时需行上带
+            offer id）。
           </p>
         </div>
         <Switch checked={value.enabled} onChange={(checked) => patch({ enabled: checked })} />

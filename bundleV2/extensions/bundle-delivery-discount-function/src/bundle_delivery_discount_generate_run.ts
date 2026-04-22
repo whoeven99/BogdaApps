@@ -3,7 +3,11 @@
  * ------------------------------------------------------------------
  * 与行项目折扣 Function 分离：仅处理「阶梯赠品」中的免邮（free_shipping）。
  * 配置来源：Shop metafield `ciwi_bundle` / `ciwi-bundle-offers`（与商品折扣相同）。
- * 购物车行需携带 line item properties：`__ciwi_bundle_offer_id`、`__ciwi_bundle_tier`（由主题脚本写入）。
+ *
+ * 购物车行属性（与主题 `properties[__ciwi_*]` 对应）：
+ * - 理想情况：行上带有 `__ciwi_bundle_offer_id`、`__ciwi_bundle_tier`（主题脚本写入）。
+ * - 兜底：若缺少上述字段（动态结账 / 主题 AJAX 未带上隐藏域等），在满足「唯一命中活动」时
+ *   用商品 ID + 行数量推断档位，与行项目折扣 Function 的「按数量取最高满足档」一致，避免「有套装折、无免邮」。
  *
  * 非目标 / 未实现（需在后续迭代补齐）：
  * - B2B 公司定位、草稿订单、订阅结账等场景未单独验证。
@@ -191,6 +195,116 @@ function readLineBundleProps(
   return { tier, offerId };
 }
 
+/** 解析 quantity-breaks 规则的 count 列表（升序），供档位推断 */
+function parseQuantityBreakTierCounts(discountRulesJson?: string | null): number[] {
+  if (!discountRulesJson) return [];
+  try {
+    const parsed = JSON.parse(discountRulesJson) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    const counts: number[] = [];
+    for (const item of parsed) {
+      if (!item || typeof item !== "object") continue;
+      const c = Math.trunc(Number((item as { count?: unknown }).count));
+      if (!Number.isFinite(c) || c < 1) continue;
+      counts.push(c);
+    }
+    counts.sort((a, b) => a - b);
+    return counts;
+  } catch {
+    return [];
+  }
+}
+
+/** 解析 bxgy 规则的 count 列表（升序），供档位推断 */
+function parseBxgyTierCounts(discountRulesJson?: string | null): number[] {
+  if (!discountRulesJson) return [];
+  try {
+    const parsed = JSON.parse(discountRulesJson) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    const counts: number[] = [];
+    for (const item of parsed) {
+      if (!item || typeof item !== "object") continue;
+      const c = Math.trunc(Number((item as { count?: unknown }).count));
+      if (!Number.isFinite(c) || c < 1) continue;
+      counts.push(c);
+    }
+    counts.sort((a, b) => a - b);
+    return counts;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 无行属性时推断 Bar 序号（1-based，与主题 `__ciwi_bundle_tier` 语义对齐）：
+ * - quantity-breaks：与行项目折扣一致，取「满足 quantity >= tier.count」的最高档；Single=1，第 i 条规则对应 bar i+2。
+ * - bxgy：与主题一致，仅当 quantity 与某一档 count 完全相等时命中该档，否则视为 1。
+ */
+function inferBarIndexFromOfferAndQty(offer: OfferRow, qty: number): number {
+  const q = Math.max(1, Math.trunc(Number(qty) || 1));
+  if (offer.offerType === "bxgy") {
+    const counts = parseBxgyTierCounts(offer.discountRulesJson);
+    const idx = counts.findIndex((c) => c === q);
+    return idx >= 0 ? idx + 1 : 1;
+  }
+  if (q === 1) return 1;
+  const tiers = parseQuantityBreakTierCounts(offer.discountRulesJson);
+  if (!tiers.length) return 1;
+  let bestIdx = -1;
+  for (let i = 0; i < tiers.length; i++) {
+    if (q >= tiers[i]) bestIdx = i;
+  }
+  if (bestIdx < 0) return 1;
+  return bestIdx + 2;
+}
+
+function progressiveGiftsActiveOnOffer(offer: OfferRow): boolean {
+  const pg = parseProgressiveGifts(offer.offerSettingsJson ?? null);
+  return !!(pg?.enabled && Array.isArray(pg.gifts) && pg.gifts.length);
+}
+
+/**
+ * 解析本行用于阶梯免邮的 (活动, 档位)。
+ * 行属性优先；缺失时用商品匹配 + 数量推断（见文件头说明）。
+ */
+function resolveOfferAndTierForProgressiveLine(
+  line: CartDeliveryDiscountInput["cart"]["lines"][number],
+  offers: OfferRow[],
+  marketId: string | undefined,
+  productId: string | undefined,
+  variantId: string | undefined,
+  qty: number,
+): { offer: OfferRow; tier: number } | null {
+  const props = readLineBundleProps(line);
+  const eligible = offers.filter(
+    (o) =>
+      offerScheduleAndMarketOk(o, marketId) &&
+      lineMatchesOfferProduct(o, productId, variantId) &&
+      progressiveGiftsActiveOnOffer(o),
+  );
+  if (!eligible.length) return null;
+
+  let offer: OfferRow | undefined;
+  if (props.offerId) {
+    offer = eligible.find((o) => String(o.id) === String(props.offerId));
+    if (!offer) return null;
+  } else if (eligible.length === 1) {
+    offer = eligible[0];
+  } else {
+    log("tier_resolve_skip", {
+      reason: "multiple_eligible_offers_need_line_offer_id",
+      offerIds: eligible.map((o) => o.id),
+    });
+    return null;
+  }
+
+  const tier = props.tier != null ? props.tier : inferBarIndexFromOfferAndQty(offer, qty);
+  if (props.tier == null) {
+    log("tier_inferred", { offerId: offer.id, qty, tier });
+  }
+  return { offer, tier };
+}
+
 export function bundleDeliveryDiscountGenerateRun(
   input: CartDeliveryDiscountInput,
 ): CartDeliveryOptionsDiscountsGenerateRunResult {
@@ -217,18 +331,21 @@ export function bundleDeliveryDiscountGenerateRun(
     if (line.merchandise.__typename !== "ProductVariant") continue;
     const variantId = line.merchandise.id;
     const productId = line.merchandise.product?.id ?? undefined;
-    const { tier, offerId } = readLineBundleProps(line);
-    if (!offerId || tier == null) continue;
+    const qty = Math.max(1, Math.trunc(Number(line.quantity) || 1));
 
-    const offer = offers.find((o) => String(o.id) === offerId);
-    if (!offer) continue;
-    if (!offerScheduleAndMarketOk(offer, marketId)) continue;
-    if (!lineMatchesOfferProduct(offer, productId, variantId)) continue;
+    const resolved = resolveOfferAndTierForProgressiveLine(
+      line,
+      offers,
+      marketId,
+      productId,
+      variantId,
+      qty,
+    );
+    if (!resolved) continue;
 
+    const { offer, tier } = resolved;
     const pg = parseProgressiveGifts(offer.offerSettingsJson ?? null);
     if (!pg?.enabled || !Array.isArray(pg.gifts) || !pg.gifts.length) continue;
-
-    const qty = Math.max(1, Math.trunc(Number(line.quantity) || 1));
 
     for (const gift of pg.gifts) {
       if (String(gift.type) !== "free_shipping") continue;
