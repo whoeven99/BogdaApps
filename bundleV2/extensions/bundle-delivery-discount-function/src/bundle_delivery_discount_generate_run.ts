@@ -39,6 +39,14 @@ function log(step: string, detail?: unknown): void {
   }
 }
 
+/**
+ * 中文调试日志：便于在 Shopify Function Logs 中快速定位「是否触发 + 触发后判定路径」。
+ * 注意：为避免日志爆炸，仅打印关键分支与最终决策。
+ */
+function logZh(step: string, detail?: unknown): void {
+  log(`zh:${step}`, detail);
+}
+
 type OfferRow = {
   id?: string;
   name?: string;
@@ -276,24 +284,48 @@ function resolveOfferAndTierForProgressiveLine(
   qty: number,
 ): { offer: OfferRow; tier: number } | null {
   const props = readLineBundleProps(line);
+  logZh("行属性读取", {
+    lineQty: line.quantity,
+    offerId: props.offerId,
+    tier: props.tier,
+  });
   const eligible = offers.filter(
     (o) =>
       offerScheduleAndMarketOk(o, marketId) &&
       lineMatchesOfferProduct(o, productId, variantId) &&
       progressiveGiftsActiveOnOffer(o),
   );
-  if (!eligible.length) return null;
+  if (!eligible.length) {
+    logZh("本行无可用活动", {
+      productId,
+      variantId,
+      marketId,
+    });
+    return null;
+  }
 
   let offer: OfferRow | undefined;
   if (props.offerId) {
     offer = eligible.find((o) => String(o.id) === String(props.offerId));
-    if (!offer) return null;
+    if (!offer) {
+      logZh("行属性 offerId 未命中活动", {
+        offerId: props.offerId,
+        eligibleOfferIds: eligible.map((o) => o.id),
+      });
+      return null;
+    }
   } else if (eligible.length === 1) {
     offer = eligible[0];
+    logZh("缺少 offerId，按唯一活动兜底", {
+      offerId: offer.id,
+    });
   } else {
     log("tier_resolve_skip", {
       reason: "multiple_eligible_offers_need_line_offer_id",
       offerIds: eligible.map((o) => o.id),
+    });
+    logZh("同商品命中多个活动，且缺少 offerId，跳过免邮", {
+      eligibleOfferIds: eligible.map((o) => o.id),
     });
     return null;
   }
@@ -301,16 +333,36 @@ function resolveOfferAndTierForProgressiveLine(
   const tier = props.tier != null ? props.tier : inferBarIndexFromOfferAndQty(offer, qty);
   if (props.tier == null) {
     log("tier_inferred", { offerId: offer.id, qty, tier });
+    logZh("tier 缺失，已按数量推断", {
+      offerId: offer.id,
+      qty,
+      inferredTier: tier,
+    });
   }
+  logZh("本行活动与档位确定", {
+    offerId: offer.id,
+    tier,
+    qty,
+  });
   return { offer, tier };
 }
 
 export function bundleDeliveryDiscountGenerateRun(
   input: CartDeliveryDiscountInput,
 ): CartDeliveryOptionsDiscountsGenerateRunResult {
+  logZh("函数已触发", {
+    cartLineCount: input.cart.lines.length,
+    deliveryGroupCount: input.cart.deliveryGroups.length,
+    discountClasses: input.discount.discountClasses,
+    marketId: input.localization.market?.id ?? null,
+  });
+
   const hasShipping = input.discount.discountClasses.includes(DiscountClass.Shipping);
   if (!hasShipping) {
     log("early_exit", { reason: "no_shipping_discount_class" });
+    logZh("提前退出：discountClasses 不包含 SHIPPING", {
+      discountClasses: input.discount.discountClasses,
+    });
     return { operations: [] };
   }
 
@@ -321,6 +373,9 @@ export function bundleDeliveryDiscountGenerateRun(
   const offers = shopPayload?.offers ?? [];
   if (!offers.length) {
     log("early_exit", { reason: "no_offers" });
+    logZh("提前退出：店铺 metafield 中无活动", {
+      metafieldPresent: Boolean(input.shop?.metafield),
+    });
     return { operations: [] };
   }
 
@@ -328,7 +383,12 @@ export function bundleDeliveryDiscountGenerateRun(
   const handlesToDiscount = new Set<string>();
 
   for (const line of input.cart.lines) {
-    if (line.merchandise.__typename !== "ProductVariant") continue;
+    if (line.merchandise.__typename !== "ProductVariant") {
+      logZh("跳过非商品变体行", {
+        typename: line.merchandise.__typename,
+      });
+      continue;
+    }
     const variantId = line.merchandise.id;
     const productId = line.merchandise.product?.id ?? undefined;
     const qty = Math.max(1, Math.trunc(Number(line.quantity) || 1));
@@ -341,11 +401,23 @@ export function bundleDeliveryDiscountGenerateRun(
       variantId,
       qty,
     );
-    if (!resolved) continue;
+    if (!resolved) {
+      logZh("本行未进入免邮计算", {
+        productId,
+        variantId,
+        qty,
+      });
+      continue;
+    }
 
     const { offer, tier } = resolved;
     const pg = parseProgressiveGifts(offer.offerSettingsJson ?? null);
-    if (!pg?.enabled || !Array.isArray(pg.gifts) || !pg.gifts.length) continue;
+    if (!pg?.enabled || !Array.isArray(pg.gifts) || !pg.gifts.length) {
+      logZh("活动未启用阶梯赠品或 gifts 为空", {
+        offerId: offer.id,
+      });
+      continue;
+    }
 
     for (const gift of pg.gifts) {
       if (String(gift.type) !== "free_shipping") continue;
@@ -358,7 +430,23 @@ export function bundleDeliveryDiscountGenerateRun(
         const needBar = Math.max(1, Math.trunc(Number(gift.unlockTierIndex) || 1));
         unlocked = tier >= needBar;
       }
-      if (!unlocked) continue;
+      if (!unlocked) {
+        logZh("免邮未解锁", {
+          offerId: offer.id,
+          unlockMode: gift.unlockMode || "tier_index",
+          currentTier: tier,
+          qty,
+          unlockTierIndex: gift.unlockTierIndex ?? null,
+          unlockAtCount: gift.unlockAtCount ?? null,
+        });
+        continue;
+      }
+      logZh("免邮已解锁，开始匹配配送选项", {
+        offerId: offer.id,
+        unlockMode: gift.unlockMode || "tier_index",
+        currentTier: tier,
+        qty,
+      });
 
       const maxRate = gift.freeShippingMaxRateAmount;
       for (const group of input.cart.deliveryGroups) {
@@ -367,9 +455,20 @@ export function bundleDeliveryDiscountGenerateRun(
           const amt = parseMoneyAmount(opt.cost?.amount);
           if (amt == null) continue;
           if (maxRate != null && Number.isFinite(maxRate) && amt > maxRate) {
+            logZh("运费超过免邮上限，跳过该配送方式", {
+              offerId: offer.id,
+              deliveryHandle: String(opt.handle),
+              shippingAmount: amt,
+              freeShippingMaxRateAmount: maxRate,
+            });
             continue;
           }
           handlesToDiscount.add(String(opt.handle));
+          logZh("命中免邮配送方式", {
+            offerId: offer.id,
+            deliveryHandle: String(opt.handle),
+            shippingAmount: amt,
+          });
         }
       }
     }
@@ -377,6 +476,9 @@ export function bundleDeliveryDiscountGenerateRun(
 
   if (!handlesToDiscount.size) {
     log("early_exit", { reason: "no_qualifying_options" });
+    logZh("提前退出：没有可打折的配送方式", {
+      deliveryGroupCount: input.cart.deliveryGroups.length,
+    });
     return { operations: [] };
   }
 
@@ -388,6 +490,10 @@ export function bundleDeliveryDiscountGenerateRun(
   }));
 
   log("apply", { optionCount: candidates.length });
+  logZh("将返回免邮折扣 candidates", {
+    optionCount: candidates.length,
+    handles: [...handlesToDiscount],
+  });
 
   return {
     operations: [
