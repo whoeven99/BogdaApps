@@ -193,10 +193,9 @@
 }
 
 .create-offer-pricing-save {
-  background: #f0f0f0;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #008060;
 }
 
 .create-offer-pricing-right {
@@ -204,8 +203,8 @@
 }
 
 .create-offer-pricing-original {
-  font-size: 12px;
-  color: #6d7175;
+  font-size: 13px;
+  color: #9da3a9;
   text-decoration: line-through;
 }
 
@@ -216,6 +215,82 @@
 
 .create-offer-pricing-footer strong {
   font-size: 13px;
+}
+
+/* Per-product pricing preview (in discount tier cards) */
+.create-offer-pricing-preview {
+  margin-top: 12px;
+  padding: 12px;
+  background: #f6f8fa;
+  border-radius: 6px;
+  border: 1px solid #e8eaed;
+}
+
+.create-offer-pricing-preview-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: #5c6166;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.create-offer-pricing-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.create-offer-pricing-row + .create-offer-pricing-row {
+  border-top: 1px dashed #dfe3e8;
+}
+
+.create-offer-pricing-row--saving {
+  margin-top: 4px;
+  padding-top: 6px !important;
+  border-top: 1px solid #c5d0d8 !important;
+}
+
+.create-offer-pricing-label {
+  font-size: 13px;
+  color: #5c6166;
+}
+
+.create-offer-pricing-discounted {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1c1f23;
+}
+
+.create-offer-pricing-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.create-offer-pricing-summary-label {
+  color: #5c6166;
+}
+
+.create-offer-pricing-summary-value {
+  font-weight: 600;
+  color: #1c1f23;
+}
+
+.create-offer-pricing-notice {
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 6px;
+}
+
+.create-offer-pricing-notice-text {
+  font-size: 13px;
+  color: #92400e;
 }
 
 /* Modal */

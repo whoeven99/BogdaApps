@@ -353,7 +353,45 @@ function parseDiscountRulesJson(discountRulesJson) {
         subtitle: item.subtitle || "",
         badge: item.badge || "",
         isDefault: !!item.isDefault,
+        productId: item.productId || undefined,
+        variantId: item.variantId || undefined,
       };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.count - b.count);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Parse per-product discount rules (supports productId / variantId fields).
+ */
+function parsePerProductDiscountRulesJson(discountRulesJson) {
+  try {
+    let parsed = discountRulesJson;
+    if (typeof parsed === "string") {
+      if (!parsed.trim()) return [];
+      parsed = JSON.parse(parsed);
+    }
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => {
+        if (!item || typeof item !== "object") return null;
+        const count = Number(item.count);
+        const discountPercent = Number(item.discountPercent);
+        if (!Number.isFinite(count) || count < 1) return null;
+        if (!Number.isFinite(discountPercent)) return null;
+        return {
+          productId: typeof item.productId === "string" && item.productId ? item.productId : undefined,
+          variantId: typeof item.variantId === "string" && item.variantId ? item.variantId : undefined,
+          count: Math.trunc(count),
+          discountPercent: Math.max(0, Math.min(100, discountPercent)),
+          title: item.title || "",
+          subtitle: item.subtitle || "",
+          badge: item.badge || "",
+          isDefault: !!item.isDefault,
+        };
       })
       .filter(Boolean)
       .sort((a, b) => a.count - b.count);
@@ -583,11 +621,15 @@ function getCurrentOffer(offersConfig) {
         continue;
       }
     } else {
-      // quantity-breaks-same
-      const discountRules = parseDiscountRulesJson(offer.discountRulesJson);
+      // quantity-breaks-same (supports per-product rules)
+      const discountRules = parsePerProductDiscountRulesJson(offer.discountRulesJson);
       if (!discountRules.length) {
-        console.log("[ciwi] offer skipped: no valid quantity discount rules", offer.id);
-        continue;
+        // Fallback to legacy format
+        const legacyRules = parseDiscountRulesJson(offer.discountRulesJson);
+        if (!legacyRules.length) {
+          console.log("[ciwi] offer skipped: no valid quantity discount rules", offer.id);
+          continue;
+        }
       }
       const selectedIds = parseSelectedProductIds(offer.selectedProductsJson);
       if (selectedIds.length > 0) {
@@ -790,8 +832,11 @@ function renderBundlePreviewHtml(offer) {
     </div>`;
   }
   
-  // Existing logic for quantity breaks
-  const discountRules = parseDiscountRulesJson(offer?.discountRulesJson);
+  // Quantity breaks — try per-product rules first, fallback to legacy
+  const perProductRules = parsePerProductDiscountRulesJson(offer?.discountRulesJson);
+  const discountRules = perProductRules.length
+    ? perProductRules
+    : parseDiscountRulesJson(offer?.discountRulesJson);
   if (!discountRules.length) return "";
 
   if (!window.__ciwiBundleState.selectedCount) {
@@ -840,14 +885,19 @@ function renderBundlePreviewHtml(offer) {
         rule.discountPercent,
       );
       const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
+      const tierTitle = rule.title || `${rule.count} items`;
+      const tierSubtitle = rule.subtitle || `You save ${rule.discountPercent}%`;
       return {
         count: rule.count,
-        title: rule.title || `${rule.count} items`,
-        subtitle: rule.subtitle || `You save ${rule.discountPercent}%`,
+        title: tierTitle,
+        subtitle: tierSubtitle,
         price: formatPrice(discountedTotal),
         original: formatPrice(originalTotal),
         badge: rule.badge || (isFeatured ? "Most Popular" : ""),
         saveLabel: `SAVE ${formatPrice(saved)}`,
+        // Extra: per-unit discounted price for per-product rules
+        discountedUnitPrice: formatPrice(discountedTotal / rule.count),
+        originalUnitPrice: formatPrice(originalTotal / rule.count),
       };
     }),
   ];
@@ -858,10 +908,19 @@ function renderBundlePreviewHtml(offer) {
       const featuredClass = isSelected
         ? " create-offer-style-preview-item--featured"
         : "";
-      const featuredStyle = isSelected 
+      const featuredStyle = isSelected
         ? `border-color: ${esc(accentColor)} !important; background: ${esc(cardBackgroundColor)} !important; box-shadow: 0 8px 18px ${esc(accentColor)}25 !important; cursor: pointer;`
         : `border-color: ${esc(borderColor)} !important; background: ${esc(cardBackgroundColor)} !important; cursor: pointer;`;
-        
+
+      let priceHtml = `<div class="create-offer-style-preview-item-price">${esc(item.price)}</div>`;
+      if (item.original) {
+        priceHtml += `<div class="create-offer-style-preview-item-original">${esc(item.original)}</div>`;
+      }
+      // Show per-unit discounted price when a tier is selected or for non-single items
+      if (item.count > 1 && item.discountedUnitPrice) {
+        priceHtml += `<div class="create-offer-style-preview-item-unit">${esc(item.discountedUnitPrice)} / item</div>`;
+      }
+
       return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}" onclick="window.ciwiSelectBundleOption(${item.count})">
       ${
         item.badge
@@ -870,17 +929,7 @@ function renderBundlePreviewHtml(offer) {
       }
       <div class="create-offer-style-preview-item-title">${esc(item.title)}</div>
       <div class="create-offer-style-preview-item-subtitle">${esc(item.subtitle)}</div>
-      ${
-        item.saveLabel
-          ? `<div class="create-offer-style-preview-item-subtitle">${esc(item.saveLabel)}</div>`
-          : ""
-      }
-      <div class="create-offer-style-preview-item-price">${esc(item.price)}</div>
-      ${
-        item.original
-          ? `<div class="create-offer-style-preview-item-original">${esc(item.original)}</div>`
-          : ""
-      }
+      ${priceHtml}
     </div>`;
     })
     .join("");

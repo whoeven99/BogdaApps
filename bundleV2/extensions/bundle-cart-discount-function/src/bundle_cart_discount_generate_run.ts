@@ -209,6 +209,8 @@ export function bundleCartDiscountGenerateRun(
       const discountPercentValue = getDiscountPercentValue(
         suitOffer.discountRulesJson,
         quantity,
+        productId,
+        variantId,
       );
       log("line_discount_percent", {
         cartLineId: lineId,
@@ -277,6 +279,8 @@ export function bundleCartDiscountGenerateRun(
 type DiscountTier = {
   count: number;
   discountPercent: number;
+  productId?: string;
+  variantId?: string;
 };
 
 function parseDiscountRulesJson(
@@ -297,7 +301,16 @@ function parseDiscountRulesJson(
       );
       if (!Number.isFinite(count) || count < 1) continue;
       if (!Number.isFinite(discountPercent) || discountPercent < 0) continue;
-      tiers.push({ count: Math.trunc(count), discountPercent });
+      tiers.push({
+        count: Math.trunc(count),
+        discountPercent,
+        productId: typeof (item as { productId?: unknown }).productId === "string"
+          ? (item as { productId: string }).productId
+          : undefined,
+        variantId: typeof (item as { variantId?: unknown }).variantId === "string"
+          ? (item as { variantId: string }).variantId
+          : undefined,
+      });
     }
 
     tiers.sort((a, b) => a.count - b.count);
@@ -491,9 +504,40 @@ function formatDiscountPercentValue(percent: number): string {
   return percent.toFixed(1);
 }
 
+/**
+ * Find the best matching discount tier for a given product/variant and quantity.
+ * Priority: variantId > productId > global (no ID).
+ * Tier selection: highest count where quantity >= count.
+ */
+function findMatchingTier(
+  productId: string | undefined,
+  variantId: string | undefined,
+  quantity: number,
+  tiers: DiscountTier[],
+): DiscountTier | null {
+  // Filter tiers that match the product/variant (or are global)
+  const eligible = tiers.filter(tier => {
+    if (tier.variantId && variantId && tier.variantId === variantId) return true;
+    if (tier.productId && productId && tier.productId === productId) return true;
+    if (!tier.productId && !tier.variantId) return true;
+    return false;
+  });
+
+  if (!eligible.length) return null;
+
+  // Pick the highest count tier that the quantity satisfies
+  let best: DiscountTier | null = null;
+  for (const tier of eligible) {
+    if (quantity >= tier.count) best = tier;
+  }
+  return best;
+}
+
 function getDiscountPercentValue(
   discountRulesJson: string | null | undefined,
   quantity: number,
+  productId?: string,
+  variantId?: string,
 ): string | null {
   const tiers = parseDiscountRulesJson(discountRulesJson);
 
@@ -503,16 +547,13 @@ function getDiscountPercentValue(
     return DEFAULT_DISCOUNT_PERCENTAGE;
   }
 
-  let best: DiscountTier | null = null;
-  for (const tier of tiers) {
-    if (quantity >= tier.count) best = tier;
-  }
-
-  if (!best) {
-    log("discount_rules_no_tier_met", { quantity, tierCounts: tiers.map((t) => t.count) });
+  // 尝试精确匹配（productId / variantId）
+  const tier = findMatchingTier(productId, variantId, quantity, tiers);
+  if (!tier) {
+    log("discount_rules_no_tier_met", { quantity, productId, variantId, tierCounts: tiers.map((t) => t.count) });
     return null;
   }
-  return formatDiscountPercentValue(best.discountPercent);
+  return formatDiscountPercentValue(tier.discountPercent);
 }
 
 const parseSelectedIds = (selectedProductsJson?: string | null): string[] => {
