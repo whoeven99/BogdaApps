@@ -60,6 +60,9 @@ type DifferentProductsDiscountRule = {
   getQuantity: number;
   buyProductIds: string[];
   getProductIds: string[];
+  maxUsesPerOrder: number;
+  /** Tier type: 'bxgy' = Buy X Get Y mode, 'simple' = flat discount mode */
+  tierType: "bxgy" | "simple";
   title?: string;
   subtitle?: string;
   badge?: string;
@@ -427,6 +430,41 @@ export function CreateNewOffer({
         setSelectedProductsData(newData);
       }
     }
+  };
+
+  // ── Add Tier Modal ──────────────────────────────────────────────────────
+  const [addTierModalVisible, setAddTierModalVisible] = useState(false);
+
+  const openAddTierModal = () => {
+    setAddTierModalVisible(true);
+  };
+
+  const closeAddTierModal = () => {
+    setAddTierModalVisible(false);
+  };
+
+  const addNewTier = (tierType: "bxgy" | "simple") => {
+    setDifferentProductsDiscountRules(prev => {
+      const lastRule = prev[prev.length - 1] || {
+        buyQuantity: 2,
+        getQuantity: 1,
+        buyProductIds: [],
+        getProductIds: [],
+        maxUsesPerOrder: 1,
+      };
+      const newDiscount = Math.min(100, (prev[prev.length - 1]?.discountPercent ?? 15) + 10);
+      return [...prev, {
+        count: prev.length + 1,
+        discountPercent: newDiscount,
+        buyQuantity: lastRule.buyQuantity || 2,
+        getQuantity: lastRule.getQuantity || 1,
+        buyProductIds: lastRule.buyProductIds.length > 0 ? lastRule.buyProductIds : selectedProductsData.map(p => p.id),
+        getProductIds: lastRule.getProductIds && lastRule.getProductIds.length > 0 ? lastRule.getProductIds : [],
+        maxUsesPerOrder: lastRule.maxUsesPerOrder || 1,
+        tierType,
+      }];
+    });
+    setAddTierModalVisible(false);
   };
   const [discountRules, setDiscountRules] = useState<DiscountRule[]>(() =>
     parseDiscountRules(initialOffer?.discountRulesJson),
@@ -1087,85 +1125,51 @@ export function CreateNewOffer({
                       </div>
                     </>
                   ) : (
-                    <div className="mb-8">
-                      <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                        Products eligible for offer
-                      </h3>
-
-                      {selectedProductsData.length === 0 ? (
-                        <Button
-                          size="large"
-                          className="text-[#008060] border-[#008060] hover:text-[#006e52] hover:border-[#006e52] hover:bg-[#f0f9f6]"
-                          onClick={(e) => {
-                            handleSelectProducts();
-                            e.preventDefault();
-                          }}
-                        >
-                          Add products eligible for offer
-                        </Button>
-                      ) : (
-                        <div>
-                          <div className="create-offer-selected-grid">
-                            {selectedProductsData.slice(0, 3).map((product) => (
-                              <div
-                                key={product.id}
-                                className="create-offer-selected-card"
-                              >
-                                <button
-                                  type="button"
-                                  className="create-offer-selected-remove"
-                                  onClick={(e) => {
-                                    setSelectedProductsData(
-                                      selectedProductsData.filter(
-                                        (p) => p.id !== product.id,
-                                      ),
-                                    );
-                                    e.preventDefault();
-                                  }}
-                                  aria-label={`Remove ${product.title}`}
-                                >
-                                  <X size={14} />
-                                </button>
-                                <img
-                                  src={product.image}
-                                  alt={product.title}
-                                  className="create-offer-selected-image"
-                                />
-                                <div className="create-offer-selected-name">
-                                  {product.title}
-                                </div>
-                                <div className="create-offer-selected-price">
-                                  {product.price}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                          <div className="create-offer-selected-count">
-                            {selectedProductsData.length} product
-                            {selectedProductsData.length > 1 ? "s" : ""}{" "}
-                            selected
-                            {(() => {
-                              const totalVariants = selectedProductsData.reduce(
-                                (sum, p) => sum + (p.variantsCount || 1),
-                                0
-                              );
-                              return totalVariants > 0
-                                ? ` (${totalVariants} variant${totalVariants > 1 ? "s" : ""})`
-                                : "";
-                            })()}
+                    <div className="mb-6">
+                      <div className="create-offer-products-pool">
+                        <div className="create-offer-products-pool__header">
+                          <div className="create-offer-products-pool__header-left">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/>
+                              <line x1="3" y1="6" x2="21" y2="6"/>
+                              <path d="M16 10a4 4 0 01-8 0"/>
+                            </svg>
+                            <span className="create-offer-products-pool__title">Product Pool</span>
+                            {selectedProductsData.length > 0 && (
+                              <span className="create-offer-products-pool__count">
+                                {selectedProductsData.length} product{selectedProductsData.length > 1 ? "s" : ""}
+                              </span>
+                            )}
                           </div>
                           <Button
                             type="link"
+                            size="small"
                             onClick={(e) => {
                               handleSelectProducts();
                               e.preventDefault();
                             }}
-                            className="px-0"
                           >
-                            Edit products
+                            {selectedProductsData.length === 0 ? "Add Products" : "Edit Products"}
                           </Button>
                         </div>
-                      )}
+                        {selectedProductsData.length > 0 && (
+                          <div className="create-offer-products-pool__thumbs">
+                            {selectedProductsData.slice(0, 8).map((product) => (
+                              <div key={product.id} className="create-offer-products-pool__thumb" title={product.title}>
+                                <img src={product.image} alt={product.title} onError={(e: any) => { e.target.style.display = 'none'; }} />
+                              </div>
+                            ))}
+                            {selectedProductsData.length > 8 && (
+                              <div className="create-offer-products-pool__thumb create-offer-products-pool__thumb--more">
+                                +{selectedProductsData.length - 8}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        <p className="create-offer-products-pool__hint">
+                          These products are available to assign in discount tiers below. Each tier can target specific products.
+                        </p>
+                      </div>
                     </div>
                   )}
 
@@ -1453,7 +1457,7 @@ export function CreateNewOffer({
 
                           return (
                             <div
-                              className={`diff-tier-card ${isFeatured ? 'diff-tier-card--featured' : ''}`}
+                              className={`diff-tier-card ${isFeatured ? 'diff-tier-card--featured' : ''} ${rule.tierType === 'simple' ? 'diff-tier-card--simple' : ''}`}
                               key={index}
                               id={`diff-tier-card-${index}`}
                             >
@@ -1465,6 +1469,9 @@ export function CreateNewOffer({
                                       {rule.badge}
                                     </span>
                                   )}
+                                  <span className={`diff-tier-card__type-badge diff-tier-card__type-badge--${rule.tierType}`}>
+                                    {rule.tierType === "bxgy" ? "BXGY" : "Simple"}
+                                  </span>
                                   <span className="diff-tier-card__title">
                                     {rule.title || `Tier ${index + 1}`}
                                   </span>
@@ -1480,122 +1487,71 @@ export function CreateNewOffer({
                                 </div>
                               </div>
 
-                              {/* Buy / Get Row */}
-                              <div className="diff-tier-card__buyget">
-                                <div className="diff-tier-card__buyget-section">
-                                  <div className="diff-tier-card__buyget-qty">
-                                    <Input
-                                      size="large"
-                                      type="number"
-                                      min={1}
-                                      max={99}
-                                      className="diff-tier-card__qty-input"
-                                      value={rule.buyQuantity || 2}
-                                      onChange={(e) => {
-                                        const v = Math.max(1, Math.min(99, Math.trunc(Number(e.target.value) || 1)));
-                                        setDifferentProductsDiscountRules(prev =>
-                                          prev.map((r, i) => i === index ? { ...r, buyQuantity: v } : r),
-                                        );
-                                      }}
-                                    />
-                                    <span className="diff-tier-card__qty-suffix">BUY</span>
-                                  </div>
-                                  <div className="diff-tier-card__buyget-products">
-                                    <div className="diff-tier-card__products-label">Products to buy</div>
-                                    <Select
-                                      mode="multiple"
-                                      size="large"
-                                      placeholder="Select products"
-                                      value={rule.buyProductIds || []}
-                                      onChange={(values) => {
-                                        setDifferentProductsDiscountRules(prev =>
-                                          prev.map((r, i) => i === index ? { ...r, buyProductIds: values } : r),
-                                        );
-                                      }}
-                                      className="w-full"
-                                      options={selectedProductsData.map(p => ({ label: p.title, value: String(p.id) }))}
-                                      maxTagCount={3}
-                                    />
-                                    {buyProductsData.length > 0 && (
-                                      <div className="diff-tier-card__thumb-row">
-                                        {buyProductsData.slice(0, 4).map(p => (
-                                          <div key={p.id} className="diff-tier-card__thumb">
-                                            <img src={p.image} alt={p.title} onError={(e: any) => { e.target.style.display = 'none'; }} />
-                                          </div>
-                                        ))}
-                                        {buyProductsData.length > 4 && (
-                                          <div className="diff-tier-card__thumb diff-tier-card__thumb--more">
-                                            +{buyProductsData.length - 4}
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-
-                                <div className="diff-tier-card__buyget-arrow">
-                                  <span>+</span>
-                                </div>
-
-                                <div className="diff-tier-card__buyget-section">
-                                  <div className="diff-tier-card__buyget-qty">
-                                    <Input
-                                      size="large"
-                                      type="number"
-                                      min={0}
-                                      max={99}
-                                      className="diff-tier-card__qty-input"
-                                      value={rule.getQuantity ?? 1}
-                                      onChange={(e) => {
-                                        const v = Math.max(0, Math.min(99, Math.trunc(Number(e.target.value) || 0)));
-                                        setDifferentProductsDiscountRules(prev =>
-                                          prev.map((r, i) => i === index ? { ...r, getQuantity: v } : r),
-                                        );
-                                      }}
-                                    />
-                                    <span className="diff-tier-card__qty-suffix">GET</span>
-                                  </div>
-                                  <div className="diff-tier-card__buyget-products">
-                                    <div className="diff-tier-card__products-label">
-                                      Products to get
-                                      <span className="diff-tier-card__products-hint">(leave empty = same as buy)</span>
-                                    </div>
-                                    <Select
-                                      mode="multiple"
-                                      size="large"
-                                      placeholder="Select products"
-                                      value={rule.getProductIds || []}
-                                      onChange={(values) => {
-                                        setDifferentProductsDiscountRules(prev =>
-                                          prev.map((r, i) => i === index ? { ...r, getProductIds: values } : r),
-                                        );
-                                      }}
-                                      className="w-full"
-                                      options={selectedProductsData.map(p => ({ label: p.title, value: String(p.id) }))}
-                                      maxTagCount={3}
-                                    />
-                                    {getProductsData.length > 0 && (
-                                      <div className="diff-tier-card__thumb-row">
-                                        {getProductsData.slice(0, 4).map(p => (
-                                          <div key={p.id} className="diff-tier-card__thumb">
-                                            <img src={p.image} alt={p.title} onError={(e: any) => { e.target.style.display = 'none'; }} />
-                                          </div>
-                                        ))}
-                                        {getProductsData.length > 4 && (
-                                          <div className="diff-tier-card__thumb diff-tier-card__thumb--more">
-                                            +{getProductsData.length - 4}
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
+                              {/* Tier Type Toggle */}
+                              <div className="diff-tier-card__type-toggle">
+                                <button
+                                  type="button"
+                                  className={`diff-tier-card__type-toggle-btn ${rule.tierType === 'simple' ? 'active' : ''}`}
+                                  onClick={() => {
+                                    setDifferentProductsDiscountRules(prev =>
+                                      prev.map((r, i) =>
+                                        i === index
+                                          ? {
+                                              ...r,
+                                              tierType: "simple" as const,
+                                              getQuantity: 0,
+                                              getProductIds: [],
+                                            }
+                                          : r,
+                                      ),
+                                    );
+                                  }}
+                                >
+                                  Simple
+                                </button>
+                                <button
+                                  type="button"
+                                  className={`diff-tier-card__type-toggle-btn ${rule.tierType === 'bxgy' ? 'active' : ''}`}
+                                  onClick={() => {
+                                    setDifferentProductsDiscountRules(prev =>
+                                      prev.map((r, i) =>
+                                        i === index
+                                          ? {
+                                              ...r,
+                                              tierType: "bxgy" as const,
+                                              buyQuantity: r.buyQuantity || 2,
+                                              getQuantity: r.getQuantity || 1,
+                                            }
+                                          : r,
+                                      ),
+                                    );
+                                  }}
+                                >
+                                  BXGY
+                                </button>
                               </div>
 
-                              {/* Footer Controls */}
-                              <div className="diff-tier-card__footer">
-                                <div className="diff-tier-card__footer-row">
-                                  <div className="diff-tier-card__footer-left">
+                              {/* Simple Mode Body */}
+                              {rule.tierType === "simple" ? (
+                                <div className="diff-tier-card__simple-body">
+                                  <div className="diff-tier-card__simple-row">
+                                    <label className="diff-tier-card__field-label">
+                                      Min. Quantity
+                                      <Input
+                                        size="large"
+                                        type="number"
+                                        min={1}
+                                        max={99}
+                                        className="diff-tier-card__qty-input"
+                                        value={rule.buyQuantity || 2}
+                                        onChange={(e) => {
+                                          const v = Math.max(1, Math.min(99, Math.trunc(Number(e.target.value) || 1)));
+                                          setDifferentProductsDiscountRules(prev =>
+                                            prev.map((r, i) => i === index ? { ...r, buyQuantity: v, count: v } : r),
+                                          );
+                                        }}
+                                      />
+                                    </label>
                                     <label className="diff-tier-card__field-label">
                                       Discount %
                                       <Input
@@ -1620,87 +1576,375 @@ export function CreateNewOffer({
                                       )}
                                     </label>
                                   </div>
-                                  <div className="diff-tier-card__footer-right">
-                                    <label className="diff-tier-card__field-label">
-                                      Badge
-                                      <Input
-                                        size="large"
-                                        className="diff-tier-card__badge-input"
-                                        value={rule.badge || ''}
-                                        placeholder="e.g. Most Popular"
-                                        onChange={(e) => {
-                                          setDifferentProductsDiscountRules(prev =>
-                                            prev.map((r, i) => i === index ? { ...r, badge: e.target.value } : r),
-                                          );
-                                        }}
-                                      />
-                                    </label>
+
+                                  <div className="diff-tier-card__simple-products">
+                                    <div className="diff-tier-card__products-label">
+                                      Products eligible for this tier
+                                      <span className="diff-tier-card__products-hint">(select which products this tier applies to)</span>
+                                    </div>
+                                    <Select
+                                      mode="multiple"
+                                      size="large"
+                                      placeholder="Select products — leave empty to apply to all"
+                                      value={rule.buyProductIds || []}
+                                      onChange={(values) => {
+                                        setDifferentProductsDiscountRules(prev =>
+                                          prev.map((r, i) => i === index ? { ...r, buyProductIds: values } : r),
+                                        );
+                                      }}
+                                      className="w-full"
+                                      options={selectedProductsData.map(p => ({ label: p.title, value: String(p.id) }))}
+                                      maxTagCount={3}
+                                      allowClear
+                                    />
+                                    {buyProductsData.length > 0 && (
+                                      <div className="diff-tier-card__thumb-row">
+                                        {buyProductsData.slice(0, 4).map(p => (
+                                          <div key={p.id} className="diff-tier-card__thumb">
+                                            <img src={p.image} alt={p.title} onError={(e: any) => { e.target.style.display = 'none'; }} />
+                                          </div>
+                                        ))}
+                                        {buyProductsData.length > 4 && (
+                                          <div className="diff-tier-card__thumb diff-tier-card__thumb--more">
+                                            +{buyProductsData.length - 4}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
-                                <div className="diff-tier-card__footer-row">
-                                  <div className="diff-tier-card__footer-left">
-                                    <label className="diff-tier-card__field-label">
-                                      Title
-                                      <Input
-                                        size="large"
-                                        className="diff-tier-card__title-input"
-                                        value={rule.title || ''}
-                                        placeholder="e.g. Duo, Trio, Quartet"
+                              ) : (
+                                <>
+                                  {/* Buy / Get Row — BXGY Mode */}
+                                  <div className="diff-tier-card__buyget">
+                                    <div className="diff-tier-card__buyget-section">
+                                      <div className="diff-tier-card__buyget-qty">
+                                        <Input
+                                          size="large"
+                                          type="number"
+                                          min={1}
+                                          max={99}
+                                          className="diff-tier-card__qty-input"
+                                          value={rule.buyQuantity || 2}
+                                          onChange={(e) => {
+                                            const v = Math.max(1, Math.min(99, Math.trunc(Number(e.target.value) || 1)));
+                                            setDifferentProductsDiscountRules(prev =>
+                                              prev.map((r, i) => i === index ? { ...r, buyQuantity: v } : r),
+                                            );
+                                          }}
+                                        />
+                                        <span className="diff-tier-card__qty-suffix">BUY</span>
+                                      </div>
+                                      <div className="diff-tier-card__buyget-products">
+                                        <div className="diff-tier-card__products-label">Products to buy</div>
+                                        <Select
+                                          mode="multiple"
+                                          size="large"
+                                          placeholder="Select products"
+                                          value={rule.buyProductIds || []}
+                                          onChange={(values) => {
+                                            setDifferentProductsDiscountRules(prev =>
+                                              prev.map((r, i) => i === index ? { ...r, buyProductIds: values } : r),
+                                            );
+                                          }}
+                                          className="w-full"
+                                          options={selectedProductsData.map(p => ({ label: p.title, value: String(p.id) }))}
+                                          maxTagCount={3}
+                                        />
+                                        {buyProductsData.length > 0 && (
+                                          <div className="diff-tier-card__thumb-row">
+                                            {buyProductsData.slice(0, 4).map(p => (
+                                              <div key={p.id} className="diff-tier-card__thumb">
+                                                <img src={p.image} alt={p.title} onError={(e: any) => { e.target.style.display = 'none'; }} />
+                                              </div>
+                                            ))}
+                                            {buyProductsData.length > 4 && (
+                                              <div className="diff-tier-card__thumb diff-tier-card__thumb--more">
+                                                +{buyProductsData.length - 4}
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    <div className="diff-tier-card__buyget-arrow">
+                                      <span>+</span>
+                                    </div>
+
+                                    <div className="diff-tier-card__buyget-section">
+                                      <div className="diff-tier-card__buyget-qty">
+                                        <Input
+                                          size="large"
+                                          type="number"
+                                          min={0}
+                                          max={99}
+                                          className="diff-tier-card__qty-input"
+                                          value={rule.getQuantity ?? 1}
+                                          onChange={(e) => {
+                                            const v = Math.max(0, Math.min(99, Math.trunc(Number(e.target.value) || 0)));
+                                            setDifferentProductsDiscountRules(prev =>
+                                              prev.map((r, i) => i === index ? { ...r, getQuantity: v } : r),
+                                            );
+                                          }}
+                                        />
+                                        <span className="diff-tier-card__qty-suffix">GET</span>
+                                      </div>
+                                      <div className="diff-tier-card__buyget-products">
+                                        <div className="diff-tier-card__products-label">
+                                          Products to get
+                                          <span className="diff-tier-card__products-hint">(leave empty = same as buy)</span>
+                                        </div>
+                                        <Select
+                                          mode="multiple"
+                                          size="large"
+                                          placeholder="Select products"
+                                          value={rule.getProductIds || []}
+                                          onChange={(values) => {
+                                            setDifferentProductsDiscountRules(prev =>
+                                              prev.map((r, i) => i === index ? { ...r, getProductIds: values } : r),
+                                            );
+                                          }}
+                                          className="w-full"
+                                          options={selectedProductsData.map(p => ({ label: p.title, value: String(p.id) }))}
+                                          maxTagCount={3}
+                                        />
+                                        {getProductsData.length > 0 && (
+                                          <div className="diff-tier-card__thumb-row">
+                                            {getProductsData.slice(0, 4).map(p => (
+                                              <div key={p.id} className="diff-tier-card__thumb">
+                                                <img src={p.image} alt={p.title} onError={(e: any) => { e.target.style.display = 'none'; }} />
+                                              </div>
+                                            ))}
+                                            {getProductsData.length > 4 && (
+                                              <div className="diff-tier-card__thumb diff-tier-card__thumb--more">
+                                                +{getProductsData.length - 4}
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Footer Controls — BXGY Mode */}
+                                  <div className="diff-tier-card__footer">
+                                    <div className="diff-tier-card__footer-row">
+                                      <div className="diff-tier-card__footer-left">
+                                        <label className="diff-tier-card__field-label">
+                                          Discount %
+                                          <Input
+                                            size="large"
+                                            type="number"
+                                            min={0}
+                                            max={100}
+                                            className="diff-tier-card__discount-input"
+                                            value={rule.discountPercent}
+                                            onChange={(e) => {
+                                              const v = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+                                              setDifferentProductsDiscountRules(prev =>
+                                                prev.map((r, i) => i === index ? { ...r, discountPercent: v } : r),
+                                              );
+                                            }}
+                                          />
+                                          {rule.discountPercent > 50 && rule.discountPercent < 90 && (
+                                            <span className="diff-tier-card__warning">High discount — check profitability</span>
+                                          )}
+                                          {rule.discountPercent >= 90 && (
+                                            <span className="diff-tier-card__warning diff-tier-card__warning--danger">Very high discount — product nearly free</span>
+                                          )}
+                                        </label>
+                                      </div>
+                                      <div className="diff-tier-card__footer-right">
+                                        <label className="diff-tier-card__field-label">
+                                          Badge
+                                          <Input
+                                            size="large"
+                                            className="diff-tier-card__badge-input"
+                                            value={rule.badge || ''}
+                                            placeholder="e.g. Most Popular"
+                                            onChange={(e) => {
+                                              setDifferentProductsDiscountRules(prev =>
+                                                prev.map((r, i) => i === index ? { ...r, badge: e.target.value } : r),
+                                              );
+                                            }}
+                                          />
+                                        </label>
+                                      </div>
+                                    </div>
+                                    <div className="diff-tier-card__footer-row">
+                                      <div className="diff-tier-card__footer-left">
+                                        <label className="diff-tier-card__field-label">
+                                          Title
+                                          <Input
+                                            size="large"
+                                            className="diff-tier-card__title-input"
+                                            value={rule.title || ''}
+                                            placeholder="e.g. Duo, Trio, Quartet"
+                                            onChange={(e) => {
+                                              setDifferentProductsDiscountRules(prev =>
+                                                prev.map((r, i) => i === index ? { ...r, title: e.target.value } : r),
+                                              );
+                                            }}
+                                          />
+                                        </label>
+                                      </div>
+                                      <div className="diff-tier-card__footer-right">
+                                        <label className="diff-tier-card__field-label">
+                                          Subtitle
+                                          <Input
+                                            size="large"
+                                            className="diff-tier-card__subtitle-input"
+                                            value={rule.subtitle || ''}
+                                            placeholder="e.g. You save 20%"
+                                            onChange={(e) => {
+                                              setDifferentProductsDiscountRules(prev =>
+                                                prev.map((r, i) => i === index ? { ...r, subtitle: e.target.value } : r),
+                                              );
+                                            }}
+                                          />
+                                        </label>
+                                      </div>
+                                    </div>
+                                    <div className="diff-tier-card__footer-bottom">
+                                      <Checkbox
+                                        checked={!!rule.isDefault}
                                         onChange={(e) => {
+                                          const checked = e.target.checked;
                                           setDifferentProductsDiscountRules(prev =>
-                                            prev.map((r, i) => i === index ? { ...r, title: e.target.value } : r),
+                                            prev.map((r, i) => ({
+                                              ...r,
+                                              isDefault: checked ? i === index : false,
+                                            })),
                                           );
                                         }}
-                                      />
-                                    </label>
+                                      >
+                                        Set as Default Selected
+                                      </Checkbox>
+                                      <Button
+                                        danger
+                                        size="small"
+                                        onClick={() => {
+                                          setDifferentProductsDiscountRules(prev => {
+                                            if (prev.length <= 1) return prev;
+                                            return prev.filter((_, i) => i !== index);
+                                          });
+                                        }}
+                                        disabled={differentProductsDiscountRules.length <= 1}
+                                      >
+                                        Remove Tier
+                                      </Button>
+                                    </div>
                                   </div>
-                                  <div className="diff-tier-card__footer-right">
-                                    <label className="diff-tier-card__field-label">
-                                      Subtitle
-                                      <Input
-                                        size="large"
-                                        className="diff-tier-card__subtitle-input"
-                                        value={rule.subtitle || ''}
-                                        placeholder="e.g. You save 20%"
+                                </>
+                              )}
+
+                              {/* Footer Controls — Simple Mode */}
+                              {rule.tierType === "simple" && (
+                                <div className="diff-tier-card__footer">
+                                  <div className="diff-tier-card__footer-row">
+                                    <div className="diff-tier-card__footer-left">
+                                      <label className="diff-tier-card__field-label">
+                                        Title
+                                        <Input
+                                          size="large"
+                                          className="diff-tier-card__title-input"
+                                          value={rule.title || ''}
+                                          placeholder="e.g. Duo, Trio, Quartet"
+                                          onChange={(e) => {
+                                            setDifferentProductsDiscountRules(prev =>
+                                              prev.map((r, i) => i === index ? { ...r, title: e.target.value } : r),
+                                            );
+                                          }}
+                                        />
+                                      </label>
+                                    </div>
+                                    <div className="diff-tier-card__footer-right">
+                                      <label className="diff-tier-card__field-label">
+                                        Subtitle
+                                        <Input
+                                          size="large"
+                                          className="diff-tier-card__subtitle-input"
+                                          value={rule.subtitle || ''}
+                                          placeholder="e.g. You save 20%"
+                                          onChange={(e) => {
+                                            setDifferentProductsDiscountRules(prev =>
+                                              prev.map((r, i) => i === index ? { ...r, subtitle: e.target.value } : r),
+                                            );
+                                          }}
+                                        />
+                                      </label>
+                                    </div>
+                                  </div>
+                                  <div className="diff-tier-card__footer-row">
+                                    <div className="diff-tier-card__footer-left">
+                                      <label className="diff-tier-card__field-label">
+                                        Badge
+                                        <Input
+                                          size="large"
+                                          className="diff-tier-card__badge-input"
+                                          value={rule.badge || ''}
+                                          placeholder="e.g. Most Popular"
+                                          onChange={(e) => {
+                                            setDifferentProductsDiscountRules(prev =>
+                                              prev.map((r, i) => i === index ? { ...r, badge: e.target.value } : r),
+                                            );
+                                          }}
+                                        />
+                                      </label>
+                                      <div className="diff-tier-card__footer-left" style={{ marginTop: '8px' }}>
+                                        <label className="diff-tier-card__field-label">
+                                          Max Uses Per Order
+                                          <Input
+                                            size="large"
+                                            type="number"
+                                            min={1}
+                                            step={1}
+                                            className="diff-tier-card__max-uses-input"
+                                            value={rule.maxUsesPerOrder || 1}
+                                            onChange={(e) => {
+                                              const v = Math.max(1, Math.trunc(Number(e.target.value) || 1));
+                                              setDifferentProductsDiscountRules(prev =>
+                                                prev.map((r, i) => i === index ? { ...r, maxUsesPerOrder: v } : r),
+                                              );
+                                            }}
+                                          />
+                                        </label>
+                                      </div>
+                                    </div>
+                                    <div className="diff-tier-card__footer-right">
+                                      <Checkbox
+                                        checked={!!rule.isDefault}
                                         onChange={(e) => {
+                                          const checked = e.target.checked;
                                           setDifferentProductsDiscountRules(prev =>
-                                            prev.map((r, i) => i === index ? { ...r, subtitle: e.target.value } : r),
+                                            prev.map((r, i) => ({
+                                              ...r,
+                                              isDefault: checked ? i === index : false,
+                                            })),
                                           );
                                         }}
-                                      />
-                                    </label>
+                                      >
+                                        Set as Default Selected
+                                      </Checkbox>
+                                      <Button
+                                        danger
+                                        size="small"
+                                        style={{ marginTop: '8px' }}
+                                        onClick={() => {
+                                          setDifferentProductsDiscountRules(prev => {
+                                            if (prev.length <= 1) return prev;
+                                            return prev.filter((_, i) => i !== index);
+                                          });
+                                        }}
+                                        disabled={differentProductsDiscountRules.length <= 1}
+                                      >
+                                        Remove Tier
+                                      </Button>
+                                    </div>
                                   </div>
                                 </div>
-                                <div className="diff-tier-card__footer-bottom">
-                                  <Checkbox
-                                    checked={!!rule.isDefault}
-                                    onChange={(e) => {
-                                      const checked = e.target.checked;
-                                      setDifferentProductsDiscountRules(prev =>
-                                        prev.map((r, i) => ({
-                                          ...r,
-                                          isDefault: checked ? i === index : false,
-                                        })),
-                                      );
-                                    }}
-                                  >
-                                    Set as Default Selected
-                                  </Checkbox>
-                                  <Button
-                                    danger
-                                    size="small"
-                                    onClick={() => {
-                                      setDifferentProductsDiscountRules(prev => {
-                                        if (prev.length <= 1) return prev;
-                                        return prev.filter((_, i) => i !== index);
-                                      });
-                                    }}
-                                    disabled={differentProductsDiscountRules.length <= 1}
-                                  >
-                                    Remove Tier
-                                  </Button>
-                                </div>
-                              </div>
+                              )}
                             </div>
                           );
                         })}
@@ -1708,20 +1952,7 @@ export function CreateNewOffer({
                         <Button
                           type="dashed"
                           className="w-full"
-                          onClick={() => {
-                            setDifferentProductsDiscountRules(prev => {
-                              const lastRule = prev[prev.length - 1] || { buyQuantity: 2, getQuantity: 1, buyProductIds: [], getProductIds: [] };
-                              const newDiscount = Math.min(100, (prev[prev.length - 1]?.discountPercent ?? 15) + 10);
-                              return [...prev, {
-                                count: prev.length + 1,
-                                discountPercent: newDiscount,
-                                buyQuantity: lastRule.buyQuantity || 2,
-                                getQuantity: lastRule.getQuantity || 1,
-                                buyProductIds: lastRule.buyProductIds.length > 0 ? lastRule.buyProductIds : selectedProductsData.map(p => p.id),
-                                getProductIds: lastRule.getProductIds && lastRule.getProductIds.length > 0 ? lastRule.getProductIds : [],
-                              }];
-                            });
-                          }}
+                          onClick={openAddTierModal}
                         >
                           + Add discount tier
                         </Button>
@@ -2905,6 +3136,82 @@ export function CreateNewOffer({
               : "Next"}
         </Button>
       </div>
+      {/* ── Add Tier Type Modal ─────────────────────────────────────────── */}
+      {addTierModalVisible && (
+        <div className="create-offer-modal-backdrop" onClick={closeAddTierModal}>
+          <div className="create-offer-modal create-offer-modal--tier-type" onClick={(e) => e.stopPropagation()}>
+            <div className="create-offer-modal-header">
+              <span className="create-offer-modal-title">Choose Tier Type</span>
+              <button
+                type="button"
+                className="create-offer-modal-close"
+                onClick={closeAddTierModal}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <p className="create-offer-modal-subtitle">
+              Select the type of discount tier you want to add. You can mix both types in the same offer.
+            </p>
+
+            <div className="create-offer-tier-type-grid">
+              {/* BXGY Option */}
+              <button
+                type="button"
+                className="create-offer-tier-type-card"
+                onClick={() => addNewTier("bxgy")}
+              >
+                <div className="create-offer-tier-type-card__icon">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="9" cy="12" r="4" />
+                    <line x1="13" y1="8" x2="20" y2="8" />
+                    <circle cx="15" cy="12" r="4" />
+                    <line x1="1" y1="8" x2="8" y2="8" />
+                    <path d="M9 12l3 3 3-3" />
+                  </svg>
+                </div>
+                <div className="create-offer-tier-type-card__title">Buy X, Get Y (BXGY)</div>
+                <div className="create-offer-tier-type-card__desc">
+                  Customer buys X items from a set of products and gets Y items at a discount. Perfect for "Buy 2, get 1 free" promotions.
+                </div>
+                <ul className="create-offer-tier-type-card__features">
+                  <li>Separate buy and get products</li>
+                  <li>Discount only on get products</li>
+                  <li>Configurable max uses per order</li>
+                </ul>
+              </button>
+
+              {/* Simple Option */}
+              <button
+                type="button"
+                className="create-offer-tier-type-card"
+                onClick={() => addNewTier("simple")}
+              >
+                <div className="create-offer-tier-type-card__icon">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="1" x2="12" y2="23" />
+                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                  </svg>
+                </div>
+                <div className="create-offer-tier-type-card__title">Quantity Breaks (Simple)</div>
+                <div className="create-offer-tier-type-card__desc">
+                  Flat percentage discount when customer buys a minimum number of items. Works across any selected products.
+                </div>
+                <ul className="create-offer-tier-type-card__features">
+                  <li>Single flat discount percentage</li>
+                  <li>Works across all selected products</li>
+                  <li>Simple, clear customer messaging</li>
+                </ul>
+              </button>
+            </div>
+
+            <div className="create-offer-modal-footer">
+              <Button onClick={closeAddTierModal}>Cancel</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </fetcher.Form>
   );
 }

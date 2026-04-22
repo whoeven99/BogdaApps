@@ -83,6 +83,7 @@ type BxgyDiscountRule = {
   getProductIds: string[];
   discountPercent: number;
   maxUsesPerOrder: number;
+  tierType: "bxgy" | "simple";
 };
 
 type Offer = NonNullable<OfferMetafieldPayload["offers"]>[number];
@@ -150,10 +151,11 @@ export function bundleCartDiscountGenerateRun(
 
   const productCandidates: ProductDiscountCandidate[] = [];
 
-  const bxgyOffers = offers.filter(o => o.offerType === 'bxgy');
-  const otherOffers = offers.filter(o => o.offerType !== 'bxgy');
+  // BXGY-tier offers: explicit "bxgy" type OR "quantity-breaks-different" with any BXGY-mode tier
+  const bxgyOffers = offers.filter(o => o.offerType === 'bxgy' || o.offerType === 'quantity-breaks-different');
+  const otherOffers = offers.filter(o => o.offerType !== 'bxgy' && o.offerType !== 'quantity-breaks-different');
 
-  // First, check for BXGY offers
+  // First, check for BXGY offers (includes quantity-breaks-different with bxgy/simple tiers)
   const bxgyCandidates = calculateBxgyDiscount(input.cart.lines, bxgyOffers);
   if (bxgyCandidates.length > 0) {
     productCandidates.push(...bxgyCandidates);
@@ -336,6 +338,7 @@ function parseBxgyDiscountRules(discountRulesJson?: string | null): BxgyDiscount
       const getQuantity = Number((item as { getQuantity?: unknown }).getQuantity);
       const discountPercent = Number((item as { discountPercent?: unknown }).discountPercent);
       const maxUsesPerOrder = Number((item as { maxUsesPerOrder?: unknown }).maxUsesPerOrder) || 1;
+      const tierType = (item as { tierType?: string }).tierType;
       
       const buyProductIds = (item as { buyProductIds?: unknown }).buyProductIds;
       const getProductIds = (item as { getProductIds?: unknown }).getProductIds;
@@ -355,6 +358,7 @@ function parseBxgyDiscountRules(discountRulesJson?: string | null): BxgyDiscount
         getProductIds: getProductIds.filter(id => typeof id === "string") as string[],
         discountPercent: Math.max(0, Math.min(100, discountPercent)),
         maxUsesPerOrder: Math.max(1, Math.trunc(maxUsesPerOrder)),
+        tierType: tierType === "bxgy" ? "bxgy" : "simple",
       });
     }
     
@@ -367,6 +371,9 @@ function parseBxgyDiscountRules(discountRulesJson?: string | null): BxgyDiscount
 
 /**
  * 计算 BXGY 折扣 — 支持多层级 (tier)，按 buyQuantity 字段选择最优匹配层级
+ * Handles two tier types:
+ *   'bxgy'   — discount applies to getProductIds items
+ *   'simple' — flat discount applies to all buyProductIds items (no Y separation)
  */
 function calculateBxgyDiscount(
   cartLines: any[],
@@ -445,9 +452,47 @@ function calculateBxgyDiscount(
       maxUsesPerOrder: selectedRule.maxUsesPerOrder,
       selectedBuyQuantity: selectedRule.buyQuantity,
       selectedCount: selectedRule.count,
+      tierType: selectedRule.tierType,
     });
 
-    // Find get products and apply discount
+    // --- Simple mode: flat discount on buy products ---
+    if (selectedRule.tierType === "simple") {
+      const discountTargetQty = maxPromotionTimes * selectedRule.buyQuantity;
+      let remaining = discountTargetQty;
+
+      for (const line of cartLines) {
+        if (remaining <= 0) break;
+        const productId = line.merchandise?.product?.id;
+        const variantId = line.merchandise?.id;
+
+        const isBuyProduct =
+          (productId && selectedRule.buyProductIds.includes(productId)) ||
+          (variantId && selectedRule.buyProductIds.includes(variantId));
+
+        if (!isBuyProduct) continue;
+
+        const discountQuantity = Math.min(line.quantity, remaining);
+        if (discountQuantity > 0) {
+          candidates.push({
+            message: offer.cartTitle || "Bundle Discount",
+            targets: [{ cartLine: { id: line.id, quantity: discountQuantity } }],
+            value: { percentage: { value: selectedRule.discountPercent.toFixed(1) } },
+          });
+          remaining -= discountQuantity;
+          log("simple_tier_candidate_added", {
+            offerId: offer.id,
+            cartLineId: line.id,
+            quantity: discountQuantity,
+            discountPercent: selectedRule.discountPercent,
+          });
+        }
+      }
+
+      allCandidates.push(...candidates);
+      continue;
+    }
+
+    // --- BXGY mode: discount applies to get products ---
     let remainingGetQuantity = maxPromotionTimes * selectedRule.getQuantity;
 
     for (const line of cartLines) {
@@ -574,7 +619,17 @@ const parseSelectedIds = (selectedProductsJson?: string | null): string[] => {
       if (Array.isArray(getProducts)) {
         allIds.push(...getProducts.filter(id => typeof id === "string"));
       }
-      return [...new Set(allIds)]; // Remove duplicates
+      if (allIds.length > 0) {
+        return [...new Set(allIds)];
+      }
+    }
+    
+    // Handle quantity-breaks-different format: { productIds: string[] }
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const productIds = (parsed as { productIds?: unknown }).productIds;
+      if (Array.isArray(productIds)) {
+        return (productIds.filter((id: unknown) => typeof id === "string")) as string[];
+      }
     }
     
     // Handle regular format: string[] or object[]

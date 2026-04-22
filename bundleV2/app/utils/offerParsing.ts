@@ -223,6 +223,10 @@ export type DifferentProductsDiscountRule = {
   buyProductIds: string[];
   /** Product IDs that customer gets with discount (empty means same as buyProductIds) */
   getProductIds: string[];
+  /** Max uses per order */
+  maxUsesPerOrder: number;
+  /** Tier type: 'bxgy' = Buy X Get Y mode, 'simple' = flat discount mode */
+  tierType: "bxgy" | "simple";
   title?: string;
   subtitle?: string;
   badge?: string;
@@ -526,6 +530,10 @@ export function parseDifferentProductsDiscountRules(
 
       const buyQuantity = Number((item as { buyQuantity?: unknown }).buyQuantity) || 1;
       const getQuantity = Number((item as { getQuantity?: unknown }).getQuantity) || 0;
+      const maxUsesPerOrder = Number((item as { maxUsesPerOrder?: unknown }).maxUsesPerOrder) || 1;
+      const tierType = (item as { tierType?: string }).tierType;
+      const validTierType: "bxgy" | "simple" =
+        tierType === "bxgy" ? "bxgy" : "simple";
 
       const buyProductIds = (item as { buyProductIds?: unknown }).buyProductIds;
       const getProductIds = (item as { getProductIds?: unknown }).getProductIds;
@@ -539,6 +547,8 @@ export function parseDifferentProductsDiscountRules(
         getQuantity: Math.max(0, Math.trunc(getQuantity)),
         buyProductIds: buyProductIds.filter((id: unknown) => typeof id === "string") as string[],
         getProductIds: Array.isArray(getProductIds) ? getProductIds.filter((id: unknown) => typeof id === "string") as string[] : [],
+        maxUsesPerOrder: Math.max(1, Math.trunc(maxUsesPerOrder)),
+        tierType: validTierType,
         title: (item as { title?: string }).title || "",
         subtitle: (item as { subtitle?: string }).subtitle || "",
         badge: (item as { badge?: string }).badge || "",
@@ -570,6 +580,8 @@ export function buildDifferentProductsDiscountRulesJson(
       getProductIds: Array.isArray(tier.getProductIds)
         ? tier.getProductIds.filter((id: unknown) => typeof id === "string")
         : [],
+      maxUsesPerOrder: Math.max(1, Math.trunc(tier.maxUsesPerOrder || 1)),
+      tierType: tier.tierType === "bxgy" ? "bxgy" : "simple",
       title: tier.title || "",
       subtitle: tier.subtitle || "",
       badge: tier.badge || "",
