@@ -9,6 +9,14 @@ export type PreviewItem = {
   featured?: boolean;
   badge?: string;
   saveLabel?: string;
+  products?: PreviewProduct[];
+};
+
+export type PreviewProduct = {
+  id: string | number;
+  name: string;
+  image: string;
+  variant?: string;
 };
 
 export const PREVIEW_ITEMS: PreviewItem[] = [
@@ -50,6 +58,7 @@ export function renderBundlePreviewHtml({
   buttonPrimaryColor = "#008060",
   showCustomButton = true,
   items = PREVIEW_ITEMS,
+  showProductImages = true,
 }: {
   title?: string;
   layoutFormat?: LayoutFormat;
@@ -64,23 +73,37 @@ export function renderBundlePreviewHtml({
   buttonPrimaryColor?: string;
   showCustomButton?: boolean;
   items?: PreviewItem[];
+  showProductImages?: boolean;
 } = {}) {
   const safeLayout: LayoutFormat = ["vertical", "horizontal", "card", "compact"].includes(layoutFormat)
     ? layoutFormat
     : "vertical";
 
+  function renderProductsHtml(products?: PreviewProduct[]): string {
+    if (!showProductImages || !products || products.length === 0) return "";
+    return `<div class="create-offer-preview-products" style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px;">
+      ${products.map(p => `
+        <div class="create-offer-preview-product" style="position: relative; width: 48px; height: 48px; border-radius: 8px; overflow: hidden; border: 1px solid ${borderColor};">
+          <img src="${esc(p.image)}" alt="${esc(p.name)}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.style.display='none'" />
+          ${p.variant ? `<span style="position: absolute; bottom: 0; left: 0; right: 0; background: ${accentColor}; color: ${labelColor}; font-size: 8px; text-align: center; padding: 1px;">${esc(p.variant)}</span>` : ''}
+        </div>
+      `).join('')}
+    </div>`;
+  }
+
   const itemsHtml = items.map((item) => {
     const featuredClass = item.featured ? " create-offer-style-preview-item--featured" : "";
-    const featuredStyle = item.featured 
+    const featuredStyle = item.featured
       ? `border-color: ${esc(accentColor)} !important; background: ${esc(cardBackgroundColor)} !important; box-shadow: 0 8px 18px ${esc(accentColor)}25 !important; cursor: pointer;`
       : `border-color: ${esc(borderColor)} !important; background: ${esc(cardBackgroundColor)} !important; cursor: pointer;`;
-      
+
     return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}">
       ${
         item.badge
           ? `<div class="create-offer-style-preview-badge" style="background:${esc(accentColor)} !important; color:${esc(labelColor)} !important;">${esc(item.badge)}</div>`
           : ""
       }
+      ${renderProductsHtml(item.products)}
       <div class="create-offer-style-preview-item-title">${esc(item.title)}</div>
       <div class="create-offer-style-preview-item-subtitle">${esc(item.subtitle)}</div>
       ${

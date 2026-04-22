@@ -353,7 +353,99 @@ function parseDiscountRulesJson(discountRulesJson) {
         subtitle: item.subtitle || "",
         badge: item.badge || "",
         isDefault: !!item.isDefault,
+        productId: item.productId || undefined,
+        variantId: item.variantId || undefined,
       };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.count - b.count);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Parse per-product discount rules (supports productId / variantId fields).
+ */
+function parsePerProductDiscountRulesJson(discountRulesJson) {
+  try {
+    let parsed = discountRulesJson;
+    if (typeof parsed === "string") {
+      if (!parsed.trim()) return [];
+      parsed = JSON.parse(parsed);
+    }
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => {
+        if (!item || typeof item !== "object") return null;
+        const count = Number(item.count);
+        const discountPercent = Number(item.discountPercent);
+        if (!Number.isFinite(count) || count < 1) return null;
+        if (!Number.isFinite(discountPercent)) return null;
+        return {
+          productId: typeof item.productId === "string" && item.productId ? item.productId : undefined,
+          variantId: typeof item.variantId === "string" && item.variantId ? item.variantId : undefined,
+          count: Math.trunc(count),
+          discountPercent: Math.max(0, Math.min(100, discountPercent)),
+          title: item.title || "",
+          subtitle: item.subtitle || "",
+          badge: item.badge || "",
+          isDefault: !!item.isDefault,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.count - b.count);
+  } catch {
+    return [];
+  }
+}
+
+function parseBxgyDiscountRulesJson(discountRulesJson) {
+  try {
+    let parsed = discountRulesJson;
+    if (typeof parsed === "string") {
+      if (!parsed.trim()) return [];
+      parsed = JSON.parse(parsed);
+    }
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => {
+        if (!item || typeof item !== "object") return null;
+        const count = Number(item.count);
+        const buyQuantity = Number(item.buyQuantity);
+        const getQuantity = Number(item.getQuantity);
+        const discountPercent = Number(item.discountPercent);
+
+        if (!Number.isFinite(count) || count < 1) return null;
+        if (!Number.isFinite(buyQuantity) || buyQuantity < 1) return null;
+        if (!Number.isFinite(getQuantity) || getQuantity < 1) return null;
+        if (
+          !Number.isFinite(discountPercent) ||
+          discountPercent < 0 ||
+          discountPercent > 100
+        )
+          return null;
+
+        const buyProductIds = Array.isArray(item.buyProductIds)
+          ? item.buyProductIds.map(String)
+          : [];
+        const getProductIds = Array.isArray(item.getProductIds)
+          ? item.getProductIds.map(String)
+          : [];
+
+        return {
+          count: Math.trunc(count),
+          buyQuantity: Math.trunc(buyQuantity),
+          getQuantity: Math.trunc(getQuantity),
+          discountPercent: discountPercent,
+          buyProductIds: buyProductIds,
+          getProductIds: getProductIds,
+          title: item.title || "",
+          subtitle: item.subtitle || "",
+          badge: item.badge || "",
+          maxUsesPerOrder: Number(item.maxUsesPerOrder) || 1,
+          isDefault: !!item.isDefault,
+        };
       })
       .filter(Boolean)
       .sort((a, b) => a.count - b.count);
@@ -505,22 +597,50 @@ function getCurrentOffer(offersConfig) {
       }
     }
 
-    const discountRules = parseDiscountRulesJson(offer.discountRulesJson);
-    if (!discountRules.length) {
-      console.log("[ciwi] offer skipped: no valid discount rules", offer.id);
-      continue;
-    }
-
-    const selectedIds = parseSelectedProductIds(offer.selectedProductsJson);
-    // 指定了商品列表时，仅当前商品命中才展示
-    if (selectedIds.length > 0) {
-      if (!currentProductGid) {
-        console.log("[ciwi] offer skipped: requires specific products but current product GID is null", offer.id);
+    if (offer.offerType === 'bxgy') {
+      const bxgyRules = parseBxgyDiscountRulesJson(offer.discountRulesJson);
+      if (!bxgyRules.length) {
+        console.log("[ciwi] offer skipped: no valid bxgy discount rules", offer.id);
         continue;
       }
-      if (!selectedIds.includes(currentProductGid)) {
-        console.log("[ciwi] offer skipped: current product not in selected list", offer.id, currentProductGid, selectedIds);
+      const rule = bxgyRules[0];
+      if (!rule.count) {
+        console.log("[ciwi] bxgy offer skipped: count is invalid", offer.id);
         continue;
+      }
+      if (!rule.buyProductIds || rule.buyProductIds.length === 0) {
+        console.log("[ciwi] bxgy offer skipped: buyProductIds is empty", offer.id);
+        continue;
+      }
+      if (!currentProductGid) {
+        console.log("[ciwi] bxgy offer skipped: current product GID is null", offer.id);
+        continue;
+      }
+      if (!rule.buyProductIds.includes(currentProductGid)) {
+        console.log("[ciwi] bxgy offer skipped: current product not in buy list", offer.id, currentProductGid);
+        continue;
+      }
+    } else {
+      // quantity-breaks-same (supports per-product rules)
+      const discountRules = parsePerProductDiscountRulesJson(offer.discountRulesJson);
+      if (!discountRules.length) {
+        // Fallback to legacy format
+        const legacyRules = parseDiscountRulesJson(offer.discountRulesJson);
+        if (!legacyRules.length) {
+          console.log("[ciwi] offer skipped: no valid quantity discount rules", offer.id);
+          continue;
+        }
+      }
+      const selectedIds = parseSelectedProductIds(offer.selectedProductsJson);
+      if (selectedIds.length > 0) {
+        if (!currentProductGid) {
+          console.log("[ciwi] offer skipped: requires specific products but current product GID is null", offer.id);
+          continue;
+        }
+        if (!selectedIds.includes(currentProductGid)) {
+          console.log("[ciwi] offer skipped: current product not in selected list", offer.id, currentProductGid, selectedIds);
+          continue;
+        }
       }
     }
 
@@ -623,7 +743,100 @@ window.ciwiHandleBundleAddToCart = function(event) {
 };
 
 function renderBundlePreviewHtml(offer) {
-  const discountRules = parseDiscountRulesJson(offer?.discountRulesJson);
+  // BXGY offer type support — quantity-break-style tier cards
+  if (offer.offerType === 'bxgy') {
+    const bxgyRules = parseBxgyDiscountRulesJson(offer?.discountRulesJson);
+    if (!bxgyRules.length) return "";
+
+    if (!window.__ciwiBundleState.selectedCount) {
+      const defaultRule = bxgyRules.find(r => r.isDefault);
+      window.__ciwiBundleState.selectedCount = defaultRule ? defaultRule.count : (bxgyRules[0]?.count || 1);
+      setTimeout(() => updateThemeQuantityInput(window.__ciwiBundleState.selectedCount), 0);
+    }
+    const selectedCount = window.__ciwiBundleState.selectedCount;
+
+    let offerSettings = {};
+    try {
+      if (offer?.offerSettingsJson) {
+        offerSettings = JSON.parse(offer.offerSettingsJson);
+      }
+    } catch (e) {
+      console.error("[ciwi] failed to parse offerSettingsJson", e);
+    }
+
+    const layoutFormat = offerSettings.layoutFormat || "vertical";
+    const accentColor = offerSettings.accentColor || "#008060";
+    const cardBackgroundColor = offerSettings.cardBackgroundColor || "#ffffff";
+    const borderColor = offerSettings.borderColor || "#dfe3e8";
+    const labelColor = offerSettings.labelColor || "#ffffff";
+    const titleFontSize = offerSettings.titleFontSize || 14;
+    const titleFontWeight = offerSettings.titleFontWeight || "600";
+    const titleColor = offerSettings.titleColor || "#111111";
+    const buttonText = offerSettings.buttonText || "Add to Cart";
+    const buttonPrimaryColor = offerSettings.buttonPrimaryColor || "#008060";
+    const showCustomButton = offerSettings.showCustomButton !== false;
+    const widgetTitle = offerSettings.title || "Bundle & Save";
+    const hasDefault = bxgyRules.some((r) => r.isDefault);
+
+    const items = bxgyRules.map((rule, index) => {
+      const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
+      const displayCount = rule.count || 1;
+      return {
+        count: displayCount,
+        title: rule.title || `${displayCount} items`,
+        subtitle: rule.subtitle || `Buy ${rule.buyQuantity}, Get ${rule.getQuantity}`,
+        price: rule.discountPercent === 100
+          ? `${rule.getQuantity} FREE`
+          : `${rule.discountPercent}% OFF`,
+        badge: rule.badge || (isFeatured ? "Most Popular" : ""),
+        saveLabel: `BUY ${rule.buyQuantity} + GET ${rule.getQuantity}`,
+      };
+    });
+
+    const itemsHtml = items
+      .map((item) => {
+        const isSelected = item.count === selectedCount;
+        const featuredClass = isSelected
+          ? " create-offer-style-preview-item--featured"
+          : "";
+        const featuredStyle = isSelected
+          ? `border-color: ${esc(accentColor)} !important; background: ${esc(cardBackgroundColor)} !important; box-shadow: 0 8px 18px ${esc(accentColor)}25 !important; cursor: pointer;`
+          : `border-color: ${esc(borderColor)} !important; background: ${esc(cardBackgroundColor)} !important; cursor: pointer;`;
+
+        return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}" onclick="window.ciwiSelectBundleOption(${item.count})">
+        ${
+          item.badge
+            ? `<div class="create-offer-style-preview-badge" style="background:${esc(accentColor)} !important; color:${esc(labelColor)} !important;">${esc(item.badge)}</div>`
+            : ""
+        }
+        <div class="create-offer-style-preview-item-title">${esc(item.title)}</div>
+        <div class="create-offer-style-preview-item-subtitle">${esc(item.subtitle)}</div>
+        ${
+          item.saveLabel
+            ? `<div class="create-offer-style-preview-item-subtitle">${esc(item.saveLabel)}</div>`
+            : ""
+        }
+        <div class="create-offer-style-preview-item-price">${esc(item.price)}</div>
+      </div>`;
+      })
+      .join("");
+
+    return `<div class="create-offer-preview-card">
+      <div class="create-offer-style-preview-header" style="color:${esc(titleColor)} !important; font-size: ${esc(titleFontSize)}px !important; font-weight: ${esc(titleFontWeight)} !important;">${esc(widgetTitle)}</div>
+      <div class="create-offer-style-preview-list create-offer-style-preview-list--${layoutFormat}">
+        ${itemsHtml}
+      </div>
+      ${showCustomButton ? `<button class="create-offer-preview-button" onclick="window.ciwiHandleBundleAddToCart()" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
+        ${esc(buttonText)}
+      </button>` : ""}
+    </div>`;
+  }
+  
+  // Quantity breaks — try per-product rules first, fallback to legacy
+  const perProductRules = parsePerProductDiscountRulesJson(offer?.discountRulesJson);
+  const discountRules = perProductRules.length
+    ? perProductRules
+    : parseDiscountRulesJson(offer?.discountRulesJson);
   if (!discountRules.length) return "";
 
   if (!window.__ciwiBundleState.selectedCount) {
@@ -672,14 +885,19 @@ function renderBundlePreviewHtml(offer) {
         rule.discountPercent,
       );
       const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
+      const tierTitle = rule.title || `${rule.count} items`;
+      const tierSubtitle = rule.subtitle || `You save ${rule.discountPercent}%`;
       return {
         count: rule.count,
-        title: rule.title || `${rule.count} items`,
-        subtitle: rule.subtitle || `You save ${rule.discountPercent}%`,
+        title: tierTitle,
+        subtitle: tierSubtitle,
         price: formatPrice(discountedTotal),
         original: formatPrice(originalTotal),
         badge: rule.badge || (isFeatured ? "Most Popular" : ""),
         saveLabel: `SAVE ${formatPrice(saved)}`,
+        // Extra: per-unit discounted price for per-product rules
+        discountedUnitPrice: formatPrice(discountedTotal / rule.count),
+        originalUnitPrice: formatPrice(originalTotal / rule.count),
       };
     }),
   ];
@@ -690,10 +908,19 @@ function renderBundlePreviewHtml(offer) {
       const featuredClass = isSelected
         ? " create-offer-style-preview-item--featured"
         : "";
-      const featuredStyle = isSelected 
+      const featuredStyle = isSelected
         ? `border-color: ${esc(accentColor)} !important; background: ${esc(cardBackgroundColor)} !important; box-shadow: 0 8px 18px ${esc(accentColor)}25 !important; cursor: pointer;`
         : `border-color: ${esc(borderColor)} !important; background: ${esc(cardBackgroundColor)} !important; cursor: pointer;`;
-        
+
+      let priceHtml = `<div class="create-offer-style-preview-item-price">${esc(item.price)}</div>`;
+      if (item.original) {
+        priceHtml += `<div class="create-offer-style-preview-item-original">${esc(item.original)}</div>`;
+      }
+      // Show per-unit discounted price when a tier is selected or for non-single items
+      if (item.count > 1 && item.discountedUnitPrice) {
+        priceHtml += `<div class="create-offer-style-preview-item-unit">${esc(item.discountedUnitPrice)} / item</div>`;
+      }
+
       return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}" onclick="window.ciwiSelectBundleOption(${item.count})">
       ${
         item.badge
@@ -702,17 +929,7 @@ function renderBundlePreviewHtml(offer) {
       }
       <div class="create-offer-style-preview-item-title">${esc(item.title)}</div>
       <div class="create-offer-style-preview-item-subtitle">${esc(item.subtitle)}</div>
-      ${
-        item.saveLabel
-          ? `<div class="create-offer-style-preview-item-subtitle">${esc(item.saveLabel)}</div>`
-          : ""
-      }
-      <div class="create-offer-style-preview-item-price">${esc(item.price)}</div>
-      ${
-        item.original
-          ? `<div class="create-offer-style-preview-item-original">${esc(item.original)}</div>`
-          : ""
-      }
+      ${priceHtml}
     </div>`;
     })
     .join("");

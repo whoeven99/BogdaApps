@@ -14,6 +14,7 @@ type Props = {
   showCustomButton?: boolean;
   title?: string;
   items?: PreviewItem[];
+  showProductImages?: boolean;
 };
 
 export default function BundlePreview({
@@ -30,6 +31,7 @@ export default function BundlePreview({
   showCustomButton,
   title = "Bundle & Save",
   items,
+  showProductImages = true,
 }: Props) {
   const html = renderBundlePreviewHtml({
     title,
@@ -45,6 +47,7 @@ export default function BundlePreview({
     buttonPrimaryColor,
     showCustomButton,
     items,
+    showProductImages,
   });
 
   return <div dangerouslySetInnerHTML={{ __html: html }} />;
