@@ -23,7 +23,6 @@ import {
   buildBxgyDiscountRulesJson,
   parseDifferentProductsDiscountRules,
   buildDifferentProductsDiscountRulesJson,
-  ProductPricingConfig,
 } from "../../../utils/offerParsing";
 
 type DiscountRule = {
@@ -54,13 +53,14 @@ type BxgyDiscountRule = {
 type DifferentProductsDiscountRule = {
   count: number;
   discountPercent: number;
-  productIds: string[];
+  buyQuantity: number;
+  getQuantity: number;
+  buyProductIds: string[];
+  getProductIds: string[];
   title?: string;
   subtitle?: string;
   badge?: string;
   isDefault?: boolean;
-  /** Per-product pricing configuration for this tier */
-  productPricing?: ProductPricingConfig[];
 };
 
 type Product = {
@@ -347,13 +347,6 @@ export function CreateNewOffer({
     image: string;
     price: string;
     variantsCount: number;
-    /** Selected variants with their pricing */
-    selectedVariants?: {
-      id: string;
-      title: string;
-      price: string;
-      image?: string;
-    }[];
   }[]>(() => {
     const ids = initialOffer?.selectedProductsJson
       ? parseSelectedProductIds(initialOffer.selectedProductsJson)
@@ -404,24 +397,13 @@ export function CreateNewOffer({
     });
 
     if (selected) {
-      const newData = selected.map((item: any) => {
-        // Collect variants with their prices
-        const variants = item.variants?.slice(0, 6).map((v: any) => ({
-          id: v.id,
-          title: v.title !== "Default Title" ? v.title : "",
-          price: v.price || "€0.00",
-          image: v.image?.originalSrc || item.images?.[0]?.originalSrc || "https://via.placeholder.com/60",
-        })) || [];
-
-        return {
-          id: item.id,
-          title: item.title,
-          image: item.images?.[0]?.originalSrc || "https://via.placeholder.com/60",
-          price: item.variants?.[0]?.price || "€0.00",
-          variantsCount: item.variants?.length || 1,
-          selectedVariants: variants,
-        };
-      });
+      const newData = selected.map((item: any) => ({
+        id: item.id,
+        title: item.title,
+        image: item.images?.[0]?.originalSrc || "https://via.placeholder.com/60",
+        price: item.variants?.[0]?.price || "€0.00",
+        variantsCount: item.variants?.length || 1,
+      }));
       
       if (type === "buy") {
         setBuyProducts(newData.map((item: any) => item.id));
@@ -460,55 +442,6 @@ export function CreateNewOffer({
     }
   });
 
-  /** Products selected for Live Preview (can be full products or specific variants) */
-  const [previewProducts, setPreviewProducts] = useState<{
-    id: string;
-    title: string;
-    image: string;
-    price: string;
-    /** Full product ID or variant ID */
-    variantId?: string;
-    /** Display title for variant */
-    variantTitle?: string;
-    /** Original price before discount */
-    originalPrice: string;
-    /** Discounted price */
-    discountedPrice?: string;
-  }[]>(() => {
-    // Initialize from selectedProductsData with first variants
-    return selectedProductsData.slice(0, 4).map((p) => {
-      const variant = p.selectedVariants?.[0];
-      const priceNum = parseFloat((p.price || "0").replace(/[^0-9.-]/g, ""));
-      const discountedPrice = priceNum > 0 ? (priceNum * 0.85).toFixed(2).replace(".", ",") : p.price;
-      return {
-        id: p.id,
-        title: p.title,
-        image: p.image,
-        price: p.price,
-        variantId: variant?.id,
-        variantTitle: variant?.title || "",
-        originalPrice: p.price,
-        discountedPrice: discountedPrice,
-      };
-    });
-  });
-
-  /** Variant selection modal state */
-  const [variantModalVisible, setVariantModalVisible] = useState(false);
-  const [variantModalProduct, setVariantModalProduct] = useState<{
-    id: string;
-    title: string;
-    image: string;
-    price: string;
-    selectedVariants?: {
-      id: string;
-      title: string;
-      price: string;
-      image?: string;
-    }[];
-  } | null>(null);
-  const [variantModalTargetIndex, setVariantModalTargetIndex] = useState<number>(-1);
-
   useEffect(() => {
     if (offerType === 'bxgy') {
       setBxgyDiscountRules(prev =>
@@ -525,27 +458,11 @@ export function CreateNewOffer({
   useEffect(() => {
     if (offerType === 'quantity-breaks-different') {
       setDifferentProductsDiscountRules(prev =>
-        prev.map(rule => {
-          // Build productPricing from selectedProductsData
-          const productPricing: ProductPricingConfig[] = selectedProductsData.map(p => {
-            // Find existing pricing for this product, or create default
-            const existing = rule.productPricing?.find(pp => pp.productId === p.id);
-            if (existing) return existing;
-            
-            return {
-              productId: p.id,
-              discountType: "percent" as const,
-              discountValue: rule.discountPercent,
-              variantIds: p.selectedVariants?.map(v => v.id),
-            };
-          });
-          
-          return {
-            ...rule,
-            productIds: selectedProductsData.map(p => p.id),
-            productPricing,
-          };
-        }),
+        prev.map(rule => ({
+          ...rule,
+          buyProductIds: rule.buyProductIds.length > 0 ? rule.buyProductIds : selectedProductsData.map(p => p.id),
+          getProductIds: rule.getProductIds.length > 0 ? rule.getProductIds : selectedProductsData.map(p => p.id),
+        })),
       );
     }
   }, [selectedProductsData, offerType]);
@@ -555,10 +472,15 @@ export function CreateNewOffer({
   );
 
   const normalizedDiscountRules = sanitizeDiscountRules(discountRules);
-  const normalizedDiffProductsRules = differentProductsDiscountRules.filter(r =>
-    Number.isFinite(r.count) && r.count >= 1 && Number.isFinite(r.discountPercent)
-  ).sort((a, b) => a.count - b.count).filter((tier, index, arr) =>
-    index === arr.findIndex((x) => x.count === tier.count)
+  const normalizedDiffProductsRules = sanitizeDiscountRules(
+    differentProductsDiscountRules.map((r) => ({
+      count: r.count,
+      discountPercent: r.discountPercent,
+      title: r.title,
+      subtitle: r.subtitle,
+      badge: r.badge,
+      isDefault: r.isDefault,
+    })),
   );
   const featuredRule = normalizedDiscountRules[0];
 
@@ -570,6 +492,10 @@ export function CreateNewOffer({
       return bxgyDiscountRules.map((rule, index) => {
         const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
         const displayCount = rule.count || 1;
+
+        const buyProductsData = storeProducts.filter(p => rule.buyProductIds.includes(String(p.id)));
+        const getProductsData = storeProducts.filter(p => rule.getProductIds.includes(String(p.id)));
+
         return {
           id: `bxgy-tier-${rule.count}`,
           title: rule.title || `${displayCount} items`,
@@ -580,60 +506,40 @@ export function CreateNewOffer({
           featured: isFeatured,
           badge: rule.badge || (isFeatured ? "Most Popular" : ""),
           saveLabel: `BUY ${rule.buyQuantity} + GET ${rule.getQuantity}`,
+          products: [
+            ...buyProductsData.slice(0, 3).map(p => ({ id: p.id, name: p.name, image: p.image })),
+            ...getProductsData.slice(0, 3).map(p => ({ id: p.id, name: p.name, image: p.image })),
+          ],
         };
       });
     }
 
-    if (offerType === "quantity-breaks-different" && normalizedDiffProductsRules.length > 0) {
-      const hasDefault = normalizedDiffProductsRules.some(r => r.isDefault);
-      return normalizedDiffProductsRules.map((rule, index) => {
+    if (offerType === "quantity-breaks-different" && differentProductsDiscountRules.length > 0) {
+      const hasDefault = differentProductsDiscountRules.some(r => r.isDefault);
+      return differentProductsDiscountRules.map((rule, index) => {
         const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
-        // For quantity-breaks-different, show actual products with pricing
-        const tierProducts = previewProducts.slice(0, Math.min(rule.count, previewProducts.length));
-        
-        // Calculate prices for this tier based on productPricing
-        const productPricing = rule.productPricing || [];
-        
-        let totalOriginal = 0;
-        let totalDiscounted = 0;
-        tierProducts.forEach(p => {
-          const priceNum = parseFloat((p.originalPrice || "0").replace(/[^0-9.-]/g, ""));
-          totalOriginal += priceNum;
-          
-          // Find product pricing config
-          const ppConfig = productPricing.find(pp => pp.productId === p.id);
-          let discountedPrice = priceNum;
-          
-          if (ppConfig) {
-            if (ppConfig.discountType === "percent" && ppConfig.discountValue) {
-              discountedPrice = priceNum * (1 - ppConfig.discountValue / 100);
-            } else if (ppConfig.discountType === "fixed" && ppConfig.discountValue) {
-              discountedPrice = Math.max(0, priceNum - ppConfig.discountValue);
-            } else if (ppConfig.discountType === "variant" && ppConfig.variantFixedPrices && p.variantId) {
-              discountedPrice = ppConfig.variantFixedPrices[p.variantId] ?? priceNum;
-            }
-          } else {
-            // Default: apply tier discount percent
-            discountedPrice = priceNum * (1 - rule.discountPercent / 100);
-          }
-          
-          totalDiscounted += discountedPrice;
-        });
-        
-        const saved = totalOriginal - totalDiscounted;
-        const savedFormatted = saved > 0 ? `SAVE €${saved.toFixed(2).replace(".", ",")}` : "";
-        const originalFormatted = totalOriginal > 0 ? `€${totalOriginal.toFixed(2).replace(".", ",")}` : undefined;
-        const discountedFormatted = totalDiscounted > 0 ? `€${totalDiscounted.toFixed(2).replace(".", ",")}` : `€${totalDiscounted.toFixed(2).replace(".", ",")}`;
-        
+
+        const buyProductsData = storeProducts.filter(p => rule.buyProductIds.includes(String(p.id)));
+        const getProductsData = rule.getProductIds && rule.getProductIds.length > 0
+          ? storeProducts.filter(p => rule.getProductIds.includes(String(p.id)))
+          : buyProductsData;
+
         return {
           id: `diff-tier-${rule.count}`,
           title: rule.title || `${rule.count} items`,
-          subtitle: rule.subtitle || (savedFormatted ? savedFormatted : `You save ${rule.discountPercent}%`),
-          price: discountedFormatted,
-          original: originalFormatted,
+          subtitle: rule.subtitle || `You save ${rule.discountPercent}%`,
+          price: rule.discountPercent === 100 && rule.getQuantity > 0
+            ? `${rule.getQuantity} FREE`
+            : `${rule.discountPercent}% OFF`,
           featured: isFeatured,
           badge: rule.badge || (isFeatured ? "Most Popular" : ""),
-          saveLabel: `BUY ${rule.count} + SAVE ${rule.discountPercent}%`,
+          saveLabel: rule.getQuantity > 0
+            ? `BUY ${rule.buyQuantity} + GET ${rule.getQuantity}`
+            : `BUY ${rule.count} + SAVE ${rule.discountPercent}%`,
+          products: [
+            ...buyProductsData.slice(0, 3).map(p => ({ id: p.id, name: p.name, image: p.image })),
+            ...(rule.getQuantity > 0 && getProductsData.length > 0 ? getProductsData.slice(0, 3).map(p => ({ id: p.id, name: p.name, image: p.image })) : []),
+          ],
         };
       });
     }
@@ -668,11 +574,12 @@ export function CreateNewOffer({
   }, [
     offerType,
     bxgyDiscountRules,
-    normalizedDiffProductsRules,
+    differentProductsDiscountRules,
     normalizedDiscountRules,
     baseUnitPrice,
     formatPreviewPrice,
     hasDefault,
+    storeProducts,
   ]);
 
   const steps = [
@@ -1045,146 +952,21 @@ export function CreateNewOffer({
                   }
                 </p>
 
-                {/* Product Preview Selector for quantity-breaks-different */}
-                {offerType === "quantity-breaks-different" && (
-                  <div className="mb-4 p-3 border border-[#dfe3e8] rounded-lg bg-[#f9fafb]">
-                    <div className="text-[12px] font-medium text-[#1c1f23] mb-2">
-                      Preview Products (drag to reorder)
-                    </div>
-                    <div className="grid grid-cols-4 gap-2">
-                      {previewProducts.map((product, index) => (
-                        <div
-                          key={`${product.id}-${index}`}
-                          className="relative group cursor-pointer"
-                          onClick={() => {
-                            // Open variant selector if product has variants
-                            const fullProduct = selectedProductsData.find(p => p.id === product.id);
-                            if (fullProduct && (fullProduct.variantsCount || 1) > 1) {
-                              setVariantModalProduct(fullProduct);
-                              setVariantModalTargetIndex(index);
-                              setVariantModalVisible(true);
-                            }
-                          }}
-                        >
-                          <div className="relative">
-                            <img
-                              src={product.image}
-                              alt={product.title}
-                              className="w-full aspect-square object-cover rounded-md border-2 border-[#dfe3e8] group-hover:border-[#008060] transition-colors"
-                              style={{ 
-                                borderColor: index === 0 ? accentColor : undefined,
-                              }}
-                            />
-                            {/* Variant badge */}
-                            {product.variantTitle && (
-                              <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[9px] px-1 py-0.5 truncate rounded-b-md">
-                                {product.variantTitle}
-                              </div>
-                            )}
-                            {/* Product count badge */}
-                            <div className="absolute -top-1 -right-1 bg-[#008060] text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-medium">
-                              {index + 1}
-                            </div>
-                          </div>
-                          <div className="text-[10px] text-[#5c6166] mt-1 truncate text-center">
-                            {product.price}
-                          </div>
-                        </div>
-                      ))}
-                      {/* Add more products placeholder */}
-                      {previewProducts.length < 4 && selectedProductsData.length > previewProducts.length && (
-                        <div
-                          className="aspect-square rounded-md border-2 border-dashed border-[#dfe3e8] flex items-center justify-center cursor-pointer hover:border-[#008060] hover:bg-[#f0f9f6] transition-colors"
-                          onClick={() => {
-                            const nextProduct = selectedProductsData[previewProducts.length];
-                            if (nextProduct) {
-                              const priceNum = parseFloat((nextProduct.price || "0").replace(/[^0-9.-]/g, ""));
-                              const discounted = priceNum > 0 ? (priceNum * 0.85).toFixed(2) : nextProduct.price;
-                              setPreviewProducts([...previewProducts, {
-                                id: nextProduct.id,
-                                title: nextProduct.title,
-                                image: nextProduct.image,
-                                price: nextProduct.price,
-                                variantId: nextProduct.selectedVariants?.[0]?.id,
-                                variantTitle: nextProduct.selectedVariants?.[0]?.title || "",
-                                originalPrice: nextProduct.price,
-                                discountedPrice: discounted,
-                              }]);
-                            }
-                          }}
-                        >
-                          <div className="text-[#6d7175] text-[20px]">+</div>
-                        </div>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-[#6d7175] mt-2">
-                      {selectedProductsData.length > 0 
-                        ? "Click a product to change its variant for the preview"
-                        : "Select products in 'Products eligible for offer' first"}
-                    </p>
-                  </div>
-                )}
-
-                {/* Product Preview Selector for quantity-breaks-same */}
-                {offerType === "quantity-breaks-same" && selectedProductsData.length > 0 && (
-                  <div className="mb-4 p-3 border border-[#dfe3e8] rounded-lg bg-[#f9fafb]">
-                    <div className="text-[12px] font-medium text-[#1c1f23] mb-2">
-                      Preview Product
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <img
-                        src={selectedProductsData[0].image}
-                        alt={selectedProductsData[0].title}
-                        className="w-14 h-14 object-cover rounded-md border border-[#dfe3e8]"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-[12px] font-medium truncate">{selectedProductsData[0].title}</div>
-                        <div className="text-[11px] text-[#6d7175]">{selectedProductsData[0].price}</div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {offerType === "quantity-breaks-different" ? (
-                  <BundlePreview
-                    layoutFormat={layoutFormat}
-                    cardBackgroundColor={cardBackgroundColor}
-                    accentColor={accentColor}
-                    borderColor={borderColor}
-                    labelColor={labelColor}
-                    titleFontSize={titleFontSize}
-                    titleFontWeight={titleFontWeight}
-                    titleColor={titleColor}
-                    buttonText={buttonText}
-                    buttonPrimaryColor={buttonPrimaryColor}
-                    showCustomButton={showCustomButton}
-                    title={widgetTitle}
-                    items={previewItems}
-                    bundleProducts={previewProducts.map(p => ({
-                      id: p.id,
-                      title: p.title,
-                      image: p.image,
-                      price: p.discountedPrice || p.price,
-                      variantTitle: p.variantTitle,
-                    }))}
-                  />
-                ) : (
-                  <BundlePreview
-                    layoutFormat={layoutFormat}
-                    cardBackgroundColor={cardBackgroundColor}
-                    accentColor={accentColor}
-                    borderColor={borderColor}
-                    labelColor={labelColor}
-                    titleFontSize={titleFontSize}
-                    titleFontWeight={titleFontWeight}
-                    titleColor={titleColor}
-                    buttonText={buttonText}
-                    buttonPrimaryColor={buttonPrimaryColor}
-                    showCustomButton={showCustomButton}
-                    title={widgetTitle}
-                    items={previewItems}
-                  />
-                )}
+                <BundlePreview
+                  layoutFormat={layoutFormat}
+                  cardBackgroundColor={cardBackgroundColor}
+                  accentColor={accentColor}
+                  borderColor={borderColor}
+                  labelColor={labelColor}
+                  titleFontSize={titleFontSize}
+                  titleFontWeight={titleFontWeight}
+                  titleColor={titleColor}
+                  buttonText={buttonText}
+                  buttonPrimaryColor={buttonPrimaryColor}
+                  showCustomButton={showCustomButton}
+                  title={widgetTitle}
+                  items={previewItems}
+                />
                 <p className="text-[12px] text-[#5c6166] mt-3 italic font-normal">
                   Note: This is a live preview. Changes will update in real-time when state is connected.
                 </p>
@@ -1590,345 +1372,265 @@ export function CreateNewOffer({
                       </>
                     ) : offerType === "quantity-breaks-different" ? (
                       <>
-                        {differentProductsDiscountRules.map((rule, index) => (
-                          <div className="create-offer-discount-card" key={index}>
-                            <div className="create-offer-discount-body">
-                              <div className="create-offer-discount-form-row create-offer-discount-form-row--inline">
-                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                                  Item quantity
-                                  <Input
-                                    size="large"
-                                    type="number"
-                                    min={1}
-                                    step={1}
-                                    className="mt-1"
-                                    value={rule.count}
-                                    onChange={(e) => {
-                                      const parsedValue = Number(e.target.value);
-                                      const nextCount =
-                                        Number.isFinite(parsedValue) && parsedValue >= 1
-                                          ? Math.trunc(parsedValue)
-                                          : 1;
-                                      setDifferentProductsDiscountRules(prev =>
-                                        prev.map((r, i) =>
-                                          i === index ? { ...r, count: nextCount } : r,
-                                        ),
-                                      );
-                                    }}
-                                  />
-                                </label>
-                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                                  Discount (%)
-                                  <Input
-                                    size="large"
-                                    type="number"
-                                    min={0}
-                                    max={100}
-                                    step={1}
-                                    className="mt-1"
-                                    value={rule.discountPercent}
-                                    onChange={(e) => {
-                                      const parsedValue = Number(e.target.value);
-                                      if (parsedValue > 100) return;
-                                      const nextPercent =
-                                        Number.isFinite(parsedValue) && parsedValue >= 0
-                                          ? parsedValue
-                                          : 0;
-                                      setDifferentProductsDiscountRules(prev =>
-                                        prev.map((r, i) =>
-                                          i === index
-                                            ? { ...r, discountPercent: nextPercent }
-                                            : r,
-                                        ),
-                                      );
-                                    }}
-                                  />
-                                  {rule.discountPercent > 50 && rule.discountPercent < 90 && (
-                                    <div className="text-[#faad14] text-[12px] mt-1 font-normal">
-                                      A discount over 50% may result in losses. Please double-check.
-                                    </div>
-                                  )}
-                                  {rule.discountPercent >= 90 && (
-                                    <div className="text-[#ff4d4f] text-[12px] mt-1 font-normal">
-                                      A discount of 90% or more means the product is nearly free.
-                                    </div>
-                                  )}
-                                </label>
-                              </div>
+                        <div style={{ marginBottom: '16px', padding: '12px', background: '#f6f8fa', borderRadius: '8px' }}>
+                          <p style={{ fontSize: '13px', color: '#5c6166', margin: 0 }}>
+                            <strong>Note:</strong> Each tier can have different product combinations. Select products for "Buy" and "Get" sections in each tier below.
+                          </p>
+                        </div>
+                        {differentProductsDiscountRules.map((rule, index) => {
+                          const buyProductsData = selectedProductsData.filter(p => rule.buyProductIds.includes(String(p.id)));
+                          const getProductsData = rule.getProductIds && rule.getProductIds.length > 0
+                            ? selectedProductsData.filter(p => rule.getProductIds.includes(String(p.id)))
+                            : buyProductsData;
 
-                              <div className="create-offer-discount-form-row" style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
-                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                                  Title
-                                  <Input
-                                    size="large"
-                                    className="mt-1"
-                                    value={rule.title || ''}
-                                    placeholder="e.g. Duo, Trio"
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setDifferentProductsDiscountRules(prev => prev.map((r, i) => i === index ? { ...r, title: val } : r));
+                          return (
+                            <div className="create-offer-discount-card" key={index}>
+                              <div className="create-offer-discount-body">
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                                  <span style={{ fontWeight: 600, color: '#1c1f23' }}>Tier {index + 1}</span>
+                                  <Button
+                                    danger
+                                    size="small"
+                                    onClick={() => {
+                                      setDifferentProductsDiscountRules(prev => {
+                                        if (prev.length <= 1) return prev;
+                                        return prev.filter((_, i) => i !== index);
+                                      });
                                     }}
-                                  />
-                                </label>
-                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                                  Subtitle
-                                  <Input
-                                    size="large"
-                                    className="mt-1"
-                                    value={rule.subtitle || ''}
-                                    placeholder="e.g. You save 20%"
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setDifferentProductsDiscountRules(prev => prev.map((r, i) => i === index ? { ...r, subtitle: val } : r));
-                                    }}
-                                  />
-                                </label>
-                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                                  Badge
-                                  <Input
-                                    size="large"
-                                    className="mt-1"
-                                    value={rule.badge || ''}
-                                    placeholder="e.g. Most Popular"
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setDifferentProductsDiscountRules(prev => prev.map((r, i) => i === index ? { ...r, badge: val } : r));
-                                    }}
-                                  />
-                                </label>
-                              </div>
+                                    disabled={differentProductsDiscountRules.length <= 1}
+                                  >
+                                    Remove Tier
+                                  </Button>
+                                </div>
 
-                              {/* Per-Product Pricing Configuration for quantity-breaks-different */}
-                              {selectedProductsData.length > 0 && (
-                                <div style={{ marginTop: '12px', padding: '12px', background: '#f9fafb', borderRadius: '6px', border: '1px solid #dfe3e8' }}>
-                                  <div className="text-[13px] font-medium text-[#1c1f23] mb-2">
-                                    Per-Product Pricing
+                                <div className="create-offer-discount-form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '12px' }}>
+                                  <div>
+                                    <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                      Buy Quantity
+                                    </label>
+                                    <Input
+                                      size="large"
+                                      type="number"
+                                      min={1}
+                                      step={1}
+                                      className="mt-1"
+                                      value={rule.buyQuantity || 2}
+                                      onChange={(e) => {
+                                        const parsedValue = Number(e.target.value);
+                                        const nextBuyQty = Number.isFinite(parsedValue) && parsedValue >= 1 ? Math.trunc(parsedValue) : 1;
+                                        setDifferentProductsDiscountRules(prev =>
+                                          prev.map((r, i) => i === index ? { ...r, buyQuantity: nextBuyQty } : r),
+                                        );
+                                      }}
+                                    />
+                                    <div style={{ fontSize: '12px', color: '#5c6166', marginTop: '4px' }}>
+                                      Number of items customer needs to buy
+                                    </div>
                                   </div>
-                                  <p className="text-[11px] text-[#6d7175] mb-3">
-                                    Override the tier discount for specific products
-                                  </p>
-                                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '8px' }}>
-                                    {selectedProductsData.map((product) => {
-                                      const existingPricing = rule.productPricing?.find(pp => pp.productId === product.id);
-                                      const discountType = existingPricing?.discountType || "percent";
-                                      const discountValue = existingPricing?.discountValue ?? rule.discountPercent;
-
-                                      return (
-                                        <div
-                                          key={product.id}
-                                          style={{ padding: '10px', background: 'white', borderRadius: '6px', border: '1px solid #dfe3e8' }}
-                                        >
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                                            <img
-                                              src={product.image}
-                                              alt={product.title}
-                                              style={{ width: '36px', height: '36px', borderRadius: '4px', objectFit: 'cover' }}
-                                            />
-                                            <div style={{ flex: 1, minWidth: 0 }}>
-                                              <div style={{ fontSize: '12px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                {product.title}
-                                              </div>
-                                              <div style={{ fontSize: '11px', color: '#6d7175' }}>{product.price}</div>
-                                            </div>
-                                          </div>
-                                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-                                            <Select
-                                              size="small"
-                                              value={discountType}
-                                              onChange={(val) => {
-                                                setDifferentProductsDiscountRules(prev =>
-                                                  prev.map((r, i) => {
-                                                    if (i !== index) return r;
-                                                    const productPricing = [...(r.productPricing || [])];
-                                                    const existingIdx = productPricing.findIndex(pp => pp.productId === product.id);
-                                                    const newConfig: ProductPricingConfig = {
-                                                      productId: product.id,
-                                                      discountType: val,
-                                                      discountValue: discountValue,
-                                                    };
-                                                    if (existingIdx >= 0) {
-                                                      productPricing[existingIdx] = newConfig;
-                                                    } else {
-                                                      productPricing.push(newConfig);
-                                                    }
-                                                    return { ...r, productPricing };
-                                                  })
-                                                );
-                                              }}
-                                              options={[
-                                                { label: '% Discount', value: 'percent' },
-                                                { label: 'Fixed Off', value: 'fixed' },
-                                                { label: 'Variant Price', value: 'variant' },
-                                              ]}
-                                            />
-                                            {discountType === 'percent' && (
-                                              <Input
-                                                size="small"
-                                                type="number"
-                                                min={0}
-                                                max={100}
-                                                value={discountValue}
-                                                onChange={(e) => {
-                                                  const val = parseFloat(e.target.value) || 0;
-                                                  setDifferentProductsDiscountRules(prev =>
-                                                    prev.map((r, i) => {
-                                                      if (i !== index) return r;
-                                                      const productPricing = [...(r.productPricing || [])];
-                                                      const existingIdx = productPricing.findIndex(pp => pp.productId === product.id);
-                                                      const newConfig: ProductPricingConfig = {
-                                                        productId: product.id,
-                                                        discountType,
-                                                        discountValue: val,
-                                                      };
-                                                      if (existingIdx >= 0) {
-                                                        productPricing[existingIdx] = newConfig;
-                                                      } else {
-                                                        productPricing.push(newConfig);
-                                                      }
-                                                      return { ...r, productPricing };
-                                                    })
-                                                  );
-                                                }}
-                                                suffix="%"
-                                              />
-                                            )}
-                                            {discountType === 'fixed' && (
-                                              <Input
-                                                size="small"
-                                                type="number"
-                                                min={0}
-                                                value={discountValue}
-                                                onChange={(e) => {
-                                                  const val = parseFloat(e.target.value) || 0;
-                                                  setDifferentProductsDiscountRules(prev =>
-                                                    prev.map((r, i) => {
-                                                      if (i !== index) return r;
-                                                      const productPricing = [...(r.productPricing || [])];
-                                                      const existingIdx = productPricing.findIndex(pp => pp.productId === product.id);
-                                                      const newConfig: ProductPricingConfig = {
-                                                        productId: product.id,
-                                                        discountType,
-                                                        discountValue: val,
-                                                      };
-                                                      if (existingIdx >= 0) {
-                                                        productPricing[existingIdx] = newConfig;
-                                                      } else {
-                                                        productPricing.push(newConfig);
-                                                      }
-                                                      return { ...r, productPricing };
-                                                    })
-                                                  );
-                                                }}
-                                                prefix="€"
-                                              />
-                                            )}
-                                            {discountType === 'variant' && (
-                                              <Select
-                                                size="small"
-                                                placeholder="Select variant"
-                                                value={existingPricing?.variantIds?.[0] || undefined}
-                                                onChange={(val) => {
-                                                  setDifferentProductsDiscountRules(prev =>
-                                                    prev.map((r, i) => {
-                                                      if (i !== index) return r;
-                                                      const productPricing = [...(r.productPricing || [])];
-                                                      const existingIdx = productPricing.findIndex(pp => pp.productId === product.id);
-                                                      const newConfig: ProductPricingConfig = {
-                                                        productId: product.id,
-                                                        discountType: 'variant',
-                                                        variantIds: [val],
-                                                        variantFixedPrices: product.selectedVariants?.reduce((acc, v) => {
-                                                          const priceNum = parseFloat((v.price || "0").replace(/[^0-9.-]/g, ""));
-                                                          acc[v.id] = priceNum;
-                                                          return acc;
-                                                        }, {} as Record<string, number>),
-                                                      };
-                                                      if (existingIdx >= 0) {
-                                                        productPricing[existingIdx] = newConfig;
-                                                      } else {
-                                                        productPricing.push(newConfig);
-                                                      }
-                                                      return { ...r, productPricing };
-                                                    })
-                                                  );
-                                                }}
-                                                options={product.selectedVariants?.map(v => ({
-                                                  label: v.title || 'Default',
-                                                  value: v.id,
-                                                })) || []}
-                                              />
-                                            )}
-                                          </div>
-                                          {existingPricing && (
-                                            <Button
-                                              type="link"
-                                              size="small"
-                                              className="px-0 mt-1"
-                                              onClick={() => {
-                                                setDifferentProductsDiscountRules(prev =>
-                                                  prev.map((r, i) => {
-                                                    if (i !== index) return r;
-                                                    return {
-                                                      ...r,
-                                                      productPricing: (r.productPricing || []).filter(
-                                                        pp => pp.productId !== product.id
-                                                      ),
-                                                    };
-                                                  })
-                                                );
-                                              }}
-                                            >
-                                              Reset to tier default
-                                            </Button>
-                                          )}
-                                        </div>
-                                      );
-                                    })}
+                                  <div>
+                                    <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                      Get Quantity
+                                    </label>
+                                    <Input
+                                      size="large"
+                                      type="number"
+                                      min={0}
+                                      step={1}
+                                      className="mt-1"
+                                      value={rule.getQuantity || 1}
+                                      onChange={(e) => {
+                                        const parsedValue = Number(e.target.value);
+                                        const nextGetQty = Number.isFinite(parsedValue) && parsedValue >= 0 ? Math.trunc(parsedValue) : 0;
+                                        setDifferentProductsDiscountRules(prev =>
+                                          prev.map((r, i) => i === index ? { ...r, getQuantity: nextGetQty } : r),
+                                        );
+                                      }}
+                                    />
+                                    <div style={{ fontSize: '12px', color: '#5c6166', marginTop: '4px' }}>
+                                      Number of items customer gets with discount
+                                    </div>
                                   </div>
                                 </div>
-                              )}
 
-                              <div className="create-offer-discount-form-row" style={{ marginTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <Checkbox
-                                  checked={!!rule.isDefault}
-                                  onChange={(e) => {
-                                    const checked = e.target.checked;
-                                    setDifferentProductsDiscountRules(prev =>
-                                      prev.map((r, i) => ({
-                                        ...r,
-                                        isDefault: checked ? i === index : false,
-                                      }))
-                                    );
-                                  }}
-                                >
-                                  Set as Default Selected
-                                </Checkbox>
-                                <Button
-                                  danger
-                                  onClick={() => {
-                                    setDifferentProductsDiscountRules(prev => {
-                                      if (prev.length <= 1) return prev;
-                                      return prev.filter((_, i) => i !== index);
-                                    });
-                                  }}
-                                  disabled={differentProductsDiscountRules.length <= 1}
-                                >
-                                  Remove
-                                </Button>
+                                <div style={{ marginBottom: '12px' }}>
+                                  <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                    Buy Products
+                                  </label>
+                                  <Select
+                                    mode="multiple"
+                                    size="large"
+                                    placeholder="Select products to buy"
+                                    value={rule.buyProductIds || []}
+                                    onChange={(values) => {
+                                      setDifferentProductsDiscountRules(prev =>
+                                        prev.map((r, i) => i === index ? { ...r, buyProductIds: values } : r),
+                                      );
+                                    }}
+                                    className="w-full"
+                                    options={selectedProductsData.map(p => ({ label: p.title, value: String(p.id) }))}
+                                    maxTagCount={3}
+                                  />
+                                  {buyProductsData.length > 0 && (
+                                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
+                                      {buyProductsData.slice(0, 4).map(p => (
+                                        <div key={p.id} style={{ position: 'relative', width: '40px', height: '40px', borderRadius: '6px', overflow: 'hidden', border: '1px solid #dfe3e8' }}>
+                                          <img src={p.image} alt={p.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e: any) => { e.target.style.display = 'none'; }} />
+                                        </div>
+                                      ))}
+                                      {buyProductsData.length > 4 && (
+                                        <div style={{ width: '40px', height: '40px', borderRadius: '6px', background: '#f4f6f8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', color: '#5c6166' }}>
+                                          +{buyProductsData.length - 4}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+
+                                {rule.getQuantity > 0 && (
+                                  <div style={{ marginBottom: '12px' }}>
+                                    <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                      Get Products
+                                    </label>
+                                    <Select
+                                      mode="multiple"
+                                      size="large"
+                                      placeholder="Select products to get with discount (leave empty to use same as buy products)"
+                                      value={rule.getProductIds || []}
+                                      onChange={(values) => {
+                                        setDifferentProductsDiscountRules(prev =>
+                                          prev.map((r, i) => i === index ? { ...r, getProductIds: values } : r),
+                                        );
+                                      }}
+                                      className="w-full"
+                                      options={selectedProductsData.map(p => ({ label: p.title, value: String(p.id) }))}
+                                      maxTagCount={3}
+                                    />
+                                    {getProductsData.length > 0 && (
+                                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
+                                        {getProductsData.slice(0, 4).map(p => (
+                                          <div key={p.id} style={{ position: 'relative', width: '40px', height: '40px', borderRadius: '6px', overflow: 'hidden', border: '1px solid #dfe3e8' }}>
+                                            <img src={p.image} alt={p.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e: any) => { e.target.style.display = 'none'; }} />
+                                          </div>
+                                        ))}
+                                        {getProductsData.length > 4 && (
+                                          <div style={{ width: '40px', height: '40px', borderRadius: '6px', background: '#f4f6f8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', color: '#5c6166' }}>
+                                            +{getProductsData.length - 4}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                <div className="create-offer-discount-form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '12px' }}>
+                                  <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                    Discount (%)
+                                    <Input
+                                      size="large"
+                                      type="number"
+                                      min={0}
+                                      max={100}
+                                      step={1}
+                                      className="mt-1"
+                                      value={rule.discountPercent}
+                                      onChange={(e) => {
+                                        const parsedValue = Number(e.target.value);
+                                        if (parsedValue > 100) return;
+                                        const nextPercent = Number.isFinite(parsedValue) && parsedValue >= 0 ? parsedValue : 0;
+                                        setDifferentProductsDiscountRules(prev =>
+                                          prev.map((r, i) => i === index ? { ...r, discountPercent: nextPercent } : r),
+                                        );
+                                      }}
+                                    />
+                                    {rule.discountPercent > 50 && rule.discountPercent < 90 && (
+                                      <div className="text-[#faad14] text-[12px] mt-1 font-normal">
+                                        A discount over 50% may result in losses. Please double-check.
+                                      </div>
+                                    )}
+                                    {rule.discountPercent >= 90 && (
+                                      <div className="text-[#ff4d4f] text-[12px] mt-1 font-normal">
+                                        A discount of 90% or more means the product is nearly free.
+                                      </div>
+                                    )}
+                                  </label>
+                                  <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                    Badge
+                                    <Input
+                                      size="large"
+                                      className="mt-1"
+                                      value={rule.badge || ''}
+                                      placeholder="e.g. Most Popular"
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setDifferentProductsDiscountRules(prev => prev.map((r, i) => i === index ? { ...r, badge: val } : r));
+                                      }}
+                                    />
+                                  </label>
+                                </div>
+
+                                <div className="create-offer-discount-form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '12px' }}>
+                                  <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                    Title
+                                    <Input
+                                      size="large"
+                                      className="mt-1"
+                                      value={rule.title || ''}
+                                      placeholder="e.g. Duo, Trio"
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setDifferentProductsDiscountRules(prev => prev.map((r, i) => i === index ? { ...r, title: val } : r));
+                                      }}
+                                    />
+                                  </label>
+                                  <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                    Subtitle
+                                    <Input
+                                      size="large"
+                                      className="mt-1"
+                                      value={rule.subtitle || ''}
+                                      placeholder="e.g. You save 20%"
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setDifferentProductsDiscountRules(prev => prev.map((r, i) => i === index ? { ...r, subtitle: val } : r));
+                                      }}
+                                    />
+                                  </label>
+                                </div>
+
+                                <div className="create-offer-discount-form-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Checkbox
+                                    checked={!!rule.isDefault}
+                                    onChange={(e) => {
+                                      const checked = e.target.checked;
+                                      setDifferentProductsDiscountRules(prev =>
+                                        prev.map((r, i) => ({
+                                          ...r,
+                                          isDefault: checked ? i === index : false,
+                                        })),
+                                      );
+                                    }}
+                                  >
+                                    Set as Default Selected
+                                  </Checkbox>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                         <Button
                           type="dashed"
                           className="w-full"
                           onClick={() => {
                             setDifferentProductsDiscountRules(prev => {
                               const maxCount = prev.reduce((max, rule) => Math.max(max, rule.count), 1);
+                              const lastRule = prev[prev.length - 1] || { buyQuantity: 2, getQuantity: 1, buyProductIds: [], getProductIds: [] };
                               return [...prev, {
                                 count: maxCount + 1,
                                 discountPercent: 15,
-                                productIds: selectedProductsData.map(p => p.id),
+                                buyQuantity: lastRule.buyQuantity || 2,
+                                getQuantity: lastRule.getQuantity || 1,
+                                buyProductIds: lastRule.buyProductIds.length > 0 ? lastRule.buyProductIds : selectedProductsData.map(p => p.id),
+                                getProductIds: lastRule.getProductIds && lastRule.getProductIds.length > 0 ? lastRule.getProductIds : [],
                               }];
                             });
                           }}
@@ -2109,46 +1811,21 @@ export function CreateNewOffer({
                       )?.description
                     }
                   </p>
-                  {offerType === "quantity-breaks-different" ? (
-                    <BundlePreview
-                      layoutFormat={layoutFormat}
-                      cardBackgroundColor={cardBackgroundColor}
-                      accentColor={accentColor}
-                      borderColor={borderColor}
-                      labelColor={labelColor}
-                      titleFontSize={titleFontSize}
-                      titleFontWeight={titleFontWeight}
-                      titleColor={titleColor}
-                      buttonText={buttonText}
-                      buttonPrimaryColor={buttonPrimaryColor}
-                      showCustomButton={showCustomButton}
-                      title={widgetTitle}
-                      items={previewItems}
-                      bundleProducts={previewProducts.map(p => ({
-                        id: p.id,
-                        title: p.title,
-                        image: p.image,
-                        price: p.discountedPrice || p.price,
-                        variantTitle: p.variantTitle,
-                      }))}
-                    />
-                  ) : (
-                    <BundlePreview
-                      layoutFormat={layoutFormat}
-                      cardBackgroundColor={cardBackgroundColor}
-                      accentColor={accentColor}
-                      borderColor={borderColor}
-                      labelColor={labelColor}
-                      titleFontSize={titleFontSize}
-                      titleFontWeight={titleFontWeight}
-                      titleColor={titleColor}
-                      buttonText={buttonText}
-                      buttonPrimaryColor={buttonPrimaryColor}
-                      showCustomButton={showCustomButton}
-                      title={widgetTitle}
-                      items={previewItems}
-                    />
-                  )}
+                  <BundlePreview
+                    layoutFormat={layoutFormat}
+                    cardBackgroundColor={cardBackgroundColor}
+                    accentColor={accentColor}
+                    borderColor={borderColor}
+                    labelColor={labelColor}
+                    titleFontSize={titleFontSize}
+                    titleFontWeight={titleFontWeight}
+                    titleColor={titleColor}
+                  buttonText={buttonText}
+                  buttonPrimaryColor={buttonPrimaryColor}
+                  showCustomButton={showCustomButton}
+                  title={widgetTitle}
+                  items={previewItems}
+                  />
                   <p className="text-[12px] text-[#5c6166] mt-3 italic font-normal">
                     Note: This is a live preview. Changes will update in real-time when state is connected.
                   </p>
@@ -2447,46 +2124,21 @@ export function CreateNewOffer({
                     )?.description
                   }
                 </p>
-                {offerType === "quantity-breaks-different" ? (
-                  <BundlePreview
-                    layoutFormat={layoutFormat}
-                    cardBackgroundColor={cardBackgroundColor}
-                    accentColor={accentColor}
-                    borderColor={borderColor}
-                    labelColor={labelColor}
-                    titleFontSize={titleFontSize}
-                    titleFontWeight={titleFontWeight}
-                    titleColor={titleColor}
-                    buttonText={buttonText}
-                    buttonPrimaryColor={buttonPrimaryColor}
-                    showCustomButton={showCustomButton}
-                    title={widgetTitle}
-                    items={previewItems}
-                    bundleProducts={previewProducts.map(p => ({
-                      id: p.id,
-                      title: p.title,
-                      image: p.image,
-                      price: p.discountedPrice || p.price,
-                      variantTitle: p.variantTitle,
-                    }))}
-                  />
-                ) : (
-                  <BundlePreview
-                    layoutFormat={layoutFormat}
-                    cardBackgroundColor={cardBackgroundColor}
-                    accentColor={accentColor}
-                    borderColor={borderColor}
-                    labelColor={labelColor}
-                    titleFontSize={titleFontSize}
-                    titleFontWeight={titleFontWeight}
-                    titleColor={titleColor}
-                    buttonText={buttonText}
-                    buttonPrimaryColor={buttonPrimaryColor}
-                    showCustomButton={showCustomButton}
-                    title={widgetTitle}
-                    items={previewItems}
-                  />
-                )}
+                <BundlePreview
+                  layoutFormat={layoutFormat}
+                  cardBackgroundColor={cardBackgroundColor}
+                  accentColor={accentColor}
+                  borderColor={borderColor}
+                  labelColor={labelColor}
+                  titleFontSize={titleFontSize}
+                  titleFontWeight={titleFontWeight}
+                  titleColor={titleColor}
+                  buttonText={buttonText}
+                  buttonPrimaryColor={buttonPrimaryColor}
+                  showCustomButton={showCustomButton}
+                  title={widgetTitle}
+                  items={previewItems}
+                />
                 <p className="text-[12px] text-[#5c6166] mt-3 italic font-normal">
                   Note: This is a live preview. Changes will update in real-time when state is connected.
                 </p>
@@ -2495,15 +2147,16 @@ export function CreateNewOffer({
           )}
 
           {step === 4 && (
-            <div>
-              <h2 className="text-[20px] font-semibold mb-6 text-[#1c1f23]">
-                Targeting & Settings
-              </h2>
+            <div className="create-offer-basic-grid lg:grid-cols-[1fr_400px]">
+              <div>
+                <h2 className="text-[20px] font-semibold mb-6 text-[#1c1f23]">
+                  Targeting & Settings
+                </h2>
 
-              <div className="mb-8">
-                <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                  Target Audience
-                </h3>
+                <div className="mb-8">
+                  <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
+                    Target Audience
+                  </h3>
                 <div className="flex flex-col gap-4">
                   {/* Hidden Customer Segments */}
                   {false && <div>
@@ -2775,6 +2428,38 @@ export function CreateNewOffer({
                 </div>
               </div>}
             </div>
+
+            <div className="create-offer-sticky-preview">
+              <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
+                Live Preview
+              </h3>
+              <p className="text-[13px] text-[#5c6166] mb-6 font-normal">
+                {
+                  offerTypes.find(
+                    (type) => type.id === offerType,
+                  )?.description
+                }
+              </p>
+              <BundlePreview
+                layoutFormat={layoutFormat}
+                cardBackgroundColor={cardBackgroundColor}
+                accentColor={accentColor}
+                borderColor={borderColor}
+                labelColor={labelColor}
+                titleFontSize={titleFontSize}
+                titleFontWeight={titleFontWeight}
+                titleColor={titleColor}
+                buttonText={buttonText}
+                buttonPrimaryColor={buttonPrimaryColor}
+                showCustomButton={showCustomButton}
+                title={widgetTitle}
+                items={previewItems}
+              />
+              <p className="text-[12px] text-[#5c6166] mt-3 italic font-normal">
+                Note: This is a live preview. Changes will update in real-time when state is connected.
+              </p>
+            </div>
+            </div>
           )}
         </div>
       </div>
@@ -2889,158 +2574,6 @@ export function CreateNewOffer({
               : "Next"}
         </Button>
       </div>
-
-      {/* Variant Selection Modal */}
-      <Modal
-        title={`Select Variant for ${variantModalProduct?.title || ""}`}
-        open={variantModalVisible}
-        onCancel={() => setVariantModalVisible(false)}
-        onOk={() => setVariantModalVisible(false)}
-        footer={null}
-        width={600}
-      >
-        <div className="max-h-[400px] overflow-auto">
-          {variantModalProduct?.selectedVariants?.map((variant) => (
-            <div
-              key={variant.id}
-              className={`flex items-center gap-4 p-3 border rounded-lg mb-2 cursor-pointer transition-colors ${
-                previewProducts[variantModalTargetIndex]?.variantId === variant.id
-                  ? "border-[#008060] bg-[#f0f9f6]"
-                  : "border-[#dfe3e8] hover:border-[#008060]"
-              }`}
-              onClick={() => {
-                if (variantModalTargetIndex >= 0) {
-                  const priceNum = parseFloat((variant.price || "0").replace(/[^0-9.-]/g, ""));
-                  const discounted = priceNum > 0 ? (priceNum * 0.85).toFixed(2) : variant.price;
-                  const updated = [...previewProducts];
-                  updated[variantModalTargetIndex] = {
-                    ...updated[variantModalTargetIndex],
-                    variantId: variant.id,
-                    variantTitle: variant.title,
-                    price: variant.price,
-                    originalPrice: variant.price,
-                    discountedPrice: discounted,
-                  };
-                  setPreviewProducts(updated);
-                }
-                setVariantModalVisible(false);
-              }}
-            >
-              <img
-                src={variant.image}
-                alt={variant.title || "Variant"}
-                className="w-12 h-12 object-cover rounded-md"
-              />
-              <div className="flex-1">
-                <div className="font-medium text-[14px]">
-                  {variant.title || "Default"}
-                </div>
-                <div className="text-[12px] text-[#6d7175]">{variant.price}</div>
-              </div>
-              {previewProducts[variantModalTargetIndex]?.variantId === variant.id && (
-                <div className="text-[#008060] font-medium">Selected</div>
-              )}
-            </div>
-          ))}
-        </div>
-        <div className="mt-4 pt-4 border-t border-[#dfe3e8]">
-          <Button
-            type="link"
-            onClick={() => {
-              // Switch to a different product variant
-              const allProducts = selectedProductsData;
-              const currentProductId = previewProducts[variantModalTargetIndex]?.id;
-              const currentIndex = allProducts.findIndex(p => p.id === currentProductId);
-              if (currentIndex >= 0 && currentIndex < allProducts.length - 1) {
-                const nextProduct = allProducts[currentIndex + 1];
-                const priceNum = parseFloat((nextProduct.price || "0").replace(/[^0-9.-]/g, ""));
-                const discounted = priceNum > 0 ? (priceNum * 0.85).toFixed(2) : nextProduct.price;
-                const updated = [...previewProducts];
-                updated[variantModalTargetIndex] = {
-                  id: nextProduct.id,
-                  title: nextProduct.title,
-                  image: nextProduct.image,
-                  price: nextProduct.price,
-                  variantId: nextProduct.selectedVariants?.[0]?.id,
-                  variantTitle: nextProduct.selectedVariants?.[0]?.title || "",
-                  originalPrice: nextProduct.price,
-                  discountedPrice: discounted,
-                };
-                setPreviewProducts(updated);
-              }
-              setVariantModalVisible(false);
-            }}
-          >
-            Next Product →
-          </Button>
-        </div>
-      </Modal>
-
-      {/* Product Preview Selector Modal for Live Preview - Step 2 */}
-      {step === 2 && offerType === "quantity-breaks-different" && (
-        <div className="mt-4 p-3 border border-[#dfe3e8] rounded-lg bg-[#f9fafb]">
-          <div className="text-[12px] font-medium text-[#1c1f23] mb-2">
-            Configure Products for Live Preview
-          </div>
-          <p className="text-[11px] text-[#6d7175] mb-3">
-            Select which products (or specific variants) appear in the preview below
-          </p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {selectedProductsData.slice(0, 8).map((product, index) => {
-              const inPreview = previewProducts.some(p => p.id === product.id);
-              return (
-                <div
-                  key={product.id}
-                  className={`border rounded-lg p-2 cursor-pointer transition-all ${
-                    inPreview
-                      ? "border-[#008060] bg-[#f0f9f6]"
-                      : "border-[#dfe3e8] hover:border-[#008060]"
-                  }`}
-                  onClick={() => {
-                    if (inPreview) {
-                      // Remove from preview
-                      setPreviewProducts(previewProducts.filter(p => p.id !== product.id));
-                    } else if (previewProducts.length < 6) {
-                      // Add to preview
-                      const priceNum = parseFloat((product.price || "0").replace(/[^0-9.-]/g, ""));
-                      const discounted = priceNum > 0 ? (priceNum * 0.85).toFixed(2) : product.price;
-                      setPreviewProducts([...previewProducts, {
-                        id: product.id,
-                        title: product.title,
-                        image: product.image,
-                        price: product.price,
-                        variantId: product.selectedVariants?.[0]?.id,
-                        variantTitle: product.selectedVariants?.[0]?.title || "",
-                        originalPrice: product.price,
-                        discountedPrice: discounted,
-                      }]);
-                    }
-                  }}
-                >
-                  <img
-                    src={product.image}
-                    alt={product.title}
-                    className="w-full aspect-square object-cover rounded-md mb-1"
-                  />
-                  <div className="text-[11px] font-medium truncate">{product.title}</div>
-                  <div className="text-[10px] text-[#6d7175]">{product.price}</div>
-                  {product.variantsCount > 1 && (
-                    <div className="text-[9px] text-[#008060] mt-1">
-                      {product.variantsCount} variants
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          {selectedProductsData.length === 0 && (
-            <div className="text-center py-4 text-[#6d7175] text-[13px]">
-              No products selected. Add products above to configure the preview.
-            </div>
-          )}
-        </div>
-      )}
-
     </fetcher.Form>
   );
 }

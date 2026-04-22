@@ -9,12 +9,14 @@ export type PreviewItem = {
   featured?: boolean;
   badge?: string;
   saveLabel?: string;
-  /** Product image URL for quantity-breaks-different preview */
-  image?: string;
-  /** Whether this is a product item (vs a tier item) */
-  isProduct?: boolean;
-  /** Variant title for product items */
-  variantTitle?: string;
+  products?: PreviewProduct[];
+};
+
+export type PreviewProduct = {
+  id: string | number;
+  name: string;
+  image: string;
+  variant?: string;
 };
 
 export const PREVIEW_ITEMS: PreviewItem[] = [
@@ -32,14 +34,6 @@ export const PREVIEW_ITEMS: PreviewItem[] = [
   { id: "trio", title: "Trio", subtitle: "Extra savings", price: "€149,00", original: "€195,00", saveLabel: "SAVE €46,00" },
   { id: "pack4", title: "Pack of 4", subtitle: "Best value", price: "€185,00", original: "€260,00", saveLabel: "SAVE €75,00" },
 ];
-
-export type BundlePreviewProduct = {
-  id: string;
-  title: string;
-  image: string;
-  price: string;
-  variantTitle?: string;
-};
 
 function esc(value: unknown) {
   return String(value ?? "")
@@ -64,7 +58,7 @@ export function renderBundlePreviewHtml({
   buttonPrimaryColor = "#008060",
   showCustomButton = true,
   items = PREVIEW_ITEMS,
-  bundleProducts = [],
+  showProductImages = true,
 }: {
   title?: string;
   layoutFormat?: LayoutFormat;
@@ -79,11 +73,23 @@ export function renderBundlePreviewHtml({
   buttonPrimaryColor?: string;
   showCustomButton?: boolean;
   items?: PreviewItem[];
-  bundleProducts?: BundlePreviewProduct[];
+  showProductImages?: boolean;
 } = {}) {
   const safeLayout: LayoutFormat = ["vertical", "horizontal", "card", "compact"].includes(layoutFormat)
     ? layoutFormat
     : "vertical";
+
+  function renderProductsHtml(products?: PreviewProduct[]): string {
+    if (!showProductImages || !products || products.length === 0) return "";
+    return `<div class="create-offer-preview-products" style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px;">
+      ${products.map(p => `
+        <div class="create-offer-preview-product" style="position: relative; width: 48px; height: 48px; border-radius: 8px; overflow: hidden; border: 1px solid ${borderColor};">
+          <img src="${esc(p.image)}" alt="${esc(p.name)}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.style.display='none'" />
+          ${p.variant ? `<span style="position: absolute; bottom: 0; left: 0; right: 0; background: ${accentColor}; color: ${labelColor}; font-size: 8px; text-align: center; padding: 1px;">${esc(p.variant)}</span>` : ''}
+        </div>
+      `).join('')}
+    </div>`;
+  }
 
   const itemsHtml = items.map((item) => {
     const featuredClass = item.featured ? " create-offer-style-preview-item--featured" : "";
@@ -97,6 +103,7 @@ export function renderBundlePreviewHtml({
           ? `<div class="create-offer-style-preview-badge" style="background:${esc(accentColor)} !important; color:${esc(labelColor)} !important;">${esc(item.badge)}</div>`
           : ""
       }
+      ${renderProductsHtml(item.products)}
       <div class="create-offer-style-preview-item-title">${esc(item.title)}</div>
       <div class="create-offer-style-preview-item-subtitle">${esc(item.subtitle)}</div>
       ${
@@ -113,25 +120,8 @@ export function renderBundlePreviewHtml({
     </div>`;
   }).join("");
 
-  // Render bundle products section (for quantity-breaks-different)
-  const bundleProductsHtml = bundleProducts.length > 0
-    ? `<div class="create-offer-bundle-products">
-        ${bundleProducts.map(p => `
-          <div class="create-offer-bundle-product">
-            <img src="${esc(p.image)}" alt="${esc(p.title)}" class="create-offer-bundle-product-image" />
-            <div class="create-offer-bundle-product-info">
-              <div class="create-offer-bundle-product-title">${esc(p.title)}</div>
-              ${p.variantTitle ? `<div class="create-offer-bundle-product-variant">${esc(p.variantTitle)}</div>` : ''}
-              <div class="create-offer-bundle-product-price">${esc(p.price)}</div>
-            </div>
-          </div>
-        `).join('')}
-      </div>`
-    : '';
-
   return `<div class="create-offer-preview-card">
     <div class="create-offer-style-preview-header" style="color:${esc(titleColor)} !important; font-size: ${esc(titleFontSize)}px !important; font-weight: ${esc(titleFontWeight)} !important;">${esc(title)}</div>
-    ${bundleProductsHtml}
     <div class="create-offer-style-preview-list create-offer-style-preview-list--${safeLayout}">
       ${itemsHtml}
     </div>

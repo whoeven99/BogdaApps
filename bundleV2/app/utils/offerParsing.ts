@@ -186,27 +186,18 @@ export type DifferentProductsDiscountRule = {
   /** Cart quantity threshold across all different eligible products */
   count: number;
   discountPercent: number;
-  /** Product IDs that are eligible for this offer */
-  productIds: string[];
+  /** Number of items customer needs to buy */
+  buyQuantity: number;
+  /** Number of items customer gets with discount */
+  getQuantity: number;
+  /** Product IDs that customer needs to buy */
+  buyProductIds: string[];
+  /** Product IDs that customer gets with discount (empty means same as buyProductIds) */
+  getProductIds: string[];
   title?: string;
   subtitle?: string;
   badge?: string;
   isDefault?: boolean;
-  /** Per-product pricing configuration for this tier */
-  productPricing?: ProductPricingConfig[];
-};
-
-/** Per-product pricing configuration */
-export type ProductPricingConfig = {
-  productId: string;
-  /** Discount type: 'percent' | 'fixed' | 'variant' */
-  discountType: "percent" | "fixed" | "variant";
-  /** Discount value (percentage or fixed amount) */
-  discountValue?: number;
-  /** Variant IDs to apply special pricing (for 'variant' type) */
-  variantIds?: string[];
-  /** Fixed price override for variant pricing */
-  variantFixedPrices?: Record<string, number>;
 };
 
 export function parseDiscountRules(discountRulesJson?: string | null): DiscountRule[] {
@@ -373,47 +364,25 @@ export function parseDifferentProductsDiscountRules(
       if (!Number.isFinite(count) || count < 1) continue;
       if (!Number.isFinite(discountPercent)) continue;
 
-      const productIds = (item as { productIds?: unknown }).productIds;
-      if (!Array.isArray(productIds) || !productIds.length) continue;
+      const buyQuantity = Number((item as { buyQuantity?: unknown }).buyQuantity) || 1;
+      const getQuantity = Number((item as { getQuantity?: unknown }).getQuantity) || 0;
 
-      const productPricing = (item as { productPricing?: unknown }).productPricing;
-      const parsedPricing: ProductPricingConfig[] = [];
-      if (Array.isArray(productPricing)) {
-        for (const p of productPricing) {
-          if (!p || typeof p !== "object") continue;
-          parsedPricing.push({
-            productId: String((p as { productId?: unknown }).productId || ""),
-            discountType: (["percent", "fixed", "variant"].includes(
-              String((p as { discountType?: unknown }).discountType)
-            ) ? String((p as { discountType?: unknown }).discountType) : "percent") as ProductPricingConfig["discountType"],
-            discountValue: Number.isFinite((p as { discountValue?: unknown }).discountValue)
-              ? Number((p as { discountValue?: unknown }).discountValue)
-              : undefined,
-            variantIds: Array.isArray((p as { variantIds?: unknown }).variantIds)
-              ? (p as { variantIds?: unknown }).variantIds.filter((v: unknown) => typeof v === "string") as string[]
-              : undefined,
-            variantFixedPrices: (() => {
-              const vfp = (p as { variantFixedPrices?: unknown }).variantFixedPrices;
-              if (typeof vfp !== "object" || vfp === null) return undefined;
-              const result: Record<string, number> = {};
-              for (const [k, v] of Object.entries(vfp)) {
-                if (typeof v === "number" && Number.isFinite(v)) result[k] = v;
-              }
-              return Object.keys(result).length > 0 ? result : undefined;
-            })(),
-          });
-        }
-      }
+      const buyProductIds = (item as { buyProductIds?: unknown }).buyProductIds;
+      const getProductIds = (item as { getProductIds?: unknown }).getProductIds;
+
+      if (!Array.isArray(buyProductIds) || !buyProductIds.length) continue;
 
       out.push({
         count: Math.trunc(count),
         discountPercent: Math.max(0, Math.min(100, discountPercent)),
-        productIds: productIds.filter((id: unknown) => typeof id === "string") as string[],
+        buyQuantity: Math.max(1, Math.trunc(buyQuantity)),
+        getQuantity: Math.max(0, Math.trunc(getQuantity)),
+        buyProductIds: buyProductIds.filter((id: unknown) => typeof id === "string") as string[],
+        getProductIds: Array.isArray(getProductIds) ? getProductIds.filter((id: unknown) => typeof id === "string") as string[] : [],
         title: (item as { title?: string }).title || "",
         subtitle: (item as { subtitle?: string }).subtitle || "",
         badge: (item as { badge?: string }).badge || "",
         isDefault: !!(item as { isDefault?: boolean }).isDefault,
-        productPricing: parsedPricing.length > 0 ? parsedPricing : undefined,
       });
     }
     out.sort((a, b) => a.count - b.count);
@@ -433,22 +402,18 @@ export function buildDifferentProductsDiscountRulesJson(
     dedupedByCount.set(Math.trunc(tier.count), {
       count: Math.trunc(tier.count),
       discountPercent: Math.max(0, Math.min(100, tier.discountPercent)),
-      productIds: Array.isArray(tier.productIds)
-        ? tier.productIds.filter((id: unknown) => typeof id === "string")
+      buyQuantity: Math.max(1, Math.trunc(tier.buyQuantity || 1)),
+      getQuantity: Math.max(0, Math.trunc(tier.getQuantity || 0)),
+      buyProductIds: Array.isArray(tier.buyProductIds)
+        ? tier.buyProductIds.filter((id: unknown) => typeof id === "string")
+        : [],
+      getProductIds: Array.isArray(tier.getProductIds)
+        ? tier.getProductIds.filter((id: unknown) => typeof id === "string")
         : [],
       title: tier.title || "",
       subtitle: tier.subtitle || "",
       badge: tier.badge || "",
       isDefault: !!tier.isDefault,
-      productPricing: Array.isArray(tier.productPricing) && tier.productPricing.length > 0
-        ? tier.productPricing.map(pp => ({
-            productId: pp.productId,
-            discountType: pp.discountType,
-            discountValue: pp.discountValue,
-            variantIds: Array.isArray(pp.variantIds) ? pp.variantIds : undefined,
-            variantFixedPrices: pp.variantFixedPrices,
-          }))
-        : undefined,
     });
   }
   return Array.from(dedupedByCount.values()).sort((a, b) => a.count - b.count);
