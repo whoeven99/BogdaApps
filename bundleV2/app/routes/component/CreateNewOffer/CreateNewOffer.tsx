@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { useFetcher, useNavigate, useSearchParams } from "react-router";
-import { Button, Input, Select, Switch, Checkbox, DatePicker, Modal, message } from "antd";
+import { Button, Input, Select, Switch, Checkbox, DatePicker, Modal, message, Dropdown } from "antd";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -550,6 +550,44 @@ export function CreateNewOffer({
     completeBundleBars.find((bar) => bar.id === activeBundleBarId) ||
     completeBundleBars[0] ||
     null;
+  // 统一格式化价格，优先显示为欧元格式，避免预览里丢失价格展示
+  const formatBundlePrice = (raw?: string) => {
+    if (!raw) return "€0.00";
+    const cleaned = String(raw).trim();
+    if (/[€$£¥]/.test(cleaned)) return cleaned;
+    const parsed = Number(cleaned.replace(",", "."));
+    if (Number.isFinite(parsed)) return `€${parsed.toFixed(2)}`;
+    return cleaned;
+  };
+
+  const updateBundleBarProductVariant = (
+    barId: string,
+    productId: string,
+    variantId: string,
+  ) => {
+    setCompleteBundleBars((prev) =>
+      prev.map((bar) => {
+        if (bar.id !== barId) return bar;
+        return {
+          ...bar,
+          products: bar.products.map((product) => {
+            if (product.productId !== productId) return product;
+            const hit = product.variants?.find((v) => v.id === variantId);
+            return {
+              ...product,
+              selectedVariantId: variantId,
+              selectedOptions: Array.isArray(hit?.selectedOptions)
+                ? Object.fromEntries(
+                    (hit?.selectedOptions || []).map((opt) => [opt.name, opt.value]),
+                  )
+                : product.selectedOptions || {},
+              price: hit?.price || product.price,
+            };
+          }),
+        };
+      }),
+    );
+  };
 
   useEffect(() => {
     if (offerType === 'bxgy') {
@@ -1140,14 +1178,21 @@ export function CreateNewOffer({
                         <h3 className="text-[14px] font-medium text-[#1c1f23]">
                           Bundle bars
                         </h3>
-                        <div className="flex gap-2">
-                          <Button size="small" onClick={(e) => { addCompleteBundleBar("quantity-break-same"); e.preventDefault(); }}>
-                            Add Quantity bar
-                          </Button>
-                          <Button size="small" onClick={(e) => { addCompleteBundleBar("bxgy"); e.preventDefault(); }}>
-                            Add Buy X Get Y bar
-                          </Button>
-                        </div>
+                        <Dropdown
+                          trigger={["click"]}
+                          menu={{
+                            items: [
+                              { key: "quantity", label: "Add Quantity bar" },
+                              { key: "bxgy", label: "Add Buy X Get Y bar" },
+                            ],
+                            onClick: ({ key }) => {
+                              if (key === "bxgy") addCompleteBundleBar("bxgy");
+                              else addCompleteBundleBar("quantity-break-same");
+                            },
+                          }}
+                        >
+                          <Button size="small">Add bar</Button>
+                        </Dropdown>
                       </div>
                       <div className="flex flex-col gap-3">
                         {completeBundleBars.map((bar, index) => (
@@ -1208,16 +1253,6 @@ export function CreateNewOffer({
                             <div className="text-[12px] text-[#5c6166] mt-2">
                               {bar.products.length} products selected
                             </div>
-                            <Button
-                              size="small"
-                              className="mt-2"
-                              onClick={(e) => {
-                                handleSelectProductsForBundleBar(bar.id);
-                                e.preventDefault();
-                              }}
-                            >
-                              {bar.products.length ? "Edit bar products" : "Select bar products"}
-                            </Button>
                           </div>
                         ))}
                       </div>
@@ -1814,21 +1849,119 @@ export function CreateNewOffer({
                       )?.description
                     }
                   </p>
-                  <BundlePreview
-                    layoutFormat={layoutFormat}
-                    cardBackgroundColor={cardBackgroundColor}
-                    accentColor={accentColor}
-                    borderColor={borderColor}
-                    labelColor={labelColor}
-                    titleFontSize={titleFontSize}
-                    titleFontWeight={titleFontWeight}
-                    titleColor={titleColor}
-                  buttonText={buttonText}
-                  buttonPrimaryColor={buttonPrimaryColor}
-                  showCustomButton={showCustomButton}
-                  title={widgetTitle}
-                  items={previewItems}
-                  />
+                  {offerType === "complete-bundle" ? (
+                    <div className="create-offer-preview-card">
+                      <div className="create-offer-style-preview-header">
+                        {widgetTitle || "Bundle & Save"}
+                      </div>
+                      <div className="create-offer-style-preview-list create-offer-style-preview-list--vertical">
+                        {completeBundleBars.map((bar, barIndex) => (
+                          <div
+                            key={bar.id}
+                            className="create-offer-style-preview-item"
+                            style={{
+                              borderColor:
+                                activeBundleBar?.id === bar.id ? accentColor : borderColor,
+                              background: cardBackgroundColor,
+                            }}
+                          >
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="create-offer-style-preview-item-title">
+                                {bar.title || `Bar #${barIndex + 1}`}
+                              </div>
+                              <Button
+                                type="link"
+                                className="px-0 h-auto"
+                                onClick={(e) => {
+                                  setActiveBundleBarId(bar.id);
+                                  handleSelectProductsForBundleBar(bar.id);
+                                  e.preventDefault();
+                                }}
+                              >
+                                {bar.products.length ? "Edit bar products" : "Select bar products"}
+                              </Button>
+                            </div>
+                            <div className="create-offer-style-preview-item-subtitle">
+                              {bar.subtitle ||
+                                `${bar.type === "bxgy" ? "Buy X Get Y" : "Quantity break"} · Qty ${bar.quantity}`}
+                            </div>
+                            <div className="mt-2 flex flex-col gap-2">
+                              {bar.products.length === 0 ? (
+                                <div className="text-[12px] text-[#5c6166]">
+                                  No products selected.
+                                </div>
+                              ) : (
+                                bar.products.map((product) => {
+                                  const selectedVariant =
+                                    product.variants?.find((v) => v.id === product.selectedVariantId) ||
+                                    product.variants?.[0];
+                                  return (
+                                    <div key={product.productId} className="rounded border border-[#e5e7eb] p-2">
+                                      <div className="text-[12px] font-medium text-[#1c1f23]">
+                                        {product.title || product.productId}
+                                      </div>
+                                      <div className="text-[12px] text-[#5c6166] mt-1">
+                                        {formatBundlePrice(selectedVariant?.price || product.price)}
+                                      </div>
+                                      {Array.isArray(product.variants) && product.variants.length > 0 && (
+                                        <Select
+                                          size="small"
+                                          className="w-full mt-2"
+                                          value={product.selectedVariantId || product.variants[0].id}
+                                          onChange={(variantId) =>
+                                            updateBundleBarProductVariant(
+                                              bar.id,
+                                              product.productId,
+                                              String(variantId),
+                                            )
+                                          }
+                                          options={product.variants.map((variant) => ({
+                                            label: variant.title || "Default",
+                                            value: variant.id,
+                                          }))}
+                                        />
+                                      )}
+                                      {selectedVariant?.selectedOptions?.length ? (
+                                        <div className="text-[12px] text-[#5c6166] mt-1">
+                                          {selectedVariant.selectedOptions
+                                            .map((opt) => `${opt.name}: ${opt.value}`)
+                                            .join(" / ")}
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      {showCustomButton ? (
+                        <button
+                          className="create-offer-preview-button"
+                          style={{ background: buttonPrimaryColor, marginTop: 12 }}
+                        >
+                          {buttonText}
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <BundlePreview
+                      layoutFormat={layoutFormat}
+                      cardBackgroundColor={cardBackgroundColor}
+                      accentColor={accentColor}
+                      borderColor={borderColor}
+                      labelColor={labelColor}
+                      titleFontSize={titleFontSize}
+                      titleFontWeight={titleFontWeight}
+                      titleColor={titleColor}
+                      buttonText={buttonText}
+                      buttonPrimaryColor={buttonPrimaryColor}
+                      showCustomButton={showCustomButton}
+                      title={widgetTitle}
+                      items={previewItems}
+                    />
+                  )}
                   <p className="text-[12px] text-[#5c6166] mt-3 italic font-normal">
                     Note: This is a live preview. Changes will update in real-time when state is connected.
                   </p>
