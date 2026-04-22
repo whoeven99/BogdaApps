@@ -14,6 +14,7 @@
       {% endfor %}
     ],
     "marketId": {{ localization.market.id | json }},
+    "countryIsoCode": {{ localization.country.iso_code | json }},
     "variants": [
       {% for item in product.variants %}
         {

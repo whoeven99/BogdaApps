@@ -12,6 +12,7 @@ import {
 import {
   authenticate,
   ensureCartLinesAutomaticDiscount,
+  ensureBundleDeliveryAutomaticDiscount,
 } from "../../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { DashboardPage } from "../page/DashboardPage";
@@ -40,6 +41,8 @@ import {
 import {
   OFFER_TEXT_LIMITS,
   clampNumber,
+  parseProgressiveGiftsConfig,
+  progressiveGiftsConfigToStorableJson,
   sanitizeHexColor,
   sanitizeSingleLineText,
 } from "../../utils/offerParsing";
@@ -670,6 +673,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   void ensureCartLinesAutomaticDiscount(admin).catch((error) => {
     console.error("Failed to ensure automatic app discount exists", error);
   });
+  // 中文说明：历史安装店可能只有商品折扣自动规则，需在每次进入 App 时补偿创建 SHIPPING 自动折扣
+  void ensureBundleDeliveryAutomaticDiscount(admin).catch((error) => {
+    console.error("Failed to ensure shipping automatic app discount exists", error);
+  });
 
   // eslint-disable-next-line no-undef
   const apiKey = process.env.SHOPIFY_API_KEY || "";
@@ -947,6 +954,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return offerActionErrorResponse("Discount rules data is too large. Please reduce the number of rules.", 400);
     }
 
+    const progressiveGiftsJsonRaw = String(formData.get("progressiveGiftsJson") || "").trim();
+    if (progressiveGiftsJsonRaw.length > 100_000) {
+      return offerActionErrorResponse("Progressive gifts data is too large.", 400);
+    }
+    let progressiveGiftsSanitized = parseProgressiveGiftsConfig(null);
+    if (progressiveGiftsJsonRaw) {
+      try {
+        progressiveGiftsSanitized = parseProgressiveGiftsConfig(
+          JSON.parse(progressiveGiftsJsonRaw) as unknown,
+        );
+      } catch {
+        return offerActionErrorResponse("Invalid progressive gifts JSON.", 400);
+      }
+    }
+
     const offerSettingsJson = JSON.stringify({
       title,
       layoutFormat,
@@ -974,6 +996,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       buttonText,
       showCustomButton,
       scheduleTimezone: scheduleTimezoneRaw || undefined,
+      progressiveGifts: progressiveGiftsConfigToStorableJson(progressiveGiftsSanitized),
     });
 
     // Store which Shopify shop this offer belongs to.
