@@ -926,3 +926,289 @@
 .create-offer-bottom-bar {
 }
 
+/* ── Diff-tier progress bar ── */
+.diff-tier-progress-bar {
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  background: #f6f8fa;
+  border-radius: 8px;
+}
+
+.diff-tier-progress-bar__label {
+  font-size: 12px;
+  color: #6d7175;
+  margin-bottom: 8px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.diff-tier-progress-bar__track {
+  position: relative;
+  height: 6px;
+  background: linear-gradient(to right, #d1fae5, #6ee7b7, #34d399, #10b981);
+  border-radius: 3px;
+  margin-top: 4px;
+}
+
+.diff-tier-progress-bar__dot-group {
+  position: absolute;
+  top: 50%;
+  transform: translateX(-50%) translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+}
+
+.diff-tier-progress-bar__dot {
+  width: 12px;
+  height: 12px;
+  background: #ffffff;
+  border: 2px solid #10b981;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px #d1fae5;
+}
+
+.diff-tier-progress-bar__dot-label {
+  position: absolute;
+  top: 16px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #059669;
+  white-space: nowrap;
+}
+
+/* ── Diff-tier card ── */
+.diff-tier-card {
+  border: 1px solid #dfe3e8;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  overflow: hidden;
+  background: #ffffff;
+  transition: box-shadow 0.2s;
+}
+
+.diff-tier-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+.diff-tier-card--featured {
+  border-color: #10b981;
+  box-shadow: 0 0 0 1px #10b981;
+}
+
+/* Header */
+.diff-tier-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #f0f2f5;
+}
+
+.diff-tier-card__header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.diff-tier-card__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  background: #f0f2f5;
+  color: #5c6166;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.diff-tier-card__badge--featured {
+  background: #10b981;
+  color: #ffffff;
+}
+
+.diff-tier-card__title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1c1f23;
+}
+
+.diff-tier-card__subtitle {
+  font-size: 13px;
+  color: #6d7175;
+}
+
+.diff-tier-card__header-right {
+  display: flex;
+  align-items: center;
+}
+
+.diff-tier-card__discount {
+  font-size: 24px;
+  font-weight: 800;
+  color: #10b981;
+  line-height: 1;
+}
+
+.diff-tier-card__discount-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #10b981;
+}
+
+/* Buy / Get Row */
+.diff-tier-card__buyget {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  padding: 16px 20px;
+  background: #fafbfc;
+}
+
+.diff-tier-card__buyget-section {
+  flex: 1;
+  min-width: 0;
+}
+
+.diff-tier-card__buyget-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #10b981;
+  flex-shrink: 0;
+}
+
+.diff-tier-card__buyget-qty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.diff-tier-card__qty-input {
+  width: 70px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.diff-tier-card__qty-suffix {
+  font-size: 12px;
+  font-weight: 700;
+  color: #5c6166;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.diff-tier-card__buyget-products {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.diff-tier-card__products-label {
+  font-size: 12px;
+  color: #5c6166;
+  font-weight: 500;
+}
+
+.diff-tier-card__products-hint {
+  font-weight: 400;
+  margin-left: 4px;
+  font-style: italic;
+}
+
+.diff-tier-card__thumb-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.diff-tier-card__thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #dfe3e8;
+  flex-shrink: 0;
+}
+
+.diff-tier-card__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.diff-tier-card__thumb--more {
+  background: #f4f6f8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #5c6166;
+}
+
+/* Footer */
+.diff-tier-card__footer {
+  padding: 16px 20px;
+  border-top: 1px solid #f0f2f5;
+}
+
+.diff-tier-card__footer-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.diff-tier-card__footer-row:last-of-type {
+  margin-bottom: 12px;
+}
+
+.diff-tier-card__footer-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.diff-tier-card__field-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #5c6166;
+}
+
+.diff-tier-card__discount-input {
+  font-weight: 700;
+  font-size: 15px;
+  color: #10b981;
+  width: 90px;
+}
+
+.diff-tier-card__warning {
+  font-size: 11px;
+  color: #d97706;
+  font-weight: 500;
+}
+
+.diff-tier-card__warning--danger {
+  color: #dc2626;
+}
+
+.diff-tier-card__badge-input,
+.diff-tier-card__title-input,
+.diff-tier-card__subtitle-input {
+  font-size: 13px;
+}
