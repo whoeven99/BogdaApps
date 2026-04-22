@@ -181,6 +181,46 @@ export type BxgyDiscountRule = {
   isDefault?: boolean;
 };
 
+export type CompleteBundlePricingMode =
+  | "full_price"
+  | "percentage_off"
+  | "amount_off"
+  | "fixed_price";
+
+export type CompleteBundleProduct = {
+  productId: string;
+  title?: string;
+  image?: string;
+  price?: string;
+  defaultVariantId?: string;
+  selectedVariantId?: string;
+  // 变体 option 值（如 Color/Size），用于前端预览回显
+  selectedOptions?: Record<string, string>;
+  variants?: Array<{
+    id: string;
+    title: string;
+    price?: string;
+    selectedOptions?: Array<{ name: string; value: string }>;
+  }>;
+};
+
+export type CompleteBundleBar = {
+  id: string;
+  type: "quantity-break-same" | "bxgy";
+  title?: string;
+  subtitle?: string;
+  quantity: number;
+  products: CompleteBundleProduct[];
+  pricing: {
+    mode: CompleteBundlePricingMode;
+    value: number;
+  };
+};
+
+export type CompleteBundleConfig = {
+  bars: CompleteBundleBar[];
+};
+
 export function parseDiscountRules(discountRulesJson?: string | null): DiscountRule[] {
   if (!discountRulesJson) return [];
 
@@ -317,4 +357,148 @@ export function buildBxgyDiscountRulesJson(tiers: BxgyDiscountRule[]): BxgyDisco
     });
   }
   return Array.from(dedupedByCount.values()).sort((a, b) => a.count - b.count);
+}
+
+export function parseCompleteBundleConfig(
+  selectedProductsJson?: string | null,
+): CompleteBundleConfig {
+  if (!selectedProductsJson) return { bars: [] };
+  try {
+    const parsed = JSON.parse(selectedProductsJson) as unknown;
+    const barsInput = (parsed as { bars?: unknown })?.bars;
+    if (!Array.isArray(barsInput)) return { bars: [] };
+
+    const bars: CompleteBundleBar[] = [];
+    for (const rawBar of barsInput) {
+      if (!rawBar || typeof rawBar !== "object") continue;
+      const id = String((rawBar as { id?: unknown }).id || "").trim();
+      if (!id) continue;
+      const typeRaw = String((rawBar as { type?: unknown }).type || "quantity-break-same");
+      const type: CompleteBundleBar["type"] =
+        typeRaw === "bxgy" ? "bxgy" : "quantity-break-same";
+      const quantityNum = Number((rawBar as { quantity?: unknown }).quantity);
+      const quantity = Number.isFinite(quantityNum) && quantityNum > 0 ? Math.trunc(quantityNum) : 1;
+
+      const pricingRaw = (rawBar as { pricing?: unknown }).pricing;
+      const modeRaw = String((pricingRaw as { mode?: unknown })?.mode || "full_price");
+      const mode: CompleteBundlePricingMode = (
+        ["full_price", "percentage_off", "amount_off", "fixed_price"] as const
+      ).includes(modeRaw as CompleteBundlePricingMode)
+        ? (modeRaw as CompleteBundlePricingMode)
+        : "full_price";
+      const valueRaw = Number((pricingRaw as { value?: unknown })?.value);
+      const value = Number.isFinite(valueRaw) ? valueRaw : 0;
+
+      const productsRaw = (rawBar as { products?: unknown }).products;
+      const products: CompleteBundleProduct[] = Array.isArray(productsRaw)
+        ? productsRaw
+            .filter((p) => p && typeof p === "object")
+            .map((p) => {
+              const productId = String((p as { productId?: unknown }).productId || "").trim();
+              const variantsRaw = (p as { variants?: unknown }).variants;
+              return {
+                productId,
+                title: String((p as { title?: unknown }).title || ""),
+                image: String((p as { image?: unknown }).image || ""),
+                price: String((p as { price?: unknown }).price || ""),
+                defaultVariantId: String((p as { defaultVariantId?: unknown }).defaultVariantId || ""),
+                selectedVariantId: String((p as { selectedVariantId?: unknown }).selectedVariantId || ""),
+                selectedOptions:
+                  (p as { selectedOptions?: unknown }).selectedOptions &&
+                  typeof (p as { selectedOptions?: unknown }).selectedOptions === "object"
+                    ? ((p as { selectedOptions?: Record<string, string> }).selectedOptions || {})
+                    : {},
+                variants: Array.isArray(variantsRaw)
+                  ? variantsRaw
+                      .filter((v) => v && typeof v === "object")
+                      .map((v) => ({
+                        id: String((v as { id?: unknown }).id || ""),
+                        title: String((v as { title?: unknown }).title || ""),
+                        price: String((v as { price?: unknown }).price || ""),
+                        selectedOptions: Array.isArray((v as { selectedOptions?: unknown }).selectedOptions)
+                          ? ((v as { selectedOptions?: Array<{ name?: unknown; value?: unknown }> }).selectedOptions || [])
+                              .map((opt) => ({
+                                name: String(opt.name || ""),
+                                value: String(opt.value || ""),
+                              }))
+                          : [],
+                      }))
+                  : [],
+              };
+            })
+            .filter((p) => p.productId)
+        : [];
+
+      bars.push({
+        id,
+        type,
+        title: String((rawBar as { title?: unknown }).title || ""),
+        subtitle: String((rawBar as { subtitle?: unknown }).subtitle || ""),
+        quantity,
+        pricing: { mode, value },
+        products,
+      });
+    }
+    return { bars };
+  } catch {
+    return { bars: [] };
+  }
+}
+
+export function buildCompleteBundleConfig(
+  config: CompleteBundleConfig,
+): CompleteBundleConfig {
+  const bars = Array.isArray(config?.bars) ? config.bars : [];
+  return {
+    bars: bars
+      .filter((bar) => bar && typeof bar === "object" && String(bar.id || "").trim())
+      .map((bar) => ({
+        id: String(bar.id).trim(),
+        type: bar.type === "bxgy" ? "bxgy" : "quantity-break-same",
+        title: String(bar.title || ""),
+        subtitle: String(bar.subtitle || ""),
+        quantity: Math.max(1, Math.trunc(Number(bar.quantity) || 1)),
+        pricing: {
+          mode: (
+            ["full_price", "percentage_off", "amount_off", "fixed_price"] as const
+          ).includes(bar.pricing?.mode as CompleteBundlePricingMode)
+            ? (bar.pricing.mode as CompleteBundlePricingMode)
+            : "full_price",
+          value: Number.isFinite(Number(bar.pricing?.value)) ? Number(bar.pricing?.value) : 0,
+        },
+        products: Array.isArray(bar.products)
+          ? bar.products
+              .filter((p) => p && typeof p === "object" && String(p.productId || "").trim())
+              .map((p) => ({
+                productId: String(p.productId).trim(),
+                title: String(p.title || ""),
+                image: String(p.image || ""),
+                price: String(p.price || ""),
+                defaultVariantId: String(p.defaultVariantId || ""),
+                selectedVariantId: String(p.selectedVariantId || ""),
+                selectedOptions:
+                  p.selectedOptions && typeof p.selectedOptions === "object"
+                    ? p.selectedOptions
+                    : {},
+                variants: Array.isArray(p.variants)
+                  ? p.variants
+                      .filter((v) => v && typeof v === "object" && String(v.id || "").trim())
+                      .map((v) => ({
+                        id: String(v.id).trim(),
+                        title: String(v.title || ""),
+                        price: String(v.price || ""),
+                        selectedOptions: Array.isArray(v.selectedOptions)
+                          ? v.selectedOptions
+                              .filter((opt) => opt && typeof opt === "object")
+                              .map((opt) => ({
+                                name: String(opt.name || ""),
+                                value: String(opt.value || ""),
+                              }))
+                          : [],
+                      }))
+                  : [],
+              }))
+          : [],
+      })),
+  };
 }

@@ -40,6 +40,7 @@ import {
 import {
   OFFER_TEXT_LIMITS,
   clampNumber,
+  parseCompleteBundleConfig,
   sanitizeHexColor,
   sanitizeSingleLineText,
 } from "../../utils/offerParsing";
@@ -945,6 +946,24 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
     if (discountRulesJson.length > 50_000) {
       return offerActionErrorResponse("Discount rules data is too large. Please reduce the number of rules.", 400);
+    }
+    if (offerType === "complete-bundle") {
+      const completeBundle = parseCompleteBundleConfig(selectedProductsJson);
+      if (!completeBundle.bars.length) {
+        return offerActionErrorResponse(
+          "Complete bundle requires at least one bar.",
+          400,
+        );
+      }
+      const hasInvalidBar = completeBundle.bars.some(
+        (bar) => !bar.products.length || !Number.isFinite(Number(bar.quantity)) || Number(bar.quantity) < 1,
+      );
+      if (hasInvalidBar) {
+        return offerActionErrorResponse(
+          "Each complete bundle bar must have products and a valid quantity.",
+          400,
+        );
+      }
     }
 
     const offerSettingsJson = JSON.stringify({

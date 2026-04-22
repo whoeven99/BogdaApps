@@ -21,6 +21,9 @@ import {
   parseOfferSettings,
   parseSelectedProductIds,
   buildBxgyDiscountRulesJson,
+  parseCompleteBundleConfig,
+  buildCompleteBundleConfig,
+  type CompleteBundleBar,
 } from "../../../utils/offerParsing";
 
 type DiscountRule = {
@@ -53,6 +56,22 @@ type Product = {
   name: string;
   price: string;
   image: string;
+};
+
+type CompleteBundleProductDraft = {
+  productId: string;
+  title: string;
+  image: string;
+  price: string;
+  defaultVariantId?: string;
+  selectedVariantId?: string;
+  selectedOptions?: Record<string, string>;
+  variants?: Array<{
+    id: string;
+    title: string;
+    price?: string;
+    selectedOptions?: Array<{ name: string; value: string }>;
+  }>;
 };
 
 interface InitialOffer {
@@ -234,6 +253,10 @@ export function CreateNewOffer({
   const [offerType, setOfferType] = useState(
     initialOffer?.offerType ?? "quantity-breaks-same",
   );
+  const initialCompleteBundleConfig = useMemo(
+    () => parseCompleteBundleConfig(initialOffer?.selectedProductsJson),
+    [initialOffer?.selectedProductsJson],
+  );
   const [offerName, setOfferName] = useState(initialOffer?.name ?? "");
   
   useEffect(() => {
@@ -399,6 +422,86 @@ export function CreateNewOffer({
       }
     }
   };
+  const addCompleteBundleBar = (type: "quantity-break-same" | "bxgy") => {
+    const id = `bar-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const newBar: CompleteBundleBar = {
+      id,
+      type,
+      title: type === "bxgy" ? "Buy X, Get Y" : "Complete the bundle",
+      subtitle: "",
+      quantity: 2,
+      products: [],
+      pricing: { mode: "full_price", value: 0 },
+    };
+    setCompleteBundleBars((prev) => [...prev, newBar]);
+    setActiveBundleBarId(id);
+  };
+
+  const removeCompleteBundleBar = (barId: string) => {
+    setCompleteBundleBars((prev) => {
+      const next = prev.filter((bar) => bar.id !== barId);
+      if (!next.length) return prev;
+      if (activeBundleBarId === barId) {
+        setActiveBundleBarId(next[0].id);
+      }
+      return next;
+    });
+  };
+
+  const updateCompleteBundleBar = (
+    barId: string,
+    patch: Partial<CompleteBundleBar>,
+  ) => {
+    setCompleteBundleBars((prev) =>
+      prev.map((bar) => (bar.id === barId ? { ...bar, ...patch } : bar)),
+    );
+  };
+
+  const handleSelectProductsForBundleBar = async (barId: string) => {
+    const targetBar = completeBundleBars.find((bar) => bar.id === barId);
+    if (!targetBar) return;
+    const selected = await (window as any).shopify.resourcePicker({
+      type: "product",
+      action: "select",
+      multiple: true,
+      selectionIds: targetBar.products.map((p) => ({ id: p.productId })),
+    });
+    if (!selected) return;
+    const mappedProducts: CompleteBundleProductDraft[] = selected.map((item: any) => ({
+      productId: String(item.id),
+      title: item.title,
+      image: item.images?.[0]?.originalSrc || "https://via.placeholder.com/60",
+      price: item.variants?.[0]?.price || "€0.00",
+      defaultVariantId: item.variants?.[0]?.id ? String(item.variants[0].id) : "",
+      selectedVariantId: item.variants?.[0]?.id ? String(item.variants[0].id) : "",
+      selectedOptions: {},
+      variants: Array.isArray(item.variants)
+        ? item.variants.map((variant: any) => ({
+            id: String(variant.id),
+            title: String(variant.title || ""),
+            price: String(variant.price || ""),
+            selectedOptions: Array.isArray(variant.selectedOptions)
+              ? variant.selectedOptions.map((opt: any) => ({
+                  name: String(opt.name || ""),
+                  value: String(opt.value || ""),
+                }))
+              : [],
+          }))
+        : [],
+    }));
+    updateCompleteBundleBar(barId, {
+      products: mappedProducts.map((p) => ({
+        productId: p.productId,
+        title: p.title,
+        image: p.image,
+        price: p.price,
+        defaultVariantId: p.defaultVariantId,
+        selectedVariantId: p.selectedVariantId,
+        selectedOptions: p.selectedOptions,
+        variants: p.variants,
+      })),
+    });
+  };
   const [discountRules, setDiscountRules] = useState<DiscountRule[]>(() =>
     parseDiscountRules(initialOffer?.discountRulesJson),
   );
@@ -423,6 +526,30 @@ export function CreateNewOffer({
       return [];
     }
   });
+  const [completeBundleBars, setCompleteBundleBars] = useState<CompleteBundleBar[]>(
+    () =>
+      initialOffer?.offerType === "complete-bundle" &&
+      initialCompleteBundleConfig.bars.length > 0
+        ? initialCompleteBundleConfig.bars
+        : [
+            {
+              id: `bar-${Date.now()}`,
+              type: "quantity-break-same",
+              title: "Complete the bundle",
+              subtitle: "",
+              quantity: 2,
+              products: [],
+              pricing: { mode: "full_price", value: 0 },
+            },
+          ],
+  );
+  const [activeBundleBarId, setActiveBundleBarId] = useState<string>(
+    () => initialCompleteBundleConfig.bars[0]?.id || "",
+  );
+  const activeBundleBar =
+    completeBundleBars.find((bar) => bar.id === activeBundleBarId) ||
+    completeBundleBars[0] ||
+    null;
 
   useEffect(() => {
     if (offerType === 'bxgy') {
@@ -436,6 +563,14 @@ export function CreateNewOffer({
       );
     }
   }, [buyProducts, getProducts, offerType]);
+  useEffect(() => {
+    if (offerType !== "complete-bundle") return;
+    if (!completeBundleBars.length) return;
+    const exists = completeBundleBars.some((bar) => bar.id === activeBundleBarId);
+    if (!exists) {
+      setActiveBundleBarId(completeBundleBars[0].id);
+    }
+  }, [offerType, completeBundleBars, activeBundleBarId]);
 
   const [status, setStatus] = useState<boolean>(
     initialOffer ? initialOffer.status : true
@@ -447,6 +582,31 @@ export function CreateNewOffer({
   const hasDefault = normalizedDiscountRules.some(r => r.isDefault);
 
   const previewItems: PreviewItem[] = useMemo(() => {
+    if (offerType === "complete-bundle" && completeBundleBars.length > 0) {
+      return completeBundleBars.map((bar, index) => {
+        const productsCount = Array.isArray(bar.products) ? bar.products.length : 0;
+        const pricingText =
+          bar.pricing.mode === "percentage_off"
+            ? `${bar.pricing.value}% OFF`
+            : bar.pricing.mode === "amount_off"
+              ? `SAVE ${formatPreviewPrice(bar.pricing.value)}`
+              : bar.pricing.mode === "fixed_price"
+                ? formatPreviewPrice(bar.pricing.value)
+                : "Full price";
+        return {
+          id: bar.id,
+          title: bar.title || `Bar #${index + 1}`,
+          subtitle:
+            bar.subtitle ||
+            `${bar.type === "bxgy" ? "Buy X Get Y" : "Quantity break"} · ${productsCount} products`,
+          price: pricingText,
+          featured: index === 0,
+          badge: index === 0 ? "Most Popular" : "",
+          saveLabel: `Qty ${Math.max(1, Number(bar.quantity) || 1)}`,
+        };
+      });
+    }
+
     if (offerType === "bxgy" && bxgyDiscountRules.length > 0) {
       const bxgyHasDefault = bxgyDiscountRules.some(r => r.isDefault);
       return bxgyDiscountRules.map((rule, index) => {
@@ -495,6 +655,7 @@ export function CreateNewOffer({
     ];
   }, [
     offerType,
+    completeBundleBars,
     bxgyDiscountRules,
     normalizedDiscountRules,
     baseUnitPrice,
@@ -521,6 +682,12 @@ export function CreateNewOffer({
       name: "Buy X, Get Y (BXGY)",
       description:
         "Buy X products and get Y products with discount (e.g., Buy 2 get 1 free)",
+    },
+    {
+      id: "complete-bundle",
+      name: "Complete the bundle",
+      description:
+        "Create multiple bundle bars and let customers choose product variants/options",
     },
   ];
 
@@ -559,6 +726,20 @@ export function CreateNewOffer({
           });
           setStep(2);
           return;
+        }
+        if (offerType === "complete-bundle") {
+          const hasInvalidBar = completeBundleBars.some(
+            (bar) => !bar.products?.length || !Number.isFinite(Number(bar.quantity)) || Number(bar.quantity) < 1,
+          );
+          if (hasInvalidBar) {
+            e.preventDefault();
+            Modal.error({
+              title: "Validation Error",
+              content: "Each bundle bar must contain at least one product and a valid quantity.",
+            });
+            setStep(2);
+            return;
+          }
         }
 
         let hasError = false;
@@ -691,12 +872,29 @@ export function CreateNewOffer({
       <input
         type="hidden"
         name="selectedProductsJson"
-        value={JSON.stringify(offerType === "bxgy" ? { buyProducts, getProducts } : selectedProductsData)}
+        value={JSON.stringify(
+          offerType === "bxgy"
+            ? { buyProducts, getProducts }
+            : offerType === "complete-bundle"
+              ? buildCompleteBundleConfig({ bars: completeBundleBars })
+              : selectedProductsData,
+        )}
       />
       <input
         type="hidden"
         name="discountRulesJson"
-        value={JSON.stringify(offerType === "bxgy" ? buildBxgyDiscountRulesJson(bxgyDiscountRules) : buildDiscountRulesJson(normalizedDiscountRules))}
+        value={JSON.stringify(
+          offerType === "bxgy"
+            ? buildBxgyDiscountRulesJson(bxgyDiscountRules)
+            : offerType === "complete-bundle"
+              ? completeBundleBars.map((bar) => ({
+                  id: bar.id,
+                  type: bar.type,
+                  quantity: bar.quantity,
+                  pricing: bar.pricing,
+                }))
+              : buildDiscountRulesJson(normalizedDiscountRules),
+        )}
       />
 
       <div className="bg-[#ffffff] rounded-[8px] shadow-[0_1px_3px_rgba(0,0,0,0.1)] p-[20px] mb-[100px]">
@@ -936,6 +1134,94 @@ export function CreateNewOffer({
                         )}
                       </div>
                     </>
+                  ) : offerType === "complete-bundle" ? (
+                    <div className="mb-8">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-[14px] font-medium text-[#1c1f23]">
+                          Bundle bars
+                        </h3>
+                        <div className="flex gap-2">
+                          <Button size="small" onClick={(e) => { addCompleteBundleBar("quantity-break-same"); e.preventDefault(); }}>
+                            Add Quantity bar
+                          </Button>
+                          <Button size="small" onClick={(e) => { addCompleteBundleBar("bxgy"); e.preventDefault(); }}>
+                            Add Buy X Get Y bar
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-3">
+                        {completeBundleBars.map((bar, index) => (
+                          <div
+                            key={bar.id}
+                            className={`border rounded-md p-3 ${activeBundleBar?.id === bar.id ? "border-[#008060]" : "border-[#dfe3e8]"}`}
+                          >
+                            <div className="flex items-center justify-between gap-3 mb-2">
+                              <Button
+                                type="link"
+                                className="px-0"
+                                onClick={(e) => {
+                                  setActiveBundleBarId(bar.id);
+                                  e.preventDefault();
+                                }}
+                              >
+                                Bar #{index + 1} - {bar.title || (bar.type === "bxgy" ? "Buy X, Get Y" : "Complete the bundle")}
+                              </Button>
+                              {completeBundleBars.length > 1 && (
+                                <Button
+                                  size="small"
+                                  danger
+                                  onClick={(e) => {
+                                    removeCompleteBundleBar(bar.id);
+                                    e.preventDefault();
+                                  }}
+                                >
+                                  Remove
+                                </Button>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                              <label className="block text-[12px]">
+                                <span className="block mb-1">Title</span>
+                                <Input
+                                  size="small"
+                                  value={bar.title || ""}
+                                  onChange={(e) =>
+                                    updateCompleteBundleBar(bar.id, { title: e.target.value })
+                                  }
+                                />
+                              </label>
+                              <label className="block text-[12px]">
+                                <span className="block mb-1">Quantity</span>
+                                <Input
+                                  size="small"
+                                  type="number"
+                                  min={1}
+                                  value={bar.quantity}
+                                  onChange={(e) =>
+                                    updateCompleteBundleBar(bar.id, {
+                                      quantity: Math.max(1, Math.trunc(Number(e.target.value) || 1)),
+                                    })
+                                  }
+                                />
+                              </label>
+                            </div>
+                            <div className="text-[12px] text-[#5c6166] mt-2">
+                              {bar.products.length} products selected
+                            </div>
+                            <Button
+                              size="small"
+                              className="mt-2"
+                              onClick={(e) => {
+                                handleSelectProductsForBundleBar(bar.id);
+                                e.preventDefault();
+                              }}
+                            >
+                              {bar.products.length ? "Edit bar products" : "Select bar products"}
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   ) : (
                     <div className="mb-8">
                       <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
@@ -1021,7 +1307,11 @@ export function CreateNewOffer({
 
                   <div>
                     <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                      {offerType === "bxgy" ? "BXGY Rules" : "Discount Setting"}
+                      {offerType === "bxgy"
+                        ? "BXGY Rules"
+                        : offerType === "complete-bundle"
+                          ? "Bar Pricing & Variant Preview"
+                          : "Discount Setting"}
                     </h3>
                     {offerType === "bxgy" ? (
                       <>
@@ -1251,6 +1541,105 @@ export function CreateNewOffer({
                         >
                           + Add BXGY tier
                         </Button>
+                      </>
+                    ) : offerType === "complete-bundle" ? (
+                      <>
+                        {activeBundleBar ? (
+                          <div className="create-offer-discount-card">
+                            <div className="create-offer-discount-body">
+                              <div className="create-offer-discount-form-row create-offer-discount-form-row--inline">
+                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                  Pricing mode
+                                  <Select
+                                    size="large"
+                                    className="mt-1"
+                                    value={activeBundleBar.pricing.mode}
+                                    onChange={(val) =>
+                                      updateCompleteBundleBar(activeBundleBar.id, {
+                                        pricing: { ...activeBundleBar.pricing, mode: val },
+                                      })
+                                    }
+                                    options={[
+                                      { label: "Full price", value: "full_price" },
+                                      { label: "Percentage off", value: "percentage_off" },
+                                      { label: "Amount off", value: "amount_off" },
+                                      { label: "Fixed price", value: "fixed_price" },
+                                    ]}
+                                  />
+                                </label>
+                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                  Pricing value
+                                  <Input
+                                    size="large"
+                                    type="number"
+                                    min={0}
+                                    className="mt-1"
+                                    value={activeBundleBar.pricing.value}
+                                    onChange={(e) =>
+                                      updateCompleteBundleBar(activeBundleBar.id, {
+                                        pricing: {
+                                          ...activeBundleBar.pricing,
+                                          value: Number(e.target.value) || 0,
+                                        },
+                                      })
+                                    }
+                                  />
+                                </label>
+                              </div>
+                              <div className="mt-4">
+                                <div className="text-[13px] font-medium mb-2 text-[#1c1f23]">
+                                  Variant / Option preview
+                                </div>
+                                {activeBundleBar.products.length === 0 ? (
+                                  <div className="text-[12px] text-[#5c6166]">
+                                    Select products for this bar first.
+                                  </div>
+                                ) : (
+                                  <div className="flex flex-col gap-3">
+                                    {activeBundleBar.products.map((product) => {
+                                      const selectedVariant =
+                                        product.variants?.find((v) => v.id === product.selectedVariantId) ||
+                                        product.variants?.[0];
+                                      return (
+                                        <div key={product.productId} className="border border-[#dfe3e8] rounded-md p-2">
+                                          <div className="text-[12px] font-medium mb-2">{product.title || product.productId}</div>
+                                          {Array.isArray(product.variants) && product.variants.length > 0 && (
+                                            <Select
+                                              size="small"
+                                              className="w-full mb-2"
+                                              value={product.selectedVariantId || product.variants[0].id}
+                                              onChange={(variantId) => {
+                                                const nextProducts = activeBundleBar.products.map((p) =>
+                                                  p.productId === product.productId
+                                                    ? { ...p, selectedVariantId: String(variantId) }
+                                                    : p,
+                                                );
+                                                updateCompleteBundleBar(activeBundleBar.id, { products: nextProducts });
+                                              }}
+                                              options={product.variants.map((variant) => ({
+                                                label: variant.title,
+                                                value: variant.id,
+                                              }))}
+                                            />
+                                          )}
+                                          {selectedVariant?.selectedOptions?.length ? (
+                                            <div className="text-[12px] text-[#5c6166]">
+                                              {selectedVariant.selectedOptions
+                                                .map((opt) => `${opt.name}: ${opt.value}`)
+                                                .join(" / ")}
+                                            </div>
+                                          ) : null}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-[12px] text-[#5c6166]">Add a bar to configure pricing.</div>
+                        )}
                       </>
                     ) : (
                       <>
@@ -2092,6 +2481,13 @@ export function CreateNewOffer({
               if (offerType === "bxgy") {
                 if (buyProducts.length === 0 || getProducts.length === 0) {
                   message.error("Please select both Buy and Get products for a BXGY offer.");
+                  e.preventDefault();
+                  return;
+                }
+              } else if (offerType === "complete-bundle") {
+                const hasEmptyBar = completeBundleBars.some((bar) => bar.products.length === 0);
+                if (hasEmptyBar) {
+                  message.error("Please select products for every bundle bar.");
                   e.preventDefault();
                   return;
                 }

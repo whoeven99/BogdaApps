@@ -100,6 +100,14 @@ function toCents(value) {
   return Math.round(n * 100);
 }
 
+function toAjaxVariantId(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (/^\d+$/.test(raw)) return raw;
+  const hit = raw.match(/\/(\d+)$/);
+  return hit ? hit[1] : "";
+}
+
 function toScaledInteger(value, scale) {
   const n = Number(value);
   if (!Number.isFinite(n)) return 0;
@@ -439,6 +447,59 @@ function parseSelectedProductIds(selectedProductsJson) {
   }
 }
 
+function parseCompleteBundleConfig(selectedProductsJson) {
+  if (typeof selectedProductsJson !== "string" || !selectedProductsJson.trim()) {
+    return { bars: [] };
+  }
+  try {
+    const parsed = JSON.parse(selectedProductsJson);
+    const bars = Array.isArray(parsed?.bars) ? parsed.bars : [];
+    return {
+      bars: bars
+        .filter((bar) => bar && typeof bar === "object" && bar.id)
+        .map((bar) => ({
+          id: String(bar.id),
+          type: bar.type === "bxgy" ? "bxgy" : "quantity-break-same",
+          title: String(bar.title || ""),
+          subtitle: String(bar.subtitle || ""),
+          quantity: Math.max(1, Math.trunc(Number(bar.quantity) || 1)),
+          pricing: {
+            mode: String(bar?.pricing?.mode || "full_price"),
+            value: Number(bar?.pricing?.value) || 0,
+          },
+          products: Array.isArray(bar.products)
+            ? bar.products
+                .filter((p) => p && typeof p === "object" && p.productId)
+                .map((p) => ({
+                  productId: String(p.productId),
+                  title: String(p.title || ""),
+                  image: String(p.image || ""),
+                  price: String(p.price || ""),
+                  selectedVariantId: String(p.selectedVariantId || p.defaultVariantId || ""),
+                  variants: Array.isArray(p.variants)
+                    ? p.variants
+                        .filter((v) => v && typeof v === "object" && v.id)
+                        .map((v) => ({
+                          id: String(v.id),
+                          title: String(v.title || ""),
+                          price: String(v.price || ""),
+                          selectedOptions: Array.isArray(v.selectedOptions)
+                            ? v.selectedOptions.map((opt) => ({
+                                name: String(opt?.name || ""),
+                                value: String(opt?.value || ""),
+                              }))
+                            : [],
+                        }))
+                    : [],
+                }))
+            : [],
+        })),
+    };
+  } catch {
+    return { bars: [] };
+  }
+}
+
 function getCurrentProductGid() {
   const productId = window?.ShopifyAnalytics?.meta?.product?.id;
   if (!productId) return null;
@@ -582,6 +643,21 @@ function getCurrentOffer(offersConfig) {
         console.log("[ciwi] bxgy offer skipped: current product not in buy list", offer.id, currentProductGid);
         continue;
       }
+    } else if (offer.offerType === "complete-bundle") {
+      const completeBundle = parseCompleteBundleConfig(offer.selectedProductsJson);
+      if (!completeBundle.bars.length) {
+        console.log("[ciwi] complete bundle skipped: no bars", offer.id);
+        continue;
+      }
+      if (!currentProductGid) {
+        continue;
+      }
+      const belongsToBar = completeBundle.bars.some((bar) =>
+        bar.products.some((p) => p.productId === currentProductGid),
+      );
+      if (!belongsToBar) {
+        continue;
+      }
     } else {
       // quantity-breaks-same
       const discountRules = parseDiscountRulesJson(offer.discountRulesJson);
@@ -609,7 +685,7 @@ function getCurrentOffer(offersConfig) {
   return null;
 }
 
-window.__ciwiBundleState = window.__ciwiBundleState || { selectedCount: null };
+window.__ciwiBundleState = window.__ciwiBundleState || { selectedCount: null, selectedBundleVariants: {} };
 
 function updateThemeQuantityInput(count) {
   const form = getAddToCartForm();
@@ -700,7 +776,130 @@ window.ciwiHandleBundleAddToCart = function(event) {
   }
 };
 
+window.ciwiSelectBundleVariant = function(barId, productId, variantId) {
+  if (!window.__ciwiBundleState.selectedBundleVariants) {
+    window.__ciwiBundleState.selectedBundleVariants = {};
+  }
+  if (!window.__ciwiBundleState.selectedBundleVariants[barId]) {
+    window.__ciwiBundleState.selectedBundleVariants[barId] = {};
+  }
+  window.__ciwiBundleState.selectedBundleVariants[barId][productId] = String(variantId || "");
+};
+
+window.ciwiHandleCompleteBundleAddToCart = async function(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  try {
+    const currentOffer = getCurrentOffer(offersConfigCache);
+    const config = parseCompleteBundleConfig(currentOffer?.selectedProductsJson);
+    const items = [];
+    for (const bar of config.bars) {
+      for (const product of bar.products) {
+        const selectedMap = window.__ciwiBundleState?.selectedBundleVariants?.[bar.id] || {};
+        const variantId = toAjaxVariantId(
+          selectedMap[product.productId] ||
+            product.selectedVariantId ||
+            product.variants?.[0]?.id ||
+            "",
+        );
+        if (!variantId) continue;
+        items.push({ id: Number(variantId), quantity: 1 });
+      }
+    }
+    if (!items.length) {
+      window.ciwiHandleBundleAddToCart(event);
+      return;
+    }
+    await fetch("/cart/add.js", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ items }),
+    });
+    window.location.href = "/cart";
+  } catch (error) {
+    console.error("[ciwi] complete bundle add failed, fallback submit", error);
+    window.ciwiHandleBundleAddToCart(event);
+  }
+};
+
 function renderBundlePreviewHtml(offer) {
+  if (offer.offerType === "complete-bundle") {
+    const completeBundle = parseCompleteBundleConfig(offer?.selectedProductsJson);
+    if (!completeBundle.bars.length) return "";
+    let offerSettings = {};
+    try {
+      if (offer?.offerSettingsJson) {
+        offerSettings = JSON.parse(offer.offerSettingsJson);
+      }
+    } catch (e) {}
+    const accentColor = offerSettings.accentColor || "#008060";
+    const cardBackgroundColor = offerSettings.cardBackgroundColor || "#ffffff";
+    const borderColor = offerSettings.borderColor || "#dfe3e8";
+    const titleFontSize = offerSettings.titleFontSize || 14;
+    const titleFontWeight = offerSettings.titleFontWeight || "600";
+    const titleColor = offerSettings.titleColor || "#111111";
+    const buttonText = offerSettings.buttonText || "Add to Cart";
+    const buttonPrimaryColor = offerSettings.buttonPrimaryColor || "#008060";
+    const showCustomButton = offerSettings.showCustomButton !== false;
+    const widgetTitle = offerSettings.title || "Bundle & Save";
+
+    const barsHtml = completeBundle.bars
+      .map((bar) => {
+        const rows = bar.products
+          .map((product) => {
+            const variantOptions = Array.isArray(product.variants) ? product.variants : [];
+            const optionHtml = variantOptions.length
+              ? `<select class="ciwi-bundle-variant-select" onchange="window.ciwiSelectBundleVariant('${esc(
+                  bar.id,
+                )}','${esc(product.productId)}', this.value)">${variantOptions
+                  .map(
+                    (variant) =>
+                      `<option value="${esc(variant.id)}">${esc(variant.title || "Default")}</option>`,
+                  )
+                  .join("")}</select>`
+              : "";
+            return `<div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+              ${product.image ? `<img src="${esc(product.image)}" alt="${esc(product.title)}" style="width:32px;height:32px;border-radius:4px;object-fit:cover;" />` : ""}
+              <div style="flex:1;">
+                <div style="font-size:12px;color:#1c1f23;">${esc(product.title || "Product")}</div>
+                ${optionHtml}
+              </div>
+            </div>`;
+          })
+          .join("");
+        return `<div class="create-offer-style-preview-item" style="border-color:${esc(
+          borderColor,
+        )};background:${esc(cardBackgroundColor)};">
+          <div class="create-offer-style-preview-item-title">${esc(bar.title || "Complete the bundle")}</div>
+          <div class="create-offer-style-preview-item-subtitle">${esc(
+            bar.subtitle || `Qty ${bar.quantity}`,
+          )}</div>
+          ${rows}
+        </div>`;
+      })
+      .join("");
+
+    return `<div class="create-offer-preview-card">
+      <div class="create-offer-style-preview-header" style="color:${esc(
+        titleColor,
+      )} !important; font-size:${esc(titleFontSize)}px !important; font-weight:${esc(
+        titleFontWeight,
+      )} !important;">${esc(widgetTitle)}</div>
+      <div class="create-offer-style-preview-list create-offer-style-preview-list--vertical">${barsHtml}</div>
+      ${
+        showCustomButton
+          ? `<button type="button" class="create-offer-preview-button" onclick="window.ciwiHandleCompleteBundleAddToCart(event)" style="width:100%;margin-top:12px;padding:12px;background:${esc(
+              buttonPrimaryColor,
+            )};color:white;border:none;border-radius:6px;font-weight:600;cursor:pointer;">${esc(
+              buttonText,
+            )}</button>`
+          : ""
+      }
+    </div>`;
+  }
+
   // BXGY offer type support — quantity-break-style tier cards
   if (offer.offerType === 'bxgy') {
     const bxgyRules = parseBxgyDiscountRulesJson(offer?.discountRulesJson);
