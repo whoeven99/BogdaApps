@@ -424,13 +424,27 @@ export function CreateNewOffer({
   };
   const addCompleteBundleBar = (type: "quantity-break-same" | "bxgy") => {
     const id = `bar-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const seededProducts =
+      mainBundleProduct && mainBundleProduct.productId
+        ? [
+            {
+              ...mainBundleProduct,
+              selectedVariantId:
+                mainBundleProduct.selectedVariantId ||
+                mainBundleProduct.defaultVariantId ||
+                mainBundleProduct.variants?.[0]?.id ||
+                "",
+            },
+          ]
+        : [];
     const newBar: CompleteBundleBar = {
       id,
       type,
       title: type === "bxgy" ? "Buy X, Get Y" : "Complete the bundle",
       subtitle: "",
       quantity: 2,
-      products: [],
+      // 新增 bar 默认继承主产品，后续可在预览里继续编辑
+      products: seededProducts,
       pricing: { mode: "full_price", value: 0 },
     };
     setCompleteBundleBars((prev) => [...prev, newBar]);
@@ -460,14 +474,17 @@ export function CreateNewOffer({
   const handleSelectProductsForBundleBar = async (barId: string) => {
     const targetBar = completeBundleBars.find((bar) => bar.id === barId);
     if (!targetBar) return;
+    const targetBarIndex = completeBundleBars.findIndex((bar) => bar.id === barId);
+    const isFirstBar = targetBarIndex === 0;
     const selected = await (window as any).shopify.resourcePicker({
       type: "product",
       action: "select",
-      multiple: true,
+      // bar #1 仅允许一个主产品；其他 bar 允许扩展多产品
+      multiple: !isFirstBar,
       selectionIds: targetBar.products.map((p) => ({ id: p.productId })),
     });
     if (!selected) return;
-    const mappedProducts: CompleteBundleProductDraft[] = selected.map((item: any) => ({
+    let mappedProducts: CompleteBundleProductDraft[] = selected.map((item: any) => ({
       productId: String(item.id),
       title: item.title,
       image: item.images?.[0]?.originalSrc || "https://via.placeholder.com/60",
@@ -489,6 +506,17 @@ export function CreateNewOffer({
           }))
         : [],
     }));
+    if (isFirstBar) {
+      mappedProducts = mappedProducts.slice(0, 1);
+    } else if (mainBundleProduct?.productId) {
+      const hasMain = mappedProducts.some(
+        (product) => product.productId === mainBundleProduct.productId,
+      );
+      if (!hasMain) {
+        // 后续 bar 默认包含主产品
+        mappedProducts = [mainBundleProduct as CompleteBundleProductDraft, ...mappedProducts];
+      }
+    }
     updateCompleteBundleBar(barId, {
       products: mappedProducts.map((p) => ({
         productId: p.productId,
@@ -550,6 +578,7 @@ export function CreateNewOffer({
     completeBundleBars.find((bar) => bar.id === activeBundleBarId) ||
     completeBundleBars[0] ||
     null;
+  const mainBundleProduct = completeBundleBars[0]?.products?.[0];
   // 统一格式化价格，优先显示为欧元格式，避免预览里丢失价格展示
   const formatBundlePrice = (raw?: string) => {
     if (!raw) return "€0.00";
@@ -582,6 +611,50 @@ export function CreateNewOffer({
                   )
                 : product.selectedOptions || {},
               price: hit?.price || product.price,
+            };
+          }),
+        };
+      }),
+    );
+  };
+
+  const updateBundleBarProductOption = (
+    barId: string,
+    productId: string,
+    optionName: string,
+    optionValue: string,
+  ) => {
+    setCompleteBundleBars((prev) =>
+      prev.map((bar) => {
+        if (bar.id !== barId) return bar;
+        return {
+          ...bar,
+          products: bar.products.map((product) => {
+            if (product.productId !== productId) return product;
+            const currentVariant =
+              product.variants?.find((v) => v.id === product.selectedVariantId) ||
+              product.variants?.[0];
+            const currentOptions = Object.fromEntries(
+              (currentVariant?.selectedOptions || []).map((opt) => [opt.name, opt.value]),
+            );
+            const nextOptions = {
+              ...currentOptions,
+              ...(product.selectedOptions || {}),
+              [optionName]: optionValue,
+            };
+            const matchedVariant = product.variants?.find((variant) => {
+              const variantOptions = Object.fromEntries(
+                (variant.selectedOptions || []).map((opt) => [opt.name, opt.value]),
+              );
+              return Object.entries(nextOptions).every(
+                ([name, value]) => variantOptions[name] === value,
+              );
+            });
+            return {
+              ...product,
+              selectedOptions: nextOptions,
+              selectedVariantId: matchedVariant?.id || product.selectedVariantId,
+              price: matchedVariant?.price || product.price,
             };
           }),
         };
@@ -1895,8 +1968,29 @@ export function CreateNewOffer({
                                   const selectedVariant =
                                     product.variants?.find((v) => v.id === product.selectedVariantId) ||
                                     product.variants?.[0];
+                                  const optionNames = Array.from(
+                                    new Set(
+                                      (product.variants || [])
+                                        .flatMap((variant) => variant.selectedOptions || [])
+                                        .map((opt) => opt.name)
+                                        .filter(Boolean),
+                                    ),
+                                  );
+                                  const selectedOptionsMap = Object.fromEntries(
+                                    (selectedVariant?.selectedOptions || []).map((opt) => [
+                                      opt.name,
+                                      opt.value,
+                                    ]),
+                                  );
                                   return (
                                     <div key={product.productId} className="rounded border border-[#e5e7eb] p-2">
+                                      {product.image ? (
+                                        <img
+                                          src={product.image}
+                                          alt={product.title || "product"}
+                                          className="w-10 h-10 rounded object-cover mb-2"
+                                        />
+                                      ) : null}
                                       <div className="text-[12px] font-medium text-[#1c1f23]">
                                         {product.title || product.productId}
                                       </div>
@@ -1921,6 +2015,41 @@ export function CreateNewOffer({
                                           }))}
                                         />
                                       )}
+                                      {optionNames.length > 0 ? (
+                                        <div className="grid grid-cols-1 gap-2 mt-2">
+                                          {optionNames.map((optionName) => {
+                                            const optionValues = Array.from(
+                                              new Set(
+                                                (product.variants || [])
+                                                  .flatMap((variant) => variant.selectedOptions || [])
+                                                  .filter((opt) => opt.name === optionName)
+                                                  .map((opt) => opt.value)
+                                                  .filter(Boolean),
+                                              ),
+                                            );
+                                            return (
+                                              <Select
+                                                key={`${product.productId}-${optionName}`}
+                                                size="small"
+                                                className="w-full"
+                                                value={selectedOptionsMap[optionName] || optionValues[0]}
+                                                onChange={(value) =>
+                                                  updateBundleBarProductOption(
+                                                    bar.id,
+                                                    product.productId,
+                                                    optionName,
+                                                    String(value),
+                                                  )
+                                                }
+                                                options={optionValues.map((value) => ({
+                                                  label: value,
+                                                  value,
+                                                }))}
+                                              />
+                                            );
+                                          })}
+                                        </div>
+                                      ) : null}
                                       {selectedVariant?.selectedOptions?.length ? (
                                         <div className="text-[12px] text-[#5c6166] mt-1">
                                           {selectedVariant.selectedOptions
