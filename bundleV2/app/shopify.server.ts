@@ -151,6 +151,14 @@ export async function ensureCartLinesAutomaticDiscount(admin: any) {
  * 与行项目折扣分开：官方要求按 discount class 拆分为不同 automatic discount（或单一 Function 多 class，此处沿用双折扣结构）。
  */
 export async function ensureBundleDeliveryAutomaticDiscount(admin: any) {
+  // 目标组合策略：运费折扣需要能与商品折扣叠加，才能实现「套装商品折扣 + 免邮」同时生效。
+  // 同类运费折扣叠加通常不被允许，因此 shippingDiscounts 关闭。
+  const expectedCombinesWith = {
+    orderDiscounts: false,
+    productDiscounts: true,
+    shippingDiscounts: false,
+  };
+
   const functionsResp = await admin.graphql(
     `#graphql
       query AppDiscountFunctions {
@@ -189,8 +197,14 @@ export async function ensureBundleDeliveryAutomaticDiscount(admin: any) {
             discount {
               __typename
               ... on DiscountAutomaticApp {
+                discountId
                 title
                 status
+                combinesWith {
+                  orderDiscounts
+                  productDiscounts
+                  shippingDiscounts
+                }
                 appDiscountType {
                   functionId
                 }
@@ -203,16 +217,71 @@ export async function ensureBundleDeliveryAutomaticDiscount(admin: any) {
   );
   const existingJson = await existingResp.json();
   const discountNodes = existingJson?.data?.discountNodes?.nodes ?? [];
-  const alreadyExists = discountNodes.some((node: any) => {
+  const existing = discountNodes.find((node: any) => {
     const d = node?.discount;
     if (!d || d.__typename !== "DiscountAutomaticApp") return false;
     if (d?.status !== "ACTIVE") return false;
     return d?.appDiscountType?.functionId === targetFn.id;
   });
 
-  if (alreadyExists) {
-    console.log("[discount-shipping] automatic app discount already exists", {
+  if (existing?.discount) {
+    const existingDiscount = existing.discount;
+    const existingCombinesWith = existingDiscount?.combinesWith ?? {};
+    const needUpdate =
+      existingCombinesWith.orderDiscounts !== expectedCombinesWith.orderDiscounts ||
+      existingCombinesWith.productDiscounts !== expectedCombinesWith.productDiscounts ||
+      existingCombinesWith.shippingDiscounts !== expectedCombinesWith.shippingDiscounts;
+
+    if (!needUpdate) {
+      console.log("[discount-shipping] automatic app discount already exists", {
+        functionId: targetFn.id,
+      });
+      return;
+    }
+
+    // 已存在但组合策略不匹配：自动修正，避免「折扣创建成功但结账不免邮」。
+    const updateResp = await admin.graphql(
+      `#graphql
+        mutation UpdateAutomaticAppDiscount(
+          $id: ID!
+          $automaticAppDiscount: DiscountAutomaticAppInput!
+        ) {
+          discountAutomaticAppUpdate(id: $id, automaticAppDiscount: $automaticAppDiscount) {
+            automaticAppDiscount {
+              discountId
+              title
+              status
+              combinesWith {
+                orderDiscounts
+                productDiscounts
+                shippingDiscounts
+              }
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }
+      `,
+      {
+        variables: {
+          id: existingDiscount.discountId,
+          automaticAppDiscount: {
+            combinesWith: expectedCombinesWith,
+          },
+        },
+      },
+    );
+    const updateJson = await updateResp.json();
+    const updateErrors = updateJson?.data?.discountAutomaticAppUpdate?.userErrors ?? [];
+    if (updateErrors.length > 0) {
+      console.error("[discount-shipping] failed to update automatic app discount", updateErrors);
+      return;
+    }
+    console.log("[discount-shipping] automatic app discount combinesWith updated", {
       functionId: targetFn.id,
+      combinesWith: expectedCombinesWith,
     });
     return;
   }
@@ -243,14 +312,7 @@ export async function ensureBundleDeliveryAutomaticDiscount(admin: any) {
           functionId: targetFn.id,
           startsAt: new Date().toISOString(),
           discountClasses: ["SHIPPING"],
-          combinesWith: {
-            /** SHIPPING 类自动折扣在该创建场景下不支持与订单折扣叠加 */
-            orderDiscounts: false,
-            /** 为避免 `is not supported with these combines_with settings`，此处统一关闭叠加 */
-            productDiscounts: false,
-            /** 同类运费折扣叠加通常不被支持，保持 false 更稳妥 */
-            shippingDiscounts: false,
-          },
+          combinesWith: expectedCombinesWith,
         },
       },
     },
