@@ -244,9 +244,12 @@ export async function ensureBundleDeliveryAutomaticDiscount(admin: any) {
           startsAt: new Date().toISOString(),
           discountClasses: ["SHIPPING"],
           combinesWith: {
+            /** SHIPPING 类自动折扣在该创建场景下不支持与订单折扣叠加 */
             orderDiscounts: false,
-            productDiscounts: true,
-            shippingDiscounts: true,
+            /** 为避免 `is not supported with these combines_with settings`，此处统一关闭叠加 */
+            productDiscounts: false,
+            /** 同类运费折扣叠加通常不被支持，保持 false 更稳妥 */
+            shippingDiscounts: false,
           },
         },
       },
