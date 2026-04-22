@@ -448,9 +448,9 @@ export function CreateNewOffer({
 
   const previewItems: PreviewItem[] = useMemo(() => {
     if (offerType === "bxgy" && bxgyDiscountRules.length > 0) {
-      const hasDefault = bxgyDiscountRules.some(r => r.isDefault);
+      const bxgyHasDefault = bxgyDiscountRules.some(r => r.isDefault);
       return bxgyDiscountRules.map((rule, index) => {
-        const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
+        const isFeatured = bxgyHasDefault ? !!rule.isDefault : index === 0;
         const displayCount = rule.count || 1;
         return {
           id: `bxgy-tier-${rule.count}`,
