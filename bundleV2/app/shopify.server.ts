@@ -174,6 +174,10 @@ export async function ensureBundleDeliveryAutomaticDiscount(admin: any) {
 
   if (!targetFn?.id) {
     console.warn("[discount-shipping] target function not found:", DELIVERY_DISCOUNT_FUNCTION_TITLE);
+    // 中文关键日志：用于快速确认当前店铺可见的函数列表，排查标题不一致或版本未发布
+    console.warn("[discount-shipping] 未找到配送免邮 Function，当前可见 discount functions：", functionNodes
+      .filter((fn: any) => String(fn?.apiType || "").toLowerCase() === "discount")
+      .map((fn: any) => ({ id: fn?.id, title: fn?.title })));
     return;
   }
 

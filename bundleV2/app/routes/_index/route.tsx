@@ -12,6 +12,7 @@ import {
 import {
   authenticate,
   ensureCartLinesAutomaticDiscount,
+  ensureBundleDeliveryAutomaticDiscount,
 } from "../../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { DashboardPage } from "../page/DashboardPage";
@@ -671,6 +672,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   });
   void ensureCartLinesAutomaticDiscount(admin).catch((error) => {
     console.error("Failed to ensure automatic app discount exists", error);
+  });
+  // 中文说明：历史安装店可能只有商品折扣自动规则，需在每次进入 App 时补偿创建 SHIPPING 自动折扣
+  void ensureBundleDeliveryAutomaticDiscount(admin).catch((error) => {
+    console.error("Failed to ensure shipping automatic app discount exists", error);
   });
 
   // eslint-disable-next-line no-undef
