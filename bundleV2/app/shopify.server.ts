@@ -9,11 +9,20 @@ import prisma from "./db.server";
 
 const CART_LINES_DISCOUNT_FUNCTION_TITLE = "Bundle Cart Discount Function";
 const CART_LINES_DISCOUNT_AUTO_TITLE = "Ciwi Bundle Auto Discount";
+/** 与 extensions/bundle-delivery-discount-function/shopify.extension.toml 中 name 一致，供 GraphQL 按标题定位 Function */
+const DELIVERY_DISCOUNT_FUNCTION_TITLE = "Bundle Delivery Discount Function";
+const DELIVERY_DISCOUNT_AUTO_TITLE = "Ciwi Bundle Auto Free Shipping";
 
 function getAutoDiscountTitle(): string {
   const appName = process.env.SHOPIFY_APP_NAME?.trim();
   if (!appName) return CART_LINES_DISCOUNT_AUTO_TITLE;
   return `${appName} - ${CART_LINES_DISCOUNT_AUTO_TITLE}`;
+}
+
+function getAutoShippingDiscountTitle(): string {
+  const appName = process.env.SHOPIFY_APP_NAME?.trim();
+  if (!appName) return DELIVERY_DISCOUNT_AUTO_TITLE;
+  return `${appName} - ${DELIVERY_DISCOUNT_AUTO_TITLE}`;
 }
 
 export async function ensureCartLinesAutomaticDiscount(admin: any) {
@@ -112,7 +121,8 @@ export async function ensureCartLinesAutomaticDiscount(admin: any) {
           combinesWith: {
             orderDiscounts: false,
             productDiscounts: true,
-            shippingDiscounts: false,
+            /** 允许与配送类 Function 折扣叠加（阶梯赠品免邮） */
+            shippingDiscounts: true,
           },
         },
       },
@@ -130,6 +140,124 @@ export async function ensureCartLinesAutomaticDiscount(admin: any) {
   const created =
     createJson?.data?.discountAutomaticAppCreate?.automaticAppDiscount;
   console.log("[discount] automatic app discount created", {
+    title: created?.title,
+    status: created?.status,
+    functionId: created?.appDiscountType?.functionId,
+  });
+}
+
+/**
+ * 创建「仅 SHIPPING 类」的 automatic app discount，绑定 cart.delivery-options.discounts.generate.run Function。
+ * 与行项目折扣分开：官方要求按 discount class 拆分为不同 automatic discount（或单一 Function 多 class，此处沿用双折扣结构）。
+ */
+export async function ensureBundleDeliveryAutomaticDiscount(admin: any) {
+  const functionsResp = await admin.graphql(
+    `#graphql
+      query AppDiscountFunctions {
+        shopifyFunctions(first: 100) {
+          nodes {
+            id
+            title
+            apiType
+          }
+        }
+      }
+    `,
+  );
+  const functionsJson = await functionsResp.json();
+  const functionNodes = functionsJson?.data?.shopifyFunctions?.nodes ?? [];
+  const targetFn = functionNodes.find(
+    (fn: any) =>
+      fn?.title === DELIVERY_DISCOUNT_FUNCTION_TITLE &&
+      String(fn?.apiType || "").toLowerCase() === "discount",
+  );
+
+  if (!targetFn?.id) {
+    console.warn("[discount-shipping] target function not found:", DELIVERY_DISCOUNT_FUNCTION_TITLE);
+    return;
+  }
+
+  const existingResp = await admin.graphql(
+    `#graphql
+      query ExistingAutomaticAppDiscounts {
+        discountNodes(first: 100, query: "method:automatic AND status:active") {
+          nodes {
+            discount {
+              __typename
+              ... on DiscountAutomaticApp {
+                title
+                status
+                appDiscountType {
+                  functionId
+                }
+              }
+            }
+          }
+        }
+      }
+    `,
+  );
+  const existingJson = await existingResp.json();
+  const discountNodes = existingJson?.data?.discountNodes?.nodes ?? [];
+  const alreadyExists = discountNodes.some((node: any) => {
+    const d = node?.discount;
+    if (!d || d.__typename !== "DiscountAutomaticApp") return false;
+    if (d?.status !== "ACTIVE") return false;
+    return d?.appDiscountType?.functionId === targetFn.id;
+  });
+
+  if (alreadyExists) {
+    console.log("[discount-shipping] automatic app discount already exists", {
+      functionId: targetFn.id,
+    });
+    return;
+  }
+
+  const createResp = await admin.graphql(
+    `#graphql
+      mutation CreateAutomaticAppDiscount($automaticAppDiscount: DiscountAutomaticAppInput!) {
+        discountAutomaticAppCreate(automaticAppDiscount: $automaticAppDiscount) {
+          automaticAppDiscount {
+            discountId
+            title
+            status
+            appDiscountType {
+              functionId
+            }
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `,
+    {
+      variables: {
+        automaticAppDiscount: {
+          title: getAutoShippingDiscountTitle(),
+          functionId: targetFn.id,
+          startsAt: new Date().toISOString(),
+          discountClasses: ["SHIPPING"],
+          combinesWith: {
+            orderDiscounts: false,
+            productDiscounts: true,
+            shippingDiscounts: true,
+          },
+        },
+      },
+    },
+  );
+  const createJson = await createResp.json();
+  const userErrors = createJson?.data?.discountAutomaticAppCreate?.userErrors ?? [];
+
+  if (userErrors.length > 0) {
+    console.error("[discount-shipping] failed to create automatic app discount", userErrors);
+    return;
+  }
+
+  const created = createJson?.data?.discountAutomaticAppCreate?.automaticAppDiscount;
+  console.log("[discount-shipping] automatic app discount created", {
     title: created?.title,
     status: created?.status,
     functionId: created?.appDiscountType?.functionId,
@@ -154,6 +282,11 @@ const shopify = shopifyApp({
         await ensureCartLinesAutomaticDiscount(admin);
       } catch (error) {
         console.error("[discount] ensure automatic discount failed", error);
+      }
+      try {
+        await ensureBundleDeliveryAutomaticDiscount(admin);
+      } catch (error) {
+        console.error("[discount-shipping] ensure automatic discount failed", error);
       }
     },
   },

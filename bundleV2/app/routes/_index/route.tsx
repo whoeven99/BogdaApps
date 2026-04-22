@@ -40,6 +40,8 @@ import {
 import {
   OFFER_TEXT_LIMITS,
   clampNumber,
+  parseProgressiveGiftsConfig,
+  progressiveGiftsConfigToStorableJson,
   sanitizeHexColor,
   sanitizeSingleLineText,
 } from "../../utils/offerParsing";
@@ -947,6 +949,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return offerActionErrorResponse("Discount rules data is too large. Please reduce the number of rules.", 400);
     }
 
+    const progressiveGiftsJsonRaw = String(formData.get("progressiveGiftsJson") || "").trim();
+    if (progressiveGiftsJsonRaw.length > 100_000) {
+      return offerActionErrorResponse("Progressive gifts data is too large.", 400);
+    }
+    let progressiveGiftsSanitized = parseProgressiveGiftsConfig(null);
+    if (progressiveGiftsJsonRaw) {
+      try {
+        progressiveGiftsSanitized = parseProgressiveGiftsConfig(
+          JSON.parse(progressiveGiftsJsonRaw) as unknown,
+        );
+      } catch {
+        return offerActionErrorResponse("Invalid progressive gifts JSON.", 400);
+      }
+    }
+
     const offerSettingsJson = JSON.stringify({
       title,
       layoutFormat,
@@ -974,6 +991,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       buttonText,
       showCustomButton,
       scheduleTimezone: scheduleTimezoneRaw || undefined,
+      progressiveGifts: progressiveGiftsConfigToStorableJson(progressiveGiftsSanitized),
     });
 
     // Store which Shopify shop this offer belongs to.
