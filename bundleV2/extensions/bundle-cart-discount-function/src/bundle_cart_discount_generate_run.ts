@@ -114,6 +114,40 @@ function parseMoneyAmount(raw: unknown): number {
 }
 
 /**
+ * 从 Product GID（gid://shopify/Product/123）或纯数字字符串中提取末尾数字 ID，用于与后台配置对比。
+ * 后台 Resource Picker 有时存整段 GID，有时仅存数字，购物车行侧始终为 GID，必须归一化后再比较。
+ */
+function extractShopifyProductNumericId(
+  raw: string | undefined | null,
+): string {
+  if (!raw) return "";
+  const s = String(raw).trim();
+  const tail = s.match(/(\d+)\s*$/);
+  return tail ? tail[1] : s;
+}
+
+/** 判断两个 Product 标识是否指向同一商品（兼容 GID / 纯数字） */
+function productIdsMatch(
+  cartProductGid: string | undefined,
+  configProductId: string,
+): boolean {
+  const a = extractShopifyProductNumericId(cartProductGid);
+  const b = extractShopifyProductNumericId(configProductId);
+  if (a.length && b.length) return a === b;
+  return String(cartProductGid || "") === String(configProductId || "");
+}
+
+/** 判断是否为 complete-bundle 活动（兼容大小写、空格与下划线） */
+function isCompleteBundleOfferType(offerType: string | undefined): boolean {
+  const t = String(offerType || "")
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, "-")
+    .replace(/\s+/g, "-");
+  return t === "complete-bundle";
+}
+
+/**
  * 将购物车行的单价（amountPerQuantity）与定价规则结合，得到折后价与应减金额。
  * 与主题 assets 中 applyCompleteBundleProductPricing 一致。
  */
@@ -304,8 +338,10 @@ function offerPassesScheduleAndMarket(
 }
 
 /**
- * 当购物车中凑齐某一档 complete-bundle 的全部商品（每件至少 1 件，支持同一行数量拆用）时，
- * 按商品级 pricing 生成行折扣（百分比或固定金额减免）。
+ * complete-bundle 购物车折扣：
+ * - 当某一「档位」bar 要求的全部商品都在购物车中（每件至少 1，可拆同一行的数量）时生效；
+ * - 多档位时必须先试「件数最多」的一档，否则会出现只命中低档位、整包优惠漏算的问题；
+ * - 商品 ID 需与购物车行 product.id 对齐（GID 与纯数字混合存储时通过归一化比较）。
  */
 function calculateCompleteBundleDiscounts(
   cartLines: CartLineForBundle[],
@@ -313,7 +349,7 @@ function calculateCompleteBundleDiscounts(
   marketId: string | undefined,
   nowMs: number | null,
 ): ProductDiscountCandidate[] {
-  const completeOffers = offers.filter((o) => o.offerType === "complete-bundle");
+  const completeOffers = offers.filter((o) => isCompleteBundleOfferType(o.offerType));
   if (!completeOffers.length) {
     return [];
   }
@@ -323,16 +359,21 @@ function calculateCompleteBundleDiscounts(
       continue;
     }
 
-    const bars = parseCompleteBundleBarsJson(offer.selectedProductsJson);
-    if (!bars.length) {
+    const barsRaw = parseCompleteBundleBarsJson(offer.selectedProductsJson);
+    if (!barsRaw.length) {
       log("complete_bundle_skip", { offerId: offer.id, reason: "no_bars" });
       continue;
     }
 
+    // 多档位：按本档包含的商品数从多到少排序，优先匹配「整包」再匹配较少件的档位
+    const bars = [...barsRaw].sort(
+      (a, b) => b.products.length - a.products.length,
+    );
+
     for (const bar of bars) {
       if (!bar.products.length) continue;
 
-      /** 每个「槽位」对应一件捆绑内商品及其定价 */
+      // 每个槽位 = 捆绑内的一件商品及其独立 pricing（与主题端 widget 一致）
       const slots = bar.products.map((p) => ({
         productId: p.productId,
         pricing: p.pricing,
@@ -353,7 +394,7 @@ function calculateCompleteBundleDiscounts(
         for (const line of cartLines) {
           if (line.merchandise.__typename !== "ProductVariant") continue;
           const pid = line.merchandise.product?.id;
-          if (!pid || pid !== slot.productId) continue;
+          if (!productIdsMatch(pid, slot.productId)) continue;
           const used = usage.get(line.id) || 0;
           const avail = line.quantity - used;
           if (avail <= 0) continue;
@@ -383,7 +424,7 @@ function calculateCompleteBundleDiscounts(
         continue;
       }
 
-      /** 按购物车行合并折扣，避免同一行多条 candidate 冲突；统一用固定金额以兼容混合计价 */
+      // 同一购物车行可能对应多个槽位（同款多件），合并为一条 fixedAmount，避免多条 candidate 互相覆盖
       const mergeByLine = new Map<string, { qty: number; totalDiscount: number }>();
 
       for (const a of allocations) {
@@ -492,18 +533,18 @@ export function bundleCartDiscountGenerateRun(
   const productCandidates: ProductDiscountCandidate[] = [];
 
   const bxgyOffers = offers.filter((o) => o.offerType === "bxgy");
-  /** complete-bundle 由专用逻辑处理，避免误用 discountRulesJson 的数量阶梯 */
+  /** 普通数量阶梯：不含 BXGY 与 complete-bundle（后两者有独立分支） */
   const regularOffers = offers.filter(
-    (o) => o.offerType !== "bxgy" && o.offerType !== "complete-bundle",
+    (o) => o.offerType !== "bxgy" && !isCompleteBundleOfferType(o.offerType),
   );
 
-  // First, check for BXGY offers
+  // ① 优先处理 BXGY（买 X 送 Y 等）
   const bxgyCandidates = calculateBxgyDiscount(input.cart.lines, bxgyOffers);
   if (bxgyCandidates.length > 0) {
     productCandidates.push(...bxgyCandidates);
   }
 
-  // 其次：整包多 SKU 的 complete-bundle（凑齐一档即按商品定价减价）
+  // ② 再处理 complete-bundle：多 SKU 成套，与 discountRulesJson 阶梯无关
   if (productCandidates.length === 0) {
     const marketIdCb = input.localization?.market?.id;
     const completeBundleCandidates = calculateCompleteBundleDiscounts(
@@ -517,7 +558,7 @@ export function bundleCartDiscountGenerateRun(
     }
   }
 
-  // Then check for regular quantity break offers（无 BXGY、无 complete-bundle 命中时）
+  // ③ 最后按行匹配普通 bundle 的 discountRulesJson 数量阶梯
   if (productCandidates.length === 0) {
     for (const line of input.cart.lines) {
       if (line.merchandise.__typename !== "ProductVariant") {
@@ -1031,9 +1072,18 @@ const findOffer = (
       return offer;
     }
 
-    const hit =
-      (productId && selectedIds.includes(productId)) ||
-      (variantId && selectedIds.includes(variantId));
+    // 配置中的 id 可能是纯数字，购物车行侧为 GID，需归一化后比较
+    let hit = false;
+    for (const sid of selectedIds) {
+      if (productId && productIdsMatch(productId, sid)) {
+        hit = true;
+        break;
+      }
+      if (variantId && productIdsMatch(variantId, sid)) {
+        hit = true;
+        break;
+      }
+    }
 
     log("offer_selected_ids_check", {
       offerId: offer.id,
@@ -1050,6 +1100,10 @@ const findOffer = (
   return null;
 };
 
+/**
+ * 校验是否允许生成本次折扣：购物车非空，且商家在自动折扣里启用了「商品级」折扣类。
+ * 若后台未勾选 Line item / Product 类折扣，函数不会运行，前台将始终显示原价。
+ */
 const checkValid = (input: CartInput): boolean => {
   if (!input.cart.lines.length) {
     return false;
