@@ -12,6 +12,7 @@ import {
 import {
   authenticate,
   ensureCartLinesAutomaticDiscount,
+  syncCartLinesAutomaticDiscountMetafield,
 } from "../../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { DashboardPage } from "../page/DashboardPage";
@@ -232,6 +233,17 @@ async function syncShopOffersMetafield(
         ok: false,
         message: userErrors.map((e) => e.message || "unknown").join("; "),
       };
+    }
+
+    // 关键：Discount Function 运行时优先从 discount owner 读取配置。
+    // 这里把同一份 offers JSON 同步到自动折扣本身，避免 shop.metafield 在 Function 侧不可见。
+    await ensureCartLinesAutomaticDiscount(admin);
+    const discountSyncResult = await syncCartLinesAutomaticDiscountMetafield(
+      admin,
+      metafieldValue,
+    );
+    if (!discountSyncResult.ok) {
+      return discountSyncResult;
     }
 
     return { ok: true };

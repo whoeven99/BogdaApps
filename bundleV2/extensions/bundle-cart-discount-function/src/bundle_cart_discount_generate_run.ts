@@ -75,6 +75,12 @@ type OfferMetafieldPayload = {
   }>;
 };
 
+type MetafieldSnapshot = {
+  jsonValue?: unknown;
+  value?: unknown;
+  type?: string;
+} | null | undefined;
+
 type BxgyDiscountRule = {
   count: number;
   buyQuantity: number;
@@ -472,18 +478,17 @@ function calculateCompleteBundleDiscounts(
 export function bundleCartDiscountGenerateRun(
   input: CartInput,
 ): CartLinesDiscountsGenerateRunResult {
-  const shopAny = input.shop as unknown as {
-    metafield?: { jsonValue?: unknown; type?: string } | null;
-  };
+  const shopMetafield = input.shop.metafield as MetafieldSnapshot;
+  const discountMetafield = input.discount.metafield as MetafieldSnapshot;
+  // 运行时优先读 discount owner 的 app-owned metafield；shop.metafield 仅作为兼容兜底。
+  const activeOffersMetafield = discountMetafield ?? shopMetafield;
+
   log("shop_metafields_snapshot", {
-    offers: summarizeMetafield(
-      shopAny.metafield as
-        | { jsonValue?: unknown; value?: unknown; type?: string }
-        | null
-        | undefined,
-    ),
+    discountOffers: summarizeMetafield(discountMetafield),
+    shopOffers: summarizeMetafield(shopMetafield),
+    activeSource: discountMetafield ? "discount" : shopMetafield ? "shop" : null,
   });
-  const offersPayload = shopAny.metafield?.jsonValue as
+  const offersPayload = activeOffersMetafield?.jsonValue as
     | OfferMetafieldPayload
     | null
     | undefined;
@@ -491,9 +496,10 @@ export function bundleCartDiscountGenerateRun(
   log("run_start", {
     cartLineCount: input.cart.lines.length,
     discountClasses: input.discount.discountClasses,
-    metafieldPresent: Boolean(input.shop.metafield),
-    metafieldType: input.shop.metafield?.type ?? null,
-    hasOffers: Boolean(shopAny.metafield?.jsonValue),
+    metafieldPresent: Boolean(activeOffersMetafield),
+    metafieldType: activeOffersMetafield?.type ?? null,
+    hasOffers: Boolean(activeOffersMetafield?.jsonValue),
+    offersSource: discountMetafield ? "discount" : shopMetafield ? "shop" : null,
   });
 
   if (!offersPayload) {
