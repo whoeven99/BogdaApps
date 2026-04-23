@@ -16,3 +16,5 @@
 **/.cache/
 .DS_Store
 /bundleV2/.testprogram
+/bundleV2/.agents
+bundleV2/skills-lock.json
