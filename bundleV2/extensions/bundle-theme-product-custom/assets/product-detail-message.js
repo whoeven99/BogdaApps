@@ -918,23 +918,27 @@ window.ciwiSelectCompleteBundleBar = function (barId) {
   if (currentOffer) syncCurrentBundleToSessionStorage(currentOffer);
 };
 
-window.ciwiHandleCompleteBundleAddToCart = async function(event) {
-  if (event) {
-    event.preventDefault();
-    event.stopPropagation();
-  }
+/** 防止同一次点击触发 click + submit 时重复请求 */
+let completeBundleCartAddBusy = false;
+
+/**
+ * 将当前选中的 complete-bundle 档加入购物车。
+ * bar.quantity 仅表示档位文案（如 Qty 2），不叠乘到每行 SKU 数量；每行固定加 1 件。
+ */
+async function performCompleteBundleCartAdd() {
+  if (completeBundleCartAddBusy) return false;
+  completeBundleCartAddBusy = true;
   try {
     const currentOffer = getCurrentOffer(offersConfigCache);
+    if (!currentOffer || currentOffer.offerType !== "complete-bundle") return false;
     const config = parseCompleteBundleConfig(currentOffer?.selectedProductsJson);
     const items = [];
     const selId = window.__ciwiBundleState?.selectedCompleteBundleBarId;
     const barToUse =
       config.bars.find((b) => String(b.id) === String(selId)) || config.bars[0] || null;
-    if (!barToUse || !Array.isArray(barToUse.products)) {
-      window.ciwiHandleBundleAddToCart(event);
-      return;
+    if (!barToUse || !Array.isArray(barToUse.products) || !barToUse.products.length) {
+      return false;
     }
-    const lineQty = Math.max(1, Math.trunc(Number(barToUse.quantity) || 1));
     for (const product of barToUse.products) {
       const selectedMap = window.__ciwiBundleState?.selectedBundleVariants?.[barToUse.id] || {};
       const variantId = toAjaxVariantId(
@@ -944,22 +948,34 @@ window.ciwiHandleCompleteBundleAddToCart = async function(event) {
           "",
       );
       if (!variantId) continue;
-      items.push({ id: Number(variantId), quantity: lineQty });
+      items.push({ id: Number(variantId), quantity: 1 });
     }
-    if (!items.length) {
-      window.ciwiHandleBundleAddToCart(event);
-      return;
-    }
+    if (!items.length) return false;
     await fetch("/cart/add.js", {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({ items }),
     });
-    window.location.href = "/cart";
+    return true;
   } catch (error) {
-    console.error("[ciwi] complete bundle add failed, fallback submit", error);
-    window.ciwiHandleBundleAddToCart(event);
+    console.error("[ciwi] performCompleteBundleCartAdd failed", error);
+    return false;
+  } finally {
+    completeBundleCartAddBusy = false;
   }
+}
+
+window.ciwiHandleCompleteBundleAddToCart = async function (event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  const ok = await performCompleteBundleCartAdd();
+  if (!ok) {
+    window.ciwiHandleBundleAddToCart(event);
+    return;
+  }
+  window.location.href = "/cart";
 };
 
 function renderBundlePreviewHtml(offer) {
@@ -1464,6 +1480,42 @@ function attachBundlePriceSync(offer) {
     const moPrice = new MutationObserver(refresh);
     moPrice.observe(priceRoot, { childList: true, subtree: true, characterData: true });
     signal.addEventListener("abort", () => moPrice.disconnect(), { once: true });
+  }
+
+  // complete-bundle：主题原生「添加到购物车」应与绿色 Add to Cart 一致（整档多 SKU 各 1 件）
+  if (offer.offerType === "complete-bundle") {
+    const isThemeAddTrigger = (t, productForm) => {
+      if (!t || typeof t.closest !== "function" || !productForm) return false;
+      if (!productForm.contains(t)) return false;
+      if (t.closest(".ciwi-bundle-wrapper")) return false;
+      if (
+        t.closest(
+          ".shopify-payment-button, shopify-buy-it-now-button, [data-shopify='payment-button']",
+        )
+      ) {
+        return false;
+      }
+      const btn = t.closest(
+        "button[type='submit'],button[name='add'],input[type='submit'][name='add'],input[name='add']",
+      );
+      return !!(btn && productForm.contains(btn));
+    };
+
+    document.addEventListener(
+      "click",
+      (e) => {
+        const productForm = getAddToCartForm();
+        if (!isThemeAddTrigger(e.target, productForm)) return;
+        if (!document.querySelector(".ciwi-bundle-wrapper")) return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation?.();
+        void performCompleteBundleCartAdd().then((ok) => {
+          if (ok) window.location.href = "/cart";
+        });
+      },
+      { capture: true, signal },
+    );
   }
 
   queueMicrotask(refresh);
