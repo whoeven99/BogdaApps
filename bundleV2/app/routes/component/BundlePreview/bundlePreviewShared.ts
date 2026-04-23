@@ -1,3 +1,6 @@
+import type { ProgressiveGiftsConfig } from "../../../utils/offerParsing";
+import { isProgressiveGiftUnlocked } from "../../../utils/offerParsing";
+
 export type LayoutFormat = "vertical" | "horizontal" | "card" | "compact";
 
 export type PreviewItem = {
@@ -34,6 +37,79 @@ function esc(value: unknown) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+/**
+ * 管理端预览：阶梯赠品（免邮）区域 HTML
+ * @param selectedBarIndex 当前模拟选中的 Bar 序号（1-based，与 __ciwi_bundle_tier 一致）
+ * @param assumedLineQty 模拟购物车行数量（用于 at_count 解锁预览）
+ */
+export function renderProgressiveGiftsPreviewHtml(
+  cfg: ProgressiveGiftsConfig,
+  selectedBarIndex: number,
+  assumedLineQty: number,
+): string {
+  if (!cfg.enabled || !cfg.gifts?.length) return "";
+
+  const layout = ["vertical", "horizontal", "card", "compact"].includes(cfg.layout)
+    ? cfg.layout
+    : "vertical";
+
+  const itemsHtml = cfg.gifts
+    .map((gift) => {
+      const unlocked = isProgressiveGiftUnlocked(gift, selectedBarIndex, assumedLineQty);
+      const hidden = cfg.hideGiftsUntilUnlocked && !unlocked;
+      if (hidden) return "";
+
+      const lockLabel = unlocked ? "已解锁" : "未解锁";
+      const showLock = cfg.showLabelsForLockedGifts || unlocked;
+      const img = gift.imageUrl?.trim()
+        ? `<div class="ciwi-progressive-gift__img-wrap"><img class="ciwi-progressive-gift__img" src="${esc(
+            gift.imageUrl,
+          )}" alt="" loading="lazy" /></div>`
+        : "";
+
+      const sub =
+        gift.type === "free_shipping"
+          ? `<div class="create-offer-style-preview-item-subtitle">${esc(
+              gift.subtitle || "结账页对符合条件的运费 100% 折扣（以 Checkout 为准）",
+            )}</div>`
+          : "";
+
+      return `<div class="ciwi-progressive-gift create-offer-style-preview-item${
+        unlocked ? " create-offer-style-preview-item--featured" : ""
+      }" data-unlocked="${unlocked ? "1" : "0"}">
+        ${
+          showLock
+            ? `<div class="ciwi-progressive-gift__lock">${esc(lockLabel)}</div>`
+            : ""
+        }
+        ${img || ""}
+        <div class="create-offer-style-preview-item-title">${esc(gift.title)}</div>
+        ${sub}
+      </div>`;
+    })
+    .filter(Boolean)
+    .join("");
+
+  if (!itemsHtml.trim()) return "";
+
+  return `<div class="ciwi-progressive-gifts" data-layout="${esc(layout)}">
+    <div class="ciwi-progressive-gifts__head">
+      <div class="ciwi-progressive-gifts__title">${esc(cfg.title)}</div>
+      ${
+        cfg.subtitle
+          ? `<div class="ciwi-progressive-gifts__sub">${esc(cfg.subtitle)}</div>`
+          : ""
+      }
+    </div>
+    <div class="create-offer-style-preview-list create-offer-style-preview-list--${esc(layout)} ciwi-progressive-gifts__list">
+      ${itemsHtml}
+    </div>
+    <p class="ciwi-progressive-gifts__legal">${esc(
+      "产品页仅作提示；真实免邮金额以 Checkout 为准。",
+    )}</p>
+  </div>`;
 }
 
 export function renderBundlePreviewHtml({

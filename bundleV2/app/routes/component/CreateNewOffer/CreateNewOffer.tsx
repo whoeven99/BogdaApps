@@ -13,6 +13,7 @@ dayjs.extend(timezone);
 import "./CreateNewOffer.css";
 import BundlePreview from "../BundlePreview/BundlePreview";
 import { PreviewItem } from "../BundlePreview/bundlePreviewShared";
+import { ProgressiveGiftsSection } from "./ProgressiveGiftsSection";
 import {
   OFFER_TEXT_LIMITS,
   normalizeOfferNameKey,
@@ -21,6 +22,8 @@ import {
   parseOfferSettings,
   parseSelectedProductIds,
   buildBxgyDiscountRulesJson,
+  progressiveGiftsConfigToStorableJson,
+  type ProgressiveGiftsConfig,
 } from "../../../utils/offerParsing";
 
 type DiscountRule = {
@@ -259,6 +262,20 @@ export function CreateNewOffer({
     initialOffer?.offerSettingsJson,
   );
 
+  const [progressiveGifts, setProgressiveGifts] = useState<ProgressiveGiftsConfig>(
+    () => offerSettings.progressiveGifts,
+  );
+
+  useEffect(() => {
+    if (!initialOffer?.id) return;
+    setProgressiveGifts(
+      parseOfferSettings(initialOffer.offerSettingsJson).progressiveGifts,
+    );
+  }, [initialOffer?.id, initialOffer?.offerSettingsJson]);
+
+  const [previewGiftBar, setPreviewGiftBar] = useState(1);
+  const [previewGiftQty, setPreviewGiftQty] = useState(1);
+
   const [scheduleTimezone, setScheduleTimezone] = useState(
     offerSettings.scheduleTimezone || ianaTimezone
   );
@@ -443,6 +460,22 @@ export function CreateNewOffer({
 
   const normalizedDiscountRules = sanitizeDiscountRules(discountRules);
   const featuredRule = normalizedDiscountRules[0];
+
+  const previewBarOptions = useMemo(() => {
+    if (offerType === "bxgy") {
+      return bxgyDiscountRules.map((r, i) => ({
+        value: i + 1,
+        label: `Bar #${i + 1} (count ≥ ${r.count})`,
+      }));
+    }
+    return [
+      { value: 1, label: "Bar #1 (Single, qty 1)" },
+      ...normalizedDiscountRules.map((r, i) => ({
+        value: i + 2,
+        label: `Bar #${i + 2} (qty ${r.count})`,
+      })),
+    ];
+  }, [offerType, bxgyDiscountRules, normalizedDiscountRules]);
 
   const hasDefault = normalizedDiscountRules.some(r => r.isDefault);
 
@@ -698,6 +731,11 @@ export function CreateNewOffer({
         name="discountRulesJson"
         value={JSON.stringify(offerType === "bxgy" ? buildBxgyDiscountRulesJson(bxgyDiscountRules) : buildDiscountRulesJson(normalizedDiscountRules))}
       />
+      <input
+        type="hidden"
+        name="progressiveGiftsJson"
+        value={JSON.stringify(progressiveGiftsConfigToStorableJson(progressiveGifts))}
+      />
 
       <div className="bg-[#ffffff] rounded-[8px] shadow-[0_1px_3px_rgba(0,0,0,0.1)] p-[20px] mb-[100px]">
         <div className="grid grid-cols-2 sm:flex sm:gap-[12px] gap-[8px] mb-6">
@@ -852,6 +890,9 @@ export function CreateNewOffer({
                   showCustomButton={showCustomButton}
                   title={widgetTitle}
                   items={previewItems}
+                  progressiveGifts={progressiveGifts}
+                  progressivePreviewBarIndex={previewGiftBar}
+                  progressivePreviewLineQty={previewGiftQty}
                 />
                 <p className="text-[12px] text-[#5c6166] mt-3 italic font-normal">
                   Note: This is a live preview. Changes will update in real-time when state is connected.
@@ -1411,6 +1452,13 @@ export function CreateNewOffer({
                         </Button>
                       </>
                     )}
+                  <ProgressiveGiftsSection
+                    offerType={offerType}
+                    normalizedDiscountRules={normalizedDiscountRules}
+                    bxgyDiscountRules={bxgyDiscountRules}
+                    value={progressiveGifts}
+                    onChange={setProgressiveGifts}
+                  />
                 </div>
                 </div>
 
@@ -1425,6 +1473,39 @@ export function CreateNewOffer({
                       )?.description
                     }
                   </p>
+                  {progressiveGifts.enabled ? (
+                    <div className="mb-4 space-y-2">
+                      <div className="text-[13px] font-medium text-[#1c1f23]">
+                        Progressive gifts preview
+                      </div>
+                      <div className="grid grid-cols-1 gap-2">
+                        <label className="block text-[12px] text-[#5c6166]">
+                          Simulated bar #（联动免邮解锁预览）
+                          <Select
+                            size="small"
+                            className="mt-1 w-full"
+                            value={previewGiftBar}
+                            options={previewBarOptions}
+                            onChange={(v) => setPreviewGiftBar(Number(v))}
+                          />
+                        </label>
+                        <label className="block text-[12px] text-[#5c6166]">
+                          Simulated line qty（at_count 模式）
+                          <Input
+                            size="small"
+                            type="number"
+                            min={1}
+                            className="mt-1"
+                            value={previewGiftQty}
+                            onChange={(e) => {
+                              const n = Math.max(1, Math.trunc(Number(e.target.value) || 1));
+                              setPreviewGiftQty(n);
+                            }}
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  ) : null}
                   <BundlePreview
                     layoutFormat={layoutFormat}
                     cardBackgroundColor={cardBackgroundColor}
@@ -1439,6 +1520,9 @@ export function CreateNewOffer({
                   showCustomButton={showCustomButton}
                   title={widgetTitle}
                   items={previewItems}
+                  progressiveGifts={progressiveGifts}
+                  progressivePreviewBarIndex={previewGiftBar}
+                  progressivePreviewLineQty={previewGiftQty}
                   />
                   <p className="text-[12px] text-[#5c6166] mt-3 italic font-normal">
                     Note: This is a live preview. Changes will update in real-time when state is connected.
@@ -1738,6 +1822,39 @@ export function CreateNewOffer({
                     )?.description
                   }
                 </p>
+                {progressiveGifts.enabled ? (
+                  <div className="mb-4 space-y-2">
+                    <div className="text-[13px] font-medium text-[#1c1f23]">
+                      Progressive gifts preview
+                    </div>
+                    <div className="grid grid-cols-1 gap-2">
+                      <label className="block text-[12px] text-[#5c6166]">
+                        Simulated bar #
+                        <Select
+                          size="small"
+                          className="mt-1 w-full"
+                          value={previewGiftBar}
+                          options={previewBarOptions}
+                          onChange={(v) => setPreviewGiftBar(Number(v))}
+                        />
+                      </label>
+                      <label className="block text-[12px] text-[#5c6166]">
+                        Simulated line qty
+                        <Input
+                          size="small"
+                          type="number"
+                          min={1}
+                          className="mt-1"
+                          value={previewGiftQty}
+                          onChange={(e) => {
+                            const n = Math.max(1, Math.trunc(Number(e.target.value) || 1));
+                            setPreviewGiftQty(n);
+                          }}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                ) : null}
                 <BundlePreview
                   layoutFormat={layoutFormat}
                   cardBackgroundColor={cardBackgroundColor}
@@ -1752,6 +1869,9 @@ export function CreateNewOffer({
                   showCustomButton={showCustomButton}
                   title={widgetTitle}
                   items={previewItems}
+                  progressiveGifts={progressiveGifts}
+                  progressivePreviewBarIndex={previewGiftBar}
+                  progressivePreviewLineQty={previewGiftQty}
                 />
                 <p className="text-[12px] text-[#5c6166] mt-3 italic font-normal">
                   Note: This is a live preview. Changes will update in real-time when state is connected.

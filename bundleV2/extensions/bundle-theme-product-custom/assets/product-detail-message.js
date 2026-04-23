@@ -465,6 +465,170 @@ function getOfferBundleTitle(offer) {
   return "NO_BUNDLE_TITLE";
 }
 
+/** 与 Admin / Function 对齐的购物车行属性名（勿改，已写入服务端白名单与配送折扣逻辑） */
+const CIWI_PROP_OFFER_ID = "__ciwi_bundle_offer_id";
+const CIWI_PROP_TIER = "__ciwi_bundle_tier";
+
+/**
+ * 从 offerSettingsJson 读取 progressiveGifts；未开启则返回 null
+ */
+function getProgressiveGiftsConfigFromOffer(offer) {
+  if (!offer?.offerSettingsJson) return null;
+  try {
+    const root = JSON.parse(offer.offerSettingsJson);
+    const pg = root && root.progressiveGifts;
+    if (!pg || !pg.enabled) return null;
+    return pg;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * 根据当前选档（与 Bar 序号 1-based 对齐）计算 tier 属性值，规则与后台预览一致
+ */
+function computeSelectedBarIndexForOffer(offer) {
+  const sc = Number(window.__ciwiBundleState?.selectedCount ?? 1);
+  if (offer.offerType === "bxgy") {
+    const rules = parseBxgyDiscountRulesJson(offer.discountRulesJson);
+    const idx = rules.findIndex((r) => Number(r.count) === sc);
+    return idx >= 0 ? idx + 1 : 1;
+  }
+  if (sc === 1) return 1;
+  const rules = parseDiscountRulesJson(offer.discountRulesJson);
+  const idx = rules.findIndex((r) => Number(r.count) === sc);
+  return idx >= 0 ? idx + 2 : 1;
+}
+
+function isProgressiveGiftUnlockedStorefront(gift, barIndex, lineQty) {
+  const mode = String(gift.unlockMode || "tier_index");
+  if (mode === "at_count") {
+    const need = Math.max(1, Math.trunc(Number(gift.unlockAtCount) || 1));
+    return Math.max(1, Math.trunc(Number(lineQty) || 1)) >= need;
+  }
+  const needBar = Math.max(1, Math.trunc(Number(gift.unlockTierIndex) || 1));
+  return Math.max(1, Math.trunc(Number(barIndex) || 1)) >= needBar;
+}
+
+function getCiwiBundlesPreviewContextLine() {
+  try {
+    const el = document.getElementById("ciwi-bundles-config");
+    const j = JSON.parse(el?.textContent || "{}");
+    const parts = [];
+    if (j.countryIsoCode) parts.push(String(j.countryIsoCode));
+    if (j.marketId) parts.push(`market:${String(j.marketId)}`);
+    return parts.length ? parts.join(" / ") : "—";
+  } catch (e) {
+    return "—";
+  }
+}
+
+/**
+ * 店面前台：阶梯赠品 HTML（免邮提示 + 锁定态）；与 Admin 预览结构尽量一致
+ */
+function renderProgressiveGiftsStorefrontHtml(offer, barIndex, lineQty) {
+  const cfg = getProgressiveGiftsConfigFromOffer(offer);
+  if (!cfg) return "";
+  const layout = ["vertical", "horizontal", "card", "compact"].includes(String(cfg.layout))
+    ? cfg.layout
+    : "vertical";
+  const gifts = Array.isArray(cfg.gifts) ? cfg.gifts : [];
+  if (!gifts.length) return "";
+
+  const itemsHtml = gifts
+    .map((gift) => {
+      const unlocked = isProgressiveGiftUnlockedStorefront(gift, barIndex, lineQty);
+      if (cfg.hideGiftsUntilUnlocked && !unlocked) return "";
+      const lockLabel = unlocked ? "已解锁" : "未解锁";
+      const showLock = cfg.showLabelsForLockedGifts !== false || unlocked;
+      const img =
+        gift.imageUrl &&
+        String(gift.imageUrl).trim() &&
+        `<div class="ciwi-progressive-gift__img-wrap"><img class="ciwi-progressive-gift__img" src="${esc(
+          gift.imageUrl,
+        )}" alt="" loading="lazy" decoding="async" /></div>`;
+      const sub =
+        gift.type === "free_shipping"
+          ? `<div class="create-offer-style-preview-item-subtitle">${esc(
+              gift.subtitle ||
+                "结账页对符合条件的运费 100% 折扣（以 Checkout 为准；购物车 AJAX 不展示折后运费）",
+            )}</div>`
+          : "";
+      return `<div class="ciwi-progressive-gift create-offer-style-preview-item${
+        unlocked ? " create-offer-style-preview-item--featured" : ""
+      }" data-unlocked="${unlocked ? "1" : "0"}">
+        ${
+          showLock
+            ? `<div class="ciwi-progressive-gift__lock">${esc(lockLabel)}</div>`
+            : ""
+        }
+        ${img || ""}
+        <div class="create-offer-style-preview-item-title">${esc(gift.title || "Free shipping")}</div>
+        ${sub}
+      </div>`;
+    })
+    .filter(Boolean)
+    .join("");
+
+  if (!itemsHtml.trim()) return "";
+
+  return `<div class="ciwi-progressive-gifts" data-layout="${esc(layout)}">
+    <div class="ciwi-progressive-gifts__head">
+      <div class="ciwi-progressive-gifts__title">${esc(cfg.title || "Progressive gifts")}</div>
+      ${
+        cfg.subtitle
+          ? `<div class="ciwi-progressive-gifts__sub">${esc(cfg.subtitle)}</div>`
+          : ""
+      }
+    </div>
+    <div class="create-offer-style-preview-list create-offer-style-preview-list--${esc(
+      layout,
+    )} ciwi-progressive-gifts__list">
+      ${itemsHtml}
+    </div>
+    <p class="ciwi-progressive-gifts__legal">${esc(
+      "当前市场 / 国家：" + getCiwiBundlesPreviewContextLine() + "；免邮以 Checkout 为准。",
+    )}</p>
+  </div>`;
+}
+
+/** 将档位与 Offer Id 写入加购表单，供 Checkout Function 读取 line item properties */
+function ensureBundleLineProperties(offer) {
+  const form = getAddToCartForm();
+  if (!form || !offer || !offer.id) return;
+  form.querySelectorAll('input[type="hidden"][data-ciwi-bundle-line-prop="1"]').forEach((n) => n.remove());
+  const bar = computeSelectedBarIndexForOffer(offer);
+  const mk = (k, v) => {
+    const inp = document.createElement("input");
+    inp.type = "hidden";
+    inp.setAttribute("data-ciwi-bundle-line-prop", "1");
+    inp.name = `properties[${k}]`;
+    inp.value = String(v);
+    form.appendChild(inp);
+  };
+  mk(CIWI_PROP_OFFER_ID, String(offer.id));
+  mk(CIWI_PROP_TIER, String(bar));
+}
+
+/**
+ * 在加购表单 submit 捕获阶段再次写入 bundle 行属性。
+ * 部分主题在更早阶段序列化 FormData，导致仅靠切换档位时写入的隐藏域未进入请求；
+ * 此处保证尽量与结账配送折扣 Function 所需的 __ciwi_* 属性一致。
+ */
+function attachBundleSubmitLinePropsGuard() {
+  const form = getAddToCartForm();
+  if (!form || form.dataset.ciwiBundleSubmitPropsGuard === "1") return;
+  form.dataset.ciwiBundleSubmitPropsGuard = "1";
+  form.addEventListener(
+    "submit",
+    () => {
+      const offer = getCurrentOffer(offersConfigCache);
+      if (offer) ensureBundleLineProperties(offer);
+    },
+    { capture: true },
+  );
+}
+
 function readSessionStorageJson(key, fallback) {
   try {
     const raw = window.sessionStorage.getItem(key);
@@ -661,6 +825,7 @@ window.ciwiSelectBundleOption = function(count) {
   const currentOffer = getCurrentOffer(offersConfigCache);
   if (currentOffer) {
     syncCurrentBundleToSessionStorage(currentOffer);
+    ensureBundleLineProperties(currentOffer);
   }
   const wrap = document.querySelector(".ciwi-bundle-wrapper");
   if (wrap && currentOffer) {
@@ -779,6 +944,9 @@ function renderBundlePreviewHtml(offer) {
       })
       .join("");
 
+    const barIdxBxgy = computeSelectedBarIndexForOffer(offer);
+    const progressiveBxgy = renderProgressiveGiftsStorefrontHtml(offer, barIdxBxgy, selectedCount);
+
     return `<div class="create-offer-preview-card">
       <div class="create-offer-style-preview-header" style="color:${esc(titleColor)} !important; font-size: ${esc(titleFontSize)}px !important; font-weight: ${esc(titleFontWeight)} !important;">${esc(widgetTitle)}</div>
       <div class="create-offer-style-preview-list create-offer-style-preview-list--${layoutFormat}">
@@ -787,7 +955,7 @@ function renderBundlePreviewHtml(offer) {
       ${showCustomButton ? `<button class="create-offer-preview-button" onclick="window.ciwiHandleBundleAddToCart()" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
         ${esc(buttonText)}
       </button>` : ""}
-    </div>`;
+    </div>` + progressiveBxgy;
   }
   
   // Existing logic for quantity breaks
@@ -885,6 +1053,9 @@ function renderBundlePreviewHtml(offer) {
     })
     .join("");
 
+  const barIdxQty = computeSelectedBarIndexForOffer(offer);
+  const progressiveQty = renderProgressiveGiftsStorefrontHtml(offer, barIdxQty, selectedCount);
+
   return `<div class="create-offer-preview-card">
     <div class="create-offer-style-preview-header" style="color:${esc(titleColor)} !important; font-size: ${esc(titleFontSize)}px !important; font-weight: ${esc(titleFontWeight)} !important;">${esc(widgetTitle)}</div>
     <div class="create-offer-style-preview-list create-offer-style-preview-list--${layoutFormat}">
@@ -893,7 +1064,7 @@ function renderBundlePreviewHtml(offer) {
     ${showCustomButton ? `<button type="button" class="create-offer-preview-button" onclick="window.ciwiHandleBundleAddToCart(event)" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
       ${esc(buttonText)}
     </button>` : ""}
-  </div>`;
+  </div>` + progressiveQty;
 }
 
 function parseCiwiMetafieldScript(scriptId) {
@@ -1011,6 +1182,7 @@ function buildBundleUi(offer) {
   wrapper.innerHTML = renderBundlePreviewHtml(offer);
   if (!wrapper.innerHTML.trim()) return null;
   wrapper.style.display = isCurrentVariantAvailable() ? "block" : "none";
+  ensureBundleLineProperties(offer);
   return wrapper;
 }
 
@@ -1030,6 +1202,7 @@ function scheduleBundlePriceRefresh(offer) {
       wrap.style.display = "none";
     }
     syncCurrentBundleToSessionStorage(offer);
+    ensureBundleLineProperties(offer);
     hideThemeQuantitySelectors();
   }, 64);
 }
@@ -1081,6 +1254,8 @@ function attachBundlePriceSync(offer) {
     moPrice.observe(priceRoot, { childList: true, subtree: true, characterData: true });
     signal.addEventListener("abort", () => moPrice.disconnect(), { once: true });
   }
+
+  attachBundleSubmitLinePropsGuard();
 
   queueMicrotask(refresh);
 }
