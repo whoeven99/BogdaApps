@@ -922,6 +922,31 @@ window.ciwiSelectCompleteBundleBar = function (barId) {
 let completeBundleCartAddBusy = false;
 
 /**
+ * AJAX 加购成功后通知主题刷新购物车/侧栏（不跳转 /cart）。
+ * Dawn 及部分主题会监听 cart:refresh / cart:updated；多派发几种常见事件以提高兼容性。
+ */
+async function notifyThemeAfterCartAdd() {
+  try {
+    const res = await fetch("/cart.js", {
+      headers: { Accept: "application/json" },
+      credentials: "same-origin",
+    });
+    const cart = res.ok ? await res.json().catch(() => null) : null;
+
+    document.documentElement.dispatchEvent(
+      new CustomEvent("cart:refresh", { bubbles: true }),
+    );
+    document.dispatchEvent(new CustomEvent("cart:updated", { detail: { cart } }));
+    window.dispatchEvent(new CustomEvent("shopify:cart:change", { detail: { cart } }));
+    document.body.dispatchEvent(
+      new CustomEvent("ajaxCart:updated", { bubbles: true, detail: { cart } }),
+    );
+  } catch (error) {
+    console.warn("[ciwi] notifyThemeAfterCartAdd failed", error);
+  }
+}
+
+/**
  * 将当前选中的 complete-bundle 档加入购物车。
  * bar.quantity 仅表示档位文案（如 Qty 2），不叠乘到每行 SKU 数量；每行固定加 1 件。
  */
@@ -951,11 +976,20 @@ async function performCompleteBundleCartAdd() {
       items.push({ id: Number(variantId), quantity: 1 });
     }
     if (!items.length) return false;
-    await fetch("/cart/add.js", {
+    const res = await fetch("/cart/add.js", {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({ items }),
     });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      console.error(
+        "[ciwi] cart/add.js failed",
+        res.status,
+        body?.description || body?.message || body,
+      );
+      return false;
+    }
     return true;
   } catch (error) {
     console.error("[ciwi] performCompleteBundleCartAdd failed", error);
@@ -975,7 +1009,7 @@ window.ciwiHandleCompleteBundleAddToCart = async function (event) {
     window.ciwiHandleBundleAddToCart(event);
     return;
   }
-  window.location.href = "/cart";
+  await notifyThemeAfterCartAdd();
 };
 
 function renderBundlePreviewHtml(offer) {
@@ -1510,8 +1544,8 @@ function attachBundlePriceSync(offer) {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation?.();
-        void performCompleteBundleCartAdd().then((ok) => {
-          if (ok) window.location.href = "/cart";
+        void performCompleteBundleCartAdd().then(async (ok) => {
+          if (ok) await notifyThemeAfterCartAdd();
         });
       },
       { capture: true, signal },
