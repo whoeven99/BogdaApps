@@ -425,6 +425,12 @@ const findOffer = (
         // ignore parse error
       }
     }
+    
+    const discountTiers = parseDiscountRulesJson(offer.discountRulesJson);
+    if (discountTiers.length === 0) {
+      log("offer_skip_no_rules", { offerId: offer.id, name: offer.name });
+      continue;
+    }
 
     const selectedIds = parseSelectedIds(offer.selectedProductsJson);
     if (!selectedIds.length) {
