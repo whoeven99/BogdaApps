@@ -132,6 +132,28 @@ function buildOfferMetafieldsInput(
   ];
 }
 
+function buildCompactOffersPayload(shopOffers: OfferListItem[]): string {
+  // 仅同步 status=true 的活动，避免无效活动占用 payload 体积并干扰函数计算
+  const activeOffers = shopOffers.filter((offer) => offer.status === true);
+  // 仅保留主题与 Function 运行所需字段，避免 payload 过大导致运行时读取失败
+  const compactOffers = activeOffers.map((offer) => ({
+    id: offer.id,
+    name: offer.name,
+    cartTitle: offer.cartTitle,
+    status: offer.status,
+    startTime: offer.startTime,
+    endTime: offer.endTime,
+    selectedProductsJson: offer.selectedProductsJson ?? null,
+    discountRulesJson: offer.discountRulesJson ?? null,
+    offerSettingsJson: offer.offerSettingsJson ?? null,
+    offerType: offer.offerType,
+  }));
+  return JSON.stringify({
+    updatedAt: new Date().toISOString(),
+    offers: compactOffers,
+  });
+}
+
 async function syncShopOffersMetafield(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   admin: any,
@@ -154,9 +176,17 @@ async function syncShopOffersMetafield(
       offerIds: shopOffers.map((o) => o.id),
     });
 
-    const metafieldValue = JSON.stringify({
+    const fullPayload = JSON.stringify({
       updatedAt: new Date().toISOString(),
       offers: shopOffers,
+    });
+    const metafieldValue = buildCompactOffersPayload(shopOffers);
+    console.log("[offers-sync] payload size snapshot", {
+      totalOffers: shopOffers.length,
+      activeOffers: shopOffers.filter((offer) => offer.status === true).length,
+      fullPayloadLength: fullPayload.length,
+      compactPayloadLength: metafieldValue.length,
+      reducedBy: fullPayload.length - metafieldValue.length,
     });
 
     const shopIdResponse = await admin.graphql(

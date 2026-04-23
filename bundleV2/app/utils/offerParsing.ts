@@ -494,15 +494,13 @@ export function buildCompleteBundleConfig(
               .filter((p) => p && typeof p === "object" && String(p.productId || "").trim())
               .map((p) => ({
                 productId: String(p.productId).trim(),
+                // 仅保留轻量展示字段，避免 selectedProductsJson 过于臃肿
                 title: String(p.title || ""),
                 image: String(p.image || ""),
                 price: String(p.price || ""),
-                defaultVariantId: String(p.defaultVariantId || ""),
+                // 保留选中变体 ID，确保 storefront 仍可直接 /cart/add
                 selectedVariantId: String(p.selectedVariantId || ""),
-                selectedOptions:
-                  p.selectedOptions && typeof p.selectedOptions === "object"
-                    ? p.selectedOptions
-                    : {},
+                // 移除默认变体、selectedOptions、variants 等大字段以减小存储体积
                 pricing: (() => {
                   const pmRaw = String(p.pricing?.mode || "full_price");
                   const pm: CompleteBundlePricingMode = (
@@ -513,23 +511,6 @@ export function buildCompleteBundleConfig(
                   const pv = Number.isFinite(Number(p.pricing?.value)) ? Number(p.pricing?.value) : 0;
                   return { mode: pm, value: pv };
                 })(),
-                variants: Array.isArray(p.variants)
-                  ? p.variants
-                      .filter((v) => v && typeof v === "object" && String(v.id || "").trim())
-                      .map((v) => ({
-                        id: String(v.id).trim(),
-                        title: String(v.title || ""),
-                        price: String(v.price || ""),
-                        selectedOptions: Array.isArray(v.selectedOptions)
-                          ? v.selectedOptions
-                              .filter((opt) => opt && typeof opt === "object")
-                              .map((opt) => ({
-                                name: String(opt.name || ""),
-                                value: String(opt.value || ""),
-                              }))
-                          : [],
-                      }))
-                  : [],
               }))
           : [],
       })),
