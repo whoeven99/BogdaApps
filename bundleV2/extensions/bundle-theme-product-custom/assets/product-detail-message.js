@@ -94,10 +94,55 @@ function formatPrice(value) {
   return `${currencySymbol}${formattedNumber}`;
 }
 
+/** 与后台 offerParsing 一致：从价格字符串解析为数字（元） */
+function parseMoneyStringToNumber(raw) {
+  if (raw == null) return 0;
+  const stripped = String(raw).trim().replace(/[^\d.,-]/g, "");
+  if (!stripped) return 0;
+  const lastComma = stripped.lastIndexOf(",");
+  const lastDot = stripped.lastIndexOf(".");
+  let normalized = stripped;
+  if (lastComma > lastDot) {
+    normalized = stripped.replace(/\./g, "").replace(",", ".");
+  } else {
+    normalized = stripped.replace(/,/g, "");
+  }
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Complete bundle 单件商品计价（与 CreateNewOffer 中 TS 逻辑对齐） */
+function applyCompleteBundleProductPricing(mode, value, basePrice) {
+  const original = Math.max(0, Number(basePrice) || 0);
+  if (mode === "full_price") {
+    return { final: original, original };
+  }
+  if (mode === "percentage_off") {
+    const pct = Math.max(0, Math.min(100, Number(value) || 0));
+    const final = Math.round(original * (1 - pct / 100) * 100) / 100;
+    return { final, original };
+  }
+  if (mode === "amount_off") {
+    const off = Math.max(0, Number(value) || 0);
+    const final = Math.max(0, Math.round((original - off) * 100) / 100);
+    return { final, original };
+  }
+  const fixed = Math.max(0, Number(value) || 0);
+  return { final: Math.round(fixed * 100) / 100, original };
+}
+
 function toCents(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return 0;
   return Math.round(n * 100);
+}
+
+function toAjaxVariantId(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (/^\d+$/.test(raw)) return raw;
+  const hit = raw.match(/\/(\d+)$/);
+  return hit ? hit[1] : "";
 }
 
 function toScaledInteger(value, scale) {
@@ -439,6 +484,368 @@ function parseSelectedProductIds(selectedProductsJson) {
   }
 }
 
+function parseCompleteBundleConfig(selectedProductsJson) {
+  if (typeof selectedProductsJson !== "string" || !selectedProductsJson.trim()) {
+    return { bars: [] };
+  }
+  try {
+    const parsed = JSON.parse(selectedProductsJson);
+    const bars = Array.isArray(parsed?.bars) ? parsed.bars : [];
+    return {
+      bars: bars
+        .filter((bar) => bar && typeof bar === "object" && bar.id)
+        .map((bar) => {
+          const barMode = String(bar?.pricing?.mode || "full_price");
+          const barValue = Number(bar?.pricing?.value) || 0;
+          const products = Array.isArray(bar.products)
+            ? bar.products
+                .filter((p) => p && typeof p === "object" && p.productId)
+                .map((p) => {
+                  const pm = String(p?.pricing?.mode || "full_price");
+                  const pv = Number(p?.pricing?.value) || 0;
+                  return {
+                    productId: String(p.productId),
+                    handle: String(p.handle || ""),
+                    title: String(p.title || ""),
+                    image: String(p.image || ""),
+                    price: String(p.price || ""),
+                    selectedVariantId: String(p.selectedVariantId || p.defaultVariantId || ""),
+                    pricing: { mode: pm, value: pv },
+                    variants: Array.isArray(p.variants)
+                      ? p.variants
+                          .filter((v) => v && typeof v === "object" && v.id)
+                          .map((v) => ({
+                            id: String(v.id),
+                            title: String(v.title || ""),
+                            price: String(v.price || ""),
+                            selectedOptions: Array.isArray(v.selectedOptions)
+                              ? v.selectedOptions.map((opt) => ({
+                                  name: String(opt?.name || ""),
+                                  value: String(opt?.value || ""),
+                                }))
+                              : [],
+                          }))
+                      : [],
+                  };
+                })
+            : [];
+          const allDefault = products.every(
+            (p) => p.pricing.mode === "full_price" && (p.pricing.value || 0) === 0,
+          );
+          if (products.length && allDefault && (barMode !== "full_price" || barValue !== 0)) {
+            products[0].pricing = { mode: barMode, value: barValue };
+          }
+          return {
+            id: String(bar.id),
+            type: bar.type === "bxgy" ? "bxgy" : "quantity-break-same",
+            title: String(bar.title || ""),
+            subtitle: String(bar.subtitle || ""),
+            quantity: Math.max(1, Math.trunc(Number(bar.quantity) || 1)),
+            pricing: { mode: barMode, value: barValue },
+            products,
+          };
+        }),
+    };
+  } catch {
+    return { bars: [] };
+  }
+}
+
+const __ciwiProductHandleCache = {};
+const __ciwiProductIdCache = {};
+const __ciwiHydrateInFlight = {};
+
+function normalizeProductHandle(raw) {
+  const s = String(raw || "").trim();
+  if (!s) return "";
+  return s.replace(/^\/+|\/+$/g, "");
+}
+
+function toProductNumericId(idLike) {
+  const raw = String(idLike || "").trim();
+  if (!raw) return "";
+  if (/^\d+$/.test(raw)) return raw;
+  const hit = raw.match(/\/(\d+)$/);
+  return hit ? hit[1] : "";
+}
+
+function toProductGid(idLike) {
+  const raw = String(idLike || "").trim();
+  if (!raw) return "";
+  if (/^gid:\/\//.test(raw)) return raw;
+  const numericId = toProductNumericId(raw);
+  return numericId ? `gid://shopify/Product/${numericId}` : raw;
+}
+
+function toVariantGid(idLike) {
+  const raw = String(idLike || "").trim();
+  if (!raw) return "";
+  if (/^gid:\/\//.test(raw)) return raw;
+  if (/^\d+$/.test(raw)) return `gid://shopify/ProductVariant/${raw}`;
+  const hit = raw.match(/(\d+)$/);
+  return hit ? `gid://shopify/ProductVariant/${hit[1]}` : raw;
+}
+
+function getProductImageUrl(rawProduct) {
+  const featured = rawProduct?.featured_image;
+  if (typeof featured === "string" && featured) return featured;
+  if (featured && typeof featured === "object" && typeof featured.url === "string") {
+    return featured.url;
+  }
+  if (Array.isArray(rawProduct?.images) && rawProduct.images.length) {
+    const firstImage = rawProduct.images[0];
+    if (typeof firstImage === "string" && firstImage) return firstImage;
+    if (firstImage && typeof firstImage === "object") {
+      if (typeof firstImage.src === "string" && firstImage.src) return firstImage.src;
+      if (typeof firstImage.url === "string" && firstImage.url) return firstImage.url;
+    }
+  }
+  return "";
+}
+
+function cacheStorefrontProduct(rawProduct) {
+  if (!rawProduct || typeof rawProduct !== "object") return;
+  const numericId = toProductNumericId(rawProduct.id);
+  const productGid = toProductGid(rawProduct.id);
+  if (numericId) __ciwiProductIdCache[numericId] = rawProduct;
+  if (productGid) __ciwiProductIdCache[productGid] = rawProduct;
+  const handle = normalizeProductHandle(rawProduct.handle);
+  if (handle) __ciwiProductHandleCache[handle] = rawProduct;
+}
+
+function readCachedStorefrontProduct(productIdLike) {
+  const numericId = toProductNumericId(productIdLike);
+  const productGid = toProductGid(productIdLike);
+  return (
+    __ciwiProductIdCache[String(productIdLike || "").trim()] ||
+    (numericId ? __ciwiProductIdCache[numericId] : null) ||
+    (productGid ? __ciwiProductIdCache[productGid] : null) ||
+    null
+  );
+}
+
+async function fetchProductByHandle(handle) {
+  const h = normalizeProductHandle(handle);
+  if (!h) return null;
+  if (__ciwiProductHandleCache[h]) return __ciwiProductHandleCache[h];
+  const requestKey = `handle:${h}`;
+  if (!__ciwiHydrateInFlight[requestKey]) {
+    __ciwiHydrateInFlight[requestKey] = fetch(`/products/${encodeURIComponent(h)}.js`, {
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .catch(() => null)
+      .then((data) => {
+        if (data) cacheStorefrontProduct(data);
+        delete __ciwiHydrateInFlight[requestKey];
+        return data;
+      });
+  }
+  return __ciwiHydrateInFlight[requestKey];
+}
+
+async function fetchProductsByProductIds(productIds) {
+  // 中文注释：优先按 productId 批量拉取，避免 selectedProductsJson 存价格/图片/变体大字段。
+  const numericIds = Array.from(
+    new Set(
+      (Array.isArray(productIds) ? productIds : [])
+        .map((id) => toProductNumericId(id))
+        .filter(Boolean),
+    ),
+  );
+  if (!numericIds.length) return [];
+
+  const missingIds = numericIds.filter((id) => !readCachedStorefrontProduct(id));
+  const batches = [];
+  for (let i = 0; i < missingIds.length; i += 20) {
+    batches.push(missingIds.slice(i, i + 20));
+  }
+
+  await Promise.all(
+    batches.map((batch) => {
+      const requestKey = `ids:${batch.join(",")}`;
+      if (!__ciwiHydrateInFlight[requestKey]) {
+        const query = encodeURIComponent(batch.join(","));
+        __ciwiHydrateInFlight[requestKey] = fetch(
+          `/products.json?ids=${query}&limit=${batch.length}`,
+          {
+            credentials: "same-origin",
+            headers: { Accept: "application/json" },
+          },
+        )
+          .then((res) => (res.ok ? res.json() : null))
+          .catch(() => null)
+          .then((data) => {
+            const products = Array.isArray(data?.products) ? data.products : [];
+            products.forEach((product) => cacheStorefrontProduct(product));
+            delete __ciwiHydrateInFlight[requestKey];
+            return products;
+          });
+      }
+      return __ciwiHydrateInFlight[requestKey];
+    }),
+  );
+
+  return numericIds
+    .map((id) => readCachedStorefrontProduct(id))
+    .filter(Boolean);
+}
+
+function hydrateProductFromStorefrontJson(rawProduct, existing) {
+  if (!rawProduct || typeof rawProduct !== "object") return existing;
+  const options = Array.isArray(rawProduct.options) ? rawProduct.options : [];
+  const variants = Array.isArray(rawProduct.variants)
+    ? rawProduct.variants.map((v) => ({
+        id: toVariantGid(v?.id),
+        title: String(v?.title || ""),
+        price: String(v?.price || ""),
+        selectedOptions: options
+          .map((name, idx) => {
+            const value = v?.[`option${idx + 1}`];
+            if (!name || value == null) return null;
+            return { name: String(name), value: String(value) };
+          })
+          .filter(Boolean),
+      }))
+    : [];
+  const selectedVariantIdRaw = String(existing?.selectedVariantId || "");
+  const selectedVariantId = toVariantGid(selectedVariantIdRaw);
+  const hasSelected = selectedVariantId
+    ? variants.some((v) => String(v.id) === String(selectedVariantId))
+    : false;
+  return {
+    ...existing,
+    handle: String(rawProduct.handle || existing?.handle || ""),
+    title: String(rawProduct.title || existing?.title || ""),
+    image: getProductImageUrl(rawProduct) || String(existing?.image || ""),
+    price: String(variants[0]?.price || rawProduct?.price || existing?.price || ""),
+    selectedVariantId: hasSelected
+      ? selectedVariantId
+      : String(variants[0]?.id || selectedVariantId || ""),
+    variants,
+  };
+}
+
+async function hydrateCompleteBundleOfferInPlace(offer) {
+  if (!offer || offer.offerType !== "complete-bundle") return false;
+  const config = parseCompleteBundleConfig(offer.selectedProductsJson);
+  if (!config.bars.length) return false;
+  let changed = false;
+
+  // 中文注释：先批量收集缺失详情的 productId，一次性拉回 storefront 数据，再回填每个 bar。
+  const missingProductIds = [];
+  for (const bar of config.bars) {
+    for (const product of bar.products || []) {
+      const needsHydrate =
+        !Array.isArray(product.variants) ||
+        product.variants.length === 0 ||
+        !product.title ||
+        !product.image ||
+        !product.price;
+      if (!needsHydrate) continue;
+      const cached = readCachedStorefrontProduct(product.productId);
+      if (cached) {
+        Object.assign(product, hydrateProductFromStorefrontJson(cached, product));
+        changed = true;
+        continue;
+      }
+      const numericId = toProductNumericId(product.productId);
+      if (numericId) missingProductIds.push(numericId);
+    }
+  }
+
+  if (missingProductIds.length) {
+    await fetchProductsByProductIds(missingProductIds);
+  }
+
+  for (const bar of config.bars) {
+    for (let i = 0; i < (bar.products || []).length; i++) {
+      const product = bar.products[i];
+      const needsHydrate =
+        !Array.isArray(product.variants) ||
+        product.variants.length === 0 ||
+        !product.title ||
+        !product.image ||
+        !product.price;
+      if (!needsHydrate) continue;
+
+      let sfProduct = readCachedStorefrontProduct(product.productId);
+      if (!sfProduct) {
+        const handle = normalizeProductHandle(product.handle);
+        if (handle) {
+          sfProduct = await fetchProductByHandle(handle);
+        }
+      }
+      if (!sfProduct) continue;
+      bar.products[i] = hydrateProductFromStorefrontJson(sfProduct, product);
+      changed = true;
+    }
+  }
+  if (changed) {
+    offer.selectedProductsJson = JSON.stringify({ bars: config.bars });
+  }
+  return changed;
+}
+
+/** 当前栏内某商品在 widget 中选中的变体（与 __ciwiBundleState.selectedBundleVariants 同步） */
+function resolveCompleteBundleVariant(bar, product) {
+  const picked =
+    window.__ciwiBundleState?.selectedBundleVariants?.[bar.id]?.[product.productId] || "";
+  const vid = picked || product.selectedVariantId || product.variants?.[0]?.id || "";
+  return (product.variants || []).find((v) => String(v.id) === String(vid)) || product.variants?.[0] || null;
+}
+
+/** 渲染单个商品块（缩略图、标题、折后价/原价、变体下拉） */
+function buildOneCompleteBundleProductHtml(bar, product) {
+  const v = resolveCompleteBundleVariant(bar, product);
+  const base = parseMoneyStringToNumber(v?.price || product.price);
+  const { final, original } = applyCompleteBundleProductPricing(
+    product.pricing?.mode || "full_price",
+    Number(product.pricing?.value) || 0,
+    base,
+  );
+  const variantOptions = Array.isArray(product.variants) ? product.variants : [];
+  const curVid = v?.id || "";
+  const optionHtml = variantOptions.length
+    ? `<select class="ciwi-bundle-variant-select" onchange="window.ciwiSelectBundleVariant('${esc(bar.id)}','${esc(
+        product.productId,
+      )}', this.value)">${variantOptions
+        .map(
+          (variant) =>
+            `<option value="${esc(variant.id)}"${
+              String(variant.id) === String(curVid) ? " selected" : ""
+            }>${esc(variant.title || "Default")}</option>`,
+        )
+        .join("")}</select>`
+    : "";
+  const cardStyle =
+    (bar.products || []).length >= 2
+      ? "flex:1;min-width:140px;border:1px solid #e5e7eb;border-radius:8px;padding:8px;background:#fff;"
+      : "";
+  return `<div style="${cardStyle}">
+    <div style="display:flex;align-items:flex-start;gap:8px;">
+      ${
+        product.image
+          ? `<img src="${esc(product.image)}" alt="${esc(product.title)}" style="width:40px;height:40px;border-radius:6px;object-fit:cover;flex-shrink:0;" />`
+          : ""
+      }
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:11px;font-weight:600;color:#1c1f23;line-height:1.35;">${esc(product.title || "Product")}</div>
+        <div style="margin-top:4px;font-size:12px;display:flex;flex-wrap:wrap;gap:4px;align-items:baseline;">
+          <span style="font-weight:700;color:#1c1f23;">${esc(formatPrice(final))}</span>
+          ${
+            original > final
+              ? `<span style="font-size:11px;color:#9aa0a6;text-decoration:line-through;">${esc(formatPrice(original))}</span>`
+              : ""
+          }
+        </div>
+        ${optionHtml ? `<div style="margin-top:6px;">${optionHtml}</div>` : ""}
+      </div>
+    </div>
+  </div>`;
+}
+
 function getCurrentProductGid() {
   const productId = window?.ShopifyAnalytics?.meta?.product?.id;
   if (!productId) return null;
@@ -705,10 +1112,12 @@ function getCurrentOffer(offersConfig) {
       }
     }
 
-    // Check market filter
+    // Check settings / market filter
+    let parsedSettings = null;
     if (currentMarketId && offer.offerSettingsJson) {
       try {
         const settings = JSON.parse(offer.offerSettingsJson);
+        parsedSettings = settings;
         const offerMarkets = settings.markets;
         if (typeof offerMarkets === "string" && offerMarkets !== "all" && offerMarkets.trim() !== "") {
           const allowedMarkets = offerMarkets.split(",").map(m => m.trim());
@@ -721,6 +1130,21 @@ function getCurrentOffer(offersConfig) {
       } catch (e) {
         // ignore parse error
       }
+    } else if (offer.offerSettingsJson) {
+      try {
+        parsedSettings = JSON.parse(offer.offerSettingsJson);
+      } catch (e) {}
+    }
+
+    // 兼容旧版开关：当 quantity bar 显式为 false 时，不渲染 quantity-break offer
+    if (
+      offer.offerType !== "complete-bundle" &&
+      offer.offerType !== "bxgy" &&
+      parsedSettings &&
+      (parsedSettings.quantity === false || parsedSettings.showQuantityBar === false)
+    ) {
+      console.log("[ciwi] offer skipped: quantity bar disabled by settings", offer.id);
+      continue;
     }
 
     if (offer.offerType === 'bxgy') {
@@ -744,6 +1168,21 @@ function getCurrentOffer(offersConfig) {
       }
       if (!rule.buyProductIds.includes(currentProductGid)) {
         console.log("[ciwi] bxgy offer skipped: current product not in buy list", offer.id, currentProductGid);
+        continue;
+      }
+    } else if (offer.offerType === "complete-bundle") {
+      const completeBundle = parseCompleteBundleConfig(offer.selectedProductsJson);
+      if (!completeBundle.bars.length) {
+        console.log("[ciwi] complete bundle skipped: no bars", offer.id);
+        continue;
+      }
+      if (!currentProductGid) {
+        continue;
+      }
+      const belongsToBar = completeBundle.bars.some((bar) =>
+        bar.products.some((p) => p.productId === currentProductGid),
+      );
+      if (!belongsToBar) {
         continue;
       }
     } else {
@@ -773,7 +1212,12 @@ function getCurrentOffer(offersConfig) {
   return null;
 }
 
-window.__ciwiBundleState = window.__ciwiBundleState || { selectedCount: null };
+window.__ciwiBundleState = window.__ciwiBundleState || {
+  selectedCount: null,
+  selectedBundleVariants: {},
+  /** complete-bundle：顾客在多个 bar 中选中的那一档（仅该档加入购物车） */
+  selectedCompleteBundleBarId: null,
+};
 
 function updateThemeQuantityInput(count) {
   const form = getAddToCartForm();
@@ -832,6 +1276,15 @@ window.ciwiSelectBundleOption = function(count) {
     const html = renderBundlePreviewHtml(currentOffer);
     if (html) wrap.innerHTML = html;
   }
+  if (currentOffer?.offerType === "complete-bundle") {
+    void hydrateCompleteBundleOfferInPlace(currentOffer).then((changed) => {
+      if (!changed) return;
+      const wrapNext = document.querySelector(".ciwi-bundle-wrapper");
+      if (!wrapNext) return;
+      const htmlNext = renderBundlePreviewHtml(currentOffer);
+      if (htmlNext) wrapNext.innerHTML = htmlNext;
+    });
+  }
 };
 
 window.ciwiHandleBundleAddToCart = function(event) {
@@ -865,7 +1318,258 @@ window.ciwiHandleBundleAddToCart = function(event) {
   }
 };
 
+window.ciwiSelectBundleVariant = function(barId, productId, variantId) {
+  if (!window.__ciwiBundleState.selectedBundleVariants) {
+    window.__ciwiBundleState.selectedBundleVariants = {};
+  }
+  if (!window.__ciwiBundleState.selectedBundleVariants[barId]) {
+    window.__ciwiBundleState.selectedBundleVariants[barId] = {};
+  }
+  window.__ciwiBundleState.selectedBundleVariants[barId][productId] = String(variantId || "");
+  const wrap = document.querySelector(".ciwi-bundle-wrapper");
+  const currentOffer = getCurrentOffer(offersConfigCache);
+  if (wrap && currentOffer && currentOffer.offerType === "complete-bundle") {
+    const html = renderBundlePreviewHtml(currentOffer);
+    if (html) wrap.innerHTML = html;
+  }
+  if (currentOffer?.offerType === "complete-bundle") {
+    void hydrateCompleteBundleOfferInPlace(currentOffer);
+  }
+};
+
+/** 顾客切换「生效」的 complete-bundle 栏并刷新 widget */
+window.ciwiSelectCompleteBundleBar = function (barId) {
+  if (!window.__ciwiBundleState) return;
+  window.__ciwiBundleState.selectedCompleteBundleBarId = String(barId || "");
+  const wrap = document.querySelector(".ciwi-bundle-wrapper");
+  const currentOffer = getCurrentOffer(offersConfigCache);
+  if (wrap && currentOffer && currentOffer.offerType === "complete-bundle") {
+    const html = renderBundlePreviewHtml(currentOffer);
+    if (html) wrap.innerHTML = html;
+  }
+  if (currentOffer) syncCurrentBundleToSessionStorage(currentOffer);
+  if (currentOffer?.offerType === "complete-bundle") {
+    void hydrateCompleteBundleOfferInPlace(currentOffer);
+  }
+};
+
+/** 防止同一次点击触发 click + submit 时重复请求 */
+let completeBundleCartAddBusy = false;
+
+/**
+ * AJAX 加购成功后通知主题刷新购物车/侧栏（不跳转 /cart）。
+ * Dawn 及部分主题会监听 cart:refresh / cart:updated；多派发几种常见事件以提高兼容性。
+ */
+async function notifyThemeAfterCartAdd() {
+  try {
+    const res = await fetch("/cart.js", {
+      headers: { Accept: "application/json" },
+      credentials: "same-origin",
+    });
+    const cart = res.ok ? await res.json().catch(() => null) : null;
+
+    document.documentElement.dispatchEvent(
+      new CustomEvent("cart:refresh", { bubbles: true }),
+    );
+    document.dispatchEvent(new CustomEvent("cart:updated", { detail: { cart } }));
+    window.dispatchEvent(new CustomEvent("shopify:cart:change", { detail: { cart } }));
+    document.body.dispatchEvent(
+      new CustomEvent("ajaxCart:updated", { bubbles: true, detail: { cart } }),
+    );
+  } catch (error) {
+    console.warn("[ciwi] notifyThemeAfterCartAdd failed", error);
+  }
+}
+
+/**
+ * 将当前选中的 complete-bundle 档加入购物车。
+ * bar.quantity 仅表示档位文案（如 Qty 2），不叠乘到每行 SKU 数量；每行固定加 1 件。
+ */
+async function performCompleteBundleCartAdd() {
+  if (completeBundleCartAddBusy) return false;
+  completeBundleCartAddBusy = true;
+  try {
+    const currentOffer = getCurrentOffer(offersConfigCache);
+    if (!currentOffer || currentOffer.offerType !== "complete-bundle") return false;
+    const config = parseCompleteBundleConfig(currentOffer?.selectedProductsJson);
+    const items = [];
+    const selId = window.__ciwiBundleState?.selectedCompleteBundleBarId;
+    const barToUse =
+      config.bars.find((b) => String(b.id) === String(selId)) || config.bars[0] || null;
+    if (!barToUse || !Array.isArray(barToUse.products) || !barToUse.products.length) {
+      return false;
+    }
+    for (const product of barToUse.products) {
+      const selectedMap = window.__ciwiBundleState?.selectedBundleVariants?.[barToUse.id] || {};
+      const variantId = toAjaxVariantId(
+        selectedMap[product.productId] ||
+          product.selectedVariantId ||
+          product.variants?.[0]?.id ||
+          "",
+      );
+      if (!variantId) continue;
+      items.push({ id: Number(variantId), quantity: 1 });
+    }
+    if (!items.length) return false;
+    const res = await fetch("/cart/add.js", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ items }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      console.error(
+        "[ciwi] cart/add.js failed",
+        res.status,
+        body?.description || body?.message || body,
+      );
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error("[ciwi] performCompleteBundleCartAdd failed", error);
+    return false;
+  } finally {
+    completeBundleCartAddBusy = false;
+  }
+}
+
+window.ciwiHandleCompleteBundleAddToCart = async function (event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  const ok = await performCompleteBundleCartAdd();
+  if (!ok) {
+    window.ciwiHandleBundleAddToCart(event);
+    return;
+  }
+  await notifyThemeAfterCartAdd();
+};
+
 function renderBundlePreviewHtml(offer) {
+  if (offer.offerType === "complete-bundle") {
+    const completeBundle = parseCompleteBundleConfig(offer?.selectedProductsJson);
+    if (!completeBundle.bars.length) return "";
+    let offerSettings = {};
+    try {
+      if (offer?.offerSettingsJson) {
+        offerSettings = JSON.parse(offer.offerSettingsJson);
+      }
+    } catch (e) {}
+    const accentColor = offerSettings.accentColor || "#008060";
+    const cardBackgroundColor = offerSettings.cardBackgroundColor || "#ffffff";
+    const borderColor = offerSettings.borderColor || "#dfe3e8";
+    const titleFontSize = offerSettings.titleFontSize || 14;
+    const titleFontWeight = offerSettings.titleFontWeight || "600";
+    const titleColor = offerSettings.titleColor || "#111111";
+    const buttonText = offerSettings.buttonText || "Add to Cart";
+    const buttonPrimaryColor = offerSettings.buttonPrimaryColor || "#008060";
+    const showCustomButton = offerSettings.showCustomButton !== false;
+    const widgetTitle = offerSettings.title || "Bundle & Save";
+
+    // 默认选中第一档；配置变更后若 id 不存在则回退到第一档
+    if (!window.__ciwiBundleState.selectedCompleteBundleBarId) {
+      window.__ciwiBundleState.selectedCompleteBundleBarId = completeBundle.bars[0].id;
+    }
+    if (
+      !completeBundle.bars.some(
+        (b) => String(b.id) === String(window.__ciwiBundleState.selectedCompleteBundleBarId),
+      )
+    ) {
+      window.__ciwiBundleState.selectedCompleteBundleBarId = completeBundle.bars[0].id;
+    }
+    const selectedBarId = String(window.__ciwiBundleState.selectedCompleteBundleBarId || "");
+
+    const barsHtml = completeBundle.bars
+      .map((bar) => {
+        const isSelected = String(bar.id) === selectedBarId;
+        const borderCol = isSelected ? accentColor : borderColor;
+        let sumOriginal = 0;
+        let sumFinal = 0;
+        for (const p of bar.products || []) {
+          const v = resolveCompleteBundleVariant(bar, p);
+          const base = parseMoneyStringToNumber(v?.price || p.price);
+          const r = applyCompleteBundleProductPricing(
+            p.pricing?.mode || "full_price",
+            Number(p.pricing?.value) || 0,
+            base,
+          );
+          sumOriginal += r.original;
+          sumFinal += r.final;
+        }
+        const saved = Math.max(0, sumOriginal - sumFinal);
+        const summaryHtml =
+          bar.products && bar.products.length
+            ? `<div style="margin-top:8px;">
+                <div style="font-size:13px;font-weight:700;color:#1c1f23;display:flex;flex-wrap:wrap;gap:6px;align-items:baseline;">
+                  <span>${esc(formatPrice(sumFinal))}</span>
+                  ${
+                    sumOriginal > sumFinal
+                      ? `<span style="font-size:12px;color:#9aa0a6;text-decoration:line-through;">${esc(formatPrice(sumOriginal))}</span>`
+                      : ""
+                  }
+                </div>
+                ${
+                  saved > 0
+                    ? `<div style="margin-top:4px;font-size:12px;font-weight:600;color:${esc(accentColor)};">Save ${esc(formatPrice(saved))}!</div>`
+                    : ""
+                }
+              </div>`
+            : "";
+        let productsHtml = "";
+        const plist = bar.products || [];
+        for (let idx = 0; idx < plist.length; idx++) {
+          if (idx > 0 && plist.length >= 2) {
+            productsHtml += `<div style="display:flex;align-items:center;justify-content:center;color:#9aa0a6;font-weight:700;width:22px;flex-shrink:0;font-size:16px;">+</div>`;
+          }
+          productsHtml += buildOneCompleteBundleProductHtml(bar, plist[idx]);
+        }
+        const productsWrap =
+          plist.length >= 2
+            ? `<div style="display:flex;flex-wrap:wrap;align-items:stretch;gap:6px;margin-top:8px;">${productsHtml}</div>`
+            : `<div style="margin-top:8px;">${productsHtml}</div>`;
+        return `<div class="create-offer-style-preview-item" style="border:2px solid ${esc(
+          borderCol,
+        )};border-radius:8px;padding:10px;background:${esc(cardBackgroundColor)};">
+          <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;margin:0;">
+            <input type="radio" name="ciwi-complete-bundle-bar-pick" style="margin-top:3px;flex-shrink:0;" ${
+              isSelected ? "checked" : ""
+            } onchange="window.ciwiSelectCompleteBundleBar('${esc(bar.id)}')" />
+            <span style="flex:1;min-width:0;">
+              <div class="create-offer-style-preview-item-title" style="color:${esc(titleColor)};">${esc(
+                bar.title || "Complete the bundle",
+              )}</div>
+              <div class="create-offer-style-preview-item-subtitle" style="font-size:12px;color:#5c6166;margin-top:2px;">${esc(
+                bar.subtitle || `Quantity break · Qty ${bar.quantity}`,
+              )}</div>
+            </span>
+          </label>
+          ${summaryHtml}
+          ${productsWrap}
+        </div>`;
+      })
+      .join("");
+
+    return `<div class="create-offer-preview-card">
+      <div class="create-offer-style-preview-header" style="color:${esc(
+        titleColor,
+      )} !important; font-size:${esc(titleFontSize)}px !important; font-weight:${esc(
+        titleFontWeight,
+      )} !important;">${esc(widgetTitle)}</div>
+      <div class="create-offer-style-preview-list create-offer-style-preview-list--vertical">${barsHtml}</div>
+      ${
+        showCustomButton
+          ? `<button type="button" class="create-offer-preview-button" onclick="window.ciwiHandleCompleteBundleAddToCart(event)" style="width:100%;margin-top:12px;padding:12px;background:${esc(
+              buttonPrimaryColor,
+            )};color:white;border:none;border-radius:6px;font-weight:600;cursor:pointer;">${esc(
+              buttonText,
+            )}</button>`
+          : ""
+      }
+    </div>`;
+  }
+
   // BXGY offer type support — quantity-break-style tier cards
   if (offer.offerType === 'bxgy') {
     const bxgyRules = parseBxgyDiscountRulesJson(offer?.discountRulesJson);
@@ -1256,6 +1960,41 @@ function attachBundlePriceSync(offer) {
   }
 
   attachBundleSubmitLinePropsGuard();
+  // complete-bundle：主题原生「添加到购物车」应与绿色 Add to Cart 一致（整档多 SKU 各 1 件）
+  if (offer.offerType === "complete-bundle") {
+    const isThemeAddTrigger = (t, productForm) => {
+      if (!t || typeof t.closest !== "function" || !productForm) return false;
+      if (!productForm.contains(t)) return false;
+      if (t.closest(".ciwi-bundle-wrapper")) return false;
+      if (
+        t.closest(
+          ".shopify-payment-button, shopify-buy-it-now-button, [data-shopify='payment-button']",
+        )
+      ) {
+        return false;
+      }
+      const btn = t.closest(
+        "button[type='submit'],button[name='add'],input[type='submit'][name='add'],input[name='add']",
+      );
+      return !!(btn && productForm.contains(btn));
+    };
+
+    document.addEventListener(
+      "click",
+      (e) => {
+        const productForm = getAddToCartForm();
+        if (!isThemeAddTrigger(e.target, productForm)) return;
+        if (!document.querySelector(".ciwi-bundle-wrapper")) return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation?.();
+        void performCompleteBundleCartAdd().then(async (ok) => {
+          if (ok) await notifyThemeAfterCartAdd();
+        });
+      },
+      { capture: true, signal },
+    );
+  }
 
   queueMicrotask(refresh);
 }
@@ -1330,6 +2069,18 @@ function run() {
     if (!currentOffer) {
       console.log("[ciwi] no active env offers after enabled checks, skip bundle UI");
       return;
+    }
+    if (currentOffer.offerType === "complete-bundle") {
+      void hydrateCompleteBundleOfferInPlace(currentOffer).then((changed) => {
+        if (!changed) return;
+        const wrap = document.querySelector(".ciwi-bundle-wrapper");
+        if (wrap) {
+          const html = renderBundlePreviewHtml(currentOffer);
+          if (html) wrap.innerHTML = html;
+        } else if (tryMount(currentOffer) !== "done") {
+          fallbackMount(currentOffer);
+        }
+      });
     }
     syncCurrentBundleToSessionStorage(currentOffer);
 

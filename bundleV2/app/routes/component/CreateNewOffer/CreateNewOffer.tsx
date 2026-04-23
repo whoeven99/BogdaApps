@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { useFetcher, useNavigate, useSearchParams } from "react-router";
-import { Button, Input, Select, Switch, Checkbox, DatePicker, Modal, message } from "antd";
+import { Button, Input, Select, Switch, Checkbox, DatePicker, Modal, message, Dropdown } from "antd";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 import {
   X,
+  Trash2,
 } from "lucide-react";
 
 dayjs.extend(utc);
@@ -24,6 +25,11 @@ import {
   buildBxgyDiscountRulesJson,
   progressiveGiftsConfigToStorableJson,
   type ProgressiveGiftsConfig,
+  parseCompleteBundleConfig,
+  buildCompleteBundleConfig,
+  type CompleteBundleBar,
+  type CompleteBundleProduct,
+  type CompleteBundlePricingMode,
 } from "../../../utils/offerParsing";
 
 type DiscountRule = {
@@ -54,9 +60,82 @@ type BxgyDiscountRule = {
 type Product = {
   id: string | number;
   name: string;
+  handle?: string;
   price: string;
   image: string;
+  variants?: Array<{
+    id: string;
+    title: string;
+    price?: string;
+    selectedOptions?: Array<{ name: string; value: string }>;
+  }>;
 };
+
+type CompleteBundleProductDraft = {
+  productId: string;
+  handle?: string;
+  title: string;
+  image: string;
+  price: string;
+  defaultVariantId?: string;
+  selectedVariantId?: string;
+  selectedOptions?: Record<string, string>;
+  pricing?: { mode: CompleteBundlePricingMode; value: number };
+  variants?: Array<{
+    id: string;
+    title: string;
+    price?: string;
+    selectedOptions?: Array<{ name: string; value: string }>;
+  }>;
+};
+
+/** 从价格字符串解析为数字（支持 12.99 / 12,99 / €12.99） */
+function parseMoneyStringToNumber(raw?: string): number {
+  if (raw == null) return 0;
+  const stripped = String(raw).trim().replace(/[^\d.,-]/g, "");
+  if (!stripped) return 0;
+  const lastComma = stripped.lastIndexOf(",");
+  const lastDot = stripped.lastIndexOf(".");
+  let normalized = stripped;
+  if (lastComma > lastDot) {
+    normalized = stripped.replace(/\./g, "").replace(",", ".");
+  } else {
+    normalized = stripped.replace(/,/g, "");
+  }
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * 单件商品定价：原价 / 百分比优惠 / 立减金额 / 固定价
+ * full_price：原价；percentage_off：按百分比减价；amount_off：减固定金额；fixed_price：指定售价
+ */
+function applyCompleteBundleProductPricing(
+  mode: CompleteBundlePricingMode,
+  value: number,
+  basePrice: number,
+): { final: number; original: number } {
+  const original = Math.max(0, basePrice);
+  if (mode === "full_price") {
+    return { final: original, original };
+  }
+  if (mode === "percentage_off") {
+    const pct = Math.max(0, Math.min(100, Number(value) || 0));
+    const final = Math.round(original * (1 - pct / 100) * 100) / 100;
+    return { final, original };
+  }
+  if (mode === "amount_off") {
+    const off = Math.max(0, Number(value) || 0);
+    const final = Math.max(0, Math.round((original - off) * 100) / 100);
+    return { final, original };
+  }
+  const fixed = Math.max(0, Number(value) || 0);
+  return { final: Math.round(fixed * 100) / 100, original };
+}
+
+function formatEuroFromNumber(amount: number): string {
+  return `€${amount.toFixed(2).replace(".", ",")}`;
+}
 
 interface InitialOffer {
   id: string;
@@ -237,6 +316,10 @@ export function CreateNewOffer({
   const [offerType, setOfferType] = useState(
     initialOffer?.offerType ?? "quantity-breaks-same",
   );
+  const initialCompleteBundleConfig = useMemo(
+    () => parseCompleteBundleConfig(initialOffer?.selectedProductsJson),
+    [initialOffer?.selectedProductsJson],
+  );
   const [offerName, setOfferName] = useState(initialOffer?.name ?? "");
   
   useEffect(() => {
@@ -416,6 +499,122 @@ export function CreateNewOffer({
       }
     }
   };
+  const addCompleteBundleBar = (type: "quantity-break-same" | "bxgy") => {
+    const id = `bar-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const seededProducts =
+      mainBundleProduct && mainBundleProduct.productId
+        ? [
+            {
+              ...mainBundleProduct,
+              pricing: mainBundleProduct.pricing ?? { mode: "full_price", value: 0 },
+              selectedVariantId:
+                mainBundleProduct.selectedVariantId ||
+                mainBundleProduct.defaultVariantId ||
+                mainBundleProduct.variants?.[0]?.id ||
+                "",
+            },
+          ]
+        : [];
+    const newBar: CompleteBundleBar = {
+      id,
+      type,
+      title: type === "bxgy" ? "Buy X, Get Y" : "Complete the bundle",
+      subtitle: "",
+      quantity: 2,
+      // 新增 bar 默认继承主产品，后续可在预览里继续编辑
+      products: seededProducts,
+      pricing: { mode: "full_price", value: 0 },
+    };
+    setCompleteBundleBars((prev) => [...prev, newBar]);
+    setActiveBundleBarId(id);
+  };
+
+  const removeCompleteBundleBar = (barId: string) => {
+    setCompleteBundleBars((prev) => {
+      const next = prev.filter((bar) => bar.id !== barId);
+      if (!next.length) return prev;
+      if (activeBundleBarId === barId) {
+        setActiveBundleBarId(next[0].id);
+      }
+      return next;
+    });
+  };
+
+  const updateCompleteBundleBar = (
+    barId: string,
+    patch: Partial<CompleteBundleBar>,
+  ) => {
+    setCompleteBundleBars((prev) =>
+      prev.map((bar) => (bar.id === barId ? { ...bar, ...patch } : bar)),
+    );
+  };
+
+  const handleSelectProductsForBundleBar = async (barId: string) => {
+    const targetBar = completeBundleBars.find((bar) => bar.id === barId);
+    if (!targetBar) return;
+    const targetBarIndex = completeBundleBars.findIndex((bar) => bar.id === barId);
+    const isFirstBar = targetBarIndex === 0;
+    const selected = await (window as any).shopify.resourcePicker({
+      type: "product",
+      action: "select",
+      // bar #1 仅允许一个主产品；其他 bar 允许扩展多产品
+      multiple: !isFirstBar,
+      selectionIds: targetBar.products.map((p) => ({ id: p.productId })),
+    });
+    if (!selected) return;
+    let mappedProducts: CompleteBundleProductDraft[] = selected.map((item: any) => ({
+      productId: String(item.id),
+      handle: String(item.handle || ""),
+      title: item.title,
+      image: item.images?.[0]?.originalSrc || "https://via.placeholder.com/60",
+      price: item.variants?.[0]?.price || "€0.00",
+      defaultVariantId: item.variants?.[0]?.id ? String(item.variants[0].id) : "",
+      selectedVariantId: item.variants?.[0]?.id ? String(item.variants[0].id) : "",
+      selectedOptions: {},
+      variants: Array.isArray(item.variants)
+        ? item.variants.map((variant: any) => ({
+            id: String(variant.id),
+            title: String(variant.title || ""),
+            price: String(variant.price || ""),
+            selectedOptions: Array.isArray(variant.selectedOptions)
+              ? variant.selectedOptions.map((opt: any) => ({
+                  name: String(opt.name || ""),
+                  value: String(opt.value || ""),
+                }))
+              : [],
+          }))
+        : [],
+    }));
+    if (isFirstBar) {
+      mappedProducts = mappedProducts.slice(0, 1);
+    } else if (mainBundleProduct?.productId) {
+      const hasMain = mappedProducts.some(
+        (product) => product.productId === mainBundleProduct.productId,
+      );
+      if (!hasMain) {
+        // 后续 bar 默认包含主产品
+        mappedProducts = [mainBundleProduct as CompleteBundleProductDraft, ...mappedProducts];
+      }
+    }
+    updateCompleteBundleBar(barId, {
+      products: mappedProducts.map((p) => {
+        const prev = targetBar.products.find((op) => op.productId === p.productId);
+        return {
+          productId: p.productId,
+          handle: p.handle || "",
+          title: p.title,
+          image: p.image,
+          price: p.price,
+          defaultVariantId: p.defaultVariantId,
+          selectedVariantId: p.selectedVariantId,
+          selectedOptions: p.selectedOptions,
+          variants: p.variants,
+          pricing: prev?.pricing ?? p.pricing ?? { mode: "full_price" as const, value: 0 },
+        };
+      }),
+    });
+  };
+
   const [discountRules, setDiscountRules] = useState<DiscountRule[]>(() =>
     parseDiscountRules(initialOffer?.discountRulesJson),
   );
@@ -440,6 +639,415 @@ export function CreateNewOffer({
       return [];
     }
   });
+  const [completeBundleBars, setCompleteBundleBars] = useState<CompleteBundleBar[]>(
+    () =>
+      initialOffer?.offerType === "complete-bundle" &&
+      initialCompleteBundleConfig.bars.length > 0
+        ? initialCompleteBundleConfig.bars
+        : [
+            {
+              id: `bar-${Date.now()}`,
+              type: "quantity-break-same",
+              title: "Complete the bundle",
+              subtitle: "",
+              quantity: 2,
+              products: [],
+              pricing: { mode: "full_price", value: 0 },
+            },
+          ],
+  );
+  const [activeBundleBarId, setActiveBundleBarId] = useState<string>(
+    () => initialCompleteBundleConfig.bars[0]?.id || "",
+  );
+  const activeBundleBar =
+    completeBundleBars.find((bar) => bar.id === activeBundleBarId) ||
+    completeBundleBars[0] ||
+    null;
+  const mainBundleProduct = completeBundleBars[0]?.products?.[0];
+  const storeProductMap = useMemo(
+    () =>
+      new Map(
+        (storeProducts || []).map((p) => [
+          String(p.id || ""),
+          p,
+        ]),
+      ),
+    [storeProducts],
+  );
+
+  // 兼容历史轻量数据：若 selectedProductsJson 里没有变体明细，则用 storeProducts 按 productId 动态补全
+  useEffect(() => {
+    if (offerType !== "complete-bundle") return;
+    if (!storeProductMap.size) return;
+    setCompleteBundleBars((prev) => {
+      let changed = false;
+      const next = prev.map((bar) => ({
+        ...bar,
+        products: (bar.products || []).map((product) => {
+          const noVariants = !Array.isArray(product.variants) || product.variants.length === 0;
+          const missingDisplayData = !product.title || !product.image || !product.price;
+          if (!noVariants && !missingDisplayData) return product;
+          const hit = storeProductMap.get(String(product.productId || ""));
+          if (!hit) return product;
+          const variants = Array.isArray(hit.variants) ? hit.variants : [];
+          if (!variants.length && !missingDisplayData) return product;
+          const preferredVariantId = String(product.selectedVariantId || "");
+          const chosen = variants.find((v) => String(v.id) === preferredVariantId) || variants[0];
+          changed = true;
+          return {
+            ...product,
+            handle: product.handle || hit.handle || "",
+            title: product.title || hit.name || "",
+            image: product.image || hit.image || "",
+            price: chosen?.price || product.price || hit.price || "",
+            defaultVariantId: product.defaultVariantId || String(variants[0]?.id || ""),
+            selectedVariantId:
+              chosen?.id || product.selectedVariantId || String(variants[0]?.id || ""),
+            selectedOptions:
+              product.selectedOptions && Object.keys(product.selectedOptions).length > 0
+                ? product.selectedOptions
+                : Object.fromEntries((chosen?.selectedOptions || []).map((opt) => [opt.name, opt.value])),
+            variants: variants.length ? variants : product.variants,
+          };
+        }),
+      }));
+      return changed ? next : prev;
+    });
+  }, [offerType, storeProductMap]);
+  // 统一格式化价格，优先显示为欧元格式，避免预览里丢失价格展示
+  const formatBundlePrice = (raw?: string) => {
+    if (!raw) return "€0.00";
+    const cleaned = String(raw).trim();
+    if (/[€$£¥]/.test(cleaned)) return cleaned;
+    const parsed = Number(cleaned.replace(",", "."));
+    if (Number.isFinite(parsed)) return `€${parsed.toFixed(2)}`;
+    return cleaned;
+  };
+
+  const updateBundleBarProductVariant = (
+    barId: string,
+    productId: string,
+    variantId: string,
+  ) => {
+    setCompleteBundleBars((prev) =>
+      prev.map((bar) => {
+        if (bar.id !== barId) return bar;
+        return {
+          ...bar,
+          products: bar.products.map((product) => {
+            if (product.productId !== productId) return product;
+            const hit = product.variants?.find((v) => v.id === variantId);
+            return {
+              ...product,
+              selectedVariantId: variantId,
+              selectedOptions: Array.isArray(hit?.selectedOptions)
+                ? Object.fromEntries(
+                    (hit?.selectedOptions || []).map((opt) => [opt.name, opt.value]),
+                  )
+                : product.selectedOptions || {},
+              price: hit?.price || product.price,
+            };
+          }),
+        };
+      }),
+    );
+  };
+
+  const updateBundleBarProductOption = (
+    barId: string,
+    productId: string,
+    optionName: string,
+    optionValue: string,
+  ) => {
+    setCompleteBundleBars((prev) =>
+      prev.map((bar) => {
+        if (bar.id !== barId) return bar;
+        return {
+          ...bar,
+          products: bar.products.map((product) => {
+            if (product.productId !== productId) return product;
+            const currentVariant =
+              product.variants?.find((v) => v.id === product.selectedVariantId) ||
+              product.variants?.[0];
+            const currentOptions = Object.fromEntries(
+              (currentVariant?.selectedOptions || []).map((opt) => [opt.name, opt.value]),
+            );
+            const nextOptions = {
+              ...currentOptions,
+              ...(product.selectedOptions || {}),
+              [optionName]: optionValue,
+            };
+            const matchedVariant = product.variants?.find((variant) => {
+              const variantOptions = Object.fromEntries(
+                (variant.selectedOptions || []).map((opt) => [opt.name, opt.value]),
+              );
+              return Object.entries(nextOptions).every(
+                ([name, value]) => variantOptions[name] === value,
+              );
+            });
+            return {
+              ...product,
+              selectedOptions: nextOptions,
+              selectedVariantId: matchedVariant?.id || product.selectedVariantId,
+              price: matchedVariant?.price || product.price,
+            };
+          }),
+        };
+      }),
+    );
+  };
+
+  const updateBundleProductPricing = (
+    barId: string,
+    productId: string,
+    pricing: { mode: CompleteBundlePricingMode; value: number },
+  ) => {
+    setCompleteBundleBars((prev) =>
+      prev.map((bar) => {
+        if (bar.id !== barId) return bar;
+        return {
+          ...bar,
+          products: bar.products.map((p) =>
+            p.productId === productId ? { ...p, pricing } : p,
+          ),
+        };
+      }),
+    );
+  };
+
+  /**
+   * 向 Bar #2 及之后追加新商品（多选 resourcePicker，按 productId 去重后合并到该栏）
+   */
+  const appendProductsToBundleBar = async (barId: string) => {
+    const selected = await (window as any).shopify.resourcePicker({
+      type: "product",
+      action: "select",
+      multiple: true,
+      selectionIds: [],
+    });
+    if (!selected || !Array.isArray(selected) || selected.length === 0) return;
+    const mappedProducts: CompleteBundleProductDraft[] = selected.map((item: any) => ({
+      productId: String(item.id),
+      handle: String(item.handle || ""),
+      title: item.title,
+      image: item.images?.[0]?.originalSrc || "https://via.placeholder.com/60",
+      price: item.variants?.[0]?.price || "€0.00",
+      defaultVariantId: item.variants?.[0]?.id ? String(item.variants[0].id) : "",
+      selectedVariantId: item.variants?.[0]?.id ? String(item.variants[0].id) : "",
+      selectedOptions: {},
+      variants: Array.isArray(item.variants)
+        ? item.variants.map((variant: any) => ({
+            id: String(variant.id),
+            title: String(variant.title || ""),
+            price: String(variant.price || ""),
+            selectedOptions: Array.isArray(variant.selectedOptions)
+              ? variant.selectedOptions.map((opt: any) => ({
+                  name: String(opt.name || ""),
+                  value: String(opt.value || ""),
+                }))
+              : [],
+          }))
+        : [],
+    }));
+    setCompleteBundleBars((prev) => {
+      const targetBarIndex = prev.findIndex((bar) => bar.id === barId);
+      if (targetBarIndex <= 0) return prev;
+      const targetBar = prev[targetBarIndex];
+      const existingIds = new Set(targetBar.products.map((p) => p.productId));
+      const toAdd = mappedProducts.filter((p) => !existingIds.has(p.productId));
+      if (!toAdd.length) return prev;
+      return prev.map((bar) =>
+        bar.id !== barId
+          ? bar
+          : {
+              ...bar,
+              products: [
+                ...bar.products,
+                ...toAdd.map((p) => ({
+                  ...p,
+                  pricing: { mode: "full_price" as const, value: 0 },
+                })),
+              ],
+            },
+      );
+    });
+  };
+
+  /**
+   * 仅 Bar #2 及之后：从该 bundle 栏移除单个商品（Bar1 仅默认主商品，不提供删除入口）
+   */
+  const removeProductFromBundleBar = (barId: string, productId: string) => {
+    setCompleteBundleBars((prev) => {
+      const targetBarIndex = prev.findIndex((bar) => bar.id === barId);
+      if (targetBarIndex <= 0) return prev;
+      return prev.map((bar) =>
+        bar.id !== barId
+          ? bar
+          : { ...bar, products: bar.products.filter((p) => p.productId !== productId) },
+      );
+    });
+  };
+
+  /**
+   * 左侧栏内：单个商品的定价模式 + 变体预览控件（Bar1 与 Bar2+ 共用；仅 Bar2+ 显示删除）
+   */
+  const renderCompleteBundleProductPricingCard = (
+    bar: CompleteBundleBar,
+    product: CompleteBundleProduct,
+    productIdx: number,
+    isFirstOfferBar: boolean,
+  ) => {
+    const selectedVariant =
+      product.variants?.find((v) => v.id === product.selectedVariantId) ||
+      product.variants?.[0];
+    const optionNames = Array.from(
+      new Set(
+        (product.variants || [])
+          .flatMap((variant) => variant.selectedOptions || [])
+          .map((opt) => opt.name)
+          .filter(Boolean),
+      ),
+    );
+    const selectedOptionsMap = Object.fromEntries(
+      (selectedVariant?.selectedOptions || []).map((opt) => [opt.name, opt.value]),
+    );
+    const pMode = product.pricing?.mode ?? "full_price";
+    const pValue = product.pricing?.value ?? 0;
+    const valueLabel =
+      pMode === "percentage_off"
+        ? "Discount per item (%)"
+        : pMode === "amount_off"
+          ? "Amount off (€)"
+          : pMode === "fixed_price"
+            ? "Total price (€)"
+            : "Pricing value";
+    const productLabel = isFirstOfferBar ? "默认产品" : `商品 ${productIdx + 1}`;
+
+    return (
+      <div
+        key={product.productId}
+        className="border border-[#dfe3e8] rounded-md p-3 bg-[#fafbfc]"
+      >
+        <div className="flex items-start gap-2 mb-2 justify-between">
+          <div className="flex items-start gap-2 flex-1 min-w-0">
+            {product.image ? (
+              <img
+                src={product.image}
+                alt=""
+                className="w-10 h-10 rounded object-cover shrink-0"
+              />
+            ) : null}
+            <div className="flex-1 min-w-0">
+              <div className="text-[12px] font-medium text-[#1c1f23]">{productLabel}</div>
+              <div className="text-[11px] text-[#5c6166] truncate">
+                {product.title || product.productId}
+              </div>
+            </div>
+          </div>
+          {!isFirstOfferBar && (
+            <Button
+              type="text"
+              danger
+              size="small"
+              className="shrink-0"
+              icon={<Trash2 size={14} aria-hidden />}
+              onClick={() => removeProductFromBundleBar(bar.id, product.productId)}
+            >
+              删除
+            </Button>
+          )}
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block text-[12px] font-medium text-[#1c1f23]">
+            Price
+            <Select
+              size="small"
+              className="mt-1 w-full"
+              value={pMode}
+              onChange={(val) =>
+                updateBundleProductPricing(bar.id, product.productId, {
+                  mode: val as CompleteBundlePricingMode,
+                  value: val === "full_price" ? 0 : pValue,
+                })
+              }
+              options={[
+                { label: "Full price", value: "full_price" },
+                { label: "Percentage off", value: "percentage_off" },
+                { label: "Amount off", value: "amount_off" },
+                { label: "Fixed price", value: "fixed_price" },
+              ]}
+            />
+          </label>
+          <label className="block text-[12px] font-medium text-[#1c1f23]">
+            {valueLabel}
+            <Input
+              size="small"
+              type="number"
+              min={0}
+              disabled={pMode === "full_price"}
+              className="mt-1"
+              value={pMode === "full_price" ? 0 : pValue}
+              onChange={(e) =>
+                updateBundleProductPricing(bar.id, product.productId, {
+                  mode: pMode,
+                  value: Number(e.target.value) || 0,
+                })
+              }
+            />
+          </label>
+        </div>
+        <div className="mt-3">
+          <div className="text-[12px] font-medium mb-1 text-[#1c1f23]">Variant / Option preview</div>
+          {Array.isArray(product.variants) &&
+            product.variants.length > 0 &&
+            optionNames.length === 0 && (
+              <Select
+                size="small"
+                className="w-full mb-2"
+                value={product.selectedVariantId || product.variants[0].id}
+                onChange={(variantId) =>
+                  updateBundleBarProductVariant(bar.id, product.productId, String(variantId))
+                }
+                options={product.variants.map((variant) => ({
+                  label: variant.title,
+                  value: variant.id,
+                }))}
+              />
+            )}
+          {optionNames.length > 0 ? (
+            <div className="grid grid-cols-1 gap-2">
+              {optionNames.map((optionName) => {
+                const optionValues = Array.from(
+                  new Set(
+                    (product.variants || [])
+                      .flatMap((variant) => variant.selectedOptions || [])
+                      .filter((opt) => opt.name === optionName)
+                      .map((opt) => opt.value)
+                      .filter(Boolean),
+                  ),
+                );
+                return (
+                  <Select
+                    key={`${product.productId}-${optionName}-cfg`}
+                    size="small"
+                    className="w-full"
+                    value={selectedOptionsMap[optionName] || optionValues[0]}
+                    onChange={(value) =>
+                      updateBundleBarProductOption(bar.id, product.productId, optionName, String(value))
+                    }
+                    options={optionValues.map((value) => ({
+                      label: value,
+                      value,
+                    }))}
+                  />
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    );
+  };
 
   useEffect(() => {
     if (offerType === 'bxgy') {
@@ -453,6 +1061,14 @@ export function CreateNewOffer({
       );
     }
   }, [buyProducts, getProducts, offerType]);
+  useEffect(() => {
+    if (offerType !== "complete-bundle") return;
+    if (!completeBundleBars.length) return;
+    const exists = completeBundleBars.some((bar) => bar.id === activeBundleBarId);
+    if (!exists) {
+      setActiveBundleBarId(completeBundleBars[0].id);
+    }
+  }, [offerType, completeBundleBars, activeBundleBarId]);
 
   const [status, setStatus] = useState<boolean>(
     initialOffer ? initialOffer.status : true
@@ -480,6 +1096,38 @@ export function CreateNewOffer({
   const hasDefault = normalizedDiscountRules.some(r => r.isDefault);
 
   const previewItems: PreviewItem[] = useMemo(() => {
+    if (offerType === "complete-bundle" && completeBundleBars.length > 0) {
+      return completeBundleBars.map((bar, index) => {
+        const productsCount = Array.isArray(bar.products) ? bar.products.length : 0;
+        let sumOriginal = 0;
+        let sumFinal = 0;
+        for (const p of bar.products) {
+          const selectedVariant =
+            p.variants?.find((v) => v.id === p.selectedVariantId) || p.variants?.[0];
+          const base = parseMoneyStringToNumber(selectedVariant?.price || p.price);
+          const mode = p.pricing?.mode ?? "full_price";
+          const val = p.pricing?.value ?? 0;
+          const { final, original } = applyCompleteBundleProductPricing(mode, val, base);
+          sumOriginal += original;
+          sumFinal += final;
+        }
+        const saved = Math.max(0, sumOriginal - sumFinal);
+        return {
+          id: bar.id,
+          title: bar.title || `Bar #${index + 1}`,
+          subtitle:
+            bar.subtitle ||
+            `${bar.type === "bxgy" ? "Buy X Get Y" : "Quantity break"} · ${productsCount} products`,
+          price: formatPreviewPrice(sumFinal),
+          original: sumOriginal > sumFinal ? formatPreviewPrice(sumOriginal) : undefined,
+          featured: index === 0,
+          badge: index === 0 ? "Most Popular" : "",
+          saveLabel:
+            saved > 0 ? `SAVE ${formatPreviewPrice(saved)}` : `Qty ${Math.max(1, Number(bar.quantity) || 1)}`,
+        };
+      });
+    }
+
     if (offerType === "bxgy" && bxgyDiscountRules.length > 0) {
       const bxgyHasDefault = bxgyDiscountRules.some(r => r.isDefault);
       return bxgyDiscountRules.map((rule, index) => {
@@ -528,6 +1176,7 @@ export function CreateNewOffer({
     ];
   }, [
     offerType,
+    completeBundleBars,
     bxgyDiscountRules,
     normalizedDiscountRules,
     baseUnitPrice,
@@ -554,6 +1203,12 @@ export function CreateNewOffer({
       name: "Buy X, Get Y (BXGY)",
       description:
         "Buy X products and get Y products with discount (e.g., Buy 2 get 1 free)",
+    },
+    {
+      id: "complete-bundle",
+      name: "Complete the bundle",
+      description:
+        "Create multiple bundle bars and let customers choose product variants/options",
     },
   ];
 
@@ -592,6 +1247,20 @@ export function CreateNewOffer({
           });
           setStep(2);
           return;
+        }
+        if (offerType === "complete-bundle") {
+          const hasInvalidBar = completeBundleBars.some(
+            (bar) => !bar.products?.length || !Number.isFinite(Number(bar.quantity)) || Number(bar.quantity) < 1,
+          );
+          if (hasInvalidBar) {
+            e.preventDefault();
+            Modal.error({
+              title: "Validation Error",
+              content: "Each bundle bar must contain at least one product and a valid quantity.",
+            });
+            setStep(2);
+            return;
+          }
         }
 
         let hasError = false;
@@ -724,12 +1393,33 @@ export function CreateNewOffer({
       <input
         type="hidden"
         name="selectedProductsJson"
-        value={JSON.stringify(offerType === "bxgy" ? { buyProducts, getProducts } : selectedProductsData)}
+        value={JSON.stringify(
+          offerType === "bxgy"
+            ? { buyProducts, getProducts }
+            : offerType === "complete-bundle"
+              ? buildCompleteBundleConfig({ bars: completeBundleBars })
+              : selectedProductsData,
+        )}
       />
       <input
         type="hidden"
         name="discountRulesJson"
-        value={JSON.stringify(offerType === "bxgy" ? buildBxgyDiscountRulesJson(bxgyDiscountRules) : buildDiscountRulesJson(normalizedDiscountRules))}
+        value={JSON.stringify(
+          offerType === "bxgy"
+            ? buildBxgyDiscountRulesJson(bxgyDiscountRules)
+            : offerType === "complete-bundle"
+              ? completeBundleBars.map((bar) => ({
+                  id: bar.id,
+                  type: bar.type,
+                  quantity: bar.quantity,
+                  pricing: bar.pricing,
+                  products: bar.products.map((p) => ({
+                    productId: p.productId,
+                    pricing: p.pricing ?? { mode: "full_price" as const, value: 0 },
+                  })),
+                }))
+              : buildDiscountRulesJson(normalizedDiscountRules),
+        )}
       />
       <input
         type="hidden"
@@ -977,6 +1667,146 @@ export function CreateNewOffer({
                         )}
                       </div>
                     </>
+                  ) : offerType === "complete-bundle" ? (
+                    <div className="mb-8">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-[14px] font-medium text-[#1c1f23]">
+                          Bundle bars
+                        </h3>
+                        <Dropdown
+                          trigger={["click"]}
+                          menu={{
+                            items: [
+                              { key: "quantity", label: "Add Quantity bar" },
+                              { key: "bxgy", label: "Add Buy X Get Y bar" },
+                            ],
+                            onClick: ({ key }) => {
+                              if (key === "bxgy") addCompleteBundleBar("bxgy");
+                              else addCompleteBundleBar("quantity-break-same");
+                            },
+                          }}
+                        >
+                          <Button size="small">Add bar</Button>
+                        </Dropdown>
+                      </div>
+                      <div className="flex flex-col gap-3">
+                        {completeBundleBars.map((bar, index) => (
+                          <div
+                            key={bar.id}
+                            className={`border rounded-md p-3 ${activeBundleBar?.id === bar.id ? "border-[#008060]" : "border-[#dfe3e8]"}`}
+                          >
+                            <div className="flex items-center justify-between gap-3 mb-2">
+                              <Button
+                                type="link"
+                                className="px-0"
+                                onClick={(e) => {
+                                  setActiveBundleBarId(bar.id);
+                                  e.preventDefault();
+                                }}
+                              >
+                                Bar #{index + 1} - {bar.title || (bar.type === "bxgy" ? "Buy X, Get Y" : "Complete the bundle")}
+                              </Button>
+                              {completeBundleBars.length > 1 && (
+                                <Button
+                                  size="small"
+                                  danger
+                                  onClick={(e) => {
+                                    removeCompleteBundleBar(bar.id);
+                                    e.preventDefault();
+                                  }}
+                                >
+                                  Remove
+                                </Button>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                              <label className="block text-[12px]">
+                                <span className="block mb-1">Title</span>
+                                <Input
+                                  size="small"
+                                  value={bar.title || ""}
+                                  onChange={(e) =>
+                                    updateCompleteBundleBar(bar.id, { title: e.target.value })
+                                  }
+                                />
+                              </label>
+                              <label className="block text-[12px]">
+                                <span className="block mb-1">Quantity</span>
+                                <Input
+                                  size="small"
+                                  type="number"
+                                  min={1}
+                                  value={bar.quantity}
+                                  onChange={(e) =>
+                                    updateCompleteBundleBar(bar.id, {
+                                      quantity: Math.max(1, Math.trunc(Number(e.target.value) || 1)),
+                                    })
+                                  }
+                                />
+                              </label>
+                            </div>
+                            <div className="text-[12px] text-[#5c6166] mt-2">
+                              {bar.products.length} products selected
+                            </div>
+                            {/* 每栏内嵌「定价 + 变体预览」：Bar1 仅默认主商品；Bar2+ 可多商品并支持追加/删除 */}
+                            <div className="mt-3 pt-3 border-t border-[#ebedef]">
+                              <div className="text-[13px] font-medium text-[#1c1f23] mb-2">
+                                Bar Pricing & Variant Preview
+                              </div>
+                              {index === 0 ? (
+                                <div className="mb-2 flex flex-wrap items-center gap-2">
+                                  <Button
+                                    size="small"
+                                    onClick={(e) => {
+                                      setActiveBundleBarId(bar.id);
+                                      handleSelectProductsForBundleBar(bar.id);
+                                      e.preventDefault();
+                                    }}
+                                  >
+                                    {bar.products.length ? "Change default product" : "Select default product"}
+                                  </Button>
+                                  <span className="text-[11px] text-[#5c6166]">
+                                    Bar #1 仅允许 1 个默认主商品
+                                  </span>
+                                </div>
+                              ) : (
+                                <div className="mb-2">
+                                  <Button
+                                    size="small"
+                                    type="primary"
+                                    onClick={(e) => {
+                                      setActiveBundleBarId(bar.id);
+                                      appendProductsToBundleBar(bar.id);
+                                      e.preventDefault();
+                                    }}
+                                  >
+                                    + Add product
+                                  </Button>
+                                </div>
+                              )}
+                              {bar.products.length === 0 ? (
+                                <div className="text-[12px] text-[#5c6166]">
+                                  {index === 0
+                                    ? "请先选择默认主商品。"
+                                    : "本栏暂无商品，可点击「+ Add product」添加。"}
+                                </div>
+                              ) : (
+                                <div className="flex flex-col gap-4">
+                                  {bar.products.map((product, productIdx) =>
+                                    renderCompleteBundleProductPricingCard(
+                                      bar,
+                                      product,
+                                      productIdx,
+                                      index === 0,
+                                    ),
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   ) : (
                     <div className="mb-8">
                       <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
@@ -1060,12 +1890,10 @@ export function CreateNewOffer({
                     </div>
                   )}
 
-                  <div>
-                    <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                      {offerType === "bxgy" ? "BXGY Rules" : "Discount Setting"}
-                    </h3>
-                    {offerType === "bxgy" ? (
-                      <>
+                  {/* complete-bundle 的定价与变体已并入各 Bundle bar 卡片，此处仅渲染 BXGY 或普通折扣阶梯 */}
+                  {offerType === "bxgy" ? (
+                    <div>
+                      <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">BXGY Rules</h3>
                         {bxgyDiscountRules.map((rule, index) => (
                           <div className="create-offer-discount-card" key={index}>
                             <div className="create-offer-discount-body">
@@ -1292,9 +2120,10 @@ export function CreateNewOffer({
                         >
                           + Add BXGY tier
                         </Button>
-                      </>
-                    ) : (
-                      <>
+                    </div>
+                    ) : offerType === "complete-bundle" ? null : (
+                    <div>
+                      <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">Discount Setting</h3>
                         {discountRules.map((rule, index) => (
                           <div className="create-offer-discount-card" key={index}>
                             <div className="create-offer-discount-body">
@@ -1450,7 +2279,7 @@ export function CreateNewOffer({
                         >
                           + Add discount tier
                         </Button>
-                      </>
+                    </div>
                     )}
                   <ProgressiveGiftsSection
                     offerType={offerType}
@@ -1459,7 +2288,6 @@ export function CreateNewOffer({
                     value={progressiveGifts}
                     onChange={setProgressiveGifts}
                   />
-                </div>
                 </div>
 
                 <div className="create-offer-sticky-preview">
@@ -1473,7 +2301,7 @@ export function CreateNewOffer({
                       )?.description
                     }
                   </p>
-                  {progressiveGifts.enabled ? (
+                  {progressiveGifts.enabled && offerType !== "complete-bundle" ? (
                     <div className="mb-4 space-y-2">
                       <div className="text-[13px] font-medium text-[#1c1f23]">
                         Progressive gifts preview
@@ -1506,24 +2334,257 @@ export function CreateNewOffer({
                       </div>
                     </div>
                   ) : null}
-                  <BundlePreview
-                    layoutFormat={layoutFormat}
-                    cardBackgroundColor={cardBackgroundColor}
-                    accentColor={accentColor}
-                    borderColor={borderColor}
-                    labelColor={labelColor}
-                    titleFontSize={titleFontSize}
-                    titleFontWeight={titleFontWeight}
-                    titleColor={titleColor}
-                  buttonText={buttonText}
-                  buttonPrimaryColor={buttonPrimaryColor}
-                  showCustomButton={showCustomButton}
-                  title={widgetTitle}
-                  items={previewItems}
-                  progressiveGifts={progressiveGifts}
-                  progressivePreviewBarIndex={previewGiftBar}
-                  progressivePreviewLineQty={previewGiftQty}
-                  />
+                  {offerType === "complete-bundle" ? (
+                    <div className="create-offer-preview-card">
+                      <div className="create-offer-style-preview-header">
+                        {widgetTitle || "Bundle & Save"}
+                      </div>
+                      <div className="create-offer-style-preview-list create-offer-style-preview-list--vertical">
+                        {completeBundleBars.map((bar, barIndex) => (
+                          <div
+                            key={bar.id}
+                            className="create-offer-style-preview-item"
+                            style={{
+                              borderColor:
+                                activeBundleBar?.id === bar.id ? accentColor : borderColor,
+                              background: cardBackgroundColor,
+                            }}
+                          >
+                            {/* Live Preview：单选表示「当前生效 / 顾客将选购」的 bundle 栏，与左侧配置 active 同步 */}
+                            <div className="flex items-start gap-2 mb-1">
+                              <input
+                                type="radio"
+                                name="complete-bundle-live-preview-bar"
+                                className="mt-1 shrink-0"
+                                checked={activeBundleBarId === bar.id}
+                                onChange={() => setActiveBundleBarId(bar.id)}
+                                aria-label={`Select bundle bar ${barIndex + 1}`}
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="create-offer-style-preview-item-title">
+                                    {bar.title || `Bar #${barIndex + 1}`}
+                                  </div>
+                                  <Button
+                                    type="link"
+                                    className="px-0 h-auto shrink-0"
+                                    onClick={(e) => {
+                                      setActiveBundleBarId(bar.id);
+                                      handleSelectProductsForBundleBar(bar.id);
+                                      e.preventDefault();
+                                    }}
+                                  >
+                                    {bar.products.length ? "Edit bar products" : "Select bar products"}
+                                  </Button>
+                                </div>
+                                <div className="create-offer-style-preview-item-subtitle">
+                                  {bar.subtitle ||
+                                    `${bar.type === "bxgy" ? "Buy X Get Y" : "Quantity break"} · Qty ${bar.quantity}`}
+                                </div>
+                              </div>
+                            </div>
+                            {bar.products.length >= 1 ? (() => {
+                              let sumOriginal = 0;
+                              let sumFinal = 0;
+                              for (const p of bar.products) {
+                                const v =
+                                  p.variants?.find((x) => x.id === p.selectedVariantId) ||
+                                  p.variants?.[0];
+                                const base = parseMoneyStringToNumber(v?.price || p.price);
+                                const { final, original } = applyCompleteBundleProductPricing(
+                                  p.pricing?.mode ?? "full_price",
+                                  p.pricing?.value ?? 0,
+                                  base,
+                                );
+                                sumOriginal += original;
+                                sumFinal += final;
+                              }
+                              const saved = Math.max(0, sumOriginal - sumFinal);
+                              return (
+                                <>
+                                  <div className="mt-2 text-[13px] font-semibold text-[#1c1f23] flex flex-wrap items-baseline gap-2">
+                                    <span>{formatEuroFromNumber(sumFinal)}</span>
+                                    {sumOriginal > sumFinal ? (
+                                      <span className="text-[12px] text-[#9aa0a6] line-through font-normal">
+                                        {formatEuroFromNumber(sumOriginal)}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  {saved > 0 ? (
+                                    <div className="mt-1 text-[12px] text-[#008060] font-medium">
+                                      Save {formatEuroFromNumber(saved)}!
+                                    </div>
+                                  ) : null}
+                                </>
+                              );
+                            })() : null}
+                            <div
+                              className={
+                                bar.products.length >= 2
+                                  ? "mt-2 flex flex-wrap items-stretch gap-2"
+                                  : "mt-2 flex flex-col gap-2"
+                              }
+                            >
+                              {bar.products.length === 0 ? (
+                                <div className="text-[12px] text-[#5c6166]">
+                                  No products selected.
+                                </div>
+                              ) : (
+                                bar.products.map((product, pIdx) => {
+                                  const selectedVariant =
+                                    product.variants?.find((v) => v.id === product.selectedVariantId) ||
+                                    product.variants?.[0];
+                                  const optionNames = Array.from(
+                                    new Set(
+                                      (product.variants || [])
+                                        .flatMap((variant) => variant.selectedOptions || [])
+                                        .map((opt) => opt.name)
+                                        .filter(Boolean),
+                                    ),
+                                  );
+                                  const selectedOptionsMap = Object.fromEntries(
+                                    (selectedVariant?.selectedOptions || []).map((opt) => [
+                                      opt.name,
+                                      opt.value,
+                                    ]),
+                                  );
+                                  const base = parseMoneyStringToNumber(
+                                    selectedVariant?.price || product.price,
+                                  );
+                                  const { final, original } = applyCompleteBundleProductPricing(
+                                    product.pricing?.mode ?? "full_price",
+                                    product.pricing?.value ?? 0,
+                                    base,
+                                  );
+                                  return (
+                                    <div key={product.productId} className="contents">
+                                      {bar.products.length >= 2 && pIdx > 0 ? (
+                                        <div className="flex items-center justify-center px-1 text-[16px] font-bold text-[#9aa0a6] self-center">
+                                          +
+                                        </div>
+                                      ) : null}
+                                      <div
+                                        className={
+                                          bar.products.length >= 2
+                                            ? "rounded border border-[#e5e7eb] p-2 flex-1 min-w-[140px] bg-white"
+                                            : "rounded border border-[#e5e7eb] p-2 bg-white"
+                                        }
+                                      >
+                                        {product.image ? (
+                                          <img
+                                            src={product.image}
+                                            alt={product.title || "product"}
+                                            className="w-12 h-12 rounded object-cover mb-2"
+                                          />
+                                        ) : null}
+                                        <div className="text-[11px] font-medium text-[#1c1f23] line-clamp-2">
+                                          {product.title || product.productId}
+                                        </div>
+                                        <div className="text-[12px] mt-1 flex flex-wrap items-baseline gap-1">
+                                          <span className="font-semibold text-[#1c1f23]">
+                                            {formatEuroFromNumber(final)}
+                                          </span>
+                                          {original > final ? (
+                                            <span className="text-[11px] text-[#9aa0a6] line-through">
+                                              {formatEuroFromNumber(original)}
+                                            </span>
+                                          ) : null}
+                                        </div>
+                                        {Array.isArray(product.variants) &&
+                                          product.variants.length > 0 &&
+                                          optionNames.length === 0 && (
+                                            <Select
+                                              size="small"
+                                              className="w-full mt-2"
+                                              value={product.selectedVariantId || product.variants[0].id}
+                                              onChange={(variantId) =>
+                                                updateBundleBarProductVariant(
+                                                  bar.id,
+                                                  product.productId,
+                                                  String(variantId),
+                                                )
+                                              }
+                                              options={product.variants.map((variant) => ({
+                                                label: variant.title || "Default",
+                                                value: variant.id,
+                                              }))}
+                                            />
+                                          )}
+                                        {optionNames.length > 0 ? (
+                                          <div className="grid grid-cols-1 gap-2 mt-2">
+                                            {optionNames.map((optionName) => {
+                                              const optionValues = Array.from(
+                                                new Set(
+                                                  (product.variants || [])
+                                                    .flatMap((variant) => variant.selectedOptions || [])
+                                                    .filter((opt) => opt.name === optionName)
+                                                    .map((opt) => opt.value)
+                                                    .filter(Boolean),
+                                                ),
+                                              );
+                                              return (
+                                                <Select
+                                                  key={`${product.productId}-${optionName}-live`}
+                                                  size="small"
+                                                  className="w-full"
+                                                  value={
+                                                    selectedOptionsMap[optionName] || optionValues[0]
+                                                  }
+                                                  onChange={(value) =>
+                                                    updateBundleBarProductOption(
+                                                      bar.id,
+                                                      product.productId,
+                                                      optionName,
+                                                      String(value),
+                                                    )
+                                                  }
+                                                  options={optionValues.map((value) => ({
+                                                    label: value,
+                                                    value,
+                                                  }))}
+                                                />
+                                              );
+                                            })}
+                                          </div>
+                                        ) : null}
+                                      </div>
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      {showCustomButton ? (
+                        <button
+                          className="create-offer-preview-button"
+                          style={{ background: buttonPrimaryColor, marginTop: 12 }}
+                        >
+                          {buttonText}
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <BundlePreview
+                      layoutFormat={layoutFormat}
+                      cardBackgroundColor={cardBackgroundColor}
+                      accentColor={accentColor}
+                      borderColor={borderColor}
+                      labelColor={labelColor}
+                      titleFontSize={titleFontSize}
+                      titleFontWeight={titleFontWeight}
+                      titleColor={titleColor}
+                      buttonText={buttonText}
+                      buttonPrimaryColor={buttonPrimaryColor}
+                      showCustomButton={showCustomButton}
+                      title={widgetTitle}
+                      items={previewItems}
+                      progressiveGifts={progressiveGifts}
+                      progressivePreviewBarIndex={previewGiftBar}
+                      progressivePreviewLineQty={previewGiftQty}
+                    />
+                  )}
                   <p className="text-[12px] text-[#5c6166] mt-3 italic font-normal">
                     Note: This is a live preview. Changes will update in real-time when state is connected.
                   </p>
@@ -2212,6 +3273,13 @@ export function CreateNewOffer({
               if (offerType === "bxgy") {
                 if (buyProducts.length === 0 || getProducts.length === 0) {
                   message.error("Please select both Buy and Get products for a BXGY offer.");
+                  e.preventDefault();
+                  return;
+                }
+              } else if (offerType === "complete-bundle") {
+                const hasEmptyBar = completeBundleBars.some((bar) => bar.products.length === 0);
+                if (hasEmptyBar) {
+                  message.error("Please select products for every bundle bar.");
                   e.preventDefault();
                   return;
                 }
