@@ -133,9 +133,65 @@ function buildOfferMetafieldsInput(
   ];
 }
 
-function buildCompactOffersPayload(shopOffers: OfferListItem[]): string {
+function buildHydratedCompleteBundleSelectedProductsJson(
+  selectedProductsJson: string | null | undefined,
+  storeProductMap: Map<string, StoreProductItem>,
+): string | null {
+  if (!selectedProductsJson) return null;
+  const config = parseCompleteBundleConfig(selectedProductsJson);
+  if (!config.bars.length) return selectedProductsJson;
+
+  const bars = config.bars.map((bar) => ({
+    ...bar,
+    products: (bar.products || []).map((product) => {
+      const hit = storeProductMap.get(String(product.productId || ""));
+      if (!hit) return product;
+      const variants = Array.isArray(hit.variants) ? hit.variants : [];
+      const preferredVariantId = String(product.selectedVariantId || "");
+      const selectedVariant =
+        variants.find((variant) => String(variant.id) === preferredVariantId) || variants[0];
+
+      return {
+        ...product,
+        handle: hit.handle || product.handle || "",
+        title: hit.name || product.title || "",
+        image: hit.image || product.image || "",
+        price: selectedVariant?.price || product.price || hit.price || "",
+        defaultVariantId: String(variants[0]?.id || product.defaultVariantId || ""),
+        selectedVariantId:
+          String(selectedVariant?.id || product.selectedVariantId || variants[0]?.id || ""),
+        selectedOptions:
+          product.selectedOptions && Object.keys(product.selectedOptions).length > 0
+            ? product.selectedOptions
+            : Object.fromEntries(
+                (selectedVariant?.selectedOptions || []).map((opt) => [opt.name, opt.value]),
+              ),
+        variants,
+      };
+    }),
+  }));
+
+  return JSON.stringify({ bars });
+}
+
+async function buildCompactOffersPayload(
+  admin: any,
+  shopOffers: OfferListItem[],
+): Promise<string> {
   // 仅同步 status=true 的活动，避免无效活动占用 payload 体积并干扰函数计算
   const activeOffers = shopOffers.filter((offer) => offer.status === true);
+  // 中文注释：DB 里仍保持轻量 selectedProductsJson，但同步到 storefront 时按 productId 补齐展示字段。
+  const completeBundleProductIds = collectReferencedProductIds(
+    activeOffers.filter((offer) => offer.offerType === "complete-bundle"),
+  );
+  const storeProducts =
+    completeBundleProductIds.length > 0
+      ? await fetchStoreProducts(admin, completeBundleProductIds)
+      : [];
+  const storeProductMap = new Map(
+    storeProducts.map((product) => [String(product.id || ""), product]),
+  );
+
   // 仅保留主题与 Function 运行所需字段，避免 payload 过大导致运行时读取失败
   const compactOffers = activeOffers.map((offer) => ({
     id: offer.id,
@@ -144,7 +200,13 @@ function buildCompactOffersPayload(shopOffers: OfferListItem[]): string {
     status: offer.status,
     startTime: offer.startTime,
     endTime: offer.endTime,
-    selectedProductsJson: offer.selectedProductsJson ?? null,
+    selectedProductsJson:
+      offer.offerType === "complete-bundle"
+        ? buildHydratedCompleteBundleSelectedProductsJson(
+            offer.selectedProductsJson,
+            storeProductMap,
+          )
+        : offer.selectedProductsJson ?? null,
     discountRulesJson: offer.discountRulesJson ?? null,
     offerSettingsJson: offer.offerSettingsJson ?? null,
     offerType: offer.offerType,
@@ -181,7 +243,7 @@ async function syncShopOffersMetafield(
       updatedAt: new Date().toISOString(),
       offers: shopOffers,
     });
-    const metafieldValue = buildCompactOffersPayload(shopOffers);
+    const metafieldValue = await buildCompactOffersPayload(admin, shopOffers);
     console.log("[offers-sync] payload size snapshot", {
       totalOffers: shopOffers.length,
       activeOffers: shopOffers.filter((offer) => offer.status === true).length,
