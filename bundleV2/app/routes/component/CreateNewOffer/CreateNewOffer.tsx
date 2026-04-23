@@ -2208,27 +2208,40 @@ export function CreateNewOffer({
                               background: cardBackgroundColor,
                             }}
                           >
-                            <div className="flex items-center justify-between mb-1">
-                              <div className="create-offer-style-preview-item-title">
-                                {bar.title || `Bar #${barIndex + 1}`}
+                            {/* Live Preview：单选表示「当前生效 / 顾客将选购」的 bundle 栏，与左侧配置 active 同步 */}
+                            <div className="flex items-start gap-2 mb-1">
+                              <input
+                                type="radio"
+                                name="complete-bundle-live-preview-bar"
+                                className="mt-1 shrink-0"
+                                checked={activeBundleBarId === bar.id}
+                                onChange={() => setActiveBundleBarId(bar.id)}
+                                aria-label={`Select bundle bar ${barIndex + 1}`}
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="create-offer-style-preview-item-title">
+                                    {bar.title || `Bar #${barIndex + 1}`}
+                                  </div>
+                                  <Button
+                                    type="link"
+                                    className="px-0 h-auto shrink-0"
+                                    onClick={(e) => {
+                                      setActiveBundleBarId(bar.id);
+                                      handleSelectProductsForBundleBar(bar.id);
+                                      e.preventDefault();
+                                    }}
+                                  >
+                                    {bar.products.length ? "Edit bar products" : "Select bar products"}
+                                  </Button>
+                                </div>
+                                <div className="create-offer-style-preview-item-subtitle">
+                                  {bar.subtitle ||
+                                    `${bar.type === "bxgy" ? "Buy X Get Y" : "Quantity break"} · Qty ${bar.quantity}`}
+                                </div>
                               </div>
-                              <Button
-                                type="link"
-                                className="px-0 h-auto"
-                                onClick={(e) => {
-                                  setActiveBundleBarId(bar.id);
-                                  handleSelectProductsForBundleBar(bar.id);
-                                  e.preventDefault();
-                                }}
-                              >
-                                {bar.products.length ? "Edit bar products" : "Select bar products"}
-                              </Button>
                             </div>
-                            <div className="create-offer-style-preview-item-subtitle">
-                              {bar.subtitle ||
-                                `${bar.type === "bxgy" ? "Buy X Get Y" : "Quantity break"} · Qty ${bar.quantity}`}
-                            </div>
-                            {bar.products.length >= 2 ? (() => {
+                            {bar.products.length >= 1 ? (() => {
                               let sumOriginal = 0;
                               let sumFinal = 0;
                               for (const p of bar.products) {

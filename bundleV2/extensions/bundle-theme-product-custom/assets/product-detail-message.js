@@ -94,6 +94,43 @@ function formatPrice(value) {
   return `${currencySymbol}${formattedNumber}`;
 }
 
+/** 与后台 offerParsing 一致：从价格字符串解析为数字（元） */
+function parseMoneyStringToNumber(raw) {
+  if (raw == null) return 0;
+  const stripped = String(raw).trim().replace(/[^\d.,-]/g, "");
+  if (!stripped) return 0;
+  const lastComma = stripped.lastIndexOf(",");
+  const lastDot = stripped.lastIndexOf(".");
+  let normalized = stripped;
+  if (lastComma > lastDot) {
+    normalized = stripped.replace(/\./g, "").replace(",", ".");
+  } else {
+    normalized = stripped.replace(/,/g, "");
+  }
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Complete bundle 单件商品计价（与 CreateNewOffer 中 TS 逻辑对齐） */
+function applyCompleteBundleProductPricing(mode, value, basePrice) {
+  const original = Math.max(0, Number(basePrice) || 0);
+  if (mode === "full_price") {
+    return { final: original, original };
+  }
+  if (mode === "percentage_off") {
+    const pct = Math.max(0, Math.min(100, Number(value) || 0));
+    const final = Math.round(original * (1 - pct / 100) * 100) / 100;
+    return { final, original };
+  }
+  if (mode === "amount_off") {
+    const off = Math.max(0, Number(value) || 0);
+    const final = Math.max(0, Math.round((original - off) * 100) / 100);
+    return { final, original };
+  }
+  const fixed = Math.max(0, Number(value) || 0);
+  return { final: Math.round(fixed * 100) / 100, original };
+}
+
 function toCents(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return 0;
@@ -513,6 +550,64 @@ function parseCompleteBundleConfig(selectedProductsJson) {
   }
 }
 
+/** 当前栏内某商品在 widget 中选中的变体（与 __ciwiBundleState.selectedBundleVariants 同步） */
+function resolveCompleteBundleVariant(bar, product) {
+  const picked =
+    window.__ciwiBundleState?.selectedBundleVariants?.[bar.id]?.[product.productId] || "";
+  const vid = picked || product.selectedVariantId || product.variants?.[0]?.id || "";
+  return (product.variants || []).find((v) => String(v.id) === String(vid)) || product.variants?.[0] || null;
+}
+
+/** 渲染单个商品块（缩略图、标题、折后价/原价、变体下拉） */
+function buildOneCompleteBundleProductHtml(bar, product) {
+  const v = resolveCompleteBundleVariant(bar, product);
+  const base = parseMoneyStringToNumber(v?.price || product.price);
+  const { final, original } = applyCompleteBundleProductPricing(
+    product.pricing?.mode || "full_price",
+    Number(product.pricing?.value) || 0,
+    base,
+  );
+  const variantOptions = Array.isArray(product.variants) ? product.variants : [];
+  const curVid = v?.id || "";
+  const optionHtml = variantOptions.length
+    ? `<select class="ciwi-bundle-variant-select" onchange="window.ciwiSelectBundleVariant('${esc(bar.id)}','${esc(
+        product.productId,
+      )}', this.value)">${variantOptions
+        .map(
+          (variant) =>
+            `<option value="${esc(variant.id)}"${
+              String(variant.id) === String(curVid) ? " selected" : ""
+            }>${esc(variant.title || "Default")}</option>`,
+        )
+        .join("")}</select>`
+    : "";
+  const cardStyle =
+    (bar.products || []).length >= 2
+      ? "flex:1;min-width:140px;border:1px solid #e5e7eb;border-radius:8px;padding:8px;background:#fff;"
+      : "";
+  return `<div style="${cardStyle}">
+    <div style="display:flex;align-items:flex-start;gap:8px;">
+      ${
+        product.image
+          ? `<img src="${esc(product.image)}" alt="${esc(product.title)}" style="width:40px;height:40px;border-radius:6px;object-fit:cover;flex-shrink:0;" />`
+          : ""
+      }
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:11px;font-weight:600;color:#1c1f23;line-height:1.35;">${esc(product.title || "Product")}</div>
+        <div style="margin-top:4px;font-size:12px;display:flex;flex-wrap:wrap;gap:4px;align-items:baseline;">
+          <span style="font-weight:700;color:#1c1f23;">${esc(formatPrice(final))}</span>
+          ${
+            original > final
+              ? `<span style="font-size:11px;color:#9aa0a6;text-decoration:line-through;">${esc(formatPrice(original))}</span>`
+              : ""
+          }
+        </div>
+        ${optionHtml ? `<div style="margin-top:6px;">${optionHtml}</div>` : ""}
+      </div>
+    </div>
+  </div>`;
+}
+
 function getCurrentProductGid() {
   const productId = window?.ShopifyAnalytics?.meta?.product?.id;
   if (!productId) return null;
@@ -698,7 +793,12 @@ function getCurrentOffer(offersConfig) {
   return null;
 }
 
-window.__ciwiBundleState = window.__ciwiBundleState || { selectedCount: null, selectedBundleVariants: {} };
+window.__ciwiBundleState = window.__ciwiBundleState || {
+  selectedCount: null,
+  selectedBundleVariants: {},
+  /** complete-bundle：顾客在多个 bar 中选中的那一档（仅该档加入购物车） */
+  selectedCompleteBundleBarId: null,
+};
 
 function updateThemeQuantityInput(count) {
   const form = getAddToCartForm();
@@ -797,6 +897,25 @@ window.ciwiSelectBundleVariant = function(barId, productId, variantId) {
     window.__ciwiBundleState.selectedBundleVariants[barId] = {};
   }
   window.__ciwiBundleState.selectedBundleVariants[barId][productId] = String(variantId || "");
+  const wrap = document.querySelector(".ciwi-bundle-wrapper");
+  const currentOffer = getCurrentOffer(offersConfigCache);
+  if (wrap && currentOffer && currentOffer.offerType === "complete-bundle") {
+    const html = renderBundlePreviewHtml(currentOffer);
+    if (html) wrap.innerHTML = html;
+  }
+};
+
+/** 顾客切换「生效」的 complete-bundle 栏并刷新 widget */
+window.ciwiSelectCompleteBundleBar = function (barId) {
+  if (!window.__ciwiBundleState) return;
+  window.__ciwiBundleState.selectedCompleteBundleBarId = String(barId || "");
+  const wrap = document.querySelector(".ciwi-bundle-wrapper");
+  const currentOffer = getCurrentOffer(offersConfigCache);
+  if (wrap && currentOffer && currentOffer.offerType === "complete-bundle") {
+    const html = renderBundlePreviewHtml(currentOffer);
+    if (html) wrap.innerHTML = html;
+  }
+  if (currentOffer) syncCurrentBundleToSessionStorage(currentOffer);
 };
 
 window.ciwiHandleCompleteBundleAddToCart = async function(event) {
@@ -808,18 +927,24 @@ window.ciwiHandleCompleteBundleAddToCart = async function(event) {
     const currentOffer = getCurrentOffer(offersConfigCache);
     const config = parseCompleteBundleConfig(currentOffer?.selectedProductsJson);
     const items = [];
-    for (const bar of config.bars) {
-      for (const product of bar.products) {
-        const selectedMap = window.__ciwiBundleState?.selectedBundleVariants?.[bar.id] || {};
-        const variantId = toAjaxVariantId(
-          selectedMap[product.productId] ||
-            product.selectedVariantId ||
-            product.variants?.[0]?.id ||
-            "",
-        );
-        if (!variantId) continue;
-        items.push({ id: Number(variantId), quantity: 1 });
-      }
+    const selId = window.__ciwiBundleState?.selectedCompleteBundleBarId;
+    const barToUse =
+      config.bars.find((b) => String(b.id) === String(selId)) || config.bars[0] || null;
+    if (!barToUse || !Array.isArray(barToUse.products)) {
+      window.ciwiHandleBundleAddToCart(event);
+      return;
+    }
+    const lineQty = Math.max(1, Math.trunc(Number(barToUse.quantity) || 1));
+    for (const product of barToUse.products) {
+      const selectedMap = window.__ciwiBundleState?.selectedBundleVariants?.[barToUse.id] || {};
+      const variantId = toAjaxVariantId(
+        selectedMap[product.productId] ||
+          product.selectedVariantId ||
+          product.variants?.[0]?.id ||
+          "",
+      );
+      if (!variantId) continue;
+      items.push({ id: Number(variantId), quantity: lineQty });
     }
     if (!items.length) {
       window.ciwiHandleBundleAddToCart(event);
@@ -858,38 +983,85 @@ function renderBundlePreviewHtml(offer) {
     const showCustomButton = offerSettings.showCustomButton !== false;
     const widgetTitle = offerSettings.title || "Bundle & Save";
 
+    // 默认选中第一档；配置变更后若 id 不存在则回退到第一档
+    if (!window.__ciwiBundleState.selectedCompleteBundleBarId) {
+      window.__ciwiBundleState.selectedCompleteBundleBarId = completeBundle.bars[0].id;
+    }
+    if (
+      !completeBundle.bars.some(
+        (b) => String(b.id) === String(window.__ciwiBundleState.selectedCompleteBundleBarId),
+      )
+    ) {
+      window.__ciwiBundleState.selectedCompleteBundleBarId = completeBundle.bars[0].id;
+    }
+    const selectedBarId = String(window.__ciwiBundleState.selectedCompleteBundleBarId || "");
+
     const barsHtml = completeBundle.bars
       .map((bar) => {
-        const rows = bar.products
-          .map((product) => {
-            const variantOptions = Array.isArray(product.variants) ? product.variants : [];
-            const optionHtml = variantOptions.length
-              ? `<select class="ciwi-bundle-variant-select" onchange="window.ciwiSelectBundleVariant('${esc(
-                  bar.id,
-                )}','${esc(product.productId)}', this.value)">${variantOptions
-                  .map(
-                    (variant) =>
-                      `<option value="${esc(variant.id)}">${esc(variant.title || "Default")}</option>`,
-                  )
-                  .join("")}</select>`
-              : "";
-            return `<div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
-              ${product.image ? `<img src="${esc(product.image)}" alt="${esc(product.title)}" style="width:32px;height:32px;border-radius:4px;object-fit:cover;" />` : ""}
-              <div style="flex:1;">
-                <div style="font-size:12px;color:#1c1f23;">${esc(product.title || "Product")}</div>
-                ${optionHtml}
-              </div>
-            </div>`;
-          })
-          .join("");
-        return `<div class="create-offer-style-preview-item" style="border-color:${esc(
-          borderColor,
-        )};background:${esc(cardBackgroundColor)};">
-          <div class="create-offer-style-preview-item-title">${esc(bar.title || "Complete the bundle")}</div>
-          <div class="create-offer-style-preview-item-subtitle">${esc(
-            bar.subtitle || `Qty ${bar.quantity}`,
-          )}</div>
-          ${rows}
+        const isSelected = String(bar.id) === selectedBarId;
+        const borderCol = isSelected ? accentColor : borderColor;
+        let sumOriginal = 0;
+        let sumFinal = 0;
+        for (const p of bar.products || []) {
+          const v = resolveCompleteBundleVariant(bar, p);
+          const base = parseMoneyStringToNumber(v?.price || p.price);
+          const r = applyCompleteBundleProductPricing(
+            p.pricing?.mode || "full_price",
+            Number(p.pricing?.value) || 0,
+            base,
+          );
+          sumOriginal += r.original;
+          sumFinal += r.final;
+        }
+        const saved = Math.max(0, sumOriginal - sumFinal);
+        const summaryHtml =
+          bar.products && bar.products.length
+            ? `<div style="margin-top:8px;">
+                <div style="font-size:13px;font-weight:700;color:#1c1f23;display:flex;flex-wrap:wrap;gap:6px;align-items:baseline;">
+                  <span>${esc(formatPrice(sumFinal))}</span>
+                  ${
+                    sumOriginal > sumFinal
+                      ? `<span style="font-size:12px;color:#9aa0a6;text-decoration:line-through;">${esc(formatPrice(sumOriginal))}</span>`
+                      : ""
+                  }
+                </div>
+                ${
+                  saved > 0
+                    ? `<div style="margin-top:4px;font-size:12px;font-weight:600;color:${esc(accentColor)};">Save ${esc(formatPrice(saved))}!</div>`
+                    : ""
+                }
+              </div>`
+            : "";
+        let productsHtml = "";
+        const plist = bar.products || [];
+        for (let idx = 0; idx < plist.length; idx++) {
+          if (idx > 0 && plist.length >= 2) {
+            productsHtml += `<div style="display:flex;align-items:center;justify-content:center;color:#9aa0a6;font-weight:700;width:22px;flex-shrink:0;font-size:16px;">+</div>`;
+          }
+          productsHtml += buildOneCompleteBundleProductHtml(bar, plist[idx]);
+        }
+        const productsWrap =
+          plist.length >= 2
+            ? `<div style="display:flex;flex-wrap:wrap;align-items:stretch;gap:6px;margin-top:8px;">${productsHtml}</div>`
+            : `<div style="margin-top:8px;">${productsHtml}</div>`;
+        return `<div class="create-offer-style-preview-item" style="border:2px solid ${esc(
+          borderCol,
+        )};border-radius:8px;padding:10px;background:${esc(cardBackgroundColor)};">
+          <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;margin:0;">
+            <input type="radio" name="ciwi-complete-bundle-bar-pick" style="margin-top:3px;flex-shrink:0;" ${
+              isSelected ? "checked" : ""
+            } onchange="window.ciwiSelectCompleteBundleBar('${esc(bar.id)}')" />
+            <span style="flex:1;min-width:0;">
+              <div class="create-offer-style-preview-item-title" style="color:${esc(titleColor)};">${esc(
+                bar.title || "Complete the bundle",
+              )}</div>
+              <div class="create-offer-style-preview-item-subtitle" style="font-size:12px;color:#5c6166;margin-top:2px;">${esc(
+                bar.subtitle || `Quantity break · Qty ${bar.quantity}`,
+              )}</div>
+            </span>
+          </label>
+          ${summaryHtml}
+          ${productsWrap}
         </div>`;
       })
       .join("");
