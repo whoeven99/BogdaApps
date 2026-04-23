@@ -37,6 +37,11 @@ query CartInput {
       value
       type
     }
+    defaultAppOffers: metafield(key: "offers") {
+      jsonValue
+      value
+      type
+    }
     legacyOffers: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-offers") {
       jsonValue
       value

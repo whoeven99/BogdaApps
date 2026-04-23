@@ -10,6 +10,7 @@ import prisma from "./db.server";
 const CART_LINES_DISCOUNT_FUNCTION_TITLE = "Bundle Cart Discount Function";
 const CART_LINES_DISCOUNT_AUTO_TITLE = "Ciwi Bundle Auto Discount";
 const CART_LINES_DISCOUNT_METAFIELD_NAMESPACE = "$app:ciwi_bundle";
+const CART_LINES_DISCOUNT_DEFAULT_APP_NAMESPACE = "$app";
 const CART_LINES_DISCOUNT_METAFIELD_KEY = "offers";
 const LEGACY_OFFERS_METAFIELD_NAMESPACE = "ciwi_bundle";
 const LEGACY_OFFERS_METAFIELD_KEY = "ciwi-bundle-offers";
@@ -201,6 +202,12 @@ export async function syncCartLinesAutomaticDiscountMetafield(
                   value: buildAutomaticDiscountOffersPayload(metafieldValue),
                 },
                 {
+                  namespace: CART_LINES_DISCOUNT_DEFAULT_APP_NAMESPACE,
+                  key: CART_LINES_DISCOUNT_METAFIELD_KEY,
+                  type: "json",
+                  value: buildAutomaticDiscountOffersPayload(metafieldValue),
+                },
+                {
                   namespace: LEGACY_OFFERS_METAFIELD_NAMESPACE,
                   key: LEGACY_OFFERS_METAFIELD_KEY,
                   type: "json",
@@ -270,6 +277,13 @@ export async function syncCartLinesAutomaticDiscountMetafield(
             },
             {
               ownerId,
+              namespace: CART_LINES_DISCOUNT_DEFAULT_APP_NAMESPACE,
+              key: CART_LINES_DISCOUNT_METAFIELD_KEY,
+              type: "json",
+              value: buildAutomaticDiscountOffersPayload(metafieldValue),
+            },
+            {
+              ownerId,
               namespace: LEGACY_OFFERS_METAFIELD_NAMESPACE,
               key: LEGACY_OFFERS_METAFIELD_KEY,
               type: "json",
@@ -310,6 +324,35 @@ export async function syncCartLinesAutomaticDiscountMetafield(
       ownerCount: ownerIds.length,
       payloadLength: typeof metafieldValue === "string" ? metafieldValue.length : 0,
     });
+    for (const discountNodeId of targetDiscountNodeIds) {
+      const verifyResp = await admin.graphql(
+        `#graphql
+          query VerifyDiscountMetafields($id: ID!) {
+            discountNode(id: $id) {
+              id
+              appOwnedOffers: metafield(namespace: "$app:ciwi_bundle", key: "offers") {
+                value
+              }
+              defaultAppOffers: metafield(namespace: "$app", key: "offers") {
+                value
+              }
+              legacyOffers: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-offers") {
+                value
+              }
+            }
+          }
+        `,
+        { variables: { id: discountNodeId } },
+      );
+      const verifyJson = await verifyResp.json();
+      const node = verifyJson?.data?.discountNode;
+      console.log("[discount][sync-meta] verify discount metafields", {
+        discountNodeId,
+        appOwnedLen: String(node?.appOwnedOffers?.value || "").length,
+        defaultAppLen: String(node?.defaultAppOffers?.value || "").length,
+        legacyLen: String(node?.legacyOffers?.value || "").length,
+      });
+    }
     return { ok: true };
   } catch (error) {
     console.error("[discount][sync-meta] unexpected exception", error);

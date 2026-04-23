@@ -480,22 +480,30 @@ export function bundleCartDiscountGenerateRun(
 ): CartLinesDiscountsGenerateRunResult {
   const shopMetafield = input.shop.metafield as MetafieldSnapshot;
   const discountAppOwnedMetafield = input.discount.appOwnedOffers as MetafieldSnapshot;
+  const discountDefaultAppMetafield = input.discount.defaultAppOffers as MetafieldSnapshot;
   const discountLegacyMetafield = input.discount.legacyOffers as MetafieldSnapshot;
   // 运行时优先读 discount owner 的 app-owned 配置，再尝试 legacy namespace，最后回退到 shop.metafield。
   const activeOffersMetafield =
-    discountAppOwnedMetafield ?? discountLegacyMetafield ?? shopMetafield;
+    discountAppOwnedMetafield ??
+    discountDefaultAppMetafield ??
+    discountLegacyMetafield ??
+    shopMetafield;
 
   log("shop_metafields_snapshot", {
     discountAppOwnedOffers: summarizeMetafield(discountAppOwnedMetafield),
+    discountDefaultAppOffers: summarizeMetafield(discountDefaultAppMetafield),
     discountLegacyOffers: summarizeMetafield(discountLegacyMetafield),
     shopOffers: summarizeMetafield(shopMetafield),
     rawValueLens: {
       discountAppOwned: String(discountAppOwnedMetafield?.value || "").length,
+      discountDefaultApp: String(discountDefaultAppMetafield?.value || "").length,
       discountLegacy: String(discountLegacyMetafield?.value || "").length,
       shop: String(shopMetafield?.value || "").length,
     },
     activeSource: discountAppOwnedMetafield
       ? "discount_app_owned"
+      : discountDefaultAppMetafield
+        ? "discount_default_app"
       : discountLegacyMetafield
         ? "discount_legacy"
         : shopMetafield
@@ -515,6 +523,8 @@ export function bundleCartDiscountGenerateRun(
     hasOffers: Boolean(activeOffersMetafield?.jsonValue),
     offersSource: discountAppOwnedMetafield
       ? "discount_app_owned"
+      : discountDefaultAppMetafield
+        ? "discount_default_app"
       : discountLegacyMetafield
         ? "discount_legacy"
         : shopMetafield
