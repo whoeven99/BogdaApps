@@ -668,14 +668,15 @@ export function CreateNewOffer({
         ...bar,
         products: (bar.products || []).map((product) => {
           const noVariants = !Array.isArray(product.variants) || product.variants.length === 0;
-          if (!noVariants) return product;
+          const missingDisplayData = !product.title || !product.image || !product.price;
+          if (!noVariants && !missingDisplayData) return product;
           const hit = storeProductMap.get(String(product.productId || ""));
           if (!hit) return product;
           const variants = Array.isArray(hit.variants) ? hit.variants : [];
-          if (!variants.length) return product;
-          changed = true;
+          if (!variants.length && !missingDisplayData) return product;
           const preferredVariantId = String(product.selectedVariantId || "");
           const chosen = variants.find((v) => String(v.id) === preferredVariantId) || variants[0];
+          changed = true;
           return {
             ...product,
             handle: product.handle || hit.handle || "",
@@ -683,12 +684,13 @@ export function CreateNewOffer({
             image: product.image || hit.image || "",
             price: chosen?.price || product.price || hit.price || "",
             defaultVariantId: product.defaultVariantId || String(variants[0]?.id || ""),
-            selectedVariantId: chosen?.id || product.selectedVariantId || String(variants[0]?.id || ""),
+            selectedVariantId:
+              chosen?.id || product.selectedVariantId || String(variants[0]?.id || ""),
             selectedOptions:
               product.selectedOptions && Object.keys(product.selectedOptions).length > 0
                 ? product.selectedOptions
                 : Object.fromEntries((chosen?.selectedOptions || []).map((opt) => [opt.name, opt.value])),
-            variants,
+            variants: variants.length ? variants : product.variants,
           };
         }),
       }));

@@ -42,6 +42,7 @@ import {
   OFFER_TEXT_LIMITS,
   clampNumber,
   parseCompleteBundleConfig,
+  parseSelectedProductIds,
   sanitizeHexColor,
   sanitizeSingleLineText,
 } from "../../utils/offerParsing";
@@ -327,6 +328,26 @@ export type StoreProductItem = {
   }>;
 };
 
+type AdminProductNode = {
+  id?: string;
+  title?: string;
+  handle?: string;
+  featuredImage?: { url?: string | null } | null;
+  variants?: {
+    edges?: Array<{
+      node?: {
+        id?: string | null;
+        title?: string | null;
+        price?: string | null;
+        selectedOptions?: Array<{
+          name?: string | null;
+          value?: string | null;
+        } | null> | null;
+      } | null;
+    }>;
+  } | null;
+} | null;
+
 export type MarketItem = {
   id: string;
   name: string;
@@ -355,7 +376,88 @@ async function fetchShopOffers(shop: string): Promise<OfferListItem[]> {
   }
 }
 
-async function fetchStoreProducts(admin: any): Promise<StoreProductItem[]> {
+function mapAdminProductNodeToStoreProductItem(
+  node: AdminProductNode | undefined,
+): StoreProductItem | null {
+  const priceRaw = node?.variants?.edges?.[0]?.node?.price;
+  const image = node?.featuredImage?.url;
+  if (!node?.id || !node.title) {
+    return null;
+  }
+  return {
+    id: node.id,
+    name: node.title,
+    handle: String(node.handle || ""),
+    price: priceRaw ? `$${priceRaw}` : "$0.00",
+    image: image || "https://via.placeholder.com/60",
+    variants:
+      node.variants?.edges
+        ?.map((edgeV) => edgeV?.node)
+        .filter((v): v is NonNullable<typeof v> => Boolean(v?.id))
+        .map((v) => ({
+          id: String(v.id || ""),
+          title: String(v.title || ""),
+          price: String(v.price || ""),
+          selectedOptions: Array.isArray(v.selectedOptions)
+            ? v.selectedOptions
+                .filter((opt): opt is NonNullable<typeof opt> => Boolean(opt))
+                .map((opt) => ({
+                  name: String(opt.name || ""),
+                  value: String(opt.value || ""),
+                }))
+            : [],
+        })) || [],
+  };
+}
+
+function parseBxgySelectedProductIds(selectedProductsJson?: string | null): string[] {
+  if (!selectedProductsJson) return [];
+  try {
+    const parsed = JSON.parse(selectedProductsJson) as {
+      buyProducts?: unknown;
+      getProducts?: unknown;
+    };
+    return [
+      ...(Array.isArray(parsed.buyProducts) ? parsed.buyProducts : []),
+      ...(Array.isArray(parsed.getProducts) ? parsed.getProducts : []),
+    ]
+      .map((id) => String(id || "").trim())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function collectReferencedProductIds(offers: OfferListItem[]): string[] {
+  const ids = new Set<string>();
+  for (const offer of offers) {
+    if (offer.offerType === "complete-bundle") {
+      const config = parseCompleteBundleConfig(offer.selectedProductsJson);
+      for (const bar of config.bars) {
+        for (const product of bar.products || []) {
+          const productId = String(product.productId || "").trim();
+          if (productId) ids.add(productId);
+        }
+      }
+      continue;
+    }
+
+    const selectedIds =
+      offer.offerType === "bxgy"
+        ? parseBxgySelectedProductIds(offer.selectedProductsJson)
+        : parseSelectedProductIds(offer.selectedProductsJson);
+    for (const productId of selectedIds) {
+      const normalized = String(productId || "").trim();
+      if (normalized) ids.add(normalized);
+    }
+  }
+  return Array.from(ids);
+}
+
+async function fetchStoreProducts(
+  admin: any,
+  includeProductIds: string[] = [],
+): Promise<StoreProductItem[]> {
   let productsResponse;
   let productsJson;
   try {
@@ -402,63 +504,75 @@ async function fetchStoreProducts(admin: any): Promise<StoreProductItem[]> {
   const productEdges =
     (productsJson?.data?.products?.edges as
       | Array<{
-          node?: {
-            id?: string;
-            title?: string;
-            handle?: string;
-            options?: Array<{ name?: string | null } | null> | null;
-            featuredImage?: { url?: string | null } | null;
-            variants?: {
-              edges?: Array<{
-                node?: {
-                  id?: string | null;
-                  title?: string | null;
-                  price?: string | null;
-                  selectedOptions?: Array<{
-                    name?: string | null;
-                    value?: string | null;
-                  } | null> | null;
-                } | null;
-              }>;
-            } | null;
-          } | null;
+          node?: AdminProductNode;
         }>
       | undefined) ?? [];
 
-  return productEdges
-    .map((edge) => {
-      const node = edge?.node;
-      const priceRaw = node?.variants?.edges?.[0]?.node?.price;
-      const image = node?.featuredImage?.url;
-      if (!node?.id || !node.title) {
-        return null;
+  const productMap = new Map<string, StoreProductItem>();
+  for (const edge of productEdges) {
+    const mapped = mapAdminProductNodeToStoreProductItem(edge?.node);
+    if (mapped) productMap.set(mapped.id, mapped);
+  }
+
+  const missingIds = Array.from(
+    new Set(
+      includeProductIds
+        .map((id) => String(id || "").trim())
+        .filter((id) => id && !productMap.has(id)),
+    ),
+  );
+
+  // 中文注释：编辑历史 offer 时，把已引用但不在前 100 个里的商品也补进来，避免预览只显示 productId。
+  for (let i = 0; i < missingIds.length; i += 50) {
+    const batchIds = missingIds.slice(i, i + 50);
+    try {
+      const byIdsResponse = await admin.graphql(
+        `#graphql
+          query ProductsByIds($ids: [ID!]!) {
+            nodes(ids: $ids) {
+              ... on Product {
+                id
+                title
+                handle
+                featuredImage {
+                  url
+                }
+                variants(first: 50) {
+                  edges {
+                    node {
+                      id
+                      title
+                      price
+                      selectedOptions {
+                        name
+                        value
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        `,
+        { variables: { ids: batchIds } },
+      );
+      const byIdsJson = await byIdsResponse.json();
+      const nodes = Array.isArray(byIdsJson?.data?.nodes)
+        ? (byIdsJson.data.nodes as AdminProductNode[])
+        : [];
+      for (const node of nodes) {
+        const mapped = mapAdminProductNodeToStoreProductItem(node);
+        if (mapped) productMap.set(mapped.id, mapped);
       }
-      return {
-        id: node.id,
-        name: node.title,
-        handle: String(node.handle || ""),
-        price: priceRaw ? `$${priceRaw}` : "$0.00",
-        image: image || "https://via.placeholder.com/60",
-        variants:
-          node.variants?.edges
-            ?.map((edgeV) => edgeV?.node)
-            .filter((v): v is NonNullable<typeof v> => Boolean(v?.id))
-            .map((v) => ({
-              id: String(v.id || ""),
-              title: String(v.title || ""),
-              price: String(v.price || ""),
-              selectedOptions: Array.isArray(v.selectedOptions)
-                ? v.selectedOptions
-                    .filter((opt): opt is NonNullable<typeof opt> => Boolean(opt))
-                    .map((opt) => ({
-                      name: String(opt.name || ""),
-                      value: String(opt.value || ""),
-                    }))
-                : [],
-            })) || [],
-      };
-    })
-    .filter((item): item is StoreProductItem => item !== null);
+    } catch (error) {
+      console.error("Failed to fetch referenced products by ids", {
+        batchIds,
+        error,
+      });
+    }
+  }
+
+  return Array.from(productMap.values());
 }
 
 const ensureWebPixel = async (admin: any, shop: string) => {
@@ -877,7 +991,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   let intent = formData.get("intent");
 
   if (intent === "load-store-products") {
-    const storeProducts = await fetchStoreProducts(admin);
+    const offers = await fetchShopOffers(session.shop);
+    const storeProducts = await fetchStoreProducts(
+      admin,
+      collectReferencedProductIds(offers),
+    );
     return Response.json({ storeProducts });
   }
   if (intent === "load-offers") {

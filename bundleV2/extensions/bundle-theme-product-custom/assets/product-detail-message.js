@@ -552,12 +552,29 @@ function parseCompleteBundleConfig(selectedProductsJson) {
 }
 
 const __ciwiProductHandleCache = {};
+const __ciwiProductIdCache = {};
 const __ciwiHydrateInFlight = {};
 
 function normalizeProductHandle(raw) {
   const s = String(raw || "").trim();
   if (!s) return "";
   return s.replace(/^\/+|\/+$/g, "");
+}
+
+function toProductNumericId(idLike) {
+  const raw = String(idLike || "").trim();
+  if (!raw) return "";
+  if (/^\d+$/.test(raw)) return raw;
+  const hit = raw.match(/\/(\d+)$/);
+  return hit ? hit[1] : "";
+}
+
+function toProductGid(idLike) {
+  const raw = String(idLike || "").trim();
+  if (!raw) return "";
+  if (/^gid:\/\//.test(raw)) return raw;
+  const numericId = toProductNumericId(raw);
+  return numericId ? `gid://shopify/Product/${numericId}` : raw;
 }
 
 function toVariantGid(idLike) {
@@ -569,24 +586,110 @@ function toVariantGid(idLike) {
   return hit ? `gid://shopify/ProductVariant/${hit[1]}` : raw;
 }
 
+function getProductImageUrl(rawProduct) {
+  const featured = rawProduct?.featured_image;
+  if (typeof featured === "string" && featured) return featured;
+  if (featured && typeof featured === "object" && typeof featured.url === "string") {
+    return featured.url;
+  }
+  if (Array.isArray(rawProduct?.images) && rawProduct.images.length) {
+    const firstImage = rawProduct.images[0];
+    if (typeof firstImage === "string" && firstImage) return firstImage;
+    if (firstImage && typeof firstImage === "object") {
+      if (typeof firstImage.src === "string" && firstImage.src) return firstImage.src;
+      if (typeof firstImage.url === "string" && firstImage.url) return firstImage.url;
+    }
+  }
+  return "";
+}
+
+function cacheStorefrontProduct(rawProduct) {
+  if (!rawProduct || typeof rawProduct !== "object") return;
+  const numericId = toProductNumericId(rawProduct.id);
+  const productGid = toProductGid(rawProduct.id);
+  if (numericId) __ciwiProductIdCache[numericId] = rawProduct;
+  if (productGid) __ciwiProductIdCache[productGid] = rawProduct;
+  const handle = normalizeProductHandle(rawProduct.handle);
+  if (handle) __ciwiProductHandleCache[handle] = rawProduct;
+}
+
+function readCachedStorefrontProduct(productIdLike) {
+  const numericId = toProductNumericId(productIdLike);
+  const productGid = toProductGid(productIdLike);
+  return (
+    __ciwiProductIdCache[String(productIdLike || "").trim()] ||
+    (numericId ? __ciwiProductIdCache[numericId] : null) ||
+    (productGid ? __ciwiProductIdCache[productGid] : null) ||
+    null
+  );
+}
+
 async function fetchProductByHandle(handle) {
   const h = normalizeProductHandle(handle);
   if (!h) return null;
   if (__ciwiProductHandleCache[h]) return __ciwiProductHandleCache[h];
-  if (!__ciwiHydrateInFlight[h]) {
-    __ciwiHydrateInFlight[h] = fetch(`/products/${encodeURIComponent(h)}.js`, {
+  const requestKey = `handle:${h}`;
+  if (!__ciwiHydrateInFlight[requestKey]) {
+    __ciwiHydrateInFlight[requestKey] = fetch(`/products/${encodeURIComponent(h)}.js`, {
       credentials: "same-origin",
       headers: { Accept: "application/json" },
     })
       .then((res) => (res.ok ? res.json() : null))
       .catch(() => null)
       .then((data) => {
-        __ciwiProductHandleCache[h] = data;
-        delete __ciwiHydrateInFlight[h];
+        if (data) cacheStorefrontProduct(data);
+        delete __ciwiHydrateInFlight[requestKey];
         return data;
       });
   }
-  return __ciwiHydrateInFlight[h];
+  return __ciwiHydrateInFlight[requestKey];
+}
+
+async function fetchProductsByProductIds(productIds) {
+  // 中文注释：优先按 productId 批量拉取，避免 selectedProductsJson 存价格/图片/变体大字段。
+  const numericIds = Array.from(
+    new Set(
+      (Array.isArray(productIds) ? productIds : [])
+        .map((id) => toProductNumericId(id))
+        .filter(Boolean),
+    ),
+  );
+  if (!numericIds.length) return [];
+
+  const missingIds = numericIds.filter((id) => !readCachedStorefrontProduct(id));
+  const batches = [];
+  for (let i = 0; i < missingIds.length; i += 20) {
+    batches.push(missingIds.slice(i, i + 20));
+  }
+
+  await Promise.all(
+    batches.map((batch) => {
+      const requestKey = `ids:${batch.join(",")}`;
+      if (!__ciwiHydrateInFlight[requestKey]) {
+        const query = encodeURIComponent(batch.join(","));
+        __ciwiHydrateInFlight[requestKey] = fetch(
+          `/products.json?ids=${query}&limit=${batch.length}`,
+          {
+            credentials: "same-origin",
+            headers: { Accept: "application/json" },
+          },
+        )
+          .then((res) => (res.ok ? res.json() : null))
+          .catch(() => null)
+          .then((data) => {
+            const products = Array.isArray(data?.products) ? data.products : [];
+            products.forEach((product) => cacheStorefrontProduct(product));
+            delete __ciwiHydrateInFlight[requestKey];
+            return products;
+          });
+      }
+      return __ciwiHydrateInFlight[requestKey];
+    }),
+  );
+
+  return numericIds
+    .map((id) => readCachedStorefrontProduct(id))
+    .filter(Boolean);
 }
 
 function hydrateProductFromStorefrontJson(rawProduct, existing) {
@@ -613,8 +716,9 @@ function hydrateProductFromStorefrontJson(rawProduct, existing) {
     : false;
   return {
     ...existing,
+    handle: String(rawProduct.handle || existing?.handle || ""),
     title: String(rawProduct.title || existing?.title || ""),
-    image: String(rawProduct?.images?.[0] || "") || String(existing?.image || ""),
+    image: getProductImageUrl(rawProduct) || String(existing?.image || ""),
     price: String(variants[0]?.price || rawProduct?.price || existing?.price || ""),
     selectedVariantId: hasSelected
       ? selectedVariantId
@@ -628,6 +732,33 @@ async function hydrateCompleteBundleOfferInPlace(offer) {
   const config = parseCompleteBundleConfig(offer.selectedProductsJson);
   if (!config.bars.length) return false;
   let changed = false;
+
+  // 中文注释：先批量收集缺失详情的 productId，一次性拉回 storefront 数据，再回填每个 bar。
+  const missingProductIds = [];
+  for (const bar of config.bars) {
+    for (const product of bar.products || []) {
+      const needsHydrate =
+        !Array.isArray(product.variants) ||
+        product.variants.length === 0 ||
+        !product.title ||
+        !product.image ||
+        !product.price;
+      if (!needsHydrate) continue;
+      const cached = readCachedStorefrontProduct(product.productId);
+      if (cached) {
+        Object.assign(product, hydrateProductFromStorefrontJson(cached, product));
+        changed = true;
+        continue;
+      }
+      const numericId = toProductNumericId(product.productId);
+      if (numericId) missingProductIds.push(numericId);
+    }
+  }
+
+  if (missingProductIds.length) {
+    await fetchProductsByProductIds(missingProductIds);
+  }
+
   for (const bar of config.bars) {
     for (let i = 0; i < (bar.products || []).length; i++) {
       const product = bar.products[i];
@@ -638,9 +769,14 @@ async function hydrateCompleteBundleOfferInPlace(offer) {
         !product.image ||
         !product.price;
       if (!needsHydrate) continue;
-      const handle = normalizeProductHandle(product.handle);
-      if (!handle) continue;
-      const sfProduct = await fetchProductByHandle(handle);
+
+      let sfProduct = readCachedStorefrontProduct(product.productId);
+      if (!sfProduct) {
+        const handle = normalizeProductHandle(product.handle);
+        if (handle) {
+          sfProduct = await fetchProductByHandle(handle);
+        }
+      }
       if (!sfProduct) continue;
       bar.products[i] = hydrateProductFromStorefrontJson(sfProduct, product);
       changed = true;

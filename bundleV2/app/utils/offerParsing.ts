@@ -496,10 +496,9 @@ export function buildCompleteBundleConfig(
               .filter((p) => p && typeof p === "object" && String(p.productId || "").trim())
               .map((p) => ({
                 productId: String(p.productId).trim(),
-                handle: String((p as { handle?: unknown }).handle || "").trim(),
                 // 保留选中变体 ID，确保 storefront 仍可直接 /cart/add
                 selectedVariantId: String(p.selectedVariantId || ""),
-                // 不存展示/变体大字段，前台与 Live Preview 按 productId/handle 动态补全
+                // 仅保留运行必需字段，展示数据统一按 productId 动态补全
                 pricing: (() => {
                   const pmRaw = String(p.pricing?.mode || "full_price");
                   const pm: CompleteBundlePricingMode = (
