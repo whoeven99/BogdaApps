@@ -114,13 +114,17 @@ export async function syncCartLinesAutomaticDiscountMetafield(
       new Set(
         discountNodes.flatMap((node: any) => {
           const discount = node?.discount;
-          if (
-            !discount ||
-            discount.__typename !== "DiscountAutomaticApp" ||
-            discount?.appDiscountType?.functionId !== functionId
-          ) {
+          if (!discount || discount.__typename !== "DiscountAutomaticApp") {
             return [];
           }
+          const discountTitle = String(discount?.title || "");
+          const titleMatches =
+            discountTitle.includes(CART_LINES_DISCOUNT_AUTO_TITLE) ||
+            discountTitle.includes(getAutoDiscountTitle());
+          const functionMatches = discount?.appDiscountType?.functionId === functionId;
+          // 兜底策略：函数 ID 命中或标题命中任一即可；避免同名函数多版本导致写入偏移。
+          if (!functionMatches && !titleMatches) return [];
+
           // 兼容不同 owner 类型：有的店铺可写 discountId，有的使用 discountNode.id。
           const ids = [discount?.discountId, node?.id]
             .map((id) => String(id || "").trim())
@@ -129,6 +133,27 @@ export async function syncCartLinesAutomaticDiscountMetafield(
         }),
       ),
     ) as string[];
+    const matchedDiscounts = discountNodes
+      .map((node: any) => {
+        const d = node?.discount;
+        if (!d || d.__typename !== "DiscountAutomaticApp") return null;
+        return {
+          nodeId: String(node?.id || ""),
+          discountId: String(d?.discountId || ""),
+          title: String(d?.title || ""),
+          status: String(d?.status || ""),
+          discountFunctionId: String(d?.appDiscountType?.functionId || ""),
+          functionMatches: d?.appDiscountType?.functionId === functionId,
+          titleMatches:
+            String(d?.title || "").includes(CART_LINES_DISCOUNT_AUTO_TITLE) ||
+            String(d?.title || "").includes(getAutoDiscountTitle()),
+        };
+      })
+      .filter(Boolean);
+    console.log("[discount][sync-meta] matched discount diagnostics", {
+      targetFunctionId: functionId,
+      matchedDiscounts,
+    });
 
     if (!ownerIds.length) {
       console.error("[discount][sync-meta] no owner ids matched function", { functionId });
