@@ -196,6 +196,11 @@ export type CompleteBundleProduct = {
   selectedVariantId?: string;
   // 变体 option 值（如 Color/Size），用于前端预览回显
   selectedOptions?: Record<string, string>;
+  /** 单件商品的定价：Full price / 百分比 / 立减金额 / 固定价 */
+  pricing?: {
+    mode: CompleteBundlePricingMode;
+    value: number;
+  };
   variants?: Array<{
     id: string;
     title: string;
@@ -396,6 +401,15 @@ export function parseCompleteBundleConfig(
             .map((p) => {
               const productId = String((p as { productId?: unknown }).productId || "").trim();
               const variantsRaw = (p as { variants?: unknown }).variants;
+              const productPricingRaw = (p as { pricing?: unknown }).pricing;
+              const pModeRaw = String((productPricingRaw as { mode?: unknown })?.mode || "");
+              const pMode: CompleteBundlePricingMode = (
+                ["full_price", "percentage_off", "amount_off", "fixed_price"] as const
+              ).includes(pModeRaw as CompleteBundlePricingMode)
+                ? (pModeRaw as CompleteBundlePricingMode)
+                : "full_price";
+              const pValueRaw = Number((productPricingRaw as { value?: unknown })?.value);
+              const pValue = Number.isFinite(pValueRaw) ? pValueRaw : 0;
               return {
                 productId,
                 title: String((p as { title?: unknown }).title || ""),
@@ -408,6 +422,7 @@ export function parseCompleteBundleConfig(
                   typeof (p as { selectedOptions?: unknown }).selectedOptions === "object"
                     ? ((p as { selectedOptions?: Record<string, string> }).selectedOptions || {})
                     : {},
+                pricing: { mode: pMode, value: pValue },
                 variants: Array.isArray(variantsRaw)
                   ? variantsRaw
                       .filter((v) => v && typeof v === "object")
@@ -428,6 +443,14 @@ export function parseCompleteBundleConfig(
             })
             .filter((p) => p.productId)
         : [];
+
+      // 兼容旧数据：仅有 bar 级 pricing、商品未单独配置时，把 bar 的定价合并到第一件商品
+      const allProductsDefaultPricing = products.every(
+        (p) => p.pricing?.mode === "full_price" && (p.pricing?.value ?? 0) === 0,
+      );
+      if (products.length && allProductsDefaultPricing && (mode !== "full_price" || value !== 0)) {
+        products[0] = { ...products[0], pricing: { mode, value } };
+      }
 
       bars.push({
         id,
@@ -480,6 +503,16 @@ export function buildCompleteBundleConfig(
                   p.selectedOptions && typeof p.selectedOptions === "object"
                     ? p.selectedOptions
                     : {},
+                pricing: (() => {
+                  const pmRaw = String(p.pricing?.mode || "full_price");
+                  const pm: CompleteBundlePricingMode = (
+                    ["full_price", "percentage_off", "amount_off", "fixed_price"] as const
+                  ).includes(pmRaw as CompleteBundlePricingMode)
+                    ? (pmRaw as CompleteBundlePricingMode)
+                    : "full_price";
+                  const pv = Number.isFinite(Number(p.pricing?.value)) ? Number(p.pricing?.value) : 0;
+                  return { mode: pm, value: pv };
+                })(),
                 variants: Array.isArray(p.variants)
                   ? p.variants
                       .filter((v) => v && typeof v === "object" && String(v.id || "").trim())

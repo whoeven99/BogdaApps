@@ -457,43 +457,56 @@ function parseCompleteBundleConfig(selectedProductsJson) {
     return {
       bars: bars
         .filter((bar) => bar && typeof bar === "object" && bar.id)
-        .map((bar) => ({
-          id: String(bar.id),
-          type: bar.type === "bxgy" ? "bxgy" : "quantity-break-same",
-          title: String(bar.title || ""),
-          subtitle: String(bar.subtitle || ""),
-          quantity: Math.max(1, Math.trunc(Number(bar.quantity) || 1)),
-          pricing: {
-            mode: String(bar?.pricing?.mode || "full_price"),
-            value: Number(bar?.pricing?.value) || 0,
-          },
-          products: Array.isArray(bar.products)
+        .map((bar) => {
+          const barMode = String(bar?.pricing?.mode || "full_price");
+          const barValue = Number(bar?.pricing?.value) || 0;
+          const products = Array.isArray(bar.products)
             ? bar.products
                 .filter((p) => p && typeof p === "object" && p.productId)
-                .map((p) => ({
-                  productId: String(p.productId),
-                  title: String(p.title || ""),
-                  image: String(p.image || ""),
-                  price: String(p.price || ""),
-                  selectedVariantId: String(p.selectedVariantId || p.defaultVariantId || ""),
-                  variants: Array.isArray(p.variants)
-                    ? p.variants
-                        .filter((v) => v && typeof v === "object" && v.id)
-                        .map((v) => ({
-                          id: String(v.id),
-                          title: String(v.title || ""),
-                          price: String(v.price || ""),
-                          selectedOptions: Array.isArray(v.selectedOptions)
-                            ? v.selectedOptions.map((opt) => ({
-                                name: String(opt?.name || ""),
-                                value: String(opt?.value || ""),
-                              }))
-                            : [],
-                        }))
-                    : [],
-                }))
-            : [],
-        })),
+                .map((p) => {
+                  const pm = String(p?.pricing?.mode || "full_price");
+                  const pv = Number(p?.pricing?.value) || 0;
+                  return {
+                    productId: String(p.productId),
+                    title: String(p.title || ""),
+                    image: String(p.image || ""),
+                    price: String(p.price || ""),
+                    selectedVariantId: String(p.selectedVariantId || p.defaultVariantId || ""),
+                    pricing: { mode: pm, value: pv },
+                    variants: Array.isArray(p.variants)
+                      ? p.variants
+                          .filter((v) => v && typeof v === "object" && v.id)
+                          .map((v) => ({
+                            id: String(v.id),
+                            title: String(v.title || ""),
+                            price: String(v.price || ""),
+                            selectedOptions: Array.isArray(v.selectedOptions)
+                              ? v.selectedOptions.map((opt) => ({
+                                  name: String(opt?.name || ""),
+                                  value: String(opt?.value || ""),
+                                }))
+                              : [],
+                          }))
+                      : [],
+                  };
+                })
+            : [];
+          const allDefault = products.every(
+            (p) => p.pricing.mode === "full_price" && (p.pricing.value || 0) === 0,
+          );
+          if (products.length && allDefault && (barMode !== "full_price" || barValue !== 0)) {
+            products[0].pricing = { mode: barMode, value: barValue };
+          }
+          return {
+            id: String(bar.id),
+            type: bar.type === "bxgy" ? "bxgy" : "quantity-break-same",
+            title: String(bar.title || ""),
+            subtitle: String(bar.subtitle || ""),
+            quantity: Math.max(1, Math.trunc(Number(bar.quantity) || 1)),
+            pricing: { mode: barMode, value: barValue },
+            products,
+          };
+        }),
     };
   } catch {
     return { bars: [] };

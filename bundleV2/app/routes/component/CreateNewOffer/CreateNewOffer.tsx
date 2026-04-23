@@ -24,6 +24,7 @@ import {
   parseCompleteBundleConfig,
   buildCompleteBundleConfig,
   type CompleteBundleBar,
+  type CompleteBundlePricingMode,
 } from "../../../utils/offerParsing";
 
 type DiscountRule = {
@@ -66,6 +67,7 @@ type CompleteBundleProductDraft = {
   defaultVariantId?: string;
   selectedVariantId?: string;
   selectedOptions?: Record<string, string>;
+  pricing?: { mode: CompleteBundlePricingMode; value: number };
   variants?: Array<{
     id: string;
     title: string;
@@ -73,6 +75,54 @@ type CompleteBundleProductDraft = {
     selectedOptions?: Array<{ name: string; value: string }>;
   }>;
 };
+
+/** 从价格字符串解析为数字（支持 12.99 / 12,99 / €12.99） */
+function parseMoneyStringToNumber(raw?: string): number {
+  if (raw == null) return 0;
+  const stripped = String(raw).trim().replace(/[^\d.,-]/g, "");
+  if (!stripped) return 0;
+  const lastComma = stripped.lastIndexOf(",");
+  const lastDot = stripped.lastIndexOf(".");
+  let normalized = stripped;
+  if (lastComma > lastDot) {
+    normalized = stripped.replace(/\./g, "").replace(",", ".");
+  } else {
+    normalized = stripped.replace(/,/g, "");
+  }
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * 单件商品定价：原价 / 百分比优惠 / 立减金额 / 固定价
+ * full_price：原价；percentage_off：按百分比减价；amount_off：减固定金额；fixed_price：指定售价
+ */
+function applyCompleteBundleProductPricing(
+  mode: CompleteBundlePricingMode,
+  value: number,
+  basePrice: number,
+): { final: number; original: number } {
+  const original = Math.max(0, basePrice);
+  if (mode === "full_price") {
+    return { final: original, original };
+  }
+  if (mode === "percentage_off") {
+    const pct = Math.max(0, Math.min(100, Number(value) || 0));
+    const final = Math.round(original * (1 - pct / 100) * 100) / 100;
+    return { final, original };
+  }
+  if (mode === "amount_off") {
+    const off = Math.max(0, Number(value) || 0);
+    const final = Math.max(0, Math.round((original - off) * 100) / 100);
+    return { final, original };
+  }
+  const fixed = Math.max(0, Number(value) || 0);
+  return { final: Math.round(fixed * 100) / 100, original };
+}
+
+function formatEuroFromNumber(amount: number): string {
+  return `€${amount.toFixed(2).replace(".", ",")}`;
+}
 
 interface InitialOffer {
   id: string;
@@ -429,6 +479,7 @@ export function CreateNewOffer({
         ? [
             {
               ...mainBundleProduct,
+              pricing: mainBundleProduct.pricing ?? { mode: "full_price", value: 0 },
               selectedVariantId:
                 mainBundleProduct.selectedVariantId ||
                 mainBundleProduct.defaultVariantId ||
@@ -518,16 +569,20 @@ export function CreateNewOffer({
       }
     }
     updateCompleteBundleBar(barId, {
-      products: mappedProducts.map((p) => ({
-        productId: p.productId,
-        title: p.title,
-        image: p.image,
-        price: p.price,
-        defaultVariantId: p.defaultVariantId,
-        selectedVariantId: p.selectedVariantId,
-        selectedOptions: p.selectedOptions,
-        variants: p.variants,
-      })),
+      products: mappedProducts.map((p) => {
+        const prev = targetBar.products.find((op) => op.productId === p.productId);
+        return {
+          productId: p.productId,
+          title: p.title,
+          image: p.image,
+          price: p.price,
+          defaultVariantId: p.defaultVariantId,
+          selectedVariantId: p.selectedVariantId,
+          selectedOptions: p.selectedOptions,
+          variants: p.variants,
+          pricing: prev?.pricing ?? p.pricing ?? { mode: "full_price" as const, value: 0 },
+        };
+      }),
     });
   };
   const [discountRules, setDiscountRules] = useState<DiscountRule[]>(() =>
@@ -662,6 +717,24 @@ export function CreateNewOffer({
     );
   };
 
+  const updateBundleProductPricing = (
+    barId: string,
+    productId: string,
+    pricing: { mode: CompleteBundlePricingMode; value: number },
+  ) => {
+    setCompleteBundleBars((prev) =>
+      prev.map((bar) => {
+        if (bar.id !== barId) return bar;
+        return {
+          ...bar,
+          products: bar.products.map((p) =>
+            p.productId === productId ? { ...p, pricing } : p,
+          ),
+        };
+      }),
+    );
+  };
+
   useEffect(() => {
     if (offerType === 'bxgy') {
       setBxgyDiscountRules(prev =>
@@ -696,24 +769,31 @@ export function CreateNewOffer({
     if (offerType === "complete-bundle" && completeBundleBars.length > 0) {
       return completeBundleBars.map((bar, index) => {
         const productsCount = Array.isArray(bar.products) ? bar.products.length : 0;
-        const pricingText =
-          bar.pricing.mode === "percentage_off"
-            ? `${bar.pricing.value}% OFF`
-            : bar.pricing.mode === "amount_off"
-              ? `SAVE ${formatPreviewPrice(bar.pricing.value)}`
-              : bar.pricing.mode === "fixed_price"
-                ? formatPreviewPrice(bar.pricing.value)
-                : "Full price";
+        let sumOriginal = 0;
+        let sumFinal = 0;
+        for (const p of bar.products) {
+          const selectedVariant =
+            p.variants?.find((v) => v.id === p.selectedVariantId) || p.variants?.[0];
+          const base = parseMoneyStringToNumber(selectedVariant?.price || p.price);
+          const mode = p.pricing?.mode ?? "full_price";
+          const val = p.pricing?.value ?? 0;
+          const { final, original } = applyCompleteBundleProductPricing(mode, val, base);
+          sumOriginal += original;
+          sumFinal += final;
+        }
+        const saved = Math.max(0, sumOriginal - sumFinal);
         return {
           id: bar.id,
           title: bar.title || `Bar #${index + 1}`,
           subtitle:
             bar.subtitle ||
             `${bar.type === "bxgy" ? "Buy X Get Y" : "Quantity break"} · ${productsCount} products`,
-          price: pricingText,
+          price: formatPreviewPrice(sumFinal),
+          original: sumOriginal > sumFinal ? formatPreviewPrice(sumOriginal) : undefined,
           featured: index === 0,
           badge: index === 0 ? "Most Popular" : "",
-          saveLabel: `Qty ${Math.max(1, Number(bar.quantity) || 1)}`,
+          saveLabel:
+            saved > 0 ? `SAVE ${formatPreviewPrice(saved)}` : `Qty ${Math.max(1, Number(bar.quantity) || 1)}`,
         };
       });
     }
@@ -1003,6 +1083,10 @@ export function CreateNewOffer({
                   type: bar.type,
                   quantity: bar.quantity,
                   pricing: bar.pricing,
+                  products: bar.products.map((p) => ({
+                    productId: p.productId,
+                    pricing: p.pricing ?? { mode: "full_price" as const, value: 0 },
+                  })),
                 }))
               : buildDiscountRulesJson(normalizedDiscountRules),
         )}
@@ -1655,94 +1739,174 @@ export function CreateNewOffer({
                         {activeBundleBar ? (
                           <div className="create-offer-discount-card">
                             <div className="create-offer-discount-body">
-                              <div className="create-offer-discount-form-row create-offer-discount-form-row--inline">
-                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                                  Pricing mode
-                                  <Select
-                                    size="large"
-                                    className="mt-1"
-                                    value={activeBundleBar.pricing.mode}
-                                    onChange={(val) =>
-                                      updateCompleteBundleBar(activeBundleBar.id, {
-                                        pricing: { ...activeBundleBar.pricing, mode: val },
-                                      })
-                                    }
-                                    options={[
-                                      { label: "Full price", value: "full_price" },
-                                      { label: "Percentage off", value: "percentage_off" },
-                                      { label: "Amount off", value: "amount_off" },
-                                      { label: "Fixed price", value: "fixed_price" },
-                                    ]}
-                                  />
-                                </label>
-                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                                  Pricing value
-                                  <Input
-                                    size="large"
-                                    type="number"
-                                    min={0}
-                                    className="mt-1"
-                                    value={activeBundleBar.pricing.value}
-                                    onChange={(e) =>
-                                      updateCompleteBundleBar(activeBundleBar.id, {
-                                        pricing: {
-                                          ...activeBundleBar.pricing,
-                                          value: Number(e.target.value) || 0,
-                                        },
-                                      })
-                                    }
-                                  />
-                                </label>
+                              <div className="text-[14px] font-medium text-[#1c1f23] mb-3">
+                                Bar Pricing & Variant Preview
                               </div>
-                              <div className="mt-4">
-                                <div className="text-[13px] font-medium mb-2 text-[#1c1f23]">
-                                  Variant / Option preview
+                              {activeBundleBar.products.length === 0 ? (
+                                <div className="text-[12px] text-[#5c6166]">
+                                  Select products for this bar first.
                                 </div>
-                                {activeBundleBar.products.length === 0 ? (
-                                  <div className="text-[12px] text-[#5c6166]">
-                                    Select products for this bar first.
-                                  </div>
-                                ) : (
-                                  <div className="flex flex-col gap-3">
-                                    {activeBundleBar.products.map((product) => {
-                                      const selectedVariant =
-                                        product.variants?.find((v) => v.id === product.selectedVariantId) ||
-                                        product.variants?.[0];
-                                      return (
-                                        <div key={product.productId} className="border border-[#dfe3e8] rounded-md p-2">
-                                          <div className="text-[12px] font-medium mb-2">{product.title || product.productId}</div>
-                                          {Array.isArray(product.variants) && product.variants.length > 0 && (
+                              ) : (
+                                <div className="flex flex-col gap-4">
+                                  {activeBundleBar.products.map((product, productIdx) => {
+                                    const selectedVariant =
+                                      product.variants?.find((v) => v.id === product.selectedVariantId) ||
+                                      product.variants?.[0];
+                                    const optionNames = Array.from(
+                                      new Set(
+                                        (product.variants || [])
+                                          .flatMap((variant) => variant.selectedOptions || [])
+                                          .map((opt) => opt.name)
+                                          .filter(Boolean),
+                                      ),
+                                    );
+                                    const selectedOptionsMap = Object.fromEntries(
+                                      (selectedVariant?.selectedOptions || []).map((opt) => [
+                                        opt.name,
+                                        opt.value,
+                                      ]),
+                                    );
+                                    const pMode = product.pricing?.mode ?? "full_price";
+                                    const pValue = product.pricing?.value ?? 0;
+                                    const valueLabel =
+                                      pMode === "percentage_off"
+                                        ? "Discount per item (%)"
+                                        : pMode === "amount_off"
+                                          ? "Amount off (€)"
+                                          : pMode === "fixed_price"
+                                            ? "Total price (€)"
+                                            : "Pricing value";
+                                    return (
+                                      <div
+                                        key={product.productId}
+                                        className="border border-[#dfe3e8] rounded-md p-3 bg-[#fafbfc]"
+                                      >
+                                        <div className="flex items-start gap-2 mb-2">
+                                          {product.image ? (
+                                            <img
+                                              src={product.image}
+                                              alt=""
+                                              className="w-10 h-10 rounded object-cover shrink-0"
+                                            />
+                                          ) : null}
+                                          <div className="flex-1 min-w-0">
+                                            <div className="text-[12px] font-medium text-[#1c1f23]">
+                                              {productIdx === 0 ? "Default product" : "Additional product"}
+                                            </div>
+                                            <div className="text-[11px] text-[#5c6166] truncate">
+                                              {product.title || product.productId}
+                                            </div>
+                                          </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                          <label className="block text-[12px] font-medium text-[#1c1f23]">
+                                            Price
                                             <Select
                                               size="small"
-                                              className="w-full mb-2"
-                                              value={product.selectedVariantId || product.variants[0].id}
-                                              onChange={(variantId) => {
-                                                const nextProducts = activeBundleBar.products.map((p) =>
-                                                  p.productId === product.productId
-                                                    ? { ...p, selectedVariantId: String(variantId) }
-                                                    : p,
-                                                );
-                                                updateCompleteBundleBar(activeBundleBar.id, { products: nextProducts });
-                                              }}
-                                              options={product.variants.map((variant) => ({
-                                                label: variant.title,
-                                                value: variant.id,
-                                              }))}
+                                              className="mt-1 w-full"
+                                              value={pMode}
+                                              onChange={(val) =>
+                                                updateBundleProductPricing(activeBundleBar.id, product.productId, {
+                                                  mode: val as CompleteBundlePricingMode,
+                                                  value:
+                                                    val === "full_price"
+                                                      ? 0
+                                                      : pValue,
+                                                })
+                                              }
+                                              options={[
+                                                { label: "Full price", value: "full_price" },
+                                                { label: "Percentage off", value: "percentage_off" },
+                                                { label: "Amount off", value: "amount_off" },
+                                                { label: "Fixed price", value: "fixed_price" },
+                                              ]}
                                             />
-                                          )}
-                                          {selectedVariant?.selectedOptions?.length ? (
-                                            <div className="text-[12px] text-[#5c6166]">
-                                              {selectedVariant.selectedOptions
-                                                .map((opt) => `${opt.name}: ${opt.value}`)
-                                                .join(" / ")}
+                                          </label>
+                                          <label className="block text-[12px] font-medium text-[#1c1f23]">
+                                            {valueLabel}
+                                            <Input
+                                              size="small"
+                                              type="number"
+                                              min={0}
+                                              disabled={pMode === "full_price"}
+                                              className="mt-1"
+                                              value={pMode === "full_price" ? 0 : pValue}
+                                              onChange={(e) =>
+                                                updateBundleProductPricing(activeBundleBar.id, product.productId, {
+                                                  mode: pMode,
+                                                  value: Number(e.target.value) || 0,
+                                                })
+                                              }
+                                            />
+                                          </label>
+                                        </div>
+                                        <div className="mt-3">
+                                          <div className="text-[12px] font-medium mb-1 text-[#1c1f23]">
+                                            Variant / Option preview
+                                          </div>
+                                          {Array.isArray(product.variants) &&
+                                            product.variants.length > 0 &&
+                                            optionNames.length === 0 && (
+                                              <Select
+                                                size="small"
+                                                className="w-full mb-2"
+                                                value={product.selectedVariantId || product.variants[0].id}
+                                                onChange={(variantId) =>
+                                                  updateBundleBarProductVariant(
+                                                    activeBundleBar.id,
+                                                    product.productId,
+                                                    String(variantId),
+                                                  )
+                                                }
+                                                options={product.variants.map((variant) => ({
+                                                  label: variant.title,
+                                                  value: variant.id,
+                                                }))}
+                                              />
+                                            )}
+                                          {optionNames.length > 0 ? (
+                                            <div className="grid grid-cols-1 gap-2">
+                                              {optionNames.map((optionName) => {
+                                                const optionValues = Array.from(
+                                                  new Set(
+                                                    (product.variants || [])
+                                                      .flatMap((variant) => variant.selectedOptions || [])
+                                                      .filter((opt) => opt.name === optionName)
+                                                      .map((opt) => opt.value)
+                                                      .filter(Boolean),
+                                                  ),
+                                                );
+                                                return (
+                                                  <Select
+                                                    key={`${product.productId}-${optionName}-cfg`}
+                                                    size="small"
+                                                    className="w-full"
+                                                    value={
+                                                      selectedOptionsMap[optionName] || optionValues[0]
+                                                    }
+                                                    onChange={(value) =>
+                                                      updateBundleBarProductOption(
+                                                        activeBundleBar.id,
+                                                        product.productId,
+                                                        optionName,
+                                                        String(value),
+                                                      )
+                                                    }
+                                                    options={optionValues.map((value) => ({
+                                                      label: value,
+                                                      value,
+                                                    }))}
+                                                  />
+                                                );
+                                              })}
                                             </div>
                                           ) : null}
                                         </div>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
                             </div>
                           </div>
                         ) : (
@@ -1958,13 +2122,54 @@ export function CreateNewOffer({
                               {bar.subtitle ||
                                 `${bar.type === "bxgy" ? "Buy X Get Y" : "Quantity break"} · Qty ${bar.quantity}`}
                             </div>
-                            <div className="mt-2 flex flex-col gap-2">
+                            {bar.products.length >= 2 ? (() => {
+                              let sumOriginal = 0;
+                              let sumFinal = 0;
+                              for (const p of bar.products) {
+                                const v =
+                                  p.variants?.find((x) => x.id === p.selectedVariantId) ||
+                                  p.variants?.[0];
+                                const base = parseMoneyStringToNumber(v?.price || p.price);
+                                const { final, original } = applyCompleteBundleProductPricing(
+                                  p.pricing?.mode ?? "full_price",
+                                  p.pricing?.value ?? 0,
+                                  base,
+                                );
+                                sumOriginal += original;
+                                sumFinal += final;
+                              }
+                              const saved = Math.max(0, sumOriginal - sumFinal);
+                              return (
+                                <>
+                                  <div className="mt-2 text-[13px] font-semibold text-[#1c1f23] flex flex-wrap items-baseline gap-2">
+                                    <span>{formatEuroFromNumber(sumFinal)}</span>
+                                    {sumOriginal > sumFinal ? (
+                                      <span className="text-[12px] text-[#9aa0a6] line-through font-normal">
+                                        {formatEuroFromNumber(sumOriginal)}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  {saved > 0 ? (
+                                    <div className="mt-1 text-[12px] text-[#008060] font-medium">
+                                      Save {formatEuroFromNumber(saved)}!
+                                    </div>
+                                  ) : null}
+                                </>
+                              );
+                            })() : null}
+                            <div
+                              className={
+                                bar.products.length >= 2
+                                  ? "mt-2 flex flex-wrap items-stretch gap-2"
+                                  : "mt-2 flex flex-col gap-2"
+                              }
+                            >
                               {bar.products.length === 0 ? (
                                 <div className="text-[12px] text-[#5c6166]">
                                   No products selected.
                                 </div>
                               ) : (
-                                bar.products.map((product) => {
+                                bar.products.map((product, pIdx) => {
                                   const selectedVariant =
                                     product.variants?.find((v) => v.id === product.selectedVariantId) ||
                                     product.variants?.[0];
@@ -1982,81 +2187,106 @@ export function CreateNewOffer({
                                       opt.value,
                                     ]),
                                   );
+                                  const base = parseMoneyStringToNumber(
+                                    selectedVariant?.price || product.price,
+                                  );
+                                  const { final, original } = applyCompleteBundleProductPricing(
+                                    product.pricing?.mode ?? "full_price",
+                                    product.pricing?.value ?? 0,
+                                    base,
+                                  );
                                   return (
-                                    <div key={product.productId} className="rounded border border-[#e5e7eb] p-2">
-                                      {product.image ? (
-                                        <img
-                                          src={product.image}
-                                          alt={product.title || "product"}
-                                          className="w-10 h-10 rounded object-cover mb-2"
-                                        />
-                                      ) : null}
-                                      <div className="text-[12px] font-medium text-[#1c1f23]">
-                                        {product.title || product.productId}
-                                      </div>
-                                      <div className="text-[12px] text-[#5c6166] mt-1">
-                                        {formatBundlePrice(selectedVariant?.price || product.price)}
-                                      </div>
-                                      {Array.isArray(product.variants) && product.variants.length > 0 && (
-                                        <Select
-                                          size="small"
-                                          className="w-full mt-2"
-                                          value={product.selectedVariantId || product.variants[0].id}
-                                          onChange={(variantId) =>
-                                            updateBundleBarProductVariant(
-                                              bar.id,
-                                              product.productId,
-                                              String(variantId),
-                                            )
-                                          }
-                                          options={product.variants.map((variant) => ({
-                                            label: variant.title || "Default",
-                                            value: variant.id,
-                                          }))}
-                                        />
-                                      )}
-                                      {optionNames.length > 0 ? (
-                                        <div className="grid grid-cols-1 gap-2 mt-2">
-                                          {optionNames.map((optionName) => {
-                                            const optionValues = Array.from(
-                                              new Set(
-                                                (product.variants || [])
-                                                  .flatMap((variant) => variant.selectedOptions || [])
-                                                  .filter((opt) => opt.name === optionName)
-                                                  .map((opt) => opt.value)
-                                                  .filter(Boolean),
-                                              ),
-                                            );
-                                            return (
-                                              <Select
-                                                key={`${product.productId}-${optionName}`}
-                                                size="small"
-                                                className="w-full"
-                                                value={selectedOptionsMap[optionName] || optionValues[0]}
-                                                onChange={(value) =>
-                                                  updateBundleBarProductOption(
-                                                    bar.id,
-                                                    product.productId,
-                                                    optionName,
-                                                    String(value),
-                                                  )
-                                                }
-                                                options={optionValues.map((value) => ({
-                                                  label: value,
-                                                  value,
-                                                }))}
-                                              />
-                                            );
-                                          })}
+                                    <div key={product.productId} className="contents">
+                                      {bar.products.length >= 2 && pIdx > 0 ? (
+                                        <div className="flex items-center justify-center px-1 text-[16px] font-bold text-[#9aa0a6] self-center">
+                                          +
                                         </div>
                                       ) : null}
-                                      {selectedVariant?.selectedOptions?.length ? (
-                                        <div className="text-[12px] text-[#5c6166] mt-1">
-                                          {selectedVariant.selectedOptions
-                                            .map((opt) => `${opt.name}: ${opt.value}`)
-                                            .join(" / ")}
+                                      <div
+                                        className={
+                                          bar.products.length >= 2
+                                            ? "rounded border border-[#e5e7eb] p-2 flex-1 min-w-[140px] bg-white"
+                                            : "rounded border border-[#e5e7eb] p-2 bg-white"
+                                        }
+                                      >
+                                        {product.image ? (
+                                          <img
+                                            src={product.image}
+                                            alt={product.title || "product"}
+                                            className="w-12 h-12 rounded object-cover mb-2"
+                                          />
+                                        ) : null}
+                                        <div className="text-[11px] font-medium text-[#1c1f23] line-clamp-2">
+                                          {product.title || product.productId}
                                         </div>
-                                      ) : null}
+                                        <div className="text-[12px] mt-1 flex flex-wrap items-baseline gap-1">
+                                          <span className="font-semibold text-[#1c1f23]">
+                                            {formatEuroFromNumber(final)}
+                                          </span>
+                                          {original > final ? (
+                                            <span className="text-[11px] text-[#9aa0a6] line-through">
+                                              {formatEuroFromNumber(original)}
+                                            </span>
+                                          ) : null}
+                                        </div>
+                                        {Array.isArray(product.variants) &&
+                                          product.variants.length > 0 &&
+                                          optionNames.length === 0 && (
+                                            <Select
+                                              size="small"
+                                              className="w-full mt-2"
+                                              value={product.selectedVariantId || product.variants[0].id}
+                                              onChange={(variantId) =>
+                                                updateBundleBarProductVariant(
+                                                  bar.id,
+                                                  product.productId,
+                                                  String(variantId),
+                                                )
+                                              }
+                                              options={product.variants.map((variant) => ({
+                                                label: variant.title || "Default",
+                                                value: variant.id,
+                                              }))}
+                                            />
+                                          )}
+                                        {optionNames.length > 0 ? (
+                                          <div className="grid grid-cols-1 gap-2 mt-2">
+                                            {optionNames.map((optionName) => {
+                                              const optionValues = Array.from(
+                                                new Set(
+                                                  (product.variants || [])
+                                                    .flatMap((variant) => variant.selectedOptions || [])
+                                                    .filter((opt) => opt.name === optionName)
+                                                    .map((opt) => opt.value)
+                                                    .filter(Boolean),
+                                                ),
+                                              );
+                                              return (
+                                                <Select
+                                                  key={`${product.productId}-${optionName}-live`}
+                                                  size="small"
+                                                  className="w-full"
+                                                  value={
+                                                    selectedOptionsMap[optionName] || optionValues[0]
+                                                  }
+                                                  onChange={(value) =>
+                                                    updateBundleBarProductOption(
+                                                      bar.id,
+                                                      product.productId,
+                                                      optionName,
+                                                      String(value),
+                                                    )
+                                                  }
+                                                  options={optionValues.map((value) => ({
+                                                    label: value,
+                                                    value,
+                                                  }))}
+                                                />
+                                              );
+                                            })}
+                                          </div>
+                                        ) : null}
+                                      </div>
                                     </div>
                                   );
                                 })
