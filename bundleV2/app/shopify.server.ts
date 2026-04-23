@@ -110,29 +110,6 @@ export async function syncCartLinesAutomaticDiscountMetafield(
       nodeCount: discountNodes.length,
       functionId,
     });
-    const ownerIds: string[] = Array.from(
-      new Set(
-        discountNodes.flatMap((node: any) => {
-          const discount = node?.discount;
-          if (!discount || discount.__typename !== "DiscountAutomaticApp") {
-            return [];
-          }
-          const discountTitle = String(discount?.title || "");
-          const titleMatches =
-            discountTitle.includes(CART_LINES_DISCOUNT_AUTO_TITLE) ||
-            discountTitle.includes(getAutoDiscountTitle());
-          const functionMatches = discount?.appDiscountType?.functionId === functionId;
-          // 兜底策略：函数 ID 命中或标题命中任一即可；避免同名函数多版本导致写入偏移。
-          if (!functionMatches && !titleMatches) return [];
-
-          // 兼容不同 owner 类型：有的店铺可写 discountId，有的使用 discountNode.id。
-          const ids = [discount?.discountId, node?.id]
-            .map((id) => String(id || "").trim())
-            .filter(Boolean);
-          return ids;
-        }),
-      ),
-    ) as string[];
     const matchedDiscounts = discountNodes
       .map((node: any) => {
         const d = node?.discount;
@@ -154,6 +131,29 @@ export async function syncCartLinesAutomaticDiscountMetafield(
       targetFunctionId: functionId,
       matchedDiscounts,
     });
+    const strictFunctionMatches = matchedDiscounts.filter(
+      (d: any) => d && d.functionMatches,
+    );
+    const fallbackTitleMatches =
+      strictFunctionMatches.length === 0
+        ? matchedDiscounts.filter((d: any) => d && d.titleMatches)
+        : [];
+    const targetDiscounts =
+      strictFunctionMatches.length > 0 ? strictFunctionMatches : fallbackTitleMatches;
+    const ownerIds: string[] = Array.from(
+      new Set(
+        targetDiscounts.flatMap((d: any) =>
+          [d.discountId, d.nodeId].map((id: string) => String(id || "").trim()).filter(Boolean),
+        ),
+      ),
+    );
+    const targetDiscountNodeIds: string[] = Array.from(
+      new Set(
+        targetDiscounts
+          .map((d: any) => String(d?.nodeId || "").trim())
+          .filter(Boolean),
+      ),
+    );
 
     if (!ownerIds.length) {
       console.error("[discount][sync-meta] no owner ids matched function", { functionId });
@@ -165,7 +165,79 @@ export async function syncCartLinesAutomaticDiscountMetafield(
     console.log("[discount][sync-meta] owner ids resolved", {
       ownerCount: ownerIds.length,
       ownerIds,
+      targetDiscountNodeIds,
+      selectionMode: strictFunctionMatches.length > 0 ? "function_id" : "title_fallback",
     });
+
+    // 先用 discountAutomaticAppUpdate 写入函数 owner 的 metafields（与函数运行时 owner 最稳定对齐）
+    for (const discountNodeId of targetDiscountNodeIds) {
+      console.log("[discount][sync-meta] updating automatic app discount metafields", {
+        discountNodeId,
+      });
+      const updateResp = await admin.graphql(
+        `#graphql
+          mutation UpdateAutomaticAppDiscount($id: ID!, $automaticAppDiscount: DiscountAutomaticAppInput!) {
+            discountAutomaticAppUpdate(id: $id, automaticAppDiscount: $automaticAppDiscount) {
+              automaticAppDiscount {
+                discountId
+                title
+              }
+              userErrors {
+                field
+                message
+              }
+            }
+          }
+        `,
+        {
+          variables: {
+            id: discountNodeId,
+            automaticAppDiscount: {
+              metafields: [
+                {
+                  namespace: CART_LINES_DISCOUNT_METAFIELD_NAMESPACE,
+                  key: CART_LINES_DISCOUNT_METAFIELD_KEY,
+                  type: "json",
+                  value: buildAutomaticDiscountOffersPayload(metafieldValue),
+                },
+                {
+                  namespace: LEGACY_OFFERS_METAFIELD_NAMESPACE,
+                  key: LEGACY_OFFERS_METAFIELD_KEY,
+                  type: "json",
+                  value: buildAutomaticDiscountOffersPayload(metafieldValue),
+                },
+              ],
+            },
+          },
+        },
+      );
+      const updateJson = (await updateResp.json()) as {
+        data?: {
+          discountAutomaticAppUpdate?: {
+            userErrors?: Array<{ message?: string }>;
+          };
+        };
+        errors?: Array<{ message?: string }>;
+      };
+      if (updateJson.errors?.length) {
+        console.error("[discount][sync-meta] discountAutomaticAppUpdate graphql errors", {
+          discountNodeId,
+          errors: updateJson.errors,
+        });
+      }
+      const updateUserErrors =
+        updateJson?.data?.discountAutomaticAppUpdate?.userErrors ?? [];
+      if (updateUserErrors.length) {
+        console.error("[discount][sync-meta] discountAutomaticAppUpdate userErrors", {
+          discountNodeId,
+          userErrors: updateUserErrors,
+        });
+      } else {
+        console.log("[discount][sync-meta] discountAutomaticAppUpdate success", {
+          discountNodeId,
+        });
+      }
+    }
 
     console.log("[discount][sync-meta] calling metafieldsSet", {
       mutationTargets: ownerIds.length * 2,

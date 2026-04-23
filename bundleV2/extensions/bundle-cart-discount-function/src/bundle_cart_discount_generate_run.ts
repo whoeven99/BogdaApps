@@ -489,6 +489,11 @@ export function bundleCartDiscountGenerateRun(
     discountAppOwnedOffers: summarizeMetafield(discountAppOwnedMetafield),
     discountLegacyOffers: summarizeMetafield(discountLegacyMetafield),
     shopOffers: summarizeMetafield(shopMetafield),
+    rawValueLens: {
+      discountAppOwned: String(discountAppOwnedMetafield?.value || "").length,
+      discountLegacy: String(discountLegacyMetafield?.value || "").length,
+      shop: String(shopMetafield?.value || "").length,
+    },
     activeSource: discountAppOwnedMetafield
       ? "discount_app_owned"
       : discountLegacyMetafield
