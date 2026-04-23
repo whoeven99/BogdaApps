@@ -84,6 +84,13 @@ export type OfferSettings = {
   buttonText: string;
   buttonPrimaryColor: string;
   showCustomButton: boolean;
+  subscriptionEnabled: boolean;
+  subscriptionPosition: "below-bundle-bars";
+  subscriptionTitle: string;
+  subscriptionSubtitle: string;
+  oneTimeTitle: string;
+  oneTimeSubtitle: string;
+  subscriptionDefaultSelected: boolean;
   scheduleTimezone?: string;
 };
 
@@ -107,6 +114,13 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
       buttonText: "Add to Cart",
       buttonPrimaryColor: "#008060",
       showCustomButton: true,
+      subscriptionEnabled: false,
+      subscriptionPosition: "below-bundle-bars",
+      subscriptionTitle: "Subscribe & Save 20%",
+      subscriptionSubtitle: "Delivered weekly",
+      oneTimeTitle: "One-time purchase",
+      oneTimeSubtitle: "",
+      subscriptionDefaultSelected: true,
       scheduleTimezone: undefined,
     };
   }
@@ -150,6 +164,13 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
       buttonText: parsed.buttonText || "Add to Cart",
       buttonPrimaryColor: sanitizeHexColor(parsed.buttonPrimaryColor, "#008060"),
       showCustomButton: parsed.showCustomButton !== false,
+      subscriptionEnabled: parsed.subscriptionEnabled === true,
+      subscriptionPosition: "below-bundle-bars",
+      subscriptionTitle: parsed.subscriptionTitle || "Subscribe & Save 20%",
+      subscriptionSubtitle: parsed.subscriptionSubtitle || "Delivered weekly",
+      oneTimeTitle: parsed.oneTimeTitle || "One-time purchase",
+      oneTimeSubtitle: parsed.oneTimeSubtitle || "",
+      subscriptionDefaultSelected: parsed.subscriptionDefaultSelected !== false,
       scheduleTimezone: parsed.scheduleTimezone,
     };
   } catch {

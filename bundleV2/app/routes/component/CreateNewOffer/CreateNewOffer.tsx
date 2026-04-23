@@ -53,6 +53,7 @@ type Product = {
   name: string;
   price: string;
   image: string;
+  hasSubscription?: boolean;
 };
 
 interface InitialOffer {
@@ -316,6 +317,25 @@ export function CreateNewOffer({
   const [buttonText, setButtonText] = useState(offerSettings.buttonText);
   const [buttonPrimaryColor, setButtonPrimaryColor] = useState(offerSettings.buttonPrimaryColor);
   const [showCustomButton, setShowCustomButton] = useState(offerSettings.showCustomButton);
+  const [subscriptionEnabled, setSubscriptionEnabled] = useState(
+    offerSettings.subscriptionEnabled,
+  );
+  const [subscriptionPosition, setSubscriptionPosition] = useState(
+    offerSettings.subscriptionPosition,
+  );
+  const [subscriptionTitle, setSubscriptionTitle] = useState(
+    offerSettings.subscriptionTitle,
+  );
+  const [subscriptionSubtitle, setSubscriptionSubtitle] = useState(
+    offerSettings.subscriptionSubtitle,
+  );
+  const [oneTimeTitle, setOneTimeTitle] = useState(offerSettings.oneTimeTitle);
+  const [oneTimeSubtitle, setOneTimeSubtitle] = useState(
+    offerSettings.oneTimeSubtitle,
+  );
+  const [subscriptionDefaultSelected, setSubscriptionDefaultSelected] = useState(
+    offerSettings.subscriptionDefaultSelected,
+  );
   const [widgetTitle, setWidgetTitle] = useState(offerSettings.title);
   const [customerSegments, setCustomerSegments] = useState<string[]>(
     offerSettings.customerSegments ? offerSettings.customerSegments.split(",") : ["all"]
@@ -332,6 +352,7 @@ export function CreateNewOffer({
     image: string;
     price: string;
     variantsCount: number;
+    hasSubscription: boolean;
   }[]>(() => {
     const ids = initialOffer?.selectedProductsJson
       ? parseSelectedProductIds(initialOffer.selectedProductsJson)
@@ -355,6 +376,7 @@ export function CreateNewOffer({
           image: savedObj.image || "https://via.placeholder.com/60",
           price: savedObj.price || "€0.00",
           variantsCount: savedObj.variantsCount || 1,
+          hasSubscription: savedObj.hasSubscription === true,
         };
       }
 
@@ -365,6 +387,7 @@ export function CreateNewOffer({
         image: found?.image ?? "https://via.placeholder.com/60",
         price: found?.price ?? "€0.00",
         variantsCount: 1,
+        hasSubscription: found?.hasSubscription === true,
       };
     });
   });
@@ -388,6 +411,13 @@ export function CreateNewOffer({
         image: item.images?.[0]?.originalSrc || "https://via.placeholder.com/60",
         price: item.variants?.[0]?.price || "€0.00",
         variantsCount: item.variants?.length || 1,
+        // 资源选择器不稳定返回 sellingPlan 字段，因此回退到 loader 的 GraphQL 结果
+        hasSubscription:
+          ((item.sellingPlanGroups?.edges as Array<unknown> | undefined) ?? [])
+            .length > 0 ||
+          storeProducts.some(
+            (p) => String(p.id) === String(item.id) && p.hasSubscription,
+          ),
       }));
       
       if (type === "buy") {
@@ -522,7 +552,18 @@ export function CreateNewOffer({
       description:
         "Buy X products and get Y products with discount (e.g., Buy 2 get 1 free)",
     },
+    {
+      id: "subscription",
+      name: "Subscription",
+      description:
+        "Show subscription purchase option below bundle bars for products that support selling plans",
+    },
   ];
+
+  const selectedProductsHasSubscription = useMemo(
+    () => selectedProductsData.some((item) => item.hasSubscription),
+    [selectedProductsData],
+  );
 
 
   return (
@@ -672,6 +713,29 @@ export function CreateNewOffer({
       <input type="hidden" name="buttonText" value={buttonText} />
       <input type="hidden" name="buttonPrimaryColor" value={buttonPrimaryColor} />
       <input type="hidden" name="showCustomButton" value={showCustomButton ? "true" : "false"} />
+      <input
+        type="hidden"
+        name="subscriptionEnabled"
+        value={subscriptionEnabled ? "true" : "false"}
+      />
+      <input
+        type="hidden"
+        name="subscriptionPosition"
+        value={subscriptionPosition}
+      />
+      <input type="hidden" name="subscriptionTitle" value={subscriptionTitle} />
+      <input
+        type="hidden"
+        name="subscriptionSubtitle"
+        value={subscriptionSubtitle}
+      />
+      <input type="hidden" name="oneTimeTitle" value={oneTimeTitle} />
+      <input type="hidden" name="oneTimeSubtitle" value={oneTimeSubtitle} />
+      <input
+        type="hidden"
+        name="subscriptionDefaultSelected"
+        value={subscriptionDefaultSelected ? "true" : "false"}
+      />
       <input
         type="hidden"
         name="cardBackgroundColor"
@@ -1588,6 +1652,113 @@ export function CreateNewOffer({
                     </div>
                   </div>
                 </div>
+
+                {offerType === "subscription" && (
+                  <div className="mb-6 rounded-[12px] border border-[#e3e8ed] p-4 bg-[#fafbfb]">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-[14px] font-medium text-[#1c1f23] m-0">
+                        Subscription
+                      </h3>
+                      <Switch
+                        checked={subscriptionEnabled}
+                        onChange={(checked) => setSubscriptionEnabled(checked)}
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[13px] text-[#5c6166] mb-1">
+                          Subscribe title
+                        </label>
+                        <Input
+                          size="large"
+                          value={subscriptionTitle}
+                          onChange={(e) => setSubscriptionTitle(e.target.value)}
+                          maxLength={60}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[13px] text-[#5c6166] mb-1">
+                          Subscribe subtitle
+                        </label>
+                        <Input
+                          size="large"
+                          value={subscriptionSubtitle}
+                          onChange={(e) => setSubscriptionSubtitle(e.target.value)}
+                          maxLength={60}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[13px] text-[#5c6166] mb-1">
+                          One-time title
+                        </label>
+                        <Input
+                          size="large"
+                          value={oneTimeTitle}
+                          onChange={(e) => setOneTimeTitle(e.target.value)}
+                          maxLength={60}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[13px] text-[#5c6166] mb-1">
+                          One-time subtitle
+                        </label>
+                        <Input
+                          size="large"
+                          value={oneTimeSubtitle}
+                          onChange={(e) => setOneTimeSubtitle(e.target.value)}
+                          maxLength={60}
+                        />
+                      </div>
+                    </div>
+                    <div className="mt-3">
+                      <Select
+                        value={subscriptionPosition}
+                        onChange={(value) =>
+                          setSubscriptionPosition(value as "below-bundle-bars")
+                        }
+                        options={[
+                          {
+                            value: "below-bundle-bars",
+                            label: "Below bundle deal bars",
+                          },
+                        ]}
+                        style={{ width: "100%" }}
+                      />
+                    </div>
+                    <div className="mt-3">
+                      <Checkbox
+                        checked={subscriptionDefaultSelected}
+                        onChange={(e) =>
+                          setSubscriptionDefaultSelected(e.target.checked)
+                        }
+                      >
+                        Make subscription option selected by default
+                      </Checkbox>
+                    </div>
+
+                    {/* 中文注释：当所选商品没有订阅计划时，编辑端展示虚线框，提示发布后前台不会渲染订阅模块 */}
+                    <div
+                      className={`mt-4 rounded-[10px] p-3 ${
+                        selectedProductsHasSubscription
+                          ? "border border-[#c9ccd0]"
+                          : "border border-dashed border-[#b7b7b7]"
+                      }`}
+                    >
+                      <div className="text-[14px] font-semibold text-[#1c1f23]">
+                        {subscriptionTitle || "Subscribe & Save 20%"}
+                      </div>
+                      <div className="text-[13px] text-[#8c9196] mt-1">
+                        {subscriptionSubtitle || "Delivered weekly"}
+                      </div>
+                      {!selectedProductsHasSubscription && (
+                        <div className="text-[12px] text-[#8c9196] mt-2">
+                          No selling plan found for selected products. This block
+                          will not render on storefront after publish.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <div className="mb-6">
                   <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">

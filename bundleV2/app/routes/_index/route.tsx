@@ -245,6 +245,7 @@ export type StoreProductItem = {
   name: string;
   price: string;
   image: string;
+  hasSubscription: boolean;
 };
 
 export type MarketItem = {
@@ -297,6 +298,13 @@ async function fetchStoreProducts(admin: any): Promise<StoreProductItem[]> {
                     }
                   }
                 }
+                sellingPlanGroups(first: 1) {
+                  edges {
+                    node {
+                      id
+                    }
+                  }
+                }
               }
             }
           }
@@ -319,6 +327,9 @@ async function fetchStoreProducts(admin: any): Promise<StoreProductItem[]> {
             variants?: {
               edges?: Array<{ node?: { price?: string | null } | null }>;
             } | null;
+            sellingPlanGroups?: {
+              edges?: Array<{ node?: { id?: string | null } | null }>;
+            } | null;
           } | null;
         }>
       | undefined) ?? [];
@@ -336,6 +347,9 @@ async function fetchStoreProducts(admin: any): Promise<StoreProductItem[]> {
         name: node.title,
         price: priceRaw ? `$${priceRaw}` : "$0.00",
         image: image || "https://via.placeholder.com/60",
+        hasSubscription:
+          ((node?.sellingPlanGroups?.edges as Array<unknown> | undefined) ?? [])
+            .length > 0,
       };
     })
     .filter((item): item is StoreProductItem => item !== null);
@@ -931,6 +945,43 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
     const showCustomButtonRaw = String(formData.get("showCustomButton") || "");
     const showCustomButton = showCustomButtonRaw !== "false";
+    const subscriptionEnabledRaw = String(
+      formData.get("subscriptionEnabled") || "",
+    );
+    const subscriptionEnabled = subscriptionEnabledRaw === "true";
+    const subscriptionPositionRaw = String(
+      formData.get("subscriptionPosition") || "below-bundle-bars",
+    ).trim();
+    const subscriptionPosition = ["below-bundle-bars"].includes(
+      subscriptionPositionRaw,
+    )
+      ? subscriptionPositionRaw
+      : "below-bundle-bars";
+    const subscriptionTitle = sanitizeSingleLineText(
+      formData.get("subscriptionTitle"),
+      60,
+      "Subscribe & Save 20%",
+    );
+    const subscriptionSubtitle = sanitizeSingleLineText(
+      formData.get("subscriptionSubtitle"),
+      60,
+      "Delivered weekly",
+    );
+    const oneTimeTitle = sanitizeSingleLineText(
+      formData.get("oneTimeTitle"),
+      60,
+      "One-time purchase",
+    );
+    const oneTimeSubtitle = sanitizeSingleLineText(
+      formData.get("oneTimeSubtitle"),
+      60,
+      "",
+    );
+    const subscriptionDefaultSelectedRaw = String(
+      formData.get("subscriptionDefaultSelected") || "",
+    );
+    const subscriptionDefaultSelected =
+      subscriptionDefaultSelectedRaw === "true";
 
     const title = sanitizeSingleLineText(
       formData.get("title"),
@@ -973,6 +1024,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       titleFontWeight,
       buttonText,
       showCustomButton,
+      subscriptionEnabled,
+      subscriptionPosition,
+      subscriptionTitle,
+      subscriptionSubtitle,
+      oneTimeTitle,
+      oneTimeSubtitle,
+      subscriptionDefaultSelected,
       scheduleTimezone: scheduleTimezoneRaw || undefined,
     });
 

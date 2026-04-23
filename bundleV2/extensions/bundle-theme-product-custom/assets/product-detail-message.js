@@ -201,6 +201,17 @@ function getSelectedVariantId() {
   return String(input.value || "").trim();
 }
 
+function getCurrentProductHasSubscription() {
+  const configEl = document.getElementById("ciwi-bundles-config");
+  if (!configEl) return false;
+  try {
+    const config = JSON.parse(configEl.textContent || "{}");
+    return config.hasSubscription === true;
+  } catch (e) {
+    return false;
+  }
+}
+
 function isCurrentVariantAvailable() {
   const selectedVariantId = getSelectedVariantId();
   const configEl = document.getElementById("ciwi-bundles-config");
@@ -583,7 +594,7 @@ function getCurrentOffer(offersConfig) {
         continue;
       }
     } else {
-      // quantity-breaks-same
+      // quantity-breaks-same / subscription
       const discountRules = parseDiscountRulesJson(offer.discountRulesJson);
       if (!discountRules.length) {
         console.log("[ciwi] offer skipped: no valid quantity discount rules", offer.id);
@@ -599,6 +610,12 @@ function getCurrentOffer(offersConfig) {
           console.log("[ciwi] offer skipped: current product not in selected list", offer.id, currentProductGid, selectedIds);
           continue;
         }
+      }
+
+      // 中文注释：订阅型 offer 需要当前商品本身具备 selling plan，否则前台不展示订阅区块
+      if (offer.offerType === "subscription" && !getCurrentProductHasSubscription()) {
+        console.log("[ciwi] subscription offer skipped: current product has no selling plan", offer.id);
+        continue;
       }
     }
 
@@ -885,11 +902,44 @@ function renderBundlePreviewHtml(offer) {
     })
     .join("");
 
+  let subscriptionHtml = "";
+  if (offer?.offerType === "subscription" && getCurrentProductHasSubscription()) {
+    const subscriptionEnabled = offerSettings.subscriptionEnabled === true;
+    if (subscriptionEnabled) {
+      const subscriptionTitle = offerSettings.subscriptionTitle || "Subscribe & Save 20%";
+      const subscriptionSubtitle = offerSettings.subscriptionSubtitle || "Delivered weekly";
+      const oneTimeTitle = offerSettings.oneTimeTitle || "One-time purchase";
+      const oneTimeSubtitle = offerSettings.oneTimeSubtitle || "";
+      const subscriptionDefaultSelected =
+        offerSettings.subscriptionDefaultSelected !== false;
+
+      subscriptionHtml = `
+        <div class="ciwi-subscription-box">
+          <label class="ciwi-subscription-option ${subscriptionDefaultSelected ? "is-selected" : ""}">
+            <input type="radio" name="ciwi-subscription-mode" ${subscriptionDefaultSelected ? "checked" : ""} />
+            <span>
+              <span class="ciwi-subscription-title">${esc(subscriptionTitle)}</span>
+              <span class="ciwi-subscription-subtitle">${esc(subscriptionSubtitle)}</span>
+            </span>
+          </label>
+          <label class="ciwi-subscription-option ${!subscriptionDefaultSelected ? "is-selected" : ""}">
+            <input type="radio" name="ciwi-subscription-mode" ${!subscriptionDefaultSelected ? "checked" : ""} />
+            <span>
+              <span class="ciwi-subscription-title">${esc(oneTimeTitle)}</span>
+              <span class="ciwi-subscription-subtitle">${esc(oneTimeSubtitle)}</span>
+            </span>
+          </label>
+        </div>
+      `;
+    }
+  }
+
   return `<div class="create-offer-preview-card">
     <div class="create-offer-style-preview-header" style="color:${esc(titleColor)} !important; font-size: ${esc(titleFontSize)}px !important; font-weight: ${esc(titleFontWeight)} !important;">${esc(widgetTitle)}</div>
     <div class="create-offer-style-preview-list create-offer-style-preview-list--${layoutFormat}">
       ${itemsHtml}
     </div>
+    ${subscriptionHtml}
     ${showCustomButton ? `<button type="button" class="create-offer-preview-button" onclick="window.ciwiHandleBundleAddToCart(event)" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
       ${esc(buttonText)}
     </button>` : ""}
