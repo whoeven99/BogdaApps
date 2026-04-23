@@ -180,7 +180,48 @@ async function buildCompactOffersPayload(
 ): Promise<string> {
   // 仅同步 status=true 的活动，避免无效活动占用 payload 体积并干扰函数计算
   const activeOffers = shopOffers.filter((offer) => offer.status === true);
-  // 中文注释：DB 里仍保持轻量 selectedProductsJson，但同步到 storefront 时按 productId 补齐展示字段。
+  // 先生成 Function 可安全消费的瘦 payload，避免 complete-bundle 展示字段把 metafield 撑爆。
+  const compactOffers = activeOffers.map((offer) => ({
+    id: offer.id,
+    name: offer.name,
+    cartTitle: offer.cartTitle,
+    status: offer.status,
+    startTime: offer.startTime,
+    endTime: offer.endTime,
+    selectedProductsJson: offer.selectedProductsJson ?? null,
+    discountRulesJson: offer.discountRulesJson ?? null,
+    offerSettingsJson: offer.offerSettingsJson ?? null,
+    offerType: offer.offerType,
+  }));
+  return JSON.stringify({
+    updatedAt: new Date().toISOString(),
+    offers: compactOffers,
+  });
+}
+
+async function buildStorefrontOffersPayload(
+  admin: any,
+  shopOffers: OfferListItem[],
+): Promise<string> {
+  const activeOffers = shopOffers.filter((offer) => offer.status === true);
+  const compactPayload = await buildCompactOffersPayload(admin, shopOffers);
+  const compactPayloadParsed = JSON.parse(compactPayload) as {
+    updatedAt?: string;
+    offers?: Array<{
+      id?: string;
+      name?: string;
+      cartTitle?: string;
+      status?: boolean;
+      startTime?: string;
+      endTime?: string;
+      selectedProductsJson?: string | null;
+      discountRulesJson?: string | null;
+      offerSettingsJson?: string | null;
+      offerType?: string;
+    }>;
+  };
+
+  // storefront 需要补齐 complete-bundle 展示字段，方便主题脚本直接渲染与加车。
   const completeBundleProductIds = collectReferencedProductIds(
     activeOffers.filter((offer) => offer.offerType === "complete-bundle"),
   );
@@ -192,14 +233,8 @@ async function buildCompactOffersPayload(
     storeProducts.map((product) => [String(product.id || ""), product]),
   );
 
-  // 仅保留主题与 Function 运行所需字段，避免 payload 过大导致运行时读取失败
-  const compactOffers = activeOffers.map((offer) => ({
-    id: offer.id,
-    name: offer.name,
-    cartTitle: offer.cartTitle,
-    status: offer.status,
-    startTime: offer.startTime,
-    endTime: offer.endTime,
+  const storefrontOffers = (compactPayloadParsed.offers || []).map((offer) => ({
+    ...offer,
     selectedProductsJson:
       offer.offerType === "complete-bundle"
         ? buildHydratedCompleteBundleSelectedProductsJson(
@@ -207,13 +242,11 @@ async function buildCompactOffersPayload(
             storeProductMap,
           )
         : offer.selectedProductsJson ?? null,
-    discountRulesJson: offer.discountRulesJson ?? null,
-    offerSettingsJson: offer.offerSettingsJson ?? null,
-    offerType: offer.offerType,
   }));
+
   return JSON.stringify({
-    updatedAt: new Date().toISOString(),
-    offers: compactOffers,
+    updatedAt: compactPayloadParsed.updatedAt || new Date().toISOString(),
+    offers: storefrontOffers,
   });
 }
 
@@ -243,13 +276,15 @@ async function syncShopOffersMetafield(
       updatedAt: new Date().toISOString(),
       offers: shopOffers,
     });
-    const metafieldValue = await buildCompactOffersPayload(admin, shopOffers);
+    const functionMetafieldValue = await buildCompactOffersPayload(admin, shopOffers);
+    const storefrontMetafieldValue = await buildStorefrontOffersPayload(admin, shopOffers);
     console.log("[offers-sync] payload size snapshot", {
       totalOffers: shopOffers.length,
       activeOffers: shopOffers.filter((offer) => offer.status === true).length,
       fullPayloadLength: fullPayload.length,
-      compactPayloadLength: metafieldValue.length,
-      reducedBy: fullPayload.length - metafieldValue.length,
+      functionPayloadLength: functionMetafieldValue.length,
+      storefrontPayloadLength: storefrontMetafieldValue.length,
+      functionReducedBy: fullPayload.length - functionMetafieldValue.length,
     });
 
     const shopIdResponse = await admin.graphql(
@@ -290,7 +325,7 @@ async function syncShopOffersMetafield(
       shopId,
       namespace: BUNDLE_METAFIELD_NAMESPACE,
       key: BUNDLE_METAFIELD_BASE_KEY,
-      payloadLength: metafieldValue.length,
+      payloadLength: storefrontMetafieldValue.length,
     });
     const metafieldsSetResponse = await admin.graphql(
       `#graphql
@@ -312,7 +347,7 @@ async function syncShopOffersMetafield(
         variables: {
           metafields: buildOfferMetafieldsInput(
             shopId,
-            metafieldValue,
+            storefrontMetafieldValue,
             themeExtensionEnabled,
           ),
         },
@@ -354,7 +389,7 @@ async function syncShopOffersMetafield(
     console.log("[offers-sync] syncing offers into automatic discount owner metafields");
     const discountSyncResult = await syncCartLinesAutomaticDiscountMetafield(
       admin,
-      metafieldValue,
+      functionMetafieldValue,
     );
     if (!discountSyncResult.ok) {
       console.error("[offers-sync] sync discount owner metafield failed", {
