@@ -11,6 +11,8 @@ const CART_LINES_DISCOUNT_FUNCTION_TITLE = "Bundle Cart Discount Function";
 const CART_LINES_DISCOUNT_AUTO_TITLE = "Ciwi Bundle Auto Discount";
 const CART_LINES_DISCOUNT_METAFIELD_NAMESPACE = "$app:ciwi_bundle";
 const CART_LINES_DISCOUNT_METAFIELD_KEY = "offers";
+const LEGACY_OFFERS_METAFIELD_NAMESPACE = "ciwi_bundle";
+const LEGACY_OFFERS_METAFIELD_KEY = "ciwi-bundle-offers";
 
 function getAutoDiscountTitle(): string {
   const appName = process.env.SHOPIFY_APP_NAME?.trim();
@@ -29,6 +31,7 @@ function buildAutomaticDiscountOffersPayload(value?: string): string {
 }
 
 async function getCartLinesDiscountFunctionId(admin: any): Promise<string | null> {
+  console.log("[discount][function-id] start querying shopifyFunctions");
   const functionsResp = await admin.graphql(
     `#graphql
       query AppDiscountFunctions {
@@ -44,13 +47,21 @@ async function getCartLinesDiscountFunctionId(admin: any): Promise<string | null
   );
   const functionsJson = await functionsResp.json();
   const functionNodes = functionsJson?.data?.shopifyFunctions?.nodes ?? [];
+  console.log("[discount][function-id] query finished", {
+    totalFunctions: functionNodes.length,
+    targetTitle: CART_LINES_DISCOUNT_FUNCTION_TITLE,
+  });
   const targetFn = functionNodes.find(
     (fn: any) =>
       fn?.title === CART_LINES_DISCOUNT_FUNCTION_TITLE &&
       String(fn?.apiType || "").toLowerCase() === "discount",
   );
-
-  return targetFn?.id ? String(targetFn.id) : null;
+  const functionId = targetFn?.id ? String(targetFn.id) : null;
+  console.log("[discount][function-id] resolve result", {
+    functionId,
+    found: Boolean(functionId),
+  });
+  return functionId;
 }
 
 export async function syncCartLinesAutomaticDiscountMetafield(
@@ -58,6 +69,11 @@ export async function syncCartLinesAutomaticDiscountMetafield(
   metafieldValue?: string,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   try {
+    console.log("[discount][sync-meta] start", {
+      payloadLength: typeof metafieldValue === "string" ? metafieldValue.length : 0,
+      appNamespace: CART_LINES_DISCOUNT_METAFIELD_NAMESPACE,
+      legacyNamespace: LEGACY_OFFERS_METAFIELD_NAMESPACE,
+    });
     const functionId = await getCartLinesDiscountFunctionId(admin);
     if (!functionId) {
       return {
@@ -71,6 +87,7 @@ export async function syncCartLinesAutomaticDiscountMetafield(
         query ExistingAutomaticAppDiscounts {
           discountNodes(first: 100, query: "method:automatic") {
             nodes {
+              id
               discount {
                 __typename
                 ... on DiscountAutomaticApp {
@@ -89,23 +106,45 @@ export async function syncCartLinesAutomaticDiscountMetafield(
     );
     const existingJson = await existingResp.json();
     const discountNodes = existingJson?.data?.discountNodes?.nodes ?? [];
-    const ownerIds = discountNodes
-      .map((node: any) => node?.discount)
-      .filter(
-        (discount: any) =>
-          discount?.__typename === "DiscountAutomaticApp" &&
-          discount?.appDiscountType?.functionId === functionId &&
-          discount?.discountId,
-      )
-      .map((discount: any) => String(discount.discountId));
+    console.log("[discount][sync-meta] loaded automatic discount nodes", {
+      nodeCount: discountNodes.length,
+      functionId,
+    });
+    const ownerIds: string[] = Array.from(
+      new Set(
+        discountNodes.flatMap((node: any) => {
+          const discount = node?.discount;
+          if (
+            !discount ||
+            discount.__typename !== "DiscountAutomaticApp" ||
+            discount?.appDiscountType?.functionId !== functionId
+          ) {
+            return [];
+          }
+          // 兼容不同 owner 类型：有的店铺可写 discountId，有的使用 discountNode.id。
+          const ids = [discount?.discountId, node?.id]
+            .map((id) => String(id || "").trim())
+            .filter(Boolean);
+          return ids;
+        }),
+      ),
+    ) as string[];
 
     if (!ownerIds.length) {
+      console.error("[discount][sync-meta] no owner ids matched function", { functionId });
       return {
         ok: false,
         message: "No automatic app discount owner found for bundle function",
       };
     }
+    console.log("[discount][sync-meta] owner ids resolved", {
+      ownerCount: ownerIds.length,
+      ownerIds,
+    });
 
+    console.log("[discount][sync-meta] calling metafieldsSet", {
+      mutationTargets: ownerIds.length * 2,
+    });
     const metafieldsSetResponse = await admin.graphql(
       `#graphql
         mutation SetBundleAutomaticDiscountMetafields($metafields: [MetafieldsSetInput!]!) {
@@ -124,13 +163,22 @@ export async function syncCartLinesAutomaticDiscountMetafield(
       `,
       {
         variables: {
-          metafields: ownerIds.map((ownerId: string) => ({
-            ownerId,
-            namespace: CART_LINES_DISCOUNT_METAFIELD_NAMESPACE,
-            key: CART_LINES_DISCOUNT_METAFIELD_KEY,
-            type: "json",
-            value: buildAutomaticDiscountOffersPayload(metafieldValue),
-          })),
+          metafields: ownerIds.flatMap((ownerId: string) => [
+            {
+              ownerId,
+              namespace: CART_LINES_DISCOUNT_METAFIELD_NAMESPACE,
+              key: CART_LINES_DISCOUNT_METAFIELD_KEY,
+              type: "json",
+              value: buildAutomaticDiscountOffersPayload(metafieldValue),
+            },
+            {
+              ownerId,
+              namespace: LEGACY_OFFERS_METAFIELD_NAMESPACE,
+              key: LEGACY_OFFERS_METAFIELD_KEY,
+              type: "json",
+              value: buildAutomaticDiscountOffersPayload(metafieldValue),
+            },
+          ]),
         },
       },
     );
@@ -145,6 +193,7 @@ export async function syncCartLinesAutomaticDiscountMetafield(
     };
 
     if (metafieldsSetJson.errors?.length) {
+      console.error("[discount][sync-meta] graphql errors", metafieldsSetJson.errors);
       return {
         ok: false,
         message: metafieldsSetJson.errors.map((e) => e.message || "unknown").join("; "),
@@ -153,20 +202,27 @@ export async function syncCartLinesAutomaticDiscountMetafield(
 
     const userErrors = metafieldsSetJson?.data?.metafieldsSet?.userErrors ?? [];
     if (userErrors.length > 0) {
+      console.error("[discount][sync-meta] userErrors", userErrors);
       return {
         ok: false,
         message: userErrors.map((e) => e.message || "unknown").join("; "),
       };
     }
 
+    console.log("[discount][sync-meta] success", {
+      ownerCount: ownerIds.length,
+      payloadLength: typeof metafieldValue === "string" ? metafieldValue.length : 0,
+    });
     return { ok: true };
   } catch (error) {
+    console.error("[discount][sync-meta] unexpected exception", error);
     const msg = error instanceof Error ? error.message : JSON.stringify(error);
     return { ok: false, message: msg || "Automatic discount metafield sync failed" };
   }
 }
 
 export async function ensureCartLinesAutomaticDiscount(admin: any) {
+  console.log("[discount][ensure-auto] start ensure automatic discount");
   const functionId = await getCartLinesDiscountFunctionId(admin);
   if (!functionId) {
     console.warn(
@@ -198,6 +254,10 @@ export async function ensureCartLinesAutomaticDiscount(admin: any) {
   );
   const existingJson = await existingResp.json();
   const discountNodes = existingJson?.data?.discountNodes?.nodes ?? [];
+  console.log("[discount][ensure-auto] active automatic discounts loaded", {
+    nodeCount: discountNodes.length,
+    functionId,
+  });
   const alreadyExists = discountNodes.some((node: any) => {
     const d = node?.discount;
     if (!d || d.__typename !== "DiscountAutomaticApp") return false;
@@ -212,6 +272,10 @@ export async function ensureCartLinesAutomaticDiscount(admin: any) {
     });
     return;
   }
+  console.log("[discount][ensure-auto] no existing active discount, creating new one", {
+    functionId,
+    title: getAutoDiscountTitle(),
+  });
 
   const createResp = await admin.graphql(
     `#graphql

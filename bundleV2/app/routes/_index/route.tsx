@@ -140,10 +140,19 @@ async function syncShopOffersMetafield(
 ): Promise<ShopOffersMetafieldSyncResult> {
   const prismaAny: any = prisma;
   try {
+    console.log("[offers-sync] start syncShopOffersMetafield", {
+      shopName: shopNameToSync,
+      themeExtensionEnabled,
+    });
     const shopOffers = (await prismaAny.offer.findMany({
       where: { shopName: shopNameToSync },
       orderBy: { createdAt: "desc" },
     })) as OfferListItem[];
+    console.log("[offers-sync] loaded offers from db", {
+      shopName: shopNameToSync,
+      offerCount: shopOffers.length,
+      offerIds: shopOffers.map((o) => o.id),
+    });
 
     const metafieldValue = JSON.stringify({
       updatedAt: new Date().toISOString(),
@@ -166,6 +175,7 @@ async function syncShopOffersMetafield(
     };
 
     if (shopIdJson.errors?.length) {
+      console.error("[offers-sync] shop id query graphql errors", shopIdJson.errors);
       return {
         ok: false,
         message: shopIdJson.errors
@@ -176,12 +186,19 @@ async function syncShopOffersMetafield(
 
     const shopId = shopIdJson?.data?.shop?.id;
     if (!shopId) {
+      console.error("[offers-sync] shop id missing in response", { shopIdJson });
       return {
         ok: false,
         message: "Failed to get shop ID, Metafield update failed",
       };
     }
 
+    console.log("[offers-sync] writing shop metafield", {
+      shopId,
+      namespace: BUNDLE_METAFIELD_NAMESPACE,
+      key: BUNDLE_METAFIELD_BASE_KEY,
+      payloadLength: metafieldValue.length,
+    });
     const metafieldsSetResponse = await admin.graphql(
       `#graphql
       mutation MetafieldsSet($metafields: [MetafieldsSetInput!]!) {
@@ -219,6 +236,7 @@ async function syncShopOffersMetafield(
     };
 
     if (metafieldsSetJson.errors?.length) {
+      console.error("[offers-sync] metafieldsSet graphql errors", metafieldsSetJson.errors);
       return {
         ok: false,
         message: metafieldsSetJson.errors
@@ -229,6 +247,7 @@ async function syncShopOffersMetafield(
 
     const userErrors = metafieldsSetJson?.data?.metafieldsSet?.userErrors ?? [];
     if (userErrors.length > 0) {
+      console.error("[offers-sync] metafieldsSet userErrors", userErrors);
       return {
         ok: false,
         message: userErrors.map((e) => e.message || "unknown").join("; "),
@@ -237,17 +256,28 @@ async function syncShopOffersMetafield(
 
     // 关键：Discount Function 运行时优先从 discount owner 读取配置。
     // 这里把同一份 offers JSON 同步到自动折扣本身，避免 shop.metafield 在 Function 侧不可见。
+    console.log("[offers-sync] ensure automatic discount before owner metafield sync");
     await ensureCartLinesAutomaticDiscount(admin);
+    console.log("[offers-sync] syncing offers into automatic discount owner metafields");
     const discountSyncResult = await syncCartLinesAutomaticDiscountMetafield(
       admin,
       metafieldValue,
     );
     if (!discountSyncResult.ok) {
+      console.error("[offers-sync] sync discount owner metafield failed", {
+        message: discountSyncResult.message,
+      });
       return discountSyncResult;
     }
 
+    console.log("[offers-sync] success", {
+      shopName: shopNameToSync,
+      shopId,
+      offerCount: shopOffers.length,
+    });
     return { ok: true };
   } catch (error) {
+    console.error("[offers-sync] unexpected exception", error);
     const msg = error instanceof Error ? error.message : JSON.stringify(error);
     return { ok: false, message: msg || "Metafield sync failed" };
   }

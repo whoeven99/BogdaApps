@@ -32,7 +32,12 @@ query CartInput {
     }
   }
   discount {
-    metafield(namespace: "$app:ciwi_bundle", key: "offers") {
+    appOwnedOffers: metafield(namespace: "$app:ciwi_bundle", key: "offers") {
+      jsonValue
+      value
+      type
+    }
+    legacyOffers: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-offers") {
       jsonValue
       value
       type

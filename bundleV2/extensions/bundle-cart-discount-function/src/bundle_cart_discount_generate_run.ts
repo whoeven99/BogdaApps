@@ -479,14 +479,23 @@ export function bundleCartDiscountGenerateRun(
   input: CartInput,
 ): CartLinesDiscountsGenerateRunResult {
   const shopMetafield = input.shop.metafield as MetafieldSnapshot;
-  const discountMetafield = input.discount.metafield as MetafieldSnapshot;
-  // 运行时优先读 discount owner 的 app-owned metafield；shop.metafield 仅作为兼容兜底。
-  const activeOffersMetafield = discountMetafield ?? shopMetafield;
+  const discountAppOwnedMetafield = input.discount.appOwnedOffers as MetafieldSnapshot;
+  const discountLegacyMetafield = input.discount.legacyOffers as MetafieldSnapshot;
+  // 运行时优先读 discount owner 的 app-owned 配置，再尝试 legacy namespace，最后回退到 shop.metafield。
+  const activeOffersMetafield =
+    discountAppOwnedMetafield ?? discountLegacyMetafield ?? shopMetafield;
 
   log("shop_metafields_snapshot", {
-    discountOffers: summarizeMetafield(discountMetafield),
+    discountAppOwnedOffers: summarizeMetafield(discountAppOwnedMetafield),
+    discountLegacyOffers: summarizeMetafield(discountLegacyMetafield),
     shopOffers: summarizeMetafield(shopMetafield),
-    activeSource: discountMetafield ? "discount" : shopMetafield ? "shop" : null,
+    activeSource: discountAppOwnedMetafield
+      ? "discount_app_owned"
+      : discountLegacyMetafield
+        ? "discount_legacy"
+        : shopMetafield
+          ? "shop"
+          : null,
   });
   const offersPayload = activeOffersMetafield?.jsonValue as
     | OfferMetafieldPayload
@@ -499,7 +508,13 @@ export function bundleCartDiscountGenerateRun(
     metafieldPresent: Boolean(activeOffersMetafield),
     metafieldType: activeOffersMetafield?.type ?? null,
     hasOffers: Boolean(activeOffersMetafield?.jsonValue),
-    offersSource: discountMetafield ? "discount" : shopMetafield ? "shop" : null,
+    offersSource: discountAppOwnedMetafield
+      ? "discount_app_owned"
+      : discountLegacyMetafield
+        ? "discount_legacy"
+        : shopMetafield
+          ? "shop"
+          : null,
   });
 
   if (!offersPayload) {
@@ -543,6 +558,12 @@ export function bundleCartDiscountGenerateRun(
   const regularOffers = offers.filter(
     (o) => o.offerType !== "bxgy" && !isCompleteBundleOfferType(o.offerType),
   );
+  log("offer_groups_resolved", {
+    totalOffers: offers.length,
+    bxgyCount: bxgyOffers.length,
+    completeBundleCount: offers.filter((o) => isCompleteBundleOfferType(o.offerType)).length,
+    regularCount: regularOffers.length,
+  });
 
   // ① 优先处理 BXGY（买 X 送 Y 等）
   const bxgyCandidates = calculateBxgyDiscount(input.cart.lines, bxgyOffers);
@@ -553,6 +574,10 @@ export function bundleCartDiscountGenerateRun(
   // ② 再处理 complete-bundle：多 SKU 成套，与 discountRulesJson 阶梯无关
   if (productCandidates.length === 0) {
     const marketIdCb = input.localization?.market?.id;
+    log("complete_bundle_evaluation_start", {
+      marketId: marketIdCb,
+      cartLineCount: input.cart.lines.length,
+    });
     const completeBundleCandidates = calculateCompleteBundleDiscounts(
       input.cart.lines,
       offers,
@@ -561,6 +586,13 @@ export function bundleCartDiscountGenerateRun(
     );
     if (completeBundleCandidates.length > 0) {
       productCandidates.push(...completeBundleCandidates);
+      log("complete_bundle_evaluation_success", {
+        candidateCount: completeBundleCandidates.length,
+      });
+    } else {
+      log("complete_bundle_evaluation_no_match", {
+        reason: "no_complete_bundle_candidates",
+      });
     }
   }
 
