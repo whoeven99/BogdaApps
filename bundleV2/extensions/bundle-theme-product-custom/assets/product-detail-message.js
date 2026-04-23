@@ -505,6 +505,7 @@ function parseCompleteBundleConfig(selectedProductsJson) {
                   const pv = Number(p?.pricing?.value) || 0;
                   return {
                     productId: String(p.productId),
+                    handle: String(p.handle || ""),
                     title: String(p.title || ""),
                     image: String(p.image || ""),
                     price: String(p.price || ""),
@@ -548,6 +549,107 @@ function parseCompleteBundleConfig(selectedProductsJson) {
   } catch {
     return { bars: [] };
   }
+}
+
+const __ciwiProductHandleCache = {};
+const __ciwiHydrateInFlight = {};
+
+function normalizeProductHandle(raw) {
+  const s = String(raw || "").trim();
+  if (!s) return "";
+  return s.replace(/^\/+|\/+$/g, "");
+}
+
+function toVariantGid(idLike) {
+  const raw = String(idLike || "").trim();
+  if (!raw) return "";
+  if (/^gid:\/\//.test(raw)) return raw;
+  if (/^\d+$/.test(raw)) return `gid://shopify/ProductVariant/${raw}`;
+  const hit = raw.match(/(\d+)$/);
+  return hit ? `gid://shopify/ProductVariant/${hit[1]}` : raw;
+}
+
+async function fetchProductByHandle(handle) {
+  const h = normalizeProductHandle(handle);
+  if (!h) return null;
+  if (__ciwiProductHandleCache[h]) return __ciwiProductHandleCache[h];
+  if (!__ciwiHydrateInFlight[h]) {
+    __ciwiHydrateInFlight[h] = fetch(`/products/${encodeURIComponent(h)}.js`, {
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .catch(() => null)
+      .then((data) => {
+        __ciwiProductHandleCache[h] = data;
+        delete __ciwiHydrateInFlight[h];
+        return data;
+      });
+  }
+  return __ciwiHydrateInFlight[h];
+}
+
+function hydrateProductFromStorefrontJson(rawProduct, existing) {
+  if (!rawProduct || typeof rawProduct !== "object") return existing;
+  const options = Array.isArray(rawProduct.options) ? rawProduct.options : [];
+  const variants = Array.isArray(rawProduct.variants)
+    ? rawProduct.variants.map((v) => ({
+        id: toVariantGid(v?.id),
+        title: String(v?.title || ""),
+        price: String(v?.price || ""),
+        selectedOptions: options
+          .map((name, idx) => {
+            const value = v?.[`option${idx + 1}`];
+            if (!name || value == null) return null;
+            return { name: String(name), value: String(value) };
+          })
+          .filter(Boolean),
+      }))
+    : [];
+  const selectedVariantIdRaw = String(existing?.selectedVariantId || "");
+  const selectedVariantId = toVariantGid(selectedVariantIdRaw);
+  const hasSelected = selectedVariantId
+    ? variants.some((v) => String(v.id) === String(selectedVariantId))
+    : false;
+  return {
+    ...existing,
+    title: String(rawProduct.title || existing?.title || ""),
+    image: String(rawProduct?.images?.[0] || "") || String(existing?.image || ""),
+    price: String(variants[0]?.price || rawProduct?.price || existing?.price || ""),
+    selectedVariantId: hasSelected
+      ? selectedVariantId
+      : String(variants[0]?.id || selectedVariantId || ""),
+    variants,
+  };
+}
+
+async function hydrateCompleteBundleOfferInPlace(offer) {
+  if (!offer || offer.offerType !== "complete-bundle") return false;
+  const config = parseCompleteBundleConfig(offer.selectedProductsJson);
+  if (!config.bars.length) return false;
+  let changed = false;
+  for (const bar of config.bars) {
+    for (let i = 0; i < (bar.products || []).length; i++) {
+      const product = bar.products[i];
+      const needsHydrate =
+        !Array.isArray(product.variants) ||
+        product.variants.length === 0 ||
+        !product.title ||
+        !product.image ||
+        !product.price;
+      if (!needsHydrate) continue;
+      const handle = normalizeProductHandle(product.handle);
+      if (!handle) continue;
+      const sfProduct = await fetchProductByHandle(handle);
+      if (!sfProduct) continue;
+      bar.products[i] = hydrateProductFromStorefrontJson(sfProduct, product);
+      changed = true;
+    }
+  }
+  if (changed) {
+    offer.selectedProductsJson = JSON.stringify({ bars: config.bars });
+  }
+  return changed;
 }
 
 /** 当前栏内某商品在 widget 中选中的变体（与 __ciwiBundleState.selectedBundleVariants 同步） */
@@ -710,10 +812,12 @@ function getCurrentOffer(offersConfig) {
       }
     }
 
-    // Check market filter
+    // Check settings / market filter
+    let parsedSettings = null;
     if (currentMarketId && offer.offerSettingsJson) {
       try {
         const settings = JSON.parse(offer.offerSettingsJson);
+        parsedSettings = settings;
         const offerMarkets = settings.markets;
         if (typeof offerMarkets === "string" && offerMarkets !== "all" && offerMarkets.trim() !== "") {
           const allowedMarkets = offerMarkets.split(",").map(m => m.trim());
@@ -726,6 +830,21 @@ function getCurrentOffer(offersConfig) {
       } catch (e) {
         // ignore parse error
       }
+    } else if (offer.offerSettingsJson) {
+      try {
+        parsedSettings = JSON.parse(offer.offerSettingsJson);
+      } catch (e) {}
+    }
+
+    // 兼容旧版开关：当 quantity bar 显式为 false 时，不渲染 quantity-break offer
+    if (
+      offer.offerType !== "complete-bundle" &&
+      offer.offerType !== "bxgy" &&
+      parsedSettings &&
+      (parsedSettings.quantity === false || parsedSettings.showQuantityBar === false)
+    ) {
+      console.log("[ciwi] offer skipped: quantity bar disabled by settings", offer.id);
+      continue;
     }
 
     if (offer.offerType === 'bxgy') {
@@ -856,6 +975,15 @@ window.ciwiSelectBundleOption = function(count) {
     const html = renderBundlePreviewHtml(currentOffer);
     if (html) wrap.innerHTML = html;
   }
+  if (currentOffer?.offerType === "complete-bundle") {
+    void hydrateCompleteBundleOfferInPlace(currentOffer).then((changed) => {
+      if (!changed) return;
+      const wrapNext = document.querySelector(".ciwi-bundle-wrapper");
+      if (!wrapNext) return;
+      const htmlNext = renderBundlePreviewHtml(currentOffer);
+      if (htmlNext) wrapNext.innerHTML = htmlNext;
+    });
+  }
 };
 
 window.ciwiHandleBundleAddToCart = function(event) {
@@ -903,6 +1031,9 @@ window.ciwiSelectBundleVariant = function(barId, productId, variantId) {
     const html = renderBundlePreviewHtml(currentOffer);
     if (html) wrap.innerHTML = html;
   }
+  if (currentOffer?.offerType === "complete-bundle") {
+    void hydrateCompleteBundleOfferInPlace(currentOffer);
+  }
 };
 
 /** 顾客切换「生效」的 complete-bundle 栏并刷新 widget */
@@ -916,6 +1047,9 @@ window.ciwiSelectCompleteBundleBar = function (barId) {
     if (html) wrap.innerHTML = html;
   }
   if (currentOffer) syncCurrentBundleToSessionStorage(currentOffer);
+  if (currentOffer?.offerType === "complete-bundle") {
+    void hydrateCompleteBundleOfferInPlace(currentOffer);
+  }
 };
 
 /** 防止同一次点击触发 click + submit 时重复请求 */
@@ -1625,6 +1759,18 @@ function run() {
     if (!currentOffer) {
       console.log("[ciwi] no active env offers after enabled checks, skip bundle UI");
       return;
+    }
+    if (currentOffer.offerType === "complete-bundle") {
+      void hydrateCompleteBundleOfferInPlace(currentOffer).then((changed) => {
+        if (!changed) return;
+        const wrap = document.querySelector(".ciwi-bundle-wrapper");
+        if (wrap) {
+          const html = renderBundlePreviewHtml(currentOffer);
+          if (html) wrap.innerHTML = html;
+        } else if (tryMount(currentOffer) !== "done") {
+          fallbackMount(currentOffer);
+        }
+      });
     }
     syncCurrentBundleToSessionStorage(currentOffer);
 

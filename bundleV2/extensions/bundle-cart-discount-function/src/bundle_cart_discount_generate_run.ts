@@ -371,10 +371,27 @@ function calculateCompleteBundleDiscounts(
       continue;
     }
 
-    // 多档位：按本档包含的商品数从多到少排序，优先匹配「整包」再匹配较少件的档位
-    const bars = [...barsRaw].sort(
-      (a, b) => b.products.length - a.products.length,
+    // 强校验：只允许按「商品数最多」的完整捆绑档位命中，不回退到单商品/较少商品档位
+    const maxProductCount = barsRaw.reduce(
+      (max, bar) => Math.max(max, Array.isArray(bar.products) ? bar.products.length : 0),
+      0,
     );
+    if (maxProductCount < 2) {
+      log("complete_bundle_skip", {
+        offerId: offer.id,
+        reason: "max_product_count_lt_2",
+        maxProductCount,
+      });
+      continue;
+    }
+    const bars = barsRaw.filter(
+      (bar) => Array.isArray(bar.products) && bar.products.length === maxProductCount,
+    );
+    log("complete_bundle_strict_bars", {
+      offerId: offer.id,
+      maxProductCount,
+      candidateBars: bars.map((b) => b.id),
+    });
 
     for (const bar of bars) {
       if (!bar.products.length) continue;
@@ -568,7 +585,11 @@ export function bundleCartDiscountGenerateRun(
 
   const productCandidates: ProductDiscountCandidate[] = [];
 
-  const bxgyOffers = offers.filter((o) => o.offerType === "bxgy");
+  const marketId = input.localization?.market?.id;
+  const nowMs = resolveNowMs();
+  const bxgyOffers = offers.filter(
+    (o) => o.offerType === "bxgy" && offerPassesScheduleAndMarket(o, marketId, nowMs),
+  );
   /** 普通数量阶梯：不含 BXGY 与 complete-bundle（后两者有独立分支） */
   const regularOffers = offers.filter(
     (o) => o.offerType !== "bxgy" && !isCompleteBundleOfferType(o.offerType),
@@ -588,16 +609,15 @@ export function bundleCartDiscountGenerateRun(
 
   // ② 再处理 complete-bundle：多 SKU 成套，与 discountRulesJson 阶梯无关
   if (productCandidates.length === 0) {
-    const marketIdCb = input.localization?.market?.id;
     log("complete_bundle_evaluation_start", {
-      marketId: marketIdCb,
+      marketId,
       cartLineCount: input.cart.lines.length,
     });
     const completeBundleCandidates = calculateCompleteBundleDiscounts(
       input.cart.lines,
       offers,
-      marketIdCb,
-      resolveNowMs(),
+      marketId,
+      nowMs,
     );
     if (completeBundleCandidates.length > 0) {
       productCandidates.push(...completeBundleCandidates);
@@ -1115,6 +1135,26 @@ const findOffer = (
           }
         }
       } catch (e) {
+        // ignore parse error
+      }
+    }
+
+    // 兼容旧版开关：当 quantity bar 显式为 false 时，不参与普通 quantity-break 折扣计算
+    if (
+      offer.offerType !== "bxgy" &&
+      !isCompleteBundleOfferType(offer.offerType) &&
+      offer.offerSettingsJson
+    ) {
+      try {
+        const settings = JSON.parse(offer.offerSettingsJson) as {
+          quantity?: boolean;
+          showQuantityBar?: boolean;
+        };
+        if (settings.quantity === false || settings.showQuantityBar === false) {
+          log("offer_skip_quantity_bar_disabled", { offerId: offer.id, name: offer.name });
+          continue;
+        }
+      } catch {
         // ignore parse error
       }
     }

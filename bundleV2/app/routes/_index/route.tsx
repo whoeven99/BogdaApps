@@ -316,8 +316,15 @@ async function syncShopOffersMetafield(
 export type StoreProductItem = {
   id: string;
   name: string;
+  handle: string;
   price: string;
   image: string;
+  variants: Array<{
+    id: string;
+    title: string;
+    price: string;
+    selectedOptions: Array<{ name: string; value: string }>;
+  }>;
 };
 
 export type MarketItem = {
@@ -360,13 +367,23 @@ async function fetchStoreProducts(admin: any): Promise<StoreProductItem[]> {
               node {
                 id
                 title
+                handle
+                options {
+                  name
+                }
                 featuredImage {
                   url
                 }
-                variants(first: 1) {
+                variants(first: 50) {
                   edges {
                     node {
+                      id
+                      title
                       price
+                      selectedOptions {
+                        name
+                        value
+                      }
                     }
                   }
                 }
@@ -388,9 +405,21 @@ async function fetchStoreProducts(admin: any): Promise<StoreProductItem[]> {
           node?: {
             id?: string;
             title?: string;
+            handle?: string;
+            options?: Array<{ name?: string | null } | null> | null;
             featuredImage?: { url?: string | null } | null;
             variants?: {
-              edges?: Array<{ node?: { price?: string | null } | null }>;
+              edges?: Array<{
+                node?: {
+                  id?: string | null;
+                  title?: string | null;
+                  price?: string | null;
+                  selectedOptions?: Array<{
+                    name?: string | null;
+                    value?: string | null;
+                  } | null> | null;
+                } | null;
+              }>;
             } | null;
           } | null;
         }>
@@ -407,8 +436,26 @@ async function fetchStoreProducts(admin: any): Promise<StoreProductItem[]> {
       return {
         id: node.id,
         name: node.title,
+        handle: String(node.handle || ""),
         price: priceRaw ? `$${priceRaw}` : "$0.00",
         image: image || "https://via.placeholder.com/60",
+        variants:
+          node.variants?.edges
+            ?.map((edgeV) => edgeV?.node)
+            .filter((v): v is NonNullable<typeof v> => Boolean(v?.id))
+            .map((v) => ({
+              id: String(v.id || ""),
+              title: String(v.title || ""),
+              price: String(v.price || ""),
+              selectedOptions: Array.isArray(v.selectedOptions)
+                ? v.selectedOptions
+                    .filter((opt): opt is NonNullable<typeof opt> => Boolean(opt))
+                    .map((opt) => ({
+                      name: String(opt.name || ""),
+                      value: String(opt.value || ""),
+                    }))
+                : [],
+            })) || [],
       };
     })
     .filter((item): item is StoreProductItem => item !== null);

@@ -189,6 +189,7 @@ export type CompleteBundlePricingMode =
 
 export type CompleteBundleProduct = {
   productId: string;
+  handle?: string;
   title?: string;
   image?: string;
   price?: string;
@@ -412,6 +413,7 @@ export function parseCompleteBundleConfig(
               const pValue = Number.isFinite(pValueRaw) ? pValueRaw : 0;
               return {
                 productId,
+                handle: String((p as { handle?: unknown }).handle || ""),
                 title: String((p as { title?: unknown }).title || ""),
                 image: String((p as { image?: unknown }).image || ""),
                 price: String((p as { price?: unknown }).price || ""),
@@ -494,13 +496,10 @@ export function buildCompleteBundleConfig(
               .filter((p) => p && typeof p === "object" && String(p.productId || "").trim())
               .map((p) => ({
                 productId: String(p.productId).trim(),
-                // 仅保留轻量展示字段，避免 selectedProductsJson 过于臃肿
-                title: String(p.title || ""),
-                image: String(p.image || ""),
-                price: String(p.price || ""),
+                handle: String((p as { handle?: unknown }).handle || "").trim(),
                 // 保留选中变体 ID，确保 storefront 仍可直接 /cart/add
                 selectedVariantId: String(p.selectedVariantId || ""),
-                // 移除默认变体、selectedOptions、variants 等大字段以减小存储体积
+                // 不存展示/变体大字段，前台与 Live Preview 按 productId/handle 动态补全
                 pricing: (() => {
                   const pmRaw = String(p.pricing?.mode || "full_price");
                   const pm: CompleteBundlePricingMode = (

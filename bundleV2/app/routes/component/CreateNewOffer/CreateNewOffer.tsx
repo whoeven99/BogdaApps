@@ -57,12 +57,20 @@ type BxgyDiscountRule = {
 type Product = {
   id: string | number;
   name: string;
+  handle?: string;
   price: string;
   image: string;
+  variants?: Array<{
+    id: string;
+    title: string;
+    price?: string;
+    selectedOptions?: Array<{ name: string; value: string }>;
+  }>;
 };
 
 type CompleteBundleProductDraft = {
   productId: string;
+  handle?: string;
   title: string;
   image: string;
   price: string;
@@ -539,6 +547,7 @@ export function CreateNewOffer({
     if (!selected) return;
     let mappedProducts: CompleteBundleProductDraft[] = selected.map((item: any) => ({
       productId: String(item.id),
+      handle: String(item.handle || ""),
       title: item.title,
       image: item.images?.[0]?.originalSrc || "https://via.placeholder.com/60",
       price: item.variants?.[0]?.price || "€0.00",
@@ -575,6 +584,7 @@ export function CreateNewOffer({
         const prev = targetBar.products.find((op) => op.productId === p.productId);
         return {
           productId: p.productId,
+          handle: p.handle || "",
           title: p.title,
           image: p.image,
           price: p.price,
@@ -637,6 +647,54 @@ export function CreateNewOffer({
     completeBundleBars[0] ||
     null;
   const mainBundleProduct = completeBundleBars[0]?.products?.[0];
+  const storeProductMap = useMemo(
+    () =>
+      new Map(
+        (storeProducts || []).map((p) => [
+          String(p.id || ""),
+          p,
+        ]),
+      ),
+    [storeProducts],
+  );
+
+  // 兼容历史轻量数据：若 selectedProductsJson 里没有变体明细，则用 storeProducts 按 productId 动态补全
+  useEffect(() => {
+    if (offerType !== "complete-bundle") return;
+    if (!storeProductMap.size) return;
+    setCompleteBundleBars((prev) => {
+      let changed = false;
+      const next = prev.map((bar) => ({
+        ...bar,
+        products: (bar.products || []).map((product) => {
+          const noVariants = !Array.isArray(product.variants) || product.variants.length === 0;
+          if (!noVariants) return product;
+          const hit = storeProductMap.get(String(product.productId || ""));
+          if (!hit) return product;
+          const variants = Array.isArray(hit.variants) ? hit.variants : [];
+          if (!variants.length) return product;
+          changed = true;
+          const preferredVariantId = String(product.selectedVariantId || "");
+          const chosen = variants.find((v) => String(v.id) === preferredVariantId) || variants[0];
+          return {
+            ...product,
+            handle: product.handle || hit.handle || "",
+            title: product.title || hit.name || "",
+            image: product.image || hit.image || "",
+            price: chosen?.price || product.price || hit.price || "",
+            defaultVariantId: product.defaultVariantId || String(variants[0]?.id || ""),
+            selectedVariantId: chosen?.id || product.selectedVariantId || String(variants[0]?.id || ""),
+            selectedOptions:
+              product.selectedOptions && Object.keys(product.selectedOptions).length > 0
+                ? product.selectedOptions
+                : Object.fromEntries((chosen?.selectedOptions || []).map((opt) => [opt.name, opt.value])),
+            variants,
+          };
+        }),
+      }));
+      return changed ? next : prev;
+    });
+  }, [offerType, storeProductMap]);
   // 统一格式化价格，优先显示为欧元格式，避免预览里丢失价格展示
   const formatBundlePrice = (raw?: string) => {
     if (!raw) return "€0.00";
@@ -751,6 +809,7 @@ export function CreateNewOffer({
     if (!selected || !Array.isArray(selected) || selected.length === 0) return;
     const mappedProducts: CompleteBundleProductDraft[] = selected.map((item: any) => ({
       productId: String(item.id),
+      handle: String(item.handle || ""),
       title: item.title,
       image: item.images?.[0]?.originalSrc || "https://via.placeholder.com/60",
       price: item.variants?.[0]?.price || "€0.00",
