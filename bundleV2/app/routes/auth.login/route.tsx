@@ -1,7 +1,6 @@
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
-import { useState } from "react";
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { Form, useActionData, useLoaderData } from "react-router";
+import type { LoaderFunctionArgs } from "react-router";
+import { useLoaderData } from "react-router";
 
 import { login } from "../../shopify.server";
 import { loginErrorMessage } from "./error.server";
@@ -12,37 +11,24 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return { errors };
 };
 
-export const action = async ({ request }: ActionFunctionArgs) => {
-  const errors = loginErrorMessage(await login(request));
-
-  return {
-    errors,
-  };
-};
-
 export default function Auth() {
-  const loaderData = useLoaderData<typeof loader>();
-  const actionData = useActionData<typeof action>();
-  const [shop, setShop] = useState("");
-  const { errors } = actionData || loaderData;
+  const { errors } = useLoaderData<typeof loader>();
+  const title = errors.shop ? "Open the app from Shopify" : "Redirecting to Shopify";
+  const description = errors.shop
+    ? "This app must be opened from Shopify Admin or the Shopify App Store install flow. Manual shop domain entry is not supported."
+    : "Continuing to Shopify authentication...";
 
   return (
     <AppProvider embedded={false}>
       <s-page>
-        <Form method="post">
-        <s-section heading="Log in">
-          <s-text-field
-            name="shop"
-            label="Shop domain"
-            details="example.myshopify.com"
-            value={shop}
-            onChange={(e) => setShop(e.currentTarget.value)}
-            autocomplete="on"
-            error={errors.shop}
-          ></s-text-field>
-          <s-button type="submit">Log in</s-button>
+        <s-section heading={title}>
+          <s-text>{description}</s-text>
+          {errors.shop ? (
+            <s-banner tone="warning">
+              <s-text>{errors.shop}</s-text>
+            </s-banner>
+          ) : null}
         </s-section>
-        </Form>
       </s-page>
     </AppProvider>
   );
