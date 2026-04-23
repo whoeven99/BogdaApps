@@ -8,6 +8,7 @@ const DEFAULT_SELECTORS = [
 ];
 
 const RETRY_MS = 12_000;
+const SESSION_STORAGE_BUNDLE_RULE_KEY = "current-ciwi-bundle-rule";
 let offersConfigCache = null;
 let priceSyncController = null;
 let bundlePriceDebounceT = null;
@@ -278,18 +279,35 @@ function getUnitPriceFromProductDom() {
 }
 
 function getCurrentUnitPrice() {
-  const productMeta = window?.ShopifyAnalytics?.meta?.product;
   const selectedVariantId = getSelectedVariantId();
+  const configEl = document.getElementById("ciwi-bundles-config");
+  if (configEl) {
+    try {
+      const config = JSON.parse(configEl.textContent || "{}");
+      const variants = Array.isArray(config?.variants) ? config.variants : [];
+      if (selectedVariantId && variants.length) {
+        const matched = variants.find(
+          (v) => String(v?.id || "") === selectedVariantId,
+        );
+        const matchedPrice = normalizePriceNumber(matched?.price);
+        if (matchedPrice != null) return matchedPrice;
+      }
+      const firstVariantPrice =
+        normalizePriceNumber(config?.firstVariant?.price) ??
+        normalizePriceNumber(variants[0]?.price);
+      if (firstVariantPrice != null) return firstVariantPrice;
+    } catch {
+      // ignore config parse error
+    }
+  }
+
+  const productMeta = window?.ShopifyAnalytics?.meta?.product;
   const variants =
     productMeta && typeof productMeta === "object" && Array.isArray(productMeta.variants)
       ? productMeta.variants
       : [];
 
-  // 1) 页面上顾客看到的单价（随变体/样式切换更新，优先）
-  const domPrice = getUnitPriceFromProductDom();
-  if (domPrice != null) return domPrice;
-
-  // 2) Analytics 里按当前 variant id 匹配
+  // 1) Analytics 里按当前 variant id 匹配
   if (productMeta && typeof productMeta === "object") {
     if (selectedVariantId && variants.length) {
       const matched = variants.find(
@@ -305,6 +323,10 @@ function getCurrentUnitPrice() {
     const firstVariantPrice = normalizePriceNumber(variants[0]?.price);
     if (firstVariantPrice != null) return firstVariantPrice;
   }
+
+  // 3) 页面上顾客看到的单价（DOM）作为最后兜底
+  const domPrice = getUnitPriceFromProductDom();
+  if (domPrice != null) return domPrice;
 
   return 100;
 }
@@ -378,6 +400,54 @@ function getCurrentMarketId() {
     } catch (e) {}
   }
   return null;
+}
+
+function getOfferBundleTitle(offer) {
+  if (!offer || typeof offer !== "object") return "NO_BUNDLE_TITLE";
+  const offerId = offer.offerId || offer.id || "";
+  const offerName = (offer.offerName || offer.name || offer.title || "").trim();
+  if (offerName) return offerName;
+  if (offerId) return `#Bundle ${offerId}`;
+  return "NO_BUNDLE_TITLE";
+}
+
+function readSessionStorageJson(key, fallback) {
+  try {
+    const raw = window.sessionStorage.getItem(key);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") return parsed;
+    return fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function syncCurrentBundleToSessionStorage(offer) {
+  const variantId = getSelectedVariantId();
+  if (!variantId) return;
+
+  const offerId = String(offer?.offerId || offer?.id || "");
+  const bundleTitle = getOfferBundleTitle(offer);
+  const currentProductGid = getCurrentProductGid() || "";
+  const data = readSessionStorageJson(SESSION_STORAGE_BUNDLE_RULE_KEY, {});
+  data[variantId] = {
+    title: bundleTitle,
+    offerId,
+    offerName: bundleTitle,
+    productId: currentProductGid,
+    variantId,
+    source: "bundle-theme-product-custom",
+  };
+
+  try {
+    window.sessionStorage.setItem(
+      SESSION_STORAGE_BUNDLE_RULE_KEY,
+      JSON.stringify(data),
+    );
+  } catch (error) {
+    console.error("[ciwi] failed to persist bundle session data", error);
+  }
 }
 
 function getCurrentOffer(offersConfig) {
@@ -511,6 +581,9 @@ window.ciwiSelectBundleOption = function(count) {
   }
   updateThemeQuantityInput(count);
   const currentOffer = getCurrentOffer(offersConfigCache);
+  if (currentOffer) {
+    syncCurrentBundleToSessionStorage(currentOffer);
+  }
   const wrap = document.querySelector(".ciwi-bundle-wrapper");
   if (wrap && currentOffer) {
     const html = renderBundlePreviewHtml(currentOffer);
@@ -518,7 +591,11 @@ window.ciwiSelectBundleOption = function(count) {
   }
 };
 
-window.ciwiHandleBundleAddToCart = function() {
+window.ciwiHandleBundleAddToCart = function(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
   const count = window.__ciwiBundleState?.selectedCount || 1;
   updateThemeQuantityInput(count);
   const form = getAddToCartForm();
@@ -645,7 +722,7 @@ function renderBundlePreviewHtml(offer) {
     <div class="create-offer-style-preview-list create-offer-style-preview-list--${layoutFormat}">
       ${itemsHtml}
     </div>
-    ${showCustomButton ? `<button class="create-offer-preview-button" onclick="window.ciwiHandleBundleAddToCart()" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
+    ${showCustomButton ? `<button type="button" class="create-offer-preview-button" onclick="window.ciwiHandleBundleAddToCart(event)" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
       ${esc(buttonText)}
     </button>` : ""}
   </div>`;
@@ -666,66 +743,9 @@ function parseCiwiMetafieldScript(scriptId) {
   return JSON.parse(jsonLike);
 }
 
-function getOffersUpdatedAtMs(payload) {
-  const updatedAtRaw = payload?.updatedAt;
-  if (!updatedAtRaw || typeof updatedAtRaw !== "string") return 0;
-  const ts = Date.parse(updatedAtRaw);
-  return Number.isFinite(ts) ? ts : 0;
-}
-
-function readEnvEnabledState() {
-  try {
-    const prodPayload = parseCiwiMetafieldScript("ciwi-bundle-enabled-prod");
-    const testPayload = parseCiwiMetafieldScript("ciwi-bundle-enabled-test");
-    const readBool = (payload) =>
-      payload && typeof payload === "object" && typeof payload.enabled === "boolean"
-        ? payload.enabled
-        : null;
-
-    return {
-      prodEnabled: readBool(prodPayload),
-      testEnabled: readBool(testPayload),
-    };
-  } catch (e) {
-    console.error("[ciwi] Failed to parse ciwi-bundle-enabled metafield", e);
-    return {
-      prodEnabled: null,
-      testEnabled: null,
-    };
-  }
-}
-
 function readOffersConfigFromMetafield() {
   try {
-    const envPayloads = {
-      prod: parseCiwiMetafieldScript("ciwi-bundle-offers-prod"),
-      test: parseCiwiMetafieldScript("ciwi-bundle-offers-test"),
-    };
-    const { prodEnabled, testEnabled } = readEnvEnabledState();
-    const prodOpen = prodEnabled === true;
-    const testOpen = testEnabled === true;
-
-    if (!prodOpen && !testOpen) {
-      return null;
-    }
-
-    if (prodOpen && !testOpen) {
-      return envPayloads.prod || null;
-    }
-
-    if (!prodOpen && testOpen) {
-      return envPayloads.test || null;
-    }
-
-    // prod/test 都开启时，按最新 updatedAt 选择。
-    const newestEnv = ["prod", "test"].sort(
-      (a, b) => getOffersUpdatedAtMs(envPayloads[b]) - getOffersUpdatedAtMs(envPayloads[a]),
-    )[0];
-    if (newestEnv && envPayloads[newestEnv]) {
-      return envPayloads[newestEnv];
-    }
-
-    return null;
+    return parseCiwiMetafieldScript("ciwi-bundle-offers");
   } catch (e) {
     console.error("[ciwi] Failed to parse ciwi-bundle-offers metafield", e);
     return null;
@@ -841,6 +861,7 @@ function scheduleBundlePriceRefresh(offer) {
     } else {
       wrap.style.display = "none";
     }
+    syncCurrentBundleToSessionStorage(offer);
     hideThemeQuantitySelectors();
   }, 64);
 }
@@ -967,6 +988,7 @@ function run() {
       console.log("[ciwi] no active env offers after enabled checks, skip bundle UI");
       return;
     }
+    syncCurrentBundleToSessionStorage(currentOffer);
 
     // Set offer name to sessionStorage for tracking.    
     const offerName = currentOffer.name || `Bundle-${currentOffer.id}`;

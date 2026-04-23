@@ -25,6 +25,40 @@ function log(step: string, detail?: unknown): void {
   }
 }
 
+function summarizeMetafield(
+  mf: { jsonValue?: unknown; value?: unknown; type?: string } | null | undefined,
+): {
+  present: boolean;
+  type: string | null;
+  hasJsonValue: boolean;
+  jsonValueType: string | null;
+  jsonValueKeys?: string[];
+  rawValueLength: number;
+} {
+  const jsonValue = mf?.jsonValue;
+  const rawValue = typeof mf?.value === "string" ? mf.value : "";
+  const jsonValueType =
+    jsonValue === null
+      ? "null"
+      : Array.isArray(jsonValue)
+        ? "array"
+        : typeof jsonValue === "object"
+          ? "object"
+          : typeof jsonValue;
+
+  return {
+    present: Boolean(mf),
+    type: mf?.type ?? null,
+    hasJsonValue: jsonValue !== undefined && jsonValue !== null,
+    jsonValueType: jsonValue === undefined ? null : jsonValueType,
+    jsonValueKeys:
+      jsonValue && typeof jsonValue === "object" && !Array.isArray(jsonValue)
+        ? Object.keys(jsonValue as Record<string, unknown>).slice(0, 20)
+        : undefined,
+    rawValueLength: rawValue.length,
+  };
+}
+
 type OfferMetafieldPayload = {
   updatedAt?: string;
   offers?: Array<{
@@ -47,76 +81,30 @@ export function bundleCartDiscountGenerateRun(
 ): CartLinesDiscountsGenerateRunResult {
   const shopAny = input.shop as unknown as {
     metafield?: { jsonValue?: unknown; type?: string } | null;
-    offersProd?: { jsonValue?: unknown; type?: string } | null;
-    offersTest?: { jsonValue?: unknown; type?: string } | null;
-    offersActiveEnv?: { jsonValue?: unknown; type?: string } | null;
-    bundleEnabledProd?: { jsonValue?: unknown; type?: string } | null;
-    bundleEnabledTest?: { jsonValue?: unknown; type?: string } | null;
   };
-  const bundleEnabledProdPayload = shopAny.bundleEnabledProd?.jsonValue as
-    | { enabled?: boolean }
-    | null
-    | undefined;
-  const bundleEnabledTestPayload = shopAny.bundleEnabledTest?.jsonValue as
-    | { enabled?: boolean }
-    | null
-    | undefined;
-  const prodEnabled = bundleEnabledProdPayload?.enabled === true;
-  const testEnabled = bundleEnabledTestPayload?.enabled === true;
-
-  const offersProdPayload = shopAny.offersProd?.jsonValue as
+  log("shop_metafields_snapshot", {
+    offers: summarizeMetafield(
+      shopAny.metafield as
+        | { jsonValue?: unknown; value?: unknown; type?: string }
+        | null
+        | undefined,
+    ),
+  });
+  const offersPayload = shopAny.metafield?.jsonValue as
     | OfferMetafieldPayload
     | null
     | undefined;
-  const offersTestPayload = shopAny.offersTest?.jsonValue as
-    | OfferMetafieldPayload
-    | null
-    | undefined;
-
-  const toUpdatedAtMs = (payload: OfferMetafieldPayload | null | undefined): number => {
-    const raw = payload?.updatedAt;
-    if (!raw || typeof raw !== "string") return 0;
-    const ts = Date.parse(raw);
-    return Number.isFinite(ts) ? ts : 0;
-  };
-
-  let selectedEnv: "prod" | "test" | null = null;
-  let offersPayload: OfferMetafieldPayload | null | undefined = null;
-  if (!prodEnabled && !testEnabled) {
-    selectedEnv = null;
-    offersPayload = null;
-  } else if (prodEnabled && !testEnabled) {
-    selectedEnv = "prod";
-    offersPayload = offersProdPayload;
-  } else if (!prodEnabled && testEnabled) {
-    selectedEnv = "test";
-    offersPayload = offersTestPayload;
-  } else {
-    const prodTs = toUpdatedAtMs(offersProdPayload);
-    const testTs = toUpdatedAtMs(offersTestPayload);
-    if (prodTs >= testTs) {
-      selectedEnv = "prod";
-      offersPayload = offersProdPayload;
-    } else {
-      selectedEnv = "test";
-      offersPayload = offersTestPayload;
-    }
-  }
 
   log("run_start", {
     cartLineCount: input.cart.lines.length,
     discountClasses: input.discount.discountClasses,
     metafieldPresent: Boolean(input.shop.metafield),
     metafieldType: input.shop.metafield?.type ?? null,
-    prodEnabled,
-    testEnabled,
-    selectedEnv,
-    hasProdOffers: Boolean(shopAny.offersProd?.jsonValue),
-    hasTestOffers: Boolean(shopAny.offersTest?.jsonValue),
+    hasOffers: Boolean(shopAny.metafield?.jsonValue),
   });
 
   if (!offersPayload) {
-    log("early_exit", { reason: "bundle_disabled_or_no_selected_env_payload" });
+    log("early_exit", { reason: "no_offers_payload" });
     return { operations: [] };
   }
   const offers = offersPayload?.offers ?? [];
@@ -349,6 +337,22 @@ const parseSelectedIds = (selectedProductsJson?: string | null): string[] => {
   }
 };
 
+function resolveNowMs(): number | null {
+  const candidates = [
+    Date.now(),
+    new Date().getTime(),
+    Date.parse(new Date().toISOString()),
+  ];
+
+  for (const value of candidates) {
+    if (Number.isFinite(value) && value > 0) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
 /**
  * selectedProductsJson 存的是 Product GID（与主题端、后台一致），需用购物车行的 product.id / variant.id 匹配，不能用 CartLine.id。
  */
@@ -358,7 +362,8 @@ const findOffer = (
   marketId: string | undefined,
   offers: Offer[],
 ): Offer | null => {
-  const now = Date.now();
+  const nowMs = resolveNowMs();
+  const nowIso = nowMs ? new Date(nowMs).toISOString() : null;
 
   for (const offer of offers) {
     if (offer.status === false) {
@@ -368,7 +373,23 @@ const findOffer = (
 
     if (offer.startTime) {
       const startTimeMs = Date.parse(offer.startTime);
-      if (Number.isFinite(startTimeMs) && now < startTimeMs) {
+      log("offer_start_time_check", {
+        offerId: offer.id,
+        name: offer.name,
+        startTime: offer.startTime,
+        nowIso,
+        nowMs,
+        startTimeMs: Number.isFinite(startTimeMs) ? startTimeMs : null,
+        isBeforeStart:
+          Number.isFinite(startTimeMs) && nowMs !== null ? nowMs < startTimeMs : null,
+      });
+      if (nowMs === null) {
+        log("offer_time_unavailable_skip_start_check", {
+          offerId: offer.id,
+          name: offer.name,
+          startTime: offer.startTime,
+        });
+      } else if (Number.isFinite(startTimeMs) && nowMs < startTimeMs) {
         log("offer_skip_before_start", { offerId: offer.id, name: offer.name, startTime: offer.startTime });
         continue;
       }
@@ -376,7 +397,13 @@ const findOffer = (
 
     if (offer.endTime) {
       const endTimeMs = Date.parse(offer.endTime);
-      if (Number.isFinite(endTimeMs) && now > endTimeMs) {
+      if (nowMs === null) {
+        log("offer_time_unavailable_skip_end_check", {
+          offerId: offer.id,
+          name: offer.name,
+          endTime: offer.endTime,
+        });
+      } else if (Number.isFinite(endTimeMs) && nowMs > endTimeMs) {
         log("offer_skip_after_end", { offerId: offer.id, name: offer.name, endTime: offer.endTime });
         continue;
       }

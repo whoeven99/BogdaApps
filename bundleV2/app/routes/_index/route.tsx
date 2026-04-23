@@ -117,46 +117,9 @@ function resolveBundleEnvironment(): BundleEnvironment {
 function buildOfferMetafieldsInput(
   ownerId: string,
   offersPayload: string,
-  themeExtensionEnabled: boolean,
+  _themeExtensionEnabled: boolean,
 ) {
-  const env = resolveBundleEnvironment();
-  const envOfferKey = `${BUNDLE_METAFIELD_BASE_KEY}-${env}`;
-  const envEnabledKey =
-    env === "prod"
-      ? BUNDLE_METAFIELD_ENABLED_PROD_KEY
-      : BUNDLE_METAFIELD_ENABLED_TEST_KEY;
-  const activeEnvPayload = JSON.stringify({
-    env,
-    updatedAt: new Date().toISOString(),
-  });
-
   return [
-    {
-      ownerId,
-      namespace: BUNDLE_METAFIELD_NAMESPACE,
-      key: envOfferKey,
-      type: "json",
-      value: offersPayload,
-    },
-    {
-      ownerId,
-      namespace: BUNDLE_METAFIELD_NAMESPACE,
-      key: BUNDLE_METAFIELD_ACTIVE_ENV_KEY,
-      type: "json",
-      value: activeEnvPayload,
-    },
-    {
-      ownerId,
-      namespace: BUNDLE_METAFIELD_NAMESPACE,
-      key: envEnabledKey,
-      type: "json",
-      value: JSON.stringify({
-        enabled: themeExtensionEnabled,
-        env,
-        updatedAt: new Date().toISOString(),
-      }),
-    },
-    // 兼容历史读路径，避免函数/主题未更新时出现空数据。
     {
       ownerId,
       namespace: BUNDLE_METAFIELD_NAMESPACE,
@@ -734,6 +697,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   let themeExtensionEnabled = false;
   themeExtensionEnabled = await getCurrentThemeExtensionEnabled(admin);
   void syncBundleEnabledMetafield(admin, themeExtensionEnabled);
+  void syncShopOffersMetafield(admin, session.shop, themeExtensionEnabled).catch((error) => {
+    console.error("Failed to sync shop offers metafield in loader", error);
+  });
 
   let markets: MarketItem[] = [];
   try {

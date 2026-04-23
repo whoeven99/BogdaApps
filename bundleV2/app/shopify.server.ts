@@ -49,12 +49,13 @@ export async function ensureCartLinesAutomaticDiscount(admin: any) {
   const existingResp = await admin.graphql(
     `#graphql
       query ExistingAutomaticAppDiscounts {
-        discountNodes(first: 100, query: "method:automatic") {
+        discountNodes(first: 100, query: "method:automatic AND status:active") {
           nodes {
             discount {
               __typename
               ... on DiscountAutomaticApp {
                 title
+                status
                 appDiscountType {
                   functionId
                 }
@@ -70,6 +71,8 @@ export async function ensureCartLinesAutomaticDiscount(admin: any) {
   const alreadyExists = discountNodes.some((node: any) => {
     const d = node?.discount;
     if (!d || d.__typename !== "DiscountAutomaticApp") return false;
+    // 只有状态为 ACTIVE 的折扣才被认为是有效的
+    if (d?.status !== "ACTIVE") return false;
     return d?.appDiscountType?.functionId === targetFn.id;
   });
 
@@ -167,3 +170,4 @@ export const unauthenticated = shopify.unauthenticated;
 export const login = shopify.login;
 export const registerWebhooks = shopify.registerWebhooks;
 export const sessionStorage = shopify.sessionStorage;
+
