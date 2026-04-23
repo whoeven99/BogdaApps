@@ -117,6 +117,60 @@
   text-decoration: line-through;
 }
 
+/* 阶梯赠品（Progressive gifts）— 与后台预览 class 对齐 */
+.ciwi-progressive-gifts {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed #dfe3e8;
+}
+
+.ciwi-progressive-gifts__head {
+  margin-bottom: 8px;
+}
+
+.ciwi-progressive-gifts__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1c1f23;
+}
+
+.ciwi-progressive-gifts__sub {
+  font-size: 12px;
+  color: #6d7175;
+  margin-top: 2px;
+}
+
+.ciwi-progressive-gift__lock {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #6d7175;
+}
+
+.ciwi-progressive-gift {
+  position: relative;
+}
+
+.ciwi-progressive-gift__img-wrap {
+  margin: 6px 0 4px;
+}
+
+.ciwi-progressive-gift__img {
+  max-width: 100%;
+  max-height: 72px;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
+.ciwi-progressive-gifts__legal {
+  font-size: 11px;
+  color: #8c9196;
+  margin: 10px 0 0;
+  line-height: 1.4;
+}
+
 .create-offer-style-preview-badge {
   position: absolute;
   right: 8px;
