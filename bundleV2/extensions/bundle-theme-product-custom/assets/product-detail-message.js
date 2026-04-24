@@ -734,7 +734,8 @@ function updateThemeSellingPlanInput(sellingPlanId) {
   });
 }
 
-function syncSubscriptionSelectionToTheme() {
+function syncSubscriptionSelectionToTheme(offer) {
+  if (!offer || offer.offerType !== "subscription") return;
   const defaultSellingPlanId = getDefaultSellingPlanId();
   const mode = window.__ciwiBundleState?.subscriptionMode || "one-time";
   if (mode === "subscription" && defaultSellingPlanId) {
@@ -758,7 +759,11 @@ window.ciwiSelectBundleOption = function(count) {
   const wrap = document.querySelector(".ciwi-bundle-wrapper");
   if (wrap && currentOffer) {
     const html = renderBundlePreviewHtml(currentOffer);
-    if (html) wrap.innerHTML = html;
+    if (html) {
+      wrap.innerHTML = html;
+      bindBundleInteractions(wrap);
+      syncSubscriptionSelectionToTheme(currentOffer);
+    }
   }
 };
 
@@ -766,14 +771,42 @@ window.ciwiSelectSubscriptionMode = function(mode) {
   if (!window.__ciwiBundleState) return;
   window.__ciwiBundleState.subscriptionMode =
     mode === "subscription" ? "subscription" : "one-time";
-  syncSubscriptionSelectionToTheme();
   const currentOffer = getCurrentOffer(offersConfigCache);
+  syncSubscriptionSelectionToTheme(currentOffer);
   const wrap = document.querySelector(".ciwi-bundle-wrapper");
   if (wrap && currentOffer) {
     const html = renderBundlePreviewHtml(currentOffer);
-    if (html) wrap.innerHTML = html;
+    if (html) {
+      wrap.innerHTML = html;
+      bindBundleInteractions(wrap);
+      syncSubscriptionSelectionToTheme(currentOffer);
+    }
   }
 };
+
+function bindBundleInteractions(root) {
+  if (!root || root.__ciwiInteractionsBound) return;
+  root.__ciwiInteractionsBound = true;
+
+  root.addEventListener("click", (event) => {
+    const bundleOption = event.target.closest("[data-ciwi-bundle-count]");
+    if (bundleOption) {
+      event.preventDefault();
+      const nextCount = Number(bundleOption.getAttribute("data-ciwi-bundle-count"));
+      if (Number.isFinite(nextCount) && nextCount > 0) {
+        window.ciwiSelectBundleOption(nextCount);
+      }
+      return;
+    }
+
+    const subscriptionOption = event.target.closest("[data-ciwi-subscription-mode]");
+    if (subscriptionOption) {
+      event.preventDefault();
+      const mode = subscriptionOption.getAttribute("data-ciwi-subscription-mode");
+      window.ciwiSelectSubscriptionMode(mode);
+    }
+  });
+}
 
 window.ciwiHandleBundleAddToCart = function(event) {
   if (event) {
@@ -782,7 +815,8 @@ window.ciwiHandleBundleAddToCart = function(event) {
   }
   const count = window.__ciwiBundleState?.selectedCount || 1;
   updateThemeQuantityInput(count);
-  syncSubscriptionSelectionToTheme();
+  const currentOffer = getCurrentOffer(offersConfigCache);
+  syncSubscriptionSelectionToTheme(currentOffer);
   const form = getAddToCartForm();
   
   if (form) {
@@ -868,7 +902,7 @@ function renderBundlePreviewHtml(offer) {
           ? `border-color: ${esc(accentColor)} !important; background: ${esc(cardBackgroundColor)} !important; box-shadow: 0 8px 18px ${esc(accentColor)}25 !important; cursor: pointer;`
           : `border-color: ${esc(borderColor)} !important; background: ${esc(cardBackgroundColor)} !important; cursor: pointer;`;
 
-        return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}" onclick="window.ciwiSelectBundleOption(${item.count})">
+        return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}" data-ciwi-bundle-count="${esc(item.count)}">
         ${
           item.badge
             ? `<div class="create-offer-style-preview-badge" style="background:${esc(accentColor)} !important; color:${esc(labelColor)} !important;">${esc(item.badge)}</div>`
@@ -969,7 +1003,7 @@ function renderBundlePreviewHtml(offer) {
         ? `border-color: ${esc(accentColor)} !important; background: ${esc(cardBackgroundColor)} !important; box-shadow: 0 8px 18px ${esc(accentColor)}25 !important; cursor: pointer;`
         : `border-color: ${esc(borderColor)} !important; background: ${esc(cardBackgroundColor)} !important; cursor: pointer;`;
         
-      return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}" onclick="window.ciwiSelectBundleOption(${item.count})">
+      return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}" data-ciwi-bundle-count="${esc(item.count)}">
       ${
         item.badge
           ? `<div class="create-offer-style-preview-badge" style="background:${esc(accentColor)} !important; color:${esc(labelColor)} !important;">${esc(item.badge)}</div>`
@@ -1019,20 +1053,20 @@ function renderBundlePreviewHtml(offer) {
       }
       const selectedMode = window.__ciwiBundleState.subscriptionMode;
       setTimeout(() => {
-        syncSubscriptionSelectionToTheme();
+        syncSubscriptionSelectionToTheme(offer);
       }, 0);
 
       subscriptionHtml = `
         <div class="ciwi-subscription-box">
-          <label class="ciwi-subscription-option ${selectedMode === "subscription" ? "is-selected" : ""}" onclick="window.ciwiSelectSubscriptionMode('subscription')">
-            <input type="radio" name="${CIWI_SUBSCRIPTION_MODE_NAME}" ${selectedMode === "subscription" ? "checked" : ""} onchange="window.ciwiSelectSubscriptionMode('subscription')" />
+          <label class="ciwi-subscription-option ${selectedMode === "subscription" ? "is-selected" : ""}" data-ciwi-subscription-mode="subscription">
+            <input type="radio" name="${CIWI_SUBSCRIPTION_MODE_NAME}" ${selectedMode === "subscription" ? "checked" : ""} />
             <span>
               <span class="ciwi-subscription-title">${esc(subscriptionTitle)}</span>
               <span class="ciwi-subscription-subtitle">${esc(subscriptionSubtitle)}</span>
             </span>
           </label>
-          <label class="ciwi-subscription-option ${selectedMode === "one-time" ? "is-selected" : ""}" onclick="window.ciwiSelectSubscriptionMode('one-time')">
-            <input type="radio" name="${CIWI_SUBSCRIPTION_MODE_NAME}" ${selectedMode === "one-time" ? "checked" : ""} onchange="window.ciwiSelectSubscriptionMode('one-time')" />
+          <label class="ciwi-subscription-option ${selectedMode === "one-time" ? "is-selected" : ""}" data-ciwi-subscription-mode="one-time">
+            <input type="radio" name="${CIWI_SUBSCRIPTION_MODE_NAME}" ${selectedMode === "one-time" ? "checked" : ""} />
             <span>
               <span class="ciwi-subscription-title">${esc(oneTimeTitle)}</span>
               <span class="ciwi-subscription-subtitle">${esc(oneTimeSubtitle)}</span>
@@ -1169,6 +1203,8 @@ function buildBundleUi(offer) {
   wrapper.className = "ciwi-bundle-wrapper";
   wrapper.innerHTML = renderBundlePreviewHtml(offer);
   if (!wrapper.innerHTML.trim()) return null;
+  bindBundleInteractions(wrapper);
+  syncSubscriptionSelectionToTheme(offer);
   wrapper.style.display = isCurrentVariantAvailable() ? "block" : "none";
   return wrapper;
 }
@@ -1184,6 +1220,8 @@ function scheduleBundlePriceRefresh(offer) {
     const html = renderBundlePreviewHtml(offer);
     if (html) {
       wrap.innerHTML = html;
+      bindBundleInteractions(wrap);
+      syncSubscriptionSelectionToTheme(offer);
       wrap.style.display = isCurrentVariantAvailable() ? "block" : "none";
     } else {
       wrap.style.display = "none";
