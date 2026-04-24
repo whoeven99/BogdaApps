@@ -560,9 +560,146 @@ export function CreateNewOffer({
     },
   ];
 
-  const selectedProductsHasSubscription = useMemo(
-    () => selectedProductsData.some((item) => item.hasSubscription),
+  const allSelectedProductsHaveSubscription = useMemo(
+    () =>
+      selectedProductsData.length > 0 &&
+      selectedProductsData.every((item) => item.hasSubscription),
     [selectedProductsData],
+  );
+  const shouldShowSubscriptionPreview =
+    offerType === "subscription" && subscriptionEnabled;
+  const subscriptionPreviewStyle = allSelectedProductsHaveSubscription
+    ? "solid"
+    : "dashed";
+  const shouldShowSubscriptionExplanation =
+    shouldShowSubscriptionPreview && !allSelectedProductsHaveSubscription;
+  const subscriptionExplanationTitle =
+    selectedProductsData.length > 0
+      ? "Some products aren't eligible for subscriptions"
+      : "Select products to check subscription eligibility";
+  const subscriptionExplanationBody =
+    selectedProductsData.length > 0
+      ? "Subscription bar will only be shown in products that are eligible for subscription. You can select those products in your subscription app."
+      : "After selecting products, the app checks whether they have selling plans and decides whether to show a solid or dashed subscription bar.";
+
+  useEffect(() => {
+    // 中文注释：当用户在第 1 步切换到 Subscription 类型时，默认自动打开订阅开关
+    if (offerType === "subscription") {
+      setSubscriptionEnabled(true);
+    }
+  }, [offerType]);
+
+  const renderSubscriptionSettings = () => (
+    <div className="mb-6 rounded-[12px] border border-[#e3e8ed] p-4 bg-[#fafbfb]">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-[14px] font-medium text-[#1c1f23] m-0">
+          Subscription
+        </h3>
+        <Switch
+          checked={subscriptionEnabled}
+          onChange={(checked) => setSubscriptionEnabled(checked)}
+        />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label className="block text-[13px] text-[#5c6166] mb-1">
+            Subscribe title
+          </label>
+          <Input
+            size="large"
+            value={subscriptionTitle}
+            onChange={(e) => setSubscriptionTitle(e.target.value)}
+            maxLength={60}
+          />
+        </div>
+        <div>
+          <label className="block text-[13px] text-[#5c6166] mb-1">
+            Subscribe subtitle
+          </label>
+          <Input
+            size="large"
+            value={subscriptionSubtitle}
+            onChange={(e) => setSubscriptionSubtitle(e.target.value)}
+            maxLength={60}
+          />
+        </div>
+        <div>
+          <label className="block text-[13px] text-[#5c6166] mb-1">
+            One-time title
+          </label>
+          <Input
+            size="large"
+            value={oneTimeTitle}
+            onChange={(e) => setOneTimeTitle(e.target.value)}
+            maxLength={60}
+          />
+        </div>
+        <div>
+          <label className="block text-[13px] text-[#5c6166] mb-1">
+            One-time subtitle
+          </label>
+          <Input
+            size="large"
+            value={oneTimeSubtitle}
+            onChange={(e) => setOneTimeSubtitle(e.target.value)}
+            maxLength={60}
+          />
+        </div>
+      </div>
+      <div className="mt-3">
+        <Select
+          value={subscriptionPosition}
+          onChange={(value) =>
+            setSubscriptionPosition(value as "below-bundle-bars")
+          }
+          options={[
+            {
+              value: "below-bundle-bars",
+              label: "Below bundle deal bars",
+            },
+          ]}
+          style={{ width: "100%" }}
+        />
+      </div>
+      <div className="mt-3">
+        <Checkbox
+          checked={subscriptionDefaultSelected}
+          onChange={(e) => setSubscriptionDefaultSelected(e.target.checked)}
+        >
+          Make subscription option selected by default
+        </Checkbox>
+      </div>
+
+      {/* 中文注释：选中商品全部有 selling plan 时显示实线，否则显示虚线并补充解释文案 */}
+      {shouldShowSubscriptionPreview && (
+        <div className="mt-4">
+          <div
+            className={`rounded-[10px] p-3 ${
+              allSelectedProductsHaveSubscription
+                ? "border border-[#c9ccd0]"
+                : "border border-dashed border-[#b7b7b7]"
+            }`}
+          >
+            <div className="text-[14px] font-semibold text-[#1c1f23]">
+              {subscriptionTitle || "Subscribe & Save 20%"}
+            </div>
+            <div className="text-[13px] text-[#8c9196] mt-1">
+              {subscriptionSubtitle || "Delivered weekly"}
+            </div>
+          </div>
+          {shouldShowSubscriptionExplanation && (
+            <div className="mt-3 rounded-[10px] bg-[#eaf4ff] p-3">
+              <div className="text-[13px] font-semibold text-[#1c1f23]">
+                {subscriptionExplanationTitle}
+              </div>
+              <div className="text-[12px] text-[#4f5b67] mt-1 leading-[1.5]">
+                {subscriptionExplanationBody}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 
 
@@ -916,6 +1053,13 @@ export function CreateNewOffer({
                   showCustomButton={showCustomButton}
                   title={widgetTitle}
                   items={previewItems}
+                  showSubscriptionPreview={shouldShowSubscriptionPreview}
+                  subscriptionPreviewStyle={subscriptionPreviewStyle}
+                  subscriptionTitle={subscriptionTitle}
+                  subscriptionSubtitle={subscriptionSubtitle}
+                  showSubscriptionExplanation={shouldShowSubscriptionExplanation}
+                  subscriptionExplanationTitle={subscriptionExplanationTitle}
+                  subscriptionExplanationBody={subscriptionExplanationBody}
                 />
                 <p className="text-[12px] text-[#5c6166] mt-3 italic font-normal">
                   Note: This is a live preview. Changes will update in real-time when state is connected.
@@ -1082,6 +1226,8 @@ export function CreateNewOffer({
                       )}
                     </div>
                   )}
+
+                  {offerType === "subscription" && renderSubscriptionSettings()}
 
                   <div>
                     <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
@@ -1503,6 +1649,13 @@ export function CreateNewOffer({
                   showCustomButton={showCustomButton}
                   title={widgetTitle}
                   items={previewItems}
+                  showSubscriptionPreview={shouldShowSubscriptionPreview}
+                  subscriptionPreviewStyle={subscriptionPreviewStyle}
+                  subscriptionTitle={subscriptionTitle}
+                  subscriptionSubtitle={subscriptionSubtitle}
+                  showSubscriptionExplanation={shouldShowSubscriptionExplanation}
+                  subscriptionExplanationTitle={subscriptionExplanationTitle}
+                  subscriptionExplanationBody={subscriptionExplanationBody}
                   />
                   <p className="text-[12px] text-[#5c6166] mt-3 italic font-normal">
                     Note: This is a live preview. Changes will update in real-time when state is connected.
@@ -1652,113 +1805,6 @@ export function CreateNewOffer({
                     </div>
                   </div>
                 </div>
-
-                {offerType === "subscription" && (
-                  <div className="mb-6 rounded-[12px] border border-[#e3e8ed] p-4 bg-[#fafbfb]">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-[14px] font-medium text-[#1c1f23] m-0">
-                        Subscription
-                      </h3>
-                      <Switch
-                        checked={subscriptionEnabled}
-                        onChange={(checked) => setSubscriptionEnabled(checked)}
-                      />
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[13px] text-[#5c6166] mb-1">
-                          Subscribe title
-                        </label>
-                        <Input
-                          size="large"
-                          value={subscriptionTitle}
-                          onChange={(e) => setSubscriptionTitle(e.target.value)}
-                          maxLength={60}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[13px] text-[#5c6166] mb-1">
-                          Subscribe subtitle
-                        </label>
-                        <Input
-                          size="large"
-                          value={subscriptionSubtitle}
-                          onChange={(e) => setSubscriptionSubtitle(e.target.value)}
-                          maxLength={60}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[13px] text-[#5c6166] mb-1">
-                          One-time title
-                        </label>
-                        <Input
-                          size="large"
-                          value={oneTimeTitle}
-                          onChange={(e) => setOneTimeTitle(e.target.value)}
-                          maxLength={60}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[13px] text-[#5c6166] mb-1">
-                          One-time subtitle
-                        </label>
-                        <Input
-                          size="large"
-                          value={oneTimeSubtitle}
-                          onChange={(e) => setOneTimeSubtitle(e.target.value)}
-                          maxLength={60}
-                        />
-                      </div>
-                    </div>
-                    <div className="mt-3">
-                      <Select
-                        value={subscriptionPosition}
-                        onChange={(value) =>
-                          setSubscriptionPosition(value as "below-bundle-bars")
-                        }
-                        options={[
-                          {
-                            value: "below-bundle-bars",
-                            label: "Below bundle deal bars",
-                          },
-                        ]}
-                        style={{ width: "100%" }}
-                      />
-                    </div>
-                    <div className="mt-3">
-                      <Checkbox
-                        checked={subscriptionDefaultSelected}
-                        onChange={(e) =>
-                          setSubscriptionDefaultSelected(e.target.checked)
-                        }
-                      >
-                        Make subscription option selected by default
-                      </Checkbox>
-                    </div>
-
-                    {/* 中文注释：当所选商品没有订阅计划时，编辑端展示虚线框，提示发布后前台不会渲染订阅模块 */}
-                    <div
-                      className={`mt-4 rounded-[10px] p-3 ${
-                        selectedProductsHasSubscription
-                          ? "border border-[#c9ccd0]"
-                          : "border border-dashed border-[#b7b7b7]"
-                      }`}
-                    >
-                      <div className="text-[14px] font-semibold text-[#1c1f23]">
-                        {subscriptionTitle || "Subscribe & Save 20%"}
-                      </div>
-                      <div className="text-[13px] text-[#8c9196] mt-1">
-                        {subscriptionSubtitle || "Delivered weekly"}
-                      </div>
-                      {!selectedProductsHasSubscription && (
-                        <div className="text-[12px] text-[#8c9196] mt-2">
-                          No selling plan found for selected products. This block
-                          will not render on storefront after publish.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
 
                 <div className="mb-6">
                   <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
@@ -1923,6 +1969,13 @@ export function CreateNewOffer({
                   showCustomButton={showCustomButton}
                   title={widgetTitle}
                   items={previewItems}
+                  showSubscriptionPreview={shouldShowSubscriptionPreview}
+                  subscriptionPreviewStyle={subscriptionPreviewStyle}
+                  subscriptionTitle={subscriptionTitle}
+                  subscriptionSubtitle={subscriptionSubtitle}
+                  showSubscriptionExplanation={shouldShowSubscriptionExplanation}
+                  subscriptionExplanationTitle={subscriptionExplanationTitle}
+                  subscriptionExplanationBody={subscriptionExplanationBody}
                 />
                 <p className="text-[12px] text-[#5c6166] mt-3 italic font-normal">
                   Note: This is a live preview. Changes will update in real-time when state is connected.
