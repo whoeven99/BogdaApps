@@ -241,6 +241,11 @@ export type OfferSettings = {
   oneTimeTitle: string;
   oneTimeSubtitle: string;
   subscriptionDefaultSelected: boolean;
+  enableMultiProductBundle?: boolean;
+  chooseButtonText?: string;
+  chooseButtonColor?: string;
+  chooseButtonSize?: number;
+  chooseImageSize?: number;
   scheduleTimezone?: string;
   progressiveGifts: ProgressiveGiftsConfig;
 };
@@ -272,6 +277,11 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
       oneTimeTitle: "One-time purchase",
       oneTimeSubtitle: "",
       subscriptionDefaultSelected: true,
+      enableMultiProductBundle: false,
+      chooseButtonText: "Choose",
+      chooseButtonColor: "#111111",
+      chooseButtonSize: 28,
+      chooseImageSize: 40,
       scheduleTimezone: undefined,
       progressiveGifts: { ...DEFAULT_PROGRESSIVE_GIFTS },
     };
@@ -324,6 +334,11 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
       oneTimeTitle: parsed.oneTimeTitle || "One-time purchase",
       oneTimeSubtitle: parsed.oneTimeSubtitle || "",
       subscriptionDefaultSelected: parsed.subscriptionDefaultSelected !== false,
+      enableMultiProductBundle: parsed.enableMultiProductBundle === true,
+      chooseButtonText: parsed.chooseButtonText || "Choose",
+      chooseButtonColor: sanitizeHexColor(parsed.chooseButtonColor, "#111111"),
+      chooseButtonSize: clampNumber(parsed.chooseButtonSize, 24, 44, 28),
+      chooseImageSize: clampNumber(parsed.chooseImageSize, 24, 64, 40),
       scheduleTimezone: parsed.scheduleTimezone,
       progressiveGifts: parseProgressiveGiftsConfig(parsed.progressiveGifts),
     };
@@ -402,6 +417,17 @@ export type CompleteBundleConfig = {
   bars: CompleteBundleBar[];
 };
 
+export type DifferentProductDiscountRule = {
+  count: number;
+  discountPercent: number;
+  priceMode?: "full_price" | "percentage_off" | "amount_off" | "fixed_price";
+  discountValue?: number;
+  title?: string;
+  subtitle?: string;
+  badge?: string;
+  isDefault?: boolean;
+};
+
 export function parseDiscountRules(discountRulesJson?: string | null): DiscountRule[] {
   if (!discountRulesJson) return [];
 
@@ -439,7 +465,27 @@ export function parseSelectedProductIds(selectedProductsJson?: string | null): s
 
   try {
     const parsed = JSON.parse(selectedProductsJson);
-    if (!Array.isArray(parsed)) return [];
+    if (!Array.isArray(parsed)) {
+      if (parsed && typeof parsed === "object") {
+        const pool = (parsed as { productPool?: unknown }).productPool;
+        if (Array.isArray(pool)) {
+          const ids: string[] = [];
+          for (const item of pool) {
+            if (typeof item === "string") {
+              ids.push(item);
+              continue;
+            }
+            if (item && typeof item === "object") {
+              const id = (item as { id?: unknown }).id;
+              if (typeof id === "string") ids.push(id);
+              else if (typeof id === "number") ids.push(String(id));
+            }
+          }
+          return ids;
+        }
+      }
+      return [];
+    }
 
     const ids: string[] = [];
     for (const item of parsed) {
@@ -504,6 +550,50 @@ export function parseBxgyDiscountRules(discountRulesJson?: string | null): BxgyD
     }
     
     // 按 count 排序，优先匹配数量多的规则
+    out.sort((a, b) => a.count - b.count);
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+export function parseDifferentProductDiscountRules(
+  discountRulesJson?: string | null,
+): DifferentProductDiscountRule[] {
+  if (!discountRulesJson) return [];
+
+  try {
+    const parsed = JSON.parse(discountRulesJson) as unknown;
+    if (!Array.isArray(parsed)) return [];
+
+    const out: DifferentProductDiscountRule[] = [];
+    for (const item of parsed) {
+      if (!item || typeof item !== "object") continue;
+      const count = Number((item as { count?: unknown }).count);
+      const discountPercent = Number(
+        (item as { discountPercent?: unknown }).discountPercent,
+      );
+      if (!Number.isFinite(count) || count < 1) continue;
+      if (!Number.isFinite(discountPercent)) continue;
+      out.push({
+        count: Math.trunc(count),
+        discountPercent: Math.max(0, Math.min(100, discountPercent)),
+        priceMode: (() => {
+          const raw = String((item as { priceMode?: unknown }).priceMode || "");
+          return ["full_price", "percentage_off", "amount_off", "fixed_price"].includes(raw)
+            ? (raw as DifferentProductDiscountRule["priceMode"])
+            : "percentage_off";
+        })(),
+        discountValue: Number.isFinite(Number((item as { discountValue?: unknown }).discountValue))
+          ? Number((item as { discountValue?: unknown }).discountValue)
+          : Math.max(0, Math.min(100, discountPercent)),
+        title: (item as { title?: string }).title || "",
+        subtitle: (item as { subtitle?: string }).subtitle || "",
+        badge: (item as { badge?: string }).badge || "",
+        isDefault: !!(item as { isDefault?: boolean }).isDefault,
+      });
+    }
+
     out.sort((a, b) => a.count - b.count);
     return out;
   } catch {
@@ -688,4 +778,29 @@ export function buildCompleteBundleConfig(
           : [],
       })),
   };
+}
+
+export function buildDifferentProductDiscountRulesJson(
+  tiers: DifferentProductDiscountRule[],
+): DifferentProductDiscountRule[] {
+  const dedupedByCount = new Map<number, DifferentProductDiscountRule>();
+  for (const tier of tiers) {
+    if (!Number.isFinite(tier.count) || tier.count < 1) continue;
+    if (!Number.isFinite(tier.discountPercent)) continue;
+
+    dedupedByCount.set(Math.trunc(tier.count), {
+      count: Math.trunc(tier.count),
+      discountPercent: Math.max(0, Math.min(100, tier.discountPercent)),
+      priceMode: tier.priceMode || "percentage_off",
+      discountValue: Number.isFinite(Number(tier.discountValue))
+        ? Number(tier.discountValue)
+        : Math.max(0, Math.min(100, tier.discountPercent)),
+      title: tier.title || "",
+      subtitle: tier.subtitle || "",
+      badge: tier.badge || "",
+      isDefault: !!tier.isDefault,
+    });
+  }
+
+  return Array.from(dedupedByCount.values()).sort((a, b) => a.count - b.count);
 }

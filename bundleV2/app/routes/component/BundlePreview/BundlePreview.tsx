@@ -3,6 +3,7 @@ import {
   renderBundlePreviewHtml,
   renderProgressiveGiftsPreviewHtml,
   PreviewItem,
+  MultiProductPreviewSettings,
 } from "./bundlePreviewShared";
 
 type Props = {
@@ -32,6 +33,12 @@ type Props = {
   showSubscriptionExplanation?: boolean;
   subscriptionExplanationTitle?: string;
   subscriptionExplanationBody?: string;
+  multiProductSettings?: MultiProductPreviewSettings;
+  onPreviewAction?: (
+    action: "add" | "choose",
+    itemId: string,
+    slotIndex?: number,
+  ) => void;
 };
 
 export default function BundlePreview({
@@ -58,6 +65,8 @@ export default function BundlePreview({
   showSubscriptionExplanation,
   subscriptionExplanationTitle,
   subscriptionExplanationBody,
+  multiProductSettings,
+  onPreviewAction,
 }: Props) {
   const html = renderBundlePreviewHtml({
     title,
@@ -80,8 +89,8 @@ export default function BundlePreview({
     showSubscriptionExplanation,
     subscriptionExplanationTitle,
     subscriptionExplanationBody,
+    multiProductSettings,
   });
-
   const prog =
     progressiveGifts && progressiveGifts.enabled
       ? renderProgressiveGiftsPreviewHtml(
@@ -92,7 +101,26 @@ export default function BundlePreview({
       : "";
 
   return (
-    <div className="ciwi-bundle-preview-wrap">
+    <div
+      className="ciwi-bundle-preview-wrap"
+      onClick={(e) => {
+        const target = e.target as HTMLElement | null;
+        if (!target || !onPreviewAction) return;
+        const actionEl = target.closest("[data-preview-action]") as HTMLElement | null;
+        if (!actionEl) return;
+        const action = actionEl.getAttribute("data-preview-action");
+        const itemId = actionEl.getAttribute("data-preview-item-id");
+        const slotIndexRaw = actionEl.getAttribute("data-preview-slot-index");
+        const slotIndex =
+          slotIndexRaw != null && Number.isFinite(Number(slotIndexRaw))
+            ? Number(slotIndexRaw)
+            : undefined;
+        if (!itemId) return;
+        if (action === "add" || action === "choose") {
+          onPreviewAction(action, itemId, slotIndex);
+        }
+      }}
+    >
       <div dangerouslySetInnerHTML={{ __html: html }} />
       {prog ? <div dangerouslySetInnerHTML={{ __html: prog }} /> : null}
     </div>

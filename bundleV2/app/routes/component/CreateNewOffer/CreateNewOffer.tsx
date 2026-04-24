@@ -20,6 +20,7 @@ import {
   normalizeOfferNameKey,
   parseDiscountRules,
   parseBxgyDiscountRules,
+  parseDifferentProductDiscountRules,
   parseOfferSettings,
   parseSelectedProductIds,
   buildBxgyDiscountRulesJson,
@@ -30,6 +31,8 @@ import {
   type CompleteBundleBar,
   type CompleteBundleProduct,
   type CompleteBundlePricingMode,
+  buildDifferentProductDiscountRulesJson,
+  type DifferentProductDiscountRule,
 } from "../../../utils/offerParsing";
 
 type DiscountRule = {
@@ -55,6 +58,14 @@ type BxgyDiscountRule = {
   subtitle?: string;
   badge?: string;
   isDefault?: boolean;
+};
+
+type DifferentProductRule = DifferentProductDiscountRule;
+type DifferentPreviewSelection = {
+  id: string;
+  title: string;
+  image: string;
+  price: string;
 };
 
 type Product = {
@@ -234,6 +245,12 @@ function calculatePreviewBundleAmounts(
     discountedTotal,
     saved: originalTotal - discountedTotal,
   };
+}
+
+function parsePriceNumber(raw: string): number {
+  const normalized = String(raw || "").replace(/[^\d.,-]/g, "").replace(",", ".");
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : 0;
 }
 
 function sanitizeDiscountRules(tiers: DiscountRule[]): DiscountRule[] {
@@ -447,6 +464,22 @@ export function CreateNewOffer({
   const [subscriptionDefaultSelected, setSubscriptionDefaultSelected] = useState(
     offerSettings.subscriptionDefaultSelected,
   );
+  const [enableMultiProductBundle, setEnableMultiProductBundle] = useState(
+    offerSettings.enableMultiProductBundle === true ||
+      initialOffer?.offerType === "quantity-breaks-different",
+  );
+  const [chooseButtonText, setChooseButtonText] = useState(
+    offerSettings.chooseButtonText || "Choose",
+  );
+  const [chooseButtonColor, setChooseButtonColor] = useState(
+    offerSettings.chooseButtonColor || "#111111",
+  );
+  const [chooseButtonSize, setChooseButtonSize] = useState(
+    offerSettings.chooseButtonSize || 28,
+  );
+  const [chooseImageSize, setChooseImageSize] = useState(
+    offerSettings.chooseImageSize || 40,
+  );
   const [widgetTitle, setWidgetTitle] = useState(offerSettings.title);
   const [customerSegments, setCustomerSegments] = useState<string[]>(
     offerSettings.customerSegments ? offerSettings.customerSegments.split(",") : ["all"]
@@ -472,7 +505,16 @@ export function CreateNewOffer({
     let parsedObjects: any[] = [];
     try {
       if (initialOffer?.selectedProductsJson) {
-        parsedObjects = JSON.parse(initialOffer.selectedProductsJson);
+        const parsed = JSON.parse(initialOffer.selectedProductsJson);
+        if (Array.isArray(parsed)) {
+          parsedObjects = parsed;
+        } else if (
+          parsed &&
+          typeof parsed === "object" &&
+          Array.isArray((parsed as any).productPool)
+        ) {
+          parsedObjects = (parsed as any).productPool;
+        }
       }
     } catch (e) {}
 
@@ -509,7 +551,11 @@ export function CreateNewOffer({
     const selected = await (window as any).shopify.resourcePicker({
       type: "product",
       action: "select",
-      multiple: type === "normal" && offerType === "subscription" ? false : true,
+      multiple:
+        type === "normal"
+          ? offerType !== "subscription" &&
+            offerType !== "quantity-breaks-different"
+          : true,
       selectionIds: type === "buy" 
         ? buyProducts.map((id) => ({ id }))
         : type === "get"
@@ -540,7 +586,10 @@ export function CreateNewOffer({
         setGetProducts(newData.map((item: any) => item.id));
       } else {
         const nextProducts =
-          offerType === "subscription" ? newData.slice(0, 1) : newData;
+          offerType === "subscription" ||
+          offerType === "quantity-breaks-different"
+            ? newData.slice(0, 1)
+            : newData;
         setSelectedProductsData(nextProducts);
 
         // 中文注释：订阅型 offer 选完商品后，使用用户指定的 GraphQL 单独校验该商品是否有 selling plan
@@ -678,6 +727,15 @@ export function CreateNewOffer({
   const [bxgyDiscountRules, setBxgyDiscountRules] = useState<BxgyDiscountRule[]>(
     parseBxgyDiscountRules(initialOffer?.discountRulesJson),
   );
+  const [differentProductRules, setDifferentProductRules] = useState<DifferentProductRule[]>(
+    () =>
+      initialOffer?.offerType === "quantity-breaks-different"
+        ? parseDifferentProductDiscountRules(initialOffer?.discountRulesJson)
+        : [],
+  );
+  const [differentPreviewSelections, setDifferentPreviewSelections] = useState<
+    Record<string, DifferentPreviewSelection[]>
+  >({});
   const [buyProducts, setBuyProducts] = useState<string[]>(() => {
     if (initialOffer?.offerType !== 'bxgy' || !initialOffer.selectedProductsJson) return [];
     try {
@@ -1107,6 +1165,64 @@ export function CreateNewOffer({
   };
 
   useEffect(() => {
+    // 不同产品类型默认开启多产品功能，其它类型默认关闭
+    setEnableMultiProductBundle(offerType === "quantity-breaks-different");
+  }, [offerType]);
+
+  useEffect(() => {
+    if (offerType !== "quantity-breaks-different") return;
+    if (differentProductRules.length > 0) return;
+    const firstProduct = selectedProductsData[0] || storeProducts[0];
+    if (!firstProduct) return;
+    const firstProductId = String(firstProduct.id);
+    // 新类型默认初始化两档 pack：1 件与 2 件
+    setDifferentProductRules([
+      {
+        count: 1,
+        discountPercent: 0,
+        priceMode: "full_price",
+        discountValue: 0,
+        title: "Bar #1 - 1 pack",
+        subtitle: "Standard price",
+        badge: "",
+        isDefault: false,
+      },
+      {
+        count: 2,
+        discountPercent: 10,
+        priceMode: "percentage_off",
+        discountValue: 10,
+        title: "Bar #2 - 2 pack",
+        subtitle: "Save 10%",
+        badge: "Most Popular",
+        isDefault: true,
+      },
+    ]);
+    if (selectedProductsData.length === 0) {
+      const firstProductAny = firstProduct as any;
+      setSelectedProductsData([
+        {
+          id: firstProductId,
+          title: String(firstProductAny.title || firstProductAny.name || "Product"),
+          image: firstProductAny.image || "https://via.placeholder.com/60",
+          price: firstProductAny.price || "€0.00",
+          variantsCount: firstProductAny.variantsCount || 1,
+          hasSubscription: firstProductAny.hasSubscription === true,
+        },
+      ]);
+    }
+  }, [offerType, differentProductRules.length, selectedProductsData, storeProducts]);
+
+  useEffect(() => {
+    if (offerType !== "quantity-breaks-different") return;
+    if (selectedProductsData.length === 0) return;
+    if (selectedProductsData.length > 1) {
+      setSelectedProductsData((prev) => prev.slice(0, 1));
+      return;
+    }
+  }, [offerType, selectedProductsData]);
+
+  useEffect(() => {
     if (offerType === 'bxgy') {
       setBxgyDiscountRules(prev =>
         prev.map(rule => ({
@@ -1203,6 +1319,63 @@ export function CreateNewOffer({
       });
     }
 
+    if (offerType === "quantity-breaks-different" && differentProductRules.length > 0) {
+      const hasDifferentDefault = differentProductRules.some((r) => r.isDefault);
+      return differentProductRules.map((rule, index) => {
+        const isFeatured = hasDifferentDefault ? !!rule.isDefault : index === 0;
+        const firstProduct = selectedProductsData[0];
+        const unit = parsePriceNumber(firstProduct?.price || "0");
+        const qty = Math.max(1, rule.count || 1);
+        const mode = rule.priceMode || "percentage_off";
+        const discountValue =
+          Number.isFinite(Number(rule.discountValue)) ? Number(rule.discountValue) : rule.discountPercent;
+
+        const rowKey = `different-tier-${rule.count}`;
+        const selectedProducts = (differentPreviewSelections[rowKey] || []).slice(
+          0,
+          Math.max(0, qty - 1),
+        );
+        const selectedExtrasTotal = selectedProducts.reduce(
+          (sum, p) => sum + parsePriceNumber(p.price || "0"),
+          0,
+        );
+        const effectiveItemsCount = Math.max(1, 1 + selectedProducts.length);
+        // 不同产品包按「主产品 + 已选附加产品」计算原价，避免仍按主产品单价 * 数量导致价格偏高
+        const originalTotal = unit + selectedExtrasTotal;
+        let finalTotal = originalTotal;
+        if (mode === "percentage_off") {
+          finalTotal =
+            originalTotal * (1 - Math.max(0, Math.min(100, discountValue)) / 100);
+        } else if (mode === "amount_off") {
+          finalTotal = Math.max(
+            0,
+            originalTotal - Math.max(0, discountValue) * effectiveItemsCount,
+          );
+        } else if (mode === "fixed_price") {
+          finalTotal = Math.max(0, discountValue) * effectiveItemsCount;
+        }
+        return {
+          id: `different-tier-${rule.count}`,
+          title: rule.title || `${rule.count} pack`,
+          subtitle: rule.subtitle || `Contains ${rule.count} item(s)`,
+          price: mode === "full_price" ? formatPreviewPrice(originalTotal) : formatPreviewPrice(finalTotal),
+          original:
+            mode === "full_price" || finalTotal >= originalTotal
+              ? undefined
+              : formatPreviewPrice(originalTotal),
+          featured: isFeatured,
+          badge: rule.badge || (isFeatured ? "Most Popular" : ""),
+          saveLabel: `${rule.count} item slot(s)`,
+          image: firstProduct?.image,
+          variantTitle: firstProduct?.title,
+          productPrice: firstProduct?.price,
+          showChooseControl: !!enableMultiProductBundle && qty > 1 && selectedProducts.length < qty - 1,
+          chooseControlCount: Math.max(0, qty - 1 - selectedProducts.length),
+          selectedProducts,
+        };
+      });
+    }
+
     if (offerType === "bxgy" && bxgyDiscountRules.length > 0) {
       const bxgyHasDefault = bxgyDiscountRules.some(r => r.isDefault);
       return bxgyDiscountRules.map((rule, index) => {
@@ -1257,7 +1430,58 @@ export function CreateNewOffer({
     baseUnitPrice,
     formatPreviewPrice,
     hasDefault,
+    enableMultiProductBundle,
+    differentPreviewSelections,
   ]);
+
+  const handlePreviewMultiProductAction = async (
+    action: "add" | "choose",
+    itemId: string,
+    slotIndex?: number,
+  ) => {
+    if (offerType !== "quantity-breaks-different" || !enableMultiProductBundle) return;
+    const matchedItem = previewItems.find((x) => x.id === itemId);
+    if (!matchedItem) return;
+    const maxSelectable = Math.max(
+      0,
+      (matchedItem.chooseControlCount || 0) +
+        (matchedItem.selectedProducts?.length || 0),
+    );
+    const selected = await (window as any).shopify.resourcePicker({
+      type: "product",
+      action: "select",
+      multiple: false,
+      selectionIds: [],
+      title: action === "add" ? "Add bundle product" : "Choose bundle product",
+    });
+    if (!selected || !selected[0]) return;
+    const item = selected[0];
+    const picked = {
+      id: String(item.id),
+      title: String(item.title || ""),
+      image: item.images?.[0]?.originalSrc || "https://via.placeholder.com/60",
+      price: item.variants?.[0]?.price || "€0.00",
+      variantsCount: item.variants?.length || 1,
+    };
+    // 预览里的 + / Choose 只更新当前 Pack 的可选商品，不覆盖主绑定商品
+    setDifferentPreviewSelections((prev) => {
+      const next = { ...prev };
+      const current = Array.isArray(next[itemId]) ? [...next[itemId]] : [];
+      if (current.length >= maxSelectable && action === "add") {
+        return prev;
+      }
+      if (action === "choose") {
+        if (current.length === 0) current[0] = picked;
+        else current[Math.max(0, Math.min(current.length - 1, slotIndex ?? 0))] = picked;
+      } else if (Number.isFinite(slotIndex as number) && (slotIndex as number) >= 0) {
+        current[slotIndex as number] = picked;
+      } else {
+        current.push(picked);
+      }
+      next[itemId] = current.filter(Boolean).slice(0, maxSelectable);
+      return next;
+    });
+  };
 
   const steps = [
     "Basic Information",
@@ -1278,6 +1502,12 @@ export function CreateNewOffer({
       name: "Buy X, Get Y (BXGY)",
       description:
         "Buy X products and get Y products with discount (e.g., Buy 2 get 1 free)",
+    },
+    {
+      id: "quantity-breaks-different",
+      name: "Quantity breaks for different products",
+      description:
+        "Offer tiered discounts by composing packs with different products",
     },
     {
       id: "complete-bundle",
@@ -1485,6 +1715,15 @@ export function CreateNewOffer({
             return;
           }
         }
+        if (offerType === "quantity-breaks-different" && differentProductRules.length === 0) {
+          e.preventDefault();
+          Modal.error({
+            title: "Validation Error",
+            content: "Please configure at least one pack rule for quantity breaks with different products.",
+          });
+          setStep(2);
+          return;
+        }
 
         let hasError = false;
         if (!offerName.trim()) {
@@ -1622,6 +1861,15 @@ export function CreateNewOffer({
       />
       <input
         type="hidden"
+        name="enableMultiProductBundle"
+        value={enableMultiProductBundle ? "true" : "false"}
+      />
+      <input type="hidden" name="chooseButtonText" value={chooseButtonText} />
+      <input type="hidden" name="chooseButtonColor" value={chooseButtonColor} />
+      <input type="hidden" name="chooseButtonSize" value={chooseButtonSize} />
+      <input type="hidden" name="chooseImageSize" value={chooseImageSize} />
+      <input
+        type="hidden"
         name="cardBackgroundColor"
         value={cardBackgroundColor}
       />
@@ -1644,6 +1892,8 @@ export function CreateNewOffer({
             ? { buyProducts, getProducts }
             : offerType === "complete-bundle"
               ? buildCompleteBundleConfig({ bars: completeBundleBars })
+            : offerType === "quantity-breaks-different"
+              ? { productPool: selectedProductsData }
               : selectedProductsData,
         )}
       />
@@ -1664,6 +1914,8 @@ export function CreateNewOffer({
                     pricing: p.pricing ?? { mode: "full_price" as const, value: 0 },
                   })),
                 }))
+            : offerType === "quantity-breaks-different"
+              ? buildDifferentProductDiscountRulesJson(differentProductRules)
               : buildDiscountRulesJson(normalizedDiscountRules),
         )}
       />
@@ -1824,6 +2076,14 @@ export function CreateNewOffer({
                   buttonText={buttonText}
                   buttonPrimaryColor={buttonPrimaryColor}
                   showCustomButton={showCustomButton}
+                  multiProductSettings={{
+                    enabled: enableMultiProductBundle,
+                    chooseButtonText,
+                    chooseButtonColor,
+                    chooseButtonSize,
+                    chooseImageSize,
+                  }}
+                  onPreviewAction={handlePreviewMultiProductAction}
                   title={widgetTitle}
                   items={previewItems}
                   progressiveGifts={progressiveGifts}
@@ -2080,7 +2340,9 @@ export function CreateNewOffer({
                       ) : (
                         <div>
                           <div className="create-offer-selected-grid">
-                            {selectedProductsData.slice(0, 3).map((product) => (
+                            {selectedProductsData
+                              .slice(0, offerType === "quantity-breaks-different" ? 1 : 3)
+                              .map((product) => (
                               <div
                                 key={product.id}
                                 className="create-offer-selected-card"
@@ -2136,7 +2398,9 @@ export function CreateNewOffer({
                             }}
                             className="px-0"
                           >
-                            Edit products
+                            {offerType === "quantity-breaks-different"
+                              ? "Change product"
+                              : "Edit products"}
                           </Button>
                         </div>
                       )}
@@ -2145,10 +2409,17 @@ export function CreateNewOffer({
 
                   {offerType === "subscription" && renderSubscriptionSettings()}
 
-                  {/* complete-bundle 的定价与变体已并入各 Bundle bar 卡片，此处仅渲染 BXGY 或普通折扣阶梯 */}
-                  {offerType === "bxgy" ? (
-                    <div>
-                      <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">BXGY Rules</h3>
+                  <div>
+                    <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
+                      {offerType === "bxgy"
+                        ? "BXGY Rules"
+                        : offerType === "quantity-breaks-different"
+                          ? "Volume discount with other products"
+                          : "Discount Setting"}
+                    </h3>
+                    {/* complete-bundle 的定价与变体已并入各 Bundle bar 卡片，此处仅渲染 BXGY 或普通折扣阶梯 */}
+                    {offerType === "bxgy" ? (
+                      <>
                         {bxgyDiscountRules.map((rule, index) => (
                           <div className="create-offer-discount-card" key={index}>
                             <div className="create-offer-discount-body">
@@ -2375,7 +2646,217 @@ export function CreateNewOffer({
                         >
                           + Add BXGY tier
                         </Button>
-                    </div>
+                      </>
+                    ) : offerType === "quantity-breaks-different" ? (
+                      <>
+                        <div className="create-offer-discount-card">
+                          <div className="create-offer-discount-body">
+                            <div className="flex items-center justify-between">
+                              <div className="text-[14px] font-medium text-[#1c1f23]">
+                                Volume discount with other products
+                              </div>
+                              <Switch
+                                checked={enableMultiProductBundle}
+                                onChange={setEnableMultiProductBundle}
+                              />
+                            </div>
+                            {enableMultiProductBundle && (
+                              <div
+                                className="create-offer-discount-form-row"
+                                style={{
+                                  marginTop: "12px",
+                                  display: "grid",
+                                  gridTemplateColumns: "1fr 1fr",
+                                  gap: "12px",
+                                }}
+                              >
+                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                  Button text
+                                  <Input
+                                    size="large"
+                                    className="mt-1"
+                                    value={chooseButtonText}
+                                    onChange={(e) => setChooseButtonText(e.target.value)}
+                                  />
+                                </label>
+                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                  Color
+                                  <input
+                                    type="color"
+                                    value={chooseButtonColor}
+                                    onChange={(e) => setChooseButtonColor(e.target.value)}
+                                    className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1 cursor-pointer"
+                                  />
+                                </label>
+                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                  Button size
+                                  <Input
+                                    size="large"
+                                    type="number"
+                                    min={24}
+                                    max={44}
+                                    className="mt-1"
+                                    value={chooseButtonSize}
+                                    onChange={(e) =>
+                                      setChooseButtonSize(
+                                        Math.max(24, Math.min(44, Number(e.target.value) || 28)),
+                                      )
+                                    }
+                                  />
+                                </label>
+                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                  Image size
+                                  <Input
+                                    size="large"
+                                    type="number"
+                                    min={24}
+                                    max={64}
+                                    className="mt-1"
+                                    value={chooseImageSize}
+                                    onChange={(e) =>
+                                      setChooseImageSize(
+                                        Math.max(24, Math.min(64, Number(e.target.value) || 40)),
+                                      )
+                                    }
+                                  />
+                                </label>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        {differentProductRules.map((rule, index) => (
+                          <div className="create-offer-discount-card" key={`different-${index}`}>
+                            <div className="create-offer-discount-body">
+                              <div className="create-offer-discount-form-row create-offer-discount-form-row--inline">
+                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                  Pack quantity
+                                  <Input
+                                    size="large"
+                                    type="number"
+                                    min={1}
+                                    className="mt-1"
+                                    value={rule.count}
+                                    onChange={(e) => {
+                                      const nextCount = Math.max(1, Math.trunc(Number(e.target.value) || 1));
+                                      setDifferentProductRules((prev) =>
+                                        prev.map((r, i) => (i === index ? { ...r, count: nextCount } : r)),
+                                      );
+                                    }}
+                                  />
+                                </label>
+                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                  Price
+                                  <Select
+                                    size="large"
+                                    className="mt-1"
+                                    value={rule.priceMode || "percentage_off"}
+                                    onChange={(val) => {
+                                      setDifferentProductRules((prev) =>
+                                        prev.map((r, i) =>
+                                          i === index ? { ...r, priceMode: val as any } : r,
+                                        ),
+                                      );
+                                    }}
+                                    options={[
+                                      { label: "Full price", value: "full_price" },
+                                      { label: "Percentage off", value: "percentage_off" },
+                                      { label: "Amount off", value: "amount_off" },
+                                      { label: "Fixed price", value: "fixed_price" },
+                                    ]}
+                                  />
+                                </label>
+                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                  Discount per item
+                                  <Input
+                                    size="large"
+                                    type="number"
+                                    min={0}
+                                    step={0.01}
+                                    className="mt-1"
+                                    value={
+                                      Number.isFinite(Number(rule.discountValue))
+                                        ? Number(rule.discountValue)
+                                        : rule.discountPercent
+                                    }
+                                    onChange={(e) => {
+                                      const nextVal = Math.max(0, Number(e.target.value) || 0);
+                                      setDifferentProductRules((prev) =>
+                                        prev.map((r, i) =>
+                                          i === index
+                                            ? {
+                                                ...r,
+                                                discountValue: nextVal,
+                                                discountPercent:
+                                                  (r.priceMode || "percentage_off") === "percentage_off"
+                                                    ? Math.max(0, Math.min(100, nextVal))
+                                                    : r.discountPercent,
+                                              }
+                                            : r,
+                                        ),
+                                      );
+                                    }}
+                                  />
+                                </label>
+                              </div>
+                              <div className="create-offer-discount-form-row" style={{ marginTop: "12px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                  Title
+                                  <Input
+                                    size="large"
+                                    className="mt-1"
+                                    value={rule.title || ""}
+                                    onChange={(e) =>
+                                      setDifferentProductRules((prev) =>
+                                        prev.map((r, i) => (i === index ? { ...r, title: e.target.value } : r)),
+                                      )
+                                    }
+                                  />
+                                </label>
+                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                  Subtitle
+                                  <Input
+                                    size="large"
+                                    className="mt-1"
+                                    value={rule.subtitle || ""}
+                                    onChange={(e) =>
+                                      setDifferentProductRules((prev) =>
+                                        prev.map((r, i) => (i === index ? { ...r, subtitle: e.target.value } : r)),
+                                      )
+                                    }
+                                  />
+                                </label>
+                              </div>
+                              <div style={{ marginTop: "12px" }} className="text-[12px] text-[#5c6166]">
+                                Pack quantity includes the default product.
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        <Button
+                          type="dashed"
+                          className="w-full"
+                          onClick={() =>
+                            setDifferentProductRules((prev) => {
+                              const nextCount = (prev[prev.length - 1]?.count || 1) + 1;
+                              return [
+                                ...prev,
+                                {
+                                  count: nextCount,
+                                  discountPercent: 10,
+                                  priceMode: "percentage_off",
+                                  discountValue: 10,
+                                  title: `Bar #${prev.length + 1} - ${nextCount} pack`,
+                                  subtitle: "",
+                                  badge: "",
+                                  isDefault: false,
+                                },
+                              ];
+                            })
+                          }
+                        >
+                          + Add bar
+                        </Button>
+                      </>
                     ) : offerType === "complete-bundle" || offerType === "subscription" ? null : (
                     <div>
                       <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">Discount Setting</h3>
@@ -2536,6 +3017,7 @@ export function CreateNewOffer({
                         </Button>
                     </div>
                     )}
+                  </div>
                   <ProgressiveGiftsSection
                     offerType={offerType}
                     normalizedDiscountRules={normalizedDiscountRules}
@@ -2833,6 +3315,14 @@ export function CreateNewOffer({
                       buttonText={buttonText}
                       buttonPrimaryColor={buttonPrimaryColor}
                       showCustomButton={showCustomButton}
+                      multiProductSettings={{
+                        enabled: enableMultiProductBundle,
+                        chooseButtonText,
+                        chooseButtonColor,
+                        chooseButtonSize,
+                        chooseImageSize,
+                      }}
+                      onPreviewAction={handlePreviewMultiProductAction}
                       title={widgetTitle}
                       items={previewItems}
                       progressiveGifts={progressiveGifts}
@@ -3190,6 +3680,14 @@ export function CreateNewOffer({
                   buttonText={buttonText}
                   buttonPrimaryColor={buttonPrimaryColor}
                   showCustomButton={showCustomButton}
+                  multiProductSettings={{
+                    enabled: enableMultiProductBundle,
+                    chooseButtonText,
+                    chooseButtonColor,
+                    chooseButtonSize,
+                    chooseImageSize,
+                  }}
+                  onPreviewAction={handlePreviewMultiProductAction}
                   title={widgetTitle}
                   items={previewItems}
                   progressiveGifts={progressiveGifts}
@@ -3549,6 +4047,17 @@ export function CreateNewOffer({
                 const hasEmptyBar = completeBundleBars.some((bar) => bar.products.length === 0);
                 if (hasEmptyBar) {
                   message.error("Please select products for every bundle bar.");
+                  e.preventDefault();
+                  return;
+                }
+              } else if (offerType === "quantity-breaks-different") {
+                if (selectedProductsData.length === 0) {
+                  message.error("Please select products for the product pool.");
+                  e.preventDefault();
+                  return;
+                }
+                if (differentProductRules.length === 0) {
+                  message.error("Please configure at least one bar.");
                   e.preventDefault();
                   return;
                 }

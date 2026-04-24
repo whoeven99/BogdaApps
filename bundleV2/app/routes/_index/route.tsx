@@ -1419,6 +1419,29 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
     const subscriptionDefaultSelected =
       subscriptionDefaultSelectedRaw === "true";
+    const enableMultiProductBundle =
+      String(formData.get("enableMultiProductBundle") || "") === "true";
+    const chooseButtonText = sanitizeSingleLineText(
+      formData.get("chooseButtonText"),
+      OFFER_TEXT_LIMITS.buttonText,
+      "Choose",
+    );
+    const chooseButtonColor = sanitizeHexColorParam(
+      String(formData.get("chooseButtonColor") || ""),
+      "#111111",
+    );
+    const chooseButtonSize = clampNumber(
+      formData.get("chooseButtonSize"),
+      24,
+      44,
+      28,
+    );
+    const chooseImageSize = clampNumber(
+      formData.get("chooseImageSize"),
+      24,
+      64,
+      40,
+    );
 
     const title = sanitizeSingleLineText(
       formData.get("title"),
@@ -1501,6 +1524,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       oneTimeTitle,
       oneTimeSubtitle,
       subscriptionDefaultSelected,
+      enableMultiProductBundle,
+      chooseButtonText,
+      chooseButtonColor,
+      chooseButtonSize,
+      chooseImageSize,
       scheduleTimezone: scheduleTimezoneRaw || undefined,
       progressiveGifts: progressiveGiftsConfigToStorableJson(progressiveGiftsSanitized),
     });
