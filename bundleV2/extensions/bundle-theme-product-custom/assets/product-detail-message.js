@@ -705,7 +705,119 @@ function getCurrentOffer(offersConfig) {
   return null;
 }
 
-window.__ciwiBundleState = window.__ciwiBundleState || { selectedCount: null };
+window.__ciwiBundleState = window.__ciwiBundleState || {
+  selectedCount: null,
+  // 不同产品组合的已选附加商品，按 ruleCount 存储
+  differentSelections: {},
+};
+
+function getDifferentSelectionKey(count) {
+  return String(Math.max(1, Number(count) || 1));
+}
+
+function getDifferentSelectionsForCount(count) {
+  const key = getDifferentSelectionKey(count);
+  const raw = window.__ciwiBundleState?.differentSelections?.[key];
+  return Array.isArray(raw) ? raw : [];
+}
+
+function setDifferentSelectionForCount(count, slotIndex, product) {
+  const key = getDifferentSelectionKey(count);
+  if (!window.__ciwiBundleState) return;
+  if (!window.__ciwiBundleState.differentSelections) {
+    window.__ciwiBundleState.differentSelections = {};
+  }
+  const current = Array.isArray(window.__ciwiBundleState.differentSelections[key])
+    ? [...window.__ciwiBundleState.differentSelections[key]]
+    : [];
+  current[Math.max(0, Number(slotIndex) || 0)] = product;
+  window.__ciwiBundleState.differentSelections[key] = current.filter(Boolean);
+}
+
+function ensureDifferentProductPickerModal() {
+  let modal = document.getElementById("ciwi-different-picker-modal");
+  if (modal) return modal;
+  modal = document.createElement("div");
+  modal.id = "ciwi-different-picker-modal";
+  modal.style.cssText =
+    "position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;display:none;align-items:center;justify-content:center;padding:16px;";
+  modal.innerHTML = `
+    <div style="width:min(560px,100%);max-height:80vh;overflow:auto;background:#fff;border-radius:10px;padding:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <strong style="font-size:16px;">Choose product</strong>
+        <button type="button" data-ciwi-close="1" style="border:none;background:#f3f4f6;border-radius:6px;padding:4px 10px;cursor:pointer;">✕</button>
+      </div>
+      <div id="ciwi-different-picker-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+    </div>
+  `;
+  modal.addEventListener("click", (e) => {
+    const target = e.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (target === modal || target.getAttribute("data-ciwi-close") === "1") {
+      modal.style.display = "none";
+    }
+  });
+  document.body.appendChild(modal);
+  return modal;
+}
+
+function openDifferentProductPicker({ offer, ruleCount, slotIndex }) {
+  const productPool = parseProductPool(offer?.selectedProductsJson);
+  if (!productPool.length) return;
+  const modal = ensureDifferentProductPickerModal();
+  const list = modal.querySelector("#ciwi-different-picker-list");
+  if (!list) return;
+  list.innerHTML = productPool
+    .map(
+      (p) => `
+      <button type="button" data-ciwi-pick-id="${esc(String(p.id))}" style="display:flex;align-items:center;gap:10px;text-align:left;border:1px solid #e5e7eb;border-radius:8px;padding:8px;background:#fff;cursor:pointer;">
+        ${
+          p.image
+            ? `<img src="${esc(p.image)}" alt="${esc(p.title)}" style="width:40px;height:40px;border-radius:6px;object-fit:cover;" />`
+            : `<div style="width:40px;height:40px;background:#f3f4f6;border-radius:6px;"></div>`
+        }
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(
+            p.title || "Product",
+          )}</div>
+          <div style="font-size:12px;color:#6b7280;">${esc(p.price || "")}</div>
+        </div>
+      </button>
+    `,
+    )
+    .join("");
+
+  list.querySelectorAll("[data-ciwi-pick-id]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.getAttribute("data-ciwi-pick-id");
+      const picked = productPool.find((p) => String(p.id) === String(id));
+      if (!picked) return;
+      setDifferentSelectionForCount(ruleCount, slotIndex, picked);
+      modal.style.display = "none";
+      const wrap = document.querySelector(".ciwi-bundle-wrapper");
+      if (wrap) {
+        const html = renderBundlePreviewHtml(offer);
+        if (html) wrap.innerHTML = html;
+      }
+    });
+  });
+
+  modal.style.display = "flex";
+}
+
+window.ciwiOpenDifferentPicker = function(event, ruleCount, slotIndex) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  const currentOffer = getCurrentOffer(offersConfigCache);
+  if (!currentOffer || currentOffer.offerType !== "quantity-breaks-different") return;
+  openDifferentProductPicker({
+    offer: currentOffer,
+    ruleCount,
+    slotIndex,
+  });
+};
 
 function updateThemeQuantityInput(count) {
   const form = getAddToCartForm();
@@ -867,18 +979,74 @@ function renderBundlePreviewHtml(offer) {
           : `border-color: ${esc(borderColor)} !important; background: ${esc(cardBackgroundColor)} !important; cursor: pointer;`;
 
         const primary = productPool[0] || null;
-        const { original, discounted } = calcDifferentPrice(rule);
+        const selectedExtras = getDifferentSelectionsForCount(rule.count).slice(
+          0,
+          Math.max(0, rule.count - 1),
+        );
+        const { original, discounted } = (() => {
+          const base = Number(primary?.price || unitPrice) || unitPrice;
+          const extrasTotal = selectedExtras.reduce(
+            (sum, p) => sum + (Number(p?.price || 0) || 0),
+            0,
+          );
+          const mode = rule.priceMode || "percentage_off";
+          const value = Number.isFinite(Number(rule.discountValue))
+            ? Number(rule.discountValue)
+            : Number(rule.discountPercent || 0);
+          // 主商品 + 已选附加商品求原价
+          const originalMix = base + extrasTotal;
+          const effectiveCount = Math.max(1, 1 + selectedExtras.length);
+          let discountedMix = originalMix;
+          if (mode === "percentage_off") {
+            discountedMix =
+              originalMix * (1 - Math.max(0, Math.min(100, value)) / 100);
+          } else if (mode === "amount_off") {
+            discountedMix = Math.max(0, originalMix - Math.max(0, value) * effectiveCount);
+          } else if (mode === "fixed_price") {
+            discountedMix = Math.max(0, value) * effectiveCount;
+          }
+          return { original: originalMix, discounted: discountedMix };
+        })();
         const showStrike = discounted < original;
         const chooseEnabled = offerSettings.enableMultiProductBundle === true && rule.count > 1;
-        const chooseCount = Math.max(0, rule.count - 1);
+        const chooseCount = Math.max(
+          0,
+          Math.max(0, rule.count - 1) - selectedExtras.length,
+        );
         const chooseRowHtml = chooseEnabled
           ? `<div style="display:flex;align-items:center;gap:6px;margin-top:8px;">
               ${Array.from({ length: chooseCount })
-                .map(() => `<button type="button" style="width:24px;height:24px;border-radius:4px;border:1px solid #111;background:#fff;color:#111;font-weight:700;">+</button>`)
+                .map(
+                  (_, idx) =>
+                    `<button type="button" onclick="window.ciwiOpenDifferentPicker(event, ${rule.count}, ${
+                      selectedExtras.length + idx
+                    })" style="width:24px;height:24px;border-radius:4px;border:1px solid #111;background:#fff;color:#111;font-weight:700;cursor:pointer;">+</button>`,
+                )
                 .join("")}
-              <button type="button" style="height:24px;padding:0 10px;border-radius:4px;border:1px solid #111;background:#111;color:#fff;font-size:11px;">${esc(offerSettings.chooseButtonText || "Choose")}</button>
+              ${
+                chooseCount > 0
+                  ? `<button type="button" onclick="window.ciwiOpenDifferentPicker(event, ${rule.count}, ${selectedExtras.length})" style="height:24px;padding:0 10px;border-radius:4px;border:1px solid #111;background:#111;color:#fff;font-size:11px;cursor:pointer;">${esc(offerSettings.chooseButtonText || "Choose")}</button>`
+                  : ""
+              }
             </div>`
           : "";
+        const extrasHtml = selectedExtras
+          .map(
+            (p) => `<div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+              ${
+                p?.image
+                  ? `<img src="${esc(p.image)}" alt="${esc(p.title || "Product")}" style="width:36px;height:36px;object-fit:cover;border-radius:4px;" />`
+                  : `<div style="width:36px;height:36px;border-radius:4px;background:#f4f6f8;"></div>`
+              }
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:12px;line-height:1.2;color:#1c1f23;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(
+                  p?.title || "Product",
+                )}</div>
+                <div style="font-size:11px;color:#6b7280;">${esc(p?.price || "")}</div>
+              </div>
+            </div>`,
+          )
+          .join("");
         const productRowHtml = primary
           ? `<div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
               ${primary.image ? `<img src="${esc(primary.image)}" alt="${esc(primary.title || "Product")}" style="width:36px;height:36px;object-fit:cover;border-radius:4px;" />` : `<div style="width:36px;height:36px;border-radius:4px;background:#f4f6f8;"></div>`}
@@ -896,6 +1064,7 @@ function renderBundlePreviewHtml(offer) {
           <div class="create-offer-style-preview-item-price">${esc(formatPrice(discounted))}</div>
           ${showStrike ? `<div class="create-offer-style-preview-item-original">${esc(formatPrice(original))}</div>` : ""}
           ${productRowHtml}
+          ${extrasHtml}
           ${chooseRowHtml}
         </div>`;
       })
