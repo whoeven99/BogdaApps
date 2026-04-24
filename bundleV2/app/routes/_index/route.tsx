@@ -774,6 +774,95 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const storeProducts = await fetchStoreProducts(admin);
     return Response.json({ storeProducts });
   }
+  if (intent === "get-product-subscription-status") {
+    const productId = String(formData.get("productId") || "").trim();
+    if (!productId) {
+      return Response.json(
+        { ok: false as const, error: "Missing product ID" },
+        { status: 400 },
+      );
+    }
+
+    try {
+      const response = await admin.graphql(
+        `#graphql
+          query GetProductSubscriptionStatus($id: ID!) {
+            product(id: $id) {
+              id
+              title
+              sellingPlanGroups(first: 10) {
+                edges {
+                  node {
+                    id
+                    name
+                  }
+                }
+              }
+              requiresSellingPlan
+            }
+          }
+        `,
+        {
+          variables: {
+            id: productId,
+          },
+        },
+      );
+      const json = (await response.json()) as {
+        data?: {
+          product?: {
+            id?: string;
+            title?: string;
+            requiresSellingPlan?: boolean;
+            sellingPlanGroups?: {
+              edges?: Array<{
+                node?: {
+                  id?: string;
+                  name?: string;
+                } | null;
+              }>;
+            };
+          } | null;
+        };
+        errors?: unknown;
+      };
+
+      if (json.errors) {
+        console.error("GraphQL errors fetching product subscription status:", json.errors);
+      }
+
+      const product = json.data?.product;
+      const sellingPlanGroups =
+        product?.sellingPlanGroups?.edges
+          ?.map((edge) => edge?.node)
+          .filter(
+            (
+              node,
+            ): node is {
+              id?: string;
+              name?: string;
+            } => !!node,
+          ) ?? [];
+
+      return Response.json({
+        ok: true as const,
+        product: {
+          id: product?.id ?? productId,
+          title: product?.title ?? "",
+          requiresSellingPlan: product?.requiresSellingPlan === true,
+          sellingPlanGroups,
+          hasSubscription:
+            product?.requiresSellingPlan === true || sellingPlanGroups.length > 0,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to fetch product subscription status", error);
+      return Response.json(
+        { ok: false as const, error: "Failed to fetch product subscription status" },
+        { status: 500 },
+      );
+    }
+  }
   if (intent === "load-offers") {
     const offers = await fetchShopOffers(session.shop);
     return Response.json({ offers });

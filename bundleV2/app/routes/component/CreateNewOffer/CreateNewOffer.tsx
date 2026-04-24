@@ -185,6 +185,17 @@ export function CreateNewOffer({
   ianaTimezone = "UTC",
 }: CreateNewOfferProps) {
   const fetcher = useFetcher();
+  const subscriptionStatusFetcher = useFetcher<{
+    ok: boolean;
+    error?: string;
+    product?: {
+      id: string;
+      title: string;
+      requiresSellingPlan: boolean;
+      sellingPlanGroups: Array<{ id?: string; name?: string }>;
+      hasSubscription: boolean;
+    };
+  }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [submitErrorToast, setSubmitErrorToast] = useState<string | null>(null);
@@ -392,11 +403,13 @@ export function CreateNewOffer({
     });
   });
 
-  const handleSelectProducts = async (type: "buy" | "get" | "normal" = "normal") => {
+  const handleSelectProducts = async (
+    type: "buy" | "get" | "normal" = "normal",
+  ) => {
     const selected = await (window as any).shopify.resourcePicker({
       type: "product",
       action: "select",
-      multiple: true,
+      multiple: type === "normal" && offerType === "subscription" ? false : true,
       selectionIds: type === "buy" 
         ? buyProducts.map((id) => ({ id }))
         : type === "get"
@@ -405,7 +418,8 @@ export function CreateNewOffer({
     });
 
     if (selected) {
-      const newData = selected.map((item: any) => ({
+      const selectedList = Array.isArray(selected) ? selected : [selected];
+      const newData = selectedList.map((item: any) => ({
         id: item.id,
         title: item.title,
         image: item.images?.[0]?.originalSrc || "https://via.placeholder.com/60",
@@ -425,7 +439,20 @@ export function CreateNewOffer({
       } else if (type === "get") {
         setGetProducts(newData.map((item: any) => item.id));
       } else {
-        setSelectedProductsData(newData);
+        const nextProducts =
+          offerType === "subscription" ? newData.slice(0, 1) : newData;
+        setSelectedProductsData(nextProducts);
+
+        // 中文注释：订阅型 offer 选完商品后，使用用户指定的 GraphQL 单独校验该商品是否有 selling plan
+        if (offerType === "subscription" && nextProducts[0]?.id) {
+          subscriptionStatusFetcher.submit(
+            {
+              intent: "get-product-subscription-status",
+              productId: String(nextProducts[0].id),
+            },
+            { method: "post" },
+          );
+        }
       }
     }
   };
@@ -470,6 +497,24 @@ export function CreateNewOffer({
   const [status, setStatus] = useState<boolean>(
     initialOffer ? initialOffer.status : true
   );
+
+  useEffect(() => {
+    if (subscriptionStatusFetcher.state !== "idle") return;
+    if (!subscriptionStatusFetcher.data?.ok) return;
+    const result = subscriptionStatusFetcher.data.product;
+    if (!result?.id) return;
+
+    setSelectedProductsData((prev) =>
+      prev.map((item) =>
+        String(item.id) === String(result.id)
+          ? {
+              ...item,
+              hasSubscription: result.hasSubscription,
+            }
+          : item,
+      ),
+    );
+  }, [subscriptionStatusFetcher.state, subscriptionStatusFetcher.data]);
 
   const normalizedDiscountRules = sanitizeDiscountRules(discountRules);
   const featuredRule = normalizedDiscountRules[0];
