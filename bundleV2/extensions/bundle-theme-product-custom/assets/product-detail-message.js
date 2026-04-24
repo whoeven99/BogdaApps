@@ -798,6 +798,18 @@ async function addDifferentBundleToCart(offer) {
   }
 }
 
+function notifyThemeCartUpdated() {
+  // 尝试通知不同主题刷新购物车抽屉/角标
+  try {
+    document.dispatchEvent(new CustomEvent("cart:refresh", { bubbles: true }));
+    document.dispatchEvent(new CustomEvent("cart:updated", { bubbles: true }));
+    window.dispatchEvent(new Event("cart:refresh"));
+    window.dispatchEvent(new Event("cart:updated"));
+  } catch (e) {
+    // ignore notify error
+  }
+}
+
 function ensureDifferentProductPickerModal() {
   let modal = document.getElementById("ciwi-different-picker-modal");
   if (modal) return modal;
@@ -1034,7 +1046,7 @@ window.ciwiHandleBundleAddToCart = async function(event) {
   ) {
     const ok = await addDifferentBundleToCart(currentOffer);
     if (ok) {
-      window.location.href = "/cart";
+      notifyThemeCartUpdated();
       return;
     }
   }
@@ -1063,6 +1075,33 @@ window.ciwiHandleBundleAddToCart = async function(event) {
     console.error("[ciwi] Add to cart form not found");
   }
 };
+
+let ciwiDifferentFormBound = false;
+function bindThemeNativeAddToCart(offer) {
+  if (!offer || offer.offerType !== "quantity-breaks-different") return;
+  if (ciwiDifferentFormBound) return;
+  const form = getAddToCartForm();
+  if (!form) return;
+  ciwiDifferentFormBound = true;
+
+  // 让主题原生「添加到购物车」按钮与 Bundle Add to Cart 逻辑一致
+  form.addEventListener(
+    "submit",
+    async (event) => {
+      const currentOffer = getCurrentOffer(offersConfigCache);
+      if (!currentOffer || currentOffer.offerType !== "quantity-breaks-different") {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      const ok = await addDifferentBundleToCart(currentOffer);
+      if (ok) {
+        notifyThemeCartUpdated();
+      }
+    },
+    true,
+  );
+}
 
 function renderBundlePreviewHtml(offer) {
   if (offer.offerType === "quantity-breaks-different") {
@@ -1693,6 +1732,7 @@ function run() {
       return;
     }
     syncCurrentBundleToSessionStorage(currentOffer);
+    bindThemeNativeAddToCart(currentOffer);
 
     // Set offer name to sessionStorage for tracking.    
     const offerName = currentOffer.name || `Bundle-${currentOffer.id}`;
