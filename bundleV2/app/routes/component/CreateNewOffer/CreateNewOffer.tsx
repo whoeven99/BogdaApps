@@ -570,21 +570,31 @@ export function CreateNewOffer({
         const mode = rule.priceMode || "percentage_off";
         const discountValue =
           Number.isFinite(Number(rule.discountValue)) ? Number(rule.discountValue) : rule.discountPercent;
-        const originalTotal = unit * qty;
-        let finalTotal = originalTotal;
-        if (mode === "percentage_off") {
-          finalTotal = originalTotal * (1 - Math.max(0, Math.min(100, discountValue)) / 100);
-        } else if (mode === "amount_off") {
-          finalTotal = Math.max(0, originalTotal - Math.max(0, discountValue) * qty);
-        } else if (mode === "fixed_price") {
-          finalTotal = Math.max(0, discountValue) * qty;
-        }
 
         const rowKey = `different-tier-${rule.count}`;
         const selectedProducts = (differentPreviewSelections[rowKey] || []).slice(
           0,
           Math.max(0, qty - 1),
         );
+        const selectedExtrasTotal = selectedProducts.reduce(
+          (sum, p) => sum + parsePriceNumber(p.price || "0"),
+          0,
+        );
+        const effectiveItemsCount = Math.max(1, 1 + selectedProducts.length);
+        // 不同产品包按「主产品 + 已选附加产品」计算原价，避免仍按主产品单价 * 数量导致价格偏高
+        const originalTotal = unit + selectedExtrasTotal;
+        let finalTotal = originalTotal;
+        if (mode === "percentage_off") {
+          finalTotal =
+            originalTotal * (1 - Math.max(0, Math.min(100, discountValue)) / 100);
+        } else if (mode === "amount_off") {
+          finalTotal = Math.max(
+            0,
+            originalTotal - Math.max(0, discountValue) * effectiveItemsCount,
+          );
+        } else if (mode === "fixed_price") {
+          finalTotal = Math.max(0, discountValue) * effectiveItemsCount;
+        }
         return {
           id: `different-tier-${rule.count}`,
           title: rule.title || `${rule.count} pack`,
