@@ -84,6 +84,13 @@ export type OfferSettings = {
   buttonText: string;
   buttonPrimaryColor: string;
   showCustomButton: boolean;
+  subscriptionEnabled: boolean;
+  subscriptionPosition: "below-bundle-bars";
+  subscriptionTitle: string;
+  subscriptionSubtitle: string;
+  oneTimeTitle: string;
+  oneTimeSubtitle: string;
+  subscriptionDefaultSelected: boolean;
   scheduleTimezone?: string;
 };
 
@@ -107,6 +114,13 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
       buttonText: "Add to Cart",
       buttonPrimaryColor: "#008060",
       showCustomButton: true,
+      subscriptionEnabled: false,
+      subscriptionPosition: "below-bundle-bars",
+      subscriptionTitle: "Subscribe & Save 20%",
+      subscriptionSubtitle: "Delivered weekly",
+      oneTimeTitle: "One-time purchase",
+      oneTimeSubtitle: "",
+      subscriptionDefaultSelected: true,
       scheduleTimezone: undefined,
     };
   }
@@ -150,6 +164,13 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
       buttonText: parsed.buttonText || "Add to Cart",
       buttonPrimaryColor: sanitizeHexColor(parsed.buttonPrimaryColor, "#008060"),
       showCustomButton: parsed.showCustomButton !== false,
+      subscriptionEnabled: parsed.subscriptionEnabled === true,
+      subscriptionPosition: "below-bundle-bars",
+      subscriptionTitle: parsed.subscriptionTitle || "Subscribe & Save 20%",
+      subscriptionSubtitle: parsed.subscriptionSubtitle || "Delivered weekly",
+      oneTimeTitle: parsed.oneTimeTitle || "One-time purchase",
+      oneTimeSubtitle: parsed.oneTimeSubtitle || "",
+      subscriptionDefaultSelected: parsed.subscriptionDefaultSelected !== false,
       scheduleTimezone: parsed.scheduleTimezone,
     };
   } catch {
@@ -160,6 +181,21 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
 export type DiscountRule = {
   count: number;
   discountPercent: number;
+  title?: string;
+  subtitle?: string;
+  badge?: string;
+  isDefault?: boolean;
+};
+
+export type BxgyDiscountRule = {
+  buyQuantity: number;
+  getQuantity: number;
+  buyProductIds: string[];
+  getProductIds: string[];
+  discountPercent: number;
+  maxUsesPerOrder: number;
+  /** Count threshold: promotion triggers when cart has this many items in buyProductIds */
+  count: number;
   title?: string;
   subtitle?: string;
   badge?: string;
@@ -223,4 +259,83 @@ export function parseSelectedProductIds(selectedProductsJson?: string | null): s
   } catch {
     return [];
   }
+}
+
+export function parseBxgyDiscountRules(discountRulesJson?: string | null): BxgyDiscountRule[] {
+  if (!discountRulesJson) return [];
+
+  try {
+    const parsed = JSON.parse(discountRulesJson) as unknown;
+    if (!Array.isArray(parsed)) return [];
+
+    const out: BxgyDiscountRule[] = [];
+    for (const item of parsed) {
+      if (!item || typeof item !== "object") continue;
+      
+      const buyQuantity = Number((item as { buyQuantity?: unknown }).buyQuantity);
+      const getQuantity = Number((item as { getQuantity?: unknown }).getQuantity);
+      const discountPercent = Number((item as { discountPercent?: unknown }).discountPercent);
+      const maxUsesPerOrder = Number((item as { maxUsesPerOrder?: unknown }).maxUsesPerOrder) || 1;
+      
+      const buyProductIds = (item as { buyProductIds?: unknown }).buyProductIds;
+      const getProductIds = (item as { getProductIds?: unknown }).getProductIds;
+      
+      const count = Number((item as { count?: unknown }).count);
+      if (!Number.isFinite(count) || count < 1) continue;
+      if (!Number.isFinite(buyQuantity) || buyQuantity < 1) continue;
+      if (!Number.isFinite(getQuantity) || getQuantity < 1) continue;
+      if (!Number.isFinite(discountPercent)) continue;
+      if (!Array.isArray(buyProductIds) || !buyProductIds.length) continue;
+      if (!Array.isArray(getProductIds) || !getProductIds.length) continue;
+      
+      out.push({
+        count: Math.trunc(count),
+        buyQuantity: Math.trunc(buyQuantity),
+        getQuantity: Math.trunc(getQuantity),
+        buyProductIds: buyProductIds.filter(id => typeof id === "string") as string[],
+        getProductIds: getProductIds.filter(id => typeof id === "string") as string[],
+        discountPercent: Math.max(0, Math.min(100, discountPercent)),
+        maxUsesPerOrder: Math.max(1, Math.trunc(maxUsesPerOrder)),
+        title: (item as { title?: string }).title || "",
+        subtitle: (item as { subtitle?: string }).subtitle || "",
+        badge: (item as { badge?: string }).badge || "",
+        isDefault: !!(item as { isDefault?: boolean }).isDefault,
+      });
+    }
+    
+    // 按 count 排序，优先匹配数量多的规则
+    out.sort((a, b) => a.count - b.count);
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+/** Build BXGY discount rules JSON for DB storage — deduplicates by count, sorts ascending. */
+export function buildBxgyDiscountRulesJson(tiers: BxgyDiscountRule[]): BxgyDiscountRule[] {
+  const dedupedByCount = new Map<number, BxgyDiscountRule>();
+  for (const tier of tiers) {
+    if (!Number.isFinite(tier.count) || tier.count < 1) continue;
+    if (!Number.isFinite(tier.buyQuantity) || tier.buyQuantity < 1) continue;
+    if (!Number.isFinite(tier.getQuantity) || tier.getQuantity < 1) continue;
+    if (!Number.isFinite(tier.discountPercent)) continue;
+    dedupedByCount.set(Math.trunc(tier.count), {
+      count: Math.trunc(tier.count),
+      buyQuantity: Math.trunc(tier.buyQuantity),
+      getQuantity: Math.trunc(tier.getQuantity),
+      discountPercent: Math.max(0, Math.min(100, tier.discountPercent)),
+      maxUsesPerOrder: Math.max(1, Math.trunc(tier.maxUsesPerOrder || 1)),
+      buyProductIds: Array.isArray(tier.buyProductIds)
+        ? tier.buyProductIds.filter(id => typeof id === "string")
+        : [],
+      getProductIds: Array.isArray(tier.getProductIds)
+        ? tier.getProductIds.filter(id => typeof id === "string")
+        : [],
+      title: tier.title || "",
+      subtitle: tier.subtitle || "",
+      badge: tier.badge || "",
+      isDefault: !!tier.isDefault,
+    });
+  }
+  return Array.from(dedupedByCount.values()).sort((a, b) => a.count - b.count);
 }

@@ -14,6 +14,13 @@ type Props = {
   showCustomButton?: boolean;
   title?: string;
   items?: PreviewItem[];
+  showSubscriptionPreview?: boolean;
+  subscriptionPreviewStyle?: "solid" | "dashed";
+  subscriptionTitle?: string;
+  subscriptionSubtitle?: string;
+  showSubscriptionExplanation?: boolean;
+  subscriptionExplanationTitle?: string;
+  subscriptionExplanationBody?: string;
 };
 
 export default function BundlePreview({
@@ -30,6 +37,13 @@ export default function BundlePreview({
   showCustomButton,
   title = "Bundle & Save",
   items,
+  showSubscriptionPreview,
+  subscriptionPreviewStyle,
+  subscriptionTitle,
+  subscriptionSubtitle,
+  showSubscriptionExplanation,
+  subscriptionExplanationTitle,
+  subscriptionExplanationBody,
 }: Props) {
   const html = renderBundlePreviewHtml({
     title,
@@ -45,6 +59,13 @@ export default function BundlePreview({
     buttonPrimaryColor,
     showCustomButton,
     items,
+    showSubscriptionPreview,
+    subscriptionPreviewStyle,
+    subscriptionTitle,
+    subscriptionSubtitle,
+    showSubscriptionExplanation,
+    subscriptionExplanationTitle,
+    subscriptionExplanationBody,
   });
 
   return <div dangerouslySetInnerHTML={{ __html: html }} />;

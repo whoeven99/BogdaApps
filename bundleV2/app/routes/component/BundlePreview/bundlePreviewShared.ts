@@ -50,6 +50,13 @@ export function renderBundlePreviewHtml({
   buttonPrimaryColor = "#008060",
   showCustomButton = true,
   items = PREVIEW_ITEMS,
+  showSubscriptionPreview = false,
+  subscriptionPreviewStyle = "dashed",
+  subscriptionTitle = "Subscribe & Save 20%",
+  subscriptionSubtitle = "Delivered weekly",
+  showSubscriptionExplanation = false,
+  subscriptionExplanationTitle = "Some products aren't eligible for subscriptions",
+  subscriptionExplanationBody = "Subscription bar will only be shown in products that are eligible for subscription. You can select those products in your subscription app.",
 }: {
   title?: string;
   layoutFormat?: LayoutFormat;
@@ -64,6 +71,13 @@ export function renderBundlePreviewHtml({
   buttonPrimaryColor?: string;
   showCustomButton?: boolean;
   items?: PreviewItem[];
+  showSubscriptionPreview?: boolean;
+  subscriptionPreviewStyle?: "solid" | "dashed";
+  subscriptionTitle?: string;
+  subscriptionSubtitle?: string;
+  showSubscriptionExplanation?: boolean;
+  subscriptionExplanationTitle?: string;
+  subscriptionExplanationBody?: string;
 } = {}) {
   const safeLayout: LayoutFormat = ["vertical", "horizontal", "card", "compact"].includes(layoutFormat)
     ? layoutFormat
@@ -97,11 +111,73 @@ export function renderBundlePreviewHtml({
     </div>`;
   }).join("");
 
+  const subscriptionHtml = showSubscriptionPreview
+    ? `
+      <div style="margin-top: 12px;">
+        <div
+          style="
+            border: 1px ${subscriptionPreviewStyle === "dashed" ? "dashed" : "solid"} #b7b7b7;
+            border-radius: 12px;
+            padding: 14px 16px;
+            background: #ffffff;
+            display: grid;
+            grid-template-columns: 20px 1fr;
+            align-items: start;
+            column-gap: 12px;
+          "
+        >
+          <span
+            style="
+              width: 18px;
+              height: 18px;
+              border: 2px solid #b7b7b7;
+              border-radius: 2px;
+              display: inline-block;
+              margin-top: 2px;
+              background: #ffffff;
+            "
+          ></span>
+          <span>
+            <span style="display:block; font-size:14px; font-weight:600; color:#1c1f23;">
+              ${esc(subscriptionTitle)}
+            </span>
+            <span style="display:block; font-size:12px; color:#8c9196; margin-top:2px;">
+              ${esc(subscriptionSubtitle)}
+            </span>
+          </span>
+        </div>
+        ${
+          showSubscriptionExplanation
+            ? `
+              <div
+                style="
+                  margin-top: 12px;
+                  background: #eaf4ff;
+                  border-radius: 10px;
+                  padding: 12px 14px;
+                  color: #1c1f23;
+                "
+              >
+                <div style="font-size: 13px; font-weight: 600;">
+                  ${esc(subscriptionExplanationTitle)}
+                </div>
+                <div style="font-size: 12px; line-height: 1.5; color: #4f5b67; margin-top: 4px;">
+                  ${esc(subscriptionExplanationBody)}
+                </div>
+              </div>
+            `
+            : ""
+        }
+      </div>
+    `
+    : "";
+
   return `<div class="create-offer-preview-card">
     <div class="create-offer-style-preview-header" style="color:${esc(titleColor)} !important; font-size: ${esc(titleFontSize)}px !important; font-weight: ${esc(titleFontWeight)} !important;">${esc(title)}</div>
     <div class="create-offer-style-preview-list create-offer-style-preview-list--${safeLayout}">
       ${itemsHtml}
     </div>
+    ${subscriptionHtml}
     ${showCustomButton ? `<button class="create-offer-preview-button" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)} !important; color: white !important; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
       ${esc(buttonText)}
     </button>` : ''}

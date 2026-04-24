@@ -13,6 +13,23 @@
         {{ item.id }}{% unless forloop.last %},{% endunless %}
       {% endfor %}
     ],
+    "hasSubscription": {% if product.selling_plan_groups and product.selling_plan_groups.size > 0 %}true{% else %}false{% endif %},
+    "sellingPlanGroups": [
+      {% for group in product.selling_plan_groups %}
+        {
+          "id": {{ group.id | json }},
+          "name": {{ group.name | json }},
+          "sellingPlans": [
+            {% for selling_plan in group.selling_plans %}
+              {
+                "id": {{ selling_plan.id | json }},
+                "name": {{ selling_plan.name | json }}
+              }{% unless forloop.last %},{% endunless %}
+            {% endfor %}
+          ]
+        }{% unless forloop.last %},{% endunless %}
+      {% endfor %}
+    ],
     "marketId": {{ localization.market.id | json }},
     "variants": [
       {% for item in product.variants %}
