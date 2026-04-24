@@ -430,32 +430,23 @@ function parseDifferentProductRulesJson(discountRulesJson) {
         if (!item || typeof item !== "object") return null;
         const count = Number(item.count);
         const discountPercent = Number(item.discountPercent);
-        const packItems = Array.isArray(item.packItems) ? item.packItems : [];
+        const discountValue = Number(item.discountValue);
+        const priceMode = String(item.priceMode || "percentage_off");
         if (!Number.isFinite(count) || count < 1) return null;
         if (!Number.isFinite(discountPercent)) return null;
-        if (!packItems.length) return null;
         return {
           count: Math.trunc(count),
           discountPercent: Math.max(0, Math.min(100, discountPercent)),
+          priceMode: ["full_price", "percentage_off", "amount_off", "fixed_price"].includes(priceMode)
+            ? priceMode
+            : "percentage_off",
+          discountValue: Number.isFinite(discountValue)
+            ? discountValue
+            : Math.max(0, Math.min(100, discountPercent)),
           title: item.title || "",
           subtitle: item.subtitle || "",
           badge: item.badge || "",
           isDefault: !!item.isDefault,
-          packItems: packItems
-            .map((slot, idx) => ({
-              slotId: String(slot?.slotId || `slot-${idx + 1}`),
-              defaultProductId:
-                typeof slot?.defaultProductId === "string" &&
-                slot.defaultProductId.trim()
-                  ? slot.defaultProductId.trim()
-                  : null,
-              allowChooseOther: slot?.allowChooseOther === true,
-              quantity:
-                Number.isFinite(Number(slot?.quantity)) && Number(slot.quantity) > 0
-                  ? Math.trunc(Number(slot.quantity))
-                  : 1,
-            }))
-            .filter(Boolean),
         };
       })
       .filter(Boolean)
@@ -846,6 +837,26 @@ function renderBundlePreviewHtml(offer) {
     const showCustomButton = offerSettings.showCustomButton !== false;
     const widgetTitle = offerSettings.title || "Bundle & Save";
     const hasDefault = rules.some((r) => r.isDefault);
+    const unitPrice = getCurrentUnitPrice();
+
+    function calcDifferentPrice(rule) {
+      const count = Math.max(1, Number(rule.count) || 1);
+      const mode = rule.priceMode || "percentage_off";
+      const value = Number.isFinite(Number(rule.discountValue))
+        ? Number(rule.discountValue)
+        : Number(rule.discountPercent || 0);
+      // 主题端暂无附加商品明细缓存，先按当前主商品单价估算，保证前台可渲染
+      const original = unitPrice * count;
+      let discounted = original;
+      if (mode === "percentage_off") {
+        discounted = original * (1 - Math.max(0, Math.min(100, value)) / 100);
+      } else if (mode === "amount_off") {
+        discounted = Math.max(0, original - Math.max(0, value) * count);
+      } else if (mode === "fixed_price") {
+        discounted = Math.max(0, value) * count;
+      }
+      return { original, discounted };
+    }
 
     const itemsHtml = rules
       .map((rule, index) => {
@@ -855,26 +866,37 @@ function renderBundlePreviewHtml(offer) {
           ? `border-color: ${esc(accentColor)} !important; background: ${esc(cardBackgroundColor)} !important; box-shadow: 0 8px 18px ${esc(accentColor)}25 !important; cursor: pointer;`
           : `border-color: ${esc(borderColor)} !important; background: ${esc(cardBackgroundColor)} !important; cursor: pointer;`;
 
-        const packRowsHtml = rule.packItems
-          .map((slot) => {
-            const p = slot.defaultProductId ? poolMap.get(String(slot.defaultProductId)) : null;
-            return `<div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
-              ${p?.image ? `<img src="${esc(p.image)}" alt="${esc(p.title || "Product")}" style="width:36px;height:36px;object-fit:cover;border-radius:4px;" />` : `<div style="width:36px;height:36px;border-radius:4px;background:#f4f6f8;"></div>`}
+        const primary = productPool[0] || null;
+        const { original, discounted } = calcDifferentPrice(rule);
+        const showStrike = discounted < original;
+        const chooseEnabled = offerSettings.enableMultiProductBundle === true && rule.count > 1;
+        const chooseCount = Math.max(0, rule.count - 1);
+        const chooseRowHtml = chooseEnabled
+          ? `<div style="display:flex;align-items:center;gap:6px;margin-top:8px;">
+              ${Array.from({ length: chooseCount })
+                .map(() => `<button type="button" style="width:24px;height:24px;border-radius:4px;border:1px solid #111;background:#fff;color:#111;font-weight:700;">+</button>`)
+                .join("")}
+              <button type="button" style="height:24px;padding:0 10px;border-radius:4px;border:1px solid #111;background:#111;color:#fff;font-size:11px;">${esc(offerSettings.chooseButtonText || "Choose")}</button>
+            </div>`
+          : "";
+        const productRowHtml = primary
+          ? `<div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+              ${primary.image ? `<img src="${esc(primary.image)}" alt="${esc(primary.title || "Product")}" style="width:36px;height:36px;object-fit:cover;border-radius:4px;" />` : `<div style="width:36px;height:36px;border-radius:4px;background:#f4f6f8;"></div>`}
               <div style="flex:1;min-width:0;">
-                <div style="font-size:12px;line-height:1.2;color:#1c1f23;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(p?.title || "Choose product")}</div>
-                <div style="font-size:11px;color:#6b7280;">Qty x${slot.quantity}</div>
+                <div style="font-size:12px;line-height:1.2;color:#1c1f23;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(primary.title || "Product")}</div>
+                <div style="font-size:11px;color:#6b7280;">${esc(primary.price || "")}</div>
               </div>
-              ${slot.allowChooseOther ? `<button type="button" style="border:1px solid #111;background:#111;color:#fff;border-radius:4px;padding:2px 8px;font-size:11px;">Choose</button>` : ""}
-            </div>`;
-          })
-          .join("");
+            </div>`
+          : "";
 
         return `<div class="create-offer-style-preview-item${isSelected ? " create-offer-style-preview-item--featured" : ""}" style="${featuredStyle}" onclick="window.ciwiSelectBundleOption(${rule.count})">
           ${rule.badge ? `<div class="create-offer-style-preview-badge" style="background:${esc(accentColor)} !important; color:${esc(labelColor)} !important;">${esc(rule.badge)}</div>` : ""}
           <div class="create-offer-style-preview-item-title">${esc(rule.title || `${rule.count} pack`)}</div>
           <div class="create-offer-style-preview-item-subtitle">${esc(rule.subtitle || `${rule.discountPercent}% OFF`)}</div>
-          <div class="create-offer-style-preview-item-price">${esc(rule.discountPercent > 0 ? `${rule.discountPercent}% OFF` : "Standard price")}</div>
-          ${packRowsHtml}
+          <div class="create-offer-style-preview-item-price">${esc(formatPrice(discounted))}</div>
+          ${showStrike ? `<div class="create-offer-style-preview-item-original">${esc(formatPrice(original))}</div>` : ""}
+          ${productRowHtml}
+          ${chooseRowHtml}
         </div>`;
       })
       .join("");
