@@ -231,11 +231,20 @@ function getCurrentProductSubscriptionData() {
 
 function getDefaultSellingPlanId() {
   const data = getCurrentProductSubscriptionData();
+  // 中文注释：遍历所有 selling_plan_groups，拿到第一个有效的 selling_plan.id
   for (const group of data.sellingPlanGroups) {
     const plans = Array.isArray(group?.sellingPlans) ? group.sellingPlans : [];
-    const firstPlan = plans.find((plan) => plan && plan.id);
-    if (firstPlan?.id) return String(firstPlan.id);
+    const firstPlan = plans.find(
+      (plan) => plan && (plan.id !== undefined && plan.id !== null && plan.id !== ""),
+    );
+    if (firstPlan?.id !== undefined && firstPlan?.id !== null) {
+      return String(firstPlan.id);
+    }
   }
+  console.warn(
+    "[ciwi][subscription] getDefaultSellingPlanId: no selling plan id found",
+    { sellingPlanGroups: data.sellingPlanGroups },
+  );
   return "";
 }
 
@@ -735,9 +744,20 @@ function updateThemeSellingPlanInput(sellingPlanId) {
 }
 
 function syncSubscriptionSelectionToTheme(offer) {
-  if (!offer || offer.offerType !== "subscription") return;
+  if (!offer || offer.offerType !== "subscription") {
+    console.log(
+      "[ciwi][subscription] syncSubscriptionSelectionToTheme skipped: offer is not subscription type",
+      { offerType: offer?.offerType },
+    );
+    return;
+  }
   const defaultSellingPlanId = getDefaultSellingPlanId();
   const mode = window.__ciwiBundleState?.subscriptionMode || "one-time";
+  console.log("[ciwi][subscription] syncSubscriptionSelectionToTheme", {
+    mode,
+    defaultSellingPlanId,
+    offerId: offer.offerId || offer.id,
+  });
   if (mode === "subscription" && defaultSellingPlanId) {
     window.__ciwiBundleState.selectedSellingPlanId = defaultSellingPlanId;
     updateThemeSellingPlanInput(defaultSellingPlanId);
@@ -768,19 +788,47 @@ window.ciwiSelectBundleOption = function(count) {
 };
 
 window.ciwiSelectSubscriptionMode = function(mode) {
-  if (!window.__ciwiBundleState) return;
-  window.__ciwiBundleState.subscriptionMode =
-    mode === "subscription" ? "subscription" : "one-time";
+  console.log("[ciwi][subscription] ciwiSelectSubscriptionMode called", { mode });
+  if (!window.__ciwiBundleState) {
+    console.warn("[ciwi][subscription] __ciwiBundleState is not initialized");
+    return;
+  }
+  const nextMode = mode === "subscription" ? "subscription" : "one-time";
+  const prevMode = window.__ciwiBundleState.subscriptionMode;
+  window.__ciwiBundleState.subscriptionMode = nextMode;
+  console.log("[ciwi][subscription] mode changed", { prevMode, nextMode });
+
+  // 中文注释：如果用户选择订阅，但商品没有可用的 selling plan，直接给用户反馈而不是静默回退
+  if (nextMode === "subscription") {
+    const defaultSellingPlanId = getDefaultSellingPlanId();
+    if (!defaultSellingPlanId) {
+      console.error(
+        "[ciwi][subscription] cannot switch to subscription mode: product has no selling plan",
+      );
+    }
+  }
+
   const currentOffer = getCurrentOffer(offersConfigCache);
   syncSubscriptionSelectionToTheme(currentOffer);
   const wrap = document.querySelector(".ciwi-bundle-wrapper");
-  if (wrap && currentOffer) {
-    const html = renderBundlePreviewHtml(currentOffer);
-    if (html) {
-      wrap.innerHTML = html;
-      bindBundleInteractions(wrap);
-      syncSubscriptionSelectionToTheme(currentOffer);
-    }
+  if (!wrap) {
+    console.warn("[ciwi][subscription] .ciwi-bundle-wrapper not found in DOM, cannot re-render");
+    return;
+  }
+  if (!currentOffer) {
+    console.warn(
+      "[ciwi][subscription] getCurrentOffer returned null, cannot re-render. Check offer rules/market/product GID.",
+    );
+    return;
+  }
+  const html = renderBundlePreviewHtml(currentOffer);
+  if (html) {
+    wrap.innerHTML = html;
+    bindBundleInteractions(wrap);
+    syncSubscriptionSelectionToTheme(currentOffer);
+    console.log("[ciwi][subscription] bundle UI re-rendered after mode change");
+  } else {
+    console.warn("[ciwi][subscription] renderBundlePreviewHtml returned empty, UI not updated");
   }
 };
 
@@ -806,15 +854,40 @@ function bindBundleInteractions(root) {
   const subscriptionOptions = Array.from(
     root.querySelectorAll("[data-ciwi-subscription-mode]"),
   );
+  console.log("[ciwi][subscription] bindBundleInteractions — subscription options count:", subscriptionOptions.length);
+
   subscriptionOptions.forEach((option) => {
     if (option.dataset.ciwiBound === "true") return;
     option.dataset.ciwiBound = "true";
-    option.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const mode = option.getAttribute("data-ciwi-subscription-mode");
-      window.ciwiSelectSubscriptionMode(mode);
-    });
+    const mode = option.getAttribute("data-ciwi-subscription-mode");
+
+    // 中文注释：label 的 click 负责主交互；为兼容主题事件拦截，用 capture 监听防止被中途 stopPropagation
+    option.addEventListener(
+      "click",
+      (event) => {
+        console.log("[ciwi][subscription] click on option", {
+          mode,
+          target: event.target?.tagName,
+        });
+        event.preventDefault();
+        event.stopPropagation();
+        window.ciwiSelectSubscriptionMode(mode);
+      },
+      { capture: false },
+    );
+
+    // 中文注释：radio input 的 change 事件作为兜底，防止某些主题拦截 label click
+    const radio = option.querySelector("input[type='radio']");
+    if (radio) {
+      radio.addEventListener("change", () => {
+        if (!radio.checked) return;
+        console.log("[ciwi][subscription] radio change fallback", { mode });
+        // 中文注释：ciwiSelectSubscriptionMode 幂等，重复调用安全
+        window.ciwiSelectSubscriptionMode(mode);
+      });
+    } else {
+      console.warn("[ciwi][subscription] no radio input found under option label", { mode });
+    }
   });
 }
 
@@ -1037,8 +1110,20 @@ function renderBundlePreviewHtml(offer) {
     .join("");
 
   let subscriptionHtml = "";
-  if (offer?.offerType === "subscription" && getCurrentProductHasSubscription()) {
+  const hasProductSubscription = getCurrentProductHasSubscription();
+  console.log("[ciwi][subscription] render pre-check", {
+    offerType: offer?.offerType,
+    hasProductSubscription,
+    subscriptionEnabled: offerSettings.subscriptionEnabled,
+  });
+  if (offer?.offerType === "subscription" && hasProductSubscription) {
     const subscriptionEnabled = offerSettings.subscriptionEnabled === true;
+    if (!subscriptionEnabled) {
+      console.warn(
+        "[ciwi][subscription] offer.subscriptionEnabled is false — subscription UI not rendered",
+        { offerId: offer.offerId || offer.id },
+      );
+    }
     if (subscriptionEnabled) {
       const defaultSellingPlanId = getDefaultSellingPlanId();
       const subscriptionTitle = offerSettings.subscriptionTitle || "Subscribe & Save 20%";
@@ -1055,13 +1140,27 @@ function renderBundlePreviewHtml(offer) {
       if (!window.__ciwiBundleState.subscriptionMode) {
         window.__ciwiBundleState.subscriptionMode = defaultMode;
       }
+      // 中文注释：这里曾经把 subscriptionMode 强制回退为 "one-time"（当 defaultSellingPlanId 为空时），
+      // 会导致「点击 Subscribe 时 UI 立刻弹回 One-time」的视觉错觉。
+      // 现改为只在渲染时读取状态，不再覆盖用户的显式选择，便于暴露真实的问题（selling_plan 未配置等）。
       if (
         window.__ciwiBundleState.subscriptionMode === "subscription" &&
         !defaultSellingPlanId
       ) {
-        window.__ciwiBundleState.subscriptionMode = "one-time";
+        console.warn(
+          "[ciwi][subscription] subscriptionMode is 'subscription' but no selling plan id — UI will still render, but add-to-cart will not carry selling_plan.",
+          {
+            sellingPlanGroups: getCurrentProductSubscriptionData().sellingPlanGroups,
+          },
+        );
       }
       const selectedMode = window.__ciwiBundleState.subscriptionMode;
+      console.log("[ciwi][subscription] render subscription block", {
+        selectedMode,
+        defaultSellingPlanId,
+        subscriptionTitle,
+        oneTimeTitle,
+      });
       setTimeout(() => {
         syncSubscriptionSelectionToTheme(offer);
       }, 0);
