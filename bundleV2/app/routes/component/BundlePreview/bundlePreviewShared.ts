@@ -13,6 +13,12 @@ export type PreviewItem = {
   variantTitle?: string;
   productPrice?: string;
   showChooseControl?: boolean;
+  chooseControlCount?: number;
+  selectedProducts?: Array<{
+    title: string;
+    image?: string;
+    price?: string;
+  }>;
 };
 
 export type MultiProductPreviewSettings = {
@@ -120,10 +126,32 @@ export function renderBundlePreviewHtml({
           : ""
       }
       ${
+        item.selectedProducts && item.selectedProducts.length
+          ? `<div style="margin-top:8px; display:flex; flex-direction:column; gap:6px;">
+              ${item.selectedProducts
+                .map(
+                  (sp) => `<div style="display:flex; align-items:center; gap:8px;">
+                    ${sp.image ? `<img src="${esc(sp.image)}" alt="${esc(sp.title)}" style="width:${esc(multiProductSettings?.chooseImageSize ?? 40)}px;height:${esc(multiProductSettings?.chooseImageSize ?? 40)}px;border-radius:4px;object-fit:cover;" />` : ""}
+                    <div style="font-size:12px;color:#5c6166;">
+                      <div>${esc(sp.title)}</div>
+                      ${sp.price ? `<div>${esc(sp.price)}</div>` : ""}
+                    </div>
+                  </div>`,
+                )
+                .join("")}
+            </div>`
+          : ""
+      }
+      ${
         multiProductSettings?.enabled && item.showChooseControl
-          ? `<div style="display:flex; align-items:center; gap:6px; margin-top:8px;">
-              <button type="button" data-preview-action="add" data-preview-item-id="${esc(item.id)}" style="width:${esc(multiProductSettings.chooseButtonSize)}px;height:${esc(multiProductSettings.chooseButtonSize)}px;border-radius:4px;border:1px solid ${esc(multiProductSettings.chooseButtonColor)};background:#fff;color:${esc(multiProductSettings.chooseButtonColor)};font-weight:700;cursor:pointer;">+</button>
-              <button type="button" data-preview-action="choose" data-preview-item-id="${esc(item.id)}" style="height:${esc(multiProductSettings.chooseButtonSize)}px;padding:0 12px;border-radius:4px;border:1px solid ${esc(multiProductSettings.chooseButtonColor)};background:${esc(multiProductSettings.chooseButtonColor)};color:#fff;cursor:pointer;">${esc(multiProductSettings.chooseButtonText)}</button>
+          ? `<div style="display:flex; align-items:center; gap:6px; margin-top:8px; flex-wrap:wrap;">
+              ${Array.from({ length: Math.max(1, item.chooseControlCount || 1) })
+                .map(
+                  (_, idx) =>
+                    `<button type="button" data-preview-action="add" data-preview-item-id="${esc(item.id)}" data-preview-slot-index="${idx}" style="width:${esc(multiProductSettings.chooseButtonSize)}px;height:${esc(multiProductSettings.chooseButtonSize)}px;border-radius:4px;border:1px solid ${esc(multiProductSettings.chooseButtonColor)};background:#fff;color:${esc(multiProductSettings.chooseButtonColor)};font-weight:700;cursor:pointer;">+</button>`,
+                )
+                .join("")}
+              <button type="button" data-preview-action="choose" data-preview-item-id="${esc(item.id)}" data-preview-slot-index="0" style="height:${esc(multiProductSettings.chooseButtonSize)}px;padding:0 12px;border-radius:4px;border:1px solid ${esc(multiProductSettings.chooseButtonColor)};background:${esc(multiProductSettings.chooseButtonColor)};color:#fff;cursor:pointer;">${esc(multiProductSettings.chooseButtonText)}</button>
             </div>`
           : ""
       }

@@ -206,6 +206,8 @@ export type DifferentProductPackSlot = {
 export type DifferentProductDiscountRule = {
   count: number;
   discountPercent: number;
+  priceMode?: "full_price" | "percentage_off" | "amount_off" | "fixed_price";
+  discountValue?: number;
   title?: string;
   subtitle?: string;
   badge?: string;
@@ -393,6 +395,15 @@ export function parseDifferentProductDiscountRules(
       out.push({
         count: Math.trunc(count),
         discountPercent: Math.max(0, Math.min(100, discountPercent)),
+        priceMode: (() => {
+          const raw = String((item as { priceMode?: unknown }).priceMode || "");
+          return ["full_price", "percentage_off", "amount_off", "fixed_price"].includes(raw)
+            ? (raw as DifferentProductDiscountRule["priceMode"])
+            : "percentage_off";
+        })(),
+        discountValue: Number.isFinite(Number((item as { discountValue?: unknown }).discountValue))
+          ? Number((item as { discountValue?: unknown }).discountValue)
+          : Math.max(0, Math.min(100, discountPercent)),
         title: (item as { title?: string }).title || "",
         subtitle: (item as { subtitle?: string }).subtitle || "",
         badge: (item as { badge?: string }).badge || "",
@@ -469,6 +480,10 @@ export function buildDifferentProductDiscountRulesJson(
     dedupedByCount.set(Math.trunc(tier.count), {
       count: Math.trunc(tier.count),
       discountPercent: Math.max(0, Math.min(100, tier.discountPercent)),
+      priceMode: tier.priceMode || "percentage_off",
+      discountValue: Number.isFinite(Number(tier.discountValue))
+        ? Number(tier.discountValue)
+        : Math.max(0, Math.min(100, tier.discountPercent)),
       title: tier.title || "",
       subtitle: tier.subtitle || "",
       badge: tier.badge || "",

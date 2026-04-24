@@ -15,7 +15,11 @@ type Props = {
   title?: string;
   items?: PreviewItem[];
   multiProductSettings?: MultiProductPreviewSettings;
-  onPreviewAction?: (action: "add" | "choose", itemId: string) => void;
+  onPreviewAction?: (
+    action: "add" | "choose",
+    itemId: string,
+    slotIndex?: number,
+  ) => void;
 };
 
 export default function BundlePreview({
@@ -60,9 +64,14 @@ export default function BundlePreview({
         if (!actionEl) return;
         const action = actionEl.getAttribute("data-preview-action");
         const itemId = actionEl.getAttribute("data-preview-item-id");
+        const slotIndexRaw = actionEl.getAttribute("data-preview-slot-index");
+        const slotIndex =
+          slotIndexRaw != null && Number.isFinite(Number(slotIndexRaw))
+            ? Number(slotIndexRaw)
+            : undefined;
         if (!itemId) return;
         if (action === "add" || action === "choose") {
-          onPreviewAction(action, itemId);
+          onPreviewAction(action, itemId, slotIndex);
         }
       }}
       dangerouslySetInnerHTML={{ __html: html }}

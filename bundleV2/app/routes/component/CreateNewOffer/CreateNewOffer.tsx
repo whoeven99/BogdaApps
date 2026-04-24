@@ -52,6 +52,12 @@ type BxgyDiscountRule = {
 };
 
 type DifferentProductRule = DifferentProductDiscountRule;
+type DifferentPreviewSelection = {
+  id: string;
+  title: string;
+  image: string;
+  price: string;
+};
 
 type Product = {
   id: string | number;
@@ -156,6 +162,12 @@ function calculatePreviewBundleAmounts(
     discountedTotal,
     saved: originalTotal - discountedTotal,
   };
+}
+
+function parsePriceNumber(raw: string): number {
+  const normalized = String(raw || "").replace(/[^\d.,-]/g, "").replace(",", ".");
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : 0;
 }
 
 function sanitizeDiscountRules(tiers: DiscountRule[]): DiscountRule[] {
@@ -446,6 +458,9 @@ export function CreateNewOffer({
         ? parseDifferentProductDiscountRules(initialOffer?.discountRulesJson)
         : [],
   );
+  const [differentPreviewSelections, setDifferentPreviewSelections] = useState<
+    Record<string, DifferentPreviewSelection[]>
+  >({});
   const [buyProducts, setBuyProducts] = useState<string[]>(() => {
     if (initialOffer?.offerType !== 'bxgy' || !initialOffer.selectedProductsJson) return [];
     try {
@@ -481,6 +496,8 @@ export function CreateNewOffer({
       {
         count: 1,
         discountPercent: 0,
+        priceMode: "full_price",
+        discountValue: 0,
         title: "Bar #1 - 1 pack",
         subtitle: "Standard price",
         badge: "",
@@ -497,6 +514,8 @@ export function CreateNewOffer({
       {
         count: 2,
         discountPercent: 10,
+        priceMode: "percentage_off",
+        discountValue: 10,
         title: "Bar #2 - 2 pack",
         subtitle: "Save 10%",
         badge: "Most Popular",
@@ -583,11 +602,32 @@ export function CreateNewOffer({
         const firstProduct = selectedProductsData.find(
           (p) => String(p.id) === String(firstSelectableSlot?.defaultProductId || ""),
         );
+        const unit = parsePriceNumber(firstProduct?.price || "0");
+        const qty = Math.max(1, rule.count || 1);
+        const mode = rule.priceMode || "percentage_off";
+        const discountValue =
+          Number.isFinite(Number(rule.discountValue)) ? Number(rule.discountValue) : rule.discountPercent;
+        const originalTotal = unit * qty;
+        let finalTotal = originalTotal;
+        if (mode === "percentage_off") {
+          finalTotal = originalTotal * (1 - Math.max(0, Math.min(100, discountValue)) / 100);
+        } else if (mode === "amount_off") {
+          finalTotal = Math.max(0, originalTotal - Math.max(0, discountValue) * qty);
+        } else if (mode === "fixed_price") {
+          finalTotal = Math.max(0, discountValue) * qty;
+        }
+
+        const rowKey = `different-tier-${rule.count}`;
+        const selectedProducts = (differentPreviewSelections[rowKey] || []).slice(0, qty);
         return {
           id: `different-tier-${rule.count}`,
           title: rule.title || `${rule.count} pack`,
           subtitle: rule.subtitle || `Contains ${rule.packItems.length} product slot(s)`,
-          price: rule.discountPercent > 0 ? `${rule.discountPercent}% OFF` : "Standard price",
+          price: mode === "full_price" ? formatPreviewPrice(originalTotal) : formatPreviewPrice(finalTotal),
+          original:
+            mode === "full_price" || finalTotal >= originalTotal
+              ? undefined
+              : formatPreviewPrice(originalTotal),
           featured: isFeatured,
           badge: rule.badge || (isFeatured ? "Most Popular" : ""),
           saveLabel: `${rule.packItems.length} item slot(s)`,
@@ -595,6 +635,8 @@ export function CreateNewOffer({
           variantTitle: firstProduct?.title,
           productPrice: firstProduct?.price,
           showChooseControl: !!enableMultiProductBundle && rule.packItems.some((slot) => slot.allowChooseOther),
+          chooseControlCount: qty,
+          selectedProducts,
         };
       });
     }
@@ -653,20 +695,20 @@ export function CreateNewOffer({
     formatPreviewPrice,
     hasDefault,
     enableMultiProductBundle,
+    differentPreviewSelections,
   ]);
 
   const handlePreviewMultiProductAction = async (
     action: "add" | "choose",
     itemId: string,
+    slotIndex?: number,
   ) => {
     if (offerType !== "quantity-breaks-different" || !enableMultiProductBundle) return;
-    const matched = previewItems.find((item) => item.id === itemId);
-    if (!matched) return;
     const selected = await (window as any).shopify.resourcePicker({
       type: "product",
       action: "select",
       multiple: false,
-      selectionIds: selectedProductsData[0]?.id ? [{ id: selectedProductsData[0].id }] : [],
+      selectionIds: [],
       title: action === "add" ? "Add bundle product" : "Choose bundle product",
     });
     if (!selected || !selected[0]) return;
@@ -678,7 +720,20 @@ export function CreateNewOffer({
       price: item.variants?.[0]?.price || "€0.00",
       variantsCount: item.variants?.length || 1,
     };
-    setSelectedProductsData([picked]);
+    // 预览里的 + / Choose 只更新当前 Pack 的可选商品，不覆盖主绑定商品
+    setDifferentPreviewSelections((prev) => {
+      const next = { ...prev };
+      const current = Array.isArray(next[itemId]) ? [...next[itemId]] : [];
+      if (action === "choose") {
+        current[0] = picked;
+      } else if (Number.isFinite(slotIndex as number) && (slotIndex as number) >= 0) {
+        current[slotIndex as number] = picked;
+      } else {
+        current.push(picked);
+      }
+      next[itemId] = current.filter(Boolean);
+      return next;
+    });
   };
 
   const steps = [
@@ -1581,19 +1636,53 @@ export function CreateNewOffer({
                                   />
                                 </label>
                                 <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                                  Discount (%)
+                                  Price
+                                  <Select
+                                    size="large"
+                                    className="mt-1"
+                                    value={rule.priceMode || "percentage_off"}
+                                    onChange={(val) => {
+                                      setDifferentProductRules((prev) =>
+                                        prev.map((r, i) =>
+                                          i === index ? { ...r, priceMode: val as any } : r,
+                                        ),
+                                      );
+                                    }}
+                                    options={[
+                                      { label: "Full price", value: "full_price" },
+                                      { label: "Percentage off", value: "percentage_off" },
+                                      { label: "Amount off", value: "amount_off" },
+                                      { label: "Fixed price", value: "fixed_price" },
+                                    ]}
+                                  />
+                                </label>
+                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                  Discount per item
                                   <Input
                                     size="large"
                                     type="number"
                                     min={0}
-                                    max={100}
+                                    step={0.01}
                                     className="mt-1"
-                                    value={rule.discountPercent}
+                                    value={
+                                      Number.isFinite(Number(rule.discountValue))
+                                        ? Number(rule.discountValue)
+                                        : rule.discountPercent
+                                    }
                                     onChange={(e) => {
-                                      const nextPercent = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+                                      const nextVal = Math.max(0, Number(e.target.value) || 0);
                                       setDifferentProductRules((prev) =>
                                         prev.map((r, i) =>
-                                          i === index ? { ...r, discountPercent: nextPercent } : r,
+                                          i === index
+                                            ? {
+                                                ...r,
+                                                discountValue: nextVal,
+                                                discountPercent:
+                                                  (r.priceMode || "percentage_off") === "percentage_off"
+                                                    ? Math.max(0, Math.min(100, nextVal))
+                                                    : r.discountPercent,
+                                              }
+                                            : r,
                                         ),
                                       );
                                     }}
@@ -1699,6 +1788,8 @@ export function CreateNewOffer({
                                 {
                                   count: nextCount,
                                   discountPercent: 10,
+                                  priceMode: "percentage_off",
+                                  discountValue: 10,
                                   title: `Bar #${prev.length + 1} - ${nextCount} pack`,
                                   subtitle: "",
                                   badge: "",
