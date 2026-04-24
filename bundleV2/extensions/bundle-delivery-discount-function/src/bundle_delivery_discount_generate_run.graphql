@@ -1,0 +1,50 @@
+query CartDeliveryDiscountInput {
+  cart {
+    lines {
+      quantity
+      bundleTierProp: attribute(key: "__ciwi_bundle_tier") {
+        key
+        value
+      }
+      bundleOfferProp: attribute(key: "__ciwi_bundle_offer_id") {
+        key
+        value
+      }
+      merchandise {
+        __typename
+        ... on ProductVariant {
+          id
+          product {
+            id
+          }
+        }
+      }
+    }
+    deliveryGroups {
+      id
+      deliveryOptions {
+        handle
+        title
+        cost {
+          amount
+        }
+        deliveryMethodType
+      }
+    }
+  }
+  shop {
+    metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-offers") {
+      jsonValue
+      value
+      type
+    }
+  }
+  localization {
+    market {
+      id
+    }
+  }
+  discount {
+    discountClasses
+  }
+}
