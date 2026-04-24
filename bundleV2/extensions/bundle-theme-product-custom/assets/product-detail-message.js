@@ -734,6 +734,70 @@ function setDifferentSelectionForCount(count, slotIndex, product) {
   window.__ciwiBundleState.differentSelections[key] = current.filter(Boolean);
 }
 
+function getMainVariantIdFromForm() {
+  const form = getAddToCartForm();
+  const input = form?.querySelector("input[name='id']");
+  return input ? String(input.value || "").trim() : "";
+}
+
+async function addDifferentBundleToCart(offer) {
+  const selectedCount = Math.max(1, Number(window.__ciwiBundleState?.selectedCount || 1));
+  const mainVariantId = getMainVariantIdFromForm();
+  if (!mainVariantId) return false;
+
+  const selectedExtras = getDifferentSelectionsForCount(selectedCount).slice(
+    0,
+    Math.max(0, selectedCount - 1),
+  );
+  const items = [
+    {
+      id: mainVariantId,
+      quantity: 1,
+      properties: {
+        _ciwi_bundle_offer_id: String(offer?.id || ""),
+        _ciwi_bundle_offer_type: "quantity-breaks-different",
+        _ciwi_bundle_count: String(selectedCount),
+      },
+    },
+    ...selectedExtras
+      .map((p) => ({
+        id: p?.variantId ? String(p.variantId) : "",
+        quantity: 1,
+        properties: {
+          _ciwi_bundle_offer_id: String(offer?.id || ""),
+          _ciwi_bundle_offer_type: "quantity-breaks-different",
+          _ciwi_bundle_count: String(selectedCount),
+        },
+      }))
+      .filter((x) => x.id),
+  ];
+
+  // 如果用户没选附加商品，仍然保持旧行为（主商品数量）
+  if (items.length === 1 && selectedCount > 1) {
+    items[0].quantity = selectedCount;
+  }
+
+  try {
+    const resp = await fetch("/cart/add.js", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ items }),
+    });
+    if (!resp.ok) {
+      console.error("[ciwi] addDifferentBundleToCart failed", resp.status);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error("[ciwi] addDifferentBundleToCart error", e);
+    return false;
+  }
+}
+
 function ensureDifferentProductPickerModal() {
   let modal = document.getElementById("ciwi-different-picker-modal");
   if (modal) return modal;
@@ -820,6 +884,10 @@ async function loadAllActiveProductsFromStorefront() {
     ciwiAllActiveProductsCache = products
       .map((p) => ({
         id: p?.admin_graphql_api_id || (p?.id ? `gid://shopify/Product/${p.id}` : ""),
+        variantId:
+          Array.isArray(p?.variants) && p.variants[0]?.id
+            ? String(p.variants[0].id)
+            : "",
         title: String(p?.title || ""),
         image: p?.images?.[0]?.src || "",
         price: p?.variants?.[0]?.price || "",
@@ -954,10 +1022,21 @@ window.ciwiSelectBundleOption = function(count) {
   }
 };
 
-window.ciwiHandleBundleAddToCart = function(event) {
+window.ciwiHandleBundleAddToCart = async function(event) {
   if (event) {
     event.preventDefault();
     event.stopPropagation();
+  }
+  const currentOffer = getCurrentOffer(offersConfigCache);
+  if (
+    currentOffer &&
+    currentOffer.offerType === "quantity-breaks-different"
+  ) {
+    const ok = await addDifferentBundleToCart(currentOffer);
+    if (ok) {
+      window.location.href = "/cart";
+      return;
+    }
   }
   const count = window.__ciwiBundleState?.selectedCount || 1;
   updateThemeQuantityInput(count);
