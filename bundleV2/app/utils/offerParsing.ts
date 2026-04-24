@@ -196,13 +196,6 @@ export type BxgyDiscountRule = {
   isDefault?: boolean;
 };
 
-export type DifferentProductPackSlot = {
-  slotId: string;
-  defaultProductId: string | null;
-  allowChooseOther: boolean;
-  quantity: number;
-};
-
 export type DifferentProductDiscountRule = {
   count: number;
   discountPercent: number;
@@ -212,7 +205,6 @@ export type DifferentProductDiscountRule = {
   subtitle?: string;
   badge?: string;
   isDefault?: boolean;
-  packItems: DifferentProductPackSlot[];
 };
 
 export function parseDiscountRules(discountRulesJson?: string | null): DiscountRule[] {
@@ -360,38 +352,8 @@ export function parseDifferentProductDiscountRules(
       const discountPercent = Number(
         (item as { discountPercent?: unknown }).discountPercent,
       );
-      const rawPackItems = (item as { packItems?: unknown }).packItems;
       if (!Number.isFinite(count) || count < 1) continue;
       if (!Number.isFinite(discountPercent)) continue;
-      if (!Array.isArray(rawPackItems)) continue;
-
-      // 解析每个 pack 槽位，容错处理旧数据和脏数据
-      const packItems: DifferentProductPackSlot[] = rawPackItems
-        .map((slot, slotIdx) => {
-          if (!slot || typeof slot !== "object") return null;
-          const slotIdRaw = (slot as { slotId?: unknown }).slotId;
-          const defaultProductIdRaw = (slot as { defaultProductId?: unknown }).defaultProductId;
-          const allowChooseOtherRaw = (slot as { allowChooseOther?: unknown }).allowChooseOther;
-          const quantityRaw = Number((slot as { quantity?: unknown }).quantity);
-          return {
-            slotId:
-              typeof slotIdRaw === "string" && slotIdRaw.trim()
-                ? slotIdRaw.trim()
-                : `slot-${slotIdx + 1}`,
-            defaultProductId:
-              typeof defaultProductIdRaw === "string" && defaultProductIdRaw.trim()
-                ? defaultProductIdRaw.trim()
-                : null,
-            allowChooseOther: allowChooseOtherRaw === true,
-            quantity:
-              Number.isFinite(quantityRaw) && quantityRaw >= 1
-                ? Math.trunc(quantityRaw)
-                : 1,
-          } satisfies DifferentProductPackSlot;
-        })
-        .filter(Boolean) as DifferentProductPackSlot[];
-
-      if (!packItems.length) continue;
       out.push({
         count: Math.trunc(count),
         discountPercent: Math.max(0, Math.min(100, discountPercent)),
@@ -408,7 +370,6 @@ export function parseDifferentProductDiscountRules(
         subtitle: (item as { subtitle?: string }).subtitle || "",
         badge: (item as { badge?: string }).badge || "",
         isDefault: !!(item as { isDefault?: boolean }).isDefault,
-        packItems,
       });
     }
 
@@ -455,27 +416,6 @@ export function buildDifferentProductDiscountRulesJson(
   for (const tier of tiers) {
     if (!Number.isFinite(tier.count) || tier.count < 1) continue;
     if (!Number.isFinite(tier.discountPercent)) continue;
-    if (!Array.isArray(tier.packItems) || !tier.packItems.length) continue;
-
-    // 统一序列化槽位字段，避免前后端字段不一致
-    const normalizedPackItems = tier.packItems
-      .map((slot, idx) => ({
-        slotId:
-          typeof slot.slotId === "string" && slot.slotId.trim()
-            ? slot.slotId.trim()
-            : `slot-${idx + 1}`,
-        defaultProductId:
-          typeof slot.defaultProductId === "string" && slot.defaultProductId.trim()
-            ? slot.defaultProductId.trim()
-            : null,
-        allowChooseOther: slot.allowChooseOther === true,
-        quantity:
-          Number.isFinite(slot.quantity) && slot.quantity >= 1
-            ? Math.trunc(slot.quantity)
-            : 1,
-      }))
-      .filter((slot) => Boolean(slot.slotId));
-    if (!normalizedPackItems.length) continue;
 
     dedupedByCount.set(Math.trunc(tier.count), {
       count: Math.trunc(tier.count),
@@ -488,7 +428,6 @@ export function buildDifferentProductDiscountRulesJson(
       subtitle: tier.subtitle || "",
       badge: tier.badge || "",
       isDefault: !!tier.isDefault,
-      packItems: normalizedPackItems,
     });
   }
 

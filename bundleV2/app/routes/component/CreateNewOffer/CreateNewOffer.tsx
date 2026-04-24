@@ -502,14 +502,6 @@ export function CreateNewOffer({
         subtitle: "Standard price",
         badge: "",
         isDefault: false,
-        packItems: [
-          {
-            slotId: "p1-s1",
-            defaultProductId: firstProductId,
-            allowChooseOther: false,
-            quantity: 1,
-          },
-        ],
       },
       {
         count: 2,
@@ -520,20 +512,6 @@ export function CreateNewOffer({
         subtitle: "Save 10%",
         badge: "Most Popular",
         isDefault: true,
-        packItems: [
-          {
-            slotId: "p2-s1",
-            defaultProductId: firstProductId,
-            allowChooseOther: false,
-            quantity: 1,
-          },
-          {
-            slotId: "p2-s2",
-            defaultProductId: null,
-            allowChooseOther: true,
-            quantity: 1,
-          },
-        ],
       },
     ]);
     if (selectedProductsData.length === 0) {
@@ -557,17 +535,6 @@ export function CreateNewOffer({
       setSelectedProductsData((prev) => prev.slice(0, 1));
       return;
     }
-    const primaryProductId = String(selectedProductsData[0].id);
-    setDifferentProductRules((prev) =>
-      prev.map((rule) => ({
-        ...rule,
-        packItems: rule.packItems.map((slot, idx) =>
-          idx === 0 || !slot.allowChooseOther
-            ? { ...slot, defaultProductId: primaryProductId }
-            : slot,
-        ),
-      })),
-    );
   }, [offerType, selectedProductsData]);
 
   useEffect(() => {
@@ -597,11 +564,7 @@ export function CreateNewOffer({
       const hasDifferentDefault = differentProductRules.some((r) => r.isDefault);
       return differentProductRules.map((rule, index) => {
         const isFeatured = hasDifferentDefault ? !!rule.isDefault : index === 0;
-        const firstSelectableSlot =
-          rule.packItems.find((slot) => slot.allowChooseOther) || rule.packItems[0];
-        const firstProduct = selectedProductsData.find(
-          (p) => String(p.id) === String(firstSelectableSlot?.defaultProductId || ""),
-        );
+        const firstProduct = selectedProductsData[0];
         const unit = parsePriceNumber(firstProduct?.price || "0");
         const qty = Math.max(1, rule.count || 1);
         const mode = rule.priceMode || "percentage_off";
@@ -618,11 +581,14 @@ export function CreateNewOffer({
         }
 
         const rowKey = `different-tier-${rule.count}`;
-        const selectedProducts = (differentPreviewSelections[rowKey] || []).slice(0, qty);
+        const selectedProducts = (differentPreviewSelections[rowKey] || []).slice(
+          0,
+          Math.max(0, qty - 1),
+        );
         return {
           id: `different-tier-${rule.count}`,
           title: rule.title || `${rule.count} pack`,
-          subtitle: rule.subtitle || `Contains ${rule.packItems.length} product slot(s)`,
+          subtitle: rule.subtitle || `Contains ${rule.count} item(s)`,
           price: mode === "full_price" ? formatPreviewPrice(originalTotal) : formatPreviewPrice(finalTotal),
           original:
             mode === "full_price" || finalTotal >= originalTotal
@@ -630,12 +596,12 @@ export function CreateNewOffer({
               : formatPreviewPrice(originalTotal),
           featured: isFeatured,
           badge: rule.badge || (isFeatured ? "Most Popular" : ""),
-          saveLabel: `${rule.packItems.length} item slot(s)`,
+          saveLabel: `${rule.count} item slot(s)`,
           image: firstProduct?.image,
           variantTitle: firstProduct?.title,
           productPrice: firstProduct?.price,
-          showChooseControl: !!enableMultiProductBundle && rule.packItems.some((slot) => slot.allowChooseOther),
-          chooseControlCount: qty,
+          showChooseControl: !!enableMultiProductBundle && qty > 1 && selectedProducts.length < qty - 1,
+          chooseControlCount: Math.max(0, qty - 1 - selectedProducts.length),
           selectedProducts,
         };
       });
@@ -704,6 +670,13 @@ export function CreateNewOffer({
     slotIndex?: number,
   ) => {
     if (offerType !== "quantity-breaks-different" || !enableMultiProductBundle) return;
+    const matchedItem = previewItems.find((x) => x.id === itemId);
+    if (!matchedItem) return;
+    const maxSelectable = Math.max(
+      0,
+      (matchedItem.chooseControlCount || 0) +
+        (matchedItem.selectedProducts?.length || 0),
+    );
     const selected = await (window as any).shopify.resourcePicker({
       type: "product",
       action: "select",
@@ -724,14 +697,18 @@ export function CreateNewOffer({
     setDifferentPreviewSelections((prev) => {
       const next = { ...prev };
       const current = Array.isArray(next[itemId]) ? [...next[itemId]] : [];
+      if (current.length >= maxSelectable && action === "add") {
+        return prev;
+      }
       if (action === "choose") {
-        current[0] = picked;
+        if (current.length === 0) current[0] = picked;
+        else current[Math.max(0, Math.min(current.length - 1, slotIndex ?? 0))] = picked;
       } else if (Number.isFinite(slotIndex as number) && (slotIndex as number) >= 0) {
         current[slotIndex as number] = picked;
       } else {
         current.push(picked);
       }
-      next[itemId] = current.filter(Boolean);
+      next[itemId] = current.filter(Boolean).slice(0, maxSelectable);
       return next;
     });
   };
@@ -1717,59 +1694,8 @@ export function CreateNewOffer({
                                   />
                                 </label>
                               </div>
-                              <div style={{ marginTop: "12px" }}>
-                                <div className="text-[13px] font-medium text-[#1c1f23] mb-2">Pack items</div>
-                                <div className="flex flex-col gap-2">
-                                  {rule.packItems.map((slot, slotIndex) => (
-                                    <div key={slot.slotId} className="flex items-center gap-2">
-                                      <Select
-                                        size="middle"
-                                        className="flex-1"
-                                        placeholder="Select default product"
-                                        value={slot.defaultProductId || undefined}
-                                        onChange={(val) => {
-                                          setDifferentProductRules((prev) =>
-                                            prev.map((r, i) =>
-                                              i === index
-                                                ? {
-                                                    ...r,
-                                                    packItems: r.packItems.map((s, si) =>
-                                                      si === slotIndex ? { ...s, defaultProductId: val } : s,
-                                                    ),
-                                                  }
-                                                : r,
-                                            ),
-                                          );
-                                        }}
-                                        options={selectedProductsData.map((p) => ({
-                                          label: p.title,
-                                          value: String(p.id),
-                                        }))}
-                                      />
-                                      <Checkbox
-                                        checked={slot.allowChooseOther}
-                                        onChange={(e) => {
-                                          setDifferentProductRules((prev) =>
-                                            prev.map((r, i) =>
-                                              i === index
-                                                ? {
-                                                    ...r,
-                                                    packItems: r.packItems.map((s, si) =>
-                                                      si === slotIndex
-                                                        ? { ...s, allowChooseOther: e.target.checked }
-                                                        : s,
-                                                    ),
-                                                  }
-                                                : r,
-                                            ),
-                                          );
-                                        }}
-                                      >
-                                        Choose other
-                                      </Checkbox>
-                                    </div>
-                                  ))}
-                                </div>
+                              <div style={{ marginTop: "12px" }} className="text-[12px] text-[#5c6166]">
+                                Pack quantity includes the default product.
                               </div>
                             </div>
                           </div>
@@ -1780,9 +1706,6 @@ export function CreateNewOffer({
                           onClick={() =>
                             setDifferentProductRules((prev) => {
                               const nextCount = (prev[prev.length - 1]?.count || 1) + 1;
-                              const firstProductId = selectedProductsData[0]?.id
-                                ? String(selectedProductsData[0].id)
-                                : null;
                               return [
                                 ...prev,
                                 {
@@ -1794,12 +1717,6 @@ export function CreateNewOffer({
                                   subtitle: "",
                                   badge: "",
                                   isDefault: false,
-                                  packItems: Array.from({ length: nextCount }).map((_, slotIdx) => ({
-                                    slotId: `p${prev.length + 1}-s${slotIdx + 1}`,
-                                    defaultProductId: slotIdx === 0 ? firstProductId : null,
-                                    allowChooseOther: slotIdx > 0,
-                                    quantity: 1,
-                                  })),
                                 },
                               ];
                             })
