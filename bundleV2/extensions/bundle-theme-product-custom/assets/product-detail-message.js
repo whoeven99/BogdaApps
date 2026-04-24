@@ -805,14 +805,91 @@ function openDifferentProductPicker({ offer, ruleCount, slotIndex }) {
   modal.style.display = "flex";
 }
 
-window.ciwiOpenDifferentPicker = function(event, ruleCount, slotIndex) {
+let ciwiAllActiveProductsCache = null;
+async function loadAllActiveProductsFromStorefront() {
+  if (Array.isArray(ciwiAllActiveProductsCache)) return ciwiAllActiveProductsCache;
+  try {
+    // 主题前台只能拿到 storefront 公开可售商品，这里作为 active 产品候选池
+    const resp = await fetch("/products.json?limit=250", {
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+    });
+    if (!resp.ok) return [];
+    const json = await resp.json();
+    const products = Array.isArray(json?.products) ? json.products : [];
+    ciwiAllActiveProductsCache = products
+      .map((p) => ({
+        id: p?.admin_graphql_api_id || (p?.id ? `gid://shopify/Product/${p.id}` : ""),
+        title: String(p?.title || ""),
+        image: p?.images?.[0]?.src || "",
+        price: p?.variants?.[0]?.price || "",
+      }))
+      .filter((p) => p.id);
+    return ciwiAllActiveProductsCache;
+  } catch {
+    return [];
+  }
+}
+
+async function openDifferentProductPickerWithAllProducts({ offer, ruleCount, slotIndex }) {
+  const explicitPool = parseProductPool(offer?.selectedProductsJson);
+  const allActive = await loadAllActiveProductsFromStorefront();
+  // 合并并去重，确保既有后台配置池，也有全店 active 产品可选
+  const mergedMap = new Map();
+  [...explicitPool, ...allActive].forEach((p) => {
+    if (!p || !p.id) return;
+    if (!mergedMap.has(String(p.id))) mergedMap.set(String(p.id), p);
+  });
+  const mergedPool = Array.from(mergedMap.values());
+  if (!mergedPool.length) return;
+
+  const modal = ensureDifferentProductPickerModal();
+  const list = modal.querySelector("#ciwi-different-picker-list");
+  if (!list) return;
+  list.innerHTML = mergedPool
+    .map(
+      (p) => `
+      <button type="button" data-ciwi-pick-id="${esc(String(p.id))}" style="display:flex;align-items:center;gap:10px;text-align:left;border:1px solid #e5e7eb;border-radius:8px;padding:8px;background:#fff;cursor:pointer;">
+        ${
+          p.image
+            ? `<img src="${esc(p.image)}" alt="${esc(p.title)}" style="width:40px;height:40px;border-radius:6px;object-fit:cover;" />`
+            : `<div style="width:40px;height:40px;background:#f3f4f6;border-radius:6px;"></div>`
+        }
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(
+            p.title || "Product",
+          )}</div>
+          <div style="font-size:12px;color:#6b7280;">${esc(p.price || "")}</div>
+        </div>
+      </button>
+    `,
+    )
+    .join("");
+  list.querySelectorAll("[data-ciwi-pick-id]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.getAttribute("data-ciwi-pick-id");
+      const picked = mergedPool.find((p) => String(p.id) === String(id));
+      if (!picked) return;
+      setDifferentSelectionForCount(ruleCount, slotIndex, picked);
+      modal.style.display = "none";
+      const wrap = document.querySelector(".ciwi-bundle-wrapper");
+      if (wrap) {
+        const html = renderBundlePreviewHtml(offer);
+        if (html) wrap.innerHTML = html;
+      }
+    });
+  });
+  modal.style.display = "flex";
+}
+
+window.ciwiOpenDifferentPicker = async function(event, ruleCount, slotIndex) {
   if (event) {
     event.preventDefault();
     event.stopPropagation();
   }
   const currentOffer = getCurrentOffer(offersConfigCache);
   if (!currentOffer || currentOffer.offerType !== "quantity-breaks-different") return;
-  openDifferentProductPicker({
+  await openDifferentProductPickerWithAllProducts({
     offer: currentOffer,
     ruleCount,
     slotIndex,
