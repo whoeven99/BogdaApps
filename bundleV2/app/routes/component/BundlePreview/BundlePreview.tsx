@@ -1,4 +1,4 @@
-import { renderBundlePreviewHtml, PreviewItem } from "./bundlePreviewShared";
+import { renderBundlePreviewHtml, PreviewItem, MultiProductPreviewSettings } from "./bundlePreviewShared";
 
 type Props = {
   layoutFormat: "vertical" | "horizontal" | "card" | "compact";
@@ -14,6 +14,8 @@ type Props = {
   showCustomButton?: boolean;
   title?: string;
   items?: PreviewItem[];
+  multiProductSettings?: MultiProductPreviewSettings;
+  onPreviewAction?: (action: "add" | "choose", itemId: string) => void;
 };
 
 export default function BundlePreview({
@@ -30,6 +32,8 @@ export default function BundlePreview({
   showCustomButton,
   title = "Bundle & Save",
   items,
+  multiProductSettings,
+  onPreviewAction,
 }: Props) {
   const html = renderBundlePreviewHtml({
     title,
@@ -45,7 +49,23 @@ export default function BundlePreview({
     buttonPrimaryColor,
     showCustomButton,
     items,
+    multiProductSettings,
   });
-
-  return <div dangerouslySetInnerHTML={{ __html: html }} />;
+  return (
+    <div
+      onClick={(e) => {
+        const target = e.target as HTMLElement | null;
+        if (!target || !onPreviewAction) return;
+        const actionEl = target.closest("[data-preview-action]") as HTMLElement | null;
+        if (!actionEl) return;
+        const action = actionEl.getAttribute("data-preview-action");
+        const itemId = actionEl.getAttribute("data-preview-item-id");
+        if (!itemId) return;
+        if (action === "add" || action === "choose") {
+          onPreviewAction(action, itemId);
+        }
+      }}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
 }

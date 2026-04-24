@@ -84,6 +84,11 @@ export type OfferSettings = {
   buttonText: string;
   buttonPrimaryColor: string;
   showCustomButton: boolean;
+  enableMultiProductBundle?: boolean;
+  chooseButtonText?: string;
+  chooseButtonColor?: string;
+  chooseButtonSize?: number;
+  chooseImageSize?: number;
   scheduleTimezone?: string;
 };
 
@@ -107,6 +112,11 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
       buttonText: "Add to Cart",
       buttonPrimaryColor: "#008060",
       showCustomButton: true,
+      enableMultiProductBundle: false,
+      chooseButtonText: "Choose",
+      chooseButtonColor: "#111111",
+      chooseButtonSize: 28,
+      chooseImageSize: 40,
       scheduleTimezone: undefined,
     };
   }
@@ -150,6 +160,11 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
       buttonText: parsed.buttonText || "Add to Cart",
       buttonPrimaryColor: sanitizeHexColor(parsed.buttonPrimaryColor, "#008060"),
       showCustomButton: parsed.showCustomButton !== false,
+      enableMultiProductBundle: parsed.enableMultiProductBundle === true,
+      chooseButtonText: parsed.chooseButtonText || "Choose",
+      chooseButtonColor: sanitizeHexColor(parsed.chooseButtonColor, "#111111"),
+      chooseButtonSize: clampNumber(parsed.chooseButtonSize, 24, 44, 28),
+      chooseImageSize: clampNumber(parsed.chooseImageSize, 24, 64, 40),
       scheduleTimezone: parsed.scheduleTimezone,
     };
   } catch {

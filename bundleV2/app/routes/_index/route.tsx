@@ -931,6 +931,29 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
     const showCustomButtonRaw = String(formData.get("showCustomButton") || "");
     const showCustomButton = showCustomButtonRaw !== "false";
+    const enableMultiProductBundle =
+      String(formData.get("enableMultiProductBundle") || "") === "true";
+    const chooseButtonText = sanitizeSingleLineText(
+      formData.get("chooseButtonText"),
+      OFFER_TEXT_LIMITS.buttonText,
+      "Choose",
+    );
+    const chooseButtonColor = sanitizeHexColorParam(
+      String(formData.get("chooseButtonColor") || ""),
+      "#111111",
+    );
+    const chooseButtonSize = clampNumber(
+      formData.get("chooseButtonSize"),
+      24,
+      44,
+      28,
+    );
+    const chooseImageSize = clampNumber(
+      formData.get("chooseImageSize"),
+      24,
+      64,
+      40,
+    );
 
     const title = sanitizeSingleLineText(
       formData.get("title"),
@@ -973,6 +996,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       titleFontWeight,
       buttonText,
       showCustomButton,
+      enableMultiProductBundle,
+      chooseButtonText,
+      chooseButtonColor,
+      chooseButtonSize,
+      chooseImageSize,
       scheduleTimezone: scheduleTimezoneRaw || undefined,
     });
 

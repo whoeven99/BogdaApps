@@ -11,6 +11,16 @@ export type PreviewItem = {
   saveLabel?: string;
   image?: string;
   variantTitle?: string;
+  productPrice?: string;
+  showChooseControl?: boolean;
+};
+
+export type MultiProductPreviewSettings = {
+  enabled: boolean;
+  chooseButtonText: string;
+  chooseButtonColor: string;
+  chooseButtonSize: number;
+  chooseImageSize: number;
 };
 
 export const PREVIEW_ITEMS: PreviewItem[] = [
@@ -52,6 +62,7 @@ export function renderBundlePreviewHtml({
   buttonPrimaryColor = "#008060",
   showCustomButton = true,
   items = PREVIEW_ITEMS,
+  multiProductSettings,
 }: {
   title?: string;
   layoutFormat?: LayoutFormat;
@@ -66,6 +77,7 @@ export function renderBundlePreviewHtml({
   buttonPrimaryColor?: string;
   showCustomButton?: boolean;
   items?: PreviewItem[];
+  multiProductSettings?: MultiProductPreviewSettings;
 } = {}) {
   const safeLayout: LayoutFormat = ["vertical", "horizontal", "card", "compact"].includes(layoutFormat)
     ? layoutFormat
@@ -86,8 +98,11 @@ export function renderBundlePreviewHtml({
       ${
         item.image
           ? `<div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-              <img src="${esc(item.image)}" alt="${esc(item.title)}" style="width:36px; height:36px; border-radius:4px; object-fit:cover;" />
-              <div style="font-size:12px; color:#5c6166;">${esc(item.variantTitle || item.title)}</div>
+              <img src="${esc(item.image)}" alt="${esc(item.title)}" style="width:${esc(multiProductSettings?.chooseImageSize ?? 40)}px; height:${esc(multiProductSettings?.chooseImageSize ?? 40)}px; border-radius:4px; object-fit:cover;" />
+              <div style="font-size:12px; color:#5c6166;">
+                <div>${esc(item.variantTitle || item.title)}</div>
+                ${item.productPrice ? `<div>${esc(item.productPrice)}</div>` : ""}
+              </div>
             </div>`
           : ""
       }
@@ -102,6 +117,14 @@ export function renderBundlePreviewHtml({
       ${
         item.original
           ? `<div class="create-offer-style-preview-item-original">${esc(item.original)}</div>`
+          : ""
+      }
+      ${
+        multiProductSettings?.enabled && item.showChooseControl
+          ? `<div style="display:flex; align-items:center; gap:6px; margin-top:8px;">
+              <button type="button" data-preview-action="add" data-preview-item-id="${esc(item.id)}" style="width:${esc(multiProductSettings.chooseButtonSize)}px;height:${esc(multiProductSettings.chooseButtonSize)}px;border-radius:4px;border:1px solid ${esc(multiProductSettings.chooseButtonColor)};background:#fff;color:${esc(multiProductSettings.chooseButtonColor)};font-weight:700;cursor:pointer;">+</button>
+              <button type="button" data-preview-action="choose" data-preview-item-id="${esc(item.id)}" style="height:${esc(multiProductSettings.chooseButtonSize)}px;padding:0 12px;border-radius:4px;border:1px solid ${esc(multiProductSettings.chooseButtonColor)};background:${esc(multiProductSettings.chooseButtonColor)};color:#fff;cursor:pointer;">${esc(multiProductSettings.chooseButtonText)}</button>
+            </div>`
           : ""
       }
     </div>`;

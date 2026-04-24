@@ -321,6 +321,22 @@ export function CreateNewOffer({
   const [buttonText, setButtonText] = useState(offerSettings.buttonText);
   const [buttonPrimaryColor, setButtonPrimaryColor] = useState(offerSettings.buttonPrimaryColor);
   const [showCustomButton, setShowCustomButton] = useState(offerSettings.showCustomButton);
+  const [enableMultiProductBundle, setEnableMultiProductBundle] = useState(
+    offerSettings.enableMultiProductBundle === true ||
+      initialOffer?.offerType === "quantity-breaks-different",
+  );
+  const [chooseButtonText, setChooseButtonText] = useState(
+    offerSettings.chooseButtonText || "Choose",
+  );
+  const [chooseButtonColor, setChooseButtonColor] = useState(
+    offerSettings.chooseButtonColor || "#111111",
+  );
+  const [chooseButtonSize, setChooseButtonSize] = useState(
+    offerSettings.chooseButtonSize || 28,
+  );
+  const [chooseImageSize, setChooseImageSize] = useState(
+    offerSettings.chooseImageSize || 40,
+  );
   const [widgetTitle, setWidgetTitle] = useState(offerSettings.title);
   const [customerSegments, setCustomerSegments] = useState<string[]>(
     offerSettings.customerSegments ? offerSettings.customerSegments.split(",") : ["all"]
@@ -345,7 +361,16 @@ export function CreateNewOffer({
     let parsedObjects: any[] = [];
     try {
       if (initialOffer?.selectedProductsJson) {
-        parsedObjects = JSON.parse(initialOffer.selectedProductsJson);
+        const parsed = JSON.parse(initialOffer.selectedProductsJson);
+        if (Array.isArray(parsed)) {
+          parsedObjects = parsed;
+        } else if (
+          parsed &&
+          typeof parsed === "object" &&
+          Array.isArray((parsed as any).productPool)
+        ) {
+          parsedObjects = (parsed as any).productPool;
+        }
       }
     } catch (e) {}
 
@@ -374,11 +399,14 @@ export function CreateNewOffer({
     });
   });
 
-  const handleSelectProducts = async (type: "buy" | "get" | "normal" = "normal") => {
+  const handleSelectProducts = async (
+    type: "buy" | "get" | "normal" = "normal",
+  ) => {
     const selected = await (window as any).shopify.resourcePicker({
       type: "product",
       action: "select",
-      multiple: true,
+      multiple:
+        type === "normal" ? offerType !== "quantity-breaks-different" : true,
       selectionIds: type === "buy" 
         ? buyProducts.map((id) => ({ id }))
         : type === "get"
@@ -400,7 +428,9 @@ export function CreateNewOffer({
       } else if (type === "get") {
         setGetProducts(newData.map((item: any) => item.id));
       } else {
-        setSelectedProductsData(newData);
+        const nextData =
+          offerType === "quantity-breaks-different" ? newData.slice(0, 1) : newData;
+        setSelectedProductsData(nextData);
       }
     }
   };
@@ -434,6 +464,11 @@ export function CreateNewOffer({
       return [];
     }
   });
+
+  useEffect(() => {
+    // 不同产品类型默认开启多产品功能，其它类型默认关闭
+    setEnableMultiProductBundle(offerType === "quantity-breaks-different");
+  }, [offerType]);
 
   useEffect(() => {
     if (offerType !== "quantity-breaks-different") return;
@@ -497,6 +532,26 @@ export function CreateNewOffer({
   }, [offerType, differentProductRules.length, selectedProductsData, storeProducts]);
 
   useEffect(() => {
+    if (offerType !== "quantity-breaks-different") return;
+    if (selectedProductsData.length === 0) return;
+    if (selectedProductsData.length > 1) {
+      setSelectedProductsData((prev) => prev.slice(0, 1));
+      return;
+    }
+    const primaryProductId = String(selectedProductsData[0].id);
+    setDifferentProductRules((prev) =>
+      prev.map((rule) => ({
+        ...rule,
+        packItems: rule.packItems.map((slot, idx) =>
+          idx === 0 || !slot.allowChooseOther
+            ? { ...slot, defaultProductId: primaryProductId }
+            : slot,
+        ),
+      })),
+    );
+  }, [offerType, selectedProductsData]);
+
+  useEffect(() => {
     if (offerType === 'bxgy') {
       setBxgyDiscountRules(prev =>
         prev.map(rule => ({
@@ -523,9 +578,10 @@ export function CreateNewOffer({
       const hasDifferentDefault = differentProductRules.some((r) => r.isDefault);
       return differentProductRules.map((rule, index) => {
         const isFeatured = hasDifferentDefault ? !!rule.isDefault : index === 0;
-        const firstSlot = rule.packItems[0];
+        const firstSelectableSlot =
+          rule.packItems.find((slot) => slot.allowChooseOther) || rule.packItems[0];
         const firstProduct = selectedProductsData.find(
-          (p) => String(p.id) === String(firstSlot?.defaultProductId || ""),
+          (p) => String(p.id) === String(firstSelectableSlot?.defaultProductId || ""),
         );
         return {
           id: `different-tier-${rule.count}`,
@@ -537,6 +593,8 @@ export function CreateNewOffer({
           saveLabel: `${rule.packItems.length} item slot(s)`,
           image: firstProduct?.image,
           variantTitle: firstProduct?.title,
+          productPrice: firstProduct?.price,
+          showChooseControl: !!enableMultiProductBundle && rule.packItems.some((slot) => slot.allowChooseOther),
         };
       });
     }
@@ -594,7 +652,34 @@ export function CreateNewOffer({
     baseUnitPrice,
     formatPreviewPrice,
     hasDefault,
+    enableMultiProductBundle,
   ]);
+
+  const handlePreviewMultiProductAction = async (
+    action: "add" | "choose",
+    itemId: string,
+  ) => {
+    if (offerType !== "quantity-breaks-different" || !enableMultiProductBundle) return;
+    const matched = previewItems.find((item) => item.id === itemId);
+    if (!matched) return;
+    const selected = await (window as any).shopify.resourcePicker({
+      type: "product",
+      action: "select",
+      multiple: false,
+      selectionIds: selectedProductsData[0]?.id ? [{ id: selectedProductsData[0].id }] : [],
+      title: action === "add" ? "Add bundle product" : "Choose bundle product",
+    });
+    if (!selected || !selected[0]) return;
+    const item = selected[0];
+    const picked = {
+      id: String(item.id),
+      title: String(item.title || ""),
+      image: item.images?.[0]?.originalSrc || "https://via.placeholder.com/60",
+      price: item.variants?.[0]?.price || "€0.00",
+      variantsCount: item.variants?.length || 1,
+    };
+    setSelectedProductsData([picked]);
+  };
 
   const steps = [
     "Basic Information",
@@ -781,6 +866,15 @@ export function CreateNewOffer({
       <input type="hidden" name="buttonText" value={buttonText} />
       <input type="hidden" name="buttonPrimaryColor" value={buttonPrimaryColor} />
       <input type="hidden" name="showCustomButton" value={showCustomButton ? "true" : "false"} />
+      <input
+        type="hidden"
+        name="enableMultiProductBundle"
+        value={enableMultiProductBundle ? "true" : "false"}
+      />
+      <input type="hidden" name="chooseButtonText" value={chooseButtonText} />
+      <input type="hidden" name="chooseButtonColor" value={chooseButtonColor} />
+      <input type="hidden" name="chooseButtonSize" value={chooseButtonSize} />
+      <input type="hidden" name="chooseImageSize" value={chooseImageSize} />
       <input
         type="hidden"
         name="cardBackgroundColor"
@@ -971,6 +1065,14 @@ export function CreateNewOffer({
                   buttonText={buttonText}
                   buttonPrimaryColor={buttonPrimaryColor}
                   showCustomButton={showCustomButton}
+                  multiProductSettings={{
+                    enabled: enableMultiProductBundle,
+                    chooseButtonText,
+                    chooseButtonColor,
+                    chooseButtonSize,
+                    chooseImageSize,
+                  }}
+                  onPreviewAction={handlePreviewMultiProductAction}
                   title={widgetTitle}
                   items={previewItems}
                 />
@@ -1077,7 +1179,9 @@ export function CreateNewOffer({
                       ) : (
                         <div>
                           <div className="create-offer-selected-grid">
-                            {selectedProductsData.slice(0, 3).map((product) => (
+                            {selectedProductsData
+                              .slice(0, offerType === "quantity-breaks-different" ? 1 : 3)
+                              .map((product) => (
                               <div
                                 key={product.id}
                                 className="create-offer-selected-card"
@@ -1133,7 +1237,9 @@ export function CreateNewOffer({
                             }}
                             className="px-0"
                           >
-                            Edit products
+                            {offerType === "quantity-breaks-different"
+                              ? "Change product"
+                              : "Edit products"}
                           </Button>
                         </div>
                       )}
@@ -1379,6 +1485,81 @@ export function CreateNewOffer({
                       </>
                     ) : offerType === "quantity-breaks-different" ? (
                       <>
+                        <div className="create-offer-discount-card">
+                          <div className="create-offer-discount-body">
+                            <div className="flex items-center justify-between">
+                              <div className="text-[14px] font-medium text-[#1c1f23]">
+                                Volume discount with other products
+                              </div>
+                              <Switch
+                                checked={enableMultiProductBundle}
+                                onChange={setEnableMultiProductBundle}
+                              />
+                            </div>
+                            {enableMultiProductBundle && (
+                              <div
+                                className="create-offer-discount-form-row"
+                                style={{
+                                  marginTop: "12px",
+                                  display: "grid",
+                                  gridTemplateColumns: "1fr 1fr",
+                                  gap: "12px",
+                                }}
+                              >
+                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                  Button text
+                                  <Input
+                                    size="large"
+                                    className="mt-1"
+                                    value={chooseButtonText}
+                                    onChange={(e) => setChooseButtonText(e.target.value)}
+                                  />
+                                </label>
+                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                  Color
+                                  <input
+                                    type="color"
+                                    value={chooseButtonColor}
+                                    onChange={(e) => setChooseButtonColor(e.target.value)}
+                                    className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1 cursor-pointer"
+                                  />
+                                </label>
+                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                  Button size
+                                  <Input
+                                    size="large"
+                                    type="number"
+                                    min={24}
+                                    max={44}
+                                    className="mt-1"
+                                    value={chooseButtonSize}
+                                    onChange={(e) =>
+                                      setChooseButtonSize(
+                                        Math.max(24, Math.min(44, Number(e.target.value) || 28)),
+                                      )
+                                    }
+                                  />
+                                </label>
+                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                  Image size
+                                  <Input
+                                    size="large"
+                                    type="number"
+                                    min={24}
+                                    max={64}
+                                    className="mt-1"
+                                    value={chooseImageSize}
+                                    onChange={(e) =>
+                                      setChooseImageSize(
+                                        Math.max(24, Math.min(64, Number(e.target.value) || 40)),
+                                      )
+                                    }
+                                  />
+                                </label>
+                              </div>
+                            )}
+                          </div>
+                        </div>
                         {differentProductRules.map((rule, index) => (
                           <div className="create-offer-discount-card" key={`different-${index}`}>
                             <div className="create-offer-discount-body">
@@ -1721,6 +1902,14 @@ export function CreateNewOffer({
                   buttonText={buttonText}
                   buttonPrimaryColor={buttonPrimaryColor}
                   showCustomButton={showCustomButton}
+                  multiProductSettings={{
+                    enabled: enableMultiProductBundle,
+                    chooseButtonText,
+                    chooseButtonColor,
+                    chooseButtonSize,
+                    chooseImageSize,
+                  }}
+                  onPreviewAction={handlePreviewMultiProductAction}
                   title={widgetTitle}
                   items={previewItems}
                   />
@@ -2034,6 +2223,14 @@ export function CreateNewOffer({
                   buttonText={buttonText}
                   buttonPrimaryColor={buttonPrimaryColor}
                   showCustomButton={showCustomButton}
+                  multiProductSettings={{
+                    enabled: enableMultiProductBundle,
+                    chooseButtonText,
+                    chooseButtonColor,
+                    chooseButtonSize,
+                    chooseImageSize,
+                  }}
+                  onPreviewAction={handlePreviewMultiProductAction}
                   title={widgetTitle}
                   items={previewItems}
                 />
