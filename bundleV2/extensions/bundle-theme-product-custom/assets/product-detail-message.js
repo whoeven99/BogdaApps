@@ -15,6 +15,11 @@ let bundlePriceDebounceT = null;
 let currentMainForm = null;
 const CIWI_SUBSCRIPTION_MODE_NAME = "ciwi-subscription-mode";
 
+// 中文注释：程序化写入 quantity / selling_plan 时会 synthetic dispatch change，否则会冒泡到
+// document 上 attachBundlePriceSync 的 capture 监听器 → scheduleBundlePriceRefresh →
+// 全量重绘 innerHTML → 再次 sync… 形成 F12 日志刷屏的死循环
+let __ciwiSuppressBundlePriceSync = false;
+
 function esc(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -694,11 +699,18 @@ function updateThemeQuantityInput(count) {
     }
 
     // 4. 更新所有找到的输入框，但禁用多余的，防止重复提交导致数量翻倍
+    __ciwiSuppressBundlePriceSync = true;
+    try {
     allQtyInputs.forEach((input, index) => {
+      const prev = String(input.value);
       input.value = count;
       if (index === 0) {
         input.disabled = false;
         // 触发 change 和 input 事件，以兼容不同主题的事件监听
+        if (String(count) === prev) {
+          return;
+        }
+        // 中文注释：必须在 suppress 块内 dispatch，避免触发整卡 bundle 重绘死循环
         input.dispatchEvent(new Event("change", { bubbles: true }));
         input.dispatchEvent(new Event("input", { bubbles: true }));
       } else {
@@ -707,6 +719,9 @@ function updateThemeQuantityInput(count) {
         input.disabled = true;
       }
     });
+    } finally {
+      __ciwiSuppressBundlePriceSync = false;
+    }
   }
 }
 
@@ -730,7 +745,11 @@ function updateThemeSellingPlanInput(sellingPlanId) {
   }
 
   // 中文注释：订阅模式写入 selling_plan，一次性购买则清空并禁用，避免旧值被提交
+  __ciwiSuppressBundlePriceSync = true;
+  try {
   allInputs.forEach((input, index) => {
+    const prevVal = String(input.value);
+    const prevDisabled = input.disabled;
     if (sellingPlanId) {
       input.value = sellingPlanId;
       input.disabled = index > 0;
@@ -738,9 +757,18 @@ function updateThemeSellingPlanInput(sellingPlanId) {
       input.value = "";
       input.disabled = true;
     }
+    const valChanged = String(input.value) !== prevVal;
+    const disabledChanged = input.disabled !== prevDisabled;
+    if (!valChanged && !disabledChanged) {
+      return;
+    }
+    // 中文注释：synthetic 事件会触发 document capture 的 refresh，必须用 suppress 打断反馈环
     input.dispatchEvent(new Event("change", { bubbles: true }));
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
+  } finally {
+    __ciwiSuppressBundlePriceSync = false;
+  }
 }
 
 function syncSubscriptionSelectionToTheme(offer) {
@@ -1358,7 +1386,12 @@ function attachBundlePriceSync(offer) {
   priceSyncController = ac;
   const { signal } = ac;
 
-  const refresh = () => scheduleBundlePriceRefresh(offer);
+  const refresh = () => {
+    if (__ciwiSuppressBundlePriceSync) {
+      return;
+    }
+    scheduleBundlePriceRefresh(offer);
+  };
 
   document.addEventListener("variant:change", refresh, { signal });
   document.addEventListener("shopify:variant:change", refresh, { signal });
