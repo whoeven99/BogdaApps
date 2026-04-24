@@ -18,9 +18,12 @@ import {
   normalizeOfferNameKey,
   parseDiscountRules,
   parseBxgyDiscountRules,
+  parseDifferentProductDiscountRules,
   parseOfferSettings,
   parseSelectedProductIds,
   buildBxgyDiscountRulesJson,
+  buildDifferentProductDiscountRulesJson,
+  type DifferentProductDiscountRule,
 } from "../../../utils/offerParsing";
 
 type DiscountRule = {
@@ -47,6 +50,8 @@ type BxgyDiscountRule = {
   badge?: string;
   isDefault?: boolean;
 };
+
+type DifferentProductRule = DifferentProductDiscountRule;
 
 type Product = {
   id: string | number;
@@ -405,6 +410,12 @@ export function CreateNewOffer({
   const [bxgyDiscountRules, setBxgyDiscountRules] = useState<BxgyDiscountRule[]>(
     parseBxgyDiscountRules(initialOffer?.discountRulesJson),
   );
+  const [differentProductRules, setDifferentProductRules] = useState<DifferentProductRule[]>(
+    () =>
+      initialOffer?.offerType === "quantity-breaks-different"
+        ? parseDifferentProductDiscountRules(initialOffer?.discountRulesJson)
+        : [],
+  );
   const [buyProducts, setBuyProducts] = useState<string[]>(() => {
     if (initialOffer?.offerType !== 'bxgy' || !initialOffer.selectedProductsJson) return [];
     try {
@@ -423,6 +434,67 @@ export function CreateNewOffer({
       return [];
     }
   });
+
+  useEffect(() => {
+    if (offerType !== "quantity-breaks-different") return;
+    if (differentProductRules.length > 0) return;
+    const firstProduct = selectedProductsData[0] || storeProducts[0];
+    if (!firstProduct) return;
+    const firstProductId = String(firstProduct.id);
+    // 新类型默认初始化两档 pack：1 件与 2 件
+    setDifferentProductRules([
+      {
+        count: 1,
+        discountPercent: 0,
+        title: "Bar #1 - 1 pack",
+        subtitle: "Standard price",
+        badge: "",
+        isDefault: false,
+        packItems: [
+          {
+            slotId: "p1-s1",
+            defaultProductId: firstProductId,
+            allowChooseOther: false,
+            quantity: 1,
+          },
+        ],
+      },
+      {
+        count: 2,
+        discountPercent: 10,
+        title: "Bar #2 - 2 pack",
+        subtitle: "Save 10%",
+        badge: "Most Popular",
+        isDefault: true,
+        packItems: [
+          {
+            slotId: "p2-s1",
+            defaultProductId: firstProductId,
+            allowChooseOther: false,
+            quantity: 1,
+          },
+          {
+            slotId: "p2-s2",
+            defaultProductId: null,
+            allowChooseOther: true,
+            quantity: 1,
+          },
+        ],
+      },
+    ]);
+    if (selectedProductsData.length === 0) {
+      const firstProductAny = firstProduct as any;
+      setSelectedProductsData([
+        {
+          id: firstProductId,
+          title: String(firstProductAny.title || firstProductAny.name || "Product"),
+          image: firstProductAny.image || "https://via.placeholder.com/60",
+          price: firstProductAny.price || "€0.00",
+          variantsCount: firstProductAny.variantsCount || 1,
+        },
+      ]);
+    }
+  }, [offerType, differentProductRules.length, selectedProductsData, storeProducts]);
 
   useEffect(() => {
     if (offerType === 'bxgy') {
@@ -447,6 +519,28 @@ export function CreateNewOffer({
   const hasDefault = normalizedDiscountRules.some(r => r.isDefault);
 
   const previewItems: PreviewItem[] = useMemo(() => {
+    if (offerType === "quantity-breaks-different" && differentProductRules.length > 0) {
+      const hasDifferentDefault = differentProductRules.some((r) => r.isDefault);
+      return differentProductRules.map((rule, index) => {
+        const isFeatured = hasDifferentDefault ? !!rule.isDefault : index === 0;
+        const firstSlot = rule.packItems[0];
+        const firstProduct = selectedProductsData.find(
+          (p) => String(p.id) === String(firstSlot?.defaultProductId || ""),
+        );
+        return {
+          id: `different-tier-${rule.count}`,
+          title: rule.title || `${rule.count} pack`,
+          subtitle: rule.subtitle || `Contains ${rule.packItems.length} product slot(s)`,
+          price: rule.discountPercent > 0 ? `${rule.discountPercent}% OFF` : "Standard price",
+          featured: isFeatured,
+          badge: rule.badge || (isFeatured ? "Most Popular" : ""),
+          saveLabel: `${rule.packItems.length} item slot(s)`,
+          image: firstProduct?.image,
+          variantTitle: firstProduct?.title,
+        };
+      });
+    }
+
     if (offerType === "bxgy" && bxgyDiscountRules.length > 0) {
       const bxgyHasDefault = bxgyDiscountRules.some(r => r.isDefault);
       return bxgyDiscountRules.map((rule, index) => {
@@ -522,6 +616,12 @@ export function CreateNewOffer({
       description:
         "Buy X products and get Y products with discount (e.g., Buy 2 get 1 free)",
     },
+    {
+      id: "quantity-breaks-different",
+      name: "Quantity breaks for different products",
+      description:
+        "Offer tiered discounts by composing packs with different products",
+    },
   ];
 
 
@@ -556,6 +656,15 @@ export function CreateNewOffer({
           Modal.error({
             title: "Validation Error",
             content: "For BXGY offers, you must select both Buy Products and Get Products.",
+          });
+          setStep(2);
+          return;
+        }
+        if (offerType === "quantity-breaks-different" && differentProductRules.length === 0) {
+          e.preventDefault();
+          Modal.error({
+            title: "Validation Error",
+            content: "Please configure at least one pack rule for quantity breaks with different products.",
           });
           setStep(2);
           return;
@@ -691,12 +800,24 @@ export function CreateNewOffer({
       <input
         type="hidden"
         name="selectedProductsJson"
-        value={JSON.stringify(offerType === "bxgy" ? { buyProducts, getProducts } : selectedProductsData)}
+        value={JSON.stringify(
+          offerType === "bxgy"
+            ? { buyProducts, getProducts }
+            : offerType === "quantity-breaks-different"
+              ? { productPool: selectedProductsData }
+              : selectedProductsData,
+        )}
       />
       <input
         type="hidden"
         name="discountRulesJson"
-        value={JSON.stringify(offerType === "bxgy" ? buildBxgyDiscountRulesJson(bxgyDiscountRules) : buildDiscountRulesJson(normalizedDiscountRules))}
+        value={JSON.stringify(
+          offerType === "bxgy"
+            ? buildBxgyDiscountRulesJson(bxgyDiscountRules)
+            : offerType === "quantity-breaks-different"
+              ? buildDifferentProductDiscountRulesJson(differentProductRules)
+              : buildDiscountRulesJson(normalizedDiscountRules),
+        )}
       />
 
       <div className="bg-[#ffffff] rounded-[8px] shadow-[0_1px_3px_rgba(0,0,0,0.1)] p-[20px] mb-[100px]">
@@ -1021,7 +1142,11 @@ export function CreateNewOffer({
 
                   <div>
                     <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                      {offerType === "bxgy" ? "BXGY Rules" : "Discount Setting"}
+                      {offerType === "bxgy"
+                        ? "BXGY Rules"
+                        : offerType === "quantity-breaks-different"
+                          ? "Volume discount with other products"
+                          : "Discount Setting"}
                     </h3>
                     {offerType === "bxgy" ? (
                       <>
@@ -1250,6 +1375,165 @@ export function CreateNewOffer({
                           }}
                         >
                           + Add BXGY tier
+                        </Button>
+                      </>
+                    ) : offerType === "quantity-breaks-different" ? (
+                      <>
+                        {differentProductRules.map((rule, index) => (
+                          <div className="create-offer-discount-card" key={`different-${index}`}>
+                            <div className="create-offer-discount-body">
+                              <div className="create-offer-discount-form-row create-offer-discount-form-row--inline">
+                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                  Pack quantity
+                                  <Input
+                                    size="large"
+                                    type="number"
+                                    min={1}
+                                    className="mt-1"
+                                    value={rule.count}
+                                    onChange={(e) => {
+                                      const nextCount = Math.max(1, Math.trunc(Number(e.target.value) || 1));
+                                      setDifferentProductRules((prev) =>
+                                        prev.map((r, i) => (i === index ? { ...r, count: nextCount } : r)),
+                                      );
+                                    }}
+                                  />
+                                </label>
+                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                  Discount (%)
+                                  <Input
+                                    size="large"
+                                    type="number"
+                                    min={0}
+                                    max={100}
+                                    className="mt-1"
+                                    value={rule.discountPercent}
+                                    onChange={(e) => {
+                                      const nextPercent = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+                                      setDifferentProductRules((prev) =>
+                                        prev.map((r, i) =>
+                                          i === index ? { ...r, discountPercent: nextPercent } : r,
+                                        ),
+                                      );
+                                    }}
+                                  />
+                                </label>
+                              </div>
+                              <div className="create-offer-discount-form-row" style={{ marginTop: "12px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                  Title
+                                  <Input
+                                    size="large"
+                                    className="mt-1"
+                                    value={rule.title || ""}
+                                    onChange={(e) =>
+                                      setDifferentProductRules((prev) =>
+                                        prev.map((r, i) => (i === index ? { ...r, title: e.target.value } : r)),
+                                      )
+                                    }
+                                  />
+                                </label>
+                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                  Subtitle
+                                  <Input
+                                    size="large"
+                                    className="mt-1"
+                                    value={rule.subtitle || ""}
+                                    onChange={(e) =>
+                                      setDifferentProductRules((prev) =>
+                                        prev.map((r, i) => (i === index ? { ...r, subtitle: e.target.value } : r)),
+                                      )
+                                    }
+                                  />
+                                </label>
+                              </div>
+                              <div style={{ marginTop: "12px" }}>
+                                <div className="text-[13px] font-medium text-[#1c1f23] mb-2">Pack items</div>
+                                <div className="flex flex-col gap-2">
+                                  {rule.packItems.map((slot, slotIndex) => (
+                                    <div key={slot.slotId} className="flex items-center gap-2">
+                                      <Select
+                                        size="middle"
+                                        className="flex-1"
+                                        placeholder="Select default product"
+                                        value={slot.defaultProductId || undefined}
+                                        onChange={(val) => {
+                                          setDifferentProductRules((prev) =>
+                                            prev.map((r, i) =>
+                                              i === index
+                                                ? {
+                                                    ...r,
+                                                    packItems: r.packItems.map((s, si) =>
+                                                      si === slotIndex ? { ...s, defaultProductId: val } : s,
+                                                    ),
+                                                  }
+                                                : r,
+                                            ),
+                                          );
+                                        }}
+                                        options={selectedProductsData.map((p) => ({
+                                          label: p.title,
+                                          value: String(p.id),
+                                        }))}
+                                      />
+                                      <Checkbox
+                                        checked={slot.allowChooseOther}
+                                        onChange={(e) => {
+                                          setDifferentProductRules((prev) =>
+                                            prev.map((r, i) =>
+                                              i === index
+                                                ? {
+                                                    ...r,
+                                                    packItems: r.packItems.map((s, si) =>
+                                                      si === slotIndex
+                                                        ? { ...s, allowChooseOther: e.target.checked }
+                                                        : s,
+                                                    ),
+                                                  }
+                                                : r,
+                                            ),
+                                          );
+                                        }}
+                                      >
+                                        Choose other
+                                      </Checkbox>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        <Button
+                          type="dashed"
+                          className="w-full"
+                          onClick={() =>
+                            setDifferentProductRules((prev) => {
+                              const nextCount = (prev[prev.length - 1]?.count || 1) + 1;
+                              const firstProductId = selectedProductsData[0]?.id
+                                ? String(selectedProductsData[0].id)
+                                : null;
+                              return [
+                                ...prev,
+                                {
+                                  count: nextCount,
+                                  discountPercent: 10,
+                                  title: `Bar #${prev.length + 1} - ${nextCount} pack`,
+                                  subtitle: "",
+                                  badge: "",
+                                  isDefault: false,
+                                  packItems: Array.from({ length: nextCount }).map((_, slotIdx) => ({
+                                    slotId: `p${prev.length + 1}-s${slotIdx + 1}`,
+                                    defaultProductId: slotIdx === 0 ? firstProductId : null,
+                                    allowChooseOther: slotIdx > 0,
+                                    quantity: 1,
+                                  })),
+                                },
+                              ];
+                            })
+                          }
+                        >
+                          + Add bar
                         </Button>
                       </>
                     ) : (
@@ -2092,6 +2376,17 @@ export function CreateNewOffer({
               if (offerType === "bxgy") {
                 if (buyProducts.length === 0 || getProducts.length === 0) {
                   message.error("Please select both Buy and Get products for a BXGY offer.");
+                  e.preventDefault();
+                  return;
+                }
+              } else if (offerType === "quantity-breaks-different") {
+                if (selectedProductsData.length === 0) {
+                  message.error("Please select products for the product pool.");
+                  e.preventDefault();
+                  return;
+                }
+                if (differentProductRules.length === 0) {
+                  message.error("Please configure at least one bar.");
                   e.preventDefault();
                   return;
                 }

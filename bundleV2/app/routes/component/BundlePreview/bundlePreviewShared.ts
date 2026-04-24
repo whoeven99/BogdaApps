@@ -9,6 +9,8 @@ export type PreviewItem = {
   featured?: boolean;
   badge?: string;
   saveLabel?: string;
+  image?: string;
+  variantTitle?: string;
 };
 
 export const PREVIEW_ITEMS: PreviewItem[] = [
@@ -79,6 +81,14 @@ export function renderBundlePreviewHtml({
       ${
         item.badge
           ? `<div class="create-offer-style-preview-badge" style="background:${esc(accentColor)} !important; color:${esc(labelColor)} !important;">${esc(item.badge)}</div>`
+          : ""
+      }
+      ${
+        item.image
+          ? `<div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+              <img src="${esc(item.image)}" alt="${esc(item.title)}" style="width:36px; height:36px; border-radius:4px; object-fit:cover;" />
+              <div style="font-size:12px; color:#5c6166;">${esc(item.variantTitle || item.title)}</div>
+            </div>`
           : ""
       }
       <div class="create-offer-style-preview-item-title">${esc(item.title)}</div>

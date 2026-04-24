@@ -181,6 +181,23 @@ export type BxgyDiscountRule = {
   isDefault?: boolean;
 };
 
+export type DifferentProductPackSlot = {
+  slotId: string;
+  defaultProductId: string | null;
+  allowChooseOther: boolean;
+  quantity: number;
+};
+
+export type DifferentProductDiscountRule = {
+  count: number;
+  discountPercent: number;
+  title?: string;
+  subtitle?: string;
+  badge?: string;
+  isDefault?: boolean;
+  packItems: DifferentProductPackSlot[];
+};
+
 export function parseDiscountRules(discountRulesJson?: string | null): DiscountRule[] {
   if (!discountRulesJson) return [];
 
@@ -218,7 +235,27 @@ export function parseSelectedProductIds(selectedProductsJson?: string | null): s
 
   try {
     const parsed = JSON.parse(selectedProductsJson);
-    if (!Array.isArray(parsed)) return [];
+    if (!Array.isArray(parsed)) {
+      if (parsed && typeof parsed === "object") {
+        const pool = (parsed as { productPool?: unknown }).productPool;
+        if (Array.isArray(pool)) {
+          const ids: string[] = [];
+          for (const item of pool) {
+            if (typeof item === "string") {
+              ids.push(item);
+              continue;
+            }
+            if (item && typeof item === "object") {
+              const id = (item as { id?: unknown }).id;
+              if (typeof id === "string") ids.push(id);
+              else if (typeof id === "number") ids.push(String(id));
+            }
+          }
+          return ids;
+        }
+      }
+      return [];
+    }
 
     const ids: string[] = [];
     for (const item of parsed) {
@@ -290,6 +327,72 @@ export function parseBxgyDiscountRules(discountRulesJson?: string | null): BxgyD
   }
 }
 
+export function parseDifferentProductDiscountRules(
+  discountRulesJson?: string | null,
+): DifferentProductDiscountRule[] {
+  if (!discountRulesJson) return [];
+
+  try {
+    const parsed = JSON.parse(discountRulesJson) as unknown;
+    if (!Array.isArray(parsed)) return [];
+
+    const out: DifferentProductDiscountRule[] = [];
+    for (const item of parsed) {
+      if (!item || typeof item !== "object") continue;
+      const count = Number((item as { count?: unknown }).count);
+      const discountPercent = Number(
+        (item as { discountPercent?: unknown }).discountPercent,
+      );
+      const rawPackItems = (item as { packItems?: unknown }).packItems;
+      if (!Number.isFinite(count) || count < 1) continue;
+      if (!Number.isFinite(discountPercent)) continue;
+      if (!Array.isArray(rawPackItems)) continue;
+
+      // 解析每个 pack 槽位，容错处理旧数据和脏数据
+      const packItems: DifferentProductPackSlot[] = rawPackItems
+        .map((slot, slotIdx) => {
+          if (!slot || typeof slot !== "object") return null;
+          const slotIdRaw = (slot as { slotId?: unknown }).slotId;
+          const defaultProductIdRaw = (slot as { defaultProductId?: unknown }).defaultProductId;
+          const allowChooseOtherRaw = (slot as { allowChooseOther?: unknown }).allowChooseOther;
+          const quantityRaw = Number((slot as { quantity?: unknown }).quantity);
+          return {
+            slotId:
+              typeof slotIdRaw === "string" && slotIdRaw.trim()
+                ? slotIdRaw.trim()
+                : `slot-${slotIdx + 1}`,
+            defaultProductId:
+              typeof defaultProductIdRaw === "string" && defaultProductIdRaw.trim()
+                ? defaultProductIdRaw.trim()
+                : null,
+            allowChooseOther: allowChooseOtherRaw === true,
+            quantity:
+              Number.isFinite(quantityRaw) && quantityRaw >= 1
+                ? Math.trunc(quantityRaw)
+                : 1,
+          } satisfies DifferentProductPackSlot;
+        })
+        .filter(Boolean) as DifferentProductPackSlot[];
+
+      if (!packItems.length) continue;
+      out.push({
+        count: Math.trunc(count),
+        discountPercent: Math.max(0, Math.min(100, discountPercent)),
+        title: (item as { title?: string }).title || "",
+        subtitle: (item as { subtitle?: string }).subtitle || "",
+        badge: (item as { badge?: string }).badge || "",
+        isDefault: !!(item as { isDefault?: boolean }).isDefault,
+        packItems,
+      });
+    }
+
+    out.sort((a, b) => a.count - b.count);
+    return out;
+  } catch {
+    return [];
+  }
+}
+
 /** Build BXGY discount rules JSON for DB storage — deduplicates by count, sorts ascending. */
 export function buildBxgyDiscountRulesJson(tiers: BxgyDiscountRule[]): BxgyDiscountRule[] {
   const dedupedByCount = new Map<number, BxgyDiscountRule>();
@@ -316,5 +419,48 @@ export function buildBxgyDiscountRulesJson(tiers: BxgyDiscountRule[]): BxgyDisco
       isDefault: !!tier.isDefault,
     });
   }
+  return Array.from(dedupedByCount.values()).sort((a, b) => a.count - b.count);
+}
+
+export function buildDifferentProductDiscountRulesJson(
+  tiers: DifferentProductDiscountRule[],
+): DifferentProductDiscountRule[] {
+  const dedupedByCount = new Map<number, DifferentProductDiscountRule>();
+  for (const tier of tiers) {
+    if (!Number.isFinite(tier.count) || tier.count < 1) continue;
+    if (!Number.isFinite(tier.discountPercent)) continue;
+    if (!Array.isArray(tier.packItems) || !tier.packItems.length) continue;
+
+    // 统一序列化槽位字段，避免前后端字段不一致
+    const normalizedPackItems = tier.packItems
+      .map((slot, idx) => ({
+        slotId:
+          typeof slot.slotId === "string" && slot.slotId.trim()
+            ? slot.slotId.trim()
+            : `slot-${idx + 1}`,
+        defaultProductId:
+          typeof slot.defaultProductId === "string" && slot.defaultProductId.trim()
+            ? slot.defaultProductId.trim()
+            : null,
+        allowChooseOther: slot.allowChooseOther === true,
+        quantity:
+          Number.isFinite(slot.quantity) && slot.quantity >= 1
+            ? Math.trunc(slot.quantity)
+            : 1,
+      }))
+      .filter((slot) => Boolean(slot.slotId));
+    if (!normalizedPackItems.length) continue;
+
+    dedupedByCount.set(Math.trunc(tier.count), {
+      count: Math.trunc(tier.count),
+      discountPercent: Math.max(0, Math.min(100, tier.discountPercent)),
+      title: tier.title || "",
+      subtitle: tier.subtitle || "",
+      badge: tier.badge || "",
+      isDefault: !!tier.isDefault,
+      packItems: normalizedPackItems,
+    });
+  }
+
   return Array.from(dedupedByCount.values()).sort((a, b) => a.count - b.count);
 }
