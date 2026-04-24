@@ -69,6 +69,7 @@ type Product = {
     price?: string;
     selectedOptions?: Array<{ name: string; value: string }>;
   }>;
+  hasSubscription?: boolean;
 };
 
 type CompleteBundleProductDraft = {
@@ -266,6 +267,17 @@ export function CreateNewOffer({
   ianaTimezone = "UTC",
 }: CreateNewOfferProps) {
   const fetcher = useFetcher();
+  const subscriptionStatusFetcher = useFetcher<{
+    ok: boolean;
+    error?: string;
+    product?: {
+      id: string;
+      title: string;
+      requiresSellingPlan: boolean;
+      sellingPlanGroups: Array<{ id?: string; name?: string }>;
+      hasSubscription: boolean;
+    };
+  }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [submitErrorToast, setSubmitErrorToast] = useState<string | null>(null);
@@ -416,6 +428,25 @@ export function CreateNewOffer({
   const [buttonText, setButtonText] = useState(offerSettings.buttonText);
   const [buttonPrimaryColor, setButtonPrimaryColor] = useState(offerSettings.buttonPrimaryColor);
   const [showCustomButton, setShowCustomButton] = useState(offerSettings.showCustomButton);
+  const [subscriptionEnabled, setSubscriptionEnabled] = useState(
+    offerSettings.subscriptionEnabled,
+  );
+  const [subscriptionPosition, setSubscriptionPosition] = useState(
+    offerSettings.subscriptionPosition,
+  );
+  const [subscriptionTitle, setSubscriptionTitle] = useState(
+    offerSettings.subscriptionTitle,
+  );
+  const [subscriptionSubtitle, setSubscriptionSubtitle] = useState(
+    offerSettings.subscriptionSubtitle,
+  );
+  const [oneTimeTitle, setOneTimeTitle] = useState(offerSettings.oneTimeTitle);
+  const [oneTimeSubtitle, setOneTimeSubtitle] = useState(
+    offerSettings.oneTimeSubtitle,
+  );
+  const [subscriptionDefaultSelected, setSubscriptionDefaultSelected] = useState(
+    offerSettings.subscriptionDefaultSelected,
+  );
   const [widgetTitle, setWidgetTitle] = useState(offerSettings.title);
   const [customerSegments, setCustomerSegments] = useState<string[]>(
     offerSettings.customerSegments ? offerSettings.customerSegments.split(",") : ["all"]
@@ -432,6 +463,7 @@ export function CreateNewOffer({
     image: string;
     price: string;
     variantsCount: number;
+    hasSubscription: boolean;
   }[]>(() => {
     const ids = initialOffer?.selectedProductsJson
       ? parseSelectedProductIds(initialOffer.selectedProductsJson)
@@ -455,6 +487,7 @@ export function CreateNewOffer({
           image: savedObj.image || "https://via.placeholder.com/60",
           price: savedObj.price || "€0.00",
           variantsCount: savedObj.variantsCount || 1,
+          hasSubscription: savedObj.hasSubscription === true,
         };
       }
 
@@ -465,15 +498,18 @@ export function CreateNewOffer({
         image: found?.image ?? "https://via.placeholder.com/60",
         price: found?.price ?? "€0.00",
         variantsCount: 1,
+        hasSubscription: found?.hasSubscription === true,
       };
     });
   });
 
-  const handleSelectProducts = async (type: "buy" | "get" | "normal" = "normal") => {
+  const handleSelectProducts = async (
+    type: "buy" | "get" | "normal" = "normal",
+  ) => {
     const selected = await (window as any).shopify.resourcePicker({
       type: "product",
       action: "select",
-      multiple: true,
+      multiple: type === "normal" && offerType === "subscription" ? false : true,
       selectionIds: type === "buy" 
         ? buyProducts.map((id) => ({ id }))
         : type === "get"
@@ -482,12 +518,20 @@ export function CreateNewOffer({
     });
 
     if (selected) {
-      const newData = selected.map((item: any) => ({
+      const selectedList = Array.isArray(selected) ? selected : [selected];
+      const newData = selectedList.map((item: any) => ({
         id: item.id,
         title: item.title,
         image: item.images?.[0]?.originalSrc || "https://via.placeholder.com/60",
         price: item.variants?.[0]?.price || "€0.00",
         variantsCount: item.variants?.length || 1,
+        // 资源选择器不稳定返回 sellingPlan 字段，因此回退到 loader 的 GraphQL 结果
+        hasSubscription:
+          ((item.sellingPlanGroups?.edges as Array<unknown> | undefined) ?? [])
+            .length > 0 ||
+          storeProducts.some(
+            (p) => String(p.id) === String(item.id) && p.hasSubscription,
+          ),
       }));
       
       if (type === "buy") {
@@ -495,7 +539,20 @@ export function CreateNewOffer({
       } else if (type === "get") {
         setGetProducts(newData.map((item: any) => item.id));
       } else {
-        setSelectedProductsData(newData);
+        const nextProducts =
+          offerType === "subscription" ? newData.slice(0, 1) : newData;
+        setSelectedProductsData(nextProducts);
+
+        // 中文注释：订阅型 offer 选完商品后，使用用户指定的 GraphQL 单独校验该商品是否有 selling plan
+        if (offerType === "subscription" && nextProducts[0]?.id) {
+          subscriptionStatusFetcher.submit(
+            {
+              intent: "get-product-subscription-status",
+              productId: String(nextProducts[0].id),
+            },
+            { method: "post" },
+          );
+        }
       }
     }
   };
@@ -1074,6 +1131,24 @@ export function CreateNewOffer({
     initialOffer ? initialOffer.status : true
   );
 
+  useEffect(() => {
+    if (subscriptionStatusFetcher.state !== "idle") return;
+    if (!subscriptionStatusFetcher.data?.ok) return;
+    const result = subscriptionStatusFetcher.data.product;
+    if (!result?.id) return;
+
+    setSelectedProductsData((prev) =>
+      prev.map((item) =>
+        String(item.id) === String(result.id)
+          ? {
+              ...item,
+              hasSubscription: result.hasSubscription,
+            }
+          : item,
+      ),
+    );
+  }, [subscriptionStatusFetcher.state, subscriptionStatusFetcher.data]);
+
   const normalizedDiscountRules = sanitizeDiscountRules(discountRules);
   const featuredRule = normalizedDiscountRules[0];
 
@@ -1210,7 +1285,155 @@ export function CreateNewOffer({
       description:
         "Create multiple bundle bars and let customers choose product variants/options",
     },
+    {
+      id: "subscription",
+      name: "Subscription",
+      description:
+        "Show subscription purchase option below bundle bars for products that support selling plans",
+    },
   ];
+
+  const allSelectedProductsHaveSubscription = useMemo(
+    () =>
+      selectedProductsData.length > 0 &&
+      selectedProductsData.every((item) => item.hasSubscription),
+    [selectedProductsData],
+  );
+  const shouldShowSubscriptionPreview =
+    offerType === "subscription" && subscriptionEnabled;
+  const subscriptionPreviewStyle = allSelectedProductsHaveSubscription
+    ? "solid"
+    : "dashed";
+  const shouldShowSubscriptionExplanation =
+    shouldShowSubscriptionPreview && !allSelectedProductsHaveSubscription;
+  const subscriptionExplanationTitle =
+    selectedProductsData.length > 0
+      ? "Some products aren't eligible for subscriptions"
+      : "Select products to check subscription eligibility";
+  const subscriptionExplanationBody =
+    selectedProductsData.length > 0
+      ? "Subscription bar will only be shown in products that are eligible for subscription. You can select those products in your subscription app."
+      : "After selecting products, the app checks whether they have selling plans and decides whether to show a solid or dashed subscription bar.";
+
+  useEffect(() => {
+    // 中文注释：当用户在第 1 步切换到 Subscription 类型时，默认自动打开订阅开关
+    if (offerType === "subscription") {
+      setSubscriptionEnabled(true);
+    }
+  }, [offerType]);
+
+  const renderSubscriptionSettings = () => (
+    <div className="mb-6 rounded-[12px] border border-[#e3e8ed] p-4 bg-[#fafbfb]">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-[14px] font-medium text-[#1c1f23] m-0">
+          Subscription
+        </h3>
+        <Switch
+          checked={subscriptionEnabled}
+          onChange={(checked) => setSubscriptionEnabled(checked)}
+        />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label className="block text-[13px] text-[#5c6166] mb-1">
+            Subscribe title
+          </label>
+          <Input
+            size="large"
+            value={subscriptionTitle}
+            onChange={(e) => setSubscriptionTitle(e.target.value)}
+            maxLength={60}
+          />
+        </div>
+        <div>
+          <label className="block text-[13px] text-[#5c6166] mb-1">
+            Subscribe subtitle
+          </label>
+          <Input
+            size="large"
+            value={subscriptionSubtitle}
+            onChange={(e) => setSubscriptionSubtitle(e.target.value)}
+            maxLength={60}
+          />
+        </div>
+        <div>
+          <label className="block text-[13px] text-[#5c6166] mb-1">
+            One-time title
+          </label>
+          <Input
+            size="large"
+            value={oneTimeTitle}
+            onChange={(e) => setOneTimeTitle(e.target.value)}
+            maxLength={60}
+          />
+        </div>
+        <div>
+          <label className="block text-[13px] text-[#5c6166] mb-1">
+            One-time subtitle
+          </label>
+          <Input
+            size="large"
+            value={oneTimeSubtitle}
+            onChange={(e) => setOneTimeSubtitle(e.target.value)}
+            maxLength={60}
+          />
+        </div>
+      </div>
+      <div className="mt-3">
+        <Select
+          value={subscriptionPosition}
+          onChange={(value) =>
+            setSubscriptionPosition(value as "below-bundle-bars")
+          }
+          options={[
+            {
+              value: "below-bundle-bars",
+              label: "Below bundle deal bars",
+            },
+          ]}
+          style={{ width: "100%" }}
+        />
+      </div>
+      <div className="mt-3">
+        <Checkbox
+          checked={subscriptionDefaultSelected}
+          onChange={(e) => setSubscriptionDefaultSelected(e.target.checked)}
+        >
+          Make subscription option selected by default
+        </Checkbox>
+      </div>
+
+      {/* 中文注释：选中商品全部有 selling plan 时显示实线，否则显示虚线并补充解释文案 */}
+      {shouldShowSubscriptionPreview && (
+        <div className="mt-4">
+          <div
+            className={`rounded-[10px] p-3 ${
+              allSelectedProductsHaveSubscription
+                ? "border border-[#c9ccd0]"
+                : "border border-dashed border-[#b7b7b7]"
+            }`}
+          >
+            <div className="text-[14px] font-semibold text-[#1c1f23]">
+              {subscriptionTitle || "Subscribe & Save 20%"}
+            </div>
+            <div className="text-[13px] text-[#8c9196] mt-1">
+              {subscriptionSubtitle || "Delivered weekly"}
+            </div>
+          </div>
+          {shouldShowSubscriptionExplanation && (
+            <div className="mt-3 rounded-[10px] bg-[#eaf4ff] p-3">
+              <div className="text-[13px] font-semibold text-[#1c1f23]">
+                {subscriptionExplanationTitle}
+              </div>
+              <div className="text-[12px] text-[#4f5b67] mt-1 leading-[1.5]">
+                {subscriptionExplanationBody}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 
 
   return (
@@ -1374,6 +1597,29 @@ export function CreateNewOffer({
       <input type="hidden" name="buttonText" value={buttonText} />
       <input type="hidden" name="buttonPrimaryColor" value={buttonPrimaryColor} />
       <input type="hidden" name="showCustomButton" value={showCustomButton ? "true" : "false"} />
+      <input
+        type="hidden"
+        name="subscriptionEnabled"
+        value={subscriptionEnabled ? "true" : "false"}
+      />
+      <input
+        type="hidden"
+        name="subscriptionPosition"
+        value={subscriptionPosition}
+      />
+      <input type="hidden" name="subscriptionTitle" value={subscriptionTitle} />
+      <input
+        type="hidden"
+        name="subscriptionSubtitle"
+        value={subscriptionSubtitle}
+      />
+      <input type="hidden" name="oneTimeTitle" value={oneTimeTitle} />
+      <input type="hidden" name="oneTimeSubtitle" value={oneTimeSubtitle} />
+      <input
+        type="hidden"
+        name="subscriptionDefaultSelected"
+        value={subscriptionDefaultSelected ? "true" : "false"}
+      />
       <input
         type="hidden"
         name="cardBackgroundColor"
@@ -1583,6 +1829,13 @@ export function CreateNewOffer({
                   progressiveGifts={progressiveGifts}
                   progressivePreviewBarIndex={previewGiftBar}
                   progressivePreviewLineQty={previewGiftQty}
+                  showSubscriptionPreview={shouldShowSubscriptionPreview}
+                  subscriptionPreviewStyle={subscriptionPreviewStyle}
+                  subscriptionTitle={subscriptionTitle}
+                  subscriptionSubtitle={subscriptionSubtitle}
+                  showSubscriptionExplanation={shouldShowSubscriptionExplanation}
+                  subscriptionExplanationTitle={subscriptionExplanationTitle}
+                  subscriptionExplanationBody={subscriptionExplanationBody}
                 />
                 <p className="text-[12px] text-[#5c6166] mt-3 italic font-normal">
                   Note: This is a live preview. Changes will update in real-time when state is connected.
@@ -1890,6 +2143,8 @@ export function CreateNewOffer({
                     </div>
                   )}
 
+                  {offerType === "subscription" && renderSubscriptionSettings()}
+
                   {/* complete-bundle 的定价与变体已并入各 Bundle bar 卡片，此处仅渲染 BXGY 或普通折扣阶梯 */}
                   {offerType === "bxgy" ? (
                     <div>
@@ -2121,7 +2376,7 @@ export function CreateNewOffer({
                           + Add BXGY tier
                         </Button>
                     </div>
-                    ) : offerType === "complete-bundle" ? null : (
+                    ) : offerType === "complete-bundle" || offerType === "subscription" ? null : (
                     <div>
                       <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">Discount Setting</h3>
                         {discountRules.map((rule, index) => (
@@ -2583,6 +2838,13 @@ export function CreateNewOffer({
                       progressiveGifts={progressiveGifts}
                       progressivePreviewBarIndex={previewGiftBar}
                       progressivePreviewLineQty={previewGiftQty}
+                      showSubscriptionPreview={shouldShowSubscriptionPreview}
+                      subscriptionPreviewStyle={subscriptionPreviewStyle}
+                      subscriptionTitle={subscriptionTitle}
+                      subscriptionSubtitle={subscriptionSubtitle}
+                      showSubscriptionExplanation={shouldShowSubscriptionExplanation}
+                      subscriptionExplanationTitle={subscriptionExplanationTitle}
+                      subscriptionExplanationBody={subscriptionExplanationBody}
                     />
                   )}
                   <p className="text-[12px] text-[#5c6166] mt-3 italic font-normal">
@@ -2933,6 +3195,13 @@ export function CreateNewOffer({
                   progressiveGifts={progressiveGifts}
                   progressivePreviewBarIndex={previewGiftBar}
                   progressivePreviewLineQty={previewGiftQty}
+                  showSubscriptionPreview={shouldShowSubscriptionPreview}
+                  subscriptionPreviewStyle={subscriptionPreviewStyle}
+                  subscriptionTitle={subscriptionTitle}
+                  subscriptionSubtitle={subscriptionSubtitle}
+                  showSubscriptionExplanation={shouldShowSubscriptionExplanation}
+                  subscriptionExplanationTitle={subscriptionExplanationTitle}
+                  subscriptionExplanationBody={subscriptionExplanationBody}
                 />
                 <p className="text-[12px] text-[#5c6166] mt-3 italic font-normal">
                   Note: This is a live preview. Changes will update in real-time when state is connected.
