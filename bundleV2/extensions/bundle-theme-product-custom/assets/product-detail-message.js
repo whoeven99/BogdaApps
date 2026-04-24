@@ -785,26 +785,36 @@ window.ciwiSelectSubscriptionMode = function(mode) {
 };
 
 function bindBundleInteractions(root) {
-  if (!root || root.__ciwiInteractionsBound) return;
-  root.__ciwiInteractionsBound = true;
+  if (!root) return;
 
-  root.addEventListener("click", (event) => {
-    const bundleOption = event.target.closest("[data-ciwi-bundle-count]");
-    if (bundleOption) {
+  const bundleOptions = Array.from(
+    root.querySelectorAll("[data-ciwi-bundle-count]"),
+  );
+  bundleOptions.forEach((option) => {
+    if (option.dataset.ciwiBound === "true") return;
+    option.dataset.ciwiBound = "true";
+    option.addEventListener("click", (event) => {
       event.preventDefault();
-      const nextCount = Number(bundleOption.getAttribute("data-ciwi-bundle-count"));
+      event.stopPropagation();
+      const nextCount = Number(option.getAttribute("data-ciwi-bundle-count"));
       if (Number.isFinite(nextCount) && nextCount > 0) {
         window.ciwiSelectBundleOption(nextCount);
       }
-      return;
-    }
+    });
+  });
 
-    const subscriptionOption = event.target.closest("[data-ciwi-subscription-mode]");
-    if (subscriptionOption) {
+  const subscriptionOptions = Array.from(
+    root.querySelectorAll("[data-ciwi-subscription-mode]"),
+  );
+  subscriptionOptions.forEach((option) => {
+    if (option.dataset.ciwiBound === "true") return;
+    option.dataset.ciwiBound = "true";
+    option.addEventListener("click", (event) => {
       event.preventDefault();
-      const mode = subscriptionOption.getAttribute("data-ciwi-subscription-mode");
+      event.stopPropagation();
+      const mode = option.getAttribute("data-ciwi-subscription-mode");
       window.ciwiSelectSubscriptionMode(mode);
-    }
+    });
   });
 }
 
