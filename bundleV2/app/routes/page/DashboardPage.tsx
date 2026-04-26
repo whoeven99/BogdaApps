@@ -279,6 +279,10 @@ export function DashboardPage({
   };
 
   const toast = searchParams.get("toast") || actionData?.toast;
+  const surfaceCardClass =
+    "rounded-[12px] border border-[#dfe3e8] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]";
+  const sectionActionClass =
+    "inline-flex items-center gap-[6px] rounded-[8px] border-0 bg-transparent px-[12px] py-[6px] text-[14px] font-medium text-[#008060] transition-all hover:bg-[#f0f9f6] cursor-pointer";
 
   useEffect(() => {
     if (toast?.startsWith("delete-success")) {
@@ -388,24 +392,58 @@ export function DashboardPage({
 
   return (
     <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px]">
+      <div className="mb-[20px] sm:mb-[28px] flex flex-col gap-[16px] lg:flex-row lg:items-end lg:justify-between">
+        <div className="max-w-[720px]">
+          <div className="mb-[8px] inline-flex items-center rounded-full border border-[#dfe3e8] bg-[#f6f6f7] px-[10px] py-[4px] text-[12px] font-medium text-[#5c6166]">
+            Dashboard
+          </div>
+          <h1 className="m-0 text-[28px] font-semibold leading-[36px] tracking-[-0.02em] text-[#1c1f23] sm:text-[32px] sm:leading-[40px]">
+            Bundle performance and offer operations
+          </h1>
+          <p className="mt-[10px] mb-0 max-w-[640px] text-[14px] leading-[22px] text-[#5c6166] sm:text-[15px] sm:leading-[24px]">
+            Track GMV, monitor theme visibility, and manage active bundle offers
+            from one place.
+          </p>
+        </div>
+        <div className="flex flex-col gap-[10px] sm:flex-row">
+          <button
+            type="button"
+            className="inline-flex items-center justify-center rounded-[8px] border border-[#dfe3e8] bg-white px-[14px] py-[9px] text-[14px] font-medium text-[#1c1f23] transition-colors hover:bg-[#f6f6f7] cursor-pointer"
+            onClick={handleViewDetails}
+          >
+            View analytics
+          </button>
+          <button
+            type="button"
+            className="inline-flex items-center justify-center rounded-[8px] bg-[#008060] px-[14px] py-[9px] text-[14px] font-medium text-white shadow-sm transition-colors hover:bg-[#006e52] border-0 cursor-pointer"
+            onClick={handleCreateOfferClick}
+          >
+            Create New Offer
+          </button>
+        </div>
+      </div>
+
       {!themeExtensionEnabled && !hideBanner && (
-        <div className="bg-[#fff4f4] border border-[#ffc9c9] rounded-[8px] p-[16px] mb-[24px] flex items-start justify-between">
+        <div className="mb-[24px] flex items-start justify-between rounded-[12px] border border-[#ffd5d2] bg-[#fff7f6] p-[16px] sm:p-[18px]">
           <div className="flex gap-[12px]">
-            <div className="text-[#d72c0d] mt-[2px]">
+            <div className="mt-[2px] text-[#d72c0d]">
               <AlertCircle size={20} />
             </div>
             <div>
-              <h3 className="font-sans font-semibold text-[14px] leading-[20px] text-[#1c1f23] mb-[4px] m-0">
+              <div className="mb-[6px] inline-flex items-center rounded-full bg-[#ffe0db] px-[8px] py-[3px] text-[12px] font-medium text-[#b42318]">
+                Action required
+              </div>
+              <h3 className="m-0 mb-[4px] font-sans text-[14px] font-semibold leading-[20px] text-[#1c1f23]">
                 Action required: Activate Theme Extension
               </h3>
-              <p className="font-sans text-[14px] leading-[20px] text-[#5c6166] m-0">
+              <p className="m-0 font-sans text-[14px] leading-[20px] text-[#5c6166]">
                 Your offer has been created, but it won't be visible on your store until you activate the theme extension.
               </p>
               <div className="mt-[12px]">
                 <button
                   type="button"
                   onClick={handleThemeExtensionToggle}
-                  className="bg-transparent text-[#1c1f23] px-[12px] py-[6px] rounded-[6px] font-normal text-[16px] border border-[#1c1f23] hover:bg-black/5 transition-all cursor-pointer"
+                  className="rounded-[8px] border border-[#1c1f23] bg-transparent px-[12px] py-[7px] text-[14px] font-medium text-[#1c1f23] transition-all hover:bg-black/5 cursor-pointer"
                 >
                   Activate Theme Extension
                 </button>
@@ -425,71 +463,77 @@ export function DashboardPage({
       {/* GMV Overview + Theme Extension */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-[16px] sm:gap-[24px] mb-[24px] sm:mb-[36px]">
         {/* GMV Overview Card */}
-        <div className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[24px]">
-          <div className="flex items-center justify-between mb-[16px]">
-            <div className="flex items-center gap-[8px]">
-              <h2 className="font-sans font-semibold text-[20px] leading-[30px] text-[#1c1f23] tracking-tight m-0">
+        <div className={`${surfaceCardClass} p-[20px] sm:p-[24px]`}>
+          <div className="mb-[16px] flex items-start justify-between gap-[12px]">
+            <div>
+              <div className="mb-[6px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
+                Last 30 days
+              </div>
+              <div className="flex items-center gap-[8px]">
+                <h2 className="m-0 font-sans text-[20px] font-semibold leading-[30px] tracking-tight text-[#1c1f23]">
                 GMV Overview
-              </h2>
-              <div className="group relative flex items-center">
-                <Info className="w-[16px] h-[16px] text-[#8a919e] cursor-help" />
-                <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-[8px] hidden group-hover:block w-max max-w-[250px] bg-[#1c1f23] text-white text-[12px] leading-[18px] px-[12px] py-[8px] rounded-[8px] shadow-lg z-10 text-center">
-                  Data accumulated over the last 30 days
-                  <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-[#1c1f23]"></div>
+                </h2>
+                <div className="group relative flex items-center">
+                  <Info className="h-[16px] w-[16px] cursor-help text-[#8a919e]" />
+                  <div className="absolute bottom-full left-1/2 z-10 mb-[8px] hidden w-max max-w-[250px] -translate-x-1/2 rounded-[8px] bg-[#1c1f23] px-[12px] py-[8px] text-center text-[12px] leading-[18px] text-white shadow-lg group-hover:block">
+                    Data accumulated over the last 30 days
+                    <div className="absolute left-1/2 top-full h-0 w-0 -translate-x-1/2 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent border-t-[#1c1f23]"></div>
+                  </div>
                 </div>
               </div>
+              <p className="mt-[8px] mb-0 text-[13px] leading-[20px] text-[#5c6166]">
+                Key commerce indicators for recent bundle performance.
+              </p>
             </div>
             <button
               type="button"
-              className="text-[#008060] font-medium text-[14px] bg-transparent hover:bg-[#f0f9f6] px-[12px] py-[6px] rounded-[8px] flex items-center gap-[6px] transition-all border-0 cursor-pointer"
+              className={sectionActionClass}
               onClick={handleViewDetails}
             >
               View Details
               <ChevronRightIcon />
             </button>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-[16px] sm:gap-[20px]">
-            <div className="flex flex-col gap-[12px] sm:gap-[16px]">
-              <span className="font-sans font-normal text-[14px] leading-[22.4px] text-[#5c6166] tracking-normal">
+          <div className="grid grid-cols-1 gap-[12px] sm:grid-cols-3 sm:gap-[16px]">
+            <div className="rounded-[12px] border border-[#e9edf1] bg-[#fcfcfd] p-[16px]">
+              <span className="font-sans text-[13px] font-medium leading-[20px] text-[#5c6166]">
                 Total GMV
               </span>
-              <h3 className="font-sans font-semibold text-[28px] leading-[42px] text-[#1c1f23] tracking-wide m-0">
+              <h3 className="m-0 mt-[8px] font-sans text-[28px] font-semibold leading-[38px] text-[#1c1f23]">
                 ${totalGmv.toFixed(2)}
               </h3>
               <span
-                className="font-sans font-normal text-[14px] leading-[22.4px] text-[#108043] tracking-normal"
+                className="mt-[8px] block font-sans text-[13px] leading-[20px]"
                 style={{
                   color: gmvGrowthRateColor,
                 }}
               >
                 {gmvGrowthRate !== 0 && `${gmvGrowthRateArrow} `}
-                {gmvGrowthRate >= 0 ? "+" : ""}{Math.abs(gmvGrowthRate).toFixed(2)}% from last month
+                {gmvGrowthRate >= 0 ? "+" : ""}
+                {Math.abs(gmvGrowthRate).toFixed(2)}% from last month
               </span>
             </div>
-
-            {/* Bundle Orders */}
-           <div className="flex flex-col gap-[16px]">
-              <span className="font-sans font-normal text-[14px] leading-[22.4px] text-[#5c6166] tracking-normal">
+            <div className="rounded-[12px] border border-[#e9edf1] bg-[#fcfcfd] p-[16px]">
+              <span className="font-sans text-[13px] font-medium leading-[20px] text-[#5c6166]">
                 Bundle Orders
               </span>
-              <h3 className="font-sans font-semibold text-[28px] leading-[42px] text-[#1c1f23] tracking-wide m-0">
+              <h3 className="m-0 mt-[8px] font-sans text-[28px] font-semibold leading-[38px] text-[#1c1f23]">
                 {bundleOrders}
               </h3>
+              <span className="mt-[8px] block font-sans text-[13px] leading-[20px] text-[#5c6166]">
+                Orders attributed to bundle purchases.
+              </span>
             </div>
-
-            {/* Avg. Conversion */}
-            <div className="flex flex-col gap-[16px]">
-              <span className="font-sans font-normal text-[14px] leading-[22.4px] text-[#5c6166] tracking-normal">
+            <div className="rounded-[12px] border border-[#e9edf1] bg-[#fcfcfd] p-[16px]">
+              <span className="font-sans text-[13px] font-medium leading-[20px] text-[#5c6166]">
                 Avg. Conversion
               </span>
-              <h3 className="font-sans font-semibold text-[28px] leading-[42px] text-[#1c1f23] tracking-wide m-0">
+              <h3 className="m-0 mt-[8px] font-sans text-[28px] font-semibold leading-[38px] text-[#1c1f23]">
                 {productViewed > 0
                   ? `${((bundleOrders / productViewed) * 100).toFixed(2)}%`
                   : "0.00%"}
               </h3>
-              <span
-                className="font-sans font-normal text-[14px] leading-[22.4px] tracking-normal"
-              >
+              <span className="mt-[8px] block font-sans text-[13px] leading-[20px] text-[#5c6166]">
                 Orders {bundleOrders} / Exposure {productViewed}
               </span>
             </div>
@@ -497,30 +541,38 @@ export function DashboardPage({
         </div>
 
         {/* Theme Extension Widget */}
-        <div className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[24px]">
-          <div className="flex items-center justify-between mb-[16px]">
-            <h2 className="font-sans font-semibold text-[20px] leading-[30px] text-[#1c1f23] tracking-tight m-0">
-              Theme extension
-            </h2>
-            <div
-              className={`flex items-center gap-[6px] px-[8px] py-[4px] rounded-[4px] ${themeExtensionEnabled ? "bg-[#d1f7c4]" : "bg-[#f4f6f8]"}`}
-            >
-              <div
-                className={`w-[8px] h-[8px] rounded-full ${themeExtensionEnabled ? "bg-[#108043]" : "bg-[#6d7175]"}`}
-              />
-              <span
-                className={`font-sans font-medium text-[14px] leading-[21px] tracking-normal ${themeExtensionEnabled ? "text-[#108043]" : "text-[#5c6166]"}`}
-              >
-                {themeExtensionEnabled ? "Active" : "Inactive"}
-              </span>
+        <div className={`${surfaceCardClass} p-[20px] sm:p-[24px]`}>
+          <div className="mb-[16px] flex items-start justify-between gap-[12px]">
+            <div>
+              <div className="mb-[6px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
+                Storefront
             </div>
+              <h2 className="m-0 font-sans text-[20px] font-semibold leading-[30px] tracking-tight text-[#1c1f23]">
+                Theme extension
+              </h2>
+            </div>
+            <button
+              type="button"
+              className={`inline-flex items-center gap-[6px] rounded-full px-[10px] py-[5px] text-[12px] font-semibold ${
+                themeExtensionEnabled
+                  ? "bg-[#e8f7ee] text-[#108043]"
+                  : "bg-[#f4f6f8] text-[#5c6166]"
+              }`}
+            >
+              <span
+                className={`h-[8px] w-[8px] rounded-full ${
+                  themeExtensionEnabled ? "bg-[#108043]" : "bg-[#6d7175]"
+                }`}
+              />
+              {themeExtensionEnabled ? "Active" : "Inactive"}
+            </button>
           </div>
-          <p className="font-sans font-normal text-[16px] leading-[25.6px] text-[#1c1f23] tracking-normal mb-[20px]">
+          <p className="mb-[10px] font-sans text-[15px] leading-[24px] text-[#1c1f23]">
             {themeExtensionEnabled
               ? "Bundles widget is visible in product pages."
               : "Bundles widget is currently disabled."}
           </p>
-          <p className="font-sans font-normal text-[13px] leading-[20px] text-[#5c6166] tracking-[-0.1px] mb-[12px]">
+          <p className="mb-[16px] font-sans text-[13px] leading-[20px] text-[#5c6166]">
             This opens Theme Editor App Embeds. Toggle the extension there and
             click Save in Shopify.
           </p>
@@ -528,58 +580,72 @@ export function DashboardPage({
             <button
               type="button"
               onClick={handleThemeExtensionToggle}
-              className={`px-[16px] py-[8px] rounded-[6px] font-sans font-normal text-[16px] leading-[24px] tracking-normal cursor-pointer transition-colors w-full border ${
+              className={`w-full rounded-[8px] border px-[16px] py-[9px] font-sans text-[14px] font-medium leading-[22px] cursor-pointer transition-colors ${
                 themeExtensionEnabled
-                  ? "bg-white border-[#dfe3e8] text-[#d72c0d] hover:bg-[#fef3f2]"
-                  : "bg-transparent border-[#1c1f23] text-[#1c1f23] hover:bg-black/5"
+                  ? "border-[#dfe3e8] bg-white text-[#1c1f23] hover:bg-[#f6f6f7]"
+                  : "border-[#1c1f23] bg-transparent text-[#1c1f23] hover:bg-black/5"
               }`}
             >
-              {themeExtensionEnabled ? "Disable" : "Enable"}
+              {themeExtensionEnabled ? "Manage in Theme Editor" : "Enable in Theme Editor"}
             </button>
           </div>
         </div>
       </div>
 
       {/* My Offers Card */}
-      <div className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[20px] sm:p-[24px] mb-[24px] sm:mb-[36px]">
+      <div className={`${surfaceCardClass} p-[20px] sm:p-[24px] mb-[24px] sm:mb-[36px]`}>
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-[12px] sm:gap-0 mb-[16px]">
-          <h2 className="font-sans font-semibold text-[16px] leading-[24px] text-[#1c1f23] tracking-tight m-0">
-            My Offers
-          </h2>
-          <button
-            type="button"
-            className="w-full sm:w-auto bg-[#008060] !text-white px-[16px] py-[8px] rounded-[8px] font-medium text-[14px] shadow-sm hover:bg-[#006e52] transition-all border-0 cursor-pointer"
-            onClick={handleCreateOfferClick}
-          >
-            Create New Offer
-          </button>
+          <div>
+            <h2 className="m-0 font-sans text-[18px] font-semibold leading-[28px] tracking-tight text-[#1c1f23]">
+              My Offers
+            </h2>
+            <p className="mt-[6px] mb-0 text-[13px] leading-[20px] text-[#5c6166]">
+              Review recent offers, update status, and jump into edits quickly.
+            </p>
+          </div>
+          <div className="flex w-full flex-col gap-[10px] sm:w-auto sm:flex-row">
+            <button
+              type="button"
+              className="inline-flex items-center justify-center rounded-[8px] border border-[#dfe3e8] bg-white px-[14px] py-[9px] text-[14px] font-medium text-[#1c1f23] transition-colors hover:bg-[#f6f6f7] cursor-pointer"
+              onClick={handleViewAllOffers}
+            >
+              View All Offers
+            </button>
+            <button
+              type="button"
+              className="inline-flex items-center justify-center rounded-[8px] bg-[#008060] px-[14px] py-[9px] text-[14px] font-medium text-white shadow-sm transition-all hover:bg-[#006e52] border-0 cursor-pointer"
+              onClick={handleCreateOfferClick}
+            >
+              Create New Offer
+            </button>
+          </div>
         </div>
 
-        <table className="hidden md:table w-full border-collapse">
+        <table className="hidden md:table w-full border-collapse overflow-hidden rounded-[10px]">
           <thead>
-            <tr>
-              <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
+            <tr className="bg-[#f9fafb]">
+              <th className="text-left p-[12px] border-b border-[#eef1f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
                 Offer Name
               </th>
-              <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
+              <th className="text-left p-[12px] border-b border-[#eef1f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
                 Display name
               </th>
-              <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
+              <th className="text-left p-[12px] border-b border-[#eef1f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
                 Discount type
               </th>
-              <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
+              <th className="text-left p-[12px] border-b border-[#eef1f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
                 Discount rules
               </th>
-              <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
+              <th className="text-left p-[12px] border-b border-[#eef1f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
                 Status
               </th>
-              <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
+              <th className="text-left p-[12px] border-b border-[#eef1f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
                 Create time
               </th>
-              <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
+              <th className="text-left p-[12px] border-b border-[#eef1f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
                 Update time
               </th>
-              <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
+              <th className="text-left p-[12px] border-b border-[#eef1f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
                 Actions
               </th>
             </tr>
@@ -589,7 +655,7 @@ export function DashboardPage({
               <tr>
                 <td
                   colSpan={8}
-                  className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#5c6166] font-sans"
+                  className="p-[16px] border-b border-[#eef1f4] text-[14px] text-[#5c6166] font-sans"
                 >
                   Loading offers...
                 </td>
@@ -598,7 +664,7 @@ export function DashboardPage({
               <tr>
                 <td
                   colSpan={8}
-                  className="p-[12px] border-b border-[#f0f2f4] font-sans text-[14px] leading-[22.4px] text-[#5c6166] tracking-normal"
+                  className="p-[16px] border-b border-[#eef1f4] font-sans text-[14px] leading-[22.4px] text-[#5c6166] tracking-normal"
                 >
                   No offers yet. Create your first offer to see it here.
                 </td>
@@ -630,22 +696,22 @@ export function DashboardPage({
                 };
 
                 return (
-                  <tr key={offer.id}>
-                    <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
+                  <tr key={offer.id} className="hover:bg-[#fafbfc]">
+                    <td className="p-[12px] border-b border-[#eef1f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
                       <div className="flex items-center gap-[8px]">
                         {offer.name}
                       </div>
                     </td>
-                    <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
+                    <td className="p-[12px] border-b border-[#eef1f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
                       {offer.cartTitle}
                     </td>
-                    <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
+                    <td className="p-[12px] border-b border-[#eef1f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
                       {displayType}
                     </td>
-                    <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
+                    <td className="p-[12px] border-b border-[#eef1f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
                       {rulesText}
                     </td>
-                    <td className="p-[12px] border-b border-[#f0f2f4]">
+                    <td className="p-[12px] border-b border-[#eef1f4]">
                       <Form method="post">
                         <input
                           type="hidden"
@@ -699,13 +765,13 @@ export function DashboardPage({
                         </button>
                       </Form>
                     </td>
-                    <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
+                    <td className="p-[12px] border-b border-[#eef1f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
                       {formatTime(offer.createdAt)}
                     </td>
-                    <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
+                    <td className="p-[12px] border-b border-[#eef1f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
                       {formatTime(offer.updatedAt)}
                     </td>
-                    <td className="p-[12px] border-b border-[#f0f2f4]">
+                    <td className="p-[12px] border-b border-[#eef1f4]">
                       <div className="flex items-center gap-[8px]">
                         {/* 
                         <button
@@ -765,12 +831,17 @@ export function DashboardPage({
               return (
                 <div
                   key={offer.id}
-                  className="border border-[#dfe3e8] rounded-[8px] p-[16px]"
+                  className="rounded-[12px] border border-[#dfe3e8] bg-[#fcfcfd] p-[16px]"
                 >
                   <div className="flex items-start justify-between mb-[12px]">
                     <div className="flex items-center gap-[8px] flex-wrap">
                       <span className="font-sans font-medium text-[16px] text-[#1c1f23]">
                         {offer.name}
+                      </span>
+                      <span className="inline-flex items-center rounded-full bg-[#f0f9f6] px-[8px] py-[3px] text-[12px] font-medium text-[#108043]">
+                        {offer.offerType === "quantity-breaks-same"
+                          ? "Quantity breaks"
+                          : offer.offerType}
                       </span>
                     </div>
                   </div>
@@ -884,7 +955,7 @@ export function DashboardPage({
         <div className="flex justify-center mt-[16px] sm:mt-[20px] pt-[16px] border-t border-[#dfe3e8]">
           <button
             type="button"
-            className="text-[#008060] font-medium text-[14px] bg-transparent hover:bg-[#f0f9f6] px-[16px] py-[8px] rounded-[8px] transition-all border-0 cursor-pointer"
+            className={sectionActionClass}
             onClick={handleViewAllOffers}
           >
             View All Offers
