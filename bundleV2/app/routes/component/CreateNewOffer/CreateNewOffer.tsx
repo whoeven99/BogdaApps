@@ -1233,12 +1233,6 @@ export function CreateNewOffer({
     "Style Design",
     "Schedule & Budget",
   ];
-  const stepDescriptions = [
-    "Name the offer and define the core offer type.",
-    "Choose products, configure discount logic, and review rule behavior.",
-    "Tune storefront presentation, layout, and CTA styling.",
-    "Control visibility, schedule, and final publishing settings.",
-  ];
 
   const offerTypes = [
     {
@@ -1289,12 +1283,6 @@ export function CreateNewOffer({
       ? "Subscription bar will only be shown in products that are eligible for subscription. You can select those products in your subscription app."
       : "After selecting products, the app checks whether they have selling plans and decides whether to show a solid or dashed subscription bar.";
   const currentStepTitle = steps[step - 1] ?? steps[0];
-  const currentStepDescription =
-    stepDescriptions[step - 1] ?? stepDescriptions[0];
-  const activeOfferTypeDescription =
-    offerTypes.find((type) => type.id === offerType)?.description ??
-    "Live preview updates as you configure this offer.";
-
   useEffect(() => {
     // 中文注释：当用户在第 1 步切换到 Subscription 类型时，默认自动打开订阅开关
     if (offerType === "subscription") {
@@ -1662,18 +1650,15 @@ export function CreateNewOffer({
       />
 
       <div className="mb-[100px] rounded-[12px] border border-[#dfe3e8] bg-[#ffffff] p-[20px] shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-[24px]">
-        <div className="mb-[20px] rounded-[12px] border border-[#e9edf1] bg-[#fcfcfd] p-[14px] sm:p-[16px]">
-          <div className="mb-[12px] flex flex-col gap-[6px] sm:flex-row sm:items-end sm:justify-between">
+        <div className="mb-[14px] rounded-[12px] border border-[#e9edf1] bg-[#fcfcfd] p-[12px] sm:p-[14px]">
+          <div className="mb-[10px] flex flex-col gap-[6px] sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="mb-[4px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
                 Step {step} of {steps.length}
               </div>
-              <h2 className="m-0 text-[20px] font-semibold leading-[30px] text-[#1c1f23]">
+              <h2 className="m-0 text-[18px] font-semibold leading-[28px] text-[#1c1f23]">
                 {currentStepTitle}
               </h2>
-              <p className="mt-[6px] mb-0 max-w-[720px] text-[13px] leading-[20px] text-[#5c6166]">
-                {currentStepDescription}
-              </p>
             </div>
             <div className="rounded-full bg-[#f0f9f6] px-[10px] py-[4px] text-[12px] font-medium text-[#108043]">
               {initialOffer ? "Editing existing offer" : "Creating new offer"}
@@ -1712,7 +1697,7 @@ export function CreateNewOffer({
                   }
                 }}
               >
-                <div className="mb-[8px] flex items-center gap-[10px]">
+                <div className="flex items-center gap-[10px]">
                   <div
                     className={`flex h-[28px] w-[28px] items-center justify-center rounded-full text-[12px] font-semibold ${
                       isActive
@@ -1730,9 +1715,6 @@ export function CreateNewOffer({
                     {stepName}
                   </div>
                 </div>
-                <div className="text-[12px] leading-[18px] text-[#6d7175]">
-                  {stepDescriptions[index]}
-                </div>
               </div>
             );
           })}
@@ -1745,16 +1727,9 @@ export function CreateNewOffer({
               <div className="flex flex-col gap-6">
                 <div>
                   <div className="mb-4">
-                    <div className="mb-[4px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
-                      Offer Setup
-                    </div>
                     <h2 className="m-0 text-[20px] font-semibold text-[#1c1f23]">
                     Basic Information
                     </h2>
-                    <p className="mt-[6px] mb-0 text-[13px] leading-[20px] text-[#5c6166]">
-                      Set a clear offer name, choose the bundle logic, and define
-                      the checkout display title.
-                    </p>
                   </div>
                   <div className="flex flex-col gap-4">
                     <div>
@@ -1835,16 +1810,10 @@ export function CreateNewOffer({
 
               <div className="create-offer-sticky-preview">
                 <div className="rounded-[12px] border border-[#dfe3e8] bg-[#fcfcfd] p-[16px] shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
-                  <div className="mb-[12px]">
-                    <div className="mb-[4px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
-                      Storefront Preview
-                    </div>
-                    <h3 className="m-0 text-[16px] font-semibold text-[#1c1f23]">
+                  <div className="mb-[10px]">
+                    <h3 className="m-0 text-[15px] font-semibold text-[#1c1f23]">
                       Live Preview
                     </h3>
-                    <p className="mt-[6px] mb-0 text-[13px] leading-[20px] text-[#5c6166]">
-                      {activeOfferTypeDescription}
-                    </p>
                   </div>
 
                   <BundlePreview
@@ -1872,10 +1841,6 @@ export function CreateNewOffer({
                     subscriptionExplanationTitle={subscriptionExplanationTitle}
                     subscriptionExplanationBody={subscriptionExplanationBody}
                   />
-                  <div className="mt-[12px] rounded-[8px] bg-white px-[10px] py-[8px] text-[12px] leading-[18px] text-[#5c6166]">
-                    Preview updates as you change form state. Final storefront
-                    rendering can still vary slightly by theme context.
-                  </div>
                 </div>
               </div>
             </div>
@@ -1886,16 +1851,9 @@ export function CreateNewOffer({
               <div className="create-offer-products-grid">
                 <div>
                   <div className="mb-6">
-                    <div className="mb-[4px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
-                      Offer Logic
-                    </div>
                     <h2 className="m-0 text-[20px] font-semibold text-[#1c1f23]">
                     Products & Discounts
                     </h2>
-                    <p className="mt-[6px] mb-0 text-[13px] leading-[20px] text-[#5c6166]">
-                      Choose eligible products and define how each bundle or tier
-                      behaves in the storefront.
-                    </p>
                   </div>
 
                   {offerType === "bxgy" ? (
@@ -1906,9 +1864,6 @@ export function CreateNewOffer({
                             <div>
                               <div className="create-offer-panel__eyebrow">BXGY Setup</div>
                               <h3 className="create-offer-panel__title">Buy Products (X)</h3>
-                              <p className="create-offer-panel__description">
-                                Choose the products customers must add to trigger the BXGY rule.
-                              </p>
                             </div>
                             {buyProducts.length > 0 ? (
                               <div className="create-offer-kpi-badge">
@@ -1949,9 +1904,6 @@ export function CreateNewOffer({
                             <div>
                               <div className="create-offer-panel__eyebrow">BXGY Setup</div>
                               <h3 className="create-offer-panel__title">Get Products (Y)</h3>
-                              <p className="create-offer-panel__description">
-                                Choose the products that receive the BXGY discount when the rule is met.
-                              </p>
                             </div>
                             {getProducts.length > 0 ? (
                               <div className="create-offer-kpi-badge">
@@ -1993,9 +1945,6 @@ export function CreateNewOffer({
                           <div>
                             <div className="create-offer-panel__eyebrow">Bundle Structure</div>
                             <h3 className="create-offer-panel__title">Bundle bars</h3>
-                            <p className="create-offer-panel__description">
-                              Create one or more bars to define how customers build a complete bundle.
-                            </p>
                           </div>
                           <div className="create-offer-panel__actions">
                             <Dropdown
@@ -2151,9 +2100,6 @@ export function CreateNewOffer({
                             <h3 className="create-offer-panel__title">
                               Products eligible for offer
                             </h3>
-                            <p className="create-offer-panel__description">
-                              Select the storefront products that can show this offer or participate in pricing tiers.
-                            </p>
                           </div>
                         </div>
 
@@ -2247,9 +2193,6 @@ export function CreateNewOffer({
                           <div>
                             <div className="create-offer-panel__eyebrow">Discount Logic</div>
                             <h3 className="create-offer-panel__title">BXGY Rules</h3>
-                            <p className="create-offer-panel__description">
-                              Configure quantity thresholds, free-item logic, and recommended tier labels.
-                            </p>
                           </div>
                         </div>
                       </div>
@@ -2487,9 +2430,6 @@ export function CreateNewOffer({
                           <div>
                             <div className="create-offer-panel__eyebrow">Discount Logic</div>
                             <h3 className="create-offer-panel__title">Discount Setting</h3>
-                            <p className="create-offer-panel__description">
-                              Define standard bundle tiers, messaging, and which option is selected by default.
-                            </p>
                           </div>
                         </div>
                       </div>
@@ -2661,16 +2601,10 @@ export function CreateNewOffer({
 
                 <div className="create-offer-sticky-preview">
                   <div className="rounded-[12px] border border-[#dfe3e8] bg-[#fcfcfd] p-[16px] shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
-                    <div className="mb-[12px]">
-                      <div className="mb-[4px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
-                        Storefront Preview
-                      </div>
-                      <h3 className="m-0 text-[16px] font-semibold text-[#1c1f23]">
+                    <div className="mb-[10px]">
+                      <h3 className="m-0 text-[15px] font-semibold text-[#1c1f23]">
                         Live Preview
                       </h3>
-                      <p className="mt-[6px] mb-0 text-[13px] leading-[20px] text-[#5c6166]">
-                        {activeOfferTypeDescription}
-                      </p>
                     </div>
                   {progressiveGifts.enabled && offerType !== "complete-bundle" ? (
                     <div className="mb-4 space-y-2">
@@ -2963,10 +2897,6 @@ export function CreateNewOffer({
                       subscriptionExplanationBody={subscriptionExplanationBody}
                     />
                   )}
-                  <div className="mt-[12px] rounded-[8px] bg-white px-[10px] py-[8px] text-[12px] leading-[18px] text-[#5c6166]">
-                    Use this panel to validate bundle logic, highlighted tiers,
-                    and optional gift states before publishing.
-                  </div>
                   </div>
                 </div>
               </div>
@@ -2977,16 +2907,9 @@ export function CreateNewOffer({
             <div className="create-offer-style-grid">
               <div>
                 <div className="mb-6">
-                  <div className="mb-[4px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
-                    Visual Design
-                  </div>
                   <h2 className="m-0 text-[20px] font-semibold text-[#1c1f23]">
                   Style Design
                   </h2>
-                  <p className="mt-[6px] mb-0 text-[13px] leading-[20px] text-[#5c6166]">
-                    Customize layout, colors, typography, and CTA styling while
-                    keeping the preview aligned with storefront output.
-                  </p>
                 </div>
 
                 <div className="mb-6">
@@ -3260,16 +3183,10 @@ export function CreateNewOffer({
 
               <div className="create-offer-sticky-preview">
                 <div className="rounded-[12px] border border-[#dfe3e8] bg-[#fcfcfd] p-[16px] shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
-                  <div className="mb-[12px]">
-                    <div className="mb-[4px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
-                      Storefront Preview
-                    </div>
-                    <h3 className="m-0 text-[16px] font-semibold text-[#1c1f23]">
+                  <div className="mb-[10px]">
+                    <h3 className="m-0 text-[15px] font-semibold text-[#1c1f23]">
                       Live Preview
                     </h3>
-                    <p className="mt-[6px] mb-0 text-[13px] leading-[20px] text-[#5c6166]">
-                      {activeOfferTypeDescription}
-                    </p>
                   </div>
                 {progressiveGifts.enabled ? (
                   <div className="mb-4 space-y-2">
@@ -3329,10 +3246,6 @@ export function CreateNewOffer({
                   subscriptionExplanationTitle={subscriptionExplanationTitle}
                   subscriptionExplanationBody={subscriptionExplanationBody}
                 />
-                <div className="mt-[12px] rounded-[8px] bg-white px-[10px] py-[8px] text-[12px] leading-[18px] text-[#5c6166]">
-                  Validate title hierarchy, accent usage, and CTA treatment
-                  against the intended storefront style.
-                </div>
                 </div>
               </div>
             </div>
@@ -3341,16 +3254,9 @@ export function CreateNewOffer({
           {step === 4 && (
             <div>
               <div className="mb-6">
-                <div className="mb-[4px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
-                  Visibility & Publishing
-                </div>
                 <h2 className="m-0 text-[20px] font-semibold text-[#1c1f23]">
                 Targeting & Settings
                 </h2>
-                <p className="mt-[6px] mb-0 text-[13px] leading-[20px] text-[#5c6166]">
-                  Choose where the offer appears, set active windows, and review
-                  final publishing constraints before saving.
-                </p>
               </div>
 
               <div className="mb-8">
@@ -3359,9 +3265,6 @@ export function CreateNewOffer({
                     <div>
                       <div className="create-offer-panel__eyebrow">Visibility</div>
                       <h3 className="create-offer-panel__title">Target Audience</h3>
-                      <p className="create-offer-panel__description">
-                        Decide which markets can see the offer when it becomes active.
-                      </p>
                     </div>
                   </div>
                 <div className="flex flex-col gap-4">
@@ -3492,9 +3395,6 @@ export function CreateNewOffer({
                     <div>
                       <div className="create-offer-panel__eyebrow">Timing</div>
                       <h3 className="create-offer-panel__title">Schedule</h3>
-                      <p className="create-offer-panel__description">
-                        Set the active window in the correct timezone so the offer launches and expires as expected.
-                      </p>
                     </div>
                   <div className="flex items-center gap-2">
                     <span className="text-[13px] text-[#5c6166]">Timezone:</span>

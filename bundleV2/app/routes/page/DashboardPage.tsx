@@ -8,7 +8,6 @@ import {
 import {
   ArrowDown,
   ArrowUp,
-  ChartBar,
   Pencil,
   Trash2,
   Info,
@@ -54,15 +53,6 @@ type DashboardOfferRow = {
   addToCartPV: number;
   gmv: number;
   conversion: number;
-};
-
-type GmvOverviewMetrics = {
-  totalGmv: number;
-  conversion: number;
-  visitor: number;
-  bundleOrders: number;
-  exposurePv: number;
-  orderPv: number;
 };
 
 const mockAbTests = [
@@ -132,20 +122,10 @@ export function DashboardPage({
     null,
   );
   const [togglingIds, setTogglingIds] = useState<string[]>([]);
-  const [overviewMetrics, setOverviewMetrics] = useState<GmvOverviewMetrics | null>(
-    null,
-  );
   const [totalGmv, setTotalGmv] = useState(0);
   const [gmvGrowthRate, setGmvGrowthRate] = useState(0);
   const [bundleOrders, setBundleOrders] = useState(0);
   const [productViewed, setProductViewed] = useState(0);
-
-  const mockOverviewData = {
-    bundleOrders: 320,
-    bundleOrdersGrowthRate: 8.5,
-    avgConversionRate: 3.2,
-    conversionTrend: 4.1,
-  };
 
   const [showThemeExtensionModal, setShowThemeExtensionModal] = useState(false);
   const [hideBanner, setHideBanner] = useState(() => {
@@ -188,51 +168,7 @@ export function DashboardPage({
 
   const visibleOffers = offerRows.slice(0, 4);
 
-  // 计算真实 Overview 数据
-  const fallbackOverview = (() => {
-    let totalGmv = 0;
-    let totalExposure = 0;
-    let totalAddToCart = 0;
-    let activeOffers = 0;
-
-    offerRows.forEach((o) => {
-      totalGmv += o.gmv || 0;
-      totalExposure += o.exposurePV || 0;
-      totalAddToCart += o.addToCartPV || 0;
-      if (o.isActive) activeOffers += 1;
-    });
-
-    const avgConversion =
-      totalExposure > 0 ? (totalAddToCart / totalExposure) * 100 : 0;
-
-    return {
-      totalGmv: `$${totalGmv.toLocaleString()}`,
-      gmvTrend: "+0.0%",
-      gmvTrendLabel: "from last month",
-      activeOffers,
-      activeOffersTrend: "currently running",
-      avgConversion: `${avgConversion.toFixed(1)}%`,
-      conversionTrendLabel: "Overall avg",
-      conversionTrendColor: "text-[#916a00]" as const,
-    };
-  })();
-
-  const cardOverview = (() => {
-    if (!overviewMetrics) return fallbackOverview;
-
-    return {
-      totalGmv: `$${overviewMetrics.totalGmv.toLocaleString()}`,
-      gmvTrend: "+0.0%",
-      gmvTrendLabel: "from last month",
-      activeOffers: overviewMetrics.bundleOrders,
-      activeOffersTrend: "bundle orders",
-      avgConversion: `${(overviewMetrics.conversion * 100).toFixed(1)}%`,
-      conversionTrendLabel: `Exposure ${overviewMetrics.exposurePv.toLocaleString()} / Orders ${overviewMetrics.orderPv.toLocaleString()}`,
-      conversionTrendColor: "text-[#916a00]" as const,
-    };
-  })();
-
-    const gmvGrowthRateColor =
+  const gmvGrowthRateColor =
     gmvGrowthRate === 0 ? "#916a00" : gmvGrowthRate > 0 ? "#108043" : "#D93025";
   const gmvGrowthRateArrow = gmvGrowthRate >= 0 ? "↑" : "↓";
 
@@ -292,16 +228,6 @@ export function DashboardPage({
 
   useEffect(() => {
     const controller = new AbortController();
-    const now = new Date();
-    const from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-
-    const query = new URLSearchParams({
-      mode: "overview",
-      shopName: shop,
-      from: from.toISOString(),
-      to: now.toISOString(),
-    });
-
     const run = async () => {
       try {
         const overviewUrl = `/webpixerToAli?mode=dashboard-overview-gmv&shopName=${shop}`;
@@ -392,18 +318,11 @@ export function DashboardPage({
 
   return (
     <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px]">
-      <div className="mb-[20px] sm:mb-[28px] flex flex-col gap-[16px] lg:flex-row lg:items-end lg:justify-between">
+      <div className="mb-[12px] sm:mb-[16px] flex flex-col gap-[12px] lg:flex-row lg:items-center lg:justify-between">
         <div className="max-w-[720px]">
-          <div className="mb-[8px] inline-flex items-center rounded-full border border-[#dfe3e8] bg-[#f6f6f7] px-[10px] py-[4px] text-[12px] font-medium text-[#5c6166]">
+          <h1 className="m-0 text-[24px] font-semibold leading-[32px] tracking-[-0.02em] text-[#1c1f23] sm:text-[28px] sm:leading-[36px]">
             Dashboard
-          </div>
-          <h1 className="m-0 text-[28px] font-semibold leading-[36px] tracking-[-0.02em] text-[#1c1f23] sm:text-[32px] sm:leading-[40px]">
-            Bundle performance and offer operations
           </h1>
-          <p className="mt-[10px] mb-0 max-w-[640px] text-[14px] leading-[22px] text-[#5c6166] sm:text-[15px] sm:leading-[24px]">
-            Track GMV, monitor theme visibility, and manage active bundle offers
-            from one place.
-          </p>
         </div>
         <div className="flex flex-col gap-[10px] sm:flex-row">
           <button
@@ -434,10 +353,10 @@ export function DashboardPage({
                 Action required
               </div>
               <h3 className="m-0 mb-[4px] font-sans text-[14px] font-semibold leading-[20px] text-[#1c1f23]">
-                Action required: Activate Theme Extension
+                Activate Theme Extension
               </h3>
               <p className="m-0 font-sans text-[14px] leading-[20px] text-[#5c6166]">
-                Your offer has been created, but it won't be visible on your store until you activate the theme extension.
+                Offers stay hidden until the extension is enabled.
               </p>
               <div className="mt-[12px]">
                 <button
@@ -481,9 +400,6 @@ export function DashboardPage({
                   </div>
                 </div>
               </div>
-              <p className="mt-[8px] mb-0 text-[13px] leading-[20px] text-[#5c6166]">
-                Key commerce indicators for recent bundle performance.
-              </p>
             </div>
             <button
               type="button"

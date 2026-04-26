@@ -1892,7 +1892,7 @@ export default function Index() {
   return (
     <AppProvider embedded apiKey={apiKey}>
       <div className="flex flex-col min-h-screen">
-        <div className="flex-1 max-w-[1280px] w-full mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px] relative">
+        <div className="flex-1 max-w-[1280px] w-full mx-auto px-[16px] sm:px-[24px] pt-[12px] sm:pt-[16px] relative">
           {toastMessage && (
           <div className="fixed z-50 top-4 left-1/2 -translate-x-1/2 bg-[rgba(0,0,0,0.75)] backdrop-blur-sm !text-white px-4 py-2 rounded shadow-lg text-sm font-sans">
             {toastMessage}
@@ -1900,22 +1900,22 @@ export default function Index() {
         )}
         {/* Tabs */}
         {!showCreateOffer && !editingOfferId && (
-          <nav className="mb-[20px] sm:mb-[28px]">
-            <div className="inline-flex w-full flex-col gap-[8px] rounded-[12px] border border-[#dfe3e8] bg-[#fcfcfd] p-[8px] sm:w-auto sm:flex-row">
+          <nav className="mb-[12px] sm:mb-[16px] overflow-x-auto">
+            <div className="inline-flex min-w-max gap-[6px] rounded-[10px] border border-[#e5e7eb] bg-white p-[4px]">
             <button
               type="button"
               onClick={() => {
                 setShowCreateOffer(false);
                 setActiveTab("dashboard");
               }}
-              className={`rounded-[10px] px-[16px] py-[12px] text-center sm:text-left cursor-pointer transition-all ${
+              className={`rounded-[8px] px-[12px] py-[8px] text-center cursor-pointer transition-all ${
                 activeTab === "dashboard"
-                  ? "bg-white text-[#1c1f23] shadow-[0_1px_2px_rgba(16,24,40,0.06)] ring-1 ring-[#dfe3e8]"
-                  : "text-[#5c6166] hover:bg-white hover:text-[#1c1f23]"
+                  ? "bg-[#f6f6f7] text-[#1c1f23]"
+                  : "text-[#5c6166] hover:bg-[#f6f6f7] hover:text-[#1c1f23]"
               }`}
             >
               <span
-                className={`font-sans leading-[24px] text-[14px] font-medium tracking-normal ${activeTab === "dashboard" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
+                className={`font-sans leading-[20px] text-[13px] font-medium tracking-normal ${activeTab === "dashboard" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
               >
                 Dashboard
               </span>
@@ -1927,14 +1927,14 @@ export default function Index() {
                 setShowCreateOffer(false);
                 setActiveTab("offers");
               }}
-              className={`rounded-[10px] px-[16px] py-[12px] text-center sm:text-left cursor-pointer transition-all ${
+              className={`rounded-[8px] px-[12px] py-[8px] text-center cursor-pointer transition-all ${
                 activeTab === "offers"
-                  ? "bg-white text-[#1c1f23] shadow-[0_1px_2px_rgba(16,24,40,0.06)] ring-1 ring-[#dfe3e8]"
-                  : "text-[#5c6166] hover:bg-white hover:text-[#1c1f23]"
+                  ? "bg-[#f6f6f7] text-[#1c1f23]"
+                  : "text-[#5c6166] hover:bg-[#f6f6f7] hover:text-[#1c1f23]"
               }`}
             >
               <span
-                className={`font-sans leading-[24px] text-[14px] font-medium tracking-normal ${activeTab === "offers" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
+                className={`font-sans leading-[20px] text-[13px] font-medium tracking-normal ${activeTab === "offers" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
               >
                 All Offers
               </span>
@@ -1946,14 +1946,14 @@ export default function Index() {
                 setShowCreateOffer(false);
                 setActiveTab("analytics");
               }}
-              className={`rounded-[10px] px-[16px] py-[12px] text-center sm:text-left cursor-pointer transition-all ${
+              className={`rounded-[8px] px-[12px] py-[8px] text-center cursor-pointer transition-all ${
                 activeTab === "analytics"
-                  ? "bg-white text-[#1c1f23] shadow-[0_1px_2px_rgba(16,24,40,0.06)] ring-1 ring-[#dfe3e8]"
-                  : "text-[#5c6166] hover:bg-white hover:text-[#1c1f23]"
+                  ? "bg-[#f6f6f7] text-[#1c1f23]"
+                  : "text-[#5c6166] hover:bg-[#f6f6f7] hover:text-[#1c1f23]"
               }`}
             >
               <span
-                className={`font-sans leading-[24px] text-[14px] font-medium tracking-normal ${activeTab === "analytics" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
+                className={`font-sans leading-[20px] text-[13px] font-medium tracking-normal ${activeTab === "analytics" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
               >
                 Analytics
               </span>

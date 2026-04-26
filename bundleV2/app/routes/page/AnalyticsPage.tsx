@@ -139,31 +139,16 @@ export function AnalyticsPage({ shop, offers, defaultOfferId }: AnalyticsPagePro
 
   return (
     <div className="max-w-[1280px] mx-auto pb-[24px]">
-      <div className="mb-[24px] flex flex-col gap-[16px] lg:flex-row lg:items-end lg:justify-between">
+      <div className="mb-[14px] flex flex-col gap-[12px] lg:flex-row lg:items-center lg:justify-between">
         <div className="max-w-[760px]">
-          <div className="mb-[8px] inline-flex items-center rounded-full border border-[#dfe3e8] bg-[#f6f6f7] px-[10px] py-[4px] text-[12px] font-medium text-[#5c6166]">
-            Performance Analytics
-          </div>
-          <h1 className="m-0 text-[28px] font-semibold leading-[36px] tracking-[-0.02em] text-[#1c1f23] sm:text-[32px] sm:leading-[40px]">
-          Analytics
+          <h1 className="m-0 text-[24px] font-semibold leading-[32px] tracking-[-0.02em] text-[#1c1f23] sm:text-[28px] sm:leading-[36px]">
+            Analytics
           </h1>
-          <p className="mt-[10px] mb-0 text-[14px] leading-[22px] text-[#5c6166] sm:text-[15px] sm:leading-[24px]">
-            Review bundle traffic, conversion, and daily revenue trends across
-            all offers or a specific bundle.
-          </p>
         </div>
       </div>
 
       {/* Filters Bar */}
       <div className={`${surfaceCardClass} mb-[24px] p-[16px] sm:p-[20px]`}>
-        <div className="mb-[12px] flex flex-col gap-[4px]">
-          <h2 className="m-0 text-[16px] font-semibold leading-[24px] text-[#1c1f23]">
-            Filters
-          </h2>
-          <p className="m-0 text-[13px] leading-[20px] text-[#5c6166]">
-            Narrow the time window or focus on a single offer to inspect performance.
-          </p>
-        </div>
         <div className="flex flex-col gap-[12px] sm:flex-row">
           <Select
             value={selectedTimeRange}

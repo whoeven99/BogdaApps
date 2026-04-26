@@ -51,10 +51,10 @@ Design decisions must fit the existing mixed stack.
 ## Design Principles
 
 1. Optimize for task completion.
-2. Keep dense screens readable through spacing and hierarchy.
-3. Use brand color with intention, not everywhere.
-4. Favor stable patterns over visual novelty.
-5. Make previews feel close to storefront output.
+2. Prefer compact layouts over explanatory copy.
+3. Keep dense screens readable through spacing and hierarchy.
+4. Use brand color with intention, not everywhere.
+5. Favor stable patterns over visual novelty.
 6. Preserve compatibility with Shopify admin expectations.
 
 ## Visual Tokens
@@ -98,11 +98,12 @@ Reuse them consistently across pages, custom CSS, and component styling.
 - Prioritize legibility over stylistic typography
 - Headings should feel compact and strong
 - Body copy should stay clean and neutral
-- Helper text and subdued text should remain understated
+- Helper text should be optional, not default
+- Prefer one clear label over a label plus explanatory sentence
 
 Recommended hierarchy:
 
-- Page title: `24px` to `28px`, semibold
+- Page title: `22px` to `28px`, semibold
 - Section title: `18px` to `20px`, semibold
 - Card title: `14px` to `16px`, semibold
 - Body text: `14px`
@@ -116,6 +117,8 @@ Recommended hierarchy:
 - Use clear section spacing instead of large decorative panels
 - Keep width practical for admin workflows
 - Avoid oversized hero sections or landing-page composition
+- Keep page headers short; title plus actions is preferred
+- Avoid eyebrow labels unless they add real navigation value
 
 ### Complex Builder Pages
 
@@ -126,6 +129,7 @@ For multistep configuration pages like offer creation:
 - Right column: sticky preview or contextual summary
 - Collapse to one column on smaller screens
 - Use a persistent bottom action area only when forms are long enough to justify it
+- Step navigation must stay compact and should not push form content below the fold
 
 ### Cards
 
@@ -145,6 +149,7 @@ Avoid inventing different card languages on each page.
 - Primary button uses the brand green
 - Secondary button is quiet and supportive
 - Plain button is text-like and used for lower-priority actions
+- Any dark-filled button must use white text for inverse contrast
 - Destructive actions must use critical styling, never brand green
 - Do not create multiple competing primary actions in one area
 
@@ -162,6 +167,7 @@ Avoid inventing different card languages on each page.
 - Active step uses the brand color
 - Inactive steps use muted backgrounds and subdued text
 - Step components should feel utilitarian, not celebratory
+- Do not add paragraph-length explanations inside each step item
 
 ### Tables and Lists
 
@@ -176,6 +182,7 @@ Avoid inventing different card languages on each page.
 - Explain what the user can do next
 - Prefer one primary CTA
 - Do not over-illustrate
+- Avoid multi-line product education in empty states
 
 ### Alerts and Status
 
@@ -245,8 +252,9 @@ The preview does not need to be pixel-identical, but it should not feel like a d
 - Use short, direct labels
 - Prefer operational language over marketing language
 - Make actions explicit
-- Keep helper text useful and compact
+- Keep helper text useful, compact, and sparse
 - Avoid vague slogans inside product UI
+- Avoid repeating the same explanation in page header, section header, and preview panel
 
 ## Accessibility
 

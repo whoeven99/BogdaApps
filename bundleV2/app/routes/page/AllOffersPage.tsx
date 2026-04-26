@@ -143,10 +143,10 @@ export function AllOffersPage({
                 Action required
               </div>
               <h3 className="m-0 mb-[4px] font-sans text-[14px] font-semibold leading-[20px] text-[#1c1f23]">
-                Action required: Activate Theme Extension
+                Activate Theme Extension
               </h3>
               <p className="m-0 font-sans text-[14px] leading-[20px] text-[#5c6166]">
-                Your offer has been created, but it won't be visible on your store until you activate the theme extension.
+                Offers stay hidden until the extension is enabled.
               </p>
               <div className="mt-[12px]">
                 <button
@@ -170,19 +170,12 @@ export function AllOffersPage({
       )}
 
       {/* Header */}
-      <div className="mb-[24px] flex flex-col gap-[16px] lg:flex-row lg:items-end lg:justify-between">
+      <div className="mb-[14px] flex flex-col gap-[12px] lg:flex-row lg:items-center lg:justify-between">
         <div className="max-w-[760px]">
-          <div className="mb-[8px] inline-flex items-center rounded-full border border-[#dfe3e8] bg-[#f6f6f7] px-[10px] py-[4px] text-[12px] font-medium text-[#5c6166]">
-            Offer Management
-          </div>
-          <h1 className="m-0 font-sans text-[28px] font-semibold leading-[36px] tracking-[-0.02em] text-[#1c1f23] sm:text-[32px] sm:leading-[40px]">
+          <h1 className="m-0 font-sans text-[24px] font-semibold leading-[32px] tracking-[-0.02em] text-[#1c1f23] sm:text-[28px] sm:leading-[36px]">
             All Offers
           </h1>
-          <p className="mt-[10px] mb-0 font-sans text-[14px] leading-[22px] text-[#5c6166] sm:text-[15px] sm:leading-[24px]">
-            Manage every bundle offer, update status safely, and jump into edits
-            without leaving the operations view.
-          </p>
-          <div className="mt-[12px] flex flex-wrap gap-[8px]">
+          <div className="mt-[8px] flex flex-wrap gap-[8px]">
             <span className="inline-flex items-center rounded-full bg-[#f6f6f7] px-[10px] py-[4px] text-[12px] font-medium text-[#5c6166]">
               {rows.length} total offers
             </span>
@@ -211,14 +204,11 @@ export function AllOffersPage({
 
       {/* Table */}
       <div className={`${surfaceCardClass} p-[20px] sm:p-[24px]`}>
-        <div className="mb-[16px] flex flex-col gap-[6px] sm:flex-row sm:items-end sm:justify-between">
+        <div className="mb-[12px] flex flex-col gap-[6px] sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 className="m-0 text-[18px] font-semibold leading-[28px] text-[#1c1f23]">
               Offer list
             </h2>
-            <p className="mt-[4px] mb-0 text-[13px] leading-[20px] text-[#5c6166]">
-              A complete view of offer status, rules, and recent update times.
-            </p>
           </div>
         </div>
         <div className="overflow-x-auto">

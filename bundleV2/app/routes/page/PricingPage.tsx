@@ -100,18 +100,11 @@ export function PricingPage({
 
   return (
     <div className="mx-auto max-w-[1280px] pb-[24px]">
-      <div className="mb-[24px] flex flex-col gap-[16px] lg:flex-row lg:items-end lg:justify-between">
+      <div className="mb-[14px] flex flex-col gap-[12px] lg:flex-row lg:items-center lg:justify-between">
         <div className="max-w-[760px]">
-          <div className="mb-[8px] inline-flex items-center rounded-full border border-[#dfe3e8] bg-[#f6f6f7] px-[10px] py-[4px] text-[12px] font-medium text-[#5c6166]">
-            Billing & Plans
-          </div>
-          <h1 className="m-0 text-[28px] font-semibold leading-[36px] tracking-[-0.02em] text-[#1c1f23] sm:text-[32px] sm:leading-[40px]">
+          <h1 className="m-0 text-[24px] font-semibold leading-[32px] tracking-[-0.02em] text-[#1c1f23] sm:text-[28px] sm:leading-[36px]">
             Pricing Plans
           </h1>
-          <p className="mt-[10px] mb-0 text-[14px] leading-[22px] text-[#5c6166] sm:text-[15px] sm:leading-[24px]">
-            Choose a plan that matches your store volume and analytics needs.
-            Billing is confirmed through Shopify.
-          </p>
         </div>
       </div>
 
@@ -134,21 +127,21 @@ export function PricingPage({
       {hasAnyActive && (
         <div className="mb-[24px] rounded-[12px] border border-[#dfe3e8] bg-white p-[14px] shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
           <p className="m-0 text-[14px] leading-[21px] text-[#5c6166]">
-            This store already has an active app subscription. To change your plan, please manage your app subscription in the Shopify admin under "Settings → Apps and sales channels", or select a different billing cycle/plan to start a new subscription (subject to Shopify rules).
+            An active subscription already exists. Manage it in Shopify admin before switching plans.
           </p>
         </div>
       )}
 
-      <div className={`${surfaceCardClass} mb-[24px] p-[24px] text-center sm:p-[28px]`}>
-        <h2 className="m-0 text-[24px] font-semibold leading-[32px] text-[#1c1f23] sm:text-[28px] sm:leading-[36px]">
-          Choose the right plan for your growth stage
+      <div className={`${surfaceCardClass} mb-[24px] p-[20px] text-center sm:p-[24px]`}>
+        <h2 className="m-0 text-[22px] font-semibold leading-[30px] text-[#1c1f23] sm:text-[24px] sm:leading-[32px]">
+          Choose a plan
         </h2>
-        <p className="mx-auto mt-[8px] mb-0 max-w-[720px] text-[14px] leading-[22px] text-[#5c6166]">
-          Includes a 14-day free trial (billed through Shopify). Clicking the button will redirect you to the Shopify admin to confirm the subscription.
+        <p className="mx-auto mt-[6px] mb-0 max-w-[720px] text-[13px] leading-[20px] text-[#5c6166]">
+          14-day free trial. Billing runs through Shopify.
         </p>
 
         {/* Billing Cycle Toggle */}
-        <div className="mt-[24px] flex items-center justify-center gap-[16px]">
+        <div className="mt-[18px] flex items-center justify-center gap-[14px]">
           <span
             className={`text-[14px] ${
               billingCycle === "monthly"
