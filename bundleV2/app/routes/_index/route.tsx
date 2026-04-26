@@ -21,7 +21,6 @@ import { AllOffersPage } from "../page/AllOffersPage";
 import { AnalyticsPage } from "../page/AnalyticsPage";
 import { PricingPage } from "../page/PricingPage";
 import { CreateNewOffer } from "../component/CreateNewOffer/CreateNewOffer";
-import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
 import prisma from "../../db.server";
 import {
   getCachedShopOffers,
@@ -97,7 +96,6 @@ type ShopOffersMetafieldSyncResult =
 
 const BUNDLE_METAFIELD_NAMESPACE = "ciwi_bundle";
 const BUNDLE_METAFIELD_BASE_KEY = "ciwi-bundle-offers";
-const BUNDLE_METAFIELD_ACTIVE_ENV_KEY = "ciwi-bundle-offers-active-env";
 const BUNDLE_METAFIELD_ENABLED_PROD_KEY = "ciwi-bundle-enabled-prod";
 const BUNDLE_METAFIELD_ENABLED_TEST_KEY = "ciwi-bundle-enabled-test";
 const PROD_SHOPIFY_API_KEY = "bfc13ad696f2a8d2a77ba6eee1e26966";
@@ -178,7 +176,6 @@ function buildHydratedCompleteBundleSelectedProductsJson(
 }
 
 async function buildCompactOffersPayload(
-  admin: any,
   shopOffers: OfferListItem[],
 ): Promise<string> {
   // 仅同步 status=true 的活动，避免无效活动占用 payload 体积并干扰函数计算
@@ -207,7 +204,7 @@ async function buildStorefrontOffersPayload(
   shopOffers: OfferListItem[],
 ): Promise<string> {
   const activeOffers = shopOffers.filter((offer) => offer.status === true);
-  const compactPayload = await buildCompactOffersPayload(admin, shopOffers);
+  const compactPayload = await buildCompactOffersPayload(shopOffers);
   const compactPayloadParsed = JSON.parse(compactPayload) as {
     updatedAt?: string;
     offers?: Array<{
@@ -279,7 +276,7 @@ async function syncShopOffersMetafield(
       updatedAt: new Date().toISOString(),
       offers: shopOffers,
     });
-    const functionMetafieldValue = await buildCompactOffersPayload(admin, shopOffers);
+    const functionMetafieldValue = await buildCompactOffersPayload(shopOffers);
     const storefrontMetafieldValue = await buildStorefrontOffersPayload(admin, shopOffers);
     console.log("[offers-sync] payload size snapshot", {
       totalOffers: shopOffers.length,
@@ -1903,14 +1900,19 @@ export default function Index() {
         )}
         {/* Tabs */}
         {!showCreateOffer && !editingOfferId && (
-          <nav className="flex flex-col sm:flex-row gap-[8px] sm:gap-[16px] items-stretch sm:items-start pb-0 mb-[16px] sm:mb-[24px] border-b border-[#e3e8ed]">
+          <nav className="mb-[20px] sm:mb-[28px]">
+            <div className="inline-flex w-full flex-col gap-[8px] rounded-[12px] border border-[#dfe3e8] bg-[#fcfcfd] p-[8px] sm:w-auto sm:flex-row">
             <button
               type="button"
               onClick={() => {
                 setShowCreateOffer(false);
                 setActiveTab("dashboard");
               }}
-              className={`px-[16px] py-[12px] text-center sm:text-left cursor-pointer transition-all border-b-2 ${activeTab === "dashboard" ? "border-[#008060] text-[#1c1f23]" : "border-transparent hover:border-[#8c9196] text-[#5c6166]"}`}
+              className={`rounded-[10px] px-[16px] py-[12px] text-center sm:text-left cursor-pointer transition-all ${
+                activeTab === "dashboard"
+                  ? "bg-white text-[#1c1f23] shadow-[0_1px_2px_rgba(16,24,40,0.06)] ring-1 ring-[#dfe3e8]"
+                  : "text-[#5c6166] hover:bg-white hover:text-[#1c1f23]"
+              }`}
             >
               <span
                 className={`font-sans leading-[24px] text-[14px] font-medium tracking-normal ${activeTab === "dashboard" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
@@ -1925,7 +1927,11 @@ export default function Index() {
                 setShowCreateOffer(false);
                 setActiveTab("offers");
               }}
-              className={`px-[16px] py-[12px] text-center sm:text-left cursor-pointer transition-all border-b-2 ${activeTab === "offers" ? "border-[#008060] text-[#1c1f23]" : "border-transparent hover:border-[#8c9196] text-[#5c6166]"}`}
+              className={`rounded-[10px] px-[16px] py-[12px] text-center sm:text-left cursor-pointer transition-all ${
+                activeTab === "offers"
+                  ? "bg-white text-[#1c1f23] shadow-[0_1px_2px_rgba(16,24,40,0.06)] ring-1 ring-[#dfe3e8]"
+                  : "text-[#5c6166] hover:bg-white hover:text-[#1c1f23]"
+              }`}
             >
               <span
                 className={`font-sans leading-[24px] text-[14px] font-medium tracking-normal ${activeTab === "offers" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
@@ -1940,7 +1946,11 @@ export default function Index() {
                 setShowCreateOffer(false);
                 setActiveTab("analytics");
               }}
-              className={`px-[16px] py-[12px] text-center sm:text-left cursor-pointer transition-all border-b-2 ${activeTab === "analytics" ? "border-[#008060] text-[#1c1f23]" : "border-transparent hover:border-[#8c9196] text-[#5c6166]"}`}
+              className={`rounded-[10px] px-[16px] py-[12px] text-center sm:text-left cursor-pointer transition-all ${
+                activeTab === "analytics"
+                  ? "bg-white text-[#1c1f23] shadow-[0_1px_2px_rgba(16,24,40,0.06)] ring-1 ring-[#dfe3e8]"
+                  : "text-[#5c6166] hover:bg-white hover:text-[#1c1f23]"
+              }`}
             >
               <span
                 className={`font-sans leading-[24px] text-[14px] font-medium tracking-normal ${activeTab === "analytics" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
@@ -1948,7 +1958,7 @@ export default function Index() {
                 Analytics
               </span>
             </button>
-
+            </div>
           </nav>
         )}
 
@@ -2041,8 +2051,8 @@ export default function Index() {
           />
         )}
         </div>
-        <div className="py-8 text-center text-sm text-[#666] w-full">
-          <a 
+        <div className="mt-[8px] mb-[24px] flex w-full flex-wrap items-center justify-center gap-[10px] rounded-[12px] border border-[#e9edf1] bg-[#fcfcfd] px-[16px] py-[14px] text-[13px] text-[#666]">
+          <a
             href="mailto:support@ciwi.ai" 
             target="_blank" 
             rel="noopener noreferrer" 
@@ -2050,8 +2060,8 @@ export default function Index() {
           >
             Contact Us
           </a>
-          |
-          <a 
+          <span className="text-[#c4cdd5]">|</span>
+          <a
             href="https://iw73s3ld6wy.feishu.cn/wiki/UEumwgOLJi90rEknevWcZp7HnQg?from=from_copylink" 
             target="_blank" 
             rel="noopener noreferrer" 

@@ -16,6 +16,8 @@ interface AnalyticsPageProps {
 }
 
 export function AnalyticsPage({ shop, offers, defaultOfferId }: AnalyticsPageProps) {
+  const surfaceCardClass =
+    "rounded-[12px] border border-[#dfe3e8] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]";
   const [analyticsData, setAnalyticsData] = useState<AnalyticsDataType>({
     visitors: 0,
     bundleOrders: 0,
@@ -137,77 +139,117 @@ export function AnalyticsPage({ shop, offers, defaultOfferId }: AnalyticsPagePro
 
   return (
     <div className="max-w-[1280px] mx-auto pb-[24px]">
-      <div className="mb-[24px]">
-        <h1 className="text-[20px] font-semibold text-[#1c1f23] m-0">
+      <div className="mb-[24px] flex flex-col gap-[16px] lg:flex-row lg:items-end lg:justify-between">
+        <div className="max-w-[760px]">
+          <div className="mb-[8px] inline-flex items-center rounded-full border border-[#dfe3e8] bg-[#f6f6f7] px-[10px] py-[4px] text-[12px] font-medium text-[#5c6166]">
+            Performance Analytics
+          </div>
+          <h1 className="m-0 text-[28px] font-semibold leading-[36px] tracking-[-0.02em] text-[#1c1f23] sm:text-[32px] sm:leading-[40px]">
           Analytics
-        </h1>
+          </h1>
+          <p className="mt-[10px] mb-0 text-[14px] leading-[22px] text-[#5c6166] sm:text-[15px] sm:leading-[24px]">
+            Review bundle traffic, conversion, and daily revenue trends across
+            all offers or a specific bundle.
+          </p>
+        </div>
       </div>
 
       {/* Filters Bar */}
-      <div className="flex items-center gap-[12px] mb-[24px]">
-        <Select
-          value={selectedTimeRange}
-          onChange={(e) => setSelectedTimeRange(e)}
-          options={timeRangeOptions}
-          style={{ width: 200 }}
-        />
-        <Select
-          value={selectedOffer}
-          onChange={(e) => setSelectedOffer(e)}
-          options={offerOptions}
-          style={{ width: 200 }}
-        />
+      <div className={`${surfaceCardClass} mb-[24px] p-[16px] sm:p-[20px]`}>
+        <div className="mb-[12px] flex flex-col gap-[4px]">
+          <h2 className="m-0 text-[16px] font-semibold leading-[24px] text-[#1c1f23]">
+            Filters
+          </h2>
+          <p className="m-0 text-[13px] leading-[20px] text-[#5c6166]">
+            Narrow the time window or focus on a single offer to inspect performance.
+          </p>
+        </div>
+        <div className="flex flex-col gap-[12px] sm:flex-row">
+          <Select
+            value={selectedTimeRange}
+            onChange={(e) => setSelectedTimeRange(e)}
+            options={timeRangeOptions}
+            style={{ width: "100%", maxWidth: 220 }}
+          />
+          <Select
+            value={selectedOffer}
+            onChange={(e) => setSelectedOffer(e)}
+            options={offerOptions}
+            style={{ width: "100%", maxWidth: 280 }}
+          />
+        </div>
       </div>
 
       {/* Metrics Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-[16px] mb-[24px]">
         {/* Visitors */}
-        <div className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[24px]">
+        <div className={`${surfaceCardClass} p-[20px] sm:p-[24px]`}>
+          <div className="mb-[8px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
+            Reach
+          </div>
           <div className="flex items-center justify-between mb-[12px]">
-            <span className="font-sans font-normal text-[14px] text-[#5c6166]">
+            <span className="font-sans font-medium text-[14px] text-[#5c6166]">
               Visitors
             </span>
             <CircleHelp size={16} className="text-[#5c6166]" />
           </div>
-          <h3 className="font-sans font-semibold text-[20px] text-[#1c1f23] m-0">
+          <h3 className="m-0 font-sans text-[28px] font-semibold leading-[38px] text-[#1c1f23]">
             {analyticsData.visitors.toLocaleString()}
           </h3>
+          <p className="mt-[8px] mb-0 text-[13px] leading-[20px] text-[#5c6166]">
+            Unique shoppers who reached a bundle-enabled buying surface.
+          </p>
         </div>
 
         {/* Bundle orders */}
-        <div className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[24px]">
+        <div className={`${surfaceCardClass} p-[20px] sm:p-[24px]`}>
+          <div className="mb-[8px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
+            Orders
+          </div>
           <div className="flex items-center justify-between mb-[12px]">
-            <span className="font-sans font-normal text-[14px] text-[#5c6166]">
+            <span className="font-sans font-medium text-[14px] text-[#5c6166]">
               Bundle orders
             </span>
             <CircleHelp size={16} className="text-[#5c6166]" />
           </div>
-          <h3 className="font-sans font-semibold text-[20px] text-[#1c1f23] m-0">
+          <h3 className="m-0 font-sans text-[28px] font-semibold leading-[38px] text-[#1c1f23]">
             {analyticsData.bundleOrders.toLocaleString()}
           </h3>
+          <p className="mt-[8px] mb-0 text-[13px] leading-[20px] text-[#5c6166]">
+            Orders that completed with a bundle purchase attached.
+          </p>
         </div>
 
         {/* Conversion to bundle */}
-        <div className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[24px]">
+        <div className={`${surfaceCardClass} p-[20px] sm:p-[24px]`}>
+          <div className="mb-[8px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
+            Efficiency
+          </div>
           <div className="flex items-center justify-between mb-[12px]">
-            <span className="font-sans font-normal text-[14px] text-[#5c6166]">
+            <span className="font-sans font-medium text-[14px] text-[#5c6166]">
               Conversion to bundle
             </span>
             <CircleHelp size={16} className="text-[#5c6166]" />
           </div>
-          <h3 className="font-sans font-semibold text-[20px] text-[#1c1f23] m-0">
-                        {(analyticsData.conversionRate * 100).toFixed(2)}%
+          <h3 className="m-0 font-sans text-[28px] font-semibold leading-[38px] text-[#1c1f23]">
+            {(analyticsData.conversionRate * 100).toFixed(2)}%
           </h3>
+          <p className="mt-[8px] mb-0 text-[13px] leading-[20px] text-[#5c6166]">
+            Share of visitors who converted into bundle orders.
+          </p>
         </div>
       </div>
 
       {/* Daily added revenue - Line Chart */}
-      <div className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[24px]">
-        <h3 className="font-sans font-semibold text-[14px] text-[#1c1f23] m-0 mb-[8px]">
+      <div className={`${surfaceCardClass} p-[20px] sm:p-[24px]`}>
+        <div className="mb-[6px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
+          Revenue Trend
+        </div>
+        <h3 className="m-0 mb-[8px] font-sans text-[18px] font-semibold leading-[28px] text-[#1c1f23]">
           Daily added revenue
         </h3>
-        <p className="font-sans font-normal text-[13px] text-[#5c6166] mb-[24px]">
-          See how much additional revenue you're making with this app every day.
+        <p className="mb-[24px] font-sans text-[13px] leading-[20px] text-[#5c6166]">
+          See how much additional revenue your bundles contribute each day over the selected range.
         </p>
         <BasicLineChart
           Xdata={basicLineChartData.Xdata}

@@ -181,12 +181,6 @@ function isOfferActionErrorBody(data: unknown): data is OfferActionErrorBody {
   );
 }
 
-function formatForDateTimeLocal(value: string | Date) {
-  const d = typeof value === "string" ? new Date(value) : value;
-  if (isNaN(d.getTime())) return "";
-  return d.toISOString();
-}
-
 function buildDiscountRulesJson(tiers: DiscountRule[]): DiscountRule[] {
   const out: DiscountRule[] = [];
   for (const tier of tiers) {
@@ -312,18 +306,6 @@ export function CreateNewOffer({
   const baseUnitPrice = 100;
   const formatPreviewPrice = (value: number) =>
     `€${value.toFixed(2).replace(".", ",")}`;
-  const startTimeInputRef = useRef<HTMLInputElement | null>(null);
-  const endTimeInputRef = useRef<HTMLInputElement | null>(null);
-  const openDateTimePicker = (input: HTMLInputElement | null) => {
-    const pickerInput = input as
-      | (HTMLInputElement & {
-          showPicker?: () => void;
-        })
-      | null;
-    if (!pickerInput) return;
-    pickerInput.focus();
-    pickerInput.showPicker?.();
-  };
   const [step, setStep] = useState(1);
   const [offerType, setOfferType] = useState(
     initialOffer?.offerType ?? "quantity-breaks-same",
@@ -771,16 +753,6 @@ export function CreateNewOffer({
       return changed ? next : prev;
     });
   }, [offerType, storeProductMap]);
-  // 统一格式化价格，优先显示为欧元格式，避免预览里丢失价格展示
-  const formatBundlePrice = (raw?: string) => {
-    if (!raw) return "€0.00";
-    const cleaned = String(raw).trim();
-    if (/[€$£¥]/.test(cleaned)) return cleaned;
-    const parsed = Number(cleaned.replace(",", "."));
-    if (Number.isFinite(parsed)) return `€${parsed.toFixed(2)}`;
-    return cleaned;
-  };
-
   const updateBundleBarProductVariant = (
     barId: string,
     productId: string,
@@ -983,7 +955,7 @@ export function CreateNewOffer({
     return (
       <div
         key={product.productId}
-        className="border border-[#dfe3e8] rounded-md p-3 bg-[#fafbfc]"
+        className="create-offer-bundle-product-card"
       >
         <div className="flex items-start gap-2 mb-2 justify-between">
           <div className="flex items-start gap-2 flex-1 min-w-0">
@@ -1127,9 +1099,7 @@ export function CreateNewOffer({
     }
   }, [offerType, completeBundleBars, activeBundleBarId]);
 
-  const [status, setStatus] = useState<boolean>(
-    initialOffer ? initialOffer.status : true
-  );
+  const status = initialOffer ? initialOffer.status : true;
 
   useEffect(() => {
     if (subscriptionStatusFetcher.state !== "idle") return;
@@ -1150,8 +1120,6 @@ export function CreateNewOffer({
   }, [subscriptionStatusFetcher.state, subscriptionStatusFetcher.data]);
 
   const normalizedDiscountRules = sanitizeDiscountRules(discountRules);
-  const featuredRule = normalizedDiscountRules[0];
-
   const previewBarOptions = useMemo(() => {
     if (offerType === "bxgy") {
       return bxgyDiscountRules.map((r, i) => ({
@@ -1265,6 +1233,12 @@ export function CreateNewOffer({
     "Style Design",
     "Schedule & Budget",
   ];
+  const stepDescriptions = [
+    "Name the offer and define the core offer type.",
+    "Choose products, configure discount logic, and review rule behavior.",
+    "Tune storefront presentation, layout, and CTA styling.",
+    "Control visibility, schedule, and final publishing settings.",
+  ];
 
   const offerTypes = [
     {
@@ -1314,6 +1288,12 @@ export function CreateNewOffer({
     selectedProductsData.length > 0
       ? "Subscription bar will only be shown in products that are eligible for subscription. You can select those products in your subscription app."
       : "After selecting products, the app checks whether they have selling plans and decides whether to show a solid or dashed subscription bar.";
+  const currentStepTitle = steps[step - 1] ?? steps[0];
+  const currentStepDescription =
+    stepDescriptions[step - 1] ?? stepDescriptions[0];
+  const activeOfferTypeDescription =
+    offerTypes.find((type) => type.id === offerType)?.description ??
+    "Live preview updates as you configure this offer.";
 
   useEffect(() => {
     // 中文注释：当用户在第 1 步切换到 Subscription 类型时，默认自动打开订阅开关
@@ -1562,11 +1542,19 @@ export function CreateNewOffer({
           >
             ← Back
           </Button>
-          <div className="flex items-center justify-between w-full gap-[16px] mt-1">
-            <h1 className="text-[24px] font-semibold m-0 text-[#1c1f23]">
+          <div className="mt-[8px] inline-flex items-center rounded-full border border-[#dfe3e8] bg-[#f6f6f7] px-[10px] py-[4px] text-[12px] font-medium text-[#5c6166]">
+            Offer Builder
+          </div>
+          <div className="mt-[10px] flex items-center justify-between w-full gap-[16px]">
+            <div>
+              <h1 className="m-0 text-[28px] font-semibold leading-[36px] tracking-[-0.02em] text-[#1c1f23] sm:text-[32px] sm:leading-[40px]">
               {initialOffer ? "Edit Offer" : "Create New Offer"}
-            </h1>
-            
+              </h1>
+              <p className="mt-[8px] mb-0 max-w-[640px] text-[14px] leading-[22px] text-[#5c6166] sm:text-[15px] sm:leading-[24px]">
+                Configure bundle logic, control storefront presentation, and
+                preview the customer experience before publishing.
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -1673,8 +1661,26 @@ export function CreateNewOffer({
         value={JSON.stringify(progressiveGiftsConfigToStorableJson(progressiveGifts))}
       />
 
-      <div className="bg-[#ffffff] rounded-[8px] shadow-[0_1px_3px_rgba(0,0,0,0.1)] p-[20px] mb-[100px]">
-        <div className="grid grid-cols-2 sm:flex sm:gap-[12px] gap-[8px] mb-6">
+      <div className="mb-[100px] rounded-[12px] border border-[#dfe3e8] bg-[#ffffff] p-[20px] shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-[24px]">
+        <div className="mb-[20px] rounded-[12px] border border-[#e9edf1] bg-[#fcfcfd] p-[14px] sm:p-[16px]">
+          <div className="mb-[12px] flex flex-col gap-[6px] sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <div className="mb-[4px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
+                Step {step} of {steps.length}
+              </div>
+              <h2 className="m-0 text-[20px] font-semibold leading-[30px] text-[#1c1f23]">
+                {currentStepTitle}
+              </h2>
+              <p className="mt-[6px] mb-0 max-w-[720px] text-[13px] leading-[20px] text-[#5c6166]">
+                {currentStepDescription}
+              </p>
+            </div>
+            <div className="rounded-full bg-[#f0f9f6] px-[10px] py-[4px] text-[12px] font-medium text-[#108043]">
+              {initialOffer ? "Editing existing offer" : "Creating new offer"}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-[8px] md:grid-cols-4">
           {steps.map((stepName, index) => {
             const stepNumber = index + 1;
             const isActive = step === stepNumber;
@@ -1684,14 +1690,14 @@ export function CreateNewOffer({
                 key={index}
                 role="button"
                 tabIndex={isClickable ? 0 : -1}
-                className={`flex-1 py-[10px] px-2 sm:p-[12px] rounded-md text-center text-[13px] sm:text-[14px] font-medium transition-colors ${
+                className={`rounded-[10px] border px-[12px] py-[12px] text-left transition-all ${
                   isActive
-                    ? "bg-[#008060] !text-white"
-                    : "bg-[#f4f6f8] text-[#5c6166]"
+                    ? "border-[#008060] bg-[#f0faf6] shadow-[inset_0_0_0_1px_rgba(0,128,96,0.08)]"
+                    : "border-[#e5e7eb] bg-white"
                 } ${
                   isClickable
-                    ? "cursor-pointer hover:opacity-80"
-                    : "cursor-not-allowed opacity-50"
+                    ? "cursor-pointer hover:border-[#bfd7cd]"
+                    : "cursor-not-allowed opacity-60"
                 }`}
                 onClick={(e) => {
                   if (isClickable) {
@@ -1706,13 +1712,31 @@ export function CreateNewOffer({
                   }
                 }}
               >
-                <span className="hidden sm:inline">
-                  {stepNumber}.{" "}
-                </span>
-                {stepName}
+                <div className="mb-[8px] flex items-center gap-[10px]">
+                  <div
+                    className={`flex h-[28px] w-[28px] items-center justify-center rounded-full text-[12px] font-semibold ${
+                      isActive
+                        ? "bg-[#008060] text-white"
+                        : "bg-[#f4f6f8] text-[#5c6166]"
+                    }`}
+                  >
+                    {stepNumber}
+                  </div>
+                  <div
+                    className={`text-[14px] font-semibold leading-[20px] ${
+                      isActive ? "text-[#1c1f23]" : "text-[#5c6166]"
+                    }`}
+                  >
+                    {stepName}
+                  </div>
+                </div>
+                <div className="text-[12px] leading-[18px] text-[#6d7175]">
+                  {stepDescriptions[index]}
+                </div>
               </div>
             );
           })}
+          </div>
         </div>
 
         <div>
@@ -1720,9 +1744,18 @@ export function CreateNewOffer({
             <div className="create-offer-basic-grid lg:grid-cols-[1fr_400px]">
               <div className="flex flex-col gap-6">
                 <div>
-                  <h2 className="text-[20px] font-semibold mb-4 text-[#1c1f23]">
+                  <div className="mb-4">
+                    <div className="mb-[4px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
+                      Offer Setup
+                    </div>
+                    <h2 className="m-0 text-[20px] font-semibold text-[#1c1f23]">
                     Basic Information
-                  </h2>
+                    </h2>
+                    <p className="mt-[6px] mb-0 text-[13px] leading-[20px] text-[#5c6166]">
+                      Set a clear offer name, choose the bundle logic, and define
+                      the checkout display title.
+                    </p>
+                  </div>
                   <div className="flex flex-col gap-4">
                     <div>
                       <label className="block">
@@ -1801,45 +1834,49 @@ export function CreateNewOffer({
               </div>
 
               <div className="create-offer-sticky-preview">
-                <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                  Live Preview
-                </h3>
-                <p className="text-[13px] text-[#5c6166] mb-6 font-normal">
-                  {
-                    offerTypes.find(
-                      (type) => type.id === offerType,
-                    )?.description
-                  }
-                </p>
+                <div className="rounded-[12px] border border-[#dfe3e8] bg-[#fcfcfd] p-[16px] shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+                  <div className="mb-[12px]">
+                    <div className="mb-[4px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
+                      Storefront Preview
+                    </div>
+                    <h3 className="m-0 text-[16px] font-semibold text-[#1c1f23]">
+                      Live Preview
+                    </h3>
+                    <p className="mt-[6px] mb-0 text-[13px] leading-[20px] text-[#5c6166]">
+                      {activeOfferTypeDescription}
+                    </p>
+                  </div>
 
-                <BundlePreview
-                  layoutFormat={layoutFormat}
-                  cardBackgroundColor={cardBackgroundColor}
-                  accentColor={accentColor}
-                  borderColor={borderColor}
-                  labelColor={labelColor}
-                  titleFontSize={titleFontSize}
-                  titleFontWeight={titleFontWeight}
-                  titleColor={titleColor}
-                  buttonText={buttonText}
-                  buttonPrimaryColor={buttonPrimaryColor}
-                  showCustomButton={showCustomButton}
-                  title={widgetTitle}
-                  items={previewItems}
-                  progressiveGifts={progressiveGifts}
-                  progressivePreviewBarIndex={previewGiftBar}
-                  progressivePreviewLineQty={previewGiftQty}
-                  showSubscriptionPreview={shouldShowSubscriptionPreview}
-                  subscriptionPreviewStyle={subscriptionPreviewStyle}
-                  subscriptionTitle={subscriptionTitle}
-                  subscriptionSubtitle={subscriptionSubtitle}
-                  showSubscriptionExplanation={shouldShowSubscriptionExplanation}
-                  subscriptionExplanationTitle={subscriptionExplanationTitle}
-                  subscriptionExplanationBody={subscriptionExplanationBody}
-                />
-                <p className="text-[12px] text-[#5c6166] mt-3 italic font-normal">
-                  Note: This is a live preview. Changes will update in real-time when state is connected.
-                </p>
+                  <BundlePreview
+                    layoutFormat={layoutFormat}
+                    cardBackgroundColor={cardBackgroundColor}
+                    accentColor={accentColor}
+                    borderColor={borderColor}
+                    labelColor={labelColor}
+                    titleFontSize={titleFontSize}
+                    titleFontWeight={titleFontWeight}
+                    titleColor={titleColor}
+                    buttonText={buttonText}
+                    buttonPrimaryColor={buttonPrimaryColor}
+                    showCustomButton={showCustomButton}
+                    title={widgetTitle}
+                    items={previewItems}
+                    progressiveGifts={progressiveGifts}
+                    progressivePreviewBarIndex={previewGiftBar}
+                    progressivePreviewLineQty={previewGiftQty}
+                    showSubscriptionPreview={shouldShowSubscriptionPreview}
+                    subscriptionPreviewStyle={subscriptionPreviewStyle}
+                    subscriptionTitle={subscriptionTitle}
+                    subscriptionSubtitle={subscriptionSubtitle}
+                    showSubscriptionExplanation={shouldShowSubscriptionExplanation}
+                    subscriptionExplanationTitle={subscriptionExplanationTitle}
+                    subscriptionExplanationBody={subscriptionExplanationBody}
+                  />
+                  <div className="mt-[12px] rounded-[8px] bg-white px-[10px] py-[8px] text-[12px] leading-[18px] text-[#5c6166]">
+                    Preview updates as you change form state. Final storefront
+                    rendering can still vary slightly by theme context.
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -1848,105 +1885,150 @@ export function CreateNewOffer({
             <>
               <div className="create-offer-products-grid">
                 <div>
-                  <h2 className="text-[20px] font-semibold mb-6 text-[#1c1f23]">
+                  <div className="mb-6">
+                    <div className="mb-[4px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
+                      Offer Logic
+                    </div>
+                    <h2 className="m-0 text-[20px] font-semibold text-[#1c1f23]">
                     Products & Discounts
-                  </h2>
+                    </h2>
+                    <p className="mt-[6px] mb-0 text-[13px] leading-[20px] text-[#5c6166]">
+                      Choose eligible products and define how each bundle or tier
+                      behaves in the storefront.
+                    </p>
+                  </div>
 
                   {offerType === "bxgy" ? (
                     <>
                       <div className="mb-6">
-                        <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                          Buy Products (X)
-                        </h3>
-                        {buyProducts.length === 0 ? (
-                          <Button
-                            size="large"
-                            className="text-[#008060] border-[#008060] hover:text-[#006e52] hover:border-[#006e52] hover:bg-[#f0f9f6]"
-                            onClick={(e) => {
-                              handleSelectProducts("buy");
-                              e.preventDefault();
-                            }}
-                          >
-                            Select buy products
-                          </Button>
-                        ) : (
-                          <div>
-                            <div className="text-[12px] text-[#5c6166] mb-2">
-                              {buyProducts.length} product{buyProducts.length > 1 ? "s" : ""} selected
+                        <div className="create-offer-panel create-offer-panel--muted">
+                          <div className="create-offer-panel__header">
+                            <div>
+                              <div className="create-offer-panel__eyebrow">BXGY Setup</div>
+                              <h3 className="create-offer-panel__title">Buy Products (X)</h3>
+                              <p className="create-offer-panel__description">
+                                Choose the products customers must add to trigger the BXGY rule.
+                              </p>
                             </div>
+                            {buyProducts.length > 0 ? (
+                              <div className="create-offer-kpi-badge">
+                                {buyProducts.length} selected
+                              </div>
+                            ) : null}
+                          </div>
+                          {buyProducts.length === 0 ? (
                             <Button
-                              size="small"
+                              size="large"
+                              className="text-[#008060] border-[#008060] hover:text-[#006e52] hover:border-[#006e52] hover:bg-[#f0f9f6]"
                               onClick={(e) => {
                                 handleSelectProducts("buy");
                                 e.preventDefault();
                               }}
                             >
-                              Edit buy products
+                              Select buy products
                             </Button>
-                          </div>
-                        )}
+                          ) : (
+                            <div className="create-offer-panel__footer">
+                              <Button
+                                size="small"
+                                onClick={(e) => {
+                                  handleSelectProducts("buy");
+                                  e.preventDefault();
+                                }}
+                              >
+                                Edit buy products
+                              </Button>
+                            </div>
+                          )}
+                        </div>
                       </div>
 
                       <div className="mb-8">
-                        <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                          Get Products (Y) 
-                        </h3>
-                        {getProducts.length === 0 ? (
-                          <Button
-                            size="large"
-                            className="text-[#008060] border-[#008060] hover:text-[#006e52] hover:border-[#006e52] hover:bg-[#f0f9f6]"
-                            onClick={(e) => {
-                              handleSelectProducts("get");
-                              e.preventDefault();
-                            }}
-                          >
-                            Select get products
-                          </Button>
-                        ) : (
-                          <div>
-                            <div className="text-[12px] text-[#5c6166] mb-2">
-                              {getProducts.length} product{getProducts.length > 1 ? "s" : ""} selected
+                        <div className="create-offer-panel create-offer-panel--muted">
+                          <div className="create-offer-panel__header">
+                            <div>
+                              <div className="create-offer-panel__eyebrow">BXGY Setup</div>
+                              <h3 className="create-offer-panel__title">Get Products (Y)</h3>
+                              <p className="create-offer-panel__description">
+                                Choose the products that receive the BXGY discount when the rule is met.
+                              </p>
                             </div>
+                            {getProducts.length > 0 ? (
+                              <div className="create-offer-kpi-badge">
+                                {getProducts.length} selected
+                              </div>
+                            ) : null}
+                          </div>
+                          {getProducts.length === 0 ? (
                             <Button
-                              size="small"
+                              size="large"
+                              className="text-[#008060] border-[#008060] hover:text-[#006e52] hover:border-[#006e52] hover:bg-[#f0f9f6]"
                               onClick={(e) => {
                                 handleSelectProducts("get");
                                 e.preventDefault();
                               }}
                             >
-                              Edit get products
+                              Select get products
                             </Button>
-                          </div>
-                        )}
+                          ) : (
+                            <div className="create-offer-panel__footer">
+                              <Button
+                                size="small"
+                                onClick={(e) => {
+                                  handleSelectProducts("get");
+                                  e.preventDefault();
+                                }}
+                              >
+                                Edit get products
+                              </Button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </>
                   ) : offerType === "complete-bundle" ? (
                     <div className="mb-8">
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-[14px] font-medium text-[#1c1f23]">
-                          Bundle bars
-                        </h3>
-                        <Dropdown
-                          trigger={["click"]}
-                          menu={{
-                            items: [
-                              { key: "quantity", label: "Add Quantity bar" },
-                              { key: "bxgy", label: "Add Buy X Get Y bar" },
-                            ],
-                            onClick: ({ key }) => {
-                              if (key === "bxgy") addCompleteBundleBar("bxgy");
-                              else addCompleteBundleBar("quantity-break-same");
-                            },
-                          }}
-                        >
-                          <Button size="small">Add bar</Button>
-                        </Dropdown>
+                      <div className="create-offer-panel create-offer-panel--muted">
+                        <div className="create-offer-panel__header">
+                          <div>
+                            <div className="create-offer-panel__eyebrow">Bundle Structure</div>
+                            <h3 className="create-offer-panel__title">Bundle bars</h3>
+                            <p className="create-offer-panel__description">
+                              Create one or more bars to define how customers build a complete bundle.
+                            </p>
+                          </div>
+                          <div className="create-offer-panel__actions">
+                            <Dropdown
+                              trigger={["click"]}
+                              menu={{
+                                items: [
+                                  { key: "quantity", label: "Add Quantity bar" },
+                                  { key: "bxgy", label: "Add Buy X Get Y bar" },
+                                ],
+                                onClick: ({ key }) => {
+                                  if (key === "bxgy") addCompleteBundleBar("bxgy");
+                                  else addCompleteBundleBar("quantity-break-same");
+                                },
+                              }}
+                            >
+                              <Button size="small">Add bar</Button>
+                            </Dropdown>
+                          </div>
+                        </div>
+                        <div className="create-offer-panel__meta">
+                          {completeBundleBars.length} bar
+                          {completeBundleBars.length > 1 ? "s" : ""} configured
+                        </div>
                       </div>
                       <div className="flex flex-col gap-3">
                         {completeBundleBars.map((bar, index) => (
                           <div
                             key={bar.id}
-                            className={`border rounded-md p-3 ${activeBundleBar?.id === bar.id ? "border-[#008060]" : "border-[#dfe3e8]"}`}
+                            className={`create-offer-bundle-bar ${
+                              activeBundleBar?.id === bar.id
+                                ? "create-offer-bundle-bar--active"
+                                : ""
+                            }`}
                           >
                             <div className="flex items-center justify-between gap-3 mb-2">
                               <Button
@@ -2062,84 +2144,96 @@ export function CreateNewOffer({
                     </div>
                   ) : (
                     <div className="mb-8">
-                      <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                        Products eligible for offer
-                      </h3>
+                      <div className="create-offer-panel create-offer-panel--muted">
+                        <div className="create-offer-panel__header">
+                          <div>
+                            <div className="create-offer-panel__eyebrow">Product Scope</div>
+                            <h3 className="create-offer-panel__title">
+                              Products eligible for offer
+                            </h3>
+                            <p className="create-offer-panel__description">
+                              Select the storefront products that can show this offer or participate in pricing tiers.
+                            </p>
+                          </div>
+                        </div>
 
-                      {selectedProductsData.length === 0 ? (
-                        <Button
-                          size="large"
-                          className="text-[#008060] border-[#008060] hover:text-[#006e52] hover:border-[#006e52] hover:bg-[#f0f9f6]"
-                          onClick={(e) => {
-                            handleSelectProducts();
-                            e.preventDefault();
-                          }}
-                        >
-                          Add products eligible for offer
-                        </Button>
-                      ) : (
-                        <div>
-                          <div className="create-offer-selected-grid">
-                            {selectedProductsData.slice(0, 3).map((product) => (
-                              <div
-                                key={product.id}
-                                className="create-offer-selected-card"
-                              >
-                                <button
-                                  type="button"
-                                  className="create-offer-selected-remove"
-                                  onClick={(e) => {
-                                    setSelectedProductsData(
-                                      selectedProductsData.filter(
-                                        (p) => p.id !== product.id,
-                                      ),
-                                    );
-                                    e.preventDefault();
-                                  }}
-                                  aria-label={`Remove ${product.title}`}
-                                >
-                                  <X size={14} />
-                                </button>
-                                <img
-                                  src={product.image}
-                                  alt={product.title}
-                                  className="create-offer-selected-image"
-                                />
-                                <div className="create-offer-selected-name">
-                                  {product.title}
-                                </div>
-                                <div className="create-offer-selected-price">
-                                  {product.price}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                          <div className="create-offer-selected-count">
-                            {selectedProductsData.length} product
-                            {selectedProductsData.length > 1 ? "s" : ""}{" "}
-                            selected
-                            {(() => {
-                              const totalVariants = selectedProductsData.reduce(
-                                (sum, p) => sum + (p.variantsCount || 1),
-                                0
-                              );
-                              return totalVariants > 0
-                                ? ` (${totalVariants} variant${totalVariants > 1 ? "s" : ""})`
-                                : "";
-                            })()}
-                          </div>
+                        {selectedProductsData.length === 0 ? (
                           <Button
-                            type="link"
+                            size="large"
+                            className="text-[#008060] border-[#008060] hover:text-[#006e52] hover:border-[#006e52] hover:bg-[#f0f9f6]"
                             onClick={(e) => {
                               handleSelectProducts();
                               e.preventDefault();
                             }}
-                            className="px-0"
                           >
-                            Edit products
+                            Add products eligible for offer
                           </Button>
-                        </div>
-                      )}
+                        ) : (
+                          <div>
+                            <div className="create-offer-selected-grid">
+                              {selectedProductsData.slice(0, 3).map((product) => (
+                                <div
+                                  key={product.id}
+                                  className="create-offer-selected-card"
+                                >
+                                  <button
+                                    type="button"
+                                    className="create-offer-selected-remove"
+                                    onClick={(e) => {
+                                      setSelectedProductsData(
+                                        selectedProductsData.filter(
+                                          (p) => p.id !== product.id,
+                                        ),
+                                      );
+                                      e.preventDefault();
+                                    }}
+                                    aria-label={`Remove ${product.title}`}
+                                  >
+                                    <X size={14} />
+                                  </button>
+                                  <img
+                                    src={product.image}
+                                    alt={product.title}
+                                    className="create-offer-selected-image"
+                                  />
+                                  <div className="create-offer-selected-name">
+                                    {product.title}
+                                  </div>
+                                  <div className="create-offer-selected-price">
+                                    {product.price}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="create-offer-panel__footer">
+                              <div className="create-offer-selected-count">
+                                {selectedProductsData.length} product
+                                {selectedProductsData.length > 1 ? "s" : ""}{" "}
+                                selected
+                                {(() => {
+                                  const totalVariants = selectedProductsData.reduce(
+                                    (sum, p) => sum + (p.variantsCount || 1),
+                                    0
+                                  );
+                                  return totalVariants > 0
+                                    ? ` (${totalVariants} variant${totalVariants > 1 ? "s" : ""})`
+                                    : "";
+                                })()}
+                              </div>
+                              <Button
+                                type="link"
+                                onClick={(e) => {
+                                  handleSelectProducts();
+                                  e.preventDefault();
+                                }}
+                                className="px-0"
+                              >
+                                Edit products
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
 
@@ -2148,7 +2242,17 @@ export function CreateNewOffer({
                   {/* complete-bundle 的定价与变体已并入各 Bundle bar 卡片，此处仅渲染 BXGY 或普通折扣阶梯 */}
                   {offerType === "bxgy" ? (
                     <div>
-                      <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">BXGY Rules</h3>
+                      <div className="create-offer-panel create-offer-panel--muted mb-4">
+                        <div className="create-offer-panel__header">
+                          <div>
+                            <div className="create-offer-panel__eyebrow">Discount Logic</div>
+                            <h3 className="create-offer-panel__title">BXGY Rules</h3>
+                            <p className="create-offer-panel__description">
+                              Configure quantity thresholds, free-item logic, and recommended tier labels.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
                         {bxgyDiscountRules.map((rule, index) => (
                           <div className="create-offer-discount-card" key={index}>
                             <div className="create-offer-discount-body">
@@ -2256,7 +2360,7 @@ export function CreateNewOffer({
                                 </label>
                               </div>
 
-                              <div className="create-offer-discount-form-row" style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                              <div className="create-offer-inline-grid-3">
                                 <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
                                   Title
                                   <Input
@@ -2298,7 +2402,7 @@ export function CreateNewOffer({
                                 </label>
                               </div>
 
-                              <div className="create-offer-discount-form-row" style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                              <div className="create-offer-inline-grid-2">
                                 <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
                                   Max Uses Per Order
                                   <Input
@@ -2324,7 +2428,7 @@ export function CreateNewOffer({
                                 </label>
                               </div>
 
-                              <div className="create-offer-discount-form-row" style={{ marginTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div className="create-offer-inline-row">
                                 <Checkbox
                                   checked={!!rule.isDefault}
                                   onChange={(e) => {
@@ -2378,7 +2482,17 @@ export function CreateNewOffer({
                     </div>
                     ) : offerType === "complete-bundle" || offerType === "subscription" ? null : (
                     <div>
-                      <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">Discount Setting</h3>
+                      <div className="create-offer-panel create-offer-panel--muted mb-4">
+                        <div className="create-offer-panel__header">
+                          <div>
+                            <div className="create-offer-panel__eyebrow">Discount Logic</div>
+                            <h3 className="create-offer-panel__title">Discount Setting</h3>
+                            <p className="create-offer-panel__description">
+                              Define standard bundle tiers, messaging, and which option is selected by default.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
                         {discountRules.map((rule, index) => (
                           <div className="create-offer-discount-card" key={index}>
                             <div className="create-offer-discount-body">
@@ -2446,7 +2560,7 @@ export function CreateNewOffer({
                               </div>
                               
                               {/* 新增的文本配置字段 */}
-                              <div className="create-offer-discount-form-row" style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                              <div className="create-offer-inline-grid-3">
                                 <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
                                   Title
                                   <Input
@@ -2488,7 +2602,7 @@ export function CreateNewOffer({
                                 </label>
                               </div>
                               
-                              <div className="create-offer-discount-form-row" style={{ marginTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div className="create-offer-inline-row">
                                 <Checkbox
                                   checked={!!rule.isDefault}
                                   onChange={(e) => {
@@ -2546,16 +2660,18 @@ export function CreateNewOffer({
                 </div>
 
                 <div className="create-offer-sticky-preview">
-                  <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                    Live Preview
-                  </h3>
-                  <p className="text-[13px] text-[#5c6166] mb-6 font-normal">
-                    {
-                      offerTypes.find(
-                        (type) => type.id === offerType,
-                      )?.description
-                    }
-                  </p>
+                  <div className="rounded-[12px] border border-[#dfe3e8] bg-[#fcfcfd] p-[16px] shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+                    <div className="mb-[12px]">
+                      <div className="mb-[4px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
+                        Storefront Preview
+                      </div>
+                      <h3 className="m-0 text-[16px] font-semibold text-[#1c1f23]">
+                        Live Preview
+                      </h3>
+                      <p className="mt-[6px] mb-0 text-[13px] leading-[20px] text-[#5c6166]">
+                        {activeOfferTypeDescription}
+                      </p>
+                    </div>
                   {progressiveGifts.enabled && offerType !== "complete-bundle" ? (
                     <div className="mb-4 space-y-2">
                       <div className="text-[13px] font-medium text-[#1c1f23]">
@@ -2847,9 +2963,11 @@ export function CreateNewOffer({
                       subscriptionExplanationBody={subscriptionExplanationBody}
                     />
                   )}
-                  <p className="text-[12px] text-[#5c6166] mt-3 italic font-normal">
-                    Note: This is a live preview. Changes will update in real-time when state is connected.
-                  </p>
+                  <div className="mt-[12px] rounded-[8px] bg-white px-[10px] py-[8px] text-[12px] leading-[18px] text-[#5c6166]">
+                    Use this panel to validate bundle logic, highlighted tiers,
+                    and optional gift states before publishing.
+                  </div>
+                  </div>
                 </div>
               </div>
             </>
@@ -2858,12 +2976,18 @@ export function CreateNewOffer({
           {step === 3 && (
             <div className="create-offer-style-grid">
               <div>
-                <h2 className="text-[20px] font-semibold mb-2 text-[#1c1f23]">
+                <div className="mb-6">
+                  <div className="mb-[4px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
+                    Visual Design
+                  </div>
+                  <h2 className="m-0 text-[20px] font-semibold text-[#1c1f23]">
                   Style Design
-                </h2>
-                <p className="text-[13px] text-[#5c6166] mb-6 font-normal">
-                  Customize the appearance of your bundle widget
-                </p>
+                  </h2>
+                  <p className="mt-[6px] mb-0 text-[13px] leading-[20px] text-[#5c6166]">
+                    Customize layout, colors, typography, and CTA styling while
+                    keeping the preview aligned with storefront output.
+                  </p>
+                </div>
 
                 <div className="mb-6">
                   <label className="block text-[14px] font-medium text-[#1c1f23] mb-2">
@@ -3135,16 +3259,18 @@ export function CreateNewOffer({
               </div>
 
               <div className="create-offer-sticky-preview">
-                <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                  Live Preview
-                </h3>
-                <p className="text-[13px] text-[#5c6166] mb-6 font-normal">
-                  {
-                    offerTypes.find(
-                      (type) => type.id === offerType,
-                    )?.description
-                  }
-                </p>
+                <div className="rounded-[12px] border border-[#dfe3e8] bg-[#fcfcfd] p-[16px] shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+                  <div className="mb-[12px]">
+                    <div className="mb-[4px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
+                      Storefront Preview
+                    </div>
+                    <h3 className="m-0 text-[16px] font-semibold text-[#1c1f23]">
+                      Live Preview
+                    </h3>
+                    <p className="mt-[6px] mb-0 text-[13px] leading-[20px] text-[#5c6166]">
+                      {activeOfferTypeDescription}
+                    </p>
+                  </div>
                 {progressiveGifts.enabled ? (
                   <div className="mb-4 space-y-2">
                     <div className="text-[13px] font-medium text-[#1c1f23]">
@@ -3203,23 +3329,41 @@ export function CreateNewOffer({
                   subscriptionExplanationTitle={subscriptionExplanationTitle}
                   subscriptionExplanationBody={subscriptionExplanationBody}
                 />
-                <p className="text-[12px] text-[#5c6166] mt-3 italic font-normal">
-                  Note: This is a live preview. Changes will update in real-time when state is connected.
-                </p>
+                <div className="mt-[12px] rounded-[8px] bg-white px-[10px] py-[8px] text-[12px] leading-[18px] text-[#5c6166]">
+                  Validate title hierarchy, accent usage, and CTA treatment
+                  against the intended storefront style.
+                </div>
+                </div>
               </div>
             </div>
           )}
 
           {step === 4 && (
             <div>
-              <h2 className="text-[20px] font-semibold mb-6 text-[#1c1f23]">
+              <div className="mb-6">
+                <div className="mb-[4px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
+                  Visibility & Publishing
+                </div>
+                <h2 className="m-0 text-[20px] font-semibold text-[#1c1f23]">
                 Targeting & Settings
-              </h2>
+                </h2>
+                <p className="mt-[6px] mb-0 text-[13px] leading-[20px] text-[#5c6166]">
+                  Choose where the offer appears, set active windows, and review
+                  final publishing constraints before saving.
+                </p>
+              </div>
 
               <div className="mb-8">
-                <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                  Target Audience
-                </h3>
+                <div className="create-offer-panel create-offer-panel--muted">
+                  <div className="create-offer-panel__header">
+                    <div>
+                      <div className="create-offer-panel__eyebrow">Visibility</div>
+                      <h3 className="create-offer-panel__title">Target Audience</h3>
+                      <p className="create-offer-panel__description">
+                        Decide which markets can see the offer when it becomes active.
+                      </p>
+                    </div>
+                  </div>
                 <div className="flex flex-col gap-4">
                   {/* Hidden Customer Segments */}
                   {false && <div>
@@ -3305,7 +3449,8 @@ export function CreateNewOffer({
                     <label className="block text-[14px] font-medium text-[#1c1f23] mb-2">
                       Market Visibility
                     </label>
-                    <div className="grid grid-cols-2 gap-3 border border-gray-200 rounded-md p-4">
+                    <div className="create-offer-setting-card">
+                      <div className="create-offer-setting-grid">
                       <Checkbox
                         checked={markets.includes("all")}
                         onChange={(e) => {
@@ -3331,19 +3476,26 @@ export function CreateNewOffer({
                           {market.name}
                         </Checkbox>
                       ))}
+                      </div>
                     </div>
                     <p className="text-[13px] text-[#5c6166] mt-2">
                       Select which markets can see this offer
                     </p>
                   </div>
                 </div>
+                </div>
               </div>
 
               <div className="mb-8">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-[14px] font-medium text-[#1c1f23] flex items-center">
-                    Schedule
-                  </h3>
+                <div className="create-offer-panel create-offer-panel--muted">
+                  <div className="create-offer-panel__header">
+                    <div>
+                      <div className="create-offer-panel__eyebrow">Timing</div>
+                      <h3 className="create-offer-panel__title">Schedule</h3>
+                      <p className="create-offer-panel__description">
+                        Set the active window in the correct timezone so the offer launches and expires as expected.
+                      </p>
+                    </div>
                   <div className="flex items-center gap-2">
                     <span className="text-[13px] text-[#5c6166]">Timezone:</span>
                     <Select
@@ -3356,7 +3508,7 @@ export function CreateNewOffer({
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="create-offer-setting-grid">
                   <label className="block text-[14px] font-medium text-[#1c1f23]">
                     Start Time
                     <DatePicker
@@ -3419,6 +3571,7 @@ export function CreateNewOffer({
                       </p>
                     )}
                   </label>
+                </div>
                 </div>
               </div>
 
@@ -3495,7 +3648,17 @@ export function CreateNewOffer({
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#dfe3e8] py-4 px-6 flex justify-center items-center gap-3 z-[100] shadow-[0_-2px_8px_rgba(0,0,0,0.1)]">
+      <div className="fixed bottom-0 left-0 right-0 z-[100] border-t border-[#dfe3e8] bg-[rgba(255,255,255,0.96)] px-[16px] py-[14px] backdrop-blur-sm shadow-[0_-8px_24px_rgba(15,23,42,0.08)] sm:px-[24px]">
+        <div className="mx-auto flex max-w-[1280px] flex-col gap-[12px] sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
+              Step {step} of {steps.length}
+            </div>
+            <div className="mt-[2px] text-[14px] font-medium text-[#1c1f23]">
+              {currentStepTitle}
+            </div>
+          </div>
+          <div className="flex items-center justify-end gap-3">
         {step > 1 && (
           <Button
             size="large"
@@ -3508,6 +3671,16 @@ export function CreateNewOffer({
             Previous
           </Button>
         )}
+        <Button
+          size="large"
+          disabled={fetcher.state !== "idle"}
+          onClick={(e) => {
+            onBack?.();
+            e.preventDefault();
+          }}
+        >
+          Cancel
+        </Button>
         <Button
           size="large"
           style={{ backgroundColor: "#008060", borderColor: "#008060", color: "#fff" }}
@@ -3605,6 +3778,8 @@ export function CreateNewOffer({
                 : "Create Offer"
               : "Next"}
         </Button>
+          </div>
+        </div>
       </div>
     </fetcher.Form>
   );

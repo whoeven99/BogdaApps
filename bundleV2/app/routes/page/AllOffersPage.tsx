@@ -45,6 +45,10 @@ export function AllOffersPage({
   shop = "",
   apiKey = "",
 }: AllOffersPageProps) {
+  const surfaceCardClass =
+    "rounded-[12px] border border-[#dfe3e8] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]";
+  const sectionActionClass =
+    "inline-flex items-center justify-center rounded-[8px] border border-[#dfe3e8] bg-white px-[14px] py-[9px] text-[14px] font-medium text-[#1c1f23] transition-colors hover:bg-[#f6f6f7] cursor-pointer";
   const handleShowGuide = () => {};
   const handleCreateOffer = () => {
     if (onCreateOffer) {
@@ -56,7 +60,6 @@ export function AllOffersPage({
       onEditOffer(id);
     }
   };
-  const handleDelete = () => {};
 
   const rows: AllOffersRow[] = (offers ?? []).map((offer) => {
     const isActive = !!offer.status;
@@ -100,6 +103,7 @@ export function AllOffersPage({
   };
 
   const toast = searchParams.get("toast") || actionData?.toast;
+  const activeOffersCount = rows.filter((offer) => offer.isActive).length;
 
   useEffect(() => {
     if (toast?.startsWith("delete-success")) {
@@ -129,23 +133,26 @@ export function AllOffersPage({
   return (
     <div className="max-w-[1280px] mx-auto pb-[24px]">
       {!themeExtensionEnabled && !hideBanner && (
-        <div className="bg-[#fff4f4] border border-[#ffc9c9] rounded-[8px] p-[16px] mb-[24px] flex items-start justify-between">
+        <div className="mb-[24px] flex items-start justify-between rounded-[12px] border border-[#ffd5d2] bg-[#fff7f6] p-[16px] sm:p-[18px]">
           <div className="flex gap-[12px]">
-            <div className="text-[#d72c0d] mt-[2px]">
+            <div className="mt-[2px] text-[#d72c0d]">
               <AlertCircle size={20} />
             </div>
             <div>
-              <h3 className="font-sans font-semibold text-[14px] leading-[20px] text-[#1c1f23] mb-[4px] m-0">
+              <div className="mb-[6px] inline-flex items-center rounded-full bg-[#ffe0db] px-[8px] py-[3px] text-[12px] font-medium text-[#b42318]">
+                Action required
+              </div>
+              <h3 className="m-0 mb-[4px] font-sans text-[14px] font-semibold leading-[20px] text-[#1c1f23]">
                 Action required: Activate Theme Extension
               </h3>
-              <p className="font-sans text-[14px] leading-[20px] text-[#5c6166] m-0">
+              <p className="m-0 font-sans text-[14px] leading-[20px] text-[#5c6166]">
                 Your offer has been created, but it won't be visible on your store until you activate the theme extension.
               </p>
               <div className="mt-[12px]">
                 <button
                   type="button"
                   onClick={handleThemeExtensionToggle}
-                  className="bg-transparent text-[#1c1f23] px-[12px] py-[6px] rounded-[6px] font-normal text-[16px] border border-[#1c1f23] hover:bg-black/5 transition-all cursor-pointer"
+                  className="rounded-[8px] border border-[#1c1f23] bg-transparent px-[12px] py-[7px] text-[14px] font-medium text-[#1c1f23] transition-all hover:bg-black/5 cursor-pointer"
                 >
                   Activate Theme Extension
                 </button>
@@ -163,26 +170,38 @@ export function AllOffersPage({
       )}
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-[12px] sm:gap-0 mb-[24px]">
-        <div>
-          <h1 className="font-sans font-semibold text-[24px] leading-[32px] text-[#1c1f23] tracking-normal m-0">
+      <div className="mb-[24px] flex flex-col gap-[16px] lg:flex-row lg:items-end lg:justify-between">
+        <div className="max-w-[760px]">
+          <div className="mb-[8px] inline-flex items-center rounded-full border border-[#dfe3e8] bg-[#f6f6f7] px-[10px] py-[4px] text-[12px] font-medium text-[#5c6166]">
+            Offer Management
+          </div>
+          <h1 className="m-0 font-sans text-[28px] font-semibold leading-[36px] tracking-[-0.02em] text-[#1c1f23] sm:text-[32px] sm:leading-[40px]">
             All Offers
           </h1>
-          <p className="font-sans font-normal text-[14px] leading-[22.4px] text-[#5c6166] mt-[4px]">
-            Manage all your bundle offers
+          <p className="mt-[10px] mb-0 font-sans text-[14px] leading-[22px] text-[#5c6166] sm:text-[15px] sm:leading-[24px]">
+            Manage every bundle offer, update status safely, and jump into edits
+            without leaving the operations view.
           </p>
+          <div className="mt-[12px] flex flex-wrap gap-[8px]">
+            <span className="inline-flex items-center rounded-full bg-[#f6f6f7] px-[10px] py-[4px] text-[12px] font-medium text-[#5c6166]">
+              {rows.length} total offers
+            </span>
+            <span className="inline-flex items-center rounded-full bg-[#f0f9f6] px-[10px] py-[4px] text-[12px] font-medium text-[#108043]">
+              {activeOffersCount} active
+            </span>
+          </div>
         </div>
-        <div className="flex flex-col sm:flex-row gap-[8px] sm:gap-[12px] w-full sm:w-auto">
+        <div className="flex w-full flex-col gap-[10px] sm:w-auto sm:flex-row">
           <button
             type="button"
-            className="bg-transparent text-[#1c1f23] px-[16px] py-[8px] rounded-[8px] font-medium text-[14px] border border-[#c4cdd5] hover:bg-[#f4f6f8] transition-all cursor-pointer"
+            className={sectionActionClass}
             onClick={handleShowGuide}
           >
             Show Guide
           </button>
           <button
             type="button"
-            className="bg-[#008060] !text-white px-[16px] py-[8px] rounded-[8px] font-medium text-[14px] shadow-sm hover:bg-[#006e52] transition-all border-0 cursor-pointer"
+            className="inline-flex items-center justify-center rounded-[8px] border-0 bg-[#008060] px-[14px] py-[9px] text-[14px] font-medium text-white shadow-sm transition-all hover:bg-[#006e52] cursor-pointer"
             onClick={handleCreateOffer}
           >
             Create New Offer
@@ -191,32 +210,43 @@ export function AllOffersPage({
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[24px]">
-        <table className="w-full border-collapse">
+      <div className={`${surfaceCardClass} p-[20px] sm:p-[24px]`}>
+        <div className="mb-[16px] flex flex-col gap-[6px] sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="m-0 text-[18px] font-semibold leading-[28px] text-[#1c1f23]">
+              Offer list
+            </h2>
+            <p className="mt-[4px] mb-0 text-[13px] leading-[20px] text-[#5c6166]">
+              A complete view of offer status, rules, and recent update times.
+            </p>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+        <table className="w-full border-collapse overflow-hidden rounded-[10px]">
           <thead>
-            <tr>
-              <th className="text-left p-[12px] border-b border-[#f0f2f4] text-[13px] text-[#5c6166] font-sans font-semibold">
+            <tr className="bg-[#f9fafb]">
+              <th className="text-left p-[12px] border-b border-[#eef1f4] text-[13px] text-[#5c6166] font-sans font-semibold">
                 Offer Name
               </th>
-              <th className="text-left p-[12px] border-b border-[#f0f2f4] text-[13px] text-[#5c6166] font-sans font-semibold">
+              <th className="text-left p-[12px] border-b border-[#eef1f4] text-[13px] text-[#5c6166] font-sans font-semibold">
                 Display name
               </th>
-              <th className="text-left p-[12px] border-b border-[#f0f2f4] text-[13px] text-[#5c6166] font-sans font-semibold">
+              <th className="text-left p-[12px] border-b border-[#eef1f4] text-[13px] text-[#5c6166] font-sans font-semibold">
                 Discount type
               </th>
-              <th className="text-left p-[12px] border-b border-[#f0f2f4] text-[13px] text-[#5c6166] font-sans font-semibold">
+              <th className="text-left p-[12px] border-b border-[#eef1f4] text-[13px] text-[#5c6166] font-sans font-semibold">
                 Discount rules
               </th>
-              <th className="text-left p-[12px] border-b border-[#f0f2f4] text-[13px] text-[#5c6166] font-sans font-semibold">
+              <th className="text-left p-[12px] border-b border-[#eef1f4] text-[13px] text-[#5c6166] font-sans font-semibold">
                 Status
               </th>
-              <th className="text-left p-[12px] border-b border-[#f0f2f4] text-[13px] text-[#5c6166] font-sans font-semibold">
+              <th className="text-left p-[12px] border-b border-[#eef1f4] text-[13px] text-[#5c6166] font-sans font-semibold">
                 Create time
               </th>
-              <th className="text-left p-[12px] border-b border-[#f0f2f4] text-[13px] text-[#5c6166] font-sans font-semibold">
+              <th className="text-left p-[12px] border-b border-[#eef1f4] text-[13px] text-[#5c6166] font-sans font-semibold">
                 Update time
               </th>
-              <th className="text-left p-[12px] border-b border-[#f0f2f4] text-[13px] text-[#5c6166] font-sans font-semibold">
+              <th className="text-left p-[12px] border-b border-[#eef1f4] text-[13px] text-[#5c6166] font-sans font-semibold">
                 Actions
               </th>
             </tr>
@@ -226,7 +256,7 @@ export function AllOffersPage({
               <tr>
                 <td
                   colSpan={8}
-                  className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#5c6166] font-sans"
+                  className="p-[16px] border-b border-[#eef1f4] text-[14px] text-[#5c6166] font-sans"
                 >
                   Loading offers...
                 </td>
@@ -235,7 +265,7 @@ export function AllOffersPage({
               <tr>
                 <td
                   colSpan={8}
-                  className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#5c6166] font-sans"
+                  className="p-[16px] border-b border-[#eef1f4] text-[14px] text-[#5c6166] font-sans"
                 >
                   No offers yet. Create your first offer to see it here.
                 </td>
@@ -267,22 +297,22 @@ export function AllOffersPage({
                 };
 
                 return (
-                  <tr key={offer.id}>
-                    <td className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#1c1f23] font-sans">
+                  <tr key={offer.id} className="hover:bg-[#fafbfc]">
+                    <td className="p-[12px] border-b border-[#eef1f4] text-[14px] text-[#1c1f23] font-sans">
                       <div className="flex items-center gap-[8px]">
                         {offer.name}
                       </div>
                     </td>
-                    <td className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#1c1f23] font-sans">
+                    <td className="p-[12px] border-b border-[#eef1f4] text-[14px] text-[#1c1f23] font-sans">
                       {offer.cartTitle}
                     </td>
-                    <td className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#1c1f23] font-sans">
+                    <td className="p-[12px] border-b border-[#eef1f4] text-[14px] text-[#1c1f23] font-sans">
                       {displayType}
                     </td>
-                    <td className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#1c1f23] font-sans">
+                    <td className="p-[12px] border-b border-[#eef1f4] text-[14px] text-[#1c1f23] font-sans">
                       {rulesText}
                     </td>
-                    <td className="p-[12px] border-b border-[#f0f2f4]">
+                    <td className="p-[12px] border-b border-[#eef1f4]">
                       <Form method="post">
                         <input type="hidden" name="intent" value="toggle-offer-status" />
                         <input type="hidden" name="offerId" value={offer.id} />
@@ -332,13 +362,13 @@ export function AllOffersPage({
                         </button>
                       </Form>
                     </td>
-                    <td className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#1c1f23] font-sans">
+                    <td className="p-[12px] border-b border-[#eef1f4] text-[14px] text-[#1c1f23] font-sans">
                       {formatTime(offer.createdAt)}
                     </td>
-                    <td className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#1c1f23] font-sans">
+                    <td className="p-[12px] border-b border-[#eef1f4] text-[14px] text-[#1c1f23] font-sans">
                       {formatTime(offer.updatedAt)}
                     </td>
-                    <td className="p-[12px] border-b border-[#f0f2f4]">
+                    <td className="p-[12px] border-b border-[#eef1f4]">
                   <div className="flex items-center gap-[8px]">
                     <button
                       type="button"
@@ -364,6 +394,7 @@ export function AllOffersPage({
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {deletingOffer && (
