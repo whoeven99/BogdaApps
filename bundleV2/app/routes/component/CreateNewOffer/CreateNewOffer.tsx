@@ -1269,7 +1269,6 @@ export function CreateNewOffer({
     selectedProductsData.length > 0
       ? "Subscription bar will only be shown in products that are eligible for subscription. You can select those products in your subscription app."
       : "After selecting products, the app checks whether they have selling plans and decides whether to show a solid or dashed subscription bar.";
-  const currentStepTitle = steps[step - 1] ?? steps[0];
   useEffect(() => {
     // 中文注释：当用户在第 1 步切换到 Subscription 类型时，默认自动打开订阅开关
     if (offerType === "subscription") {
@@ -1517,14 +1516,8 @@ export function CreateNewOffer({
           >
             ← Back
           </Button>
-          <div className="mt-[8px] inline-flex items-center rounded-full border border-[#dfe3e8] bg-[#f6f6f7] px-[10px] py-[4px] text-[12px] font-medium text-[#5c6166]">
-            Offer Builder
-          </div>
           <div className="mt-[8px]">
-            <AdminPageHeader
-              title={initialOffer ? "Edit Offer" : "Create New Offer"}
-              subtitle="Configure the promotion structure, storefront behavior, and customer-facing preview in a compact builder flow."
-            />
+            <AdminPageHeader title={initialOffer ? "Edit Offer" : "Create New Offer"} />
           </div>
         </div>
       </div>
@@ -1633,20 +1626,6 @@ export function CreateNewOffer({
 
       <div className="mb-[100px] rounded-[12px] border border-[#dfe3e8] bg-[#ffffff] p-[20px] shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-[24px]">
         <div className="mb-[16px] rounded-[12px] border border-[#e9edf1] bg-[#fcfcfd] p-[14px] sm:p-[16px]">
-          <div className="mb-[10px] flex flex-col gap-[6px] sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="mb-[4px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
-                Step {step} of {steps.length}
-              </div>
-              <h2 className="m-0 text-[18px] font-semibold leading-[28px] text-[#1c1f23]">
-                {currentStepTitle}
-              </h2>
-            </div>
-            <div className="rounded-full bg-[#f0f9f6] px-[10px] py-[4px] text-[12px] font-medium text-[#108043]">
-              {initialOffer ? "Editing existing offer" : "Creating new offer"}
-            </div>
-          </div>
-
           <div className="grid grid-cols-1 gap-[8px] md:grid-cols-4">
           {steps.map((stepName, index) => {
             const stepNumber = index + 1;
@@ -1708,11 +1687,6 @@ export function CreateNewOffer({
             <div className="create-offer-basic-grid lg:grid-cols-[1fr_400px]">
               <div className="flex flex-col gap-6">
                 <div>
-                  <div className="mb-4">
-                    <h2 className="m-0 text-[20px] font-semibold text-[#1c1f23]">
-                    Basic Information
-                    </h2>
-                  </div>
                   <div className="flex flex-col gap-4">
                     <div>
                       <label className="block">
@@ -1799,9 +1773,6 @@ export function CreateNewOffer({
                 <div className="create-offer-preview-shell">
                   <div className="create-offer-preview-shell__eyebrow">Preview</div>
                   <h3 className="create-offer-preview-shell__title">Live Preview</h3>
-                  <p className="create-offer-preview-shell__description">
-                    Review the customer-facing offer block before publishing changes.
-                  </p>
 
                   <BundlePreview
                     layoutFormat={layoutFormat}
@@ -2590,9 +2561,6 @@ export function CreateNewOffer({
                   <div className="create-offer-preview-shell">
                     <div className="create-offer-preview-shell__eyebrow">Preview</div>
                     <h3 className="create-offer-preview-shell__title">Live Preview</h3>
-                    <p className="create-offer-preview-shell__description">
-                      Check pricing tiers and progressive gift unlocking before customers see the offer.
-                    </p>
                   {progressiveGifts.enabled && offerType !== "complete-bundle" ? (
                     <div className="mb-4 space-y-2">
                       <div className="text-[13px] font-medium text-[#1c1f23]">
@@ -3172,9 +3140,6 @@ export function CreateNewOffer({
                 <div className="create-offer-preview-shell">
                   <div className="create-offer-preview-shell__eyebrow">Preview</div>
                   <h3 className="create-offer-preview-shell__title">Live Preview</h3>
-                  <p className="create-offer-preview-shell__description">
-                    Validate layout, messaging, and progressive gift behavior before saving the offer.
-                  </p>
                 {progressiveGifts.enabled ? (
                   <div className="mb-4 space-y-2">
                     <div className="text-[13px] font-medium text-[#1c1f23]">
@@ -3537,14 +3502,6 @@ export function CreateNewOffer({
 
       <div className="fixed bottom-0 left-0 right-0 z-[100] border-t border-[#dfe3e8] bg-[rgba(255,255,255,0.96)] px-[16px] py-[14px] backdrop-blur-sm shadow-[0_-8px_24px_rgba(15,23,42,0.08)] sm:px-[24px]">
         <div className="mx-auto flex max-w-[1280px] flex-col items-center gap-[12px]">
-          <div className="text-center">
-            <div className="text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
-              Step {step} of {steps.length}
-            </div>
-            <div className="mt-[2px] text-[14px] font-medium text-[#1c1f23]">
-              {currentStepTitle}
-            </div>
-          </div>
           <div className="flex items-center justify-center gap-3">
         {step > 1 && (
           <Button

@@ -234,15 +234,7 @@ export function OfferTypeSelection({
           ← Back
         </Button>
         <div className="mt-[8px]">
-          <AdminPageHeader
-            title="Choose Offer Type"
-            subtitle="Start with the promotion structure that matches your campaign, then continue through the builder with the selected setup."
-            meta={
-              <span className="inline-flex items-center rounded-full border border-[#dfe3e8] bg-[#f6f6f7] px-[10px] py-[4px] text-[12px] font-medium text-[#5c6166]">
-                Offer Setup
-              </span>
-            }
-          />
+          <AdminPageHeader title="Choose Offer Type" />
         </div>
       </div>
 

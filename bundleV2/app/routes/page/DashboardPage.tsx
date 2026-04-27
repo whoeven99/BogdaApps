@@ -24,9 +24,7 @@ import {
   AdminModal,
   AdminPageHeader,
   ThemeExtensionBanner,
-  adminPrimaryButtonClass,
   adminQuietActionClass,
-  adminSecondaryButtonClass,
   adminSurfaceCardClass,
 } from "../component/adminUi";
 
@@ -34,9 +32,7 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 
 interface DashboardPageProps {
-  onViewAllOffers?: () => void;
   onViewAnalytics?: (offerId?: string) => void;
-  onCreateOffer?: () => void;
   offers?: IndexLoaderData["offers"];
   offersLoading?: boolean;
   storeProducts?: IndexLoaderData["storeProducts"];
@@ -109,9 +105,7 @@ function ChevronRightIcon() {
 }
 
 export function DashboardPage({
-  onViewAllOffers,
   onViewAnalytics,
-  onCreateOffer,
   offers,
   offersLoading = false,
   storeProducts = [],
@@ -200,20 +194,7 @@ export function DashboardPage({
   const handleViewDetails = () => {
     onViewAnalytics?.();
   };
-  const handleCreateOfferClick = () => {
-    if (onCreateOffer) {
-      onCreateOffer();
-    } else {
-      setEditingOfferId(null);
-      setShowCreateOffer(true);
-    }
-  };
   const handleCreateAbTest = () => {}; // mock
-  const handleViewAllOffers = () => {
-    if (onViewAllOffers) {
-      onViewAllOffers();
-    }
-  };
   const handleViewAllAbTests = () => {}; // mock
   const handleThemeExtensionToggle = () => {
     const storeHandle = shop.replace(".myshopify.com", "");
@@ -325,24 +306,6 @@ export function DashboardPage({
       <AdminPageHeader
         title="Dashboard"
         subtitle="Monitor bundle performance, storefront readiness, and recent offer activity from one operational overview."
-        actions={
-          <>
-          <button
-            type="button"
-            className={adminSecondaryButtonClass}
-            onClick={handleViewDetails}
-          >
-            View analytics
-          </button>
-          <button
-            type="button"
-            className={adminPrimaryButtonClass}
-            onClick={handleCreateOfferClick}
-          >
-            Create New Offer
-          </button>
-          </>
-        }
       />
 
       {!themeExtensionEnabled && !hideBanner && (
@@ -491,22 +454,6 @@ export function DashboardPage({
             <p className="mt-[6px] mb-0 text-[13px] leading-[20px] text-[#5c6166]">
               Review recent offers, update status, and jump into edits quickly.
             </p>
-          </div>
-          <div className="flex w-full flex-col gap-[10px] sm:w-auto sm:flex-row">
-            <button
-              type="button"
-              className={adminSecondaryButtonClass}
-              onClick={handleViewAllOffers}
-            >
-              View All Offers
-            </button>
-            <button
-              type="button"
-              className={adminPrimaryButtonClass}
-              onClick={handleCreateOfferClick}
-            >
-              Create New Offer
-            </button>
           </div>
         </div>
 
@@ -831,15 +778,6 @@ export function DashboardPage({
           )}
         </div>
 
-        <div className="flex justify-center mt-[16px] sm:mt-[20px] pt-[16px] border-t border-[#dfe3e8]">
-          <button
-            type="button"
-            className={adminQuietActionClass}
-            onClick={handleViewAllOffers}
-          >
-            View All Offers
-          </button>
-        </div>
       </div>
 
       {/* A/B Tests Card - Temporarily hidden */}
