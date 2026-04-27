@@ -9,16 +9,80 @@ const DEFAULT_SELECTORS = [
 
 const RETRY_MS = 12_000;
 const SESSION_STORAGE_BUNDLE_RULE_KEY = "current-ciwi-bundle-rule";
+const ABTEST_LOCAL_STORAGE_KEY = "ciwi-abtest-assignments";
 let offersConfigCache = null;
 let priceSyncController = null;
 let bundlePriceDebounceT = null;
 let currentMainForm = null;
 const CIWI_SUBSCRIPTION_MODE_NAME = "ciwi-subscription-mode";
+const CIWI_PROP_AB_GROUP = "__ciwi_ab_group";
+const CIWI_PROP_AB_BUCKET = "__ciwi_ab_bucket";
 
 // 中文注释：程序化写入 quantity / selling_plan 时会 synthetic dispatch change，否则会冒泡到
 // document 上 attachBundlePriceSync 的 capture 监听器 → scheduleBundlePriceRefresh →
 // 全量重绘 innerHTML → 再次 sync… 形成 F12 日志刷屏的死循环
 let __ciwiSuppressBundlePriceSync = false;
+
+function getBundlesConfigRaw() {
+  const configEl = document.getElementById("ciwi-bundles-config");
+  if (!configEl) return {};
+  try {
+    return JSON.parse(configEl.textContent || "{}");
+  } catch (e) {
+    return {};
+  }
+}
+
+function getCurrentCustomerId() {
+  const config = getBundlesConfigRaw();
+  const customerId = config?.customerId != null ? String(config.customerId).trim() : "";
+  console.log("[abtest] customerId from liquid config", { customerId: customerId || null });
+  return customerId;
+}
+
+function getOrCreateAnonId() {
+  const key = "ciwi-abtest-anon-id";
+  try {
+    const existing = window.localStorage.getItem(key);
+    if (existing && existing.trim()) return existing.trim();
+    const next = `anon_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`;
+    window.localStorage.setItem(key, next);
+    return next;
+  } catch (e) {
+    return `anon_${Date.now().toString(36)}`;
+  }
+}
+
+function readAbAssignments() {
+  try {
+    const raw = window.localStorage.getItem(ABTEST_LOCAL_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function writeAbAssignments(next) {
+  try {
+    window.localStorage.setItem(ABTEST_LOCAL_STORAGE_KEY, JSON.stringify(next || {}));
+  } catch (e) {}
+}
+
+function simpleHashBucket(input) {
+  const s = String(input || "");
+  let hash = 0;
+  for (let i = 0; i < s.length; i += 1) {
+    hash = (hash * 31 + s.charCodeAt(i)) >>> 0;
+  }
+  return hash % 100;
+}
+
+function resolveAbGroupByBucket(bucket, splitPercent) {
+  const split = Math.max(1, Math.min(99, Number(splitPercent) || 50));
+  return bucket < split ? "abtest1" : "abtest2";
+}
 
 function esc(value) {
   return String(value ?? "")
@@ -1148,6 +1212,14 @@ function ensureBundleLineProperties(offer) {
   };
   mk(CIWI_PROP_OFFER_ID, String(offer.id));
   mk(CIWI_PROP_TIER, String(bar));
+  if (offer.offerType === "abTest") {
+    if (offer.__ciwiAbGroup) {
+      mk(CIWI_PROP_AB_GROUP, String(offer.__ciwiAbGroup));
+    }
+    if (offer.__ciwiAbBucket != null) {
+      mk(CIWI_PROP_AB_BUCKET, String(offer.__ciwiAbBucket));
+    }
+  }
 }
 
 /**
@@ -1206,6 +1278,105 @@ function syncCurrentBundleToSessionStorage(offer) {
   } catch (error) {
     console.error("[ciwi] failed to persist bundle session data", error);
   }
+}
+
+function getAbTestConfigFromOfferSettings(offer) {
+  try {
+    const settings = JSON.parse(String(offer?.offerSettingsJson || "{}"));
+    const ab = settings?.abTest || {};
+    return {
+      groupADiscountPercent: Math.max(
+        0,
+        Math.min(100, Number(ab.groupADiscountPercent) || 10),
+      ),
+      groupBDiscountPercent: Math.max(
+        0,
+        Math.min(100, Number(ab.groupBDiscountPercent) || 90),
+      ),
+      bucketSplitPercent: Math.max(
+        1,
+        Math.min(99, Number(ab.bucketSplitPercent) || 50),
+      ),
+      salt: String(ab.salt || ""),
+    };
+  } catch (e) {
+    return {
+      groupADiscountPercent: 10,
+      groupBDiscountPercent: 90,
+      bucketSplitPercent: 50,
+      salt: "",
+    };
+  }
+}
+
+function ensureAbTestAssignmentForOffer(offer) {
+  if (!offer || offer.offerType !== "abTest") return offer;
+  const cfg = getAbTestConfigFromOfferSettings(offer);
+  const customerId = getCurrentCustomerId();
+  const anonId = getOrCreateAnonId();
+  const identityKey = customerId ? `customer:${customerId}` : `anon:${anonId}`;
+  const localAssignments = readAbAssignments();
+  const localKey = `${offer.id}:${identityKey}`;
+  const cached = localAssignments[localKey];
+  let bucket = Number(cached?.bucket);
+  let group = String(cached?.group || "");
+  if (!Number.isFinite(bucket) || !group) {
+    if (customerId) {
+      bucket = simpleHashBucket(`${customerId}:${cfg.salt}`);
+      group = resolveAbGroupByBucket(bucket, cfg.bucketSplitPercent);
+    } else {
+      bucket = Math.floor(Math.random() * 100);
+      group = resolveAbGroupByBucket(bucket, cfg.bucketSplitPercent);
+    }
+    localAssignments[localKey] = {
+      group,
+      bucket,
+      assignedAt: Date.now(),
+      source: customerId ? "hash_local" : "random_first_touch_local",
+    };
+    writeAbAssignments(localAssignments);
+  }
+
+  // 异步写入后端 Redis（30 天 TTL），首次随机结果通过 identityKey 固定，不会被覆盖
+  try {
+    const bundlesConfig = getBundlesConfigRaw();
+    const shopName = String(bundlesConfig.shopifyDomain || "").trim();
+    const params = new URLSearchParams({
+      mode: "abtest-assign",
+      shopName,
+      offerId: String(offer.id || ""),
+      customerId: customerId || "",
+      anonId: anonId || "",
+      splitPercent: String(cfg.bucketSplitPercent),
+      salt: cfg.salt || "",
+    });
+    fetch(`/webpixerToAli?${params.toString()}`, { method: "GET" })
+      .then((res) => res.json())
+      .then((json) => {
+        if (!json?.success) return;
+        console.log("[abtest] assign api result", json);
+      })
+      .catch((error) => {
+        console.error("[abtest] assign api failed", error);
+      });
+  } catch (e) {}
+
+  const chosenPercent =
+    group === "abtest1" ? cfg.groupADiscountPercent : cfg.groupBDiscountPercent;
+  offer.__ciwiAbGroup = group;
+  offer.__ciwiAbBucket = bucket;
+  offer.__ciwiAbDiscountPercent = chosenPercent;
+  offer.discountRulesJson = JSON.stringify([
+    {
+      count: 1,
+      discountPercent: chosenPercent,
+      title: group === "abtest1" ? "A group" : "B group",
+      subtitle: "",
+      badge: group === "abtest1" ? "A" : "B",
+      isDefault: true,
+    },
+  ]);
+  return offer;
 }
 
 function getCurrentOffer(offersConfig) {
@@ -1360,6 +1531,9 @@ function getCurrentOffer(offersConfig) {
       }
     }
 
+    if (offer.offerType === "abTest") {
+      return ensureAbTestAssignmentForOffer(offer);
+    }
     return offer;
   }
 

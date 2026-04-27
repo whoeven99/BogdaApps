@@ -6,6 +6,7 @@
 <script id="ciwi-bundles-config" type="application/json">
   {
     "shopifyDomain": "{{ shop.domain }}",
+    "customerId": {{ customer.id | json }},
     "moneyFormat": "{{ shop.money_format | escape }}",
     "productId": {{ product.id | default: "null" }},
     "variantIds": [

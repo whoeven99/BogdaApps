@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { useFetcher, useNavigate, useSearchParams } from "react-router";
-import { Button, Input, Select, Switch, Checkbox, DatePicker, Modal, message, Dropdown } from "antd";
+import { Button, Input, InputNumber, Select, Switch, Checkbox, DatePicker, Modal, message, Dropdown } from "antd";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -481,6 +481,16 @@ export function CreateNewOffer({
     offerSettings.chooseImageSize || 40,
   );
   const [widgetTitle, setWidgetTitle] = useState(offerSettings.title);
+  const [abGroupADiscountPercent, setAbGroupADiscountPercent] = useState<number>(
+    offerSettings.abTest?.groupADiscountPercent ?? 10,
+  );
+  const [abGroupBDiscountPercent, setAbGroupBDiscountPercent] = useState<number>(
+    offerSettings.abTest?.groupBDiscountPercent ?? 90,
+  );
+  const [abBucketSplitPercent, setAbBucketSplitPercent] = useState<number>(
+    offerSettings.abTest?.bucketSplitPercent ?? 50,
+  );
+  const [abSalt] = useState<string>(offerSettings.abTest?.salt || "");
   const [customerSegments, setCustomerSegments] = useState<string[]>(
     offerSettings.customerSegments ? offerSettings.customerSegments.split(",") : ["all"]
   );
@@ -1521,6 +1531,12 @@ export function CreateNewOffer({
       description:
         "Show subscription purchase option below bundle bars for products that support selling plans",
     },
+    {
+      id: "abTest",
+      name: "A/B test",
+      description:
+        "Split customers into A/B groups and apply different discount percentages",
+    },
   ];
 
   const allSelectedProductsHaveSubscription = useMemo(
@@ -1824,6 +1840,22 @@ export function CreateNewOffer({
       <input type="hidden" name="offerName" value={offerName} />
       <input type="hidden" name="cartTitle" value={cartTitle} />
       <input type="hidden" name="title" value={widgetTitle} />
+      <input
+        type="hidden"
+        name="abGroupADiscountPercent"
+        value={String(abGroupADiscountPercent)}
+      />
+      <input
+        type="hidden"
+        name="abGroupBDiscountPercent"
+        value={String(abGroupBDiscountPercent)}
+      />
+      <input
+        type="hidden"
+        name="abBucketSplitPercent"
+        value={String(abBucketSplitPercent)}
+      />
+      <input type="hidden" name="abSalt" value={abSalt} />
       <input type="hidden" name="offerType" value={offerType} />
       <input type="hidden" name="layoutFormat" value={layoutFormat} />
       <input type="hidden" name="scheduleTimezone" value={scheduleTimezone} />
@@ -1894,6 +1926,8 @@ export function CreateNewOffer({
               ? buildCompleteBundleConfig({ bars: completeBundleBars })
             : offerType === "quantity-breaks-different"
               ? { productPool: selectedProductsData }
+              : offerType === "abTest"
+                ? selectedProductsData
               : selectedProductsData,
         )}
       />
@@ -1916,6 +1950,31 @@ export function CreateNewOffer({
                 }))
             : offerType === "quantity-breaks-different"
               ? buildDifferentProductDiscountRulesJson(differentProductRules)
+              : offerType === "abTest"
+                ? buildDiscountRulesJson([
+                    {
+                      count: 1,
+                      discountPercent: Math.max(
+                        0,
+                        Math.min(100, Number(abGroupADiscountPercent) || 10),
+                      ),
+                      title: "A group",
+                      subtitle: "",
+                      badge: "A",
+                      isDefault: true,
+                    },
+                    {
+                      count: 1,
+                      discountPercent: Math.max(
+                        0,
+                        Math.min(100, Number(abGroupBDiscountPercent) || 90),
+                      ),
+                      title: "B group",
+                      subtitle: "",
+                      badge: "B",
+                      isDefault: false,
+                    },
+                  ])
               : buildDiscountRulesJson(normalizedDiscountRules),
         )}
       />
@@ -2112,7 +2171,54 @@ export function CreateNewOffer({
                     Products & Discounts
                   </h2>
 
-                  {offerType === "bxgy" ? (
+                  {offerType === "abTest" ? (
+                    <div className="mb-8 rounded-[12px] border border-[#e3e8ed] bg-[#fafbfb] p-4">
+                      <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
+                        A/B test settings
+                      </h3>
+                      <p className="text-[12px] text-[#5c6166] mb-4">
+                        Configure discount percentages for A/B groups and traffic split bucket.
+                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-[13px] text-[#5c6166] mb-1">
+                            A group discount（%）
+                          </label>
+                          <InputNumber
+                            min={0}
+                            max={100}
+                            value={abGroupADiscountPercent}
+                            onChange={(v) => setAbGroupADiscountPercent(Number(v ?? 10))}
+                            className="w-full"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[13px] text-[#5c6166] mb-1">
+                            B group discount（%）
+                          </label>
+                          <InputNumber
+                            min={0}
+                            max={100}
+                            value={abGroupBDiscountPercent}
+                            onChange={(v) => setAbGroupBDiscountPercent(Number(v ?? 90))}
+                            className="w-full"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[13px] text-[#5c6166] mb-1">
+                            Hash split bucket（A:0~X，B:X+1~99）
+                          </label>
+                          <InputNumber
+                            min={1}
+                            max={99}
+                            value={abBucketSplitPercent}
+                            onChange={(v) => setAbBucketSplitPercent(Number(v ?? 50))}
+                            className="w-full"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ) : offerType === "bxgy" ? (
                     <>
                       <div className="mb-6">
                         <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">

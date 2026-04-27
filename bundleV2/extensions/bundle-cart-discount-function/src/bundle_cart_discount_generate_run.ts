@@ -10,6 +10,12 @@ const LOG_PREFIX = "[ciwi-cart-lines-discount]";
 
 const DISCOUNT_PERCENTAGE = "10.0";
 const DEFAULT_DISCOUNT_PERCENTAGE = DISCOUNT_PERCENTAGE;
+const CIWI_PROP_AB_GROUP = "__ciwi_ab_group";
+
+type AbTestSettings = {
+  groupADiscountPercent: number;
+  groupBDiscountPercent: number;
+};
 
 function log(step: string, detail?: unknown): void {
   try {
@@ -122,6 +128,42 @@ function parseMoneyAmount(raw: unknown): number {
   if (raw == null) return 0;
   const n = typeof raw === "number" ? raw : Number(String(raw));
   return Number.isFinite(n) ? n : 0;
+}
+
+function getCartLineAttributeValue(
+  line: CartInput["cart"]["lines"][number],
+  key: string,
+): string {
+  const attrs = ((line as unknown as { attributes?: Array<{ key?: string; value?: string }> })
+    .attributes || []) as Array<{ key?: string; value?: string }>;
+  for (const attr of attrs) {
+    if (String(attr?.key || "") === key) {
+      return String(attr?.value || "");
+    }
+  }
+  return "";
+}
+
+function parseAbTestSettings(offerSettingsJson?: string | null): AbTestSettings {
+  if (!offerSettingsJson) {
+    return { groupADiscountPercent: 10, groupBDiscountPercent: 90 };
+  }
+  try {
+    const parsed = JSON.parse(offerSettingsJson) as Record<string, unknown>;
+    const ab = (parsed?.abTest || {}) as Record<string, unknown>;
+    return {
+      groupADiscountPercent: Math.max(
+        0,
+        Math.min(100, Number(ab.groupADiscountPercent) || 10),
+      ),
+      groupBDiscountPercent: Math.max(
+        0,
+        Math.min(100, Number(ab.groupBDiscountPercent) || 90),
+      ),
+    };
+  } catch {
+    return { groupADiscountPercent: 10, groupBDiscountPercent: 90 };
+  }
 }
 
 /**
@@ -702,10 +744,25 @@ export function bundleCartDiscountGenerateRun(
         offerName: suitOffer.name,
       });
 
-      const discountPercentValue = getDiscountPercentValue(
+      let discountPercentValue = getDiscountPercentValue(
         suitOffer.discountRulesJson,
         quantity,
       );
+      if (suitOffer.offerType === "abTest") {
+        const abGroup = getCartLineAttributeValue(line, CIWI_PROP_AB_GROUP);
+        const abSettings = parseAbTestSettings(suitOffer.offerSettingsJson);
+        if (abGroup === "abtest1") {
+          discountPercentValue = String(abSettings.groupADiscountPercent);
+        } else if (abGroup === "abtest2") {
+          discountPercentValue = String(abSettings.groupBDiscountPercent);
+        }
+        log("abtest_line_discount_resolved", {
+          cartLineId: lineId,
+          offerId: suitOffer.id,
+          abGroup,
+          discountPercentValue,
+        });
+      }
       log("line_discount_percent", {
         cartLineId: lineId,
         discountPercentValue,

@@ -1,6 +1,8 @@
 import Client from "@alicloud/log";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { getBogdaRate } from "../redis.server";
+import { createHash } from "crypto";
+import { getBogdaRate, redis } from "../redis.server";
+import { unauthenticated } from "../shopify.server";
 
 /** 勿在模块顶层 new Client：无凭证时 @alicloud/log 会抛错，导致整条路由 SSR 加载失败。 */
 function createSlsClient(): Client | null {
@@ -51,6 +53,37 @@ type DailyGmvPoint = {
 };
 
 const NO_BUNDLE_TITLE = "NO_BUNDLE_TITLE";
+const AB_TEST_REDIS_TTL_SECONDS = 30 * 24 * 60 * 60;
+
+type AbTestGroup = "abtest1" | "abtest2";
+
+function getAbSaltFromEnvOrRandom(): string {
+  const envSalt = String(process.env.AB_TEST_SALT || "").trim();
+  if (envSalt) return envSalt;
+  return createHash("sha256")
+    .update(`${Date.now()}-${Math.random()}`)
+    .digest("hex")
+    .slice(0, 32);
+}
+
+function computeAbBucketByHash(customerId: string, salt: string): number {
+  const digest = createHash("sha256")
+    .update(`${customerId}:${salt}`)
+    .digest("hex");
+  const lastTwoHex = digest.slice(-2);
+  const n = Number.parseInt(lastTwoHex, 16);
+  if (!Number.isFinite(n)) return 0;
+  return n % 100;
+}
+
+function resolveAbGroupByBucket(bucket: number, splitPercent: number): AbTestGroup {
+  const split = Math.max(1, Math.min(99, Math.trunc(splitPercent || 50)));
+  return bucket < split ? "abtest1" : "abtest2";
+}
+
+function buildAbRedisKey(shopName: string, offerId: string, identityKey: string): string {
+  return `ciwi:abtest:${shopName}:${offerId}:${identityKey}`;
+}
 
 function parseTime(input: unknown): number | null {
   if (typeof input === "number" && Number.isFinite(input)) {
@@ -296,11 +329,174 @@ async function runSlsSql(
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
+  const mode = String(url.searchParams.get("mode") || "").trim();
   if (request.method === "OPTIONS") {
     return new Response(null, {
       status: 200,
       headers: corsHeaders,
     });
+  }
+
+  if (request.method === "GET" && mode === "abtest-assign") {
+    const shopName = String(url.searchParams.get("shopName") || "").trim();
+    const offerId = String(url.searchParams.get("offerId") || "").trim();
+    const customerId = String(url.searchParams.get("customerId") || "").trim();
+    const anonId = String(url.searchParams.get("anonId") || "").trim();
+    const splitPercent = Number(url.searchParams.get("splitPercent") || "50");
+    const salt = String(url.searchParams.get("salt") || "").trim() || getAbSaltFromEnvOrRandom();
+    const identityKey = customerId ? `customer:${customerId}` : `anon:${anonId}`;
+
+    console.log("[abtest] assign request", {
+      shopName,
+      offerId,
+      customerId,
+      anonId,
+      splitPercent,
+      identityKey,
+    });
+    console.log("[abtest] customerId resolved", { customerId: customerId || null });
+
+    if (!shopName || !offerId || (!customerId && !anonId)) {
+      return new Response(
+        JSON.stringify({ success: false, message: "shopName/offerId/customerId|anonId is required" }),
+        { status: 400, headers: corsHeaders },
+      );
+    }
+
+    const redisKey = buildAbRedisKey(shopName, offerId, identityKey);
+    try {
+      const existing = await redis.get(redisKey);
+      if (existing) {
+        const parsed = JSON.parse(existing) as Record<string, unknown>;
+        console.log("[abtest] assign cache hit", { redisKey, parsed });
+        return new Response(
+          JSON.stringify({
+            success: true,
+            source: "redis",
+            group: parsed.group,
+            bucket: parsed.bucket,
+            salt: parsed.salt || salt,
+            splitPercent: parsed.splitPercent ?? splitPercent,
+          }),
+          { status: 200, headers: corsHeaders },
+        );
+      }
+    } catch (error) {
+      console.error("[abtest] read redis failed", { redisKey, error: String(error) });
+    }
+
+    const isCustomer = Boolean(customerId);
+    const bucket = isCustomer
+      ? computeAbBucketByHash(customerId, salt)
+      : Math.floor(Math.random() * 100);
+    const group = resolveAbGroupByBucket(bucket, splitPercent);
+    const payload = {
+      group,
+      bucket,
+      salt,
+      splitPercent: Math.max(1, Math.min(99, Math.trunc(splitPercent || 50))),
+      identityKey,
+      assignedAt: Date.now(),
+      source: isCustomer ? "hash" : "random_first_touch",
+    };
+
+    try {
+      await redis.set(redisKey, JSON.stringify(payload), "EX", AB_TEST_REDIS_TTL_SECONDS);
+    } catch (error) {
+      console.error("[abtest] write redis failed", { redisKey, error: String(error) });
+    }
+
+    return new Response(
+      JSON.stringify({ success: true, ...payload }),
+      { status: 200, headers: corsHeaders },
+    );
+  }
+
+  if (request.method === "GET" && mode === "abtest-bind-order") {
+    const shopName = String(url.searchParams.get("shopName") || "").trim();
+    const offerId = String(url.searchParams.get("offerId") || "").trim();
+    const orderId = String(url.searchParams.get("orderId") || "").trim();
+    const anonId = String(url.searchParams.get("anonId") || "").trim();
+    const splitPercent = Number(url.searchParams.get("splitPercent") || "50");
+    const salt = String(url.searchParams.get("salt") || "").trim() || getAbSaltFromEnvOrRandom();
+    if (!shopName || !offerId || !orderId || !anonId) {
+      return new Response(
+        JSON.stringify({ success: false, message: "shopName/offerId/orderId/anonId is required" }),
+        { status: 400, headers: corsHeaders },
+      );
+    }
+
+    try {
+      const { admin } = await unauthenticated.admin(shopName);
+      const query = `#graphql
+query GetOrderCustomerId($id: ID!) {
+  order(id: $id) {
+    id
+    name
+    customer {
+      id
+    }
+  }
+}`;
+      console.log("[abtest] GetOrderCustomerId query", { query, orderId, shopName });
+      const response = await admin.graphql(query, { variables: { id: orderId } });
+      const json = await response.json();
+      console.log("[abtest] GetOrderCustomerId result", json);
+      const customerId = String(json?.data?.order?.customer?.id || "").trim();
+      if (!customerId) {
+        return new Response(
+          JSON.stringify({ success: false, message: "order has no customer id" }),
+          { status: 404, headers: corsHeaders },
+        );
+      }
+
+      const customerBucket = computeAbBucketByHash(customerId, salt);
+      const customerGroup = resolveAbGroupByBucket(customerBucket, splitPercent);
+      const anonKey = buildAbRedisKey(shopName, offerId, `anon:${anonId}`);
+      const customerKey = buildAbRedisKey(shopName, offerId, `customer:${customerId}`);
+
+      let finalGroup = customerGroup;
+      let finalBucket = customerBucket;
+      try {
+        const existingAnon = await redis.get(anonKey);
+        if (existingAnon) {
+          const parsedAnon = JSON.parse(existingAnon) as Record<string, unknown>;
+          if (typeof parsedAnon.group === "string" && typeof parsedAnon.bucket === "number") {
+            finalGroup = parsedAnon.group as AbTestGroup;
+            finalBucket = parsedAnon.bucket;
+          }
+        }
+      } catch (error) {
+        console.error("[abtest] read anon redis failed", { anonKey, error: String(error) });
+      }
+
+      const payload = {
+        group: finalGroup,
+        bucket: finalBucket,
+        splitPercent: Math.max(1, Math.min(99, Math.trunc(splitPercent || 50))),
+        salt,
+        customerId,
+        source: "bind_order_keep_first_random",
+        assignedAt: Date.now(),
+      };
+      await redis.set(customerKey, JSON.stringify(payload), "EX", AB_TEST_REDIS_TTL_SECONDS);
+      return new Response(JSON.stringify({ success: true, ...payload }), {
+        status: 200,
+        headers: corsHeaders,
+      });
+    } catch (error) {
+      console.error("[abtest] bind order failed", {
+        shopName,
+        offerId,
+        orderId,
+        anonId,
+        error: String(error),
+      });
+      return new Response(
+        JSON.stringify({ success: false, message: String(error) }),
+        { status: 500, headers: corsHeaders },
+      );
+    }
   }
 
   if (request.method === "GET" && url.searchParams.get("mode") === "overview") {

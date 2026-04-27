@@ -22,6 +22,7 @@ import { AnalyticsPage } from "../page/AnalyticsPage";
 import { PricingPage } from "../page/PricingPage";
 import { CreateNewOffer } from "../component/CreateNewOffer/CreateNewOffer";
 import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
+import { randomBytes } from "crypto";
 import prisma from "../../db.server";
 import {
   getCachedShopOffers,
@@ -89,6 +90,10 @@ function sanitizeHexColorParam(
   fallback: string,
 ): string {
   return sanitizeHexColor(raw, fallback);
+}
+
+function generateAbTestSalt(): string {
+  return randomBytes(16).toString("hex");
 }
 
 type ShopOffersMetafieldSyncResult =
@@ -1442,6 +1447,27 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       64,
       40,
     );
+    const abGroupADiscountPercent = clampNumber(
+      formData.get("abGroupADiscountPercent"),
+      0,
+      100,
+      10,
+    );
+    const abGroupBDiscountPercent = clampNumber(
+      formData.get("abGroupBDiscountPercent"),
+      0,
+      100,
+      90,
+    );
+    const abBucketSplitPercent = clampNumber(
+      formData.get("abBucketSplitPercent"),
+      1,
+      99,
+      50,
+    );
+    const abSaltRaw = sanitizeSingleLineText(formData.get("abSalt"), 120, "");
+    const abSalt =
+      abSaltRaw || sanitizeSingleLineText(process.env.AB_TEST_SALT, 120, "") || generateAbTestSalt();
 
     const title = sanitizeSingleLineText(
       formData.get("title"),
@@ -1473,6 +1499,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           "Each complete bundle bar must have products and a valid quantity.",
           400,
         );
+      }
+    }
+    if (offerType === "abTest") {
+      if (abBucketSplitPercent < 1 || abBucketSplitPercent > 99) {
+        return offerActionErrorResponse("A/B hash split bucket must be between 1 and 99.", 400);
       }
     }
 
@@ -1529,6 +1560,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       chooseButtonColor,
       chooseButtonSize,
       chooseImageSize,
+      abTest: {
+        groupADiscountPercent: abGroupADiscountPercent,
+        groupBDiscountPercent: abGroupBDiscountPercent,
+        bucketSplitPercent: abBucketSplitPercent,
+        salt: abSalt,
+      },
       scheduleTimezone: scheduleTimezoneRaw || undefined,
       progressiveGifts: progressiveGiftsConfigToStorableJson(progressiveGiftsSanitized),
     });

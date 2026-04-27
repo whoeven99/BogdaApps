@@ -247,6 +247,12 @@ export type OfferSettings = {
   chooseButtonSize?: number;
   chooseImageSize?: number;
   scheduleTimezone?: string;
+  abTest?: {
+    groupADiscountPercent: number;
+    groupBDiscountPercent: number;
+    bucketSplitPercent: number;
+    salt?: string;
+  };
   progressiveGifts: ProgressiveGiftsConfig;
 };
 
@@ -283,6 +289,12 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
       chooseButtonSize: 28,
       chooseImageSize: 40,
       scheduleTimezone: undefined,
+      abTest: {
+        groupADiscountPercent: 10,
+        groupBDiscountPercent: 90,
+        bucketSplitPercent: 50,
+        salt: "",
+      },
       progressiveGifts: { ...DEFAULT_PROGRESSIVE_GIFTS },
     };
   }
@@ -340,6 +352,27 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
       chooseButtonSize: clampNumber(parsed.chooseButtonSize, 24, 44, 28),
       chooseImageSize: clampNumber(parsed.chooseImageSize, 24, 64, 40),
       scheduleTimezone: parsed.scheduleTimezone,
+      abTest: {
+        groupADiscountPercent: clampNumber(
+          (parsed as any)?.abTest?.groupADiscountPercent,
+          0,
+          100,
+          10,
+        ),
+        groupBDiscountPercent: clampNumber(
+          (parsed as any)?.abTest?.groupBDiscountPercent,
+          0,
+          100,
+          90,
+        ),
+        bucketSplitPercent: clampNumber(
+          (parsed as any)?.abTest?.bucketSplitPercent,
+          1,
+          99,
+          50,
+        ),
+        salt: sanitizeSingleLineText((parsed as any)?.abTest?.salt, 120, ""),
+      },
       progressiveGifts: parseProgressiveGiftsConfig(parsed.progressiveGifts),
     };
   } catch {
