@@ -24,6 +24,7 @@ import {
   AdminModal,
   AdminPageHeader,
   ThemeExtensionBanner,
+  adminPrimaryButtonClass,
   adminQuietActionClass,
   adminSurfaceCardClass,
 } from "../component/adminUi";
@@ -32,7 +33,9 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 
 interface DashboardPageProps {
+  onViewAllOffers?: () => void;
   onViewAnalytics?: (offerId?: string) => void;
+  onCreateOffer?: () => void;
   offers?: IndexLoaderData["offers"];
   offersLoading?: boolean;
   storeProducts?: IndexLoaderData["storeProducts"];
@@ -106,6 +109,7 @@ function ChevronRightIcon() {
 
 export function DashboardPage({
   onViewAnalytics,
+  onCreateOffer,
   offers,
   offersLoading = false,
   storeProducts = [],
@@ -193,6 +197,14 @@ export function DashboardPage({
 
   const handleViewDetails = () => {
     onViewAnalytics?.();
+  };
+  const handleCreateOfferClick = () => {
+    if (onCreateOffer) {
+      onCreateOffer();
+    } else {
+      setEditingOfferId(null);
+      setShowCreateOffer(true);
+    }
   };
   const handleCreateAbTest = () => {}; // mock
   const handleViewAllAbTests = () => {}; // mock
@@ -305,7 +317,6 @@ export function DashboardPage({
     <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px]">
       <AdminPageHeader
         title="Dashboard"
-        subtitle="Monitor bundle performance, storefront readiness, and recent offer activity from one operational overview."
       />
 
       {!themeExtensionEnabled && !hideBanner && (
@@ -455,6 +466,13 @@ export function DashboardPage({
               Review recent offers, update status, and jump into edits quickly.
             </p>
           </div>
+          <button
+            type="button"
+            className={adminPrimaryButtonClass}
+            onClick={handleCreateOfferClick}
+          >
+            Create Offer
+          </button>
         </div>
 
         <table className="hidden md:table w-full border-collapse overflow-hidden rounded-[10px]">

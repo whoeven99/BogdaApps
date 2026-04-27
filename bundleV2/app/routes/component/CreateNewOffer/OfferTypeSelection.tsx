@@ -96,12 +96,6 @@ function QuantityBreakPreview() {
           />
         </div>
       </div>
-      <div className="mt-auto pt-[18px]">
-        <div className="mb-[10px] text-[12px] font-semibold leading-[16px] text-[#1c1f23]">
-          Quantity breaks for the same product
-        </div>
-        <PreviewAction />
-      </div>
     </div>
   );
 }
@@ -121,12 +115,6 @@ function BxgyPreview() {
         <div className="rounded-[10px] bg-[#f6f6f7] px-[12px] py-[8px] text-[12px] font-semibold text-[#1c1f23]">
           + Free special gift!
         </div>
-      </div>
-      <div className="mt-auto pt-[18px]">
-        <div className="mb-[10px] text-[12px] font-semibold leading-[16px] text-[#1c1f23]">
-          Buy X, get Y deal
-        </div>
-        <PreviewAction />
       </div>
     </div>
   );
@@ -170,12 +158,6 @@ function CompleteBundlePreview() {
           </div>
         </div>
       </div>
-      <div className="mt-auto pt-[18px]">
-        <div className="mb-[10px] text-[12px] font-semibold leading-[16px] text-[#1c1f23]">
-          Complete the bundle
-        </div>
-        <PreviewAction />
-      </div>
     </div>
   );
 }
@@ -198,12 +180,6 @@ function SubscriptionPreview() {
           </div>
           <div className="mt-[2px] text-[12px] text-[#6d7175]">Delivered weekly</div>
         </div>
-      </div>
-      <div className="mt-auto pt-[18px]">
-        <div className="mb-[10px] text-[12px] font-semibold leading-[16px] text-[#1c1f23]">
-          Subscription
-        </div>
-        <PreviewAction />
       </div>
     </div>
   );
@@ -244,16 +220,19 @@ export function OfferTypeSelection({
             key={option.id}
             type="button"
             onClick={() => onSelect(option.id)}
-            className="group h-full rounded-[12px] border border-[#dfe3e8] bg-white p-[12px] text-left transition-all hover:border-[#bfd7cd] hover:shadow-[0_4px_12px_rgba(15,23,42,0.06)]"
+            className="group flex h-full flex-col rounded-[12px] border border-[#dfe3e8] bg-white p-[12px] text-left transition-all hover:border-[#bfd7cd] hover:shadow-[0_4px_12px_rgba(15,23,42,0.06)]"
           >
             <OfferTypePreview offerType={option.id} />
-            <div className="px-[4px] pt-[14px]">
+            <div className="flex flex-1 flex-col px-[4px] pt-[14px]">
               <h2 className="m-0 text-[16px] font-semibold leading-[24px] text-[#1c1f23]">
                 {option.name}
               </h2>
               <p className="mt-[6px] mb-0 text-[13px] leading-[20px] text-[#5c6166]">
                 {option.description}
               </p>
+              <div className="mt-auto pt-[14px]">
+                <PreviewAction />
+              </div>
             </div>
           </button>
         ))}
