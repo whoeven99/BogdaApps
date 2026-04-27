@@ -21,6 +21,7 @@ import { AllOffersPage } from "../page/AllOffersPage";
 import { AnalyticsPage } from "../page/AnalyticsPage";
 import { PricingPage } from "../page/PricingPage";
 import { CreateNewOffer } from "../component/CreateNewOffer/CreateNewOffer";
+import { OfferTypeSelection } from "../component/CreateNewOffer/OfferTypeSelection";
 import prisma from "../../db.server";
 import {
   getCachedShopOffers,
@@ -48,6 +49,7 @@ import {
   sanitizeHexColor,
   sanitizeSingleLineText,
 } from "../../utils/offerParsing";
+import type { OfferTypeId } from "../component/CreateNewOffer/offerTypeOptions";
 
 type OfferListItem = {
   id: string;
@@ -1784,6 +1786,7 @@ export default function Index() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<HomeTabKey>("dashboard");
   const [showCreateOffer, setShowCreateOffer] = useState(false);
+  const [createOfferType, setCreateOfferType] = useState<OfferTypeId | null>(null);
   const [editingOfferId, setEditingOfferId] = useState<string | null>(null);
   const [analyticsOfferId, setAnalyticsOfferId] = useState<string | null>(null);
   const offersFetcher = useFetcher<{ offers: OfferListItem[] }>();
@@ -1794,8 +1797,9 @@ export default function Index() {
   const storeProducts = storeProductsFetcher.data?.storeProducts ?? [];
   const isOffersLoading =
     !offersFetcher.data?.offers && offersFetcher.state !== "idle";
+  const shouldShowOfferBuilder = Boolean(editingOfferId || (showCreateOffer && createOfferType));
   const isStoreProductsLoading =
-    (showCreateOffer || !!editingOfferId) &&
+    shouldShowOfferBuilder &&
     !storeProductsFetcher.data?.storeProducts &&
     storeProductsFetcher.state !== "idle";
 
@@ -1816,14 +1820,17 @@ export default function Index() {
     if (toast?.startsWith("create-success")) {
       setToastMessage("Offer created successfully");
       setShowCreateOffer(false);
+      setCreateOfferType(null);
       setEditingOfferId(null);
     } else if (toast?.startsWith("update-success")) {
       setToastMessage("Offer updated successfully");
       setShowCreateOffer(false);
+      setCreateOfferType(null);
       setEditingOfferId(null);
     } else if (toast?.startsWith("delete-success")) {
       setToastMessage("Offer deleted successfully");
       setShowCreateOffer(false);
+      setCreateOfferType(null);
       setEditingOfferId(null);
     } else if (toast?.startsWith("toggle-success")) {
       setToastMessage("Offer status updated successfully");
@@ -1872,7 +1879,7 @@ export default function Index() {
   }, [toast, offersFetcher, offersFetcher.state]);
 
   useEffect(() => {
-    const shouldLoadStoreProducts = showCreateOffer || !!editingOfferId;
+    const shouldLoadStoreProducts = shouldShowOfferBuilder;
     if (!shouldLoadStoreProducts) return;
     if (storeProductsFetcher.data?.storeProducts) return;
     if (storeProductsFetcher.state !== "idle") return;
@@ -1882,8 +1889,7 @@ export default function Index() {
       { method: "post" },
     );
   }, [
-    showCreateOffer,
-    editingOfferId,
+    shouldShowOfferBuilder,
     storeProductsFetcher,
     storeProductsFetcher.data,
     storeProductsFetcher.state,
@@ -1984,6 +1990,7 @@ export default function Index() {
             }}
             onCreateOffer={() => {
               setShowCreateOffer(true);
+              setCreateOfferType(null);
               setEditingOfferId(null);
               setActiveTab("offers");
             }}
@@ -1999,15 +2006,29 @@ export default function Index() {
             apiKey={apiKey}
             onCreateOffer={() => {
               setShowCreateOffer(true);
+              setCreateOfferType(null);
               setEditingOfferId(null);
             }}
             onEditOffer={(id) => {
               setEditingOfferId(id);
               setShowCreateOffer(false);
+              setCreateOfferType(null);
             }}
           />
         )}
-        {(showCreateOffer || editingOfferId) &&
+        {showCreateOffer && !createOfferType && !editingOfferId && (
+          <OfferTypeSelection
+            onBack={() => {
+              setShowCreateOffer(false);
+              setCreateOfferType(null);
+              setEditingOfferId(null);
+            }}
+            onSelect={(offerType) => {
+              setCreateOfferType(offerType);
+            }}
+          />
+        )}
+        {(shouldShowOfferBuilder || editingOfferId) &&
           (isStoreProductsLoading ? (
             <div className="bg-white rounded-[12px] border border-[#e3e8ed] p-[24px] shadow-sm">
               <div className="animate-pulse space-y-[12px]">
@@ -2023,10 +2044,15 @@ export default function Index() {
           ) : (
             <CreateNewOffer
               onBack={() => {
-                setShowCreateOffer(false);
-                setEditingOfferId(null);
+                if (editingOfferId) {
+                  setShowCreateOffer(false);
+                  setEditingOfferId(null);
+                  return;
+                }
+                setCreateOfferType(null);
               }}
               initialOffer={editingOfferId ? offers.find(o => o.id === editingOfferId) as any : undefined}
+              initialOfferType={createOfferType ?? undefined}
               storeProducts={storeProducts}
               markets={markets}
               existingOffers={offers.map((o) => ({

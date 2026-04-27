@@ -31,6 +31,10 @@ import {
   type CompleteBundleProduct,
   type CompleteBundlePricingMode,
 } from "../../../utils/offerParsing";
+import {
+  OFFER_TYPE_OPTIONS,
+  type OfferTypeId,
+} from "./offerTypeOptions";
 
 type DiscountRule = {
   // 数量阈值：例如 count=2 表示"买 2 件及以上"生效
@@ -160,6 +164,7 @@ interface MarketItem {
 interface CreateNewOfferProps {
   onBack?: () => void;
   initialOffer?: InitialOffer;
+  initialOfferType?: OfferTypeId;
   storeProducts?: Product[];
   markets?: MarketItem[];
   /** 当前店铺已有 offers，用于名称重复校验（与后台 normalize 规则一致） */
@@ -255,6 +260,7 @@ function sanitizeDiscountRules(tiers: DiscountRule[]): DiscountRule[] {
 export function CreateNewOffer({
   onBack,
   initialOffer,
+  initialOfferType,
   storeProducts = [],
   markets: shopMarkets = [],
   existingOffers = [],
@@ -307,8 +313,10 @@ export function CreateNewOffer({
   const formatPreviewPrice = (value: number) =>
     `€${value.toFixed(2).replace(".", ",")}`;
   const [step, setStep] = useState(1);
-  const [offerType, setOfferType] = useState(
-    initialOffer?.offerType ?? "quantity-breaks-same",
+  const [offerType, setOfferType] = useState<OfferTypeId>(
+    (initialOffer?.offerType as OfferTypeId | undefined) ??
+      initialOfferType ??
+      "quantity-breaks-same",
   );
   const initialCompleteBundleConfig = useMemo(
     () => parseCompleteBundleConfig(initialOffer?.selectedProductsJson),
@@ -1234,32 +1242,8 @@ export function CreateNewOffer({
     "Schedule & Budget",
   ];
 
-  const offerTypes = [
-    {
-      id: "quantity-breaks-same",
-      name: "Quantity breaks for the same product",
-      description:
-        "Offer discounts when customers buy multiple quantities of the same product",
-    },
-    {
-      id: "bxgy",
-      name: "Buy X, Get Y (BXGY)",
-      description:
-        "Buy X products and get Y products with discount (e.g., Buy 2 get 1 free)",
-    },
-    {
-      id: "complete-bundle",
-      name: "Complete the bundle",
-      description:
-        "Create multiple bundle bars and let customers choose product variants/options",
-    },
-    {
-      id: "subscription",
-      name: "Subscription",
-      description:
-        "Show subscription purchase option below bundle bars for products that support selling plans",
-    },
-  ];
+  const offerTypes = OFFER_TYPE_OPTIONS;
+  const isOfferTypeLocked = !initialOffer && !!initialOfferType;
 
   const allSelectedProductsHaveSubscription = useMemo(
     () =>
@@ -1767,12 +1751,17 @@ export function CreateNewOffer({
                         <Select
                           size="large"
                           value={offerType}
-                          onChange={(val) => setOfferType(val)}
-                          disabled={!!initialOffer}
+                          onChange={(val) => setOfferType(val as OfferTypeId)}
+                          disabled={!!initialOffer || isOfferTypeLocked}
                           className="w-full"
                           options={offerTypes.map(t => ({ label: t.name, value: t.id }))}
                         />
                       </label>
+                      {isOfferTypeLocked && (
+                        <div className="mt-1 text-[13px] text-[#5c6166]">
+                          To change the offer type, go back and choose another template.
+                        </div>
+                      )}
                     </div>
                     
                     <div>
