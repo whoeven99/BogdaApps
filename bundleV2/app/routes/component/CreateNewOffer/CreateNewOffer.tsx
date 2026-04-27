@@ -1296,6 +1296,41 @@ export function CreateNewOffer({
 
   const hasDefault = normalizedDiscountRules.some(r => r.isDefault);
 
+  const buildAbTestPreviewItems = (discountPercent: number): PreviewItem[] => {
+    const normalizedPercent = Math.max(0, Math.min(100, Number(discountPercent) || 0));
+    const { originalTotal, discountedTotal, saved } = calculatePreviewBundleAmounts(
+      baseUnitPrice,
+      2,
+      normalizedPercent,
+    );
+    return [
+      {
+        id: "single",
+        title: "Single",
+        subtitle: "Standard price",
+        price: formatPreviewPrice(baseUnitPrice),
+      },
+      {
+        id: `abtest-tier-${normalizedPercent}`,
+        title: "2 items",
+        subtitle: `A/B discount ${normalizedPercent}%`,
+        price: formatPreviewPrice(discountedTotal),
+        original: formatPreviewPrice(originalTotal),
+        featured: true,
+        badge: "A/B group",
+        saveLabel: `SAVE ${formatPreviewPrice(saved)}`,
+      },
+    ];
+  };
+  const abPreviewItemsA: PreviewItem[] = useMemo(
+    () => buildAbTestPreviewItems(abGroupADiscountPercent),
+    [abGroupADiscountPercent],
+  );
+  const abPreviewItemsB: PreviewItem[] = useMemo(
+    () => buildAbTestPreviewItems(abGroupBDiscountPercent),
+    [abGroupBDiscountPercent],
+  );
+
   const previewItems: PreviewItem[] = useMemo(() => {
     if (offerType === "complete-bundle" && completeBundleBars.length > 0) {
       return completeBundleBars.map((bar, index) => {
@@ -2963,7 +2998,7 @@ export function CreateNewOffer({
                           + Add bar
                         </Button>
                       </>
-                    ) : offerType === "complete-bundle" || offerType === "subscription" ? null : (
+                    ) : offerType === "complete-bundle" || offerType === "subscription" || offerType === "abTest" ? null : (
                     <div>
                       <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">Discount Setting</h3>
                         {discountRules.map((rule, index) => (
@@ -3407,6 +3442,85 @@ export function CreateNewOffer({
                           {buttonText}
                         </button>
                       ) : null}
+                    </div>
+                  ) : offerType === "abTest" ? (
+                    <div className="space-y-4">
+                      <div>
+                        <div className="text-[13px] font-medium text-[#1c1f23] mb-2">
+                          A 组预览（折扣 {abGroupADiscountPercent}%）
+                        </div>
+                        <BundlePreview
+                          layoutFormat={layoutFormat}
+                          cardBackgroundColor={cardBackgroundColor}
+                          accentColor={accentColor}
+                          borderColor={borderColor}
+                          labelColor={labelColor}
+                          titleFontSize={titleFontSize}
+                          titleFontWeight={titleFontWeight}
+                          titleColor={titleColor}
+                          buttonText={buttonText}
+                          buttonPrimaryColor={buttonPrimaryColor}
+                          showCustomButton={showCustomButton}
+                          multiProductSettings={{
+                            enabled: false,
+                            chooseButtonText,
+                            chooseButtonColor,
+                            chooseButtonSize,
+                            chooseImageSize,
+                          }}
+                          onPreviewAction={handlePreviewMultiProductAction}
+                          title={`${widgetTitle || "Bundle & Save"} · A`}
+                          items={abPreviewItemsA}
+                          progressiveGifts={progressiveGifts}
+                          progressivePreviewBarIndex={previewGiftBar}
+                          progressivePreviewLineQty={previewGiftQty}
+                          showSubscriptionPreview={false}
+                          subscriptionPreviewStyle={subscriptionPreviewStyle}
+                          subscriptionTitle={subscriptionTitle}
+                          subscriptionSubtitle={subscriptionSubtitle}
+                          showSubscriptionExplanation={false}
+                          subscriptionExplanationTitle={subscriptionExplanationTitle}
+                          subscriptionExplanationBody={subscriptionExplanationBody}
+                        />
+                      </div>
+                      <div>
+                        <div className="text-[13px] font-medium text-[#1c1f23] mb-2">
+                          B 组预览（折扣 {abGroupBDiscountPercent}%）
+                        </div>
+                        <BundlePreview
+                          layoutFormat={layoutFormat}
+                          cardBackgroundColor={cardBackgroundColor}
+                          accentColor={accentColor}
+                          borderColor={borderColor}
+                          labelColor={labelColor}
+                          titleFontSize={titleFontSize}
+                          titleFontWeight={titleFontWeight}
+                          titleColor={titleColor}
+                          buttonText={buttonText}
+                          buttonPrimaryColor={buttonPrimaryColor}
+                          showCustomButton={showCustomButton}
+                          multiProductSettings={{
+                            enabled: false,
+                            chooseButtonText,
+                            chooseButtonColor,
+                            chooseButtonSize,
+                            chooseImageSize,
+                          }}
+                          onPreviewAction={handlePreviewMultiProductAction}
+                          title={`${widgetTitle || "Bundle & Save"} · B`}
+                          items={abPreviewItemsB}
+                          progressiveGifts={progressiveGifts}
+                          progressivePreviewBarIndex={previewGiftBar}
+                          progressivePreviewLineQty={previewGiftQty}
+                          showSubscriptionPreview={false}
+                          subscriptionPreviewStyle={subscriptionPreviewStyle}
+                          subscriptionTitle={subscriptionTitle}
+                          subscriptionSubtitle={subscriptionSubtitle}
+                          showSubscriptionExplanation={false}
+                          subscriptionExplanationTitle={subscriptionExplanationTitle}
+                          subscriptionExplanationBody={subscriptionExplanationBody}
+                        />
+                      </div>
                     </div>
                   ) : (
                     <BundlePreview
