@@ -12,6 +12,9 @@ import {
 dayjs.extend(utc);
 dayjs.extend(timezone);
 import "./CreateNewOffer.css";
+import {
+  AdminPageHeader,
+} from "../adminUi";
 import BundlePreview from "../BundlePreview/BundlePreview";
 import { PreviewItem } from "../BundlePreview/bundlePreviewShared";
 import { ProgressiveGiftsSection } from "./ProgressiveGiftsSection";
@@ -1502,7 +1505,7 @@ export function CreateNewOffer({
           {submitErrorToast}
         </div>
       )}
-      <div className="mb-6">
+      <div className="mb-4">
         <div>
           <Button
             type="text"
@@ -1517,16 +1520,11 @@ export function CreateNewOffer({
           <div className="mt-[8px] inline-flex items-center rounded-full border border-[#dfe3e8] bg-[#f6f6f7] px-[10px] py-[4px] text-[12px] font-medium text-[#5c6166]">
             Offer Builder
           </div>
-          <div className="mt-[10px] flex items-center justify-between w-full gap-[16px]">
-            <div>
-              <h1 className="m-0 text-[28px] font-semibold leading-[36px] tracking-[-0.02em] text-[#1c1f23] sm:text-[32px] sm:leading-[40px]">
-              {initialOffer ? "Edit Offer" : "Create New Offer"}
-              </h1>
-              <p className="mt-[8px] mb-0 max-w-[640px] text-[14px] leading-[22px] text-[#5c6166] sm:text-[15px] sm:leading-[24px]">
-                Configure bundle logic, control storefront presentation, and
-                preview the customer experience before publishing.
-              </p>
-            </div>
+          <div className="mt-[8px]">
+            <AdminPageHeader
+              title={initialOffer ? "Edit Offer" : "Create New Offer"}
+              subtitle="Configure the promotion structure, storefront behavior, and customer-facing preview in a compact builder flow."
+            />
           </div>
         </div>
       </div>
@@ -1634,7 +1632,7 @@ export function CreateNewOffer({
       />
 
       <div className="mb-[100px] rounded-[12px] border border-[#dfe3e8] bg-[#ffffff] p-[20px] shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-[24px]">
-        <div className="mb-[14px] rounded-[12px] border border-[#e9edf1] bg-[#fcfcfd] p-[12px] sm:p-[14px]">
+        <div className="mb-[16px] rounded-[12px] border border-[#e9edf1] bg-[#fcfcfd] p-[14px] sm:p-[16px]">
           <div className="mb-[10px] flex flex-col gap-[6px] sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="mb-[4px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
@@ -1662,10 +1660,10 @@ export function CreateNewOffer({
                 className={`rounded-[10px] border px-[12px] py-[12px] text-left transition-all ${
                   isActive
                     ? "border-[#008060] bg-[#f0faf6] shadow-[inset_0_0_0_1px_rgba(0,128,96,0.08)]"
-                    : "border-[#e5e7eb] bg-white"
+                    : "border-[#e5e7eb] bg-[#ffffff]"
                 } ${
                   isClickable
-                    ? "cursor-pointer hover:border-[#bfd7cd]"
+                    ? "cursor-pointer hover:border-[#bfd7cd] hover:bg-[#ffffff]"
                     : "cursor-not-allowed opacity-60"
                 }`}
                 onClick={(e) => {
@@ -1798,12 +1796,12 @@ export function CreateNewOffer({
               </div>
 
               <div className="create-offer-sticky-preview">
-                <div className="rounded-[12px] border border-[#dfe3e8] bg-[#fcfcfd] p-[16px] shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
-                  <div className="mb-[10px]">
-                    <h3 className="m-0 text-[15px] font-semibold text-[#1c1f23]">
-                      Live Preview
-                    </h3>
-                  </div>
+                <div className="create-offer-preview-shell">
+                  <div className="create-offer-preview-shell__eyebrow">Preview</div>
+                  <h3 className="create-offer-preview-shell__title">Live Preview</h3>
+                  <p className="create-offer-preview-shell__description">
+                    Review the customer-facing offer block before publishing changes.
+                  </p>
 
                   <BundlePreview
                     layoutFormat={layoutFormat}
@@ -2589,12 +2587,12 @@ export function CreateNewOffer({
                 </div>
 
                 <div className="create-offer-sticky-preview">
-                  <div className="rounded-[12px] border border-[#dfe3e8] bg-[#fcfcfd] p-[16px] shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
-                    <div className="mb-[10px]">
-                      <h3 className="m-0 text-[15px] font-semibold text-[#1c1f23]">
-                        Live Preview
-                      </h3>
-                    </div>
+                  <div className="create-offer-preview-shell">
+                    <div className="create-offer-preview-shell__eyebrow">Preview</div>
+                    <h3 className="create-offer-preview-shell__title">Live Preview</h3>
+                    <p className="create-offer-preview-shell__description">
+                      Check pricing tiers and progressive gift unlocking before customers see the offer.
+                    </p>
                   {progressiveGifts.enabled && offerType !== "complete-bundle" ? (
                     <div className="mb-4 space-y-2">
                       <div className="text-[13px] font-medium text-[#1c1f23]">
@@ -2602,7 +2600,7 @@ export function CreateNewOffer({
                       </div>
                       <div className="grid grid-cols-1 gap-2">
                         <label className="block text-[12px] text-[#5c6166]">
-                          Simulated bar #（联动免邮解锁预览）
+                          Simulated bar # (free shipping unlock preview)
                           <Select
                             size="small"
                             className="mt-1 w-full"
@@ -2612,7 +2610,7 @@ export function CreateNewOffer({
                           />
                         </label>
                         <label className="block text-[12px] text-[#5c6166]">
-                          Simulated line qty（at_count 模式）
+                          Simulated line qty (at_count mode)
                           <Input
                             size="small"
                             type="number"
@@ -3171,12 +3169,12 @@ export function CreateNewOffer({
               </div>
 
               <div className="create-offer-sticky-preview">
-                <div className="rounded-[12px] border border-[#dfe3e8] bg-[#fcfcfd] p-[16px] shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
-                  <div className="mb-[10px]">
-                    <h3 className="m-0 text-[15px] font-semibold text-[#1c1f23]">
-                      Live Preview
-                    </h3>
-                  </div>
+                <div className="create-offer-preview-shell">
+                  <div className="create-offer-preview-shell__eyebrow">Preview</div>
+                  <h3 className="create-offer-preview-shell__title">Live Preview</h3>
+                  <p className="create-offer-preview-shell__description">
+                    Validate layout, messaging, and progressive gift behavior before saving the offer.
+                  </p>
                 {progressiveGifts.enabled ? (
                   <div className="mb-4 space-y-2">
                     <div className="text-[13px] font-medium text-[#1c1f23]">
@@ -3538,8 +3536,8 @@ export function CreateNewOffer({
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 z-[100] border-t border-[#dfe3e8] bg-[rgba(255,255,255,0.96)] px-[16px] py-[14px] backdrop-blur-sm shadow-[0_-8px_24px_rgba(15,23,42,0.08)] sm:px-[24px]">
-        <div className="mx-auto flex max-w-[1280px] flex-col gap-[12px] sm:flex-row sm:items-center sm:justify-between">
-          <div>
+        <div className="mx-auto flex max-w-[1280px] flex-col items-center gap-[12px]">
+          <div className="text-center">
             <div className="text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
               Step {step} of {steps.length}
             </div>
@@ -3547,7 +3545,7 @@ export function CreateNewOffer({
               {currentStepTitle}
             </div>
           </div>
-          <div className="flex items-center justify-end gap-3">
+          <div className="flex items-center justify-center gap-3">
         {step > 1 && (
           <Button
             size="large"
@@ -3560,16 +3558,6 @@ export function CreateNewOffer({
             Previous
           </Button>
         )}
-        <Button
-          size="large"
-          disabled={fetcher.state !== "idle"}
-          onClick={(e) => {
-            onBack?.();
-            e.preventDefault();
-          }}
-        >
-          Cancel
-        </Button>
         <Button
           size="large"
           style={{ backgroundColor: "#008060", borderColor: "#008060", color: "#fff" }}

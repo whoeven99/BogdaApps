@@ -1964,6 +1964,24 @@ export default function Index() {
                 Analytics
               </span>
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowCreateOffer(false);
+                setActiveTab("pricing");
+              }}
+              className={`rounded-[8px] px-[12px] py-[8px] text-center cursor-pointer transition-all ${
+                activeTab === "pricing"
+                  ? "bg-[#f6f6f7] text-[#1c1f23]"
+                  : "text-[#5c6166] hover:bg-[#f6f6f7] hover:text-[#1c1f23]"
+              }`}
+            >
+              <span
+                className={`font-sans leading-[20px] text-[13px] font-medium tracking-normal ${activeTab === "pricing" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
+              >
+                Pricing
+              </span>
+            </button>
             </div>
           </nav>
         )}

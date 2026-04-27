@@ -11,8 +11,6 @@ import {
   Pencil,
   Trash2,
   Info,
-  X,
-  AlertCircle,
 } from "lucide-react";
 import "../../styles/tailwind.css";
 import { CreateNewOffer } from "../component/CreateNewOffer/CreateNewOffer";
@@ -21,6 +19,16 @@ import { parseDiscountRules } from "../../utils/offerParsing";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
+import {
+  AdminEmptyState,
+  AdminModal,
+  AdminPageHeader,
+  ThemeExtensionBanner,
+  adminPrimaryButtonClass,
+  adminQuietActionClass,
+  adminSecondaryButtonClass,
+  adminSurfaceCardClass,
+} from "../component/adminUi";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -215,10 +223,6 @@ export function DashboardPage({
   };
 
   const toast = searchParams.get("toast") || actionData?.toast;
-  const surfaceCardClass =
-    "rounded-[12px] border border-[#dfe3e8] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]";
-  const sectionActionClass =
-    "inline-flex items-center gap-[6px] rounded-[8px] border-0 bg-transparent px-[12px] py-[6px] text-[14px] font-medium text-[#008060] transition-all hover:bg-[#f0f9f6] cursor-pointer";
 
   useEffect(() => {
     if (toast?.startsWith("delete-success")) {
@@ -318,71 +322,40 @@ export function DashboardPage({
 
   return (
     <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px]">
-      <div className="mb-[12px] sm:mb-[16px] flex flex-col gap-[12px] lg:flex-row lg:items-center lg:justify-between">
-        <div className="max-w-[720px]">
-          <h1 className="m-0 text-[24px] font-semibold leading-[32px] tracking-[-0.02em] text-[#1c1f23] sm:text-[28px] sm:leading-[36px]">
-            Dashboard
-          </h1>
-        </div>
-        <div className="flex flex-col gap-[10px] sm:flex-row">
+      <AdminPageHeader
+        title="Dashboard"
+        subtitle="Monitor bundle performance, storefront readiness, and recent offer activity from one operational overview."
+        actions={
+          <>
           <button
             type="button"
-            className="inline-flex items-center justify-center rounded-[8px] border border-[#dfe3e8] bg-white px-[14px] py-[9px] text-[14px] font-medium text-[#1c1f23] transition-colors hover:bg-[#f6f6f7] cursor-pointer"
+            className={adminSecondaryButtonClass}
             onClick={handleViewDetails}
           >
             View analytics
           </button>
           <button
             type="button"
-            className="inline-flex items-center justify-center rounded-[8px] bg-[#008060] px-[14px] py-[9px] text-[14px] font-medium text-white shadow-sm transition-colors hover:bg-[#006e52] border-0 cursor-pointer"
+            className={adminPrimaryButtonClass}
             onClick={handleCreateOfferClick}
           >
             Create New Offer
           </button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {!themeExtensionEnabled && !hideBanner && (
-        <div className="mb-[24px] flex items-start justify-between rounded-[12px] border border-[#ffd5d2] bg-[#fff7f6] p-[16px] sm:p-[18px]">
-          <div className="flex gap-[12px]">
-            <div className="mt-[2px] text-[#d72c0d]">
-              <AlertCircle size={20} />
-            </div>
-            <div>
-              <div className="mb-[6px] inline-flex items-center rounded-full bg-[#ffe0db] px-[8px] py-[3px] text-[12px] font-medium text-[#b42318]">
-                Action required
-              </div>
-              <h3 className="m-0 mb-[4px] font-sans text-[14px] font-semibold leading-[20px] text-[#1c1f23]">
-                Activate Theme Extension
-              </h3>
-              <p className="m-0 font-sans text-[14px] leading-[20px] text-[#5c6166]">
-                Offers stay hidden until the extension is enabled.
-              </p>
-              <div className="mt-[12px]">
-                <button
-                  type="button"
-                  onClick={handleThemeExtensionToggle}
-                  className="rounded-[8px] border border-[#1c1f23] bg-transparent px-[12px] py-[7px] text-[14px] font-medium text-[#1c1f23] transition-all hover:bg-black/5 cursor-pointer"
-                >
-                  Activate Theme Extension
-                </button>
-              </div>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={handleCloseBanner}
-            className="text-[#5c6166] hover:text-[#1c1f23] bg-transparent border-0 cursor-pointer p-[4px]"
-          >
-            <X size={20} />
-          </button>
-        </div>
+        <ThemeExtensionBanner
+          onActivate={handleThemeExtensionToggle}
+          onDismiss={handleCloseBanner}
+        />
       )}
 
       {/* GMV Overview + Theme Extension */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-[16px] sm:gap-[24px] mb-[24px] sm:mb-[36px]">
         {/* GMV Overview Card */}
-        <div className={`${surfaceCardClass} p-[20px] sm:p-[24px]`}>
+        <div className={`${adminSurfaceCardClass} p-[20px] sm:p-[24px]`}>
           <div className="mb-[16px] flex items-start justify-between gap-[12px]">
             <div>
               <div className="mb-[6px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
@@ -403,7 +376,7 @@ export function DashboardPage({
             </div>
             <button
               type="button"
-              className={sectionActionClass}
+              className={adminQuietActionClass}
               onClick={handleViewDetails}
             >
               View Details
@@ -457,7 +430,7 @@ export function DashboardPage({
         </div>
 
         {/* Theme Extension Widget */}
-        <div className={`${surfaceCardClass} p-[20px] sm:p-[24px]`}>
+        <div className={`${adminSurfaceCardClass} p-[20px] sm:p-[24px]`}>
           <div className="mb-[16px] flex items-start justify-between gap-[12px]">
             <div>
               <div className="mb-[6px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
@@ -509,7 +482,7 @@ export function DashboardPage({
       </div>
 
       {/* My Offers Card */}
-      <div className={`${surfaceCardClass} p-[20px] sm:p-[24px] mb-[24px] sm:mb-[36px]`}>
+      <div className={`${adminSurfaceCardClass} p-[20px] sm:p-[24px] mb-[24px] sm:mb-[36px]`}>
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-[12px] sm:gap-0 mb-[16px]">
           <div>
             <h2 className="m-0 font-sans text-[18px] font-semibold leading-[28px] tracking-tight text-[#1c1f23]">
@@ -522,14 +495,14 @@ export function DashboardPage({
           <div className="flex w-full flex-col gap-[10px] sm:w-auto sm:flex-row">
             <button
               type="button"
-              className="inline-flex items-center justify-center rounded-[8px] border border-[#dfe3e8] bg-white px-[14px] py-[9px] text-[14px] font-medium text-[#1c1f23] transition-colors hover:bg-[#f6f6f7] cursor-pointer"
+              className={adminSecondaryButtonClass}
               onClick={handleViewAllOffers}
             >
               View All Offers
             </button>
             <button
               type="button"
-              className="inline-flex items-center justify-center rounded-[8px] bg-[#008060] px-[14px] py-[9px] text-[14px] font-medium text-white shadow-sm transition-all hover:bg-[#006e52] border-0 cursor-pointer"
+              className={adminPrimaryButtonClass}
               onClick={handleCreateOfferClick}
             >
               Create New Offer
@@ -569,20 +542,14 @@ export function DashboardPage({
           <tbody>
             {offersLoading ? (
               <tr>
-                <td
-                  colSpan={8}
-                  className="p-[16px] border-b border-[#eef1f4] text-[14px] text-[#5c6166] font-sans"
-                >
-                  Loading offers...
+                <td colSpan={8} className="p-[12px] border-b border-[#eef1f4]">
+                  <AdminEmptyState message="Loading offers..." />
                 </td>
               </tr>
             ) : visibleOffers.length === 0 ? (
               <tr>
-                <td
-                  colSpan={8}
-                  className="p-[16px] border-b border-[#eef1f4] font-sans text-[14px] leading-[22.4px] text-[#5c6166] tracking-normal"
-                >
-                  No offers yet. Create your first offer to see it here.
+                <td colSpan={8} className="p-[12px] border-b border-[#eef1f4]">
+                  <AdminEmptyState message="No offers yet. Create your first offer to see it here." />
                 </td>
               </tr>
             ) : (
@@ -729,13 +696,9 @@ export function DashboardPage({
 
         <div className="md:hidden space-y-[12px]">
           {offersLoading ? (
-            <div className="border border-[#dfe3e8] rounded-[8px] p-[16px] text-[14px] text-[#5c6166] font-sans">
-              Loading offers...
-            </div>
+            <AdminEmptyState message="Loading offers..." />
           ) : visibleOffers.length === 0 ? (
-            <div className="border border-[#dfe3e8] rounded-[8px] p-[16px] text-[14px] text-[#5c6166] font-sans">
-              No offers yet. Create your first offer to see it here.
-            </div>
+            <AdminEmptyState message="No offers yet. Create your first offer to see it here." />
           ) : (
             visibleOffers.map((offer) => {
               const isToggling = getIsToggling(offer.id);
@@ -871,7 +834,7 @@ export function DashboardPage({
         <div className="flex justify-center mt-[16px] sm:mt-[20px] pt-[16px] border-t border-[#dfe3e8]">
           <button
             type="button"
-            className={sectionActionClass}
+            className={adminQuietActionClass}
             onClick={handleViewAllOffers}
           >
             View All Offers
@@ -1148,22 +1111,20 @@ export function DashboardPage({
       )}
 
       {deletingOffer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.4)]">
-          <div className="bg-white rounded-[16px] shadow-[0_8px_24px_rgba(0,0,0,0.12)] max-w-[400px] w-[90%] p-[24px]">
-            <h2 className="font-sans font-semibold text-[18px] leading-[27px] text-[#1c1f23] mb-[8px]">
-              Delete offer
-            </h2>
-            <p className="font-sans text-[14px] leading-[21px] text-[#5c6166] mb-[16px]">
+        <AdminModal
+          title="Delete offer"
+          description={
+            <>
               Are you sure you want to delete offer{" "}
-              <span className="font-semibold text-[#1c1f23]">
-                {deletingOffer.name}
-              </span>
+              <span className="font-semibold text-[#1c1f23]">{deletingOffer.name}</span>
               ? This action cannot be undone.
-            </p>
-            <div className="flex justify-end gap-[8px]">
+            </>
+          }
+          actions={
+            <>
               <button
                 type="button"
-                className="px-[12px] py-[6px] rounded-[6px] border border-[#dfe3e8] bg-white text-[#1c1f23] text-[14px] font-sans hover:bg-[#f4f6f8]"
+                className="rounded-[6px] border border-[#dfe3e8] bg-white px-[12px] py-[6px] text-[14px] text-[#1c1f23] hover:bg-[#f4f6f8]"
                 onClick={() => setDeletingOffer(null)}
               >
                 Cancel
@@ -1173,29 +1134,25 @@ export function DashboardPage({
                 <input type="hidden" name="offerId" value={deletingOffer.id} />
                 <button
                   type="submit"
-                  className="px-[12px] py-[6px] rounded-[6px] bg-[#d72c0d] !text-white text-[14px] font-sans hover:bg-[#bc2200]"
+                  className="rounded-[6px] bg-[#d72c0d] px-[12px] py-[6px] text-[14px] text-white hover:bg-[#bc2200]"
                 >
                   Delete
                 </button>
               </Form>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        />
       )}
 
       {showThemeExtensionModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.4)]">
-          <div className="bg-white rounded-[16px] shadow-[0_8px_24px_rgba(0,0,0,0.12)] max-w-[400px] w-[90%] p-[24px]">
-            <h2 className="font-sans font-semibold text-[18px] leading-[27px] text-[#1c1f23] mb-[8px]">
-              Activate Theme Extension
-            </h2>
-            <p className="font-sans text-[14px] leading-[21px] text-[#5c6166] mb-[16px]">
-              You need to activate the theme extension first before you can turn on any offers.
-            </p>
-            <div className="flex justify-end gap-[8px]">
+        <AdminModal
+          title="Activate Theme Extension"
+          description="You need to activate the theme extension first before you can turn on any offers."
+          actions={
+            <>
               <button
                 type="button"
-                className="px-[12px] py-[6px] rounded-[6px] border border-[#dfe3e8] bg-white text-[#1c1f23] text-[14px] font-sans hover:bg-[#f4f6f8]"
+                className="rounded-[6px] border border-[#dfe3e8] bg-white px-[12px] py-[6px] text-[14px] text-[#1c1f23] hover:bg-[#f4f6f8]"
                 onClick={() => setShowThemeExtensionModal(false)}
               >
                 Cancel
@@ -1206,13 +1163,13 @@ export function DashboardPage({
                   setShowThemeExtensionModal(false);
                   handleThemeExtensionToggle();
                 }}
-                className="px-[12px] py-[6px] rounded-[6px] bg-[#008060] !text-white text-[14px] font-sans hover:bg-[#006e52]"
+                className="rounded-[6px] bg-[#008060] px-[12px] py-[6px] text-[14px] text-white hover:bg-[#006e52]"
               >
                 Activate Now
               </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        />
       )}
     </div>
   );

@@ -14,7 +14,7 @@ This is a product UI system for a Shopify embedded app with a related storefront
 - Primary environment: Shopify Admin
 - Secondary environment: Shopify storefront theme extension
 - Main user mindset: operational, task-focused, configuration-heavy
-- Design goal: feel trustworthy, efficient, modern, and easy to scan
+- Design goal: feel trustworthy, efficient, native to Shopify Admin, and easy to scan
 
 ## Core Personality
 
@@ -23,17 +23,17 @@ The product should feel:
 - Calm, not loud
 - Precise, not decorative
 - Friendly, not playful
-- Branded, but not over-styled
-- Modern SaaS, but still native enough for the Shopify admin ecosystem
+- Branded, but never more dominant than the workflow
+- Native to Shopify Admin first, modern SaaS second
 
-Preferred inspiration:
+Preferred reference points:
 
-- Linear: density, hierarchy, and precision
-- Vercel: restraint and clarity
-- Supabase: green-accented brand confidence
+- Shopify Admin: hierarchy, spacing, contrast, and interaction tone
+- Polaris guidance: predictable controls, practical page structure, and clear status meaning
+- Modern SaaS restraint: compact hierarchy and reduced visual noise
 
 Do not mimic any external brand literally.
-Use these references only as tonal guides.
+Do not make the product feel like a separate design system living inside Shopify Admin.
 
 ## Tech Reality
 
@@ -46,16 +46,29 @@ Generate UI that matches the actual repository:
 - Host environment: Shopify embedded app shell
 
 Do not assume this project uses a pure design system package, pure Tailwind approach, or official Polaris React components everywhere.
-Design decisions must fit the existing mixed stack.
+Design decisions must fit the existing mixed stack while still following Shopify Admin visual expectations.
+
+## Fit Into Admin
+
+The app lives inside merchant workflows that already move across Shopify Admin surfaces.
+UI should reduce context switching rather than announce a separate brand world.
+
+- Match Shopify Admin expectations in spacing, density, headings, and status treatment
+- Prefer practical page headers over hero compositions
+- Prefer white surfaces, neutral text, and restrained borders over decorative treatments
+- Use icons and color as support, not as the primary carrier of meaning
+- If a UI choice feels more like a marketing site than an operations tool, it is probably wrong
 
 ## Design Principles
 
 1. Optimize for task completion.
 2. Prefer compact layouts over explanatory copy.
 3. Keep dense screens readable through spacing and hierarchy.
-4. Use brand color with intention, not everywhere.
-5. Favor stable patterns over visual novelty.
-6. Preserve compatibility with Shopify admin expectations.
+4. Keep the experience visually harmonious with Shopify Admin.
+5. Use color with semantic intent, not as decoration.
+6. Favor stable patterns over visual novelty.
+7. Preserve compatibility with Shopify admin expectations.
+8. Keep brand expression subtle and secondary to usability.
 
 ## Visual Tokens
 
@@ -64,7 +77,7 @@ Reuse them consistently across pages, custom CSS, and component styling.
 
 ### Colors
 
-- Primary: `#008060`
+- Primary accent: `#008060`
 - Primary hover: `#006e52`
 - Primary active: `#005c43`
 - Surface: `#ffffff`
@@ -79,6 +92,15 @@ Reuse them consistently across pages, custom CSS, and component styling.
 - Featured tint: `#f5fff9`
 - Critical: `#d72c0d`
 - Warning: `#b98900`
+
+Color usage rules:
+
+- Most text should use neutral dark text, not accent colors
+- Green should signal primary action or positive state, but must not be sprayed across the page
+- Yellow or amber should indicate caution, incomplete work, or attention-needed states
+- Orange may be used for pending or in-progress states when stronger non-blocking emphasis is needed
+- Red is only for destructive actions, blocking errors, or clearly critical states
+- Never rely on color alone to explain status; pair it with text and, when useful, iconography
 
 ### Radius
 
@@ -100,6 +122,13 @@ Reuse them consistently across pages, custom CSS, and component styling.
 - Body copy should stay clean and neutral
 - Helper text should be optional, not default
 - Prefer one clear label over a label plus explanatory sentence
+- Avoid using color alone to imply heading hierarchy
+- The current page title should be the strongest text element on the page
+
+Minimum size guidance:
+
+- Headings, body text, and interactive text: `13px` minimum
+- Smaller supporting text: `12px` minimum
 
 Recommended hierarchy:
 
@@ -119,6 +148,8 @@ Recommended hierarchy:
 - Avoid oversized hero sections or landing-page composition
 - Keep page headers short; title plus actions is preferred
 - Avoid eyebrow labels unless they add real navigation value
+- Favor consistent merchant-facing spacing over dramatic whitespace
+- Page structure should feel like an admin tool, not a branded microsite
 
 ### Complex Builder Pages
 
@@ -146,7 +177,8 @@ Avoid inventing different card languages on each page.
 
 ### Buttons
 
-- Primary button uses the brand green
+- Primary action should be singular and obvious in each decision area
+- Primary button can use the app green accent, but only for the most important action
 - Secondary button is quiet and supportive
 - Plain button is text-like and used for lower-priority actions
 - Any dark-filled button must use white text for inverse contrast
@@ -188,6 +220,7 @@ Avoid inventing different card languages on each page.
 
 - Success uses green accents sparingly
 - Warning uses amber or muted emphasis
+- Pending or in-progress states may use orange when needed
 - Critical uses red and must be unambiguous
 - Informational notices should stay low-drama and practical
 
@@ -255,6 +288,8 @@ The preview does not need to be pixel-identical, but it should not feel like a d
 - Keep helper text useful, compact, and sparse
 - Avoid vague slogans inside product UI
 - Avoid repeating the same explanation in page header, section header, and preview panel
+- Prefer merchant-facing clarity over internal jargon
+- Explain the outcome of an action instead of selling the feature
 
 ## Accessibility
 
@@ -272,7 +307,9 @@ When generating code for this repository:
 - Prefer Tailwind for layout, spacing, alignment, and page composition
 - Use custom CSS only when utility classes become hard to manage or when storefront preview fidelity matters
 - Reuse existing visual patterns before inventing new ones
-- Keep brand green as the primary accent throughout the app
+- Keep Shopify Admin harmony as the default visual target
+- Use the app green as a restrained accent, not a page-wide brand wash
+- If Ant Design defaults feel too far from Shopify Admin tone, tune spacing, borders, radius, and color usage at the composition layer instead of introducing a new library
 
 Before adding new visual patterns, check whether an existing page already solves the same problem.
 

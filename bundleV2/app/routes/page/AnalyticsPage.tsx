@@ -2,6 +2,10 @@ import { Select } from "antd";
 import { CircleHelp } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import BasicLineChart from "../component/BasicLineChart/BasicLineChart";
+import {
+  AdminPageHeader,
+  adminSurfaceCardClass,
+} from "../component/adminUi";
 
 interface AnalyticsDataType {
   visitors: number;
@@ -16,8 +20,6 @@ interface AnalyticsPageProps {
 }
 
 export function AnalyticsPage({ shop, offers, defaultOfferId }: AnalyticsPageProps) {
-  const surfaceCardClass =
-    "rounded-[12px] border border-[#dfe3e8] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]";
   const [analyticsData, setAnalyticsData] = useState<AnalyticsDataType>({
     visitors: 0,
     bundleOrders: 0,
@@ -139,36 +141,39 @@ export function AnalyticsPage({ shop, offers, defaultOfferId }: AnalyticsPagePro
 
   return (
     <div className="max-w-[1280px] mx-auto pb-[24px]">
-      <div className="mb-[14px] flex flex-col gap-[12px] lg:flex-row lg:items-center lg:justify-between">
-        <div className="max-w-[760px]">
-          <h1 className="m-0 text-[24px] font-semibold leading-[32px] tracking-[-0.02em] text-[#1c1f23] sm:text-[28px] sm:leading-[36px]">
-            Analytics
-          </h1>
-        </div>
-      </div>
+      <AdminPageHeader
+        title="Analytics"
+        subtitle="Track bundle reach, order conversion, and added revenue with compact merchant-friendly reporting."
+      />
 
       {/* Filters Bar */}
-      <div className={`${surfaceCardClass} mb-[24px] p-[16px] sm:p-[20px]`}>
-        <div className="flex flex-col gap-[12px] sm:flex-row">
-          <Select
-            value={selectedTimeRange}
-            onChange={(e) => setSelectedTimeRange(e)}
-            options={timeRangeOptions}
-            style={{ width: "100%", maxWidth: 220 }}
-          />
-          <Select
-            value={selectedOffer}
-            onChange={(e) => setSelectedOffer(e)}
-            options={offerOptions}
-            style={{ width: "100%", maxWidth: 280 }}
-          />
+      <div className={`${adminSurfaceCardClass} mb-[24px] p-[16px] sm:p-[20px]`}>
+        <div className="grid grid-cols-1 gap-[12px] md:grid-cols-2">
+          <label className="block text-[13px] font-medium text-[#1c1f23]">
+            Time range
+            <Select
+              value={selectedTimeRange}
+              onChange={(e) => setSelectedTimeRange(e)}
+              options={timeRangeOptions}
+              className="mt-[6px] w-full max-w-[220px]"
+            />
+          </label>
+          <label className="block text-[13px] font-medium text-[#1c1f23]">
+            Offer
+            <Select
+              value={selectedOffer}
+              onChange={(e) => setSelectedOffer(e)}
+              options={offerOptions}
+              className="mt-[6px] w-full max-w-[280px]"
+            />
+          </label>
         </div>
       </div>
 
       {/* Metrics Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-[16px] mb-[24px]">
         {/* Visitors */}
-        <div className={`${surfaceCardClass} p-[20px] sm:p-[24px]`}>
+        <div className={`${adminSurfaceCardClass} p-[20px] sm:p-[24px]`}>
           <div className="mb-[8px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
             Reach
           </div>
@@ -187,7 +192,7 @@ export function AnalyticsPage({ shop, offers, defaultOfferId }: AnalyticsPagePro
         </div>
 
         {/* Bundle orders */}
-        <div className={`${surfaceCardClass} p-[20px] sm:p-[24px]`}>
+        <div className={`${adminSurfaceCardClass} p-[20px] sm:p-[24px]`}>
           <div className="mb-[8px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
             Orders
           </div>
@@ -206,7 +211,7 @@ export function AnalyticsPage({ shop, offers, defaultOfferId }: AnalyticsPagePro
         </div>
 
         {/* Conversion to bundle */}
-        <div className={`${surfaceCardClass} p-[20px] sm:p-[24px]`}>
+        <div className={`${adminSurfaceCardClass} p-[20px] sm:p-[24px]`}>
           <div className="mb-[8px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
             Efficiency
           </div>
@@ -226,7 +231,7 @@ export function AnalyticsPage({ shop, offers, defaultOfferId }: AnalyticsPagePro
       </div>
 
       {/* Daily added revenue - Line Chart */}
-      <div className={`${surfaceCardClass} p-[20px] sm:p-[24px]`}>
+      <div className={`${adminSurfaceCardClass} p-[20px] sm:p-[24px]`}>
         <div className="mb-[6px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
           Revenue Trend
         </div>

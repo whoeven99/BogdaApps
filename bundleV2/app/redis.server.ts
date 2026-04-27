@@ -3,10 +3,14 @@ import Redis from "ioredis";
 // 若要连接到不同的 Redis 服务器，您可以修改 `.env` 文件中的以下环境变量。
 const redisUrl = `rediss://:${process.env.REDIS_PASSWORD}@${process.env.REDIS_HOST}:${process.env.REDIS_PORT}`;
 console.log("[redis] Redis URL:", redisUrl);
-let redis: Redis;
+type RedisClient = {
+  hgetall: (key: string) => Promise<Record<string, string>>;
+};
+
+let redis: RedisClient;
 
 declare global {
-  var __redis: Redis | undefined;
+  var __redis: RedisClient | undefined;
 }
 
 // 这能防止我们在开发环境中建立过多的连接。

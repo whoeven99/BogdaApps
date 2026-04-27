@@ -1,5 +1,9 @@
 import { Button } from "antd";
 import { OFFER_TYPE_OPTIONS, type OfferTypeId } from "./offerTypeOptions";
+import {
+  AdminPageHeader,
+  adminSurfaceCardClass,
+} from "../adminUi";
 
 interface OfferTypeSelectionProps {
   onBack?: () => void;
@@ -23,19 +27,19 @@ function PreviewRow({
     <div
       className={`rounded-[10px] border bg-white px-[12px] py-[10px] transition-colors ${
         selected
-          ? "border-[#1c1f23] shadow-[inset_0_0_0_1px_rgba(28,31,35,0.06)]"
+          ? "border-[#008060] shadow-[inset_0_0_0_1px_rgba(0,128,96,0.08)]"
           : "border-[#dfe3e8]"
       }`}
     >
       <div className="flex items-start gap-[10px]">
         <span
           className={`mt-[3px] h-[14px] w-[14px] rounded-full border ${
-            selected ? "border-[#1c1f23]" : "border-[#c9ccd0]"
+            selected ? "border-[#008060]" : "border-[#c9ccd0]"
           } flex items-center justify-center`}
         >
           <span
             className={`h-[6px] w-[6px] rounded-full ${
-              selected ? "bg-[#1c1f23]" : "bg-transparent"
+              selected ? "bg-[#008060]" : "bg-transparent"
             }`}
           />
         </span>
@@ -68,7 +72,7 @@ function PreviewRow({
 
 function PreviewAction() {
   return (
-    <div className="mt-auto rounded-[10px] bg-[#1c1f23] px-[14px] py-[10px] text-center text-[13px] font-semibold text-white shadow-[inset_0_-2px_0_rgba(255,255,255,0.08)] transition-colors group-hover:bg-black">
+    <div className="mt-auto rounded-[10px] bg-[#008060] px-[14px] py-[10px] text-center text-[13px] font-semibold text-white transition-colors group-hover:bg-[#006e52]">
       Choose
     </div>
   );
@@ -80,8 +84,8 @@ function QuantityBreakPreview() {
       <div className="space-y-[8px]">
         <PreviewRow title="Single" subtitle="Standard price" price="EUR65.00" />
         <div className="relative">
-          <div className="absolute right-[10px] top-[-10px] rounded-full bg-[#111111] px-[10px] py-[4px] text-[10px] font-semibold uppercase tracking-[0.05em] text-white">
-            Most popular
+          <div className="absolute right-[10px] top-[-10px] rounded-full bg-[#f0f9f6] px-[10px] py-[4px] text-[10px] font-semibold uppercase tracking-[0.05em] text-[#108043]">
+            Recommended
           </div>
           <PreviewRow
             title="Duo"
@@ -114,7 +118,7 @@ function BxgyPreview() {
         />
         <PreviewRow title="Buy 2, get 3 free" price="EUR130.00" badge="Save 60%" />
         <PreviewRow title="Buy 3, get 6 free" price="EUR195.00" badge="Save 67%" />
-        <div className="rounded-[10px] bg-[#d1d1d1] px-[12px] py-[8px] text-[12px] font-semibold text-[#1c1f23]">
+        <div className="rounded-[10px] bg-[#f6f6f7] px-[12px] py-[8px] text-[12px] font-semibold text-[#1c1f23]">
           + Free special gift!
         </div>
       </div>
@@ -188,7 +192,7 @@ function SubscriptionPreview() {
         />
         <PreviewRow title="Buy 2, get 3 free" price="EUR104.00" badge="Save 68%" />
         <PreviewRow title="Buy 3, get 6 free" price="EUR156.00" badge="Save 73%" />
-        <div className="rounded-[10px] border border-dashed border-[#1c1f23] bg-white px-[12px] py-[9px]">
+        <div className="rounded-[10px] border border-dashed border-[#008060] bg-white px-[12px] py-[9px]">
           <div className="text-[13px] font-semibold text-[#1c1f23]">
             Subscribe & Save 20%
           </div>
@@ -217,8 +221,8 @@ export function OfferTypeSelection({
   onSelect,
 }: OfferTypeSelectionProps) {
   return (
-    <div className="rounded-[12px] border border-[#dfe3e8] bg-white p-[20px] shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-[24px]">
-      <div className="mb-[24px]">
+    <div className={`${adminSurfaceCardClass} p-[20px] sm:p-[24px]`}>
+      <div className="mb-[20px]">
         <Button
           type="text"
           className="px-0 text-gray-600 hover:text-gray-900"
@@ -229,16 +233,17 @@ export function OfferTypeSelection({
         >
           ← Back
         </Button>
-        <div className="mt-[8px] inline-flex items-center rounded-full border border-[#dfe3e8] bg-[#f6f6f7] px-[10px] py-[4px] text-[12px] font-medium text-[#5c6166]">
-          Offer Setup
+        <div className="mt-[8px]">
+          <AdminPageHeader
+            title="Choose Offer Type"
+            subtitle="Start with the promotion structure that matches your campaign, then continue through the builder with the selected setup."
+            meta={
+              <span className="inline-flex items-center rounded-full border border-[#dfe3e8] bg-[#f6f6f7] px-[10px] py-[4px] text-[12px] font-medium text-[#5c6166]">
+                Offer Setup
+              </span>
+            }
+          />
         </div>
-        <h1 className="mt-[10px] mb-0 text-[28px] font-semibold leading-[36px] tracking-[-0.02em] text-[#1c1f23] sm:text-[32px] sm:leading-[40px]">
-          Choose offer type
-        </h1>
-        <p className="mt-[8px] mb-0 max-w-[720px] text-[14px] leading-[22px] text-[#5c6166] sm:text-[15px] sm:leading-[24px]">
-          Start with the promotion structure that matches your campaign, then
-          continue in the existing builder flow with the selected offer type.
-        </p>
       </div>
 
       <div className="grid grid-cols-1 gap-[16px] md:grid-cols-2 xl:grid-cols-4">
@@ -247,7 +252,7 @@ export function OfferTypeSelection({
             key={option.id}
             type="button"
             onClick={() => onSelect(option.id)}
-            className="group h-full rounded-[16px] border border-[#dfe3e8] bg-white p-[12px] text-left transition-all hover:border-[#008060] hover:shadow-[0_8px_24px_rgba(15,23,42,0.08)]"
+            className="group h-full rounded-[12px] border border-[#dfe3e8] bg-white p-[12px] text-left transition-all hover:border-[#bfd7cd] hover:shadow-[0_4px_12px_rgba(15,23,42,0.06)]"
           >
             <OfferTypePreview offerType={option.id} />
             <div className="px-[4px] pt-[14px]">

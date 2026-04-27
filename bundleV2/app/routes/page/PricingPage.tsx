@@ -4,6 +4,12 @@ import { useFetcher } from "react-router";
 import "../../styles/tailwind.css";
 import type { BillingPlanId } from "../../billing";
 import { subscriptionDisplayName } from "../../billing";
+import {
+  AdminPageHeader,
+  adminPrimaryButtonClass,
+  adminSecondaryButtonClass,
+  adminSurfaceCardClass,
+} from "../component/adminUi";
 
 type BillingSubscribeJson =
   | { ok: true; confirmationUrl: string; testCharge?: boolean }
@@ -66,8 +72,6 @@ export function PricingPage({
   activeSubscriptions,
   billingTestMode,
 }: PricingPageProps) {
-  const surfaceCardClass =
-    "rounded-[12px] border border-[#dfe3e8] bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]";
   const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">(
     "monthly",
   );
@@ -100,13 +104,10 @@ export function PricingPage({
 
   return (
     <div className="mx-auto max-w-[1280px] pb-[24px]">
-      <div className="mb-[14px] flex flex-col gap-[12px] lg:flex-row lg:items-center lg:justify-between">
-        <div className="max-w-[760px]">
-          <h1 className="m-0 text-[24px] font-semibold leading-[32px] tracking-[-0.02em] text-[#1c1f23] sm:text-[28px] sm:leading-[36px]">
-            Pricing Plans
-          </h1>
-        </div>
-      </div>
+      <AdminPageHeader
+        title="Pricing"
+        subtitle="Manage billing inside Shopify Admin with a compact plan comparison and a single clear subscription action."
+      />
 
       {billingTestMode && (
         <div className="mb-[16px] rounded-[12px] border border-[#ffd79d] bg-[#fff7e8] p-[14px]">
@@ -125,60 +126,54 @@ export function PricingPage({
       )}
 
       {hasAnyActive && (
-        <div className="mb-[24px] rounded-[12px] border border-[#dfe3e8] bg-white p-[14px] shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+        <div className={`${adminSurfaceCardClass} mb-[24px] p-[14px]`}>
           <p className="m-0 text-[14px] leading-[21px] text-[#5c6166]">
             An active subscription already exists. Manage it in Shopify admin before switching plans.
           </p>
         </div>
       )}
 
-      <div className={`${surfaceCardClass} mb-[24px] p-[20px] text-center sm:p-[24px]`}>
-        <h2 className="m-0 text-[22px] font-semibold leading-[30px] text-[#1c1f23] sm:text-[24px] sm:leading-[32px]">
-          Choose a plan
-        </h2>
-        <p className="mx-auto mt-[6px] mb-0 max-w-[720px] text-[13px] leading-[20px] text-[#5c6166]">
-          14-day free trial. Billing runs through Shopify.
-        </p>
-
-        {/* Billing Cycle Toggle */}
-        <div className="mt-[18px] flex items-center justify-center gap-[14px]">
-          <span
-            className={`text-[14px] ${
-              billingCycle === "monthly"
-                ? "font-semibold text-[#202223]"
-                : "font-normal text-[#6d7175]"
-            }`}
-          >
-            Monthly
-          </span>
-          <button
-            type="button"
-            onClick={() =>
-              setBillingCycle((prev) => (prev === "monthly" ? "yearly" : "monthly"))
-            }
-            className={`relative h-[28px] w-[52px] rounded-full border-0 p-0 transition-colors cursor-pointer ${
-              billingCycle === "yearly" ? "bg-[#008060]" : "bg-[#c4cdd5]"
-            }`}
-          >
-            <span
-              className={`absolute top-[2px] h-[24px] w-[24px] rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.2)] transition-all ${
-                billingCycle === "yearly" ? "left-[26px]" : "left-[2px]"
-              }`}
-            />
-          </button>
-          <div className="flex items-center gap-[8px]">
-            <span
-              className={`text-[14px] ${
-                billingCycle === "yearly"
-                  ? "font-semibold text-[#202223]"
-                  : "font-normal text-[#6d7175]"
-              }`}
-            >
-              Yearly
-            </span>
-            <span className="rounded-full bg-[#d1f7c4] px-[8px] py-[2px] text-[12px] font-semibold text-[#108043]">
-              Save 17%
-            </span>
+      <div className={`${adminSurfaceCardClass} mb-[24px] p-[20px] sm:p-[24px]`}>
+        <div className="flex flex-col gap-[16px] lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-[680px]">
+            <h2 className="m-0 text-[18px] font-semibold leading-[28px] text-[#1c1f23]">
+              Plan comparison
+            </h2>
+            <p className="mt-[6px] mb-0 text-[13px] leading-[20px] text-[#5c6166]">
+              Start with a 14-day free trial. Shopify handles billing and confirmation.
+            </p>
+          </div>
+          <div>
+            <div className="mb-[6px] text-[13px] font-medium text-[#1c1f23]">
+              Billing cycle
+            </div>
+            <div className="inline-flex items-center gap-[8px] rounded-[10px] border border-[#e5e7eb] bg-[#fcfcfd] p-[4px]">
+              <button
+                type="button"
+                onClick={() => setBillingCycle("monthly")}
+                className={`rounded-[8px] px-[12px] py-[8px] text-[13px] font-medium transition-colors ${
+                  billingCycle === "monthly"
+                    ? "bg-white text-[#1c1f23] shadow-[0_1px_2px_rgba(16,24,40,0.06)]"
+                    : "text-[#5c6166] hover:bg-[#f6f6f7]"
+                }`}
+              >
+                Monthly
+              </button>
+              <button
+                type="button"
+                onClick={() => setBillingCycle("yearly")}
+                className={`rounded-[8px] px-[12px] py-[8px] text-[13px] font-medium transition-colors ${
+                  billingCycle === "yearly"
+                    ? "bg-white text-[#1c1f23] shadow-[0_1px_2px_rgba(16,24,40,0.06)]"
+                    : "text-[#5c6166] hover:bg-[#f6f6f7]"
+                }`}
+              >
+                Yearly
+              </button>
+              <span className="rounded-full bg-[#f0f9f6] px-[8px] py-[4px] text-[12px] font-medium text-[#108043]">
+                Save 17%
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -190,23 +185,24 @@ export function PricingPage({
           return (
             <div
               key={index}
-              className={`relative flex h-full flex-col rounded-[16px] bg-white p-[24px] shadow-[0_1px_2px_rgba(16,24,40,0.04)] ${
+              className={`relative flex h-full flex-col rounded-[12px] bg-white p-[20px] shadow-[0_1px_2px_rgba(16,24,40,0.04)] ${
                 plan.popular
                   ? "border-2 border-[#008060]"
                   : "border border-[#dfe3e8]"
               }`}
             >
               {plan.popular && (
-                <div className="absolute left-1/2 top-[-12px] -translate-x-1/2 rounded-full bg-[#008060] px-[14px] py-[4px] text-[12px] font-semibold text-white">
-                  MOST POPULAR
+                <div className="absolute right-[16px] top-[16px] rounded-full bg-[#f0f9f6] px-[10px] py-[4px] text-[12px] font-medium text-[#108043]">
+                  Recommended
                 </div>
               )}
 
-              <div className="text-center">
-                <h3 className="text-[22px] font-semibold leading-[30px] text-[#1c1f23]">
+              <div className="flex h-full flex-col">
+                <div className="pr-[96px]">
+                <h3 className="m-0 text-[20px] font-semibold leading-[30px] text-[#1c1f23]">
                   {plan.name}
                 </h3>
-                <div className="my-[16px]">
+                <div className="mt-[12px]">
                   <span className="text-[36px] font-semibold leading-[44px] text-[#1c1f23]">
                     {billingCycle === "monthly" ? plan.monthlyPrice : plan.yearlyPrice}
                   </span>
@@ -219,8 +215,9 @@ export function PricingPage({
                     </div>
                   )}
                 </div>
+                </div>
 
-                <ul className="my-[24px] space-y-[10px] p-0 text-left">
+                <ul className="my-[20px] space-y-[10px] p-0 text-left">
                   {plan.features.map((feature, i) => (
                     <li
                       key={i}
@@ -244,8 +241,8 @@ export function PricingPage({
                       current
                         ? "cursor-not-allowed border border-[#dfe3e8] bg-[#f6f6f7] text-[#6d7175]"
                         : plan.popular
-                          ? "border-0 bg-[#008060] text-white hover:bg-[#006e52]"
-                          : "border border-[#dfe3e8] bg-white text-[#1c1f23] hover:bg-[#f6f6f7]"
+                          ? adminPrimaryButtonClass
+                          : adminSecondaryButtonClass
                     }`}
                     disabled={fetcher.state !== "idle" || current}
                   >
@@ -262,9 +259,9 @@ export function PricingPage({
         })}
       </div>
 
-      <div className={`${surfaceCardClass} mt-[32px] p-[24px]`}>
-        <h2 className="mb-[16px] text-[22px] font-semibold leading-[30px] text-[#1c1f23]">
-          Frequently Asked Questions
+      <div className={`${adminSurfaceCardClass} mt-[24px] p-[20px] sm:p-[24px]`}>
+        <h2 className="mb-[16px] text-[18px] font-semibold leading-[28px] text-[#1c1f23]">
+          Billing notes
         </h2>
         <div className="space-y-[20px]">
           <div>
@@ -290,7 +287,7 @@ export function PricingPage({
               Do you offer refunds?
             </h3>
             <p className="m-0 text-[14px] leading-[22px] text-[#5c6166]">
-              Yes, we offer a 30-day money-back guarantee for all plans.
+              Refund handling depends on the approved billing flow and Shopify billing terms.
             </p>
           </div>
         </div>
