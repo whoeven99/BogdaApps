@@ -1,0 +1,52 @@
+import { AppProvider } from "@shopify/shopify-app-react-router/react";
+import { useState } from "react";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import { Form, useActionData, useLoaderData } from "react-router";
+
+import { login } from "../../shopify.server";
+import { loginErrorMessage } from "./error.server";
+
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const errors = loginErrorMessage(await login(request));
+
+  return { errors };
+};
+
+export const action = async ({ request }: ActionFunctionArgs) => {
+  const errors = loginErrorMessage(await login(request));
+
+  return {
+    errors,
+  };
+};
+
+export default function Auth() {
+  const loaderData = useLoaderData<typeof loader>();
+  const actionData = useActionData<typeof action>();
+  const [shop, setShop] = useState("");
+  const { errors } = actionData || loaderData;
+
+  return (
+    <AppProvider embedded={false}>
+      <s-page heading="登录 Shopify 店铺">
+        <Form method="post">
+        <s-section heading="开始安装与登录">
+          <s-paragraph>
+            输入你的店铺域名，进入标准 Shopify App 安装与授权流程。
+          </s-paragraph>
+          <s-text-field
+            name="shop"
+            label="店铺域名"
+            details="example.myshopify.com"
+            value={shop}
+            onChange={(e) => setShop(e.currentTarget.value)}
+            autocomplete="on"
+            error={errors.shop}
+          ></s-text-field>
+          <s-button type="submit" variant="primary">登录并安装</s-button>
+        </s-section>
+        </Form>
+      </s-page>
+    </AppProvider>
+  );
+}
