@@ -2207,52 +2207,125 @@ export function CreateNewOffer({
                   </h2>
 
                   {offerType === "abTest" ? (
-                    <div className="mb-8 rounded-[12px] border border-[#e3e8ed] bg-[#fafbfb] p-4">
-                      <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                        A/B test settings
-                      </h3>
-                      <p className="text-[12px] text-[#5c6166] mb-4">
-                        Configure discount percentages for A/B groups and traffic split bucket.
-                      </p>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <div>
-                          <label className="block text-[13px] text-[#5c6166] mb-1">
-                            A group discount（%）
-                          </label>
-                          <InputNumber
-                            min={0}
-                            max={100}
-                            value={abGroupADiscountPercent}
-                            onChange={(v) => setAbGroupADiscountPercent(Number(v ?? 10))}
-                            className="w-full"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[13px] text-[#5c6166] mb-1">
-                            B group discount（%）
-                          </label>
-                          <InputNumber
-                            min={0}
-                            max={100}
-                            value={abGroupBDiscountPercent}
-                            onChange={(v) => setAbGroupBDiscountPercent(Number(v ?? 90))}
-                            className="w-full"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[13px] text-[#5c6166] mb-1">
-                            Hash split bucket（A:0~X，B:X+1~99）
-                          </label>
-                          <InputNumber
-                            min={1}
-                            max={99}
-                            value={abBucketSplitPercent}
-                            onChange={(v) => setAbBucketSplitPercent(Number(v ?? 50))}
-                            className="w-full"
-                          />
+                    <>
+                      <div className="mb-8 rounded-[12px] border border-[#e3e8ed] bg-[#fafbfb] p-4">
+                        <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
+                          A/B test settings
+                        </h3>
+                        <p className="text-[12px] text-[#5c6166] mb-4">
+                          Configure discount percentages for A/B groups and traffic split bucket.
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <div>
+                            <label className="block text-[13px] text-[#5c6166] mb-1">
+                              A group discount（%）
+                            </label>
+                            <InputNumber
+                              min={0}
+                              max={100}
+                              value={abGroupADiscountPercent}
+                              onChange={(v) => setAbGroupADiscountPercent(Number(v ?? 10))}
+                              className="w-full"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[13px] text-[#5c6166] mb-1">
+                              B group discount（%）
+                            </label>
+                            <InputNumber
+                              min={0}
+                              max={100}
+                              value={abGroupBDiscountPercent}
+                              onChange={(v) => setAbGroupBDiscountPercent(Number(v ?? 90))}
+                              className="w-full"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[13px] text-[#5c6166] mb-1">
+                              Hash split bucket（A:0~X，B:X+1~99）
+                            </label>
+                            <InputNumber
+                              min={1}
+                              max={99}
+                              value={abBucketSplitPercent}
+                              onChange={(v) => setAbBucketSplitPercent(Number(v ?? 50))}
+                              className="w-full"
+                            />
+                          </div>
                         </div>
                       </div>
-                    </div>
+
+                      <div className="mb-8">
+                        <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
+                          Products eligible for offer
+                        </h3>
+
+                        {selectedProductsData.length === 0 ? (
+                          <Button
+                            size="large"
+                            className="text-[#008060] border-[#008060] hover:text-[#006e52] hover:border-[#006e52] hover:bg-[#f0f9f6]"
+                            onClick={(e) => {
+                              handleSelectProducts();
+                              e.preventDefault();
+                            }}
+                          >
+                            Add products eligible for offer
+                          </Button>
+                        ) : (
+                          <div>
+                            <div className="create-offer-selected-grid">
+                              {selectedProductsData.slice(0, 3).map((product) => (
+                                <div
+                                  key={product.id}
+                                  className="create-offer-selected-card"
+                                >
+                                  <button
+                                    type="button"
+                                    className="create-offer-selected-remove"
+                                    onClick={(e) => {
+                                      setSelectedProductsData(
+                                        selectedProductsData.filter(
+                                          (p) => p.id !== product.id,
+                                        ),
+                                      );
+                                      e.preventDefault();
+                                    }}
+                                    aria-label={`Remove ${product.title}`}
+                                  >
+                                    <X size={14} />
+                                  </button>
+                                  <img
+                                    src={product.image}
+                                    alt={product.title}
+                                    className="create-offer-selected-image"
+                                  />
+                                  <div className="create-offer-selected-name">
+                                    {product.title}
+                                  </div>
+                                  <div className="create-offer-selected-price">
+                                    {product.price}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="create-offer-selected-count">
+                              {selectedProductsData.length} product
+                              {selectedProductsData.length > 1 ? "s" : ""} selected
+                            </div>
+                            <Button
+                              type="link"
+                              onClick={(e) => {
+                                handleSelectProducts();
+                                e.preventDefault();
+                              }}
+                              className="px-0"
+                            >
+                              Edit products
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </>
                   ) : offerType === "bxgy" ? (
                     <>
                       <div className="mb-6">
