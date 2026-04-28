@@ -1,8 +1,6 @@
 import { Input, Switch } from "antd";
 
 type Props = {
-  logicBlockLabel: string;
-  logicBlockDescription: string;
   showCountdownBlock: boolean;
   setShowCountdownBlock: (checked: boolean) => void;
   countdownLabel: string;
@@ -10,8 +8,6 @@ type Props = {
 };
 
 export default function DisplayBlocksEditor({
-  logicBlockLabel,
-  logicBlockDescription,
   showCountdownBlock,
   setShowCountdownBlock,
   countdownLabel,
@@ -23,28 +19,11 @@ export default function DisplayBlocksEditor({
         Display Blocks
       </h3>
       <div className="flex flex-col gap-3">
-        <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-          <div>
-            <div className="text-[14px] font-medium text-[#1c1f23]">
-              Offer Card
-            </div>
-            <div className="text-[13px] text-[#5c6166]">
-              Core promotion card linked to your {logicBlockLabel} logic.
-            </div>
-            <div className="mt-1 text-[12px] text-[#8c9196]">
-              {logicBlockDescription}
-            </div>
-          </div>
-          <Switch checked disabled />
-        </div>
         <div className="p-4 border border-gray-200 rounded-lg">
           <div className="flex items-center justify-between">
             <div>
               <div className="text-[14px] font-medium text-[#1c1f23]">
                 Countdown
-              </div>
-              <div className="text-[13px] text-[#5c6166]">
-                Add a time-sensitive message tied to the campaign end time.
               </div>
             </div>
             <Switch

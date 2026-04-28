@@ -16,22 +16,17 @@ import {
 } from "../adminUi";
 import BundlePreview from "../BundlePreview/BundlePreview";
 import { PreviewItem } from "../BundlePreview/bundlePreviewShared";
-import BuilderSummaryCards from "./BuilderSummaryCards";
 import BuilderStepIntro from "./BuilderStepIntro";
 import type { CampaignDraft, CampaignDraftActions } from "./campaignDraft";
 import {
   buildDiscountRulesPayload,
   buildSelectedProductsPayload,
-  getCampaignBuilderMeta,
-  getCampaignLogicSummary,
-  getCampaignScopeSummary,
   validateFinalSubmitScopeAndLogic,
   validateScopeAndLogicStep,
 } from "./campaignBuilderRegistry";
 import DisplayBlocksEditor from "./DisplayBlocksEditor";
 import LogicEditorsRenderer from "./LogicEditorsRenderer";
 import ScheduleTargetingEditor from "./ScheduleTargetingEditor";
-import StarterTemplatePicker from "./StarterTemplatePicker";
 import {
   OFFER_TEXT_LIMITS,
   buildLegacyFieldsFromCampaignConfig,
@@ -1538,10 +1533,6 @@ export function CreateNewOffer({
     () => (currentCampaignConfig ? JSON.stringify(currentCampaignConfig) : ""),
     [currentCampaignConfig],
   );
-  const builderMeta = useMemo(
-    () => getCampaignBuilderMeta(offerType),
-    [offerType],
-  );
   const allSelectedProductsHaveSubscription = useMemo(
     () =>
       selectedProductsData.length > 0 &&
@@ -1653,48 +1644,6 @@ export function CreateNewOffer({
       .tz(scheduleTimezone)
       .format("YYYY-MM-DD HH:mm")}`;
   }, [countdownLabel, endTime, scheduleTimezone, showCountdownBlock]);
-  const scopeSummary = useMemo(() => {
-    return getCampaignScopeSummary(campaignDraft);
-  }, [campaignDraft]);
-  const logicSummary = useMemo(() => {
-    return getCampaignLogicSummary(campaignDraft);
-  }, [campaignDraft]);
-  const displaySummary = useMemo(() => {
-    return showCountdownBlock ? "Offer card + Countdown" : "Offer card only";
-  }, [showCountdownBlock]);
-  const logicBlockLabel = useMemo(() => {
-    return builderMeta.logicBlockLabel;
-  }, [builderMeta]);
-  const logicBlockDescription = useMemo(() => {
-    return builderMeta.logicBlockDescription;
-  }, [builderMeta]);
-  const stepTwoDescription = useMemo(() => {
-    return builderMeta.stepTwoDescription;
-  }, [builderMeta]);
-  const stepThreeDescription = useMemo(() => {
-    return `Configure how your ${logicBlockLabel} campaign appears on the storefront, including optional promotional display blocks.`;
-  }, [logicBlockLabel]);
-  const summaryCards = useMemo(
-    () => [
-      {
-        label: "Scope",
-        value: scopeSummary,
-        helper: "Which products participate in this campaign.",
-      },
-      {
-        label: "Logic",
-        value: logicSummary,
-        helper: "How customers qualify and what reward they get.",
-      },
-      {
-        label: "Display",
-        value: displaySummary,
-        helper: "How the campaign is presented on the storefront.",
-      },
-    ],
-    [displaySummary, logicSummary, scopeSummary],
-  );
-
   const hasDefault = normalizedDiscountRules.some(r => r.isDefault);
 
   const previewItems: PreviewItem[] = useMemo(() => {
@@ -1876,7 +1825,6 @@ export function CreateNewOffer({
     "Targeting",
   ];
 
-  const isOfferTypeLocked = !initialOffer && !!initialOfferType;
   useEffect(() => {
     // 中文注释：当用户在第 1 步切换到 Subscription 类型时，默认自动打开订阅开关
     if (offerType === "subscription") {
@@ -2119,8 +2067,8 @@ export function CreateNewOffer({
       <input type="hidden" name="campaignConfigJson" value={campaignConfigJson} />
 
       <div className="mb-[100px] rounded-[12px] border border-[#dfe3e8] bg-[#ffffff] p-[20px] shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-[24px]">
-        <div className="mb-[16px] rounded-[12px] border border-[#e9edf1] bg-[#fcfcfd] p-[14px] sm:p-[16px]">
-          <div className="grid grid-cols-1 gap-[8px] md:grid-cols-4">
+        <div className="mb-[12px] rounded-[10px] border border-[#e9edf1] bg-[#fcfcfd] p-[10px] sm:p-[12px]">
+          <div className="grid grid-cols-1 gap-[6px] md:grid-cols-4">
           {steps.map((stepName, index) => {
             const stepNumber = index + 1;
             const isActive = step === stepNumber;
@@ -2130,7 +2078,7 @@ export function CreateNewOffer({
                 key={index}
                 role="button"
                 tabIndex={isClickable ? 0 : -1}
-                className={`rounded-[10px] border px-[12px] py-[12px] text-left transition-all ${
+                className={`rounded-[8px] border px-[10px] py-[9px] text-left transition-all ${
                   isActive
                     ? "border-[#008060] bg-[#f0faf6] shadow-[inset_0_0_0_1px_rgba(0,128,96,0.08)]"
                     : "border-[#e5e7eb] bg-[#ffffff]"
@@ -2152,9 +2100,9 @@ export function CreateNewOffer({
                   }
                 }}
               >
-                <div className="flex items-center gap-[10px]">
+                <div className="flex items-center gap-[8px]">
                   <div
-                    className={`flex h-[28px] w-[28px] items-center justify-center rounded-full text-[12px] font-semibold ${
+                    className={`flex h-[24px] w-[24px] items-center justify-center rounded-full text-[11px] font-semibold ${
                       isActive
                         ? "bg-[#008060] text-white"
                         : "bg-[#f4f6f8] text-[#5c6166]"
@@ -2163,7 +2111,7 @@ export function CreateNewOffer({
                     {stepNumber}
                   </div>
                   <div
-                    className={`text-[14px] font-semibold leading-[20px] ${
+                    className={`text-[13px] font-semibold leading-[18px] ${
                       isActive ? "text-[#1c1f23]" : "text-[#5c6166]"
                     }`}
                   >
@@ -2177,7 +2125,6 @@ export function CreateNewOffer({
         </div>
 
         <div>
-          {step >= 2 && <BuilderSummaryCards cards={summaryCards} />}
           {step === 1 && (
             <div className="create-offer-basic-grid lg:grid-cols-[1fr_400px]">
               <div className="flex flex-col gap-6">
@@ -2185,7 +2132,6 @@ export function CreateNewOffer({
                   <div className="flex flex-col gap-4">
                       <BuilderStepIntro
                         title="Campaign Setup"
-                        description="Name this campaign and choose a starter template before configuring the component stack, display, and targeting."
                       />
                     <div>
                       <label className="block">
@@ -2214,24 +2160,6 @@ export function CreateNewOffer({
                       )}
                     </div>
 
-                    <div>
-                      <div className="block text-[14px] font-medium text-[#1c1f23] mb-3">
-                        Starter Template
-                      </div>
-                      <StarterTemplatePicker
-                        selectedOfferType={offerType}
-                        onSelect={setOfferType}
-                        actionLabel="Use This Template"
-                        disabled={!!initialOffer || isOfferTypeLocked}
-                        compact
-                      />
-                      {isOfferTypeLocked && (
-                        <div className="mt-1 text-[13px] text-[#5c6166]">
-                          This builder was opened from a fixed starter template. You can still swap the template from Step 2 when editing the component stack.
-                        </div>
-                      )}
-                    </div>
-                    
                     <div>
                       <label className="block">
                         <span className="block text-[14px] font-medium text-[#1c1f23] mb-1">
@@ -2267,8 +2195,7 @@ export function CreateNewOffer({
 
               <div className="create-offer-sticky-preview">
                 <div className="create-offer-preview-shell">
-                  <div className="create-offer-preview-shell__eyebrow">Preview</div>
-                  <h3 className="create-offer-preview-shell__title">Live Preview</h3>
+                  <h3 className="create-offer-preview-shell__title">Preview</h3>
 
                   <BundlePreview
                     layoutFormat={layoutFormat}
@@ -2306,8 +2233,6 @@ export function CreateNewOffer({
                 <div>
                   <BuilderStepIntro
                     title="Scope & Logic"
-                    description={stepTwoDescription}
-                    meta={logicBlockLabel}
                   />
 
                   <LogicEditorsRenderer
@@ -2321,8 +2246,7 @@ export function CreateNewOffer({
 
                 <div className="create-offer-sticky-preview">
                   <div className="create-offer-preview-shell">
-                    <div className="create-offer-preview-shell__eyebrow">Preview</div>
-                    <h3 className="create-offer-preview-shell__title">Live Preview</h3>
+                    <h3 className="create-offer-preview-shell__title">Preview</h3>
                   {progressiveGifts.enabled && offerType !== "complete-bundle" ? (
                     <div className="mb-4 space-y-2">
                       <div className="text-[13px] font-medium text-[#1c1f23]">
@@ -2625,13 +2549,9 @@ export function CreateNewOffer({
               <div>
                 <BuilderStepIntro
                   title="Display"
-                  description={stepThreeDescription}
-                  meta={`${logicBlockLabel} storefront presentation`}
                 />
 
                 <DisplayBlocksEditor
-                  logicBlockLabel={logicBlockLabel}
-                  logicBlockDescription={logicBlockDescription}
                   showCountdownBlock={showCountdownBlock}
                   setShowCountdownBlock={setShowCountdownBlock}
                   countdownLabel={countdownLabel}
@@ -2909,8 +2829,7 @@ export function CreateNewOffer({
 
               <div className="create-offer-sticky-preview">
                 <div className="create-offer-preview-shell">
-                  <div className="create-offer-preview-shell__eyebrow">Preview</div>
-                  <h3 className="create-offer-preview-shell__title">Live Preview</h3>
+                  <h3 className="create-offer-preview-shell__title">Preview</h3>
                 {showCountdownBlock && countdownPreviewText ? (
                   <div className="mb-4 rounded-lg border border-[#ffe58f] bg-[#fffbe6] px-3 py-2 text-[12px] text-[#ad6800]">
                     {countdownPreviewText}
@@ -2983,7 +2902,6 @@ export function CreateNewOffer({
             <div>
               <BuilderStepIntro
                 title="Targeting"
-                description="Control schedule, market visibility, and activation so this campaign launches with the right audience and timing."
               />
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8">
                 <div className="rounded-lg border border-[#dfe3e8] bg-white p-3">

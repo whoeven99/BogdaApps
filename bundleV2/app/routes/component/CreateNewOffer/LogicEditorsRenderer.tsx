@@ -564,23 +564,17 @@ export default function LogicEditorsRenderer({
             <h3 className="m-0 mt-1 text-[16px] font-semibold text-[#1c1f23]">
               Configure this campaign as a component stack
             </h3>
-            <p className="m-0 mt-1 text-[13px] leading-[1.5] text-[#5c6166]">
-              Keep the required components in place, and add optional components when this offer needs more merchandising or rewards.
-            </p>
           </div>
           <div>
             <div className="mb-3 text-[12px] font-medium uppercase tracking-[0.08em] text-[#5c6166]">
-              Starter Template
+              Offer Logic
             </div>
             <StarterTemplatePicker
               selectedOfferType={draft.offerType}
               onSelect={actions.setOfferType}
-              actionLabel="Switch Template"
+              actionLabel="Use Logic"
               compact
             />
-            <p className="m-0 mt-2 text-[12px] leading-[1.5] text-[#5c6166]">
-              Swap the main offer logic without leaving this flow. Existing display and targeting settings stay in place.
-            </p>
           </div>
           {inactiveOptionalComponents.length > 0 ? (
             <div className="flex flex-wrap gap-2">
@@ -624,9 +618,6 @@ export default function LogicEditorsRenderer({
               <h3 className="m-0 mt-1 text-[16px] font-semibold text-[#1c1f23]">
                 {component.title}
               </h3>
-              <p className="m-0 mt-1 text-[13px] leading-[1.5] text-[#5c6166]">
-                {component.description}
-              </p>
             </div>
             {!component.required && component.onRemove ? (
               <Button size="small" onClick={component.onRemove}>

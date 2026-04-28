@@ -30,11 +30,6 @@ export function OfferTypeSelection({
         </Button>
         <div className="mt-[8px]">
           <AdminPageHeader title="Choose Starter Template" />
-          <p className="mt-[8px] mb-0 max-w-[760px] text-[13px] leading-[20px] text-[#5c6166]">
-            Start from the template that is closest to your campaign. You can
-            still switch the core logic and add optional components later in the
-            same configuration flow.
-          </p>
         </div>
       </div>
       <StarterTemplatePicker

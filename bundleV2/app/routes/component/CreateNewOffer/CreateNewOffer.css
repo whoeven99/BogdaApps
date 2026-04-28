@@ -82,15 +82,6 @@
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
 }
 
-.create-offer-preview-shell__eyebrow {
-  margin-bottom: 4px;
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #6d7175;
-}
-
 .create-offer-preview-shell__title {
   margin: 0;
   font-size: 16px;
