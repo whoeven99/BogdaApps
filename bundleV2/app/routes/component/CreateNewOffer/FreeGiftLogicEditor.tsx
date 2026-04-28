@@ -1,4 +1,4 @@
-import { Button, Checkbox, Input } from "antd";
+import { Button, Checkbox, Dropdown, Input } from "antd";
 import type { FreeGiftRule } from "../../../utils/offerParsing";
 
 type Props = {
@@ -18,6 +18,26 @@ export default function FreeGiftLogicEditor({
   freeGiftRules,
   setFreeGiftRules,
 }: Props) {
+  const appendFreeGiftTier = () => {
+    setFreeGiftRules((prev) => {
+      const maxCount = prev.reduce(
+        (max, rule) => Math.max(max, rule.count),
+        1,
+      );
+      return [
+        ...prev,
+        {
+          count: maxCount + 1,
+          giftQuantity: 1,
+          title: "",
+          subtitle: "",
+          badge: "",
+          isDefault: false,
+        },
+      ];
+    });
+  };
+
   return (
     <>
       <div className="mb-6">
@@ -252,31 +272,17 @@ export default function FreeGiftLogicEditor({
             </div>
           </div>
         ))}
-        <Button
-          type="dashed"
-          className="w-full"
-          onClick={() => {
-            setFreeGiftRules((prev) => {
-              const maxCount = prev.reduce(
-                (max, rule) => Math.max(max, rule.count),
-                1,
-              );
-              return [
-                ...prev,
-                {
-                  count: maxCount + 1,
-                  giftQuantity: 1,
-                  title: "",
-                  subtitle: "",
-                  badge: "",
-                  isDefault: false,
-                },
-              ];
-            });
+        <Dropdown
+          trigger={["click"]}
+          menu={{
+            items: [{ key: "free-gift", label: "Add Free Gift Tier" }],
+            onClick: appendFreeGiftTier,
           }}
         >
-          + Add free gift tier
-        </Button>
+          <Button type="dashed" className="w-full">
+            + Add tier
+          </Button>
+        </Dropdown>
       </div>
     </>
   );

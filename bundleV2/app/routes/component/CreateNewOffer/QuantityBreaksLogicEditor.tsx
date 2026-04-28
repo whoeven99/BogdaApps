@@ -1,4 +1,4 @@
-import { Button, Checkbox, Input } from "antd";
+import { Button, Checkbox, Dropdown, Input } from "antd";
 
 type DiscountRule = {
   count: number;
@@ -22,6 +22,15 @@ export default function QuantityBreaksLogicEditor({
 }: Props) {
   const showTiers = section === "all" || section === "tiers";
   const showPresentation = section === "all" || section === "presentation";
+  const appendDiscountTier = () => {
+    setDiscountRules((prev) => {
+      const maxCount = prev.reduce(
+        (max, rule) => Math.max(max, rule.count),
+        1,
+      );
+      return [...prev, { count: maxCount + 1, discountPercent: 15 }];
+    });
+  };
 
   return (
     <div>
@@ -235,21 +244,17 @@ export default function QuantityBreaksLogicEditor({
         </div>
       ))}
       {showTiers ? (
-        <Button
-          type="dashed"
-          className="w-full"
-          onClick={() => {
-            setDiscountRules((prev) => {
-              const maxCount = prev.reduce(
-                (max, rule) => Math.max(max, rule.count),
-                1,
-              );
-              return [...prev, { count: maxCount + 1, discountPercent: 15 }];
-            });
+        <Dropdown
+          trigger={["click"]}
+          menu={{
+            items: [{ key: "discount", label: "Add Discount Tier" }],
+            onClick: appendDiscountTier,
           }}
         >
-          + Add discount tier
-        </Button>
+          <Button type="dashed" className="w-full">
+            + Add tier
+          </Button>
+        </Dropdown>
       ) : null}
     </div>
   );

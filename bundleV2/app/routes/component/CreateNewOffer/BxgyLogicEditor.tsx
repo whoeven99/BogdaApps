@@ -1,4 +1,4 @@
-import { Button, Checkbox, Input } from "antd";
+import { Button, Checkbox, Dropdown, Input } from "antd";
 import type { BxgyDiscountRule } from "../../../utils/offerParsing";
 
 type Props = {
@@ -23,6 +23,30 @@ export default function BxgyLogicEditor({
   const showBuyProducts = section === "all" || section === "buy-products";
   const showGetProducts = section === "all" || section === "get-products";
   const showRules = section === "all" || section === "rules";
+  const appendBxgyTier = () => {
+    setBxgyDiscountRules((prev) => {
+      const maxCount = prev.reduce(
+        (max, rule) => Math.max(max, rule.count),
+        1,
+      );
+      return [
+        ...prev,
+        {
+          count: maxCount + 1,
+          buyQuantity: 2,
+          getQuantity: 1,
+          buyProductIds: [],
+          getProductIds: [],
+          discountPercent: 100,
+          maxUsesPerOrder: 1,
+          title: "",
+          subtitle: "",
+          badge: "",
+          isDefault: false,
+        },
+      ];
+    });
+  };
 
   return (
     <>
@@ -348,36 +372,17 @@ export default function BxgyLogicEditor({
               </div>
             </div>
           ))}
-          <Button
-            type="dashed"
-            className="w-full"
-            onClick={() => {
-              setBxgyDiscountRules((prev) => {
-                const maxCount = prev.reduce(
-                  (max, rule) => Math.max(max, rule.count),
-                  1,
-                );
-                return [
-                  ...prev,
-                  {
-                    count: maxCount + 1,
-                    buyQuantity: 2,
-                    getQuantity: 1,
-                    buyProductIds: [],
-                    getProductIds: [],
-                    discountPercent: 100,
-                    maxUsesPerOrder: 1,
-                    title: "",
-                    subtitle: "",
-                    badge: "",
-                    isDefault: false,
-                  },
-                ];
-              });
+          <Dropdown
+            trigger={["click"]}
+            menu={{
+              items: [{ key: "bxgy", label: "Add BXGY Tier" }],
+              onClick: appendBxgyTier,
             }}
           >
-            + Add BXGY tier
-          </Button>
+            <Button type="dashed" className="w-full">
+              + Add tier
+            </Button>
+          </Dropdown>
         </div>
       ) : null}
     </>

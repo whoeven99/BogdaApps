@@ -1,4 +1,4 @@
-import { Button, Checkbox, Input, Select, Segmented } from "antd";
+import { Button, Checkbox, Dropdown, Input, Select, Segmented } from "antd";
 import type { DifferentProductsDiscountRule } from "../../../utils/offerParsing";
 import type { DraftSelectedProduct } from "./campaignDraft";
 
@@ -50,6 +50,12 @@ export default function DifferentProductsLogicEditor({
         ruleIndex === index ? { ...rule, ...patch } : rule,
       ),
     );
+  };
+  const appendTier = (tierType: DifferentProductsDiscountRule["tierType"]) => {
+    setDifferentProductsDiscountRules((prev) => [
+      ...prev,
+      buildDefaultTier(selectedProductsData, tierType),
+    ]);
   };
 
   return (
@@ -385,28 +391,20 @@ export default function DifferentProductsLogicEditor({
       })}
 
       <div className="flex flex-wrap gap-3">
-        <Button
-          type="dashed"
-          onClick={() => {
-            setDifferentProductsDiscountRules((prev) => [
-              ...prev,
-              buildDefaultTier(selectedProductsData, "simple"),
-            ]);
+        <Dropdown
+          trigger={["click"]}
+          menu={{
+            items: [
+              { key: "simple", label: "Add Simple Tier" },
+              { key: "bxgy", label: "Add BXGY Tier" },
+            ],
+            onClick: ({ key }) => {
+              appendTier(key === "bxgy" ? "bxgy" : "simple");
+            },
           }}
         >
-          + Add Simple Tier
-        </Button>
-        <Button
-          type="dashed"
-          onClick={() => {
-            setDifferentProductsDiscountRules((prev) => [
-              ...prev,
-              buildDefaultTier(selectedProductsData, "bxgy"),
-            ]);
-          }}
-        >
-          + Add BXGY Tier
-        </Button>
+          <Button type="dashed">+ Add tier</Button>
+        </Dropdown>
       </div>
     </div>
   );
