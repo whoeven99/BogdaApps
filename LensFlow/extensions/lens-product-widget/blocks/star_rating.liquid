@@ -4,6 +4,7 @@
 <div
   class="lens-widget"
   data-lens-widget
+  data-widget-mode="{{ block.settings.widget_mode }}"
   data-product-id="{{ product.id }}"
   data-selected-variant-id="{{ product.selected_or_first_available_variant.id }}"
   data-proxy-path="{{ routes.root }}apps/product-match"
@@ -39,6 +40,16 @@
   "name": "Prescription Recommender",
   "target": "section",
   "settings": [
+    {
+      "type": "select",
+      "id": "widget_mode",
+      "label": "Widget mode",
+      "default": "live",
+      "options": [
+        { "value": "live", "label": "Live data mode" },
+        { "value": "prototype", "label": "Prototype mode" }
+      ]
+    },
     { "type": "text", "id": "heading", "label": "Heading", "default": "输入验光结果，找到适合的眼镜" },
     { "type": "text", "id": "subtitle", "label": "Subtitle", "default": "表单字段来自商家后台配置，消费者提交后会自动匹配对应库存货品。" }
   ]

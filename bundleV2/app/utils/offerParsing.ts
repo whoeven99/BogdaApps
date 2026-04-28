@@ -166,6 +166,79 @@ export type DiscountRule = {
   isDefault?: boolean;
 };
 
+export type CampaignScope = {
+  productIds: string[];
+  markets: string[];
+  customerSegments: string[];
+};
+
+export type QuantityBreakTier = {
+  qty: number;
+  discountPercent: number;
+  title?: string;
+  subtitle?: string;
+  badge?: string;
+  isDefault?: boolean;
+};
+
+export type QuantityBreaksLogicBlock = {
+  id: string;
+  type: "quantity-breaks";
+  config: {
+    tiers: QuantityBreakTier[];
+  };
+};
+
+export type OfferCardDisplayBlock = {
+  id: string;
+  type: "offer-card";
+  logicBlockRef: string;
+  config: {
+    title: string;
+    layoutFormat: OfferSettings["layoutFormat"];
+    accentColor: string;
+    cardBackgroundColor: string;
+    borderColor: string;
+    labelColor: string;
+    titleFontSize: number;
+    titleFontWeight: string;
+    titleColor: string;
+    buttonText: string;
+    buttonPrimaryColor: string;
+    showCustomButton: boolean;
+  };
+};
+
+export type CountdownDisplayBlock = {
+  id: string;
+  type: "countdown";
+  config: {
+    endTimeMode: "campaign-end-time";
+    label: string;
+  };
+};
+
+export type LogicBlock = QuantityBreaksLogicBlock;
+export type DisplayBlock = OfferCardDisplayBlock | CountdownDisplayBlock;
+
+export type CampaignSettings = {
+  status: boolean;
+  startTime: string;
+  endTime: string;
+  scheduleTimezone?: string;
+  totalBudget: number | null;
+  dailyBudget: number | null;
+  usageLimitPerCustomer: string;
+};
+
+export type CampaignConfig = {
+  version: 1;
+  scope: CampaignScope;
+  logicBlocks: LogicBlock[];
+  displayBlocks: DisplayBlock[];
+  settings: CampaignSettings;
+};
+
 export function parseDiscountRules(discountRulesJson?: string | null): DiscountRule[] {
   if (!discountRulesJson) return [];
 
@@ -196,6 +269,422 @@ export function parseDiscountRules(discountRulesJson?: string | null): DiscountR
   } catch {
     return [];
   }
+}
+
+function buildDefaultOfferCardConfig(
+  settings: OfferSettings,
+): OfferCardDisplayBlock["config"] {
+  return {
+    title: settings.title || "Bundle & Save",
+    layoutFormat: settings.layoutFormat,
+    accentColor: sanitizeHexColor(settings.accentColor, "#008060"),
+    cardBackgroundColor: sanitizeHexColor(
+      settings.cardBackgroundColor,
+      "#ffffff",
+    ),
+    borderColor: sanitizeHexColor(settings.borderColor, "#dfe3e8"),
+    labelColor: sanitizeHexColor(settings.labelColor, "#ffffff"),
+    titleFontSize: clampNumber(settings.titleFontSize, 10, 36, 14),
+    titleFontWeight: ["400", "500", "600", "700"].includes(
+      String(settings.titleFontWeight),
+    )
+      ? String(settings.titleFontWeight)
+      : "600",
+    titleColor: sanitizeHexColor(settings.titleColor, "#111111"),
+    buttonText: settings.buttonText || "Add to Cart",
+    buttonPrimaryColor: sanitizeHexColor(
+      settings.buttonPrimaryColor,
+      "#008060",
+    ),
+    showCustomButton: settings.showCustomButton !== false,
+  };
+}
+
+function sanitizeQuantityBreakTier(raw: unknown): QuantityBreakTier | null {
+  if (!raw || typeof raw !== "object") return null;
+  const item = raw as Record<string, unknown>;
+  const qty = Math.trunc(Number(item.qty));
+  const discountPercent = Number(item.discountPercent);
+  if (!Number.isFinite(qty) || qty < 1) return null;
+  if (!Number.isFinite(discountPercent)) return null;
+  return {
+    qty,
+    discountPercent: Math.max(0, Math.min(100, discountPercent)),
+    title: typeof item.title === "string" ? item.title : "",
+    subtitle: typeof item.subtitle === "string" ? item.subtitle : "",
+    badge: typeof item.badge === "string" ? item.badge : "",
+    isDefault: !!item.isDefault,
+  };
+}
+
+function sanitizeLogicBlock(raw: unknown): LogicBlock | null {
+  if (!raw || typeof raw !== "object") return null;
+  const item = raw as Record<string, unknown>;
+  if (item.type !== "quantity-breaks") return null;
+  const config = item.config;
+  const configRecord =
+    config && typeof config === "object" ? (config as Record<string, unknown>) : {};
+  const tiersRaw = Array.isArray(configRecord.tiers) ? configRecord.tiers : [];
+  const tiers = tiersRaw
+    .map((tier) => sanitizeQuantityBreakTier(tier))
+    .filter((tier): tier is QuantityBreakTier => tier !== null)
+    .sort((a, b) => a.qty - b.qty)
+    .filter((tier, index, arr) => index === arr.findIndex((it) => it.qty === tier.qty));
+
+  if (tiers.length === 0) return null;
+
+  return {
+    id: typeof item.id === "string" && item.id ? item.id : "logic-quantity-breaks",
+    type: "quantity-breaks",
+    config: { tiers },
+  };
+}
+
+function sanitizeDisplayBlock(raw: unknown): DisplayBlock | null {
+  if (!raw || typeof raw !== "object") return null;
+  const item = raw as Record<string, unknown>;
+  const id = typeof item.id === "string" && item.id ? item.id : "display-block";
+
+  if (item.type === "offer-card") {
+    const config =
+      item.config && typeof item.config === "object"
+        ? (item.config as Record<string, unknown>)
+        : {};
+    const layoutCandidate = String(config.layoutFormat || "vertical");
+    const layoutFormat: OfferSettings["layoutFormat"] = [
+      "vertical",
+      "horizontal",
+      "card",
+      "compact",
+    ].includes(layoutCandidate)
+      ? (layoutCandidate as OfferSettings["layoutFormat"])
+      : "vertical";
+    return {
+      id,
+      type: "offer-card",
+      logicBlockRef:
+        typeof item.logicBlockRef === "string" && item.logicBlockRef
+          ? item.logicBlockRef
+          : "logic-quantity-breaks",
+      config: {
+        title: typeof config.title === "string" && config.title
+          ? config.title
+          : "Bundle & Save",
+        layoutFormat,
+        accentColor: sanitizeHexColor(config.accentColor, "#008060"),
+        cardBackgroundColor: sanitizeHexColor(
+          config.cardBackgroundColor,
+          "#ffffff",
+        ),
+        borderColor: sanitizeHexColor(config.borderColor, "#dfe3e8"),
+        labelColor: sanitizeHexColor(config.labelColor, "#ffffff"),
+        titleFontSize: clampNumber(config.titleFontSize, 10, 36, 14),
+        titleFontWeight: ["400", "500", "600", "700"].includes(
+          String(config.titleFontWeight),
+        )
+          ? String(config.titleFontWeight)
+          : "600",
+        titleColor: sanitizeHexColor(config.titleColor, "#111111"),
+        buttonText:
+          typeof config.buttonText === "string" && config.buttonText
+            ? config.buttonText
+            : "Add to Cart",
+        buttonPrimaryColor: sanitizeHexColor(
+          config.buttonPrimaryColor,
+          "#008060",
+        ),
+        showCustomButton: config.showCustomButton !== false,
+      },
+    };
+  }
+
+  if (item.type === "countdown") {
+    const config =
+      item.config && typeof item.config === "object"
+        ? (item.config as Record<string, unknown>)
+        : {};
+    return {
+      id,
+      type: "countdown",
+      config: {
+        endTimeMode: "campaign-end-time",
+        label:
+          typeof config.label === "string" && config.label
+            ? config.label
+            : "Limited time offer",
+      },
+    };
+  }
+
+  return null;
+}
+
+export function parseCampaignConfig(
+  campaignConfigJson?: string | null,
+): CampaignConfig | null {
+  if (!campaignConfigJson) return null;
+
+  try {
+    const parsed = JSON.parse(campaignConfigJson) as Record<string, unknown>;
+    const scopeRaw =
+      parsed.scope && typeof parsed.scope === "object"
+        ? (parsed.scope as Record<string, unknown>)
+        : {};
+    const settingsRaw =
+      parsed.settings && typeof parsed.settings === "object"
+        ? (parsed.settings as Record<string, unknown>)
+        : {};
+    const logicBlocksRaw = Array.isArray(parsed.logicBlocks)
+      ? parsed.logicBlocks
+      : [];
+    const displayBlocksRaw = Array.isArray(parsed.displayBlocks)
+      ? parsed.displayBlocks
+      : [];
+
+    const logicBlocks = logicBlocksRaw
+      .map((block) => sanitizeLogicBlock(block))
+      .filter((block): block is LogicBlock => block !== null);
+    if (logicBlocks.length === 0) return null;
+
+    const logicIds = new Set(logicBlocks.map((block) => block.id));
+    const displayBlocks = displayBlocksRaw
+      .map((block) => sanitizeDisplayBlock(block))
+      .filter((block): block is DisplayBlock => block !== null)
+      .filter((block) =>
+        block.type === "offer-card" ? logicIds.has(block.logicBlockRef) : true,
+      );
+
+    return {
+      version: 1,
+      scope: {
+        productIds: Array.isArray(scopeRaw.productIds)
+          ? scopeRaw.productIds
+              .map((id) => String(id || "").trim())
+              .filter(Boolean)
+          : [],
+        markets: Array.isArray(scopeRaw.markets)
+          ? scopeRaw.markets
+              .map((market) => String(market || "").trim())
+              .filter(Boolean)
+          : ["all"],
+        customerSegments: Array.isArray(scopeRaw.customerSegments)
+          ? scopeRaw.customerSegments
+              .map((segment) => String(segment || "").trim())
+              .filter(Boolean)
+          : ["all"],
+      },
+      logicBlocks,
+      displayBlocks,
+      settings: {
+        status: settingsRaw.status !== false,
+        startTime:
+          typeof settingsRaw.startTime === "string" ? settingsRaw.startTime : "",
+        endTime: typeof settingsRaw.endTime === "string" ? settingsRaw.endTime : "",
+        scheduleTimezone:
+          typeof settingsRaw.scheduleTimezone === "string"
+            ? settingsRaw.scheduleTimezone
+            : undefined,
+        totalBudget:
+          settingsRaw.totalBudget !== undefined
+            ? parseNonNegativeNumberOrNull(settingsRaw.totalBudget)
+            : null,
+        dailyBudget:
+          settingsRaw.dailyBudget !== undefined
+            ? parseNonNegativeNumberOrNull(settingsRaw.dailyBudget)
+            : null,
+        usageLimitPerCustomer:
+          typeof settingsRaw.usageLimitPerCustomer === "string" &&
+          settingsRaw.usageLimitPerCustomer
+            ? settingsRaw.usageLimitPerCustomer
+            : "unlimited",
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function migrateLegacyOfferToCampaignConfig(params: {
+  selectedProductsJson?: string | null;
+  discountRulesJson?: string | null;
+  offerSettingsJson?: string | null;
+  startTime?: string | Date | null;
+  endTime?: string | Date | null;
+  status?: boolean;
+}): CampaignConfig {
+  const offerSettings = parseOfferSettings(params.offerSettingsJson);
+  const tiers = parseDiscountRules(params.discountRulesJson).map((rule) => ({
+    qty: rule.count,
+    discountPercent: rule.discountPercent,
+    title: rule.title || "",
+    subtitle: rule.subtitle || "",
+    badge: rule.badge || "",
+    isDefault: !!rule.isDefault,
+  }));
+  const productIds = parseSelectedProductIds(params.selectedProductsJson);
+  const logicBlockId = "logic-quantity-breaks";
+  const settings = {
+    status: params.status !== false,
+    startTime:
+      params.startTime instanceof Date
+        ? params.startTime.toISOString()
+        : String(params.startTime || ""),
+    endTime:
+      params.endTime instanceof Date
+        ? params.endTime.toISOString()
+        : String(params.endTime || ""),
+    scheduleTimezone: offerSettings.scheduleTimezone,
+    totalBudget: offerSettings.totalBudget,
+    dailyBudget: offerSettings.dailyBudget,
+    usageLimitPerCustomer: offerSettings.usageLimitPerCustomer,
+  };
+
+  return {
+    version: 1,
+    scope: {
+      productIds,
+      markets: offerSettings.markets ? offerSettings.markets.split(",") : ["all"],
+      customerSegments: offerSettings.customerSegments
+        ? offerSettings.customerSegments.split(",")
+        : ["all"],
+    },
+    logicBlocks: [
+      {
+        id: logicBlockId,
+        type: "quantity-breaks",
+        config: {
+          tiers:
+            tiers.length > 0
+              ? tiers
+              : [
+                  {
+                    qty: 2,
+                    discountPercent: 10,
+                    title: "",
+                    subtitle: "",
+                    badge: "",
+                    isDefault: true,
+                  },
+                ],
+        },
+      },
+    ],
+    displayBlocks: [
+      {
+        id: "display-offer-card",
+        type: "offer-card",
+        logicBlockRef: logicBlockId,
+        config: buildDefaultOfferCardConfig(offerSettings),
+      },
+    ],
+    settings,
+  };
+}
+
+export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
+  offerType: string;
+  selectedProductsJson: string | null;
+  discountRulesJson: string | null;
+  offerSettingsJson: string;
+} {
+  const quantityBreaks = config.logicBlocks.find(
+    (block): block is QuantityBreaksLogicBlock => block.type === "quantity-breaks",
+  );
+  const offerCard = config.displayBlocks.find(
+    (block): block is OfferCardDisplayBlock => block.type === "offer-card",
+  );
+
+  const discountRules = (quantityBreaks?.config.tiers ?? []).map((tier) => ({
+    count: tier.qty,
+    discountPercent: tier.discountPercent,
+    title: tier.title || "",
+    subtitle: tier.subtitle || "",
+    badge: tier.badge || "",
+    isDefault: !!tier.isDefault,
+  }));
+
+  const offerSettings = {
+    title: offerCard?.config.title || "Bundle & Save",
+    layoutFormat: offerCard?.config.layoutFormat || "vertical",
+    totalBudget: config.settings.totalBudget,
+    dailyBudget: config.settings.dailyBudget,
+    customerSegments: config.scope.customerSegments.length
+      ? config.scope.customerSegments.join(",")
+      : null,
+    markets: config.scope.markets.length ? config.scope.markets.join(",") : null,
+    usageLimitPerCustomer: config.settings.usageLimitPerCustomer || "unlimited",
+    accentColor: offerCard?.config.accentColor || "#008060",
+    cardBackgroundColor: offerCard?.config.cardBackgroundColor || "#ffffff",
+    borderColor: offerCard?.config.borderColor || "#dfe3e8",
+    labelColor: offerCard?.config.labelColor || "#ffffff",
+    titleColor: offerCard?.config.titleColor || "#111111",
+    buttonPrimaryColor: offerCard?.config.buttonPrimaryColor || "#008060",
+    titleFontSize: offerCard?.config.titleFontSize ?? 14,
+    titleFontWeight: offerCard?.config.titleFontWeight || "600",
+    buttonText: offerCard?.config.buttonText || "Add to Cart",
+    showCustomButton: offerCard?.config.showCustomButton !== false,
+    scheduleTimezone: config.settings.scheduleTimezone,
+  } satisfies OfferSettings;
+
+  return {
+    offerType: quantityBreaks ? "quantity-breaks-same" : "campaign-builder",
+    selectedProductsJson:
+      config.scope.productIds.length > 0
+        ? JSON.stringify(config.scope.productIds.map((id) => ({ id })))
+        : null,
+    discountRulesJson:
+      discountRules.length > 0 ? JSON.stringify(discountRules) : null,
+    offerSettingsJson: JSON.stringify(offerSettings),
+  };
+}
+
+export function getOfferDisplayType(
+  offerType: string,
+  campaignConfigJson?: string | null,
+): string {
+  const config = parseCampaignConfig(campaignConfigJson);
+  const primaryBlock = config?.logicBlocks[0];
+  if (primaryBlock?.type === "quantity-breaks") return "Quantity breaks";
+  if (offerType === "quantity-breaks-same") return "Quantity breaks";
+  return offerType || "Campaign";
+}
+
+export function getOfferRulesText(params: {
+  campaignConfigJson?: string | null;
+  discountRulesJson?: string | null;
+}): string {
+  const config = parseCampaignConfig(params.campaignConfigJson);
+  if (config) {
+    const quantityBreaks = config.logicBlocks.find(
+      (block): block is QuantityBreaksLogicBlock => block.type === "quantity-breaks",
+    );
+    const tiers = quantityBreaks?.config.tiers ?? [];
+    if (tiers.length > 0) {
+      return tiers
+        .map((tier) => `Buy ${tier.qty} Get ${tier.discountPercent}% Off`)
+        .join(", ");
+    }
+  }
+
+  const rules = parseDiscountRules(params.discountRulesJson);
+  if (rules.length > 0) {
+    return rules.map((rule) => `Buy ${rule.count} Get ${rule.discountPercent}% Off`).join(", ");
+  }
+
+  return "-";
+}
+
+export function getOfferScheduleTimezone(params: {
+  campaignConfigJson?: string | null;
+  offerSettingsJson?: string | null;
+  fallback?: string;
+}): string {
+  const config = parseCampaignConfig(params.campaignConfigJson);
+  if (config?.settings.scheduleTimezone) {
+    return config.settings.scheduleTimezone;
+  }
+  const offerSettings = parseOfferSettings(params.offerSettingsJson);
+  return offerSettings.scheduleTimezone || params.fallback || "UTC";
 }
 
 export function parseSelectedProductIds(selectedProductsJson?: string | null): string[] {

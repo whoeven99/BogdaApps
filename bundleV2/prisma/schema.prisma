@@ -51,6 +51,7 @@ model Offer {
 
   // Layout / Budget / Targeting / Risk Control (合并到 JSON 字段)
   offerSettingsJson String?
+  campaignConfigJson String?
 
   // Schedule
   startTime DateTime

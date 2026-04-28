@@ -1,24 +1,28 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { useFetcher, useNavigate, useSearchParams } from "react-router";
-import { Button, Input, Select, Switch, Checkbox, DatePicker, Modal, message } from "antd";
+import { Button, Input, Select, Switch, Modal, message } from "antd";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
-import {
-  X,
-} from "lucide-react";
-
 dayjs.extend(utc);
 dayjs.extend(timezone);
 import "./CreateNewOffer.css";
-import BundlePreview from "../BundlePreview/BundlePreview";
 import { PreviewItem } from "../BundlePreview/bundlePreviewShared";
+import QuantityBreaksLogicEditor from "./QuantityBreaksLogicEditor";
+import DisplayBlocksEditor from "./DisplayBlocksEditor";
+import ScopeEditor from "./ScopeEditor";
+import ScheduleTargetingEditor from "./ScheduleTargetingEditor";
+import CampaignPreviewPanel from "./CampaignPreviewPanel";
 import {
   OFFER_TEXT_LIMITS,
+  buildLegacyFieldsFromCampaignConfig,
+  migrateLegacyOfferToCampaignConfig,
   normalizeOfferNameKey,
+  parseCampaignConfig,
   parseDiscountRules,
   parseOfferSettings,
   parseSelectedProductIds,
+  type CampaignConfig,
 } from "../../../utils/offerParsing";
 
 type DiscountRule = {
@@ -48,6 +52,7 @@ interface InitialOffer {
   endTime: string;
   selectedProductsJson: string | null;
   offerSettingsJson: string | null;
+  campaignConfigJson?: string | null;
   status: boolean;
 }
 
@@ -172,6 +177,34 @@ export function CreateNewOffer({
   const [submitErrorToast, setSubmitErrorToast] = useState<string | null>(null);
   const wasSubmittingRef = useRef(false);
   const confirmedHighDiscountRef = useRef(false);
+  const initialCampaignConfig = useMemo(() => {
+    if (!initialOffer) return null;
+    return (
+      parseCampaignConfig(initialOffer.campaignConfigJson) ??
+      migrateLegacyOfferToCampaignConfig({
+        selectedProductsJson: initialOffer.selectedProductsJson,
+        discountRulesJson: initialOffer.discountRulesJson,
+        offerSettingsJson: initialOffer.offerSettingsJson,
+        startTime: initialOffer.startTime,
+        endTime: initialOffer.endTime,
+        status: initialOffer.status,
+      })
+    );
+  }, [initialOffer]);
+  const initialCampaignLegacy = useMemo(
+    () =>
+      initialCampaignConfig
+        ? buildLegacyFieldsFromCampaignConfig(initialCampaignConfig)
+        : null,
+    [initialCampaignConfig],
+  );
+  const initialCountdownBlock = useMemo(
+    () =>
+      initialCampaignConfig?.displayBlocks.find(
+        (block) => block.type === "countdown",
+      ) ?? null,
+    [initialCampaignConfig],
+  );
 
   useEffect(() => {
     if (fetcher.state === "submitting") {
@@ -215,7 +248,9 @@ export function CreateNewOffer({
   };
   const [step, setStep] = useState(1);
   const [offerType, setOfferType] = useState(
-    initialOffer?.offerType ?? "quantity-breaks-same",
+    initialCampaignLegacy?.offerType ??
+      initialOffer?.offerType ??
+      "quantity-breaks-same",
   );
   const [offerName, setOfferName] = useState(initialOffer?.name ?? "");
   
@@ -228,18 +263,24 @@ export function CreateNewOffer({
   const [offerNameError, setOfferNameError] = useState("");
   const [cartTitleError, setCartTitleError] = useState("");
   const [startTime, setStartTime] = useState(
-    initialOffer && initialOffer.startTime
-      ? new Date(initialOffer.startTime).toISOString()
-      : new Date().toISOString(),
+    initialCampaignConfig?.settings.startTime
+      ? new Date(initialCampaignConfig.settings.startTime).toISOString()
+      : initialOffer && initialOffer.startTime
+        ? new Date(initialOffer.startTime).toISOString()
+        : new Date().toISOString(),
   );
   const [endTime, setEndTime] = useState(
-    initialOffer && initialOffer.endTime ? new Date(initialOffer.endTime).toISOString() : "",
+    initialCampaignConfig?.settings.endTime
+      ? new Date(initialCampaignConfig.settings.endTime).toISOString()
+      : initialOffer && initialOffer.endTime
+        ? new Date(initialOffer.endTime).toISOString()
+        : "",
   );
   const [startTimeError, setStartTimeError] = useState("");
   const [endTimeError, setEndTimeError] = useState("");
 
   const offerSettings = parseOfferSettings(
-    initialOffer?.offerSettingsJson,
+    initialCampaignLegacy?.offerSettingsJson ?? initialOffer?.offerSettingsJson,
   );
 
   const [scheduleTimezone, setScheduleTimezone] = useState(
@@ -316,14 +357,18 @@ export function CreateNewOffer({
     price: string;
     variantsCount: number;
   }[]>(() => {
-    const ids = initialOffer?.selectedProductsJson
-      ? parseSelectedProductIds(initialOffer.selectedProductsJson)
+    const selectedProductsJson =
+      initialCampaignLegacy?.selectedProductsJson ??
+      initialOffer?.selectedProductsJson ??
+      null;
+    const ids = selectedProductsJson
+      ? parseSelectedProductIds(selectedProductsJson)
       : [];
 
     let parsedObjects: any[] = [];
     try {
-      if (initialOffer?.selectedProductsJson) {
-        parsedObjects = JSON.parse(initialOffer.selectedProductsJson);
+      if (selectedProductsJson) {
+        parsedObjects = JSON.parse(selectedProductsJson);
       }
     } catch (e) {}
 
@@ -372,14 +417,193 @@ export function CreateNewOffer({
     }
   };
   const [discountRules, setDiscountRules] = useState<DiscountRule[]>(() =>
-    parseDiscountRules(initialOffer?.discountRulesJson),
+    (() => {
+      const parsed = parseDiscountRules(
+        initialCampaignLegacy?.discountRulesJson ?? initialOffer?.discountRulesJson,
+      );
+      return parsed.length > 0
+        ? parsed
+        : [{ count: 2, discountPercent: 10, isDefault: true }];
+    })(),
   );
   const [status, setStatus] = useState<boolean>(
-    initialOffer ? initialOffer.status : true
+    initialCampaignConfig
+      ? initialCampaignConfig.settings.status
+      : initialOffer
+        ? initialOffer.status
+        : true
+  );
+  const [showCountdownBlock, setShowCountdownBlock] = useState(
+    initialCountdownBlock !== null,
+  );
+  const [countdownLabel, setCountdownLabel] = useState(
+    initialCountdownBlock?.type === "countdown"
+      ? initialCountdownBlock.config.label
+      : "Limited time offer",
   );
 
   const normalizedDiscountRules = sanitizeDiscountRules(discountRules);
-  const featuredRule = normalizedDiscountRules[0];
+  const currentCampaignConfig = useMemo<CampaignConfig>(
+    () => ({
+      version: 1,
+      scope: {
+        productIds: selectedProductsData.map((product) => String(product.id)),
+        markets,
+        customerSegments,
+      },
+      logicBlocks: [
+        {
+          id: "logic-quantity-breaks",
+          type: "quantity-breaks",
+          config: {
+            tiers: normalizedDiscountRules.map((rule) => ({
+              qty: rule.count,
+              discountPercent: rule.discountPercent,
+              title: rule.title || "",
+              subtitle: rule.subtitle || "",
+              badge: rule.badge || "",
+              isDefault: !!rule.isDefault,
+            })),
+          },
+        },
+      ],
+      displayBlocks: [
+        {
+          id: "display-offer-card",
+          type: "offer-card",
+          logicBlockRef: "logic-quantity-breaks",
+          config: {
+            title: widgetTitle,
+            layoutFormat,
+            accentColor,
+            cardBackgroundColor,
+            borderColor,
+            labelColor,
+            titleFontSize,
+            titleFontWeight,
+            titleColor,
+            buttonText,
+            buttonPrimaryColor,
+            showCustomButton,
+          },
+        },
+        ...(showCountdownBlock
+          ? [
+              {
+                id: "display-countdown",
+                type: "countdown" as const,
+                config: {
+                  endTimeMode: "campaign-end-time" as const,
+                  label: countdownLabel.trim() || "Limited time offer",
+                },
+              },
+            ]
+          : []),
+      ],
+      settings: {
+        status,
+        startTime,
+        endTime,
+        scheduleTimezone,
+        totalBudget: totalBudget.trim() ? Number(totalBudget) : null,
+        dailyBudget: dailyBudget.trim() ? Number(dailyBudget) : null,
+        usageLimitPerCustomer,
+      },
+    }),
+    [
+      accentColor,
+      borderColor,
+      buttonPrimaryColor,
+      buttonText,
+      cardBackgroundColor,
+      customerSegments,
+      countdownLabel,
+      dailyBudget,
+      endTime,
+      labelColor,
+      layoutFormat,
+      markets,
+      normalizedDiscountRules,
+      scheduleTimezone,
+      selectedProductsData,
+      showCustomButton,
+      showCountdownBlock,
+      startTime,
+      status,
+      titleColor,
+      titleFontSize,
+      titleFontWeight,
+      totalBudget,
+      usageLimitPerCustomer,
+      widgetTitle,
+    ],
+  );
+  const primaryLogicBlock = currentCampaignConfig.logicBlocks[0];
+  const quantityTiers =
+    primaryLogicBlock?.type === "quantity-breaks"
+      ? primaryLogicBlock.config.tiers
+      : [];
+  const featuredRule = quantityTiers[0];
+  const activeDisplayBlocks = useMemo(
+    () =>
+      currentCampaignConfig.displayBlocks.map((block) =>
+        block.type === "offer-card" ? "Offer card" : "Countdown",
+      ),
+    [currentCampaignConfig.displayBlocks],
+  );
+  const builderStructureItems = useMemo(
+    () => [
+      `Scope: ${currentCampaignConfig.scope.productIds.length} product${
+        currentCampaignConfig.scope.productIds.length > 1 ? "s" : ""
+      }`,
+      `Logic: quantity breaks (${quantityTiers.length} tier${
+        quantityTiers.length === 1 ? "" : "s"
+      })`,
+      `Display: ${activeDisplayBlocks.join(" + ")}`,
+    ],
+    [
+      activeDisplayBlocks,
+      currentCampaignConfig.scope.productIds.length,
+      quantityTiers.length,
+    ],
+  );
+  const campaignSummary = useMemo(() => {
+    const productCount = currentCampaignConfig.scope.productIds.length;
+    const tierCount = quantityTiers.length;
+    const bestTier = quantityTiers[quantityTiers.length - 1];
+    const rewardText = bestTier
+      ? `up to ${bestTier.discountPercent}% off`
+      : "a bundle discount";
+    const productText =
+      productCount === 0
+        ? "selected products"
+        : `${productCount} product${productCount > 1 ? "s" : ""}`;
+    return `When customers buy ${productText}, they unlock ${tierCount} tier${tierCount === 1 ? "" : "s"} and get ${rewardText}.`;
+  }, [currentCampaignConfig.scope.productIds.length, quantityTiers]);
+  const countdownPreviewText = useMemo(() => {
+    if (!showCountdownBlock || !endTime || !dayjs(endTime).isValid()) {
+      return "";
+    }
+    return `${countdownLabel} • Ends ${dayjs(endTime)
+      .tz(scheduleTimezone)
+      .format("YYYY-MM-DD HH:mm")}`;
+  }, [countdownLabel, endTime, scheduleTimezone, showCountdownBlock]);
+  const scopeSummary = useMemo(() => {
+    const productCount = currentCampaignConfig.scope.productIds.length;
+    return productCount === 0
+      ? "No products selected yet"
+      : `${productCount} product${productCount > 1 ? "s" : ""} in scope`;
+  }, [currentCampaignConfig.scope.productIds.length]);
+  const logicSummary = useMemo(() => {
+    if (!featuredRule) return "Add at least one discount tier";
+    return `${quantityTiers.length} tier${
+      quantityTiers.length > 1 ? "s" : ""
+    }, starting from buy ${featuredRule.qty}`;
+  }, [featuredRule, quantityTiers.length]);
+  const displayBlocksSummary = useMemo(
+    () => `${activeDisplayBlocks.length} active block${activeDisplayBlocks.length > 1 ? "s" : ""}`,
+    [activeDisplayBlocks.length],
+  );
 
   const hasDefault = normalizedDiscountRules.some(r => r.isDefault);
 
@@ -412,10 +636,10 @@ export function CreateNewOffer({
   ];
 
   const steps = [
-    "Basic Information",
-    "Products & Discounts",
-    "Style Design",
-    "Schedule & Budget",
+    "Campaign Basics",
+    "Promotion Logic",
+    "Display & Style",
+    "Schedule & Targeting",
   ];
 
   const offerTypes = [
@@ -426,6 +650,13 @@ export function CreateNewOffer({
         "Offer discounts when customers buy multiple quantities of the same product",
     },
   ];
+  const currentOfferTypeDescription =
+    offerTypes.find((type) => type.id === offerType)?.description || "";
+
+  const campaignConfigJson = useMemo(
+    () => JSON.stringify(currentCampaignConfig),
+    [currentCampaignConfig],
+  );
 
 
   return (
@@ -536,6 +767,17 @@ export function CreateNewOffer({
             </h1>
             
           </div>
+          <div className="mt-4 rounded-[10px] border border-[#dfe3e8] bg-[#f6f6f7] px-4 py-3">
+            <div className="text-[12px] font-semibold uppercase tracking-[0.04em] text-[#5c6166]">
+              Campaign summary
+            </div>
+            <div className="mt-1 text-[14px] text-[#1c1f23]">
+              {campaignSummary}
+            </div>
+            <div className="mt-2 text-[13px] text-[#5c6166]">
+              Display blocks: {activeDisplayBlocks.join(", ")}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -591,6 +833,7 @@ export function CreateNewOffer({
         name="discountRulesJson"
         value={JSON.stringify(buildDiscountRulesJson(normalizedDiscountRules))}
       />
+      <input type="hidden" name="campaignConfigJson" value={campaignConfigJson} />
 
       <div className="bg-[#ffffff] rounded-[8px] shadow-[0_1px_3px_rgba(0,0,0,0.1)] p-[20px] mb-[100px]">
         <div className="grid grid-cols-2 sm:flex sm:gap-[12px] gap-[8px] mb-6">
@@ -640,8 +883,46 @@ export function CreateNewOffer({
               <div className="flex flex-col gap-6">
                 <div>
                   <h2 className="text-[20px] font-semibold mb-4 text-[#1c1f23]">
-                    Basic Information
+                    Campaign Basics
                   </h2>
+                  <p className="text-[13px] text-[#5c6166] mb-4 font-normal">
+                    Define the campaign name and the customer-facing labels before you configure the promotion logic.
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
+                    <div className="rounded-lg border border-[#dfe3e8] bg-white p-3">
+                      <div className="text-[12px] font-semibold uppercase tracking-[0.04em] text-[#5c6166]">
+                        Scope
+                      </div>
+                      <div className="mt-1 text-[14px] text-[#1c1f23]">{scopeSummary}</div>
+                    </div>
+                    <div className="rounded-lg border border-[#dfe3e8] bg-white p-3">
+                      <div className="text-[12px] font-semibold uppercase tracking-[0.04em] text-[#5c6166]">
+                        Logic
+                      </div>
+                      <div className="mt-1 text-[14px] text-[#1c1f23]">{logicSummary}</div>
+                    </div>
+                    <div className="rounded-lg border border-[#dfe3e8] bg-white p-3">
+                      <div className="text-[12px] font-semibold uppercase tracking-[0.04em] text-[#5c6166]">
+                        Display
+                      </div>
+                      <div className="mt-1 text-[14px] text-[#1c1f23]">{displayBlocksSummary}</div>
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-[#dfe3e8] bg-[#fcfcfd] p-4 mb-5">
+                    <div className="text-[12px] font-semibold uppercase tracking-[0.04em] text-[#5c6166]">
+                      Builder Structure
+                    </div>
+                    <div className="mt-2 flex flex-col gap-2">
+                      {builderStructureItems.map((item) => (
+                        <div
+                          key={item}
+                          className="text-[13px] text-[#1c1f23]"
+                        >
+                          {item}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                   <div className="flex flex-col gap-4">
                     <div>
                       <label className="block">
@@ -673,7 +954,7 @@ export function CreateNewOffer({
                     <div>
                       <label className="block">
                         <span className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                          Offer Type
+                          Primary Logic Template
                         </span>
                         <Select
                           size="large"
@@ -689,7 +970,7 @@ export function CreateNewOffer({
                     <div>
                       <label className="block">
                         <span className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                          Display Title (Cart & Checkout)
+                          Discount Label (Cart & Checkout)
                         </span>
                         <Input
                           size="large"
@@ -707,7 +988,7 @@ export function CreateNewOffer({
                         />
                       </label>
                       <div className="text-[13px] text-[#5c6166] mt-1">
-                        This is the discount name shown to customers in their cart and checkout.
+                        This label is shown when the discount is applied in cart and checkout.
                       </div>
                       {cartTitleError && (
                         <div className="text-red-500 text-xs mt-1">
@@ -719,19 +1000,57 @@ export function CreateNewOffer({
                 </div>
               </div>
 
-              <div className="create-offer-sticky-preview">
-                <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                  Live Preview
-                </h3>
-                <p className="text-[13px] text-[#5c6166] mb-6 font-normal">
-                  {
-                    offerTypes.find(
-                      (type) => type.id === offerType,
-                    )?.description
-                  }
-                </p>
+              <CampaignPreviewPanel
+                description={currentOfferTypeDescription}
+                layoutFormat={layoutFormat}
+                cardBackgroundColor={cardBackgroundColor}
+                accentColor={accentColor}
+                borderColor={borderColor}
+                labelColor={labelColor}
+                titleFontSize={titleFontSize}
+                titleFontWeight={titleFontWeight}
+                titleColor={titleColor}
+                buttonText={buttonText}
+                buttonPrimaryColor={buttonPrimaryColor}
+                showCustomButton={showCustomButton}
+                title={widgetTitle}
+                items={previewItems}
+              />
+            </div>
+          )}
 
-                <BundlePreview
+          {step === 2 && (
+            <>
+              <div className="create-offer-products-grid">
+                <div>
+                  <h2 className="text-[20px] font-semibold mb-6 text-[#1c1f23]">
+                    Promotion Logic
+                  </h2>
+                  <p className="text-[13px] text-[#5c6166] mb-6 font-normal">
+                    First define which products belong to this campaign, then configure the quantity-breaks logic that customers can unlock.
+                  </p>
+
+                  <ScopeEditor
+                    selectedProductsData={selectedProductsData}
+                    onSelectProducts={handleSelectProducts}
+                    onRemoveProduct={(productId) => {
+                      setSelectedProductsData((prev) =>
+                        prev.filter((product) => product.id !== productId),
+                      );
+                    }}
+                  />
+
+                  <QuantityBreaksLogicEditor
+                    discountRules={discountRules}
+                    setDiscountRules={setDiscountRules}
+                  />
+                </div>
+
+                <CampaignPreviewPanel
+                  description={currentOfferTypeDescription}
+                  countdownPreviewText={
+                    showCountdownBlock ? countdownPreviewText : undefined
+                  }
                   layoutFormat={layoutFormat}
                   cardBackgroundColor={cardBackgroundColor}
                   accentColor={accentColor}
@@ -746,294 +1065,6 @@ export function CreateNewOffer({
                   title={widgetTitle}
                   items={previewItems}
                 />
-                <p className="text-[12px] text-[#5c6166] mt-3 italic font-normal">
-                  Note: This is a live preview. Changes will update in real-time when state is connected.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {step === 2 && (
-            <>
-              <div className="create-offer-products-grid">
-                <div>
-                  <h2 className="text-[20px] font-semibold mb-6 text-[#1c1f23]">
-                    Products & Discounts
-                  </h2>
-
-                  <div className="mb-8">
-                    <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                      Products eligible for offer
-                    </h3>
-
-                    {selectedProductsData.length === 0 ? (
-                      <Button
-                        size="large"
-                        className="text-[#008060] border-[#008060] hover:text-[#006e52] hover:border-[#006e52] hover:bg-[#f0f9f6]"
-                        onClick={(e) => {
-                          handleSelectProducts();
-                          e.preventDefault();
-                        }}
-                      >
-                        Add products eligible for offer
-                      </Button>
-                    ) : (
-                      <div>
-                        <div className="create-offer-selected-grid">
-                          {selectedProductsData.slice(0, 3).map((product) => (
-                            <div
-                              key={product.id}
-                              className="create-offer-selected-card"
-                            >
-                              <button
-                                type="button"
-                                className="create-offer-selected-remove"
-                                onClick={(e) => {
-                                  setSelectedProductsData(
-                                    selectedProductsData.filter(
-                                      (p) => p.id !== product.id,
-                                    ),
-                                  );
-                                  e.preventDefault();
-                                }}
-                                aria-label={`Remove ${product.title}`}
-                              >
-                                <X size={14} />
-                              </button>
-                              <img
-                                src={product.image}
-                                alt={product.title}
-                                className="create-offer-selected-image"
-                              />
-                              <div className="create-offer-selected-name">
-                                {product.title}
-                              </div>
-                              <div className="create-offer-selected-price">
-                                {product.price}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                        <div className="create-offer-selected-count">
-                          {selectedProductsData.length} product
-                          {selectedProductsData.length > 1 ? "s" : ""}{" "}
-                          selected
-                          {(() => {
-                            const totalVariants = selectedProductsData.reduce(
-                              (sum, p) => sum + (p.variantsCount || 1),
-                              0
-                            );
-                            return totalVariants > 0
-                              ? ` (${totalVariants} variant${totalVariants > 1 ? "s" : ""})`
-                              : "";
-                          })()}
-                        </div>
-                        <Button
-                          type="link"
-                          onClick={(e) => {
-                            handleSelectProducts();
-                            e.preventDefault();
-                          }}
-                          className="px-0"
-                        >
-                          Edit products
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-
-                  <div>
-                    <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                      Discount Setting
-                    </h3>
-                    {discountRules.map((rule, index) => (
-                      <div className="create-offer-discount-card" key={`${rule.count}-${index}`}>
-                        <div className="create-offer-discount-body">
-                          <div className="create-offer-discount-form-row create-offer-discount-form-row--inline">
-                            <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                              Item quantity
-                              <Input
-                                size="large"
-                                type="number"
-                                min={1}
-                                step={1}
-                                className="mt-1"
-                                value={rule.count}
-                                onChange={(e) => {
-                                  const parsedValue = Number(e.target.value);
-                                  const nextCount =
-                                    Number.isFinite(parsedValue) && parsedValue >= 1
-                                      ? Math.trunc(parsedValue)
-                                      : 1;
-                                  setDiscountRules((prev) =>
-                                    prev.map((r, i) =>
-                                      i === index ? { ...r, count: nextCount } : r,
-                                    ),
-                                  );
-                                }}
-                              />
-                            </label>
-                            <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                              Discount (%)
-                              <Input
-                                size="large"
-                                type="number"
-                                min={0}
-                                max={100}
-                                step={1}
-                                className="mt-1"
-                                value={rule.discountPercent}
-                                onChange={(e) => {
-                                  const parsedValue = Number(e.target.value);
-                                  if (parsedValue > 100) return; // Do not allow entering > 100
-                                  const nextPercent =
-                                    Number.isFinite(parsedValue) && parsedValue >= 0
-                                      ? parsedValue
-                                      : 0;
-                                  setDiscountRules((prev) =>
-                                    prev.map((r, i) =>
-                                      i === index
-                                        ? { ...r, discountPercent: nextPercent }
-                                        : r,
-                                    ),
-                                  );
-                                }}
-                              />
-                              {rule.discountPercent > 50 && rule.discountPercent < 90 && (
-                                <div className="text-[#faad14] text-[12px] mt-1 font-normal">
-                                  A discount over 50% may result in losses. Please double-check.
-                                </div>
-                              )}
-                              {rule.discountPercent >= 90 && (
-                                <div className="text-[#ff4d4f] text-[12px] mt-1 font-normal">
-                                  A discount of 90% or more means the product is nearly free.
-                                </div>
-                              )}
-                            </label>
-                          </div>
-                          
-                          {/* 新增的文本配置字段 */}
-                          <div className="create-offer-discount-form-row" style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
-                            <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                              Title
-                              <Input
-                                size="large"
-                                className="mt-1"
-                                value={rule.title || ''}
-                                placeholder="e.g. Duo, Trio"
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  setDiscountRules(prev => prev.map((r, i) => i === index ? { ...r, title: val } : r));
-                                }}
-                              />
-                            </label>
-                            <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                              Subtitle
-                              <Input
-                                size="large"
-                                className="mt-1"
-                                value={rule.subtitle || ''}
-                                placeholder="e.g. You save 20%"
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  setDiscountRules(prev => prev.map((r, i) => i === index ? { ...r, subtitle: val } : r));
-                                }}
-                              />
-                            </label>
-                            <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                              Badge
-                              <Input
-                                size="large"
-                                className="mt-1"
-                                value={rule.badge || ''}
-                                placeholder="e.g. Most Popular"
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  setDiscountRules(prev => prev.map((r, i) => i === index ? { ...r, badge: val } : r));
-                                }}
-                              />
-                            </label>
-                          </div>
-                          
-                          <div className="create-offer-discount-form-row" style={{ marginTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <Checkbox
-                              checked={!!rule.isDefault}
-                              onChange={(e) => {
-                                const checked = e.target.checked;
-                                setDiscountRules((prev) =>
-                                  prev.map((r, i) => ({
-                                    ...r,
-                                    isDefault: checked ? i === index : false,
-                                  }))
-                                );
-                              }}
-                            >
-                              Set as Default Selected
-                            </Checkbox>
-                            <Button
-                              danger
-                              onClick={() => {
-                                setDiscountRules((prev) => {
-                                  if (prev.length <= 1) return prev;
-                                  return prev.filter((_, i) => i !== index);
-                                });
-                              }}
-                              disabled={discountRules.length <= 1}
-                            >
-                              Remove
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    <Button
-                      type="dashed"
-                      className="w-full"
-                      onClick={() => {
-                        setDiscountRules((prev) => {
-                          const maxCount = prev.reduce(
-                            (max, rule) => Math.max(max, rule.count),
-                            1,
-                          );
-                          return [...prev, { count: maxCount + 1, discountPercent: 15 }];
-                        });
-                      }}
-                    >
-                      + Add discount tier
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="create-offer-sticky-preview">
-                  <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                    Live Preview
-                  </h3>
-                  <p className="text-[13px] text-[#5c6166] mb-6 font-normal">
-                    {
-                      offerTypes.find(
-                        (type) => type.id === offerType,
-                      )?.description
-                    }
-                  </p>
-                  <BundlePreview
-                    layoutFormat={layoutFormat}
-                    cardBackgroundColor={cardBackgroundColor}
-                    accentColor={accentColor}
-                    borderColor={borderColor}
-                    labelColor={labelColor}
-                    titleFontSize={titleFontSize}
-                    titleFontWeight={titleFontWeight}
-                    titleColor={titleColor}
-                  buttonText={buttonText}
-                  buttonPrimaryColor={buttonPrimaryColor}
-                  showCustomButton={showCustomButton}
-                  title={widgetTitle}
-                  items={previewItems}
-                  />
-                  <p className="text-[12px] text-[#5c6166] mt-3 italic font-normal">
-                    Note: This is a live preview. Changes will update in real-time when state is connected.
-                  </p>
-                </div>
               </div>
             </>
           )}
@@ -1042,15 +1073,22 @@ export function CreateNewOffer({
             <div className="create-offer-style-grid">
               <div>
                 <h2 className="text-[20px] font-semibold mb-2 text-[#1c1f23]">
-                  Style Design
+                  Display & Style
                 </h2>
                 <p className="text-[13px] text-[#5c6166] mb-6 font-normal">
-                  Customize the appearance of your bundle widget
+                  Choose which display blocks explain the campaign, then customize how the offer card appears on the storefront.
                 </p>
+
+                <DisplayBlocksEditor
+                  showCountdownBlock={showCountdownBlock}
+                  setShowCountdownBlock={setShowCountdownBlock}
+                  countdownLabel={countdownLabel}
+                  setCountdownLabel={setCountdownLabel}
+                />
 
                 <div className="mb-6">
                   <label className="block text-[14px] font-medium text-[#1c1f23] mb-2">
-                    Widget Title
+                    Offer Card Title
                   </label>
                   <Input
                     size="large"
@@ -1063,7 +1101,7 @@ export function CreateNewOffer({
                     showCount
                   />
                   <p className="text-[13px] text-[#5c6166] mt-1">
-                    The main heading displayed above your bundle options
+                    This title appears at the top of the main promotion card.
                   </p>
                 </div>
 
@@ -1317,250 +1355,81 @@ export function CreateNewOffer({
                 </div>
               </div>
 
-              <div className="create-offer-sticky-preview">
-                <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                  Live Preview
-                </h3>
-                <p className="text-[13px] text-[#5c6166] mb-6 font-normal">
-                  {
-                    offerTypes.find(
-                      (type) => type.id === offerType,
-                    )?.description
-                  }
-                </p>
-                <BundlePreview
-                  layoutFormat={layoutFormat}
-                  cardBackgroundColor={cardBackgroundColor}
-                  accentColor={accentColor}
-                  borderColor={borderColor}
-                  labelColor={labelColor}
-                  titleFontSize={titleFontSize}
-                  titleFontWeight={titleFontWeight}
-                  titleColor={titleColor}
-                  buttonText={buttonText}
-                  buttonPrimaryColor={buttonPrimaryColor}
-                  showCustomButton={showCustomButton}
-                  title={widgetTitle}
-                  items={previewItems}
-                />
-                <p className="text-[12px] text-[#5c6166] mt-3 italic font-normal">
-                  Note: This is a live preview. Changes will update in real-time when state is connected.
-                </p>
-              </div>
+              <CampaignPreviewPanel
+                description={currentOfferTypeDescription}
+                countdownPreviewText={
+                  showCountdownBlock ? countdownPreviewText : undefined
+                }
+                layoutFormat={layoutFormat}
+                cardBackgroundColor={cardBackgroundColor}
+                accentColor={accentColor}
+                borderColor={borderColor}
+                labelColor={labelColor}
+                titleFontSize={titleFontSize}
+                titleFontWeight={titleFontWeight}
+                titleColor={titleColor}
+                buttonText={buttonText}
+                buttonPrimaryColor={buttonPrimaryColor}
+                showCustomButton={showCustomButton}
+                title={widgetTitle}
+                items={previewItems}
+              />
             </div>
           )}
 
           {step === 4 && (
             <div>
               <h2 className="text-[20px] font-semibold mb-6 text-[#1c1f23]">
-                Targeting & Settings
+                Schedule & Targeting
               </h2>
-
-              <div className="mb-8">
-                <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                  Target Audience
-                </h3>
-                <div className="flex flex-col gap-4">
-                  {/* Hidden Customer Segments */}
-                  {false && <div>
-                    <label className="block text-[14px] font-medium text-[#1c1f23] mb-2">
-                      Customer Segments
-                    </label>
-                    <div className="grid grid-cols-2 gap-3 border border-gray-200 rounded-md p-4">
-                      <Checkbox
-                        checked={customerSegments.includes("all")}
-                        onChange={(e) => {
-                          if (e.target.checked) setCustomerSegments(["all"]);
-                        }}
-                      >
-                        All Customers
-                      </Checkbox>
-                      <Checkbox
-                        checked={customerSegments.includes("vip")}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setCustomerSegments(prev => prev.includes("all") ? ["vip"] : [...prev, "vip"]);
-                          } else {
-                            setCustomerSegments(prev => prev.filter(v => v !== "vip"));
-                          }
-                        }}
-                      >
-                        VIP Customers
-                      </Checkbox>
-                      <Checkbox
-                        checked={customerSegments.includes("new")}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setCustomerSegments(prev => prev.includes("all") ? ["new"] : [...prev, "new"]);
-                          } else {
-                            setCustomerSegments(prev => prev.filter(v => v !== "new"));
-                          }
-                        }}
-                      >
-                        New Customers
-                      </Checkbox>
-                      <Checkbox
-                        checked={customerSegments.includes("returning")}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setCustomerSegments(prev => prev.includes("all") ? ["returning"] : [...prev, "returning"]);
-                          } else {
-                            setCustomerSegments(prev => prev.filter(v => v !== "returning"));
-                          }
-                        }}
-                      >
-                        Returning Customers
-                      </Checkbox>
-                      <Checkbox
-                        checked={customerSegments.includes("high-value")}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setCustomerSegments(prev => prev.includes("all") ? ["high-value"] : [...prev, "high-value"]);
-                          } else {
-                            setCustomerSegments(prev => prev.filter(v => v !== "high-value"));
-                          }
-                        }}
-                      >
-                        High-Value Customers
-                      </Checkbox>
-                      <Checkbox
-                        checked={customerSegments.includes("at-risk")}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setCustomerSegments(prev => prev.includes("all") ? ["at-risk"] : [...prev, "at-risk"]);
-                          } else {
-                            setCustomerSegments(prev => prev.filter(v => v !== "at-risk"));
-                          }
-                        }}
-                      >
-                        At-Risk Customers
-                      </Checkbox>
-                    </div>
-                    <p className="text-[13px] text-[#5c6166] mt-2">
-                      Select one or more customer segments to target
-                    </p>
-                  </div>}
-
-                  <div>
-                    <label className="block text-[14px] font-medium text-[#1c1f23] mb-2">
-                      Market Visibility
-                    </label>
-                    <div className="grid grid-cols-2 gap-3 border border-gray-200 rounded-md p-4">
-                      <Checkbox
-                        checked={markets.includes("all")}
-                        onChange={(e) => {
-                          if (e.target.checked) setMarkets(["all"]);
-                        }}
-                      >
-                        All Markets
-                      </Checkbox>
-                      {shopMarkets.map((market) => (
-                        <Checkbox
-                          key={market.id}
-                          checked={markets.includes(market.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setMarkets((prev) =>
-                                prev.includes("all") ? [market.id] : [...prev, market.id]
-                              );
-                            } else {
-                              setMarkets((prev) => prev.filter((v) => v !== market.id));
-                            }
-                          }}
-                        >
-                          {market.name}
-                        </Checkbox>
-                      ))}
-                    </div>
-                    <p className="text-[13px] text-[#5c6166] mt-2">
-                      Select which markets can see this offer
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mb-8">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-[14px] font-medium text-[#1c1f23] flex items-center">
+              <p className="text-[13px] text-[#5c6166] mb-6 font-normal">
+                Control when this campaign is active and which markets can see it.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8">
+                <div className="rounded-lg border border-[#dfe3e8] bg-white p-3">
+                  <div className="text-[12px] font-semibold uppercase tracking-[0.04em] text-[#5c6166]">
                     Schedule
-                  </h3>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[13px] text-[#5c6166]">Timezone:</span>
-                    <Select
-                      size="small"
-                      showSearch
-                      className="w-[240px]"
-                      value={scheduleTimezone}
-                      onChange={setScheduleTimezone}
-                      options={tzOptions}
-                    />
+                  </div>
+                  <div className="mt-1 text-[14px] text-[#1c1f23]">
+                    {startTime && endTime ? "Start and end time set" : "Schedule needs attention"}
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <label className="block text-[14px] font-medium text-[#1c1f23]">
-                    Start Time
-                    <DatePicker
-                      size="large"
-                      showTime={{ format: 'HH:mm' }}
-                      format="YYYY-MM-DD HH:mm"
-                      className="mt-1 w-full text-[14px]"
-                      value={startTime && dayjs(startTime).isValid() ? dayjs(startTime).tz(scheduleTimezone) : null}
-                      onChange={(date) => {
-                        const val = date ? dayjs.tz(date.format('YYYY-MM-DD HH:mm:ss'), scheduleTimezone).toISOString() : '';
-                        setStartTime(val);
-                        if (val && endTime && dayjs(endTime).isBefore(dayjs(val))) {
-                          setStartTimeError("Start time must be before end time.");
-                        } else {
-                          setStartTimeError("");
-                          setEndTimeError("");
-                        }
-                      }}
-                      status={startTimeError ? "error" : ""}
-                    />
-                    <input type="hidden" name="startTime" value={startTime} />
-                    {startTimeError ? (
-                      <p className="text-red-500 text-xs mt-1">
-                        {startTimeError}
-                      </p>
-                    ) : (
-                      <p className="text-[13px] text-[#5c6166] mt-1 font-normal">
-                        When the offer becomes active
-                      </p>
-                    )}
-                  </label>
-                  <label className="block text-[14px] font-medium text-[#1c1f23]">
-                    End Time
-                    <DatePicker
-                      size="large"
-                      showTime={{ format: 'HH:mm' }}
-                      format="YYYY-MM-DD HH:mm"
-                      className="mt-1 w-full"
-                      value={endTime && dayjs(endTime).isValid() ? dayjs(endTime).tz(scheduleTimezone) : null}
-                      onChange={(date) => {
-                        const val = date ? dayjs.tz(date.format('YYYY-MM-DD HH:mm:ss'), scheduleTimezone).toISOString() : '';
-                        setEndTime(val);
-                        if (val && startTime && dayjs(val).isBefore(dayjs(startTime))) {
-                          setEndTimeError("End time must be after start time.");
-                        } else {
-                          setEndTimeError("");
-                          setStartTimeError("");
-                        }
-                      }}
-                      status={endTimeError ? "error" : ""}
-                    />
-                    <input type="hidden" name="endTime" value={endTime} />
-                    {endTimeError ? (
-                      <p className="text-red-500 text-xs mt-1">
-                        {endTimeError}
-                      </p>
-                    ) : (
-                      <p className="text-[13px] text-[#5c6166] mt-1 font-normal">
-                        When the offer expires
-                      </p>
-                    )}
-                  </label>
+                <div className="rounded-lg border border-[#dfe3e8] bg-white p-3">
+                  <div className="text-[12px] font-semibold uppercase tracking-[0.04em] text-[#5c6166]">
+                    Markets
+                  </div>
+                  <div className="mt-1 text-[14px] text-[#1c1f23]">
+                    {markets.includes("all")
+                      ? "Visible in all markets"
+                      : `${markets.length} market${markets.length > 1 ? "s" : ""} selected`}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-[#dfe3e8] bg-white p-3">
+                  <div className="text-[12px] font-semibold uppercase tracking-[0.04em] text-[#5c6166]">
+                    Status
+                  </div>
+                  <div className="mt-1 text-[14px] text-[#1c1f23]">
+                    {status ? "Campaign will be active after save" : "Campaign will be saved as inactive"}
+                  </div>
                 </div>
               </div>
+
+              <ScheduleTargetingEditor
+                markets={markets}
+                setMarkets={setMarkets}
+                shopMarkets={shopMarkets}
+                scheduleTimezone={scheduleTimezone}
+                setScheduleTimezone={setScheduleTimezone}
+                tzOptions={tzOptions}
+                startTime={startTime}
+                setStartTime={setStartTime}
+                endTime={endTime}
+                setEndTime={setEndTime}
+                startTimeError={startTimeError}
+                setStartTimeError={setStartTimeError}
+                endTimeError={endTimeError}
+                setEndTimeError={setEndTimeError}
+              />
 
               {/* Hidden Budget Module */}
               {false && <div className="mb-8">
@@ -1681,6 +1550,11 @@ export function CreateNewOffer({
             if (step === 2) {
               if (selectedProductsData.length === 0) {
                 message.error("Please select at least one product.");
+                e.preventDefault();
+                return;
+              }
+              if (normalizedDiscountRules.length === 0) {
+                message.error("Please add at least one quantity-break tier.");
                 e.preventDefault();
                 return;
               }

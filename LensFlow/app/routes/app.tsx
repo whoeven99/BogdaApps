@@ -38,6 +38,8 @@ export default function App() {
         </Link>
         <Link to="/app/subscriptions">订阅方案
         </Link>
+        <Link to="/app/prototype">交互原型
+        </Link>
       </NavMenu>
       <Outlet />
     </AppProvider>
