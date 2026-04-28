@@ -15,7 +15,11 @@ import {
 import "../../styles/tailwind.css";
 import { CreateNewOffer } from "../component/CreateNewOffer/CreateNewOffer";
 import type { IndexLoaderData } from "../_index/route";
-import { parseDiscountRules } from "../../utils/offerParsing";
+import {
+  getOfferDisplayType,
+  getOfferRulesText,
+  getOfferScheduleTimezone,
+} from "../../utils/offerParsing";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -53,6 +57,7 @@ type DashboardOfferRow = {
   offerType: string;
   discountRulesJson: string | null;
   offerSettingsJson: string | null;
+  campaignConfigJson?: string | null;
   isActive: boolean;
   createdAt: string | Date | undefined;
   updatedAt: string | Date | undefined;
@@ -162,6 +167,7 @@ export function DashboardPage({
       offerType: offer.offerType,
       discountRulesJson: offer.discountRulesJson,
       offerSettingsJson: offer.offerSettingsJson,
+      campaignConfigJson: offer.campaignConfigJson,
       isActive,
       createdAt,
       updatedAt,
@@ -522,24 +528,25 @@ export function DashboardPage({
                 const isToggling = getIsToggling(offer.id);
                 const displayIsActive = themeExtensionEnabled ? offer.isActive : false;
                 const statusLabel = displayIsActive ? "Active" : "Inactive";
-                const displayType = offer.offerType === "quantity-breaks-same" ? "Quantity breaks" : offer.offerType;
-                
-                const rules = parseDiscountRules(offer.discountRulesJson);
-                const rulesText = rules.length > 0 
-                  ? rules.map(r => `Buy ${r.count} Get ${r.discountPercent}% Off`).join(", ")
-                  : "-";
+                const displayType = getOfferDisplayType(
+                  offer.offerType,
+                  offer.campaignConfigJson,
+                );
+
+                const rulesText = getOfferRulesText({
+                  campaignConfigJson: offer.campaignConfigJson,
+                  discountRulesJson: offer.discountRulesJson,
+                });
                   
                 const formatTime = (timeStr: string | Date | undefined) => {
                   if (!timeStr) return "-";
                   const d = dayjs(timeStr);
                   if (!d.isValid()) return "-";
-                  let tz = ianaTimezone;
-                  try {
-                    if (offer.offerSettingsJson) {
-                      const parsed = JSON.parse(offer.offerSettingsJson);
-                      if (parsed.scheduleTimezone) tz = parsed.scheduleTimezone;
-                    }
-                  } catch (e) {}
+                  const tz = getOfferScheduleTimezone({
+                    campaignConfigJson: offer.campaignConfigJson,
+                    offerSettingsJson: offer.offerSettingsJson,
+                    fallback: ianaTimezone,
+                  });
                   return d.tz(tz).format("YYYY-MM-DD HH:mm:ss") + ` (UTC${d.tz(tz).format('Z')})`;
                 };
 

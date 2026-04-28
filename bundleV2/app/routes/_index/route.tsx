@@ -41,11 +41,14 @@ import {
 } from "../../billing.server";
 import {
   OFFER_TEXT_LIMITS,
+  buildLegacyFieldsFromCampaignConfig,
   clampNumber,
   parseProgressiveGiftsConfig,
   progressiveGiftsConfigToStorableJson,
   parseCompleteBundleConfig,
   parseSelectedProductIds,
+  migrateLegacyOfferToCampaignConfig,
+  parseCampaignConfig,
   sanitizeHexColor,
   sanitizeSingleLineText,
 } from "../../utils/offerParsing";
@@ -62,6 +65,7 @@ type OfferListItem = {
   selectedProductsJson: string | null;
   discountRulesJson: string | null;
   offerSettingsJson: string | null;
+  campaignConfigJson?: string | null;
   exposurePV?: number | null;
   addToCartPV?: number | null;
   gmv?: number | null;
@@ -1316,23 +1320,26 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       OFFER_TEXT_LIMITS.cartTitle,
       "Bundle Discount",
     );
-    const offerType = String(formData.get("offerType") || "").trim();
+    let offerType = String(formData.get("offerType") || "").trim();
     const layoutFormatRaw = String(formData.get("layoutFormat") || "").trim();
     const layoutFormat = ["vertical", "horizontal", "card", "compact"].includes(
       layoutFormatRaw,
     )
       ? layoutFormatRaw
       : "vertical";
-    const startTimeRaw = String(formData.get("startTime") || "").trim();
-    const endTimeRaw = String(formData.get("endTime") || "").trim();
-    const selectedProductsJson = String(
+    let startTimeRaw = String(formData.get("startTime") || "").trim();
+    let endTimeRaw = String(formData.get("endTime") || "").trim();
+    let selectedProductsJson = String(
       formData.get("selectedProductsJson") || "",
     );
-    const discountRulesJson = String(formData.get("discountRulesJson") || "");
+    let discountRulesJson = String(formData.get("discountRulesJson") || "");
+    const campaignConfigJsonRaw = String(
+      formData.get("campaignConfigJson") || "",
+    ).trim();
 
     // Status is checked, defaults to false if not provided or explicitly 'false'
     const statusRaw = String(formData.get("status") || "");
-    const status = statusRaw === "true";
+    let status = statusRaw === "true";
 
     const totalBudgetRaw = formData.get("totalBudget");
     const dailyBudgetRaw = formData.get("dailyBudget");
@@ -1467,7 +1474,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     }
 
-    const offerSettingsJson = JSON.stringify({
+    let offerSettingsJson = JSON.stringify({
       title,
       layoutFormat,
       totalBudget:
@@ -1503,6 +1510,53 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       scheduleTimezone: scheduleTimezoneRaw || undefined,
       progressiveGifts: progressiveGiftsConfigToStorableJson(progressiveGiftsSanitized),
     });
+
+    let campaignConfigJson: string | null = null;
+
+    if (selectedProductsJson.length > 50_000) {
+      return offerActionErrorResponse("Selected products data is too large. Please reduce the number of products.", 400);
+    }
+    if (discountRulesJson.length > 50_000) {
+      return offerActionErrorResponse("Discount rules data is too large. Please reduce the number of rules.", 400);
+    }
+    if (campaignConfigJsonRaw.length > 100_000) {
+      return offerActionErrorResponse("Campaign configuration is too large. Please simplify the campaign.", 400);
+    }
+
+    if (campaignConfigJsonRaw) {
+      const parsedCampaignConfig = parseCampaignConfig(campaignConfigJsonRaw);
+      if (!parsedCampaignConfig) {
+        return offerActionErrorResponse("Invalid campaign configuration.", 400);
+      }
+      if (parsedCampaignConfig.scope.productIds.length === 0) {
+        return offerActionErrorResponse("Please select at least one product.", 400);
+      }
+      if (parsedCampaignConfig.logicBlocks.length === 0) {
+        return offerActionErrorResponse("Please add at least one promotion rule.", 400);
+      }
+      const derivedLegacyFields =
+        buildLegacyFieldsFromCampaignConfig(parsedCampaignConfig);
+      campaignConfigJson = JSON.stringify(parsedCampaignConfig);
+      offerType = derivedLegacyFields.offerType;
+      if (!selectedProductsJson) {
+        selectedProductsJson = derivedLegacyFields.selectedProductsJson || "";
+      }
+      discountRulesJson = derivedLegacyFields.discountRulesJson || discountRulesJson;
+      offerSettingsJson = derivedLegacyFields.offerSettingsJson;
+      status = parsedCampaignConfig.settings.status;
+      startTimeRaw = parsedCampaignConfig.settings.startTime || startTimeRaw;
+      endTimeRaw = parsedCampaignConfig.settings.endTime || endTimeRaw;
+    } else {
+      const derivedCampaignConfig = migrateLegacyOfferToCampaignConfig({
+        selectedProductsJson,
+        discountRulesJson,
+        offerSettingsJson,
+        startTime: startTimeRaw,
+        endTime: endTimeRaw,
+        status,
+      });
+      campaignConfigJson = JSON.stringify(derivedCampaignConfig);
+    }
 
     // Store which Shopify shop this offer belongs to.
     // `session.shop` is typically the shop's domain. As a fallback, use GraphQL `shop.name`.
@@ -1566,6 +1620,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       startTime,
       endTime,
       status,
+      campaignConfigJson,
       offerSettingsJson,
       selectedProductsJson: selectedProductsJson || null,
       discountRulesJson: discountRulesJson || null,

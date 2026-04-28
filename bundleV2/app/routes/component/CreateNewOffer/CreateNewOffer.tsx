@@ -20,7 +20,10 @@ import { PreviewItem } from "../BundlePreview/bundlePreviewShared";
 import { ProgressiveGiftsSection } from "./ProgressiveGiftsSection";
 import {
   OFFER_TEXT_LIMITS,
+  buildLegacyFieldsFromCampaignConfig,
+  migrateLegacyOfferToCampaignConfig,
   normalizeOfferNameKey,
+  parseCampaignConfig,
   parseDiscountRules,
   parseBxgyDiscountRules,
   parseOfferSettings,
@@ -33,6 +36,7 @@ import {
   type CompleteBundleBar,
   type CompleteBundleProduct,
   type CompleteBundlePricingMode,
+  type CampaignConfig,
 } from "../../../utils/offerParsing";
 import {
   OFFER_TYPE_OPTIONS,
@@ -155,6 +159,7 @@ interface InitialOffer {
   endTime: string;
   selectedProductsJson: string | null;
   offerSettingsJson: string | null;
+  campaignConfigJson?: string | null;
   status: boolean;
 }
 
@@ -286,6 +291,34 @@ export function CreateNewOffer({
   const [submitErrorToast, setSubmitErrorToast] = useState<string | null>(null);
   const wasSubmittingRef = useRef(false);
   const confirmedHighDiscountRef = useRef(false);
+  const initialCampaignConfig = useMemo(() => {
+    if (!initialOffer) return null;
+    return (
+      parseCampaignConfig(initialOffer.campaignConfigJson) ??
+      migrateLegacyOfferToCampaignConfig({
+        selectedProductsJson: initialOffer.selectedProductsJson,
+        discountRulesJson: initialOffer.discountRulesJson,
+        offerSettingsJson: initialOffer.offerSettingsJson,
+        startTime: initialOffer.startTime,
+        endTime: initialOffer.endTime,
+        status: initialOffer.status,
+      })
+    );
+  }, [initialOffer]);
+  const initialCampaignLegacy = useMemo(
+    () =>
+      initialCampaignConfig
+        ? buildLegacyFieldsFromCampaignConfig(initialCampaignConfig)
+        : null,
+    [initialCampaignConfig],
+  );
+  const initialCountdownBlock = useMemo(
+    () =>
+      initialCampaignConfig?.displayBlocks.find(
+        (block) => block.type === "countdown",
+      ) ?? null,
+    [initialCampaignConfig],
+  );
 
   useEffect(() => {
     if (fetcher.state === "submitting") {
@@ -317,7 +350,8 @@ export function CreateNewOffer({
     `€${value.toFixed(2).replace(".", ",")}`;
   const [step, setStep] = useState(1);
   const [offerType, setOfferType] = useState<OfferTypeId>(
-    (initialOffer?.offerType as OfferTypeId | undefined) ??
+    (initialCampaignLegacy?.offerType as OfferTypeId | undefined) ??
+      (initialOffer?.offerType as OfferTypeId | undefined) ??
       initialOfferType ??
       "quantity-breaks-same",
   );
@@ -336,18 +370,24 @@ export function CreateNewOffer({
   const [offerNameError, setOfferNameError] = useState("");
   const [cartTitleError, setCartTitleError] = useState("");
   const [startTime, setStartTime] = useState(
-    initialOffer && initialOffer.startTime
-      ? new Date(initialOffer.startTime).toISOString()
+    initialCampaignConfig?.settings.startTime
+      ? new Date(initialCampaignConfig.settings.startTime).toISOString()
+      : initialOffer && initialOffer.startTime
+        ? new Date(initialOffer.startTime).toISOString()
       : new Date().toISOString(),
   );
   const [endTime, setEndTime] = useState(
-    initialOffer && initialOffer.endTime ? new Date(initialOffer.endTime).toISOString() : "",
+    initialCampaignConfig?.settings.endTime
+      ? new Date(initialCampaignConfig.settings.endTime).toISOString()
+      : initialOffer && initialOffer.endTime
+        ? new Date(initialOffer.endTime).toISOString()
+        : "",
   );
   const [startTimeError, setStartTimeError] = useState("");
   const [endTimeError, setEndTimeError] = useState("");
 
   const offerSettings = parseOfferSettings(
-    initialOffer?.offerSettingsJson,
+    initialCampaignLegacy?.offerSettingsJson ?? initialOffer?.offerSettingsJson,
   );
 
   const [progressiveGifts, setProgressiveGifts] = useState<ProgressiveGiftsConfig>(
@@ -458,14 +498,17 @@ export function CreateNewOffer({
     variantsCount: number;
     hasSubscription: boolean;
   }[]>(() => {
-    const ids = initialOffer?.selectedProductsJson
-      ? parseSelectedProductIds(initialOffer.selectedProductsJson)
+    const selectedProductsJson =
+      initialCampaignLegacy?.selectedProductsJson ??
+      initialOffer?.selectedProductsJson;
+    const ids = selectedProductsJson
+      ? parseSelectedProductIds(selectedProductsJson)
       : [];
 
     let parsedObjects: any[] = [];
     try {
-      if (initialOffer?.selectedProductsJson) {
-        parsedObjects = JSON.parse(initialOffer.selectedProductsJson);
+      if (selectedProductsJson) {
+        parsedObjects = JSON.parse(selectedProductsJson);
       }
     } catch (e) {}
 
@@ -666,7 +709,9 @@ export function CreateNewOffer({
   };
 
   const [discountRules, setDiscountRules] = useState<DiscountRule[]>(() =>
-    parseDiscountRules(initialOffer?.discountRulesJson),
+    parseDiscountRules(
+      initialCampaignLegacy?.discountRulesJson ?? initialOffer?.discountRulesJson,
+    ),
   );
   const [bxgyDiscountRules, setBxgyDiscountRules] = useState<BxgyDiscountRule[]>(
     parseBxgyDiscountRules(initialOffer?.discountRulesJson),
@@ -708,6 +753,21 @@ export function CreateNewOffer({
   );
   const [activeBundleBarId, setActiveBundleBarId] = useState<string>(
     () => initialCompleteBundleConfig.bars[0]?.id || "",
+  );
+  const [status, setStatus] = useState<boolean>(
+    initialCampaignConfig
+      ? initialCampaignConfig.settings.status
+      : initialOffer
+        ? initialOffer.status
+        : true,
+  );
+  const [showCountdownBlock, setShowCountdownBlock] = useState(
+    initialCountdownBlock !== null,
+  );
+  const [countdownLabel, setCountdownLabel] = useState(
+    initialCountdownBlock?.type === "countdown"
+      ? initialCountdownBlock.config.label
+      : "Limited time offer",
   );
   const activeBundleBar =
     completeBundleBars.find((bar) => bar.id === activeBundleBarId) ||
@@ -1110,8 +1170,6 @@ export function CreateNewOffer({
     }
   }, [offerType, completeBundleBars, activeBundleBarId]);
 
-  const status = initialOffer ? initialOffer.status : true;
-
   useEffect(() => {
     if (subscriptionStatusFetcher.state !== "idle") return;
     if (!subscriptionStatusFetcher.data?.ok) return;
@@ -1146,6 +1204,107 @@ export function CreateNewOffer({
       })),
     ];
   }, [offerType, bxgyDiscountRules, normalizedDiscountRules]);
+  const currentCampaignConfig = useMemo<CampaignConfig | null>(() => {
+    if (offerType !== "quantity-breaks-same") return null;
+
+    return {
+      version: 1,
+      scope: {
+        productIds: selectedProductsData.map((product) => String(product.id)),
+        markets,
+        customerSegments,
+      },
+      logicBlocks: [
+        {
+          id: "logic-quantity-breaks",
+          type: "quantity-breaks",
+          config: {
+            tiers: normalizedDiscountRules.map((rule) => ({
+              qty: rule.count,
+              discountPercent: rule.discountPercent,
+              title: rule.title || "",
+              subtitle: rule.subtitle || "",
+              badge: rule.badge || "",
+              isDefault: !!rule.isDefault,
+            })),
+          },
+        },
+      ],
+      displayBlocks: [
+        {
+          id: "display-offer-card",
+          type: "offer-card",
+          logicBlockRef: "logic-quantity-breaks",
+          config: {
+            title: widgetTitle,
+            layoutFormat,
+            accentColor,
+            cardBackgroundColor,
+            borderColor,
+            labelColor,
+            titleFontSize,
+            titleFontWeight,
+            titleColor,
+            buttonText,
+            buttonPrimaryColor,
+            showCustomButton,
+          },
+        },
+        ...(showCountdownBlock
+          ? [
+              {
+                id: "display-countdown",
+                type: "countdown" as const,
+                config: {
+                  endTimeMode: "campaign-end-time" as const,
+                  label: countdownLabel.trim() || "Limited time offer",
+                },
+              },
+            ]
+          : []),
+      ],
+      settings: {
+        status,
+        startTime,
+        endTime,
+        scheduleTimezone,
+        totalBudget: totalBudget.trim() ? Number(totalBudget) : null,
+        dailyBudget: dailyBudget.trim() ? Number(dailyBudget) : null,
+        usageLimitPerCustomer,
+      },
+    };
+  }, [
+    accentColor,
+    borderColor,
+    buttonPrimaryColor,
+    buttonText,
+    cardBackgroundColor,
+    countdownLabel,
+    customerSegments,
+    dailyBudget,
+    endTime,
+    labelColor,
+    layoutFormat,
+    markets,
+    normalizedDiscountRules,
+    scheduleTimezone,
+    selectedProductsData,
+    showCountdownBlock,
+    showCustomButton,
+    startTime,
+    status,
+    titleColor,
+    titleFontSize,
+    titleFontWeight,
+    totalBudget,
+    usageLimitPerCustomer,
+    widgetTitle,
+    offerType,
+  ]);
+  const campaignConfigJson = useMemo(
+    () => (currentCampaignConfig ? JSON.stringify(currentCampaignConfig) : ""),
+    [currentCampaignConfig],
+  );
 
   const hasDefault = normalizedDiscountRules.some(r => r.isDefault);
 
@@ -1623,6 +1782,7 @@ export function CreateNewOffer({
         name="progressiveGiftsJson"
         value={JSON.stringify(progressiveGiftsConfigToStorableJson(progressiveGifts))}
       />
+      <input type="hidden" name="campaignConfigJson" value={campaignConfigJson} />
 
       <div className="mb-[100px] rounded-[12px] border border-[#dfe3e8] bg-[#ffffff] p-[20px] shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-[24px]">
         <div className="mb-[16px] rounded-[12px] border border-[#e9edf1] bg-[#fcfcfd] p-[14px] sm:p-[16px]">

@@ -4,7 +4,11 @@ import "../../styles/tailwind.css";
 import { Trash2, Pencil } from "lucide-react";
 import { Form, useNavigation, useSearchParams, useActionData } from "react-router";
 import type { IndexLoaderData } from "../_index/route";
-import { parseDiscountRules } from "../../utils/offerParsing";
+import {
+  getOfferDisplayType,
+  getOfferRulesText,
+  getOfferScheduleTimezone,
+} from "../../utils/offerParsing";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -28,6 +32,7 @@ type AllOffersRow = {
   offerType: string;
   discountRulesJson: string | null;
   offerSettingsJson: string | null;
+  campaignConfigJson?: string | null;
   isActive: boolean;
   createdAt: string | Date | undefined;
   updatedAt: string | Date | undefined;
@@ -75,6 +80,7 @@ export function AllOffersPage({
       offerType: offer.offerType,
       discountRulesJson: offer.discountRulesJson,
       offerSettingsJson: offer.offerSettingsJson,
+      campaignConfigJson: offer.campaignConfigJson,
       isActive,
       createdAt: offer.createdAt,
       updatedAt: offer.updatedAt,
@@ -316,12 +322,27 @@ export function AllOffersPage({
                 const isToggling = getIsToggling(offer.id);
                 const displayIsActive = themeExtensionEnabled ? offer.isActive : false;
                 const statusLabel = displayIsActive ? "Active" : "Inactive";
-                const displayType = offer.offerType === "quantity-breaks-same" ? "Quantity breaks" : offer.offerType;
-                
-                const rules = parseDiscountRules(offer.discountRulesJson);
-                const rulesText = rules.length > 0 
-                  ? rules.map(r => `Buy ${r.count} Get ${r.discountPercent}% Off`).join(", ")
-                  : "-";
+                const displayType = getOfferDisplayType(
+                  offer.offerType,
+                  offer.campaignConfigJson,
+                );
+
+                const rulesText = getOfferRulesText({
+                  campaignConfigJson: offer.campaignConfigJson,
+                  discountRulesJson: offer.discountRulesJson,
+                });
+                  
+                const formatTime = (timeStr: string | Date | undefined) => {
+                  if (!timeStr) return "-";
+                  const d = dayjs(timeStr);
+                  if (!d.isValid()) return "-";
+                  const tz = getOfferScheduleTimezone({
+                    campaignConfigJson: offer.campaignConfigJson,
+                    offerSettingsJson: offer.offerSettingsJson,
+                    fallback: ianaTimezone,
+                  });
+                  return d.tz(tz).format("YYYY-MM-DD HH:mm:ss") + ` (UTC${d.tz(tz).format('Z')})`;
+                };
 
                 return (
                   <tr key={offer.id} className="hover:bg-[#fafbfc]">
@@ -390,10 +411,10 @@ export function AllOffersPage({
                       </Form>
                     </td>
                     <td className="p-[12px] border-b border-[#eef1f4] text-[14px] text-[#1c1f23] font-sans">
-                      {formatTime(offer, offer.createdAt)}
+                      {formatTime(offer.createdAt)}
                     </td>
                     <td className="p-[12px] border-b border-[#eef1f4] text-[14px] text-[#1c1f23] font-sans">
-                      {formatTime(offer, offer.updatedAt)}
+                      {formatTime(offer.updatedAt)}
                     </td>
                     <td className="p-[12px] border-b border-[#eef1f4]">
                   <div className="flex items-center gap-[8px]">
