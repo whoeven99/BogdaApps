@@ -333,12 +333,20 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
 }
 
 export type DiscountRule = {
+  id?: string;
   count: number;
   discountPercent: number;
   title?: string;
   subtitle?: string;
   badge?: string;
   isDefault?: boolean;
+  discountClass?: "product" | "order" | "shipping";
+  offerKind?: "percentage_discount" | "free_gift" | "free_shipping";
+  conditionType?: "item_quantity" | "cart_amount";
+  amountThreshold?: number;
+  rewardType?: "percentage_off" | "gift_product" | "free_shipping";
+  rewardProductIds?: string[];
+  giftQuantity?: number;
 };
 
 export type PerProductDiscountRule = {
@@ -380,6 +388,13 @@ export type QuantityBreakTier = {
   subtitle?: string;
   badge?: string;
   isDefault?: boolean;
+  discountClass?: "product" | "order" | "shipping";
+  offerKind?: "percentage_discount" | "free_gift" | "free_shipping";
+  conditionType?: "item_quantity" | "cart_amount";
+  amountThreshold?: number;
+  rewardType?: "percentage_off" | "gift_product" | "free_shipping";
+  rewardProductIds?: string[];
+  giftQuantity?: number;
 };
 
 export type QuantityBreaksLogicBlock = {
@@ -580,12 +595,52 @@ export function parseDiscountRules(discountRulesJson?: string | null): DiscountR
       if (!Number.isFinite(count) || count < 1) continue;
       if (!Number.isFinite(discountPercent)) continue;
       out.push({
+        id:
+          typeof (item as { id?: unknown }).id === "string"
+            ? (item as { id: string }).id
+            : undefined,
         count: Math.trunc(count),
         discountPercent: Math.max(0, Math.min(100, discountPercent)),
         title: (item as { title?: string }).title || "",
         subtitle: (item as { subtitle?: string }).subtitle || "",
         badge: (item as { badge?: string }).badge || "",
         isDefault: !!(item as { isDefault?: boolean }).isDefault,
+        discountClass:
+          (item as { discountClass?: unknown }).discountClass === "order" ||
+          (item as { discountClass?: unknown }).discountClass === "shipping"
+            ? ((item as { discountClass: "order" | "shipping" }).discountClass)
+            : "product",
+        offerKind:
+          (item as { offerKind?: unknown }).offerKind === "free_gift" ||
+          (item as { offerKind?: unknown }).offerKind === "free_shipping"
+            ? ((item as { offerKind: "free_gift" | "free_shipping" }).offerKind)
+            : "percentage_discount",
+        conditionType:
+          (item as { conditionType?: unknown }).conditionType === "cart_amount"
+            ? "cart_amount"
+            : "item_quantity",
+        amountThreshold: Number.isFinite(
+          Number((item as { amountThreshold?: unknown }).amountThreshold),
+        )
+          ? Math.max(0, Number((item as { amountThreshold?: unknown }).amountThreshold))
+          : undefined,
+        rewardType:
+          (item as { rewardType?: unknown }).rewardType === "gift_product" ||
+          (item as { rewardType?: unknown }).rewardType === "free_shipping"
+            ? ((item as { rewardType: "gift_product" | "free_shipping" }).rewardType)
+            : "percentage_off",
+        rewardProductIds: Array.isArray(
+          (item as { rewardProductIds?: unknown }).rewardProductIds,
+        )
+          ? ((item as { rewardProductIds: unknown[] }).rewardProductIds)
+              .map((id) => String(id || "").trim())
+              .filter(Boolean)
+          : [],
+        giftQuantity: Number.isFinite(
+          Number((item as { giftQuantity?: unknown }).giftQuantity),
+        )
+          ? Math.max(1, Math.trunc(Number((item as { giftQuantity?: unknown }).giftQuantity)))
+          : undefined,
       });
     }
     out.sort((a, b) => a.count - b.count);
@@ -638,6 +693,28 @@ function sanitizeQuantityBreakTier(raw: unknown): QuantityBreakTier | null {
     subtitle: typeof item.subtitle === "string" ? item.subtitle : "",
     badge: typeof item.badge === "string" ? item.badge : "",
     isDefault: !!item.isDefault,
+    discountClass:
+      item.discountClass === "order" || item.discountClass === "shipping"
+        ? item.discountClass
+        : "product",
+    offerKind:
+      item.offerKind === "free_gift" || item.offerKind === "free_shipping"
+        ? item.offerKind
+        : "percentage_discount",
+    conditionType: item.conditionType === "cart_amount" ? "cart_amount" : "item_quantity",
+    amountThreshold: Number.isFinite(Number(item.amountThreshold))
+      ? Math.max(0, Number(item.amountThreshold))
+      : undefined,
+    rewardType:
+      item.rewardType === "gift_product" || item.rewardType === "free_shipping"
+        ? item.rewardType
+        : "percentage_off",
+    rewardProductIds: Array.isArray(item.rewardProductIds)
+      ? item.rewardProductIds.map((id) => String(id || "").trim()).filter(Boolean)
+      : [],
+    giftQuantity: Number.isFinite(Number(item.giftQuantity))
+      ? Math.max(1, Math.trunc(Number(item.giftQuantity)))
+      : undefined,
   };
 }
 
@@ -1408,6 +1485,24 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
     subtitle: tier.subtitle || "",
     badge: tier.badge || "",
     isDefault: !!tier.isDefault,
+    discountClass:
+      tier.discountClass === "order" || tier.discountClass === "shipping"
+        ? tier.discountClass
+        : "product",
+    offerKind:
+      tier.offerKind === "free_gift" || tier.offerKind === "free_shipping"
+        ? tier.offerKind
+        : "percentage_discount",
+    conditionType: tier.conditionType === "cart_amount" ? "cart_amount" : "item_quantity",
+    amountThreshold: tier.amountThreshold,
+    rewardType:
+      tier.rewardType === "gift_product" || tier.rewardType === "free_shipping"
+        ? tier.rewardType
+        : "percentage_off",
+    rewardProductIds: Array.isArray(tier.rewardProductIds)
+      ? tier.rewardProductIds
+      : [],
+    giftQuantity: tier.giftQuantity,
   }));
   const bxgyRules = buildBxgyDiscountRulesJson(bxgy?.config.tiers ?? []);
   const differentProductsRules = buildDifferentProductsDiscountRulesJson(

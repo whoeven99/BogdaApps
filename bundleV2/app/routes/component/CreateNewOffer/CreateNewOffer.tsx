@@ -29,6 +29,7 @@ import LogicEditorsRenderer from "./LogicEditorsRenderer";
 import QuantityBreaksDisplayCustomizer from "./QuantityBreaksDisplayCustomizer";
 import ScheduleTargetingEditor from "./ScheduleTargetingEditor";
 import { getStarterTemplateDefaults } from "./starterTemplateDefaults";
+import { getUnifiedRuleBlockingMessage, isLegacyExecutableDiscountRule } from "./unifiedRuleModel";
 import {
   OFFER_TEXT_LIMITS,
   buildLegacyFieldsFromCampaignConfig,
@@ -60,12 +61,20 @@ import { type OfferTypeId } from "./offerTypeOptions";
 
 type DiscountRule = {
   // 数量阈值：例如 count=2 表示"买 2 件及以上"生效
+  id?: string;
   count: number;
   discountPercent: number;
   title?: string;
   subtitle?: string;
   badge?: string;
   isDefault?: boolean;
+  discountClass?: "product" | "order" | "shipping";
+  offerKind?: "percentage_discount" | "free_gift" | "free_shipping";
+  conditionType?: "item_quantity" | "cart_amount";
+  amountThreshold?: number;
+  rewardType?: "percentage_off" | "gift_product" | "free_shipping";
+  rewardProductIds?: string[];
+  giftQuantity?: number;
 };
 
 type BxgyDiscountRule = {
@@ -215,12 +224,28 @@ function buildDiscountRulesJson(tiers: DiscountRule[]): DiscountRule[] {
     if (!Number.isFinite(tier.count) || tier.count < 1) continue;
     if (!Number.isFinite(tier.discountPercent)) continue;
     out.push({
+      id: tier.id,
       count: Math.trunc(tier.count),
       discountPercent: Math.max(0, Math.min(100, tier.discountPercent)),
       title: tier.title || "",
       subtitle: tier.subtitle || "",
       badge: tier.badge || "",
       isDefault: !!tier.isDefault,
+      discountClass: tier.discountClass || "product",
+      offerKind: tier.offerKind || "percentage_discount",
+      conditionType: tier.conditionType || "item_quantity",
+      amountThreshold:
+        tier.conditionType === "cart_amount"
+          ? Math.max(0, Number(tier.amountThreshold) || 0)
+          : undefined,
+      rewardType: tier.rewardType || "percentage_off",
+      rewardProductIds: Array.isArray(tier.rewardProductIds)
+        ? tier.rewardProductIds
+        : [],
+      giftQuantity:
+        tier.rewardType === "gift_product"
+          ? Math.max(1, Math.trunc(Number(tier.giftQuantity) || 1))
+          : undefined,
     });
   }
 
@@ -259,24 +284,30 @@ function calculatePreviewBundleAmounts(
 }
 
 function sanitizeDiscountRules(tiers: DiscountRule[]): DiscountRule[] {
-  const dedupedByCount = new Map<number, DiscountRule>();
+  const dedupedByKey = new Map<string, DiscountRule>();
   for (const tier of tiers) {
+    if (!isLegacyExecutableDiscountRule(tier)) continue;
     if (!Number.isFinite(tier.count) || tier.count < 1) continue;
     if (!Number.isFinite(tier.discountPercent)) continue;
-    dedupedByCount.set(
-      Math.trunc(tier.count),
-      {
-        count: Math.trunc(tier.count),
-        discountPercent: Math.max(0, Math.min(100, tier.discountPercent)),
-        title: tier.title || "",
-        subtitle: tier.subtitle || "",
-        badge: tier.badge || "",
-        isDefault: !!tier.isDefault,
-      }
-    );
+    const normalizedCount = Math.trunc(tier.count);
+    dedupedByKey.set(String(normalizedCount), {
+      id: tier.id,
+      count: normalizedCount,
+      discountPercent: Math.max(0, Math.min(100, tier.discountPercent)),
+      title: tier.title || "",
+      subtitle: tier.subtitle || "",
+      badge: tier.badge || "",
+      isDefault: !!tier.isDefault,
+      discountClass: "product",
+      offerKind: "percentage_discount",
+      conditionType: "item_quantity",
+      rewardType: "percentage_off",
+      rewardProductIds: [],
+      giftQuantity: undefined,
+    });
   }
 
-  return Array.from(dedupedByCount.values())
+  return Array.from(dedupedByKey.values())
     .sort((a, b) => a.count - b.count);
 }
 
@@ -1375,6 +1406,15 @@ export function CreateNewOffer({
               subtitle: rule.subtitle || "",
               badge: rule.badge || "",
               isDefault: !!rule.isDefault,
+              discountClass: rule.discountClass || "product",
+              offerKind: rule.offerKind || "percentage_discount",
+              conditionType: rule.conditionType || "item_quantity",
+              amountThreshold: rule.amountThreshold,
+              rewardType: rule.rewardType || "percentage_off",
+              rewardProductIds: Array.isArray(rule.rewardProductIds)
+                ? rule.rewardProductIds
+                : [],
+              giftQuantity: rule.giftQuantity,
             })),
           },
         },
@@ -1938,6 +1978,18 @@ export function CreateNewOffer({
           });
           setStep(2);
           return;
+        }
+        if (offerType === "quantity-breaks-same") {
+          const unifiedRuleBlockingMessage = getUnifiedRuleBlockingMessage(discountRules);
+          if (unifiedRuleBlockingMessage) {
+            e.preventDefault();
+            Modal.error({
+              title: "Validation Error",
+              content: unifiedRuleBlockingMessage,
+            });
+            setStep(2);
+            return;
+          }
         }
 
         let hasError = false;
@@ -3172,6 +3224,16 @@ export function CreateNewOffer({
                 message.error(stepTwoError);
                 e.preventDefault();
                 return;
+              }
+              if (offerType === "quantity-breaks-same") {
+                const unifiedRuleBlockingMessage = getUnifiedRuleBlockingMessage(
+                  discountRules,
+                );
+                if (unifiedRuleBlockingMessage) {
+                  message.error(unifiedRuleBlockingMessage);
+                  e.preventDefault();
+                  return;
+                }
               }
               setStep(3);
               e.preventDefault();

@@ -1,5 +1,5 @@
 import { Button, Dropdown } from "antd";
-import { useEffect, useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import type {
   CompleteBundleProduct,
 } from "../../../utils/offerParsing";
@@ -475,15 +475,16 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
       },
       {
         id: "quantity-breaks-rules",
-        title: "Quantity Rules",
+        title: "Offer Rules",
         description:
-          "Define the tier thresholds and discount values customers unlock as quantity increases.",
+          "Define the condition, Shopify discount class, and reward for each rule entry.",
         required: true,
         active: true,
         render: () => (
           <QuantityBreaksLogicEditor
             discountRules={props.draft.discountRules}
             setDiscountRules={props.actions.setDiscountRules}
+            selectedProductsData={props.draft.selectedProductsData}
             section="tiers"
           />
         ),
@@ -536,194 +537,56 @@ export default function LogicEditorsRenderer({
   const inactiveOptionalComponents = allComponents.filter(
     (component) => !component.required && !component.active,
   );
-  const [activeEditorId, setActiveEditorId] = useState<string | null>(
-    activeComponents[0]?.id ?? null,
-  );
-  const stackEntries = activeComponents.map((component, index) => ({
-    component,
-    position: index + 1,
-  }));
-  const coreStackEntries = stackEntries.filter(({ component }) => component.required);
-  const optionalStackEntries = stackEntries.filter(
-    ({ component }) => !component.required,
-  );
   const addComponentMenuItems = inactiveOptionalComponents.map((component) => ({
     key: component.id,
     label: component.addLabel || `Add ${component.title}`,
   }));
-  useEffect(() => {
-    if (activeComponents.length === 0) {
-      setActiveEditorId(null);
-      return;
-    }
-    if (activeEditorId === null) {
-      return;
-    }
-    const currentStillExists = activeComponents.some(
-      (component) => component.id === activeEditorId,
-    );
-    if (!currentStillExists) {
-      setActiveEditorId(activeComponents[0].id);
-    }
-  }, [activeComponents, activeEditorId]);
-  const scrollToComponentSection = (componentId: string) => {
-    setActiveEditorId(componentId);
-    if (typeof document === "undefined") return;
-    const element = document.getElementById(`builder-component-${componentId}`);
-    element?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-  const renderStackCard = (
-    component: LogicEditorComponent,
-    position: number,
-  ) => (
-    <div
-      key={component.id}
-      className={`rounded-[10px] border bg-white px-3 py-3 transition-colors ${
-        component.id === activeEditorId
-          ? "border-[#bfd7cd] bg-[#f5fff9]"
-          : "border-[#dfe3e8]"
-      }`}
-    >
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[#f4f6f8] px-2 text-[12px] font-medium text-[#5c6166]">
-              {position}
-            </span>
-            <span className="text-[14px] font-semibold text-[#1c1f23]">
-              {component.title}
-            </span>
-            <span className="rounded-full border border-[#dfe3e8] bg-[#fafbfb] px-2 py-0.5 text-[11px] text-[#5c6166]">
-              {component.required ? "Core" : "Optional"}
-            </span>
-          </div>
-          <p className="m-0 mt-2 text-[13px] text-[#5c6166]">
-            {component.description}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            size="small"
-            onClick={() => scrollToComponentSection(component.id)}
-          >
-            Edit
-          </Button>
-          {!component.required && component.onRemove ? (
-            <Button size="small" onClick={component.onRemove}>
-              Remove
-            </Button>
-          ) : null}
-        </div>
-      </div>
-    </div>
-  );
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="rounded-[12px] border border-[#e3e8ed] bg-[#fafbfb] p-4">
-        <div className="flex flex-col gap-3">
-          {inactiveOptionalComponents.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
-              <Dropdown
-                trigger={["click"]}
-                menu={{
-                  items: addComponentMenuItems,
-                  onClick: ({ key }) => {
-                    const component = inactiveOptionalComponents.find(
-                      (entry) => entry.id === key,
-                    );
-                    setActiveEditorId(String(key));
-                    component?.onAdd?.();
-                  },
-                }}
-              >
-                <Button size="small">Add component</Button>
-              </Dropdown>
-            </div>
-          ) : null}
+      {inactiveOptionalComponents.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
+          <Dropdown
+            trigger={["click"]}
+            menu={{
+              items: addComponentMenuItems,
+              onClick: ({ key }) => {
+                const component = inactiveOptionalComponents.find(
+                  (entry) => entry.id === key,
+                );
+                component?.onAdd?.();
+              },
+            }}
+          >
+            <Button size="small">Add component</Button>
+          </Dropdown>
         </div>
-        <div className="mt-4">
-          <div className="mb-3 text-[12px] font-medium uppercase tracking-[0.08em] text-[#5c6166]">
-            Active Stack
-          </div>
-          <div className="flex flex-col gap-4">
-            <div>
-              <div className="mb-2 text-[12px] font-medium uppercase tracking-[0.08em] text-[#5c6166]">
-                Core Structure
-              </div>
-              <div className="flex flex-col gap-2">
-                {coreStackEntries.map(({ component, position }) =>
-                  renderStackCard(component, position),
-                )}
-              </div>
-            </div>
-            <div>
-              <div className="mb-2 text-[12px] font-medium uppercase tracking-[0.08em] text-[#5c6166]">
-                Optional Components
-              </div>
-              {optionalStackEntries.length > 0 ? (
-                <div className="flex flex-col gap-2">
-                  {optionalStackEntries.map(({ component, position }) =>
-                    renderStackCard(component, position),
-                  )}
-                </div>
-              ) : (
-                <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-white px-3 py-3 text-[13px] text-[#5c6166]">
-                  No optional components added yet.
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+      ) : null}
 
       {activeComponents.map((component) => (
-        (() => {
-          const isExpanded = component.id === activeEditorId;
-          return (
-            <div
-              key={component.id}
-              id={`builder-component-${component.id}`}
-              className="rounded-[12px] border border-[#e3e8ed] bg-white p-4"
-            >
-              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                <div>
-                  <div className="text-[12px] font-medium uppercase tracking-[0.08em] text-[#5c6166]">
-                    {component.required ? "Required Component" : "Optional Component"}
-                  </div>
-                  <h3 className="m-0 mt-1 text-[16px] font-semibold text-[#1c1f23]">
-                    {component.title}
-                  </h3>
-                  {!isExpanded ? (
-                    <p className="m-0 mt-2 text-[13px] text-[#5c6166]">
-                      {component.description}
-                    </p>
-                  ) : null}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    size="small"
-                    onClick={() => {
-                      if (isExpanded) {
-                        setActiveEditorId(null);
-                        return;
-                      }
-                      scrollToComponentSection(component.id);
-                    }}
-                  >
-                    {isExpanded ? "Collapse" : "Open"}
-                  </Button>
-                  {!component.required && component.onRemove ? (
-                    <Button size="small" onClick={component.onRemove}>
-                      Remove
-                    </Button>
-                  ) : null}
-                </div>
-              </div>
-              {isExpanded ? <div className="mt-4">{component.render()}</div> : null}
+        <div
+          key={component.id}
+          className="rounded-[12px] border border-[#e3e8ed] bg-white p-4"
+        >
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h3 className="m-0 text-[16px] font-semibold text-[#1c1f23]">
+                {component.title}
+              </h3>
+              <p className="m-0 mt-2 text-[13px] text-[#5c6166]">
+                {component.description}
+              </p>
             </div>
-          );
-        })()
+            {!component.required && component.onRemove ? (
+              <div className="flex flex-wrap gap-2">
+                <Button size="small" onClick={component.onRemove}>
+                  Remove
+                </Button>
+              </div>
+            ) : null}
+          </div>
+          <div className="mt-4">{component.render()}</div>
+        </div>
       ))}
     </div>
   );

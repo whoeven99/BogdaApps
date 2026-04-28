@@ -7,12 +7,20 @@ import type {
 import type { OfferTypeId } from "./offerTypeOptions";
 
 export type DraftDiscountRule = {
+  id?: string;
   count: number;
   discountPercent: number;
   title?: string;
   subtitle?: string;
   badge?: string;
   isDefault?: boolean;
+  discountClass?: "product" | "order" | "shipping";
+  offerKind?: "percentage_discount" | "free_gift" | "free_shipping";
+  conditionType?: "item_quantity" | "cart_amount";
+  amountThreshold?: number;
+  rewardType?: "percentage_off" | "gift_product" | "free_shipping";
+  rewardProductIds?: string[];
+  giftQuantity?: number;
 };
 
 export type DraftBxgyDiscountRule = {
