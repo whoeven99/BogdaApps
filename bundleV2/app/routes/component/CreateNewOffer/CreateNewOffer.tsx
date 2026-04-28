@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { useFetcher, useNavigate, useSearchParams } from "react-router";
-import { Button, Input, Select, Switch, Checkbox, DatePicker, Modal, message, Dropdown } from "antd";
+import { Button, Input, Select, Switch, Modal, message } from "antd";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 import {
-  X,
   Trash2,
 } from "lucide-react";
 
@@ -17,7 +16,16 @@ import {
 } from "../adminUi";
 import BundlePreview from "../BundlePreview/BundlePreview";
 import { PreviewItem } from "../BundlePreview/bundlePreviewShared";
+import BxgyLogicEditor from "./BxgyLogicEditor";
+import BuilderSummaryCards from "./BuilderSummaryCards";
+import BuilderStepIntro from "./BuilderStepIntro";
+import CompleteBundleEditor from "./CompleteBundleEditor";
 import { ProgressiveGiftsSection } from "./ProgressiveGiftsSection";
+import DisplayBlocksEditor from "./DisplayBlocksEditor";
+import QuantityBreaksLogicEditor from "./QuantityBreaksLogicEditor";
+import ScheduleTargetingEditor from "./ScheduleTargetingEditor";
+import ScopeEditor from "./ScopeEditor";
+import SubscriptionSettingsEditor from "./SubscriptionSettingsEditor";
 import {
   OFFER_TEXT_LIMITS,
   buildLegacyFieldsFromCampaignConfig,
@@ -296,6 +304,7 @@ export function CreateNewOffer({
     return (
       parseCampaignConfig(initialOffer.campaignConfigJson) ??
       migrateLegacyOfferToCampaignConfig({
+        offerType: initialOffer.offerType,
         selectedProductsJson: initialOffer.selectedProductsJson,
         discountRulesJson: initialOffer.discountRulesJson,
         offerSettingsJson: initialOffer.offerSettingsJson,
@@ -356,8 +365,11 @@ export function CreateNewOffer({
       "quantity-breaks-same",
   );
   const initialCompleteBundleConfig = useMemo(
-    () => parseCompleteBundleConfig(initialOffer?.selectedProductsJson),
-    [initialOffer?.selectedProductsJson],
+    () =>
+      parseCompleteBundleConfig(
+        initialCampaignLegacy?.selectedProductsJson ?? initialOffer?.selectedProductsJson,
+      ),
+    [initialCampaignLegacy?.selectedProductsJson, initialOffer?.selectedProductsJson],
   );
   const [offerName, setOfferName] = useState(initialOffer?.name ?? "");
   
@@ -481,7 +493,7 @@ export function CreateNewOffer({
     offerSettings.subscriptionDefaultSelected,
   );
   const [widgetTitle, setWidgetTitle] = useState(offerSettings.title);
-  const [customerSegments, setCustomerSegments] = useState<string[]>(
+  const [customerSegments] = useState<string[]>(
     offerSettings.customerSegments ? offerSettings.customerSegments.split(",") : ["all"]
   );
   const [markets, setMarkets] = useState<string[]>(
@@ -714,21 +726,35 @@ export function CreateNewOffer({
     ),
   );
   const [bxgyDiscountRules, setBxgyDiscountRules] = useState<BxgyDiscountRule[]>(
-    parseBxgyDiscountRules(initialOffer?.discountRulesJson),
+    parseBxgyDiscountRules(
+      initialCampaignLegacy?.discountRulesJson ?? initialOffer?.discountRulesJson,
+    ),
   );
   const [buyProducts, setBuyProducts] = useState<string[]>(() => {
-    if (initialOffer?.offerType !== 'bxgy' || !initialOffer.selectedProductsJson) return [];
+    const selectedProductsJson =
+      initialCampaignLegacy?.offerType === "bxgy"
+        ? initialCampaignLegacy.selectedProductsJson
+        : initialOffer?.offerType === "bxgy"
+          ? initialOffer.selectedProductsJson
+          : null;
+    if (!selectedProductsJson) return [];
     try {
-      const parsed = JSON.parse(initialOffer.selectedProductsJson);
+      const parsed = JSON.parse(selectedProductsJson);
       return Array.isArray(parsed.buyProducts) ? parsed.buyProducts.map(String) : [];
     } catch (e) {
       return [];
     }
   });
   const [getProducts, setGetProducts] = useState<string[]>(() => {
-    if (initialOffer?.offerType !== 'bxgy' || !initialOffer.selectedProductsJson) return [];
+    const selectedProductsJson =
+      initialCampaignLegacy?.offerType === "bxgy"
+        ? initialCampaignLegacy.selectedProductsJson
+        : initialOffer?.offerType === "bxgy"
+          ? initialOffer.selectedProductsJson
+          : null;
+    if (!selectedProductsJson) return [];
     try {
-      const parsed = JSON.parse(initialOffer.selectedProductsJson);
+      const parsed = JSON.parse(selectedProductsJson);
       return Array.isArray(parsed.getProducts) ? parsed.getProducts.map(String) : [];
     } catch (e) {
       return [];
@@ -736,7 +762,8 @@ export function CreateNewOffer({
   });
   const [completeBundleBars, setCompleteBundleBars] = useState<CompleteBundleBar[]>(
     () =>
-      initialOffer?.offerType === "complete-bundle" &&
+      ((initialCampaignLegacy?.offerType as OfferTypeId | undefined) === "complete-bundle" ||
+        initialOffer?.offerType === "complete-bundle") &&
       initialCompleteBundleConfig.bars.length > 0
         ? initialCompleteBundleConfig.bars
         : [
@@ -1205,18 +1232,31 @@ export function CreateNewOffer({
     ];
   }, [offerType, bxgyDiscountRules, normalizedDiscountRules]);
   const currentCampaignConfig = useMemo<CampaignConfig | null>(() => {
-    if (offerType !== "quantity-breaks-same") return null;
+    const buildOfferCardConfig = () => ({
+      title: widgetTitle,
+      layoutFormat,
+      accentColor,
+      cardBackgroundColor,
+      borderColor,
+      labelColor,
+      titleFontSize,
+      titleFontWeight,
+      titleColor,
+      buttonText,
+      buttonPrimaryColor,
+      showCustomButton,
+    });
 
-    return {
-      version: 1,
-      scope: {
-        productIds: selectedProductsData.map((product) => String(product.id)),
-        markets,
-        customerSegments,
-      },
-      logicBlocks: [
+    let logicBlockId = "logic-campaign";
+    let scopeProductIds: string[] = [];
+    let logicBlocks: CampaignConfig["logicBlocks"] = [];
+
+    if (offerType === "quantity-breaks-same") {
+      logicBlockId = "logic-quantity-breaks";
+      scopeProductIds = selectedProductsData.map((product) => String(product.id));
+      logicBlocks = [
         {
-          id: "logic-quantity-breaks",
+          id: logicBlockId,
           type: "quantity-breaks",
           config: {
             tiers: normalizedDiscountRules.map((rule) => ({
@@ -1229,26 +1269,73 @@ export function CreateNewOffer({
             })),
           },
         },
-      ],
+      ];
+    } else if (offerType === "bxgy") {
+      logicBlockId = "logic-bxgy";
+      scopeProductIds = Array.from(new Set([...buyProducts, ...getProducts]));
+      logicBlocks = [
+        {
+          id: logicBlockId,
+          type: "bxgy",
+          config: {
+            tiers: buildBxgyDiscountRulesJson(bxgyDiscountRules),
+          },
+        },
+      ];
+    } else if (offerType === "complete-bundle") {
+      logicBlockId = "logic-complete-bundle";
+      const completeBundleConfig = buildCompleteBundleConfig({ bars: completeBundleBars });
+      scopeProductIds = Array.from(
+        new Set(
+          completeBundleConfig.bars.flatMap((bar) =>
+            bar.products.map((product) => String(product.productId)),
+          ),
+        ),
+      );
+      logicBlocks = [
+        {
+          id: logicBlockId,
+          type: "complete-bundle",
+          config: completeBundleConfig,
+        },
+      ];
+    } else if (offerType === "subscription") {
+      logicBlockId = "logic-subscription";
+      scopeProductIds = selectedProductsData.map((product) => String(product.id));
+      logicBlocks = [
+        {
+          id: logicBlockId,
+          type: "subscription",
+          config: {
+            enabled: subscriptionEnabled,
+            position: subscriptionPosition,
+            title: subscriptionTitle,
+            subtitle: subscriptionSubtitle,
+            oneTimeTitle,
+            oneTimeSubtitle,
+            defaultSelected: subscriptionDefaultSelected,
+            productIds: scopeProductIds,
+          },
+        },
+      ];
+    } else {
+      return null;
+    }
+
+    return {
+      version: 1,
+      scope: {
+        productIds: scopeProductIds,
+        markets,
+        customerSegments,
+      },
+      logicBlocks,
       displayBlocks: [
         {
           id: "display-offer-card",
           type: "offer-card",
-          logicBlockRef: "logic-quantity-breaks",
-          config: {
-            title: widgetTitle,
-            layoutFormat,
-            accentColor,
-            cardBackgroundColor,
-            borderColor,
-            labelColor,
-            titleFontSize,
-            titleFontWeight,
-            titleColor,
-            buttonText,
-            buttonPrimaryColor,
-            showCustomButton,
-          },
+          logicBlockRef: logicBlockId,
+          config: buildOfferCardConfig(),
         },
         ...(showCountdownBlock
           ? [
@@ -1276,9 +1363,12 @@ export function CreateNewOffer({
   }, [
     accentColor,
     borderColor,
+    buyProducts,
+    bxgyDiscountRules,
     buttonPrimaryColor,
     buttonText,
     cardBackgroundColor,
+    completeBundleBars,
     countdownLabel,
     customerSegments,
     dailyBudget,
@@ -1287,12 +1377,20 @@ export function CreateNewOffer({
     layoutFormat,
     markets,
     normalizedDiscountRules,
+    oneTimeSubtitle,
+    oneTimeTitle,
     scheduleTimezone,
     selectedProductsData,
+    getProducts,
     showCountdownBlock,
     showCustomButton,
     startTime,
     status,
+    subscriptionDefaultSelected,
+    subscriptionEnabled,
+    subscriptionPosition,
+    subscriptionSubtitle,
+    subscriptionTitle,
     titleColor,
     titleFontSize,
     titleFontWeight,
@@ -1304,6 +1402,127 @@ export function CreateNewOffer({
   const campaignConfigJson = useMemo(
     () => (currentCampaignConfig ? JSON.stringify(currentCampaignConfig) : ""),
     [currentCampaignConfig],
+  );
+  const countdownPreviewText = useMemo(() => {
+    if (!showCountdownBlock || !endTime || !dayjs(endTime).isValid()) {
+      return "";
+    }
+    return `${countdownLabel || "Limited time offer"} • Ends ${dayjs(endTime)
+      .tz(scheduleTimezone)
+      .format("YYYY-MM-DD HH:mm")}`;
+  }, [countdownLabel, endTime, scheduleTimezone, showCountdownBlock]);
+  const scopeSummary = useMemo(() => {
+    if (offerType === "bxgy") {
+      return `${buyProducts.length} buy products + ${getProducts.length} get products`;
+    }
+    if (offerType === "complete-bundle") {
+      const uniqueProductCount = new Set(
+        completeBundleBars.flatMap((bar) =>
+          bar.products.map((product) => String(product.productId)),
+        ),
+      ).size;
+      return `${uniqueProductCount} products across ${completeBundleBars.length} bars`;
+    }
+    return `${selectedProductsData.length} selected products`;
+  }, [
+    buyProducts.length,
+    completeBundleBars,
+    getProducts.length,
+    offerType,
+    selectedProductsData.length,
+  ]);
+  const logicSummary = useMemo(() => {
+    if (offerType === "bxgy") {
+      const bestDiscount = bxgyDiscountRules.reduce(
+        (max, rule) => Math.max(max, rule.discountPercent),
+        0,
+      );
+      return `${bxgyDiscountRules.length} BXGY tiers, up to ${bestDiscount}% off`;
+    }
+    if (offerType === "complete-bundle") {
+      const bxgyBars = completeBundleBars.filter((bar) => bar.type === "bxgy").length;
+      const quantityBars = completeBundleBars.length - bxgyBars;
+      return `${quantityBars} quantity bars, ${bxgyBars} BXGY bars`;
+    }
+    if (offerType === "subscription") {
+      return subscriptionEnabled
+        ? `Subscription enabled for ${selectedProductsData.length} products`
+        : "Subscription block configured but disabled";
+    }
+    const bestDiscount = normalizedDiscountRules.reduce(
+      (max, rule) => Math.max(max, rule.discountPercent),
+      0,
+    );
+    return `${normalizedDiscountRules.length} quantity tiers, up to ${bestDiscount}% off`;
+  }, [
+    bxgyDiscountRules,
+    completeBundleBars,
+    normalizedDiscountRules,
+    offerType,
+    selectedProductsData.length,
+    subscriptionEnabled,
+  ]);
+  const displaySummary = useMemo(() => {
+    return showCountdownBlock ? "Offer card + Countdown" : "Offer card only";
+  }, [showCountdownBlock]);
+  const logicBlockLabel = useMemo(() => {
+    switch (offerType) {
+      case "bxgy":
+        return "Buy X Get Y";
+      case "complete-bundle":
+        return "Complete Bundle";
+      case "subscription":
+        return "Subscription";
+      default:
+        return "Quantity Breaks";
+    }
+  }, [offerType]);
+  const logicBlockDescription = useMemo(() => {
+    switch (offerType) {
+      case "bxgy":
+        return "Promote a buy-and-reward mechanic with separate buy and get product groups.";
+      case "complete-bundle":
+        return "Present multi-bar bundle combinations with per-product pricing and variant previews.";
+      case "subscription":
+        return "Show a subscription purchase mode alongside one-time purchase messaging.";
+      default:
+        return "Reward larger quantities of the same product with progressively better pricing.";
+    }
+  }, [offerType]);
+  const stepTwoDescription = useMemo(() => {
+    switch (offerType) {
+      case "bxgy":
+        return "Choose the buy and get product groups, then define the reward tiers customers can unlock.";
+      case "complete-bundle":
+        return "Build each bundle bar, attach the right products, and control how the combined offer is priced.";
+      case "subscription":
+        return "Pick the products that participate and configure how subscription and one-time purchase options are presented.";
+      default:
+        return "Select the products in scope and define the quantity tiers that drive the promotion.";
+    }
+  }, [offerType]);
+  const stepThreeDescription = useMemo(() => {
+    return `Configure how your ${logicBlockLabel} campaign appears on the storefront, including optional promotional display blocks.`;
+  }, [logicBlockLabel]);
+  const summaryCards = useMemo(
+    () => [
+      {
+        label: "Scope",
+        value: scopeSummary,
+        helper: "Which products participate in this campaign.",
+      },
+      {
+        label: "Logic",
+        value: logicSummary,
+        helper: "How customers qualify and what reward they get.",
+      },
+      {
+        label: "Display",
+        value: displaySummary,
+        helper: "How the campaign is presented on the storefront.",
+      },
+    ],
+    [displaySummary, logicSummary, scopeSummary],
   );
 
   const hasDefault = normalizedDiscountRules.some(r => r.isDefault);
@@ -1398,10 +1617,10 @@ export function CreateNewOffer({
   ]);
 
   const steps = [
-    "Basic Information",
-    "Products & Discounts",
-    "Style Design",
-    "Schedule & Budget",
+    "Campaign",
+    "Scope & Logic",
+    "Display",
+    "Targeting",
   ];
 
   const offerTypes = OFFER_TYPE_OPTIONS;
@@ -1434,120 +1653,6 @@ export function CreateNewOffer({
       setSubscriptionEnabled(true);
     }
   }, [offerType]);
-
-  const renderSubscriptionSettings = () => (
-    <div className="mb-6 rounded-[12px] border border-[#e3e8ed] p-4 bg-[#fafbfb]">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-[14px] font-medium text-[#1c1f23] m-0">
-          Subscription
-        </h3>
-        <Switch
-          checked={subscriptionEnabled}
-          onChange={(checked) => setSubscriptionEnabled(checked)}
-        />
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div>
-          <label className="block text-[13px] text-[#5c6166] mb-1">
-            Subscribe title
-          </label>
-          <Input
-            size="large"
-            value={subscriptionTitle}
-            onChange={(e) => setSubscriptionTitle(e.target.value)}
-            maxLength={60}
-          />
-        </div>
-        <div>
-          <label className="block text-[13px] text-[#5c6166] mb-1">
-            Subscribe subtitle
-          </label>
-          <Input
-            size="large"
-            value={subscriptionSubtitle}
-            onChange={(e) => setSubscriptionSubtitle(e.target.value)}
-            maxLength={60}
-          />
-        </div>
-        <div>
-          <label className="block text-[13px] text-[#5c6166] mb-1">
-            One-time title
-          </label>
-          <Input
-            size="large"
-            value={oneTimeTitle}
-            onChange={(e) => setOneTimeTitle(e.target.value)}
-            maxLength={60}
-          />
-        </div>
-        <div>
-          <label className="block text-[13px] text-[#5c6166] mb-1">
-            One-time subtitle
-          </label>
-          <Input
-            size="large"
-            value={oneTimeSubtitle}
-            onChange={(e) => setOneTimeSubtitle(e.target.value)}
-            maxLength={60}
-          />
-        </div>
-      </div>
-      <div className="mt-3">
-        <Select
-          value={subscriptionPosition}
-          onChange={(value) =>
-            setSubscriptionPosition(value as "below-bundle-bars")
-          }
-          options={[
-            {
-              value: "below-bundle-bars",
-              label: "Below bundle deal bars",
-            },
-          ]}
-          style={{ width: "100%" }}
-        />
-      </div>
-      <div className="mt-3">
-        <Checkbox
-          checked={subscriptionDefaultSelected}
-          onChange={(e) => setSubscriptionDefaultSelected(e.target.checked)}
-        >
-          Make subscription option selected by default
-        </Checkbox>
-      </div>
-
-      {/* 中文注释：选中商品全部有 selling plan 时显示实线，否则显示虚线并补充解释文案 */}
-      {shouldShowSubscriptionPreview && (
-        <div className="mt-4">
-          <div
-            className={`rounded-[10px] p-3 ${
-              allSelectedProductsHaveSubscription
-                ? "border border-[#c9ccd0]"
-                : "border border-dashed border-[#b7b7b7]"
-            }`}
-          >
-            <div className="text-[14px] font-semibold text-[#1c1f23]">
-              {subscriptionTitle || "Subscribe & Save 20%"}
-            </div>
-            <div className="text-[13px] text-[#8c9196] mt-1">
-              {subscriptionSubtitle || "Delivered weekly"}
-            </div>
-          </div>
-          {shouldShowSubscriptionExplanation && (
-            <div className="mt-3 rounded-[10px] bg-[#eaf4ff] p-3">
-              <div className="text-[13px] font-semibold text-[#1c1f23]">
-                {subscriptionExplanationTitle}
-              </div>
-              <div className="text-[12px] text-[#4f5b67] mt-1 leading-[1.5]">
-                {subscriptionExplanationBody}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-
 
   return (
     <fetcher.Form
@@ -1843,11 +1948,16 @@ export function CreateNewOffer({
         </div>
 
         <div>
+          {step >= 2 && <BuilderSummaryCards cards={summaryCards} />}
           {step === 1 && (
             <div className="create-offer-basic-grid lg:grid-cols-[1fr_400px]">
               <div className="flex flex-col gap-6">
                 <div>
                   <div className="flex flex-col gap-4">
+                      <BuilderStepIntro
+                        title="Campaign Setup"
+                        description="Name this campaign and choose the core promotion mechanic before configuring scope, display, and targeting."
+                      />
                     <div>
                       <label className="block">
                         <span className="block text-[14px] font-medium text-[#1c1f23] mb-1">
@@ -1968,745 +2078,77 @@ export function CreateNewOffer({
             <>
               <div className="create-offer-products-grid">
                 <div>
-                  <div className="mb-6">
-                    <h2 className="m-0 text-[20px] font-semibold text-[#1c1f23]">
-                    Products & Discounts
-                    </h2>
-                  </div>
+                  <BuilderStepIntro
+                    title="Scope & Logic"
+                    description={stepTwoDescription}
+                    meta={logicBlockLabel}
+                  />
 
                   {offerType === "bxgy" ? (
-                    <>
-                      <div className="mb-6">
-                        <div className="create-offer-panel create-offer-panel--muted">
-                          <div className="create-offer-panel__header">
-                            <div>
-                              <div className="create-offer-panel__eyebrow">BXGY Setup</div>
-                              <h3 className="create-offer-panel__title">Buy Products (X)</h3>
-                            </div>
-                            {buyProducts.length > 0 ? (
-                              <div className="create-offer-kpi-badge">
-                                {buyProducts.length} selected
-                              </div>
-                            ) : null}
-                          </div>
-                          {buyProducts.length === 0 ? (
-                            <Button
-                              size="large"
-                              className="text-[#008060] border-[#008060] hover:text-[#006e52] hover:border-[#006e52] hover:bg-[#f0f9f6]"
-                              onClick={(e) => {
-                                handleSelectProducts("buy");
-                                e.preventDefault();
-                              }}
-                            >
-                              Select buy products
-                            </Button>
-                          ) : (
-                            <div className="create-offer-panel__footer">
-                              <Button
-                                size="small"
-                                onClick={(e) => {
-                                  handleSelectProducts("buy");
-                                  e.preventDefault();
-                                }}
-                              >
-                                Edit buy products
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="mb-8">
-                        <div className="create-offer-panel create-offer-panel--muted">
-                          <div className="create-offer-panel__header">
-                            <div>
-                              <div className="create-offer-panel__eyebrow">BXGY Setup</div>
-                              <h3 className="create-offer-panel__title">Get Products (Y)</h3>
-                            </div>
-                            {getProducts.length > 0 ? (
-                              <div className="create-offer-kpi-badge">
-                                {getProducts.length} selected
-                              </div>
-                            ) : null}
-                          </div>
-                          {getProducts.length === 0 ? (
-                            <Button
-                              size="large"
-                              className="text-[#008060] border-[#008060] hover:text-[#006e52] hover:border-[#006e52] hover:bg-[#f0f9f6]"
-                              onClick={(e) => {
-                                handleSelectProducts("get");
-                                e.preventDefault();
-                              }}
-                            >
-                              Select get products
-                            </Button>
-                          ) : (
-                            <div className="create-offer-panel__footer">
-                              <Button
-                                size="small"
-                                onClick={(e) => {
-                                  handleSelectProducts("get");
-                                  e.preventDefault();
-                                }}
-                              >
-                                Edit get products
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </>
+                    <BxgyLogicEditor
+                      buyProductsCount={buyProducts.length}
+                      getProductsCount={getProducts.length}
+                      onSelectBuyProducts={() => handleSelectProducts("buy")}
+                      onSelectGetProducts={() => handleSelectProducts("get")}
+                      bxgyDiscountRules={bxgyDiscountRules}
+                      setBxgyDiscountRules={setBxgyDiscountRules}
+                    />
                   ) : offerType === "complete-bundle" ? (
-                    <div className="mb-8">
-                      <div className="create-offer-panel create-offer-panel--muted">
-                        <div className="create-offer-panel__header">
-                          <div>
-                            <div className="create-offer-panel__eyebrow">Bundle Structure</div>
-                            <h3 className="create-offer-panel__title">Bundle bars</h3>
-                          </div>
-                          <div className="create-offer-panel__actions">
-                            <Dropdown
-                              trigger={["click"]}
-                              menu={{
-                                items: [
-                                  { key: "quantity", label: "Add Quantity bar" },
-                                  { key: "bxgy", label: "Add Buy X Get Y bar" },
-                                ],
-                                onClick: ({ key }) => {
-                                  if (key === "bxgy") addCompleteBundleBar("bxgy");
-                                  else addCompleteBundleBar("quantity-break-same");
-                                },
-                              }}
-                            >
-                              <Button size="small">Add bar</Button>
-                            </Dropdown>
-                          </div>
-                        </div>
-                        <div className="create-offer-panel__meta">
-                          {completeBundleBars.length} bar
-                          {completeBundleBars.length > 1 ? "s" : ""} configured
-                        </div>
-                      </div>
-                      <div className="flex flex-col gap-3">
-                        {completeBundleBars.map((bar, index) => (
-                          <div
-                            key={bar.id}
-                            className={`create-offer-bundle-bar ${
-                              activeBundleBar?.id === bar.id
-                                ? "create-offer-bundle-bar--active"
-                                : ""
-                            }`}
-                          >
-                            <div className="flex items-center justify-between gap-3 mb-2">
-                              <Button
-                                type="link"
-                                className="px-0"
-                                onClick={(e) => {
-                                  setActiveBundleBarId(bar.id);
-                                  e.preventDefault();
-                                }}
-                              >
-                                Bar #{index + 1} - {bar.title || (bar.type === "bxgy" ? "Buy X, Get Y" : "Complete the bundle")}
-                              </Button>
-                              {completeBundleBars.length > 1 && (
-                                <Button
-                                  size="small"
-                                  danger
-                                  onClick={(e) => {
-                                    removeCompleteBundleBar(bar.id);
-                                    e.preventDefault();
-                                  }}
-                                >
-                                  Remove
-                                </Button>
-                              )}
-                            </div>
-                            <div className="grid grid-cols-2 gap-3">
-                              <label className="block text-[12px]">
-                                <span className="block mb-1">Title</span>
-                                <Input
-                                  size="small"
-                                  value={bar.title || ""}
-                                  onChange={(e) =>
-                                    updateCompleteBundleBar(bar.id, { title: e.target.value })
-                                  }
-                                />
-                              </label>
-                              <label className="block text-[12px]">
-                                <span className="block mb-1">Quantity</span>
-                                <Input
-                                  size="small"
-                                  type="number"
-                                  min={1}
-                                  value={bar.quantity}
-                                  onChange={(e) =>
-                                    updateCompleteBundleBar(bar.id, {
-                                      quantity: Math.max(1, Math.trunc(Number(e.target.value) || 1)),
-                                    })
-                                  }
-                                />
-                              </label>
-                            </div>
-                            <div className="text-[12px] text-[#5c6166] mt-2">
-                              {bar.products.length} products selected
-                            </div>
-                            {/* 每栏内嵌「定价 + 变体预览」：Bar1 仅默认主商品；Bar2+ 可多商品并支持追加/删除 */}
-                            <div className="mt-3 pt-3 border-t border-[#ebedef]">
-                              <div className="text-[13px] font-medium text-[#1c1f23] mb-2">
-                                Bar Pricing & Variant Preview
-                              </div>
-                              {index === 0 ? (
-                                <div className="mb-2 flex flex-wrap items-center gap-2">
-                                  <Button
-                                    size="small"
-                                    onClick={(e) => {
-                                      setActiveBundleBarId(bar.id);
-                                      handleSelectProductsForBundleBar(bar.id);
-                                      e.preventDefault();
-                                    }}
-                                  >
-                                    {bar.products.length ? "Change default product" : "Select default product"}
-                                  </Button>
-                                  <span className="text-[11px] text-[#5c6166]">
-                                    Bar #1 仅允许 1 个默认主商品
-                                  </span>
-                                </div>
-                              ) : (
-                                <div className="mb-2">
-                                  <Button
-                                    size="small"
-                                    type="primary"
-                                    onClick={(e) => {
-                                      setActiveBundleBarId(bar.id);
-                                      appendProductsToBundleBar(bar.id);
-                                      e.preventDefault();
-                                    }}
-                                  >
-                                    + Add product
-                                  </Button>
-                                </div>
-                              )}
-                              {bar.products.length === 0 ? (
-                                <div className="text-[12px] text-[#5c6166]">
-                                  {index === 0
-                                    ? "请先选择默认主商品。"
-                                    : "本栏暂无商品，可点击「+ Add product」添加。"}
-                                </div>
-                              ) : (
-                                <div className="flex flex-col gap-4">
-                                  {bar.products.map((product, productIdx) =>
-                                    renderCompleteBundleProductPricingCard(
-                                      bar,
-                                      product,
-                                      productIdx,
-                                      index === 0,
-                                    ),
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                    <CompleteBundleEditor
+                      completeBundleBars={completeBundleBars}
+                      activeBundleBarId={activeBundleBarId}
+                      setActiveBundleBarId={setActiveBundleBarId}
+                      addCompleteBundleBar={addCompleteBundleBar}
+                      removeCompleteBundleBar={removeCompleteBundleBar}
+                      updateCompleteBundleBar={updateCompleteBundleBar}
+                      handleSelectProductsForBundleBar={handleSelectProductsForBundleBar}
+                      appendProductsToBundleBar={appendProductsToBundleBar}
+                      renderCompleteBundleProductPricingCard={
+                        renderCompleteBundleProductPricingCard
+                      }
+                    />
                   ) : (
-                    <div className="mb-8">
-                      <div className="create-offer-panel create-offer-panel--muted">
-                        <div className="create-offer-panel__header">
-                          <div>
-                            <div className="create-offer-panel__eyebrow">Product Scope</div>
-                            <h3 className="create-offer-panel__title">
-                              Products eligible for offer
-                            </h3>
-                          </div>
-                        </div>
-
-                        {selectedProductsData.length === 0 ? (
-                          <Button
-                            size="large"
-                            className="text-[#008060] border-[#008060] hover:text-[#006e52] hover:border-[#006e52] hover:bg-[#f0f9f6]"
-                            onClick={(e) => {
-                              handleSelectProducts();
-                              e.preventDefault();
-                            }}
-                          >
-                            Add products eligible for offer
-                          </Button>
-                        ) : (
-                          <div>
-                            <div className="create-offer-selected-grid">
-                              {selectedProductsData.slice(0, 3).map((product) => (
-                                <div
-                                  key={product.id}
-                                  className="create-offer-selected-card"
-                                >
-                                  <button
-                                    type="button"
-                                    className="create-offer-selected-remove"
-                                    onClick={(e) => {
-                                      setSelectedProductsData(
-                                        selectedProductsData.filter(
-                                          (p) => p.id !== product.id,
-                                        ),
-                                      );
-                                      e.preventDefault();
-                                    }}
-                                    aria-label={`Remove ${product.title}`}
-                                  >
-                                    <X size={14} />
-                                  </button>
-                                  <img
-                                    src={product.image}
-                                    alt={product.title}
-                                    className="create-offer-selected-image"
-                                  />
-                                  <div className="create-offer-selected-name">
-                                    {product.title}
-                                  </div>
-                                  <div className="create-offer-selected-price">
-                                    {product.price}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                            <div className="create-offer-panel__footer">
-                              <div className="create-offer-selected-count">
-                                {selectedProductsData.length} product
-                                {selectedProductsData.length > 1 ? "s" : ""}{" "}
-                                selected
-                                {(() => {
-                                  const totalVariants = selectedProductsData.reduce(
-                                    (sum, p) => sum + (p.variantsCount || 1),
-                                    0
-                                  );
-                                  return totalVariants > 0
-                                    ? ` (${totalVariants} variant${totalVariants > 1 ? "s" : ""})`
-                                    : "";
-                                })()}
-                              </div>
-                              <Button
-                                type="link"
-                                onClick={(e) => {
-                                  handleSelectProducts();
-                                  e.preventDefault();
-                                }}
-                                className="px-0"
-                              >
-                                Edit products
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                    <ScopeEditor
+                      selectedProductsData={selectedProductsData}
+                      onSelectProducts={handleSelectProducts}
+                      onRemoveProduct={(productId) =>
+                        setSelectedProductsData((prev) =>
+                          prev.filter((product) => product.id !== productId),
+                        )
+                      }
+                    />
                   )}
 
-                  {offerType === "subscription" && renderSubscriptionSettings()}
+                  {offerType === "subscription" && (
+                    <SubscriptionSettingsEditor
+                      subscriptionEnabled={subscriptionEnabled}
+                      setSubscriptionEnabled={setSubscriptionEnabled}
+                      subscriptionTitle={subscriptionTitle}
+                      setSubscriptionTitle={setSubscriptionTitle}
+                      subscriptionSubtitle={subscriptionSubtitle}
+                      setSubscriptionSubtitle={setSubscriptionSubtitle}
+                      oneTimeTitle={oneTimeTitle}
+                      setOneTimeTitle={setOneTimeTitle}
+                      oneTimeSubtitle={oneTimeSubtitle}
+                      setOneTimeSubtitle={setOneTimeSubtitle}
+                      subscriptionPosition={subscriptionPosition}
+                      setSubscriptionPosition={setSubscriptionPosition}
+                      subscriptionDefaultSelected={subscriptionDefaultSelected}
+                      setSubscriptionDefaultSelected={setSubscriptionDefaultSelected}
+                      shouldShowSubscriptionPreview={shouldShowSubscriptionPreview}
+                      allSelectedProductsHaveSubscription={allSelectedProductsHaveSubscription}
+                      shouldShowSubscriptionExplanation={shouldShowSubscriptionExplanation}
+                      subscriptionExplanationTitle={subscriptionExplanationTitle}
+                      subscriptionExplanationBody={subscriptionExplanationBody}
+                    />
+                  )}
 
                   {/* complete-bundle 的定价与变体已并入各 Bundle bar 卡片，此处仅渲染 BXGY 或普通折扣阶梯 */}
-                  {offerType === "bxgy" ? (
-                    <div>
-                      <div className="create-offer-panel create-offer-panel--muted mb-4">
-                        <div className="create-offer-panel__header">
-                          <div>
-                            <div className="create-offer-panel__eyebrow">Discount Logic</div>
-                            <h3 className="create-offer-panel__title">BXGY Rules</h3>
-                          </div>
-                        </div>
-                      </div>
-                        {bxgyDiscountRules.map((rule, index) => (
-                          <div className="create-offer-discount-card" key={index}>
-                            <div className="create-offer-discount-body">
-                              <div className="create-offer-discount-form-row create-offer-discount-form-row--inline">
-                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                                  Cart quantity
-                                  <Input
-                                    size="large"
-                                    type="number"
-                                    min={1}
-                                    step={1}
-                                    className="mt-1"
-                                    value={rule.count}
-                                    onChange={(e) => {
-                                      const parsedValue = Number(e.target.value);
-                                      const nextCount =
-                                        Number.isFinite(parsedValue) && parsedValue >= 1
-                                          ? Math.trunc(parsedValue)
-                                          : 1;
-                                      setBxgyDiscountRules(prev =>
-                                        prev.map((r, i) =>
-                                          i === index ? { ...r, count: nextCount } : r,
-                                        ),
-                                      );
-                                    }}
-                                  />
-                                </label>
-                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                                  Buy Quantity (X)
-                                  <Input
-                                    size="large"
-                                    type="number"
-                                    min={1}
-                                    step={1}
-                                    className="mt-1"
-                                    value={rule.buyQuantity}
-                                    onChange={(e) => {
-                                      const parsedValue = Number(e.target.value);
-                                      const nextCount =
-                                        Number.isFinite(parsedValue) && parsedValue >= 1
-                                          ? Math.trunc(parsedValue)
-                                          : 1;
-                                      setBxgyDiscountRules(prev =>
-                                        prev.map((r, i) =>
-                                          i === index ? { ...r, buyQuantity: nextCount } : r,
-                                        ),
-                                      );
-                                    }}
-                                  />
-                                </label>
-                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                                  Get Quantity (Y)
-                                  <Input
-                                    size="large"
-                                    type="number"
-                                    min={1}
-                                    step={1}
-                                    className="mt-1"
-                                    value={rule.getQuantity}
-                                    onChange={(e) => {
-                                      const parsedValue = Number(e.target.value);
-                                      const nextCount =
-                                        Number.isFinite(parsedValue) && parsedValue >= 1
-                                          ? Math.trunc(parsedValue)
-                                          : 1;
-                                      setBxgyDiscountRules(prev =>
-                                        prev.map((r, i) =>
-                                          i === index ? { ...r, getQuantity: nextCount } : r,
-                                        ),
-                                      );
-                                    }}
-                                  />
-                                </label>
-                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                                  Discount (%)
-                                  <Input
-                                    size="large"
-                                    type="number"
-                                    min={0}
-                                    max={100}
-                                    step={1}
-                                    className="mt-1"
-                                    value={rule.discountPercent}
-                                    onChange={(e) => {
-                                      const parsedValue = Number(e.target.value);
-                                      if (parsedValue > 100) return;
-                                      const nextPercent =
-                                        Number.isFinite(parsedValue) && parsedValue >= 0
-                                          ? parsedValue
-                                          : 0;
-                                      setBxgyDiscountRules(prev =>
-                                        prev.map((r, i) =>
-                                          i === index
-                                            ? { ...r, discountPercent: nextPercent }
-                                            : r,
-                                        ),
-                                      );
-                                    }}
-                                  />
-                                  {rule.discountPercent === 100 && (
-                                    <div className="text-[#52c41a] text-[12px] mt-1 font-normal">
-                                      Y products will be FREE
-                                    </div>
-                                  )}
-                                </label>
-                              </div>
-
-                              <div className="create-offer-inline-grid-3">
-                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                                  Title
-                                  <Input
-                                    size="large"
-                                    className="mt-1"
-                                    value={rule.title || ''}
-                                    placeholder="e.g. Duo, Trio"
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setBxgyDiscountRules(prev => prev.map((r, i) => i === index ? { ...r, title: val } : r));
-                                    }}
-                                  />
-                                </label>
-                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                                  Subtitle
-                                  <Input
-                                    size="large"
-                                    className="mt-1"
-                                    value={rule.subtitle || ''}
-                                    placeholder="e.g. Buy 2, get 1 free"
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setBxgyDiscountRules(prev => prev.map((r, i) => i === index ? { ...r, subtitle: val } : r));
-                                    }}
-                                  />
-                                </label>
-                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                                  Badge
-                                  <Input
-                                    size="large"
-                                    className="mt-1"
-                                    value={rule.badge || ''}
-                                    placeholder="e.g. Most Popular"
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setBxgyDiscountRules(prev => prev.map((r, i) => i === index ? { ...r, badge: val } : r));
-                                    }}
-                                  />
-                                </label>
-                              </div>
-
-                              <div className="create-offer-inline-grid-2">
-                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                                  Max Uses Per Order
-                                  <Input
-                                    size="large"
-                                    type="number"
-                                    min={1}
-                                    step={1}
-                                    className="mt-1"
-                                    value={rule.maxUsesPerOrder}
-                                    onChange={(e) => {
-                                      const parsedValue = Number(e.target.value);
-                                      const nextMax =
-                                        Number.isFinite(parsedValue) && parsedValue >= 1
-                                          ? Math.trunc(parsedValue)
-                                          : 1;
-                                      setBxgyDiscountRules(prev =>
-                                        prev.map((r, i) =>
-                                          i === index ? { ...r, maxUsesPerOrder: nextMax } : r,
-                                        ),
-                                      );
-                                    }}
-                                  />
-                                </label>
-                              </div>
-
-                              <div className="create-offer-inline-row">
-                                <Checkbox
-                                  checked={!!rule.isDefault}
-                                  onChange={(e) => {
-                                    const checked = e.target.checked;
-                                    setBxgyDiscountRules(prev =>
-                                      prev.map((r, i) => ({
-                                        ...r,
-                                        isDefault: checked ? i === index : false,
-                                      }))
-                                    );
-                                  }}
-                                >
-                                  Set as Default Selected
-                                </Checkbox>
-                                <Button
-                                  danger
-                                  onClick={() => {
-                                    setBxgyDiscountRules(prev => {
-                                      if (prev.length <= 1) return prev;
-                                      return prev.filter((_, i) => i !== index);
-                                    });
-                                  }}
-                                  disabled={bxgyDiscountRules.length <= 1}
-                                >
-                                  Remove
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                        <Button
-                          type="dashed"
-                          className="w-full"
-                          onClick={() => {
-                            setBxgyDiscountRules(prev => {
-                              const maxCount = prev.reduce((max, rule) => Math.max(max, rule.count), 1);
-                              return [...prev, {
-                                count: maxCount + 1,
-                                buyQuantity: 2,
-                                getQuantity: 1,
-                                buyProductIds: buyProducts,
-                                getProductIds: getProducts,
-                                discountPercent: 100,
-                                maxUsesPerOrder: 1,
-                              }];
-                            });
-                          }}
-                        >
-                          + Add BXGY tier
-                        </Button>
-                    </div>
-                    ) : offerType === "complete-bundle" || offerType === "subscription" ? null : (
-                    <div>
-                      <div className="create-offer-panel create-offer-panel--muted mb-4">
-                        <div className="create-offer-panel__header">
-                          <div>
-                            <div className="create-offer-panel__eyebrow">Discount Logic</div>
-                            <h3 className="create-offer-panel__title">Discount Setting</h3>
-                          </div>
-                        </div>
-                      </div>
-                        {discountRules.map((rule, index) => (
-                          <div className="create-offer-discount-card" key={index}>
-                            <div className="create-offer-discount-body">
-                              <div className="create-offer-discount-form-row create-offer-discount-form-row--inline">
-                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                                  Item quantity
-                                  <Input
-                                    size="large"
-                                    type="number"
-                                    min={1}
-                                    step={1}
-                                    className="mt-1"
-                                    value={rule.count}
-                                    onChange={(e) => {
-                                      const parsedValue = Number(e.target.value);
-                                      const nextCount =
-                                        Number.isFinite(parsedValue) && parsedValue >= 1
-                                          ? Math.trunc(parsedValue)
-                                          : 1;
-                                      setDiscountRules((prev) =>
-                                        prev.map((r, i) =>
-                                          i === index ? { ...r, count: nextCount } : r,
-                                        ),
-                                      );
-                                    }}
-                                  />
-                                </label>
-                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                                  Discount (%)
-                                  <Input
-                                    size="large"
-                                    type="number"
-                                    min={0}
-                                    max={100}
-                                    step={1}
-                                    className="mt-1"
-                                    value={rule.discountPercent}
-                                    onChange={(e) => {
-                                      const parsedValue = Number(e.target.value);
-                                      if (parsedValue > 100) return; // Do not allow entering > 100
-                                      const nextPercent =
-                                        Number.isFinite(parsedValue) && parsedValue >= 0
-                                          ? parsedValue
-                                          : 0;
-                                      setDiscountRules((prev) =>
-                                        prev.map((r, i) =>
-                                          i === index
-                                            ? { ...r, discountPercent: nextPercent }
-                                            : r,
-                                        ),
-                                      );
-                                    }}
-                                  />
-                                  {rule.discountPercent > 50 && rule.discountPercent < 90 && (
-                                    <div className="text-[#faad14] text-[12px] mt-1 font-normal">
-                                      A discount over 50% may result in losses. Please double-check.
-                                    </div>
-                                  )}
-                                  {rule.discountPercent >= 90 && (
-                                    <div className="text-[#ff4d4f] text-[12px] mt-1 font-normal">
-                                      A discount of 90% or more means the product is nearly free.
-                                    </div>
-                                  )}
-                                </label>
-                              </div>
-                              
-                              {/* 新增的文本配置字段 */}
-                              <div className="create-offer-inline-grid-3">
-                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                                  Title
-                                  <Input
-                                    size="large"
-                                    className="mt-1"
-                                    value={rule.title || ''}
-                                    placeholder="e.g. Duo, Trio"
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setDiscountRules(prev => prev.map((r, i) => i === index ? { ...r, title: val } : r));
-                                    }}
-                                  />
-                                </label>
-                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                                  Subtitle
-                                  <Input
-                                    size="large"
-                                    className="mt-1"
-                                    value={rule.subtitle || ''}
-                                    placeholder="e.g. You save 20%"
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setDiscountRules(prev => prev.map((r, i) => i === index ? { ...r, subtitle: val } : r));
-                                    }}
-                                  />
-                                </label>
-                                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                                  Badge
-                                  <Input
-                                    size="large"
-                                    className="mt-1"
-                                    value={rule.badge || ''}
-                                    placeholder="e.g. Most Popular"
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setDiscountRules(prev => prev.map((r, i) => i === index ? { ...r, badge: val } : r));
-                                    }}
-                                  />
-                                </label>
-                              </div>
-                              
-                              <div className="create-offer-inline-row">
-                                <Checkbox
-                                  checked={!!rule.isDefault}
-                                  onChange={(e) => {
-                                    const checked = e.target.checked;
-                                    setDiscountRules((prev) =>
-                                      prev.map((r, i) => ({
-                                        ...r,
-                                        isDefault: checked ? i === index : false,
-                                      }))
-                                    );
-                                  }}
-                                >
-                                  Set as Default Selected
-                                </Checkbox>
-                                <Button
-                                  danger
-                                  onClick={() => {
-                                    setDiscountRules((prev) => {
-                                      if (prev.length <= 1) return prev;
-                                      return prev.filter((_, i) => i !== index);
-                                    });
-                                  }}
-                                  disabled={discountRules.length <= 1}
-                                >
-                                  Remove
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                        <Button
-                          type="dashed"
-                          className="w-full"
-                          onClick={() => {
-                            setDiscountRules((prev) => {
-                              const maxCount = prev.reduce(
-                                (max, rule) => Math.max(max, rule.count),
-                                1,
-                              );
-                              return [...prev, { count: maxCount + 1, discountPercent: 15 }];
-                            });
-                          }}
-                        >
-                          + Add discount tier
-                        </Button>
-                    </div>
+                  {offerType === "bxgy" ? null : offerType === "complete-bundle" || offerType === "subscription" ? null : (
+                      <QuantityBreaksLogicEditor
+                        discountRules={discountRules}
+                        setDiscountRules={setDiscountRules}
+                      />
                     )}
                   <ProgressiveGiftsSection
                     offerType={offerType}
@@ -3021,11 +2463,20 @@ export function CreateNewOffer({
           {step === 3 && (
             <div className="create-offer-style-grid">
               <div>
-                <div className="mb-6">
-                  <h2 className="m-0 text-[20px] font-semibold text-[#1c1f23]">
-                  Style Design
-                  </h2>
-                </div>
+                <BuilderStepIntro
+                  title="Display"
+                  description={stepThreeDescription}
+                  meta={`${logicBlockLabel} storefront presentation`}
+                />
+
+                <DisplayBlocksEditor
+                  logicBlockLabel={logicBlockLabel}
+                  logicBlockDescription={logicBlockDescription}
+                  showCountdownBlock={showCountdownBlock}
+                  setShowCountdownBlock={setShowCountdownBlock}
+                  countdownLabel={countdownLabel}
+                  setCountdownLabel={setCountdownLabel}
+                />
 
                 <div className="mb-6">
                   <label className="block text-[14px] font-medium text-[#1c1f23] mb-2">
@@ -3300,6 +2751,11 @@ export function CreateNewOffer({
                 <div className="create-offer-preview-shell">
                   <div className="create-offer-preview-shell__eyebrow">Preview</div>
                   <h3 className="create-offer-preview-shell__title">Live Preview</h3>
+                {showCountdownBlock && countdownPreviewText ? (
+                  <div className="mb-4 rounded-lg border border-[#ffe58f] bg-[#fffbe6] px-3 py-2 text-[12px] text-[#ad6800]">
+                    {countdownPreviewText}
+                  </div>
+                ) : null}
                 {progressiveGifts.enabled ? (
                   <div className="mb-4 space-y-2">
                     <div className="text-[13px] font-medium text-[#1c1f23]">
@@ -3365,225 +2821,70 @@ export function CreateNewOffer({
 
           {step === 4 && (
             <div>
-              <div className="mb-6">
-                <h2 className="m-0 text-[20px] font-semibold text-[#1c1f23]">
-                Targeting & Settings
-                </h2>
+              <BuilderStepIntro
+                title="Targeting"
+                description="Control schedule, market visibility, and activation so this campaign launches with the right audience and timing."
+              />
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8">
+                <div className="rounded-lg border border-[#dfe3e8] bg-white p-3">
+                  <div className="text-[12px] font-semibold uppercase tracking-[0.04em] text-[#5c6166]">
+                    Schedule
+                  </div>
+                  <div className="mt-1 text-[14px] text-[#1c1f23]">
+                    {startTime && endTime ? "Start and end time set" : "Schedule needs attention"}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-[#dfe3e8] bg-white p-3">
+                  <div className="text-[12px] font-semibold uppercase tracking-[0.04em] text-[#5c6166]">
+                    Markets
+                  </div>
+                  <div className="mt-1 text-[14px] text-[#1c1f23]">
+                    {markets.includes("all")
+                      ? "Visible in all markets"
+                      : `${markets.length} market${markets.length > 1 ? "s" : ""} selected`}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-[#dfe3e8] bg-white p-3">
+                  <div className="text-[12px] font-semibold uppercase tracking-[0.04em] text-[#5c6166]">
+                    Status
+                  </div>
+                  <div className="mt-1 text-[14px] text-[#1c1f23]">
+                    {status ? "Campaign will be active after save" : "Campaign will be saved as inactive"}
+                  </div>
+                </div>
               </div>
 
-              <div className="mb-8">
-                <div className="create-offer-panel create-offer-panel--muted">
-                  <div className="create-offer-panel__header">
-                    <div>
-                      <div className="create-offer-panel__eyebrow">Visibility</div>
-                      <h3 className="create-offer-panel__title">Target Audience</h3>
-                    </div>
-                  </div>
-                <div className="flex flex-col gap-4">
-                  {/* Hidden Customer Segments */}
-                  {false && <div>
-                    <label className="block text-[14px] font-medium text-[#1c1f23] mb-2">
-                      Customer Segments
-                    </label>
-                    <div className="grid grid-cols-2 gap-3 border border-gray-200 rounded-md p-4">
-                      <Checkbox
-                        checked={customerSegments.includes("all")}
-                        onChange={(e) => {
-                          if (e.target.checked) setCustomerSegments(["all"]);
-                        }}
-                      >
-                        All Customers
-                      </Checkbox>
-                      <Checkbox
-                        checked={customerSegments.includes("vip")}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setCustomerSegments(prev => prev.includes("all") ? ["vip"] : [...prev, "vip"]);
-                          } else {
-                            setCustomerSegments(prev => prev.filter(v => v !== "vip"));
-                          }
-                        }}
-                      >
-                        VIP Customers
-                      </Checkbox>
-                      <Checkbox
-                        checked={customerSegments.includes("new")}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setCustomerSegments(prev => prev.includes("all") ? ["new"] : [...prev, "new"]);
-                          } else {
-                            setCustomerSegments(prev => prev.filter(v => v !== "new"));
-                          }
-                        }}
-                      >
-                        New Customers
-                      </Checkbox>
-                      <Checkbox
-                        checked={customerSegments.includes("returning")}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setCustomerSegments(prev => prev.includes("all") ? ["returning"] : [...prev, "returning"]);
-                          } else {
-                            setCustomerSegments(prev => prev.filter(v => v !== "returning"));
-                          }
-                        }}
-                      >
-                        Returning Customers
-                      </Checkbox>
-                      <Checkbox
-                        checked={customerSegments.includes("high-value")}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setCustomerSegments(prev => prev.includes("all") ? ["high-value"] : [...prev, "high-value"]);
-                          } else {
-                            setCustomerSegments(prev => prev.filter(v => v !== "high-value"));
-                          }
-                        }}
-                      >
-                        High-Value Customers
-                      </Checkbox>
-                      <Checkbox
-                        checked={customerSegments.includes("at-risk")}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setCustomerSegments(prev => prev.includes("all") ? ["at-risk"] : [...prev, "at-risk"]);
-                          } else {
-                            setCustomerSegments(prev => prev.filter(v => v !== "at-risk"));
-                          }
-                        }}
-                      >
-                        At-Risk Customers
-                      </Checkbox>
-                    </div>
-                    <p className="text-[13px] text-[#5c6166] mt-2">
-                      Select one or more customer segments to target
-                    </p>
-                  </div>}
+              <ScheduleTargetingEditor
+                markets={markets}
+                setMarkets={setMarkets}
+                shopMarkets={shopMarkets}
+                scheduleTimezone={scheduleTimezone}
+                setScheduleTimezone={setScheduleTimezone}
+                tzOptions={tzOptions}
+                startTime={startTime}
+                setStartTime={setStartTime}
+                endTime={endTime}
+                setEndTime={setEndTime}
+                startTimeError={startTimeError}
+                setStartTimeError={setStartTimeError}
+                endTimeError={endTimeError}
+                setEndTimeError={setEndTimeError}
+              />
 
+              <div className="mb-8">
+                <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
+                  Campaign Status
+                </h3>
+                <div className="flex items-center justify-between rounded-lg border border-[#dfe3e8] bg-white p-4">
                   <div>
-                    <label className="block text-[14px] font-medium text-[#1c1f23] mb-2">
-                      Market Visibility
-                    </label>
-                    <div className="create-offer-setting-card">
-                      <div className="create-offer-setting-grid">
-                      <Checkbox
-                        checked={markets.includes("all")}
-                        onChange={(e) => {
-                          if (e.target.checked) setMarkets(["all"]);
-                        }}
-                      >
-                        All Markets
-                      </Checkbox>
-                      {shopMarkets.map((market) => (
-                        <Checkbox
-                          key={market.id}
-                          checked={markets.includes(market.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setMarkets((prev) =>
-                                prev.includes("all") ? [market.id] : [...prev, market.id]
-                              );
-                            } else {
-                              setMarkets((prev) => prev.filter((v) => v !== market.id));
-                            }
-                          }}
-                        >
-                          {market.name}
-                        </Checkbox>
-                      ))}
-                      </div>
+                    <div className="text-[14px] font-medium text-[#1c1f23]">
+                      Activate after save
                     </div>
-                    <p className="text-[13px] text-[#5c6166] mt-2">
-                      Select which markets can see this offer
-                    </p>
-                  </div>
-                </div>
-                </div>
-              </div>
-
-              <div className="mb-8">
-                <div className="create-offer-panel create-offer-panel--muted">
-                  <div className="create-offer-panel__header">
-                    <div>
-                      <div className="create-offer-panel__eyebrow">Timing</div>
-                      <h3 className="create-offer-panel__title">Schedule</h3>
+                    <div className="text-[13px] text-[#5c6166]">
+                      Turn this off if you want to finish setup before showing the offer.
                     </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[13px] text-[#5c6166]">Timezone:</span>
-                    <Select
-                      size="small"
-                      showSearch
-                      className="w-[240px]"
-                      value={scheduleTimezone}
-                      onChange={setScheduleTimezone}
-                      options={tzOptions}
-                    />
                   </div>
-                </div>
-                <div className="create-offer-setting-grid">
-                  <label className="block text-[14px] font-medium text-[#1c1f23]">
-                    Start Time
-                    <DatePicker
-                      size="large"
-                      showTime={{ format: 'HH:mm' }}
-                      format="YYYY-MM-DD HH:mm"
-                      className="mt-1 w-full text-[14px]"
-                      value={startTime && dayjs(startTime).isValid() ? dayjs(startTime).tz(scheduleTimezone) : null}
-                      onChange={(date) => {
-                        const val = date ? dayjs.tz(date.format('YYYY-MM-DD HH:mm:ss'), scheduleTimezone).toISOString() : '';
-                        setStartTime(val);
-                        if (val && endTime && dayjs(endTime).isBefore(dayjs(val))) {
-                          setStartTimeError("Start time must be before end time.");
-                        } else {
-                          setStartTimeError("");
-                          setEndTimeError("");
-                        }
-                      }}
-                      status={startTimeError ? "error" : ""}
-                    />
-                    <input type="hidden" name="startTime" value={startTime} />
-                    {startTimeError ? (
-                      <p className="text-red-500 text-xs mt-1">
-                        {startTimeError}
-                      </p>
-                    ) : (
-                      <p className="text-[13px] text-[#5c6166] mt-1 font-normal">
-                        When the offer becomes active
-                      </p>
-                    )}
-                  </label>
-                  <label className="block text-[14px] font-medium text-[#1c1f23]">
-                    End Time
-                    <DatePicker
-                      size="large"
-                      showTime={{ format: 'HH:mm' }}
-                      format="YYYY-MM-DD HH:mm"
-                      className="mt-1 w-full"
-                      value={endTime && dayjs(endTime).isValid() ? dayjs(endTime).tz(scheduleTimezone) : null}
-                      onChange={(date) => {
-                        const val = date ? dayjs.tz(date.format('YYYY-MM-DD HH:mm:ss'), scheduleTimezone).toISOString() : '';
-                        setEndTime(val);
-                        if (val && startTime && dayjs(val).isBefore(dayjs(startTime))) {
-                          setEndTimeError("End time must be after start time.");
-                        } else {
-                          setEndTimeError("");
-                          setStartTimeError("");
-                        }
-                      }}
-                      status={endTimeError ? "error" : ""}
-                    />
-                    <input type="hidden" name="endTime" value={endTime} />
-                    {endTimeError ? (
-                      <p className="text-red-500 text-xs mt-1">
-                        {endTimeError}
-                      </p>
-                    ) : (
-                      <p className="text-[13px] text-[#5c6166] mt-1 font-normal">
-                        When the offer expires
-                      </p>
-                    )}
-                  </label>
-                </div>
+                  <Switch checked={status} onChange={setStatus} />
                 </div>
               </div>
 

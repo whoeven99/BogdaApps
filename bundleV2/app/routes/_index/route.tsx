@@ -1548,6 +1548,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       endTimeRaw = parsedCampaignConfig.settings.endTime || endTimeRaw;
     } else {
       const derivedCampaignConfig = migrateLegacyOfferToCampaignConfig({
+        offerType,
         selectedProductsJson,
         discountRulesJson,
         offerSettingsJson,

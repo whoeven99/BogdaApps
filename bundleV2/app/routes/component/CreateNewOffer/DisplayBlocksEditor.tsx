@@ -1,6 +1,8 @@
 import { Input, Switch } from "antd";
 
 type Props = {
+  logicBlockLabel: string;
+  logicBlockDescription: string;
   showCountdownBlock: boolean;
   setShowCountdownBlock: (checked: boolean) => void;
   countdownLabel: string;
@@ -8,6 +10,8 @@ type Props = {
 };
 
 export default function DisplayBlocksEditor({
+  logicBlockLabel,
+  logicBlockDescription,
   showCountdownBlock,
   setShowCountdownBlock,
   countdownLabel,
@@ -25,7 +29,10 @@ export default function DisplayBlocksEditor({
               Offer Card
             </div>
             <div className="text-[13px] text-[#5c6166]">
-              Core promotion card linked to your quantity-breaks logic.
+              Core promotion card linked to your {logicBlockLabel} logic.
+            </div>
+            <div className="mt-1 text-[12px] text-[#8c9196]">
+              {logicBlockDescription}
             </div>
           </div>
           <Switch checked disabled />

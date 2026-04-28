@@ -393,9 +393,6 @@ export type CountdownDisplayBlock = {
   };
 };
 
-export type LogicBlock = QuantityBreaksLogicBlock;
-export type DisplayBlock = OfferCardDisplayBlock | CountdownDisplayBlock;
-
 export type CampaignSettings = {
   status: boolean;
   startTime: string;
@@ -427,6 +424,14 @@ export type BxgyDiscountRule = {
   subtitle?: string;
   badge?: string;
   isDefault?: boolean;
+};
+
+export type BxgyLogicBlock = {
+  id: string;
+  type: "bxgy";
+  config: {
+    tiers: BxgyDiscountRule[];
+  };
 };
 
 export type CompleteBundlePricingMode =
@@ -474,6 +479,34 @@ export type CompleteBundleBar = {
 export type CompleteBundleConfig = {
   bars: CompleteBundleBar[];
 };
+
+export type CompleteBundleLogicBlock = {
+  id: string;
+  type: "complete-bundle";
+  config: CompleteBundleConfig;
+};
+
+export type SubscriptionLogicBlock = {
+  id: string;
+  type: "subscription";
+  config: {
+    enabled: boolean;
+    position: "below-bundle-bars";
+    title: string;
+    subtitle: string;
+    oneTimeTitle: string;
+    oneTimeSubtitle: string;
+    defaultSelected: boolean;
+    productIds: string[];
+  };
+};
+
+export type LogicBlock =
+  | QuantityBreaksLogicBlock
+  | BxgyLogicBlock
+  | CompleteBundleLogicBlock
+  | SubscriptionLogicBlock;
+export type DisplayBlock = OfferCardDisplayBlock | CountdownDisplayBlock;
 
 export function parseDiscountRules(discountRulesJson?: string | null): DiscountRule[] {
   if (!discountRulesJson) return [];
@@ -553,27 +586,126 @@ function sanitizeQuantityBreakTier(raw: unknown): QuantityBreakTier | null {
   };
 }
 
+function sanitizeBxgyTier(raw: unknown): BxgyDiscountRule | null {
+  if (!raw || typeof raw !== "object") return null;
+  const item = raw as Record<string, unknown>;
+  const count = Math.trunc(Number(item.count));
+  const buyQuantity = Math.trunc(Number(item.buyQuantity));
+  const getQuantity = Math.trunc(Number(item.getQuantity));
+  const discountPercent = Number(item.discountPercent);
+  const maxUsesPerOrder = Math.trunc(Number(item.maxUsesPerOrder ?? 1));
+  const buyProductIds = Array.isArray(item.buyProductIds)
+    ? item.buyProductIds.map((id) => String(id || "").trim()).filter(Boolean)
+    : [];
+  const getProductIds = Array.isArray(item.getProductIds)
+    ? item.getProductIds.map((id) => String(id || "").trim()).filter(Boolean)
+    : [];
+
+  if (!Number.isFinite(count) || count < 1) return null;
+  if (!Number.isFinite(buyQuantity) || buyQuantity < 1) return null;
+  if (!Number.isFinite(getQuantity) || getQuantity < 1) return null;
+  if (!Number.isFinite(discountPercent)) return null;
+  if (buyProductIds.length === 0 || getProductIds.length === 0) return null;
+
+  return {
+    count,
+    buyQuantity,
+    getQuantity,
+    buyProductIds,
+    getProductIds,
+    discountPercent: Math.max(0, Math.min(100, discountPercent)),
+    maxUsesPerOrder: Number.isFinite(maxUsesPerOrder) && maxUsesPerOrder > 0 ? maxUsesPerOrder : 1,
+    title: typeof item.title === "string" ? item.title : "",
+    subtitle: typeof item.subtitle === "string" ? item.subtitle : "",
+    badge: typeof item.badge === "string" ? item.badge : "",
+    isDefault: !!item.isDefault,
+  };
+}
+
+function sanitizeSubscriptionLogicConfig(raw: unknown): SubscriptionLogicBlock["config"] | null {
+  if (!raw || typeof raw !== "object") return null;
+  const item = raw as Record<string, unknown>;
+  const productIds = Array.isArray(item.productIds)
+    ? item.productIds.map((id) => String(id || "").trim()).filter(Boolean)
+    : [];
+  return {
+    enabled: item.enabled !== false,
+    position: "below-bundle-bars",
+    title: sanitizeSingleLineText(item.title, 60, "Subscribe & Save 20%"),
+    subtitle: sanitizeSingleLineText(item.subtitle, 60, "Delivered weekly"),
+    oneTimeTitle: sanitizeSingleLineText(item.oneTimeTitle, 60, "One-time purchase"),
+    oneTimeSubtitle: sanitizeSingleLineText(item.oneTimeSubtitle, 60, ""),
+    defaultSelected: item.defaultSelected !== false,
+    productIds,
+  };
+}
+
 function sanitizeLogicBlock(raw: unknown): LogicBlock | null {
   if (!raw || typeof raw !== "object") return null;
   const item = raw as Record<string, unknown>;
-  if (item.type !== "quantity-breaks") return null;
   const config = item.config;
   const configRecord =
     config && typeof config === "object" ? (config as Record<string, unknown>) : {};
-  const tiersRaw = Array.isArray(configRecord.tiers) ? configRecord.tiers : [];
-  const tiers = tiersRaw
-    .map((tier) => sanitizeQuantityBreakTier(tier))
-    .filter((tier): tier is QuantityBreakTier => tier !== null)
-    .sort((a, b) => a.qty - b.qty)
-    .filter((tier, index, arr) => index === arr.findIndex((it) => it.qty === tier.qty));
 
-  if (tiers.length === 0) return null;
+  if (item.type === "quantity-breaks") {
+    const tiersRaw = Array.isArray(configRecord.tiers) ? configRecord.tiers : [];
+    const tiers = tiersRaw
+      .map((tier) => sanitizeQuantityBreakTier(tier))
+      .filter((tier): tier is QuantityBreakTier => tier !== null)
+      .sort((a, b) => a.qty - b.qty)
+      .filter((tier, index, arr) => index === arr.findIndex((it) => it.qty === tier.qty));
 
-  return {
-    id: typeof item.id === "string" && item.id ? item.id : "logic-quantity-breaks",
-    type: "quantity-breaks",
-    config: { tiers },
-  };
+    if (tiers.length === 0) return null;
+
+    return {
+      id: typeof item.id === "string" && item.id ? item.id : "logic-quantity-breaks",
+      type: "quantity-breaks",
+      config: { tiers },
+    };
+  }
+
+  if (item.type === "bxgy") {
+    const tiersRaw = Array.isArray(configRecord.tiers) ? configRecord.tiers : [];
+    const tiers = tiersRaw
+      .map((tier) => sanitizeBxgyTier(tier))
+      .filter((tier): tier is BxgyDiscountRule => tier !== null)
+      .sort((a, b) => a.count - b.count)
+      .filter((tier, index, arr) => index === arr.findIndex((it) => it.count === tier.count));
+
+    if (tiers.length === 0) return null;
+
+    return {
+      id: typeof item.id === "string" && item.id ? item.id : "logic-bxgy",
+      type: "bxgy",
+      config: { tiers },
+    };
+  }
+
+  if (item.type === "complete-bundle") {
+    const config = buildCompleteBundleConfig(
+      parseCompleteBundleConfig(JSON.stringify({ bars: configRecord.bars || [] })),
+    );
+    if (config.bars.length === 0) return null;
+    return {
+      id:
+        typeof item.id === "string" && item.id ? item.id : "logic-complete-bundle",
+      type: "complete-bundle",
+      config,
+    };
+  }
+
+  if (item.type === "subscription") {
+    const config = sanitizeSubscriptionLogicConfig(configRecord);
+    if (!config) return null;
+    return {
+      id:
+        typeof item.id === "string" && item.id ? item.id : "logic-subscription",
+      type: "subscription",
+      config,
+    };
+  }
+
+  return null;
 }
 
 function sanitizeDisplayBlock(raw: unknown): DisplayBlock | null {
@@ -741,6 +873,7 @@ export function parseCampaignConfig(
 }
 
 export function migrateLegacyOfferToCampaignConfig(params: {
+  offerType?: string | null;
   selectedProductsJson?: string | null;
   discountRulesJson?: string | null;
   offerSettingsJson?: string | null;
@@ -774,6 +907,144 @@ export function migrateLegacyOfferToCampaignConfig(params: {
     dailyBudget: offerSettings.dailyBudget,
     usageLimitPerCustomer: offerSettings.usageLimitPerCustomer,
   };
+  const offerType = String(params.offerType || "").trim();
+
+  if (offerType === "bxgy") {
+    let bxgySelectedProducts: { buyProducts?: string[]; getProducts?: string[] } = {};
+    try {
+      bxgySelectedProducts = JSON.parse(String(params.selectedProductsJson || "{}")) as {
+        buyProducts?: string[];
+        getProducts?: string[];
+      };
+    } catch {}
+    const tiers = buildBxgyDiscountRulesJson(parseBxgyDiscountRules(params.discountRulesJson));
+    const buyProducts = Array.isArray(bxgySelectedProducts.buyProducts)
+      ? bxgySelectedProducts.buyProducts.map((id) => String(id || "").trim()).filter(Boolean)
+      : [];
+    const getProducts = Array.isArray(bxgySelectedProducts.getProducts)
+      ? bxgySelectedProducts.getProducts.map((id) => String(id || "").trim()).filter(Boolean)
+      : [];
+    const bxgyTiers =
+      tiers.length > 0
+        ? tiers
+        : [
+            {
+              count: 2,
+              buyQuantity: 2,
+              getQuantity: 1,
+              buyProductIds: buyProducts,
+              getProductIds: getProducts,
+              discountPercent: 100,
+              maxUsesPerOrder: 1,
+              title: "",
+              subtitle: "",
+              badge: "",
+              isDefault: true,
+            },
+          ];
+    return {
+      version: 1,
+      scope: {
+        productIds: Array.from(new Set([...buyProducts, ...getProducts])),
+        markets: offerSettings.markets ? offerSettings.markets.split(",") : ["all"],
+        customerSegments: offerSettings.customerSegments
+          ? offerSettings.customerSegments.split(",")
+          : ["all"],
+      },
+      logicBlocks: [
+        {
+          id: "logic-bxgy",
+          type: "bxgy",
+          config: { tiers: bxgyTiers },
+        },
+      ],
+      displayBlocks: [
+        {
+          id: "display-offer-card",
+          type: "offer-card",
+          logicBlockRef: "logic-bxgy",
+          config: buildDefaultOfferCardConfig(offerSettings),
+        },
+      ],
+      settings,
+    };
+  }
+
+  if (offerType === "complete-bundle") {
+    const completeBundleConfig = buildCompleteBundleConfig(
+      parseCompleteBundleConfig(params.selectedProductsJson),
+    );
+    return {
+      version: 1,
+      scope: {
+        productIds: Array.from(
+          new Set(
+            completeBundleConfig.bars.flatMap((bar) =>
+              bar.products.map((product) => product.productId),
+            ),
+          ),
+        ),
+        markets: offerSettings.markets ? offerSettings.markets.split(",") : ["all"],
+        customerSegments: offerSettings.customerSegments
+          ? offerSettings.customerSegments.split(",")
+          : ["all"],
+      },
+      logicBlocks: [
+        {
+          id: "logic-complete-bundle",
+          type: "complete-bundle",
+          config: completeBundleConfig,
+        },
+      ],
+      displayBlocks: [
+        {
+          id: "display-offer-card",
+          type: "offer-card",
+          logicBlockRef: "logic-complete-bundle",
+          config: buildDefaultOfferCardConfig(offerSettings),
+        },
+      ],
+      settings,
+    };
+  }
+
+  if (offerType === "subscription") {
+    return {
+      version: 1,
+      scope: {
+        productIds,
+        markets: offerSettings.markets ? offerSettings.markets.split(",") : ["all"],
+        customerSegments: offerSettings.customerSegments
+          ? offerSettings.customerSegments.split(",")
+          : ["all"],
+      },
+      logicBlocks: [
+        {
+          id: "logic-subscription",
+          type: "subscription",
+          config: {
+            enabled: offerSettings.subscriptionEnabled,
+            position: offerSettings.subscriptionPosition,
+            title: offerSettings.subscriptionTitle,
+            subtitle: offerSettings.subscriptionSubtitle,
+            oneTimeTitle: offerSettings.oneTimeTitle,
+            oneTimeSubtitle: offerSettings.oneTimeSubtitle,
+            defaultSelected: offerSettings.subscriptionDefaultSelected,
+            productIds,
+          },
+        },
+      ],
+      displayBlocks: [
+        {
+          id: "display-offer-card",
+          type: "offer-card",
+          logicBlockRef: "logic-subscription",
+          config: buildDefaultOfferCardConfig(offerSettings),
+        },
+      ],
+      settings,
+    };
+  }
 
   return {
     version: 1,
@@ -826,6 +1097,15 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
   const quantityBreaks = config.logicBlocks.find(
     (block): block is QuantityBreaksLogicBlock => block.type === "quantity-breaks",
   );
+  const bxgy = config.logicBlocks.find(
+    (block): block is BxgyLogicBlock => block.type === "bxgy",
+  );
+  const completeBundle = config.logicBlocks.find(
+    (block): block is CompleteBundleLogicBlock => block.type === "complete-bundle",
+  );
+  const subscription = config.logicBlocks.find(
+    (block): block is SubscriptionLogicBlock => block.type === "subscription",
+  );
   const offerCard = config.displayBlocks.find(
     (block): block is OfferCardDisplayBlock => block.type === "offer-card",
   );
@@ -838,6 +1118,16 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
     badge: tier.badge || "",
     isDefault: !!tier.isDefault,
   }));
+  const bxgyRules = buildBxgyDiscountRulesJson(bxgy?.config.tiers ?? []);
+  const bxgyBuyProducts = Array.from(
+    new Set(bxgyRules.flatMap((tier) => tier.buyProductIds)),
+  );
+  const bxgyGetProducts = Array.from(
+    new Set(bxgyRules.flatMap((tier) => tier.getProductIds)),
+  );
+  const completeBundleConfig = completeBundle
+    ? buildCompleteBundleConfig(completeBundle.config)
+    : { bars: [] };
 
   const offerSettings = {
     title: offerCard?.config.title || "Bundle & Save",
@@ -859,25 +1149,57 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
     titleFontWeight: offerCard?.config.titleFontWeight || "600",
     buttonText: offerCard?.config.buttonText || "Add to Cart",
     showCustomButton: offerCard?.config.showCustomButton !== false,
-    subscriptionEnabled: false,
-    subscriptionPosition: "below-bundle-bars" as const,
-    subscriptionTitle: "Subscribe & Save 20%",
-    subscriptionSubtitle: "Delivered weekly",
-    oneTimeTitle: "One-time purchase",
-    oneTimeSubtitle: "",
-    subscriptionDefaultSelected: true,
+    subscriptionEnabled: subscription?.config.enabled ?? false,
+    subscriptionPosition: subscription?.config.position ?? "below-bundle-bars",
+    subscriptionTitle: subscription?.config.title ?? "Subscribe & Save 20%",
+    subscriptionSubtitle: subscription?.config.subtitle ?? "Delivered weekly",
+    oneTimeTitle: subscription?.config.oneTimeTitle ?? "One-time purchase",
+    oneTimeSubtitle: subscription?.config.oneTimeSubtitle ?? "",
+    subscriptionDefaultSelected: subscription?.config.defaultSelected ?? true,
     progressiveGifts: { ...DEFAULT_PROGRESSIVE_GIFTS },
     scheduleTimezone: config.settings.scheduleTimezone,
   } satisfies OfferSettings;
 
   return {
-    offerType: quantityBreaks ? "quantity-breaks-same" : "campaign-builder",
+    offerType: quantityBreaks
+      ? "quantity-breaks-same"
+      : bxgy
+        ? "bxgy"
+        : completeBundle
+          ? "complete-bundle"
+          : subscription
+            ? "subscription"
+        : "campaign-builder",
     selectedProductsJson:
-      config.scope.productIds.length > 0
+      bxgy
+        ? JSON.stringify({
+            buyProducts: bxgyBuyProducts,
+            getProducts: bxgyGetProducts,
+          })
+        : completeBundle
+          ? JSON.stringify(completeBundleConfig)
+        : config.scope.productIds.length > 0
         ? JSON.stringify(config.scope.productIds.map((id) => ({ id })))
         : null,
     discountRulesJson:
-      discountRules.length > 0 ? JSON.stringify(discountRules) : null,
+      quantityBreaks && discountRules.length > 0
+        ? JSON.stringify(discountRules)
+        : bxgy && bxgyRules.length > 0
+          ? JSON.stringify(bxgyRules)
+          : completeBundle && completeBundleConfig.bars.length > 0
+            ? JSON.stringify(
+                completeBundleConfig.bars.map((bar) => ({
+                  id: bar.id,
+                  type: bar.type,
+                  quantity: bar.quantity,
+                  pricing: bar.pricing,
+                  products: bar.products.map((product) => ({
+                    productId: product.productId,
+                    pricing: product.pricing ?? { mode: "full_price" as const, value: 0 },
+                  })),
+                })),
+              )
+          : null,
     offerSettingsJson: JSON.stringify(offerSettings),
   };
 }
@@ -889,7 +1211,13 @@ export function getOfferDisplayType(
   const config = parseCampaignConfig(campaignConfigJson);
   const primaryBlock = config?.logicBlocks[0];
   if (primaryBlock?.type === "quantity-breaks") return "Quantity breaks";
+  if (primaryBlock?.type === "bxgy") return "Buy X Get Y";
+  if (primaryBlock?.type === "complete-bundle") return "Complete bundle";
+  if (primaryBlock?.type === "subscription") return "Subscription";
   if (offerType === "quantity-breaks-same") return "Quantity breaks";
+  if (offerType === "bxgy") return "Buy X Get Y";
+  if (offerType === "complete-bundle") return "Complete bundle";
+  if (offerType === "subscription") return "Subscription";
   return offerType || "Campaign";
 }
 
@@ -908,12 +1236,55 @@ export function getOfferRulesText(params: {
         .map((tier) => `Buy ${tier.qty} Get ${tier.discountPercent}% Off`)
         .join(", ");
     }
+    const bxgy = config.logicBlocks.find(
+      (block): block is BxgyLogicBlock => block.type === "bxgy",
+    );
+    const bxgyTiers = bxgy?.config.tiers ?? [];
+    if (bxgyTiers.length > 0) {
+      return bxgyTiers
+        .map(
+          (tier) =>
+            `Buy ${tier.buyQuantity} Get ${tier.getQuantity} ${tier.discountPercent === 100 ? "Free" : `${tier.discountPercent}% Off`}`,
+        )
+        .join(", ");
+    }
+    const completeBundle = config.logicBlocks.find(
+      (block): block is CompleteBundleLogicBlock => block.type === "complete-bundle",
+    );
+    if (completeBundle?.config.bars.length) {
+      return `${completeBundle.config.bars.length} bundle bar${completeBundle.config.bars.length > 1 ? "s" : ""}`;
+    }
+    const subscription = config.logicBlocks.find(
+      (block): block is SubscriptionLogicBlock => block.type === "subscription",
+    );
+    if (subscription) {
+      return subscription.config.enabled
+        ? `Subscription enabled for ${subscription.config.productIds.length || config.scope.productIds.length} product${(subscription.config.productIds.length || config.scope.productIds.length) > 1 ? "s" : ""}`
+        : "Subscription block configured";
+    }
   }
 
   const rules = parseDiscountRules(params.discountRulesJson);
   if (rules.length > 0) {
     return rules.map((rule) => `Buy ${rule.count} Get ${rule.discountPercent}% Off`).join(", ");
   }
+
+  const bxgyRules = parseBxgyDiscountRules(params.discountRulesJson);
+  if (bxgyRules.length > 0) {
+    return bxgyRules
+      .map(
+        (rule) =>
+          `Buy ${rule.buyQuantity} Get ${rule.getQuantity} ${rule.discountPercent === 100 ? "Free" : `${rule.discountPercent}% Off`}`,
+      )
+      .join(", ");
+  }
+
+  try {
+    const parsed = JSON.parse(String(params.discountRulesJson || "null")) as unknown;
+    if (Array.isArray(parsed) && parsed.some((item) => item && typeof item === "object" && "products" in (item as Record<string, unknown>))) {
+      return `${parsed.length} bundle bar${parsed.length > 1 ? "s" : ""}`;
+    }
+  } catch {}
 
   return "-";
 }
