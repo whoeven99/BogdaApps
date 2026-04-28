@@ -216,9 +216,12 @@ export function isProgressiveGiftUnlocked(
   return Math.max(1, Math.trunc(selectedBarIndex)) >= needBar;
 }
 
+/** 与 quantity-breaks-same / A/B 变体阶梯 JSON 一致（含可选定价模式，兼容仅 discountPercent 的旧数据） */
 export type DiscountRule = {
   count: number;
   discountPercent: number;
+  priceMode?: "full_price" | "percentage_off" | "amount_off" | "fixed_price";
+  discountValue?: number;
   title?: string;
   subtitle?: string;
   badge?: string;
@@ -352,6 +355,13 @@ export type DifferentProductDiscountRule = {
   isDefault?: boolean;
 };
 
+const QUANTITY_BREAK_PRICE_MODES = [
+  "full_price",
+  "percentage_off",
+  "amount_off",
+  "fixed_price",
+] as const;
+
 export function parseDiscountRules(discountRulesJson?: string | null): DiscountRule[] {
   if (!discountRulesJson) return [];
 
@@ -363,14 +373,35 @@ export function parseDiscountRules(discountRulesJson?: string | null): DiscountR
     for (const item of parsed) {
       if (!item || typeof item !== "object") continue;
       const count = Number((item as { count?: unknown }).count);
-      const discountPercent = Number(
+      const discountPercentRaw = Number(
         (item as { discountPercent?: unknown }).discountPercent,
       );
       if (!Number.isFinite(count) || count < 1) continue;
-      if (!Number.isFinite(discountPercent)) continue;
+      const discountPercent = Number.isFinite(discountPercentRaw)
+        ? Math.max(0, Math.min(100, discountPercentRaw))
+        : 0;
+      const rawMode = String((item as { priceMode?: unknown }).priceMode || "");
+      const priceMode: NonNullable<DiscountRule["priceMode"]> =
+        QUANTITY_BREAK_PRICE_MODES.includes(rawMode as (typeof QUANTITY_BREAK_PRICE_MODES)[number])
+          ? (rawMode as NonNullable<DiscountRule["priceMode"]>)
+          : "percentage_off";
+      const dvRaw = Number((item as { discountValue?: unknown }).discountValue);
+      const discountValue = Number.isFinite(dvRaw)
+        ? Math.max(0, dvRaw)
+        : priceMode === "percentage_off"
+          ? discountPercent
+          : discountPercent;
+      const syncedPercent =
+        priceMode === "percentage_off"
+          ? Math.max(0, Math.min(100, discountValue))
+          : priceMode === "full_price"
+            ? 0
+            : discountPercent;
       out.push({
         count: Math.trunc(count),
-        discountPercent: Math.max(0, Math.min(100, discountPercent)),
+        discountPercent: syncedPercent,
+        priceMode,
+        discountValue: priceMode === "full_price" ? 0 : Math.max(0, discountValue),
         title: (item as { title?: string }).title || "",
         subtitle: (item as { subtitle?: string }).subtitle || "",
         badge: (item as { badge?: string }).badge || "",
@@ -385,7 +416,16 @@ export function parseDiscountRules(discountRulesJson?: string | null): DiscountR
 }
 
 const DEFAULT_AB_DISCOUNT_RULES: DiscountRule[] = [
-  { count: 2, discountPercent: 15, title: "", subtitle: "", badge: "", isDefault: true },
+  {
+    count: 2,
+    discountPercent: 15,
+    priceMode: "percentage_off",
+    discountValue: 15,
+    title: "",
+    subtitle: "",
+    badge: "",
+    isDefault: true,
+  },
 ];
 
 /** 将 N 路流量均分（整数权重，总和 100） */

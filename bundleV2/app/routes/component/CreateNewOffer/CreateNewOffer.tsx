@@ -39,17 +39,8 @@ import {
   computeEvenTrafficWeights,
   normalizeTrafficWeights,
   type AbTestVariantStored,
+  type DiscountRule,
 } from "../../../utils/offerParsing";
-
-type DiscountRule = {
-  // 数量阈值：例如 count=2 表示"买 2 件及以上"生效
-  count: number;
-  discountPercent: number;
-  title?: string;
-  subtitle?: string;
-  badge?: string;
-  isDefault?: boolean;
-};
 
 type BxgyDiscountRule = {
   /** Cart quantity threshold (from buy-product list) to trigger this tier */
@@ -208,10 +199,24 @@ function buildDiscountRulesJson(tiers: DiscountRule[]): DiscountRule[] {
   const out: DiscountRule[] = [];
   for (const tier of tiers) {
     if (!Number.isFinite(tier.count) || tier.count < 1) continue;
-    if (!Number.isFinite(tier.discountPercent)) continue;
+    const mode = tier.priceMode ?? "percentage_off";
+    const dvRaw = Number(tier.discountValue);
+    const discountValue = Number.isFinite(dvRaw)
+      ? Math.max(0, dvRaw)
+      : tier.discountPercent;
+    const pctRaw = Number(tier.discountPercent);
+    const discountPercent = Number.isFinite(pctRaw) ? pctRaw : 0;
+    const syncedPercent =
+      mode === "percentage_off"
+        ? Math.max(0, Math.min(100, discountValue))
+        : mode === "full_price"
+          ? 0
+          : Math.max(0, Math.min(100, discountPercent));
     out.push({
       count: Math.trunc(tier.count),
-      discountPercent: Math.max(0, Math.min(100, tier.discountPercent)),
+      discountPercent: syncedPercent,
+      priceMode: mode,
+      discountValue: mode === "full_price" ? 0 : Math.max(0, discountValue),
       title: tier.title || "",
       subtitle: tier.subtitle || "",
       badge: tier.badge || "",
@@ -253,31 +258,51 @@ function nextAbVariantKey(variants: AbVariantDraft[]): string {
   return `V${variants.length + 1}`;
 }
 
-function calculatePreviewBundleAmounts(
+/** 同品多件阶梯：原价 = 单价 × pack 件数，再按 priceMode 得到折后价（与 quantity-breaks-different 预览公式对齐） */
+function computeSameProductPackTotals(
   unitPrice: number,
-  quantity: number,
-  discountPercent: number,
-) {
-  const MONEY_SCALE = 10000;
-  const safeQty = Math.max(1, Math.trunc(Number(quantity) || 1));
-  const safeDiscountPercent = Math.max(
-    0,
-    Math.min(100, Number(discountPercent) || 0),
-  );
-  const unitPriceScaled = Math.round(unitPrice * MONEY_SCALE);
-  const originalTotalScaled = unitPriceScaled * safeQty;
-  const discountedTotalScaled = Math.round(
-    originalTotalScaled * (1 - safeDiscountPercent / 100),
-  );
-  const originalTotal = Math.round(originalTotalScaled / (MONEY_SCALE / 100)) / 100;
-  const discountedTotal =
-    Math.round(discountedTotalScaled / (MONEY_SCALE / 100)) / 100;
+  rule: Pick<DiscountRule, "count" | "priceMode" | "discountValue" | "discountPercent">,
+): { originalTotal: number; discountedTotal: number; saved: number } {
+  const qty = Math.max(1, Math.trunc(rule.count || 1));
+  const unit = Math.max(0, Number(unitPrice) || 0);
+  const originalTotal = Math.round(unit * qty * 100) / 100;
+  const mode = rule.priceMode ?? "percentage_off";
+  const discountValue = Number.isFinite(Number(rule.discountValue))
+    ? Number(rule.discountValue)
+    : rule.discountPercent;
+
+  let discountedTotal = originalTotal;
+  if (mode === "full_price") {
+    discountedTotal = originalTotal;
+  } else if (mode === "percentage_off") {
+    const pct = Math.max(0, Math.min(100, discountValue));
+    discountedTotal = Math.round(originalTotal * (1 - pct / 100) * 100) / 100;
+  } else if (mode === "amount_off") {
+    discountedTotal = Math.max(
+      0,
+      Math.round((originalTotal - Math.max(0, discountValue) * qty) * 100) / 100,
+    );
+  } else if (mode === "fixed_price") {
+    discountedTotal = Math.round(Math.max(0, discountValue) * qty * 100) / 100;
+  }
 
   return {
     originalTotal,
     discountedTotal,
-    saved: originalTotal - discountedTotal,
+    saved: Math.max(0, originalTotal - discountedTotal),
   };
+}
+
+function autoQuantityBreakPreviewSubtitle(rule: DiscountRule): string {
+  if (rule.subtitle) return rule.subtitle;
+  const mode = rule.priceMode ?? "percentage_off";
+  const dv = Number.isFinite(Number(rule.discountValue))
+    ? Number(rule.discountValue)
+    : rule.discountPercent;
+  if (mode === "full_price") return "Standard price";
+  if (mode === "percentage_off") return `You save ${Math.max(0, Math.min(100, dv))}%`;
+  if (mode === "amount_off") return "Amount off per item";
+  return "Fixed price per item";
 }
 
 function parsePriceNumber(raw: string): number {
@@ -290,22 +315,34 @@ function sanitizeDiscountRules(tiers: DiscountRule[]): DiscountRule[] {
   const dedupedByCount = new Map<number, DiscountRule>();
   for (const tier of tiers) {
     if (!Number.isFinite(tier.count) || tier.count < 1) continue;
-    if (!Number.isFinite(tier.discountPercent)) continue;
-    dedupedByCount.set(
-      Math.trunc(tier.count),
-      {
-        count: Math.trunc(tier.count),
-        discountPercent: Math.max(0, Math.min(100, tier.discountPercent)),
-        title: tier.title || "",
-        subtitle: tier.subtitle || "",
-        badge: tier.badge || "",
-        isDefault: !!tier.isDefault,
-      }
-    );
+    const mode = tier.priceMode ?? "percentage_off";
+    const pctRaw = Number(tier.discountPercent);
+    const discountPercent = Number.isFinite(pctRaw) ? pctRaw : 0;
+    const dvRaw = Number(tier.discountValue);
+    const discountValue = Number.isFinite(dvRaw)
+      ? Math.max(0, dvRaw)
+      : mode === "percentage_off"
+        ? Math.max(0, Math.min(100, discountPercent))
+        : discountPercent;
+    const syncedPercent =
+      mode === "percentage_off"
+        ? Math.max(0, Math.min(100, discountValue))
+        : mode === "full_price"
+          ? 0
+          : Math.max(0, Math.min(100, discountPercent));
+    dedupedByCount.set(Math.trunc(tier.count), {
+      count: Math.trunc(tier.count),
+      discountPercent: syncedPercent,
+      priceMode: mode,
+      discountValue: mode === "full_price" ? 0 : Math.max(0, discountValue),
+      title: tier.title || "",
+      subtitle: tier.subtitle || "",
+      badge: tier.badge || "",
+      isDefault: !!tier.isDefault,
+    });
   }
 
-  return Array.from(dedupedByCount.values())
-    .sort((a, b) => a.count - b.count);
+  return Array.from(dedupedByCount.values()).sort((a, b) => a.count - b.count);
 }
 
 export function CreateNewOffer({
@@ -359,7 +396,6 @@ export function CreateNewOffer({
     navigate({ search: qs ? `?${qs}` : "" }, { replace: true });
   }, [fetcher.state, fetcher.data, navigate, searchParams]);
 
-  const baseUnitPrice = 100;
   const formatPreviewPrice = (value: number) =>
     `€${value.toFixed(2).replace(".", ",")}`;
   const startTimeInputRef = useRef<HTMLInputElement | null>(null);
@@ -597,6 +633,12 @@ export function CreateNewOffer({
       };
     });
   });
+
+  const previewUnitPrice = useMemo(() => {
+    const n = parsePriceNumber(String(selectedProductsData[0]?.price ?? "0"));
+    if (n > 0) return n;
+    return 100;
+  }, [selectedProductsData]);
 
   const handleSelectProducts = async (
     type: "buy" | "get" | "normal" = "normal",
@@ -1384,32 +1426,40 @@ export function CreateNewOffer({
     if (offerType === "abTest" && abVariants.length > 0) {
       const firstProduct = selectedProductsData[0];
       const rules = normalizedAbActiveDiscountRules;
+      const unit = previewUnitPrice;
       return [
         {
           id: "single",
           title: "Single",
           subtitle: "Standard price",
-          price: formatPreviewPrice(baseUnitPrice),
+          price: formatPreviewPrice(unit),
           image: firstProduct?.image,
           variantTitle: firstProduct?.title,
           productPrice: firstProduct?.price,
         },
         ...rules.map((rule, index) => {
-          const { originalTotal, discountedTotal, saved } = calculatePreviewBundleAmounts(
-            baseUnitPrice,
-            rule.count,
-            rule.discountPercent,
-          );
+          const { originalTotal, discountedTotal, saved } =
+            computeSameProductPackTotals(unit, rule);
+          const mode = rule.priceMode ?? "percentage_off";
           const isFeatured = hasDefaultAb ? !!rule.isDefault : index === 0;
           return {
             id: `ab-tier-${activeAbVariant?.id || "x"}-${rule.count}`,
             title: rule.title || `${rule.count} items`,
-            subtitle: rule.subtitle || `You save ${rule.discountPercent}%`,
-            price: formatPreviewPrice(discountedTotal),
-            original: formatPreviewPrice(originalTotal),
+            subtitle: autoQuantityBreakPreviewSubtitle(rule),
+            price:
+              mode === "full_price"
+                ? formatPreviewPrice(originalTotal)
+                : formatPreviewPrice(discountedTotal),
+            original:
+              mode === "full_price" || discountedTotal >= originalTotal
+                ? undefined
+                : formatPreviewPrice(originalTotal),
             featured: isFeatured,
             badge: rule.badge || (isFeatured ? "Most Popular" : ""),
-            saveLabel: `SAVE ${formatPreviewPrice(saved)}`,
+            saveLabel:
+              saved > 0
+                ? `SAVE ${formatPreviewPrice(saved)}`
+                : `Qty ${Math.max(1, rule.count)}`,
             image: firstProduct?.image,
             variantTitle: firstProduct?.title,
             productPrice: firstProduct?.price,
@@ -1531,25 +1581,33 @@ export function CreateNewOffer({
         id: "single",
         title: "Single",
         subtitle: "Standard price",
-        price: formatPreviewPrice(baseUnitPrice),
+        price: formatPreviewPrice(previewUnitPrice),
       },
       ...normalizedDiscountRules.map((rule, index) => {
-        const { originalTotal, discountedTotal, saved } =
-          calculatePreviewBundleAmounts(
-            baseUnitPrice,
-            rule.count,
-            rule.discountPercent,
-          );
+        const { originalTotal, discountedTotal, saved } = computeSameProductPackTotals(
+          previewUnitPrice,
+          rule,
+        );
+        const mode = rule.priceMode ?? "percentage_off";
         const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
         return {
           id: `tier-${rule.count}`,
           title: rule.title || `${rule.count} items`,
-          subtitle: rule.subtitle || `You save ${rule.discountPercent}%`,
-          price: formatPreviewPrice(discountedTotal),
-          original: formatPreviewPrice(originalTotal),
+          subtitle: autoQuantityBreakPreviewSubtitle(rule),
+          price:
+            mode === "full_price"
+              ? formatPreviewPrice(originalTotal)
+              : formatPreviewPrice(discountedTotal),
+          original:
+            mode === "full_price" || discountedTotal >= originalTotal
+              ? undefined
+              : formatPreviewPrice(originalTotal),
           featured: isFeatured,
           badge: rule.badge || (isFeatured ? "Most Popular" : ""),
-          saveLabel: `SAVE ${formatPreviewPrice(saved)}`,
+          saveLabel:
+            saved > 0
+              ? `SAVE ${formatPreviewPrice(saved)}`
+              : `Qty ${Math.max(1, rule.count)}`,
         };
       }),
     ];
@@ -1562,7 +1620,7 @@ export function CreateNewOffer({
     hasDefaultAb,
     activeAbVariant?.id,
     abVariants.length,
-    baseUnitPrice,
+    previewUnitPrice,
     formatPreviewPrice,
     hasDefault,
     enableMultiProductBundle,
@@ -1685,6 +1743,8 @@ export function CreateNewOffer({
         {
           count: 1,
           discountPercent: 0,
+          priceMode: "full_price",
+          discountValue: 0,
           title: "Bar #1 - 1 pack",
           subtitle: "Standard price",
           badge: "",
@@ -1693,6 +1753,8 @@ export function CreateNewOffer({
         {
           count: 2,
           discountPercent: 10,
+          priceMode: "percentage_off",
+          discountValue: 10,
           title: "Bar #2 - 2 pack",
           subtitle: "Save 10%",
           badge: "Most Popular",
@@ -2468,30 +2530,71 @@ export function CreateNewOffer({
                                     />
                                   </label>
                                   <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                                    Discount (%)
+                                    Price
+                                    <Select
+                                      size="large"
+                                      className="mt-1"
+                                      value={rule.priceMode || "percentage_off"}
+                                      onChange={(val) => {
+                                        updateAbVariantDiscountRules((prev) =>
+                                          prev.map((r, i) =>
+                                            i === index
+                                              ? {
+                                                  ...r,
+                                                  priceMode: val as NonNullable<
+                                                    DiscountRule["priceMode"]
+                                                  >,
+                                                }
+                                              : r,
+                                          ),
+                                        );
+                                      }}
+                                      options={[
+                                        { label: "Full price", value: "full_price" },
+                                        { label: "Percentage off", value: "percentage_off" },
+                                        { label: "Amount off", value: "amount_off" },
+                                        { label: "Fixed price", value: "fixed_price" },
+                                      ]}
+                                    />
+                                  </label>
+                                  <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                    Discount per item
                                     <Input
                                       size="large"
                                       type="number"
                                       min={0}
-                                      max={100}
-                                      step={1}
+                                      step={0.01}
                                       className="mt-1"
-                                      value={rule.discountPercent}
+                                      disabled={(rule.priceMode || "percentage_off") === "full_price"}
+                                      value={
+                                        (rule.priceMode || "percentage_off") === "full_price"
+                                          ? 0
+                                          : Number.isFinite(Number(rule.discountValue))
+                                            ? Number(rule.discountValue)
+                                            : rule.discountPercent
+                                      }
                                       onChange={(e) => {
-                                        const parsedValue = Number(e.target.value);
-                                        if (parsedValue > 100) return;
-                                        const nextPercent =
-                                          Number.isFinite(parsedValue) && parsedValue >= 0
-                                            ? parsedValue
-                                            : 0;
+                                        const nextVal = Math.max(0, Number(e.target.value) || 0);
                                         updateAbVariantDiscountRules((prev) =>
                                           prev.map((r, i) =>
-                                            i === index ? { ...r, discountPercent: nextPercent } : r,
+                                            i === index
+                                              ? {
+                                                  ...r,
+                                                  discountValue: nextVal,
+                                                  discountPercent:
+                                                    (r.priceMode || "percentage_off") === "percentage_off"
+                                                      ? Math.max(0, Math.min(100, nextVal))
+                                                      : r.discountPercent,
+                                                }
+                                              : r,
                                           ),
                                         );
                                       }}
                                     />
                                   </label>
+                                </div>
+                                <div style={{ marginTop: "8px" }} className="text-[12px] text-[#5c6166]">
+                                  Pack quantity includes the default product.
                                 </div>
                                 <div
                                   className="create-offer-discount-form-row"
@@ -2598,6 +2701,8 @@ export function CreateNewOffer({
                                   {
                                     count: maxCount + 1,
                                     discountPercent: 15,
+                                    priceMode: "percentage_off",
+                                    discountValue: 15,
                                     title: "",
                                     subtitle: "",
                                     badge: "",
@@ -3580,7 +3685,15 @@ export function CreateNewOffer({
                                 (max, rule) => Math.max(max, rule.count),
                                 1,
                               );
-                              return [...prev, { count: maxCount + 1, discountPercent: 15 }];
+                              return [
+                                ...prev,
+                                {
+                                  count: maxCount + 1,
+                                  discountPercent: 15,
+                                  priceMode: "percentage_off",
+                                  discountValue: 15,
+                                },
+                              ];
                             });
                           }}
                         >
