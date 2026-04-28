@@ -426,11 +426,30 @@ export type BxgyDiscountRule = {
   isDefault?: boolean;
 };
 
+export type FreeGiftRule = {
+  count: number;
+  giftQuantity: number;
+  title?: string;
+  subtitle?: string;
+  badge?: string;
+  isDefault?: boolean;
+};
+
 export type BxgyLogicBlock = {
   id: string;
   type: "bxgy";
   config: {
     tiers: BxgyDiscountRule[];
+  };
+};
+
+export type FreeGiftLogicBlock = {
+  id: string;
+  type: "free-gift";
+  config: {
+    triggerProductIds: string[];
+    giftProductIds: string[];
+    tiers: FreeGiftRule[];
   };
 };
 
@@ -504,6 +523,7 @@ export type SubscriptionLogicBlock = {
 export type LogicBlock =
   | QuantityBreaksLogicBlock
   | BxgyLogicBlock
+  | FreeGiftLogicBlock
   | CompleteBundleLogicBlock
   | SubscriptionLogicBlock;
 export type DisplayBlock = OfferCardDisplayBlock | CountdownDisplayBlock;
@@ -622,6 +642,24 @@ function sanitizeBxgyTier(raw: unknown): BxgyDiscountRule | null {
   };
 }
 
+function sanitizeFreeGiftTier(raw: unknown): FreeGiftRule | null {
+  if (!raw || typeof raw !== "object") return null;
+  const item = raw as Record<string, unknown>;
+  const count = Math.trunc(Number(item.count));
+  const giftQuantity = Math.trunc(Number(item.giftQuantity));
+  if (!Number.isFinite(count) || count < 1) return null;
+  if (!Number.isFinite(giftQuantity) || giftQuantity < 1) return null;
+
+  return {
+    count,
+    giftQuantity,
+    title: typeof item.title === "string" ? item.title : "",
+    subtitle: typeof item.subtitle === "string" ? item.subtitle : "",
+    badge: typeof item.badge === "string" ? item.badge : "",
+    isDefault: !!item.isDefault,
+  };
+}
+
 function sanitizeSubscriptionLogicConfig(raw: unknown): SubscriptionLogicBlock["config"] | null {
   if (!raw || typeof raw !== "object") return null;
   const item = raw as Record<string, unknown>;
@@ -678,6 +716,39 @@ function sanitizeLogicBlock(raw: unknown): LogicBlock | null {
       id: typeof item.id === "string" && item.id ? item.id : "logic-bxgy",
       type: "bxgy",
       config: { tiers },
+    };
+  }
+
+  if (item.type === "free-gift") {
+    const triggerProductIds = Array.isArray(configRecord.triggerProductIds)
+      ? configRecord.triggerProductIds
+          .map((id) => String(id || "").trim())
+          .filter(Boolean)
+      : [];
+    const giftProductIds = Array.isArray(configRecord.giftProductIds)
+      ? configRecord.giftProductIds
+          .map((id) => String(id || "").trim())
+          .filter(Boolean)
+      : [];
+    const tiersRaw = Array.isArray(configRecord.tiers) ? configRecord.tiers : [];
+    const tiers = tiersRaw
+      .map((tier) => sanitizeFreeGiftTier(tier))
+      .filter((tier): tier is FreeGiftRule => tier !== null)
+      .sort((a, b) => a.count - b.count)
+      .filter((tier, index, arr) => index === arr.findIndex((it) => it.count === tier.count));
+
+    if (triggerProductIds.length === 0 || giftProductIds.length === 0 || tiers.length === 0) {
+      return null;
+    }
+
+    return {
+      id: typeof item.id === "string" && item.id ? item.id : "logic-free-gift",
+      type: "free-gift",
+      config: {
+        triggerProductIds,
+        giftProductIds,
+        tiers,
+      },
     };
   }
 
@@ -970,6 +1041,61 @@ export function migrateLegacyOfferToCampaignConfig(params: {
     };
   }
 
+  if (offerType === "free-gift") {
+    const freeGiftSelectedProducts = parseFreeGiftSelectedProducts(
+      params.selectedProductsJson,
+    );
+    const freeGiftRules = buildFreeGiftRulesJson(
+      parseFreeGiftRules(params.discountRulesJson),
+    );
+    const triggerProducts = freeGiftSelectedProducts.triggerProducts;
+    const giftProducts = freeGiftSelectedProducts.giftProducts;
+    const tiers =
+      freeGiftRules.length > 0
+        ? freeGiftRules
+        : [
+            {
+              count: 2,
+              giftQuantity: 1,
+              title: "",
+              subtitle: "",
+              badge: "",
+              isDefault: true,
+            },
+          ];
+
+    return {
+      version: 1,
+      scope: {
+        productIds: Array.from(new Set([...triggerProducts, ...giftProducts])),
+        markets: offerSettings.markets ? offerSettings.markets.split(",") : ["all"],
+        customerSegments: offerSettings.customerSegments
+          ? offerSettings.customerSegments.split(",")
+          : ["all"],
+      },
+      logicBlocks: [
+        {
+          id: "logic-free-gift",
+          type: "free-gift",
+          config: {
+            triggerProductIds: triggerProducts,
+            giftProductIds: giftProducts,
+            tiers,
+          },
+        },
+      ],
+      displayBlocks: [
+        {
+          id: "display-offer-card",
+          type: "offer-card",
+          logicBlockRef: "logic-free-gift",
+          config: buildDefaultOfferCardConfig(offerSettings),
+        },
+      ],
+      settings,
+    };
+  }
+
   if (offerType === "complete-bundle") {
     const completeBundleConfig = buildCompleteBundleConfig(
       parseCompleteBundleConfig(params.selectedProductsJson),
@@ -1100,6 +1226,9 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
   const bxgy = config.logicBlocks.find(
     (block): block is BxgyLogicBlock => block.type === "bxgy",
   );
+  const freeGift = config.logicBlocks.find(
+    (block): block is FreeGiftLogicBlock => block.type === "free-gift",
+  );
   const completeBundle = config.logicBlocks.find(
     (block): block is CompleteBundleLogicBlock => block.type === "complete-bundle",
   );
@@ -1125,6 +1254,7 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
   const bxgyGetProducts = Array.from(
     new Set(bxgyRules.flatMap((tier) => tier.getProductIds)),
   );
+  const freeGiftRules = buildFreeGiftRulesJson(freeGift?.config.tiers ?? []);
   const completeBundleConfig = completeBundle
     ? buildCompleteBundleConfig(completeBundle.config)
     : { bars: [] };
@@ -1165,6 +1295,8 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
       ? "quantity-breaks-same"
       : bxgy
         ? "bxgy"
+        : freeGift
+          ? "free-gift"
         : completeBundle
           ? "complete-bundle"
           : subscription
@@ -1176,6 +1308,11 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
             buyProducts: bxgyBuyProducts,
             getProducts: bxgyGetProducts,
           })
+        : freeGift
+          ? JSON.stringify({
+              triggerProducts: freeGift.config.triggerProductIds,
+              giftProducts: freeGift.config.giftProductIds,
+            })
         : completeBundle
           ? JSON.stringify(completeBundleConfig)
         : config.scope.productIds.length > 0
@@ -1186,6 +1323,8 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
         ? JSON.stringify(discountRules)
         : bxgy && bxgyRules.length > 0
           ? JSON.stringify(bxgyRules)
+          : freeGift && freeGiftRules.length > 0
+            ? JSON.stringify(freeGiftRules)
           : completeBundle && completeBundleConfig.bars.length > 0
             ? JSON.stringify(
                 completeBundleConfig.bars.map((bar) => ({
@@ -1212,10 +1351,12 @@ export function getOfferDisplayType(
   const primaryBlock = config?.logicBlocks[0];
   if (primaryBlock?.type === "quantity-breaks") return "Quantity breaks";
   if (primaryBlock?.type === "bxgy") return "Buy X Get Y";
+  if (primaryBlock?.type === "free-gift") return "Free gift";
   if (primaryBlock?.type === "complete-bundle") return "Complete bundle";
   if (primaryBlock?.type === "subscription") return "Subscription";
   if (offerType === "quantity-breaks-same") return "Quantity breaks";
   if (offerType === "bxgy") return "Buy X Get Y";
+  if (offerType === "free-gift") return "Free gift";
   if (offerType === "complete-bundle") return "Complete bundle";
   if (offerType === "subscription") return "Subscription";
   return offerType || "Campaign";
@@ -1248,6 +1389,18 @@ export function getOfferRulesText(params: {
         )
         .join(", ");
     }
+    const freeGift = config.logicBlocks.find(
+      (block): block is FreeGiftLogicBlock => block.type === "free-gift",
+    );
+    const freeGiftTiers = freeGift?.config.tiers ?? [];
+    if (freeGift && freeGiftTiers.length > 0) {
+      return freeGiftTiers
+        .map(
+          (tier) =>
+            `Buy ${tier.count} Get ${tier.giftQuantity} free gift${tier.giftQuantity > 1 ? "s" : ""}`,
+        )
+        .join(", ");
+    }
     const completeBundle = config.logicBlocks.find(
       (block): block is CompleteBundleLogicBlock => block.type === "complete-bundle",
     );
@@ -1275,6 +1428,16 @@ export function getOfferRulesText(params: {
       .map(
         (rule) =>
           `Buy ${rule.buyQuantity} Get ${rule.getQuantity} ${rule.discountPercent === 100 ? "Free" : `${rule.discountPercent}% Off`}`,
+      )
+      .join(", ");
+  }
+
+  const freeGiftRules = parseFreeGiftRules(params.discountRulesJson);
+  if (freeGiftRules.length > 0) {
+    return freeGiftRules
+      .map(
+        (rule) =>
+          `Buy ${rule.count} Get ${rule.giftQuantity} free gift${rule.giftQuantity > 1 ? "s" : ""}`,
       )
       .join(", ");
   }
@@ -1329,6 +1492,36 @@ export function parseSelectedProductIds(selectedProductsJson?: string | null): s
   }
 }
 
+export function parseFreeGiftSelectedProducts(selectedProductsJson?: string | null): {
+  triggerProducts: string[];
+  giftProducts: string[];
+} {
+  if (!selectedProductsJson) {
+    return { triggerProducts: [], giftProducts: [] };
+  }
+
+  try {
+    const parsed = JSON.parse(selectedProductsJson) as {
+      triggerProducts?: unknown;
+      giftProducts?: unknown;
+    };
+    return {
+      triggerProducts: Array.isArray(parsed.triggerProducts)
+        ? parsed.triggerProducts
+            .map((id) => String(id || "").trim())
+            .filter(Boolean)
+        : [],
+      giftProducts: Array.isArray(parsed.giftProducts)
+        ? parsed.giftProducts
+            .map((id) => String(id || "").trim())
+            .filter(Boolean)
+        : [],
+    };
+  } catch {
+    return { triggerProducts: [], giftProducts: [] };
+  }
+}
+
 export function parseBxgyDiscountRules(discountRulesJson?: string | null): BxgyDiscountRule[] {
   if (!discountRulesJson) return [];
 
@@ -1379,6 +1572,39 @@ export function parseBxgyDiscountRules(discountRulesJson?: string | null): BxgyD
   }
 }
 
+export function parseFreeGiftRules(discountRulesJson?: string | null): FreeGiftRule[] {
+  if (!discountRulesJson) return [];
+
+  try {
+    const parsed = JSON.parse(discountRulesJson) as unknown;
+    if (!Array.isArray(parsed)) return [];
+
+    const out: FreeGiftRule[] = [];
+    for (const item of parsed) {
+      if (!item || typeof item !== "object") continue;
+
+      const count = Number((item as { count?: unknown }).count);
+      const giftQuantity = Number((item as { giftQuantity?: unknown }).giftQuantity);
+      if (!Number.isFinite(count) || count < 1) continue;
+      if (!Number.isFinite(giftQuantity) || giftQuantity < 1) continue;
+
+      out.push({
+        count: Math.trunc(count),
+        giftQuantity: Math.trunc(giftQuantity),
+        title: (item as { title?: string }).title || "",
+        subtitle: (item as { subtitle?: string }).subtitle || "",
+        badge: (item as { badge?: string }).badge || "",
+        isDefault: !!(item as { isDefault?: boolean }).isDefault,
+      });
+    }
+
+    out.sort((a, b) => a.count - b.count);
+    return out;
+  } catch {
+    return [];
+  }
+}
+
 /** Build BXGY discount rules JSON for DB storage — deduplicates by count, sorts ascending. */
 export function buildBxgyDiscountRulesJson(tiers: BxgyDiscountRule[]): BxgyDiscountRule[] {
   const dedupedByCount = new Map<number, BxgyDiscountRule>();
@@ -1399,6 +1625,23 @@ export function buildBxgyDiscountRulesJson(tiers: BxgyDiscountRule[]): BxgyDisco
       getProductIds: Array.isArray(tier.getProductIds)
         ? tier.getProductIds.filter(id => typeof id === "string")
         : [],
+      title: tier.title || "",
+      subtitle: tier.subtitle || "",
+      badge: tier.badge || "",
+      isDefault: !!tier.isDefault,
+    });
+  }
+  return Array.from(dedupedByCount.values()).sort((a, b) => a.count - b.count);
+}
+
+export function buildFreeGiftRulesJson(tiers: FreeGiftRule[]): FreeGiftRule[] {
+  const dedupedByCount = new Map<number, FreeGiftRule>();
+  for (const tier of tiers) {
+    if (!Number.isFinite(tier.count) || tier.count < 1) continue;
+    if (!Number.isFinite(tier.giftQuantity) || tier.giftQuantity < 1) continue;
+    dedupedByCount.set(Math.trunc(tier.count), {
+      count: Math.trunc(tier.count),
+      giftQuantity: Math.trunc(tier.giftQuantity),
       title: tier.title || "",
       subtitle: tier.subtitle || "",
       badge: tier.badge || "",

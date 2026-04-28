@@ -14,6 +14,7 @@ type Props = {
   bxgyDiscountRules: BxgyRuleLite[];
   value: ProgressiveGiftsConfig;
   onChange: (next: ProgressiveGiftsConfig) => void;
+  showToggle?: boolean;
 };
 
 /** 生成「Bar #N」下拉选项，与店面前台档位顺序一致 */
@@ -47,6 +48,7 @@ export function ProgressiveGiftsSection({
   bxgyDiscountRules,
   value,
   onChange,
+  showToggle = true,
 }: Props) {
   const barOptions = buildBarOptions(offerType, normalizedDiscountRules, bxgyDiscountRules);
 
@@ -101,7 +103,12 @@ export function ProgressiveGiftsSection({
             same time, each line should include the offer id.
           </p>
         </div>
-        <Switch checked={value.enabled} onChange={(checked) => patch({ enabled: checked })} />
+        {showToggle ? (
+          <Switch
+            checked={value.enabled}
+            onChange={(checked) => patch({ enabled: checked })}
+          />
+        ) : null}
       </div>
 
       {!value.enabled ? (

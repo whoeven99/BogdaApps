@@ -16,16 +16,22 @@ import {
 } from "../adminUi";
 import BundlePreview from "../BundlePreview/BundlePreview";
 import { PreviewItem } from "../BundlePreview/bundlePreviewShared";
-import BxgyLogicEditor from "./BxgyLogicEditor";
 import BuilderSummaryCards from "./BuilderSummaryCards";
 import BuilderStepIntro from "./BuilderStepIntro";
-import CompleteBundleEditor from "./CompleteBundleEditor";
-import { ProgressiveGiftsSection } from "./ProgressiveGiftsSection";
+import type { CampaignDraft, CampaignDraftActions } from "./campaignDraft";
+import {
+  buildDiscountRulesPayload,
+  buildSelectedProductsPayload,
+  getCampaignBuilderMeta,
+  getCampaignLogicSummary,
+  getCampaignScopeSummary,
+  validateFinalSubmitScopeAndLogic,
+  validateScopeAndLogicStep,
+} from "./campaignBuilderRegistry";
 import DisplayBlocksEditor from "./DisplayBlocksEditor";
-import QuantityBreaksLogicEditor from "./QuantityBreaksLogicEditor";
+import LogicEditorsRenderer from "./LogicEditorsRenderer";
 import ScheduleTargetingEditor from "./ScheduleTargetingEditor";
-import ScopeEditor from "./ScopeEditor";
-import SubscriptionSettingsEditor from "./SubscriptionSettingsEditor";
+import StarterTemplatePicker from "./StarterTemplatePicker";
 import {
   OFFER_TEXT_LIMITS,
   buildLegacyFieldsFromCampaignConfig,
@@ -34,22 +40,23 @@ import {
   parseCampaignConfig,
   parseDiscountRules,
   parseBxgyDiscountRules,
+  parseFreeGiftRules,
   parseOfferSettings,
   parseSelectedProductIds,
   buildBxgyDiscountRulesJson,
+  buildFreeGiftRulesJson,
   progressiveGiftsConfigToStorableJson,
   type ProgressiveGiftsConfig,
   parseCompleteBundleConfig,
+  parseFreeGiftSelectedProducts,
   buildCompleteBundleConfig,
   type CompleteBundleBar,
   type CompleteBundleProduct,
   type CompleteBundlePricingMode,
   type CampaignConfig,
+  type FreeGiftRule,
 } from "../../../utils/offerParsing";
-import {
-  OFFER_TYPE_OPTIONS,
-  type OfferTypeId,
-} from "./offerTypeOptions";
+import { type OfferTypeId } from "./offerTypeOptions";
 
 type DiscountRule = {
   // 数量阈值：例如 count=2 表示"买 2 件及以上"生效
@@ -513,9 +520,19 @@ export function CreateNewOffer({
     const selectedProductsJson =
       initialCampaignLegacy?.selectedProductsJson ??
       initialOffer?.selectedProductsJson;
-    const ids = selectedProductsJson
-      ? parseSelectedProductIds(selectedProductsJson)
-      : [];
+    const selectedSourceOfferType =
+      (initialCampaignLegacy?.offerType as OfferTypeId | undefined) ??
+      (initialOffer?.offerType as OfferTypeId | undefined);
+    const freeGiftSelectedProducts =
+      selectedSourceOfferType === "free-gift"
+        ? parseFreeGiftSelectedProducts(selectedProductsJson)
+        : { triggerProducts: [], giftProducts: [] };
+    const ids =
+      selectedSourceOfferType === "free-gift"
+        ? freeGiftSelectedProducts.triggerProducts
+        : selectedProductsJson
+          ? parseSelectedProductIds(selectedProductsJson)
+          : [];
 
     let parsedObjects: any[] = [];
     try {
@@ -550,9 +567,40 @@ export function CreateNewOffer({
       };
     });
   });
+  const [giftProductsData, setGiftProductsData] = useState<{
+    id: string;
+    title: string;
+    image: string;
+    price: string;
+    variantsCount: number;
+    hasSubscription: boolean;
+  }[]>(() => {
+    const selectedProductsJson =
+      initialCampaignLegacy?.selectedProductsJson ??
+      initialOffer?.selectedProductsJson;
+    const selectedSourceOfferType =
+      (initialCampaignLegacy?.offerType as OfferTypeId | undefined) ??
+      (initialOffer?.offerType as OfferTypeId | undefined);
+    const giftIds =
+      selectedSourceOfferType === "free-gift"
+        ? parseFreeGiftSelectedProducts(selectedProductsJson).giftProducts
+        : [];
+
+    return giftIds.map((id: string) => {
+      const found = storeProducts.find((p) => String(p.id) === id);
+      return {
+        id,
+        title: found?.name ?? "Unknown product",
+        image: found?.image ?? "https://via.placeholder.com/60",
+        price: found?.price ?? "€0.00",
+        variantsCount: 1,
+        hasSubscription: found?.hasSubscription === true,
+      };
+    });
+  });
 
   const handleSelectProducts = async (
-    type: "buy" | "get" | "normal" = "normal",
+    type: "buy" | "get" | "gift" | "normal" = "normal",
   ) => {
     const selected = await (window as any).shopify.resourcePicker({
       type: "product",
@@ -562,6 +610,8 @@ export function CreateNewOffer({
         ? buyProducts.map((id) => ({ id }))
         : type === "get"
         ? getProducts.map((id) => ({ id }))
+        : type === "gift"
+        ? giftProductsData.map((p) => ({ id: p.id }))
         : selectedProductsData.map((p) => ({ id: p.id })),
     });
 
@@ -586,6 +636,11 @@ export function CreateNewOffer({
         setBuyProducts(newData.map((item: any) => item.id));
       } else if (type === "get") {
         setGetProducts(newData.map((item: any) => item.id));
+      } else if (type === "gift") {
+        setGiftProductsData(newData);
+      } else if (offerType === "free-gift") {
+        setFreeGiftTriggerProducts(newData.map((item: any) => String(item.id)));
+        setSelectedProductsData(newData);
       } else {
         const nextProducts =
           offerType === "subscription" ? newData.slice(0, 1) : newData;
@@ -730,6 +785,11 @@ export function CreateNewOffer({
       initialCampaignLegacy?.discountRulesJson ?? initialOffer?.discountRulesJson,
     ),
   );
+  const [freeGiftRules, setFreeGiftRules] = useState<FreeGiftRule[]>(
+    parseFreeGiftRules(
+      initialCampaignLegacy?.discountRulesJson ?? initialOffer?.discountRulesJson,
+    ),
+  );
   const [buyProducts, setBuyProducts] = useState<string[]>(() => {
     const selectedProductsJson =
       initialCampaignLegacy?.offerType === "bxgy"
@@ -759,6 +819,15 @@ export function CreateNewOffer({
     } catch (e) {
       return [];
     }
+  });
+  const [freeGiftTriggerProducts, setFreeGiftTriggerProducts] = useState<string[]>(() => {
+    const selectedProductsJson =
+      initialCampaignLegacy?.offerType === "free-gift"
+        ? initialCampaignLegacy.selectedProductsJson
+        : initialOffer?.offerType === "free-gift"
+          ? initialOffer.selectedProductsJson
+          : null;
+    return parseFreeGiftSelectedProducts(selectedProductsJson).triggerProducts;
   });
   const [completeBundleBars, setCompleteBundleBars] = useState<CompleteBundleBar[]>(
     () =>
@@ -1223,6 +1292,12 @@ export function CreateNewOffer({
         label: `Bar #${i + 1} (count ≥ ${r.count})`,
       }));
     }
+    if (offerType === "free-gift") {
+      return freeGiftRules.map((r, i) => ({
+        value: i + 1,
+        label: `Gift tier #${i + 1} (count ≥ ${r.count})`,
+      }));
+    }
     return [
       { value: 1, label: "Bar #1 (Single, qty 1)" },
       ...normalizedDiscountRules.map((r, i) => ({
@@ -1299,6 +1374,25 @@ export function CreateNewOffer({
           config: completeBundleConfig,
         },
       ];
+    } else if (offerType === "free-gift") {
+      logicBlockId = "logic-free-gift";
+      scopeProductIds = Array.from(
+        new Set([
+          ...freeGiftTriggerProducts,
+          ...giftProductsData.map((product) => String(product.id)),
+        ]),
+      );
+      logicBlocks = [
+        {
+          id: logicBlockId,
+          type: "free-gift",
+          config: {
+            triggerProductIds: freeGiftTriggerProducts,
+            giftProductIds: giftProductsData.map((product) => String(product.id)),
+            tiers: buildFreeGiftRulesJson(freeGiftRules),
+          },
+        },
+      ];
     } else if (offerType === "subscription") {
       logicBlockId = "logic-subscription";
       scopeProductIds = selectedProductsData.map((product) => String(product.id));
@@ -1373,6 +1467,9 @@ export function CreateNewOffer({
     customerSegments,
     dailyBudget,
     endTime,
+    freeGiftRules,
+    freeGiftTriggerProducts,
+    giftProductsData,
     labelColor,
     layoutFormat,
     markets,
@@ -1403,6 +1500,110 @@ export function CreateNewOffer({
     () => (currentCampaignConfig ? JSON.stringify(currentCampaignConfig) : ""),
     [currentCampaignConfig],
   );
+  const builderMeta = useMemo(
+    () => getCampaignBuilderMeta(offerType),
+    [offerType],
+  );
+  const allSelectedProductsHaveSubscription = useMemo(
+    () =>
+      selectedProductsData.length > 0 &&
+      selectedProductsData.every((item) => item.hasSubscription),
+    [selectedProductsData],
+  );
+  const shouldShowSubscriptionPreview =
+    offerType === "subscription" && subscriptionEnabled;
+  const subscriptionPreviewStyle = allSelectedProductsHaveSubscription
+    ? "solid"
+    : "dashed";
+  const shouldShowSubscriptionExplanation =
+    shouldShowSubscriptionPreview && !allSelectedProductsHaveSubscription;
+  const subscriptionExplanationTitle =
+    selectedProductsData.length > 0
+      ? "Some products aren't eligible for subscriptions"
+      : "Select products to check subscription eligibility";
+  const subscriptionExplanationBody =
+    selectedProductsData.length > 0
+      ? "Subscription bar will only be shown in products that are eligible for subscription. You can select those products in your subscription app."
+      : "After selecting products, the app checks whether they have selling plans and decides whether to show a solid or dashed subscription bar.";
+  const campaignDraft = useMemo<CampaignDraft>(
+    () => ({
+      offerType,
+      selectedProductsData,
+      discountRules,
+      buyProducts,
+      getProducts,
+      activeBundleBarId,
+      completeBundleBars,
+      subscriptionTitle,
+      subscriptionSubtitle,
+      oneTimeTitle,
+      oneTimeSubtitle,
+      subscriptionPosition,
+      subscriptionDefaultSelected,
+      shouldShowSubscriptionPreview,
+      allSelectedProductsHaveSubscription,
+      shouldShowSubscriptionExplanation,
+      subscriptionExplanationTitle,
+      subscriptionExplanationBody,
+      freeGiftTriggerProducts,
+      giftProductsData,
+      progressiveGifts,
+      normalizedDiscountRules,
+      bxgyDiscountRules,
+      freeGiftRules,
+      subscriptionEnabled,
+    }),
+    [
+      offerType,
+      selectedProductsData,
+      discountRules,
+      buyProducts,
+      getProducts,
+      activeBundleBarId,
+      completeBundleBars,
+      subscriptionTitle,
+      subscriptionSubtitle,
+      oneTimeTitle,
+      oneTimeSubtitle,
+      subscriptionPosition,
+      subscriptionDefaultSelected,
+      shouldShowSubscriptionPreview,
+      allSelectedProductsHaveSubscription,
+      shouldShowSubscriptionExplanation,
+      subscriptionExplanationTitle,
+      subscriptionExplanationBody,
+      freeGiftTriggerProducts,
+      giftProductsData,
+      progressiveGifts,
+      normalizedDiscountRules,
+      bxgyDiscountRules,
+      freeGiftRules,
+      subscriptionEnabled,
+    ],
+  );
+  const campaignDraftActions: CampaignDraftActions = {
+    setOfferType,
+    setSelectedProductsData,
+    handleSelectProducts,
+    setDiscountRules,
+    setBxgyDiscountRules,
+    setActiveBundleBarId,
+    addCompleteBundleBar,
+    removeCompleteBundleBar,
+    updateCompleteBundleBar,
+    handleSelectProductsForBundleBar,
+    appendProductsToBundleBar,
+    setSubscriptionEnabled,
+    setSubscriptionTitle,
+    setSubscriptionSubtitle,
+    setOneTimeTitle,
+    setOneTimeSubtitle,
+    setSubscriptionPosition,
+    setSubscriptionDefaultSelected,
+    setFreeGiftTriggerProducts,
+    setFreeGiftRules,
+    setProgressiveGifts,
+  };
   const countdownPreviewText = useMemo(() => {
     if (!showCountdownBlock || !endTime || !dayjs(endTime).isValid()) {
       return "";
@@ -1412,95 +1613,23 @@ export function CreateNewOffer({
       .format("YYYY-MM-DD HH:mm")}`;
   }, [countdownLabel, endTime, scheduleTimezone, showCountdownBlock]);
   const scopeSummary = useMemo(() => {
-    if (offerType === "bxgy") {
-      return `${buyProducts.length} buy products + ${getProducts.length} get products`;
-    }
-    if (offerType === "complete-bundle") {
-      const uniqueProductCount = new Set(
-        completeBundleBars.flatMap((bar) =>
-          bar.products.map((product) => String(product.productId)),
-        ),
-      ).size;
-      return `${uniqueProductCount} products across ${completeBundleBars.length} bars`;
-    }
-    return `${selectedProductsData.length} selected products`;
-  }, [
-    buyProducts.length,
-    completeBundleBars,
-    getProducts.length,
-    offerType,
-    selectedProductsData.length,
-  ]);
+    return getCampaignScopeSummary(campaignDraft);
+  }, [campaignDraft]);
   const logicSummary = useMemo(() => {
-    if (offerType === "bxgy") {
-      const bestDiscount = bxgyDiscountRules.reduce(
-        (max, rule) => Math.max(max, rule.discountPercent),
-        0,
-      );
-      return `${bxgyDiscountRules.length} BXGY tiers, up to ${bestDiscount}% off`;
-    }
-    if (offerType === "complete-bundle") {
-      const bxgyBars = completeBundleBars.filter((bar) => bar.type === "bxgy").length;
-      const quantityBars = completeBundleBars.length - bxgyBars;
-      return `${quantityBars} quantity bars, ${bxgyBars} BXGY bars`;
-    }
-    if (offerType === "subscription") {
-      return subscriptionEnabled
-        ? `Subscription enabled for ${selectedProductsData.length} products`
-        : "Subscription block configured but disabled";
-    }
-    const bestDiscount = normalizedDiscountRules.reduce(
-      (max, rule) => Math.max(max, rule.discountPercent),
-      0,
-    );
-    return `${normalizedDiscountRules.length} quantity tiers, up to ${bestDiscount}% off`;
-  }, [
-    bxgyDiscountRules,
-    completeBundleBars,
-    normalizedDiscountRules,
-    offerType,
-    selectedProductsData.length,
-    subscriptionEnabled,
-  ]);
+    return getCampaignLogicSummary(campaignDraft);
+  }, [campaignDraft]);
   const displaySummary = useMemo(() => {
     return showCountdownBlock ? "Offer card + Countdown" : "Offer card only";
   }, [showCountdownBlock]);
   const logicBlockLabel = useMemo(() => {
-    switch (offerType) {
-      case "bxgy":
-        return "Buy X Get Y";
-      case "complete-bundle":
-        return "Complete Bundle";
-      case "subscription":
-        return "Subscription";
-      default:
-        return "Quantity Breaks";
-    }
-  }, [offerType]);
+    return builderMeta.logicBlockLabel;
+  }, [builderMeta]);
   const logicBlockDescription = useMemo(() => {
-    switch (offerType) {
-      case "bxgy":
-        return "Promote a buy-and-reward mechanic with separate buy and get product groups.";
-      case "complete-bundle":
-        return "Present multi-bar bundle combinations with per-product pricing and variant previews.";
-      case "subscription":
-        return "Show a subscription purchase mode alongside one-time purchase messaging.";
-      default:
-        return "Reward larger quantities of the same product with progressively better pricing.";
-    }
-  }, [offerType]);
+    return builderMeta.logicBlockDescription;
+  }, [builderMeta]);
   const stepTwoDescription = useMemo(() => {
-    switch (offerType) {
-      case "bxgy":
-        return "Choose the buy and get product groups, then define the reward tiers customers can unlock.";
-      case "complete-bundle":
-        return "Build each bundle bar, attach the right products, and control how the combined offer is priced.";
-      case "subscription":
-        return "Pick the products that participate and configure how subscription and one-time purchase options are presented.";
-      default:
-        return "Select the products in scope and define the quantity tiers that drive the promotion.";
-    }
-  }, [offerType]);
+    return builderMeta.stepTwoDescription;
+  }, [builderMeta]);
   const stepThreeDescription = useMemo(() => {
     return `Configure how your ${logicBlockLabel} campaign appears on the storefront, including optional promotional display blocks.`;
   }, [logicBlockLabel]);
@@ -1579,6 +1708,24 @@ export function CreateNewOffer({
       });
     }
 
+    if (offerType === "free-gift" && freeGiftRules.length > 0) {
+      const freeGiftHasDefault = freeGiftRules.some((r) => r.isDefault);
+      return freeGiftRules.map((rule, index) => {
+        const isFeatured = freeGiftHasDefault ? !!rule.isDefault : index === 0;
+        return {
+          id: `free-gift-tier-${rule.count}`,
+          title: rule.title || `Buy ${rule.count}`,
+          subtitle:
+            rule.subtitle ||
+            `Unlock ${rule.giftQuantity} free gift${rule.giftQuantity > 1 ? "s" : ""}`,
+          price: `${rule.giftQuantity} FREE`,
+          featured: isFeatured,
+          badge: rule.badge || (isFeatured ? "Gift included" : ""),
+          saveLabel: `TRIGGER AT ${rule.count}`,
+        };
+      });
+    }
+
     return [
       {
         id: "single",
@@ -1610,6 +1757,7 @@ export function CreateNewOffer({
     offerType,
     completeBundleBars,
     bxgyDiscountRules,
+    freeGiftRules,
     normalizedDiscountRules,
     baseUnitPrice,
     formatPreviewPrice,
@@ -1623,30 +1771,7 @@ export function CreateNewOffer({
     "Targeting",
   ];
 
-  const offerTypes = OFFER_TYPE_OPTIONS;
   const isOfferTypeLocked = !initialOffer && !!initialOfferType;
-
-  const allSelectedProductsHaveSubscription = useMemo(
-    () =>
-      selectedProductsData.length > 0 &&
-      selectedProductsData.every((item) => item.hasSubscription),
-    [selectedProductsData],
-  );
-  const shouldShowSubscriptionPreview =
-    offerType === "subscription" && subscriptionEnabled;
-  const subscriptionPreviewStyle = allSelectedProductsHaveSubscription
-    ? "solid"
-    : "dashed";
-  const shouldShowSubscriptionExplanation =
-    shouldShowSubscriptionPreview && !allSelectedProductsHaveSubscription;
-  const subscriptionExplanationTitle =
-    selectedProductsData.length > 0
-      ? "Some products aren't eligible for subscriptions"
-      : "Select products to check subscription eligibility";
-  const subscriptionExplanationBody =
-    selectedProductsData.length > 0
-      ? "Subscription bar will only be shown in products that are eligible for subscription. You can select those products in your subscription app."
-      : "After selecting products, the app checks whether they have selling plans and decides whether to show a solid or dashed subscription bar.";
   useEffect(() => {
     // 中文注释：当用户在第 1 步切换到 Subscription 类型时，默认自动打开订阅开关
     if (offerType === "subscription") {
@@ -1702,6 +1827,17 @@ export function CreateNewOffer({
             setStep(2);
             return;
           }
+        }
+        const finalScopeLogicError =
+          validateFinalSubmitScopeAndLogic(campaignDraft);
+        if (finalScopeLogicError) {
+          e.preventDefault();
+          Modal.error({
+            title: "Validation Error",
+            content: finalScopeLogicError,
+          });
+          setStep(2);
+          return;
         }
 
         let hasError = false;
@@ -1854,32 +1990,16 @@ export function CreateNewOffer({
       <input
         type="hidden"
         name="selectedProductsJson"
-        value={JSON.stringify(
-          offerType === "bxgy"
-            ? { buyProducts, getProducts }
-            : offerType === "complete-bundle"
-              ? buildCompleteBundleConfig({ bars: completeBundleBars })
-              : selectedProductsData,
-        )}
+        value={JSON.stringify(buildSelectedProductsPayload(campaignDraft))}
       />
       <input
         type="hidden"
         name="discountRulesJson"
         value={JSON.stringify(
-          offerType === "bxgy"
-            ? buildBxgyDiscountRulesJson(bxgyDiscountRules)
-            : offerType === "complete-bundle"
-              ? completeBundleBars.map((bar) => ({
-                  id: bar.id,
-                  type: bar.type,
-                  quantity: bar.quantity,
-                  pricing: bar.pricing,
-                  products: bar.products.map((p) => ({
-                    productId: p.productId,
-                    pricing: p.pricing ?? { mode: "full_price" as const, value: 0 },
-                  })),
-                }))
-              : buildDiscountRulesJson(normalizedDiscountRules),
+          buildDiscountRulesPayload(
+            campaignDraft,
+            buildDiscountRulesJson,
+          ),
         )}
       />
       <input
@@ -1956,7 +2076,7 @@ export function CreateNewOffer({
                   <div className="flex flex-col gap-4">
                       <BuilderStepIntro
                         title="Campaign Setup"
-                        description="Name this campaign and choose the core promotion mechanic before configuring scope, display, and targeting."
+                        description="Name this campaign and choose a starter template before configuring the component stack, display, and targeting."
                       />
                     <div>
                       <label className="block">
@@ -1986,22 +2106,19 @@ export function CreateNewOffer({
                     </div>
 
                     <div>
-                      <label className="block">
-                        <span className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                          Offer Type
-                        </span>
-                        <Select
-                          size="large"
-                          value={offerType}
-                          onChange={(val) => setOfferType(val as OfferTypeId)}
-                          disabled={!!initialOffer || isOfferTypeLocked}
-                          className="w-full"
-                          options={offerTypes.map(t => ({ label: t.name, value: t.id }))}
-                        />
-                      </label>
+                      <div className="block text-[14px] font-medium text-[#1c1f23] mb-3">
+                        Starter Template
+                      </div>
+                      <StarterTemplatePicker
+                        selectedOfferType={offerType}
+                        onSelect={setOfferType}
+                        actionLabel="Use This Template"
+                        disabled={!!initialOffer || isOfferTypeLocked}
+                        compact
+                      />
                       {isOfferTypeLocked && (
                         <div className="mt-1 text-[13px] text-[#5c6166]">
-                          To change the offer type, go back and choose another template.
+                          This builder was opened from a fixed starter template. You can still swap the template from Step 2 when editing the component stack.
                         </div>
                       )}
                     </div>
@@ -2084,78 +2201,12 @@ export function CreateNewOffer({
                     meta={logicBlockLabel}
                   />
 
-                  {offerType === "bxgy" ? (
-                    <BxgyLogicEditor
-                      buyProductsCount={buyProducts.length}
-                      getProductsCount={getProducts.length}
-                      onSelectBuyProducts={() => handleSelectProducts("buy")}
-                      onSelectGetProducts={() => handleSelectProducts("get")}
-                      bxgyDiscountRules={bxgyDiscountRules}
-                      setBxgyDiscountRules={setBxgyDiscountRules}
-                    />
-                  ) : offerType === "complete-bundle" ? (
-                    <CompleteBundleEditor
-                      completeBundleBars={completeBundleBars}
-                      activeBundleBarId={activeBundleBarId}
-                      setActiveBundleBarId={setActiveBundleBarId}
-                      addCompleteBundleBar={addCompleteBundleBar}
-                      removeCompleteBundleBar={removeCompleteBundleBar}
-                      updateCompleteBundleBar={updateCompleteBundleBar}
-                      handleSelectProductsForBundleBar={handleSelectProductsForBundleBar}
-                      appendProductsToBundleBar={appendProductsToBundleBar}
-                      renderCompleteBundleProductPricingCard={
-                        renderCompleteBundleProductPricingCard
-                      }
-                    />
-                  ) : (
-                    <ScopeEditor
-                      selectedProductsData={selectedProductsData}
-                      onSelectProducts={handleSelectProducts}
-                      onRemoveProduct={(productId) =>
-                        setSelectedProductsData((prev) =>
-                          prev.filter((product) => product.id !== productId),
-                        )
-                      }
-                    />
-                  )}
-
-                  {offerType === "subscription" && (
-                    <SubscriptionSettingsEditor
-                      subscriptionEnabled={subscriptionEnabled}
-                      setSubscriptionEnabled={setSubscriptionEnabled}
-                      subscriptionTitle={subscriptionTitle}
-                      setSubscriptionTitle={setSubscriptionTitle}
-                      subscriptionSubtitle={subscriptionSubtitle}
-                      setSubscriptionSubtitle={setSubscriptionSubtitle}
-                      oneTimeTitle={oneTimeTitle}
-                      setOneTimeTitle={setOneTimeTitle}
-                      oneTimeSubtitle={oneTimeSubtitle}
-                      setOneTimeSubtitle={setOneTimeSubtitle}
-                      subscriptionPosition={subscriptionPosition}
-                      setSubscriptionPosition={setSubscriptionPosition}
-                      subscriptionDefaultSelected={subscriptionDefaultSelected}
-                      setSubscriptionDefaultSelected={setSubscriptionDefaultSelected}
-                      shouldShowSubscriptionPreview={shouldShowSubscriptionPreview}
-                      allSelectedProductsHaveSubscription={allSelectedProductsHaveSubscription}
-                      shouldShowSubscriptionExplanation={shouldShowSubscriptionExplanation}
-                      subscriptionExplanationTitle={subscriptionExplanationTitle}
-                      subscriptionExplanationBody={subscriptionExplanationBody}
-                    />
-                  )}
-
-                  {/* complete-bundle 的定价与变体已并入各 Bundle bar 卡片，此处仅渲染 BXGY 或普通折扣阶梯 */}
-                  {offerType === "bxgy" ? null : offerType === "complete-bundle" || offerType === "subscription" ? null : (
-                      <QuantityBreaksLogicEditor
-                        discountRules={discountRules}
-                        setDiscountRules={setDiscountRules}
-                      />
-                    )}
-                  <ProgressiveGiftsSection
-                    offerType={offerType}
-                    normalizedDiscountRules={normalizedDiscountRules}
-                    bxgyDiscountRules={bxgyDiscountRules}
-                    value={progressiveGifts}
-                    onChange={setProgressiveGifts}
+                  <LogicEditorsRenderer
+                    draft={campaignDraft}
+                    actions={campaignDraftActions}
+                    renderCompleteBundleProductPricingCard={
+                      renderCompleteBundleProductPricingCard
+                    }
                   />
                 </div>
 
@@ -3007,25 +3058,13 @@ export function CreateNewOffer({
             }
 
             if (step === 2) {
-              if (offerType === "bxgy") {
-                if (buyProducts.length === 0 || getProducts.length === 0) {
-                  message.error("Please select both Buy and Get products for a BXGY offer.");
-                  e.preventDefault();
-                  return;
-                }
-              } else if (offerType === "complete-bundle") {
-                const hasEmptyBar = completeBundleBars.some((bar) => bar.products.length === 0);
-                if (hasEmptyBar) {
-                  message.error("Please select products for every bundle bar.");
-                  e.preventDefault();
-                  return;
-                }
-              } else {
-                if (selectedProductsData.length === 0) {
-                  message.error("Please select at least one product.");
-                  e.preventDefault();
-                  return;
-                }
+              const stepTwoError = validateScopeAndLogicStep(
+                campaignDraft,
+              );
+              if (stepTwoError) {
+                message.error(stepTwoError);
+                e.preventDefault();
+                return;
               }
               setStep(3);
               e.preventDefault();

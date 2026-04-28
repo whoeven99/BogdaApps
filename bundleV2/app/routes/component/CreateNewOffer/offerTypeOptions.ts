@@ -2,7 +2,8 @@ export type OfferTypeId =
   | "quantity-breaks-same"
   | "bxgy"
   | "complete-bundle"
-  | "subscription";
+  | "subscription"
+  | "free-gift";
 
 export type OfferTypeOption = {
   id: OfferTypeId;
@@ -34,5 +35,11 @@ export const OFFER_TYPE_OPTIONS: OfferTypeOption[] = [
     name: "Subscription",
     description:
       "Show subscription purchase option below bundle bars for products that support selling plans",
+  },
+  {
+    id: "free-gift",
+    name: "Free gift",
+    description:
+      "Reward customers with one or more free gift products after they reach a quantity threshold",
   },
 ];

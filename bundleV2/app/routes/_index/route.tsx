@@ -46,6 +46,7 @@ import {
   parseProgressiveGiftsConfig,
   progressiveGiftsConfigToStorableJson,
   parseCompleteBundleConfig,
+  parseFreeGiftSelectedProducts,
   parseSelectedProductIds,
   migrateLegacyOfferToCampaignConfig,
   parseCampaignConfig,
@@ -554,6 +555,11 @@ function collectReferencedProductIds(offers: OfferListItem[]): string[] {
     const selectedIds =
       offer.offerType === "bxgy"
         ? parseBxgySelectedProductIds(offer.selectedProductsJson)
+        : offer.offerType === "free-gift"
+          ? [
+              ...parseFreeGiftSelectedProducts(offer.selectedProductsJson).triggerProducts,
+              ...parseFreeGiftSelectedProducts(offer.selectedProductsJson).giftProducts,
+            ]
         : parseSelectedProductIds(offer.selectedProductsJson);
     for (const productId of selectedIds) {
       const normalized = String(productId || "").trim();
