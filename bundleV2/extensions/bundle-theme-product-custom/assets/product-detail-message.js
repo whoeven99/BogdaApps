@@ -84,6 +84,42 @@ function resolveAbGroupByBucket(bucket, splitPercent) {
   return bucket < split ? "abtest1" : "abtest2";
 }
 
+function computeEvenTrafficWeightsJs(n) {
+  const count = Math.max(2, Math.min(24, Math.trunc(Number(n)) || 2));
+  const base = Math.floor(100 / count);
+  const weights = Array.from({ length: count }, () => base);
+  let rem = 100 - base * count;
+  for (let i = 0; i < count && rem > 0; i += 1, rem -= 1) {
+    weights[i] += 1;
+  }
+  return weights;
+}
+
+function resolveVariantIndexByWeights(bucket, weights) {
+  const w = Array.isArray(weights) && weights.length ? weights : [50, 50];
+  const b = Math.max(0, Math.min(99, Math.trunc(Number(bucket)) || 0));
+  let cum = 0;
+  for (let i = 0; i < w.length; i += 1) {
+    cum += Math.max(0, Math.trunc(Number(w[i]) || 0));
+    if (b < cum) return i;
+  }
+  return Math.max(0, w.length - 1);
+}
+
+function resolveAbGroupOrVariantId(bucket, splitPercent, variantIds, trafficWeights) {
+  if (
+    Array.isArray(variantIds) &&
+    variantIds.length >= 2 &&
+    Array.isArray(trafficWeights) &&
+    trafficWeights.length === variantIds.length
+  ) {
+    const idx = resolveVariantIndexByWeights(bucket, trafficWeights);
+    const id = String(variantIds[idx] || variantIds[0] || "").trim();
+    return id || "abtest1";
+  }
+  return resolveAbGroupByBucket(bucket, splitPercent);
+}
+
 function esc(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -1284,29 +1320,79 @@ function getAbTestConfigFromOfferSettings(offer) {
   try {
     const settings = JSON.parse(String(offer?.offerSettingsJson || "{}"));
     const ab = settings?.abTest || {};
+    const variants = Array.isArray(ab.variants) ? ab.variants : [];
+    let trafficWeights = Array.isArray(ab.trafficWeights)
+      ? ab.trafficWeights.map((x) => Number(x))
+      : [];
+    const variantIds = variants
+      .map((row) => (row && typeof row === "object" ? String(row.id || "").trim() : ""))
+      .filter(Boolean);
+    if (variantIds.length >= 2) {
+      if (trafficWeights.length !== variantIds.length) {
+        trafficWeights = computeEvenTrafficWeightsJs(variantIds.length);
+      }
+      return {
+        mode: "nway",
+        variantIds,
+        trafficWeights,
+        salt: String(ab.salt || ""),
+        groupADiscountPercent: Math.max(0, Math.min(100, Number(ab.groupADiscountPercent) || 10)),
+        groupBDiscountPercent: Math.max(0, Math.min(100, Number(ab.groupBDiscountPercent) || 90)),
+        bucketSplitPercent: Math.max(1, Math.min(99, Number(ab.bucketSplitPercent) || 50)),
+      };
+    }
     return {
-      groupADiscountPercent: Math.max(
-        0,
-        Math.min(100, Number(ab.groupADiscountPercent) || 10),
-      ),
-      groupBDiscountPercent: Math.max(
-        0,
-        Math.min(100, Number(ab.groupBDiscountPercent) || 90),
-      ),
-      bucketSplitPercent: Math.max(
-        1,
-        Math.min(99, Number(ab.bucketSplitPercent) || 50),
-      ),
+      mode: "legacy",
+      variantIds: [],
+      trafficWeights: [],
+      groupADiscountPercent: Math.max(0, Math.min(100, Number(ab.groupADiscountPercent) || 10)),
+      groupBDiscountPercent: Math.max(0, Math.min(100, Number(ab.groupBDiscountPercent) || 90)),
+      bucketSplitPercent: Math.max(1, Math.min(99, Number(ab.bucketSplitPercent) || 50)),
       salt: String(ab.salt || ""),
     };
   } catch (e) {
     return {
+      mode: "legacy",
+      variantIds: [],
+      trafficWeights: [],
       groupADiscountPercent: 10,
       groupBDiscountPercent: 90,
       bucketSplitPercent: 50,
       salt: "",
     };
   }
+}
+
+function pickAbDiscountRulesForGroup(offer, group) {
+  const g = String(group || "");
+  try {
+    const settings = JSON.parse(String(offer?.offerSettingsJson || "{}"));
+    const ab = settings?.abTest || {};
+    const variants = Array.isArray(ab.variants) ? ab.variants : [];
+    if (variants.length >= 2) {
+      let idx = -1;
+      if (g === "abtest1") idx = 0;
+      else if (g === "abtest2") idx = 1;
+      else {
+        idx = variants.findIndex((row) => row && typeof row === "object" && String(row.id) === g);
+      }
+      const row = idx >= 0 ? variants[idx] : variants[0];
+      const rules = row && typeof row === "object" && Array.isArray(row.discountRules) ? row.discountRules : [];
+      if (rules.length) return rules;
+    }
+  } catch (e) {}
+  const cfg = getAbTestConfigFromOfferSettings(offer);
+  const pct = g === "abtest1" ? cfg.groupADiscountPercent : cfg.groupBDiscountPercent;
+  return [
+    {
+      count: 1,
+      discountPercent: pct,
+      title: g === "abtest1" ? "A group" : "B group",
+      subtitle: "",
+      badge: g === "abtest1" ? "A" : "B",
+      isDefault: true,
+    },
+  ];
 }
 
 function ensureAbTestAssignmentForOffer(offer) {
@@ -1323,10 +1409,20 @@ function ensureAbTestAssignmentForOffer(offer) {
   if (!Number.isFinite(bucket) || !group) {
     if (customerId) {
       bucket = simpleHashBucket(`${customerId}:${cfg.salt}`);
-      group = resolveAbGroupByBucket(bucket, cfg.bucketSplitPercent);
+      group = resolveAbGroupOrVariantId(
+        bucket,
+        cfg.bucketSplitPercent,
+        cfg.variantIds,
+        cfg.trafficWeights,
+      );
     } else {
       bucket = Math.floor(Math.random() * 100);
-      group = resolveAbGroupByBucket(bucket, cfg.bucketSplitPercent);
+      group = resolveAbGroupOrVariantId(
+        bucket,
+        cfg.bucketSplitPercent,
+        cfg.variantIds,
+        cfg.trafficWeights,
+      );
     }
     localAssignments[localKey] = {
       group,
@@ -1350,6 +1446,10 @@ function ensureAbTestAssignmentForOffer(offer) {
       splitPercent: String(cfg.bucketSplitPercent),
       salt: cfg.salt || "",
     });
+    if (cfg.mode === "nway" && cfg.variantIds.length >= 2) {
+      params.set("variantIds", JSON.stringify(cfg.variantIds));
+      params.set("trafficWeights", JSON.stringify(cfg.trafficWeights));
+    }
     fetch(`/webpixerToAli?${params.toString()}`, { method: "GET" })
       .then((res) => res.json())
       .then((json) => {
@@ -1361,21 +1461,13 @@ function ensureAbTestAssignmentForOffer(offer) {
       });
   } catch (e) {}
 
-  const chosenPercent =
-    group === "abtest1" ? cfg.groupADiscountPercent : cfg.groupBDiscountPercent;
+  const rules = pickAbDiscountRulesForGroup(offer, group);
+  const featured = rules.find((r) => r && r.isDefault) || rules[0];
+  const chosenPercent = featured ? Number(featured.discountPercent) || 0 : 0;
   offer.__ciwiAbGroup = group;
   offer.__ciwiAbBucket = bucket;
   offer.__ciwiAbDiscountPercent = chosenPercent;
-  offer.discountRulesJson = JSON.stringify([
-    {
-      count: 1,
-      discountPercent: chosenPercent,
-      title: group === "abtest1" ? "A group" : "B group",
-      subtitle: "",
-      badge: group === "abtest1" ? "A" : "B",
-      isDefault: true,
-    },
-  ]);
+  offer.discountRulesJson = JSON.stringify(rules);
   return offer;
 }
 

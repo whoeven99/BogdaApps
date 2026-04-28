@@ -12,11 +12,6 @@ const DISCOUNT_PERCENTAGE = "10.0";
 const DEFAULT_DISCOUNT_PERCENTAGE = DISCOUNT_PERCENTAGE;
 const CIWI_PROP_AB_GROUP = "__ciwi_ab_group";
 
-type AbTestSettings = {
-  groupADiscountPercent: number;
-  groupBDiscountPercent: number;
-};
-
 function log(step: string, detail?: unknown): void {
   try {
     if (detail === undefined) {
@@ -144,25 +139,39 @@ function getCartLineAttributeValue(
   return "";
 }
 
-function parseAbTestSettings(offerSettingsJson?: string | null): AbTestSettings {
-  if (!offerSettingsJson) {
-    return { groupADiscountPercent: 10, groupBDiscountPercent: 90 };
-  }
+/** 根据行属性 __ciwi_ab_group 解析该用户所在变体的 discountRules JSON（供阶梯匹配） */
+function resolveAbTestVariantDiscountRulesJson(
+  offerSettingsJson: string | null | undefined,
+  abGroupRaw: string,
+): string | null {
+  const g = String(abGroupRaw || "").trim();
+  if (!g) return null;
   try {
-    const parsed = JSON.parse(offerSettingsJson) as Record<string, unknown>;
+    const parsed = JSON.parse(String(offerSettingsJson || "{}")) as Record<string, unknown>;
     const ab = (parsed?.abTest || {}) as Record<string, unknown>;
-    return {
-      groupADiscountPercent: Math.max(
-        0,
-        Math.min(100, Number(ab.groupADiscountPercent) || 10),
-      ),
-      groupBDiscountPercent: Math.max(
-        0,
-        Math.min(100, Number(ab.groupBDiscountPercent) || 90),
-      ),
-    };
+    const variants = Array.isArray(ab.variants) ? ab.variants : [];
+    if (variants.length >= 2) {
+      let idx = -1;
+      if (g === "abtest1") idx = 0;
+      else if (g === "abtest2") idx = 1;
+      else {
+        idx = variants.findIndex(
+          (row) => row && typeof row === "object" && String((row as { id?: unknown }).id) === g,
+        );
+      }
+      const row =
+        idx >= 0 ? (variants[idx] as { discountRules?: unknown }) : (variants[0] as { discountRules?: unknown });
+      const rules = row?.discountRules;
+      if (Array.isArray(rules) && rules.length) {
+        return JSON.stringify(rules);
+      }
+    }
+    const ga = Math.max(0, Math.min(100, Number(ab.groupADiscountPercent) || 10));
+    const gb = Math.max(0, Math.min(100, Number(ab.groupBDiscountPercent) || 90));
+    const pct = g === "abtest1" ? ga : gb;
+    return JSON.stringify([{ count: 1, discountPercent: pct, isDefault: true }]);
   } catch {
-    return { groupADiscountPercent: 10, groupBDiscountPercent: 90 };
+    return null;
   }
 }
 
@@ -750,12 +759,11 @@ export function bundleCartDiscountGenerateRun(
       );
       if (suitOffer.offerType === "abTest") {
         const abGroup = getCartLineAttributeValue(line, CIWI_PROP_AB_GROUP);
-        const abSettings = parseAbTestSettings(suitOffer.offerSettingsJson);
-        if (abGroup === "abtest1") {
-          discountPercentValue = String(abSettings.groupADiscountPercent);
-        } else if (abGroup === "abtest2") {
-          discountPercentValue = String(abSettings.groupBDiscountPercent);
-        }
+        const variantRulesJson = resolveAbTestVariantDiscountRulesJson(
+          suitOffer.offerSettingsJson,
+          abGroup,
+        );
+        discountPercentValue = getDiscountPercentValue(variantRulesJson, quantity);
         log("abtest_line_discount_resolved", {
           cartLineId: lineId,
           offerId: suitOffer.id,

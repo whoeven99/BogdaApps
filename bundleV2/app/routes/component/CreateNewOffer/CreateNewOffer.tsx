@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState, useMemo } from "react";
+import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { useFetcher, useNavigate, useSearchParams } from "react-router";
-import { Button, Input, InputNumber, Select, Switch, Checkbox, DatePicker, Modal, message, Dropdown } from "antd";
+import { Button, Input, InputNumber, Select, Switch, Checkbox, DatePicker, Modal, message, Dropdown, Radio } from "antd";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 import {
   X,
   Trash2,
+  Plus,
+  Settings,
 } from "lucide-react";
 
 dayjs.extend(utc);
@@ -33,6 +35,10 @@ import {
   type CompleteBundlePricingMode,
   buildDifferentProductDiscountRulesJson,
   type DifferentProductDiscountRule,
+  parseAbTestOfferSettingsBlock,
+  computeEvenTrafficWeights,
+  normalizeTrafficWeights,
+  type AbTestVariantStored,
 } from "../../../utils/offerParsing";
 
 type DiscountRule = {
@@ -218,6 +224,33 @@ function buildDiscountRulesJson(tiers: DiscountRule[]): DiscountRule[] {
     .filter((tier, index, arr) =>
       index === arr.findIndex((x) => x.count === tier.count),
     );
+}
+
+type AbVariantDraft = {
+  id: string;
+  key: string;
+  discountRules: DiscountRule[];
+};
+
+function cloneAbVariantsFromStored(variants: AbTestVariantStored[]): AbVariantDraft[] {
+  return variants.map((v) => ({
+    id: v.id,
+    key: v.key,
+    discountRules: v.discountRules.map((r) => ({ ...r })),
+  }));
+}
+
+function newAbVariantId(): string {
+  return `abv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function nextAbVariantKey(variants: AbVariantDraft[]): string {
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const used = new Set(variants.map((v) => v.key));
+  for (const ch of letters) {
+    if (!used.has(ch)) return ch;
+  }
+  return `V${variants.length + 1}`;
 }
 
 function calculatePreviewBundleAmounts(
@@ -481,16 +514,26 @@ export function CreateNewOffer({
     offerSettings.chooseImageSize || 40,
   );
   const [widgetTitle, setWidgetTitle] = useState(offerSettings.title);
-  const [abGroupADiscountPercent, setAbGroupADiscountPercent] = useState<number>(
-    offerSettings.abTest?.groupADiscountPercent ?? 10,
+  const initialAbBlock = parseAbTestOfferSettingsBlock(
+    offerSettings.abTest,
+    offerSettings.abTest?.salt ?? "",
   );
-  const [abGroupBDiscountPercent, setAbGroupBDiscountPercent] = useState<number>(
-    offerSettings.abTest?.groupBDiscountPercent ?? 90,
+  const [abVariants, setAbVariants] = useState<AbVariantDraft[]>(() =>
+    cloneAbVariantsFromStored(initialAbBlock.variants),
   );
-  const [abBucketSplitPercent, setAbBucketSplitPercent] = useState<number>(
-    offerSettings.abTest?.bucketSplitPercent ?? 50,
+  const [abSelectedVariantId, setAbSelectedVariantId] = useState(
+    () => initialAbBlock.variants[0]?.id || "",
   );
-  const [abSalt] = useState<string>(offerSettings.abTest?.salt || "");
+  const [abAllocationMode, setAbAllocationMode] = useState<"even" | "custom">(
+    () => initialAbBlock.allocationMode,
+  );
+  const [abTrafficWeights, setAbTrafficWeights] = useState<number[]>(() => [
+    ...initialAbBlock.trafficWeights,
+  ]);
+  const [abSalt] = useState<string>(() => initialAbBlock.salt || "");
+  const [abSettingsOpen, setAbSettingsOpen] = useState(false);
+  const [abModalAllocation, setAbModalAllocation] = useState<"even" | "custom">("even");
+  const [abModalWeights, setAbModalWeights] = useState<number[]>([]);
   const [customerSegments, setCustomerSegments] = useState<string[]>(
     offerSettings.customerSegments ? offerSettings.customerSegments.split(",") : ["all"]
   );
@@ -746,6 +789,22 @@ export function CreateNewOffer({
   const [differentPreviewSelections, setDifferentPreviewSelections] = useState<
     Record<string, DifferentPreviewSelection[]>
   >({});
+
+  useEffect(() => {
+    if (offerType !== "abTest") return;
+    if (abVariants.length === 0) return;
+    if (!abVariants.some((v) => v.id === abSelectedVariantId)) {
+      const first = abVariants[0]?.id || "";
+      if (first) setAbSelectedVariantId(first);
+    }
+  }, [offerType, abVariants, abSelectedVariantId]);
+
+  useEffect(() => {
+    if (offerType !== "abTest") return;
+    if (abAllocationMode !== "even") return;
+    setAbTrafficWeights(computeEvenTrafficWeights(abVariants.length));
+  }, [offerType, abAllocationMode, abVariants.length]);
+
   const [buyProducts, setBuyProducts] = useState<string[]>(() => {
     if (initialOffer?.offerType !== 'bxgy' || !initialOffer.selectedProductsJson) return [];
     try {
@@ -1285,6 +1344,18 @@ export function CreateNewOffer({
         label: `Bar #${i + 1} (count ≥ ${r.count})`,
       }));
     }
+    if (offerType === "abTest") {
+      const active =
+        abVariants.find((v) => v.id === abSelectedVariantId) || abVariants[0] || null;
+      const rules = sanitizeDiscountRules(active?.discountRules || []);
+      return [
+        { value: 1, label: "Bar #1 (Single, qty 1)" },
+        ...rules.map((r, i) => ({
+          value: i + 2,
+          label: `Bar #${i + 2} (qty ${r.count})`,
+        })),
+      ];
+    }
     return [
       { value: 1, label: "Bar #1 (Single, qty 1)" },
       ...normalizedDiscountRules.map((r, i) => ({
@@ -1292,46 +1363,54 @@ export function CreateNewOffer({
         label: `Bar #${i + 2} (qty ${r.count})`,
       })),
     ];
-  }, [offerType, bxgyDiscountRules, normalizedDiscountRules]);
+  }, [
+    offerType,
+    bxgyDiscountRules,
+    normalizedDiscountRules,
+    abVariants,
+    abSelectedVariantId,
+  ]);
 
   const hasDefault = normalizedDiscountRules.some(r => r.isDefault);
 
-  const buildAbTestPreviewItems = (discountPercent: number): PreviewItem[] => {
-    const normalizedPercent = Math.max(0, Math.min(100, Number(discountPercent) || 0));
-    const { originalTotal, discountedTotal, saved } = calculatePreviewBundleAmounts(
-      baseUnitPrice,
-      2,
-      normalizedPercent,
-    );
-    return [
-      {
-        id: "single",
-        title: "Single",
-        subtitle: "Standard price",
-        price: formatPreviewPrice(baseUnitPrice),
-      },
-      {
-        id: `abtest-tier-${normalizedPercent}`,
-        title: "2 items",
-        subtitle: `A/B discount ${normalizedPercent}%`,
-        price: formatPreviewPrice(discountedTotal),
-        original: formatPreviewPrice(originalTotal),
-        featured: true,
-        badge: "A/B group",
-        saveLabel: `SAVE ${formatPreviewPrice(saved)}`,
-      },
-    ];
-  };
-  const abPreviewItemsA: PreviewItem[] = useMemo(
-    () => buildAbTestPreviewItems(abGroupADiscountPercent),
-    [abGroupADiscountPercent],
+  const activeAbVariant =
+    abVariants.find((v) => v.id === abSelectedVariantId) || abVariants[0] || null;
+  const normalizedAbActiveDiscountRules = sanitizeDiscountRules(
+    activeAbVariant?.discountRules || [],
   );
-  const abPreviewItemsB: PreviewItem[] = useMemo(
-    () => buildAbTestPreviewItems(abGroupBDiscountPercent),
-    [abGroupBDiscountPercent],
-  );
+  const hasDefaultAb = normalizedAbActiveDiscountRules.some((r) => r.isDefault);
 
   const previewItems: PreviewItem[] = useMemo(() => {
+    if (offerType === "abTest" && abVariants.length > 0) {
+      const rules = normalizedAbActiveDiscountRules;
+      return [
+        {
+          id: "single",
+          title: "Single",
+          subtitle: "Standard price",
+          price: formatPreviewPrice(baseUnitPrice),
+        },
+        ...rules.map((rule, index) => {
+          const { originalTotal, discountedTotal, saved } = calculatePreviewBundleAmounts(
+            baseUnitPrice,
+            rule.count,
+            rule.discountPercent,
+          );
+          const isFeatured = hasDefaultAb ? !!rule.isDefault : index === 0;
+          return {
+            id: `ab-tier-${activeAbVariant?.id || "x"}-${rule.count}`,
+            title: rule.title || `${rule.count} items`,
+            subtitle: rule.subtitle || `You save ${rule.discountPercent}%`,
+            price: formatPreviewPrice(discountedTotal),
+            original: formatPreviewPrice(originalTotal),
+            featured: isFeatured,
+            badge: rule.badge || (isFeatured ? "Most Popular" : ""),
+            saveLabel: `SAVE ${formatPreviewPrice(saved)}`,
+          };
+        }),
+      ];
+    }
+
     if (offerType === "complete-bundle" && completeBundleBars.length > 0) {
       return completeBundleBars.map((bar, index) => {
         const productsCount = Array.isArray(bar.products) ? bar.products.length : 0;
@@ -1472,6 +1551,10 @@ export function CreateNewOffer({
     completeBundleBars,
     bxgyDiscountRules,
     normalizedDiscountRules,
+    normalizedAbActiveDiscountRules,
+    hasDefaultAb,
+    activeAbVariant?.id,
+    abVariants.length,
     baseUnitPrice,
     formatPreviewPrice,
     hasDefault,
@@ -1570,9 +1653,154 @@ export function CreateNewOffer({
       id: "abTest",
       name: "A/B test",
       description:
-        "Split customers into A/B groups and apply different discount percentages",
+        "Split traffic across variants with independent tiered discounts; preview follows the selected variant.",
     },
   ];
+
+  const updateAbVariantDiscountRules = useCallback(
+    (updater: (prev: DiscountRule[]) => DiscountRule[]) => {
+      setAbVariants((variants) =>
+        variants.map((v) =>
+          v.id === abSelectedVariantId ? { ...v, discountRules: updater(v.discountRules) } : v,
+        ),
+      );
+    },
+    [abSelectedVariantId],
+  );
+
+  const handleAddAbVariant = useCallback(() => {
+    let newId = "";
+    setAbVariants((prev) => {
+      if (prev.length >= 8) return prev;
+      newId = newAbVariantId();
+      const key = nextAbVariantKey(prev);
+      const discountRules: DiscountRule[] = [
+        {
+          count: 1,
+          discountPercent: 0,
+          title: "Bar #1 - 1 pack",
+          subtitle: "Standard price",
+          badge: "",
+          isDefault: false,
+        },
+        {
+          count: 2,
+          discountPercent: 10,
+          title: "Bar #2 - 2 pack",
+          subtitle: "Save 10%",
+          badge: "Most Popular",
+          isDefault: true,
+        },
+      ];
+      return [...prev, { id: newId, key, discountRules }];
+    });
+    if (newId) setAbSelectedVariantId(newId);
+  }, []);
+
+  const handleDeleteAbVariant = useCallback((id: string) => {
+    setAbVariants((prev) => {
+      if (prev.length < 3) return prev;
+      return prev.filter((v) => v.id !== id);
+    });
+  }, []);
+
+  const openAbSettingsModal = useCallback(() => {
+    setAbModalAllocation(abAllocationMode);
+    setAbModalWeights(
+      abTrafficWeights.length === abVariants.length
+        ? [...abTrafficWeights]
+        : computeEvenTrafficWeights(abVariants.length),
+    );
+    setAbSettingsOpen(true);
+  }, [abAllocationMode, abTrafficWeights, abVariants.length]);
+
+  const saveAbSettingsModal = useCallback(() => {
+    setAbAllocationMode(abModalAllocation);
+    setAbTrafficWeights(
+      normalizeTrafficWeights(abModalAllocation, abModalWeights, abVariants.length),
+    );
+    setAbSettingsOpen(false);
+  }, [abModalAllocation, abModalWeights, abVariants.length]);
+
+  const abLivePreviewToolbar = useMemo(() => {
+    if (offerType !== "abTest") return null;
+    return (
+      <div className="mb-4">
+        <div className="flex flex-wrap gap-2 items-start">
+          {abVariants.map((v) => {
+            const selected = v.id === abSelectedVariantId;
+            const showDelete = abVariants.length >= 3 && selected;
+            return (
+              <div key={v.id} className="flex flex-col items-center gap-1">
+                <div className="relative">
+                  <button
+                    type="button"
+                    className={`flex h-10 w-10 items-center justify-center rounded-md border text-[14px] font-semibold transition-colors ${
+                      selected
+                        ? "border-[#111] bg-[#111] text-white"
+                        : "border-[#dfe3e8] bg-white text-[#111]"
+                    }`}
+                    onClick={() => setAbSelectedVariantId(v.id)}
+                    aria-pressed={selected}
+                  >
+                    {v.key}
+                  </button>
+                  {showDelete ? (
+                    <button
+                      type="button"
+                      className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold leading-none text-white"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleDeleteAbVariant(v.id);
+                      }}
+                      aria-label={`Delete variant ${v.key}`}
+                    >
+                      ×
+                    </button>
+                  ) : null}
+                </div>
+                <span className="text-[11px] text-[#5c6166]">variant</span>
+              </div>
+            );
+          })}
+          <div className="flex flex-col items-center gap-1">
+            <button
+              type="button"
+              className="flex h-10 w-10 items-center justify-center rounded-md border border-[#dfe3e8] bg-white text-[#111]"
+              onClick={handleAddAbVariant}
+              aria-label="Add variant"
+            >
+              <Plus size={18} />
+            </button>
+            <span className="text-[11px] text-[#5c6166]">Add variant</span>
+          </div>
+          <div className="flex flex-col items-center gap-1">
+            <button
+              type="button"
+              className="flex h-10 w-10 items-center justify-center rounded-md border border-[#dfe3e8] bg-white text-[#111]"
+              onClick={openAbSettingsModal}
+              aria-label="A/B settings"
+            >
+              <Settings size={18} />
+            </button>
+            <span className="text-[11px] text-[#5c6166]">Settings</span>
+          </div>
+        </div>
+        <div className="mt-3 rounded-md border border-[#91caff] bg-[#e6f4ff] px-3 py-2 text-[12px] leading-snug text-[#0958d9]">
+          在左侧编辑器中配置各变体的阶梯折扣；在上方切换 A/B/C
+          预览。流量将按「Settings」中的比例分配，数据可在主仪表盘查看。
+        </div>
+      </div>
+    );
+  }, [
+    offerType,
+    abVariants,
+    abSelectedVariantId,
+    handleAddAbVariant,
+    handleDeleteAbVariant,
+    openAbSettingsModal,
+  ]);
 
   const allSelectedProductsHaveSubscription = useMemo(
     () =>
@@ -1875,22 +2103,27 @@ export function CreateNewOffer({
       <input type="hidden" name="offerName" value={offerName} />
       <input type="hidden" name="cartTitle" value={cartTitle} />
       <input type="hidden" name="title" value={widgetTitle} />
-      <input
-        type="hidden"
-        name="abGroupADiscountPercent"
-        value={String(abGroupADiscountPercent)}
-      />
-      <input
-        type="hidden"
-        name="abGroupBDiscountPercent"
-        value={String(abGroupBDiscountPercent)}
-      />
-      <input
-        type="hidden"
-        name="abBucketSplitPercent"
-        value={String(abBucketSplitPercent)}
-      />
-      <input type="hidden" name="abSalt" value={abSalt} />
+      {offerType === "abTest" ? (
+        <input
+          type="hidden"
+          name="abTestPayloadJson"
+          value={JSON.stringify({
+            salt: abSalt,
+            allocationMode: abAllocationMode,
+            trafficWeights:
+              abAllocationMode === "even"
+                ? computeEvenTrafficWeights(abVariants.length)
+                : normalizeTrafficWeights("custom", abTrafficWeights, abVariants.length),
+            variants: abVariants.map((v) => ({
+              id: v.id,
+              key: v.key,
+              discountRules: buildDiscountRulesJson(v.discountRules),
+            })),
+          })}
+        />
+      ) : (
+        <input type="hidden" name="abTestPayloadJson" value="" />
+      )}
       <input type="hidden" name="offerType" value={offerType} />
       <input type="hidden" name="layoutFormat" value={layoutFormat} />
       <input type="hidden" name="scheduleTimezone" value={scheduleTimezone} />
@@ -1986,30 +2219,7 @@ export function CreateNewOffer({
             : offerType === "quantity-breaks-different"
               ? buildDifferentProductDiscountRulesJson(differentProductRules)
               : offerType === "abTest"
-                ? buildDiscountRulesJson([
-                    {
-                      count: 1,
-                      discountPercent: Math.max(
-                        0,
-                        Math.min(100, Number(abGroupADiscountPercent) || 10),
-                      ),
-                      title: "A group",
-                      subtitle: "",
-                      badge: "A",
-                      isDefault: true,
-                    },
-                    {
-                      count: 1,
-                      discountPercent: Math.max(
-                        0,
-                        Math.min(100, Number(abGroupBDiscountPercent) || 90),
-                      ),
-                      title: "B group",
-                      subtitle: "",
-                      badge: "B",
-                      isDefault: false,
-                    },
-                  ])
+                ? buildDiscountRulesJson(abVariants[0]?.discountRules || [])
               : buildDiscountRulesJson(normalizedDiscountRules),
         )}
       />
@@ -2157,6 +2367,7 @@ export function CreateNewOffer({
                     )?.description
                   }
                 </p>
+                {abLivePreviewToolbar}
 
                 <BundlePreview
                   layoutFormat={layoutFormat}
@@ -2209,49 +2420,183 @@ export function CreateNewOffer({
                   {offerType === "abTest" ? (
                     <>
                       <div className="mb-8 rounded-[12px] border border-[#e3e8ed] bg-[#fafbfb] p-4">
-                        <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                          A/B test settings
+                        <h3 className="text-[14px] font-medium text-[#1c1f23] mb-1">
+                          Variant {activeAbVariant?.key ?? "?"} — discount tiers
                         </h3>
                         <p className="text-[12px] text-[#5c6166] mb-4">
-                          Configure discount percentages for A/B groups and traffic split bucket.
+                          Switch variant in the Live Preview toolbar on the right. Traffic split is under Settings.
                         </p>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                          <div>
-                            <label className="block text-[13px] text-[#5c6166] mb-1">
-                              A group discount（%）
-                            </label>
-                            <InputNumber
-                              min={0}
-                              max={100}
-                              value={abGroupADiscountPercent}
-                              onChange={(v) => setAbGroupADiscountPercent(Number(v ?? 10))}
-                              className="w-full"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[13px] text-[#5c6166] mb-1">
-                              B group discount（%）
-                            </label>
-                            <InputNumber
-                              min={0}
-                              max={100}
-                              value={abGroupBDiscountPercent}
-                              onChange={(v) => setAbGroupBDiscountPercent(Number(v ?? 90))}
-                              className="w-full"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[13px] text-[#5c6166] mb-1">
-                              Hash split bucket（A:0~X，B:X+1~99）
-                            </label>
-                            <InputNumber
-                              min={1}
-                              max={99}
-                              value={abBucketSplitPercent}
-                              onChange={(v) => setAbBucketSplitPercent(Number(v ?? 50))}
-                              className="w-full"
-                            />
-                          </div>
+                        <div>
+                          <h4 className="text-[13px] font-medium text-[#1c1f23] mb-3">Discount Setting</h4>
+                          {(activeAbVariant?.discountRules || []).map((rule, index) => (
+                            <div className="create-offer-discount-card mb-3" key={`${abSelectedVariantId}-${index}`}>
+                              <div className="create-offer-discount-body">
+                                <div className="create-offer-discount-form-row create-offer-discount-form-row--inline">
+                                  <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                    Pack quantity
+                                    <Input
+                                      size="large"
+                                      type="number"
+                                      min={1}
+                                      step={1}
+                                      className="mt-1"
+                                      value={rule.count}
+                                      onChange={(e) => {
+                                        const parsedValue = Number(e.target.value);
+                                        const nextCount =
+                                          Number.isFinite(parsedValue) && parsedValue >= 1
+                                            ? Math.trunc(parsedValue)
+                                            : 1;
+                                        updateAbVariantDiscountRules((prev) =>
+                                          prev.map((r, i) =>
+                                            i === index ? { ...r, count: nextCount } : r,
+                                          ),
+                                        );
+                                      }}
+                                    />
+                                  </label>
+                                  <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                    Discount (%)
+                                    <Input
+                                      size="large"
+                                      type="number"
+                                      min={0}
+                                      max={100}
+                                      step={1}
+                                      className="mt-1"
+                                      value={rule.discountPercent}
+                                      onChange={(e) => {
+                                        const parsedValue = Number(e.target.value);
+                                        if (parsedValue > 100) return;
+                                        const nextPercent =
+                                          Number.isFinite(parsedValue) && parsedValue >= 0
+                                            ? parsedValue
+                                            : 0;
+                                        updateAbVariantDiscountRules((prev) =>
+                                          prev.map((r, i) =>
+                                            i === index ? { ...r, discountPercent: nextPercent } : r,
+                                          ),
+                                        );
+                                      }}
+                                    />
+                                  </label>
+                                </div>
+                                <div
+                                  className="create-offer-discount-form-row"
+                                  style={{
+                                    marginTop: "12px",
+                                    display: "grid",
+                                    gridTemplateColumns: "1fr 1fr 1fr",
+                                    gap: "12px",
+                                  }}
+                                >
+                                  <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                    Title
+                                    <Input
+                                      size="large"
+                                      className="mt-1"
+                                      value={rule.title || ""}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        updateAbVariantDiscountRules((prev) =>
+                                          prev.map((r, i) => (i === index ? { ...r, title: val } : r)),
+                                        );
+                                      }}
+                                    />
+                                  </label>
+                                  <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                    Subtitle
+                                    <Input
+                                      size="large"
+                                      className="mt-1"
+                                      value={rule.subtitle || ""}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        updateAbVariantDiscountRules((prev) =>
+                                          prev.map((r, i) => (i === index ? { ...r, subtitle: val } : r)),
+                                        );
+                                      }}
+                                    />
+                                  </label>
+                                  <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                                    Badge
+                                    <Input
+                                      size="large"
+                                      className="mt-1"
+                                      value={rule.badge || ""}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        updateAbVariantDiscountRules((prev) =>
+                                          prev.map((r, i) => (i === index ? { ...r, badge: val } : r)),
+                                        );
+                                      }}
+                                    />
+                                  </label>
+                                </div>
+                                <div
+                                  className="create-offer-discount-form-row"
+                                  style={{
+                                    marginTop: "12px",
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
+                                  }}
+                                >
+                                  <Checkbox
+                                    checked={!!rule.isDefault}
+                                    onChange={(e) => {
+                                      const checked = e.target.checked;
+                                      updateAbVariantDiscountRules((prev) =>
+                                        prev.map((r, i) => ({
+                                          ...r,
+                                          isDefault: checked ? i === index : false,
+                                        })),
+                                      );
+                                    }}
+                                  >
+                                    Set as Default Selected
+                                  </Checkbox>
+                                  <Button
+                                    danger
+                                    onClick={() => {
+                                      updateAbVariantDiscountRules((prev) => {
+                                        if (prev.length <= 1) return prev;
+                                        return prev.filter((_, i) => i !== index);
+                                      });
+                                    }}
+                                    disabled={(activeAbVariant?.discountRules || []).length <= 1}
+                                  >
+                                    Remove
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                          <Button
+                            type="dashed"
+                            className="w-full"
+                            onClick={() =>
+                              updateAbVariantDiscountRules((prev) => {
+                                const maxCount = prev.reduce(
+                                  (max, r) => Math.max(max, r.count),
+                                  1,
+                                );
+                                return [
+                                  ...prev,
+                                  {
+                                    count: maxCount + 1,
+                                    discountPercent: 15,
+                                    title: "",
+                                    subtitle: "",
+                                    badge: "",
+                                    isDefault: false,
+                                  },
+                                ];
+                              })
+                            }
+                          >
+                            + Add bar
+                          </Button>
                         </div>
                       </div>
 
@@ -3234,7 +3579,11 @@ export function CreateNewOffer({
                   </div>
                   <ProgressiveGiftsSection
                     offerType={offerType}
-                    normalizedDiscountRules={normalizedDiscountRules}
+                    normalizedDiscountRules={
+                      offerType === "abTest"
+                        ? normalizedAbActiveDiscountRules
+                        : normalizedDiscountRules
+                    }
                     bxgyDiscountRules={bxgyDiscountRules}
                     value={progressiveGifts}
                     onChange={setProgressiveGifts}
@@ -3252,6 +3601,7 @@ export function CreateNewOffer({
                       )?.description
                     }
                   </p>
+                  {abLivePreviewToolbar}
                   {progressiveGifts.enabled && offerType !== "complete-bundle" ? (
                     <div className="mb-4 space-y-2">
                       <div className="text-[13px] font-medium text-[#1c1f23]">
@@ -3517,84 +3867,39 @@ export function CreateNewOffer({
                       ) : null}
                     </div>
                   ) : offerType === "abTest" ? (
-                    <div className="space-y-4">
-                      <div>
-                        <div className="text-[13px] font-medium text-[#1c1f23] mb-2">
-                          A 组预览（折扣 {abGroupADiscountPercent}%）
-                        </div>
-                        <BundlePreview
-                          layoutFormat={layoutFormat}
-                          cardBackgroundColor={cardBackgroundColor}
-                          accentColor={accentColor}
-                          borderColor={borderColor}
-                          labelColor={labelColor}
-                          titleFontSize={titleFontSize}
-                          titleFontWeight={titleFontWeight}
-                          titleColor={titleColor}
-                          buttonText={buttonText}
-                          buttonPrimaryColor={buttonPrimaryColor}
-                          showCustomButton={showCustomButton}
-                          multiProductSettings={{
-                            enabled: false,
-                            chooseButtonText,
-                            chooseButtonColor,
-                            chooseButtonSize,
-                            chooseImageSize,
-                          }}
-                          onPreviewAction={handlePreviewMultiProductAction}
-                          title={`${widgetTitle || "Bundle & Save"} · A`}
-                          items={abPreviewItemsA}
-                          progressiveGifts={progressiveGifts}
-                          progressivePreviewBarIndex={previewGiftBar}
-                          progressivePreviewLineQty={previewGiftQty}
-                          showSubscriptionPreview={false}
-                          subscriptionPreviewStyle={subscriptionPreviewStyle}
-                          subscriptionTitle={subscriptionTitle}
-                          subscriptionSubtitle={subscriptionSubtitle}
-                          showSubscriptionExplanation={false}
-                          subscriptionExplanationTitle={subscriptionExplanationTitle}
-                          subscriptionExplanationBody={subscriptionExplanationBody}
-                        />
-                      </div>
-                      <div>
-                        <div className="text-[13px] font-medium text-[#1c1f23] mb-2">
-                          B 组预览（折扣 {abGroupBDiscountPercent}%）
-                        </div>
-                        <BundlePreview
-                          layoutFormat={layoutFormat}
-                          cardBackgroundColor={cardBackgroundColor}
-                          accentColor={accentColor}
-                          borderColor={borderColor}
-                          labelColor={labelColor}
-                          titleFontSize={titleFontSize}
-                          titleFontWeight={titleFontWeight}
-                          titleColor={titleColor}
-                          buttonText={buttonText}
-                          buttonPrimaryColor={buttonPrimaryColor}
-                          showCustomButton={showCustomButton}
-                          multiProductSettings={{
-                            enabled: false,
-                            chooseButtonText,
-                            chooseButtonColor,
-                            chooseButtonSize,
-                            chooseImageSize,
-                          }}
-                          onPreviewAction={handlePreviewMultiProductAction}
-                          title={`${widgetTitle || "Bundle & Save"} · B`}
-                          items={abPreviewItemsB}
-                          progressiveGifts={progressiveGifts}
-                          progressivePreviewBarIndex={previewGiftBar}
-                          progressivePreviewLineQty={previewGiftQty}
-                          showSubscriptionPreview={false}
-                          subscriptionPreviewStyle={subscriptionPreviewStyle}
-                          subscriptionTitle={subscriptionTitle}
-                          subscriptionSubtitle={subscriptionSubtitle}
-                          showSubscriptionExplanation={false}
-                          subscriptionExplanationTitle={subscriptionExplanationTitle}
-                          subscriptionExplanationBody={subscriptionExplanationBody}
-                        />
-                      </div>
-                    </div>
+                    <BundlePreview
+                      layoutFormat={layoutFormat}
+                      cardBackgroundColor={cardBackgroundColor}
+                      accentColor={accentColor}
+                      borderColor={borderColor}
+                      labelColor={labelColor}
+                      titleFontSize={titleFontSize}
+                      titleFontWeight={titleFontWeight}
+                      titleColor={titleColor}
+                      buttonText={buttonText}
+                      buttonPrimaryColor={buttonPrimaryColor}
+                      showCustomButton={showCustomButton}
+                      multiProductSettings={{
+                        enabled: false,
+                        chooseButtonText,
+                        chooseButtonColor,
+                        chooseButtonSize,
+                        chooseImageSize,
+                      }}
+                      onPreviewAction={handlePreviewMultiProductAction}
+                      title={`${widgetTitle || "Bundle & Save"} · Variant ${activeAbVariant?.key ?? ""}`}
+                      items={previewItems}
+                      progressiveGifts={progressiveGifts}
+                      progressivePreviewBarIndex={previewGiftBar}
+                      progressivePreviewLineQty={previewGiftQty}
+                      showSubscriptionPreview={false}
+                      subscriptionPreviewStyle={subscriptionPreviewStyle}
+                      subscriptionTitle={subscriptionTitle}
+                      subscriptionSubtitle={subscriptionSubtitle}
+                      showSubscriptionExplanation={false}
+                      subscriptionExplanationTitle={subscriptionExplanationTitle}
+                      subscriptionExplanationBody={subscriptionExplanationBody}
+                    />
                   ) : (
                     <BundlePreview
                       layoutFormat={layoutFormat}
@@ -4408,6 +4713,73 @@ export function CreateNewOffer({
               : "Next"}
         </Button>
       </div>
+
+      <Modal
+        title="A/B Test Settings"
+        open={abSettingsOpen}
+        onCancel={() => setAbSettingsOpen(false)}
+        footer={[
+          <Button key="cancel" onClick={() => setAbSettingsOpen(false)}>
+            Cancel
+          </Button>,
+          <Button key="save" type="primary" onClick={saveAbSettingsModal}>
+            Save settings
+          </Button>,
+        ]}
+        width={520}
+      >
+        <div className="mb-4 flex flex-wrap gap-4">
+          {abVariants.map((v, i) => {
+            const sumW = abModalWeights.reduce((a, b) => a + (Number.isFinite(b) ? Math.max(1, b) : 0), 0) || 1;
+            const pct = (((abModalWeights[i] || 0) / sumW) * 100).toFixed(1);
+            return (
+              <div key={v.id} className="flex flex-col items-center gap-1">
+                <span className="rounded-full bg-[#f4f6f8] px-2 py-0.5 text-[11px] font-medium text-[#1c1f23]">
+                  {pct}%
+                </span>
+                <div className="flex h-10 w-10 items-center justify-center rounded-md border border-[#dfe3e8] text-[14px] font-semibold">
+                  {v.key}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="mb-2 text-[13px] font-medium text-[#1c1f23]">Traffic allocation</div>
+        <Radio.Group
+          className="flex flex-col gap-2"
+          value={abModalAllocation}
+          onChange={(e) => setAbModalAllocation(e.target.value)}
+        >
+          <Radio value="even">Even allocation — traffic is split equally across all variants.</Radio>
+          <Radio value="custom">
+            Custom allocation — choose what percentage of traffic is sent to each variant (weights are
+            normalized to sum 100%).
+          </Radio>
+        </Radio.Group>
+        {abModalAllocation === "custom" ? (
+          <div className="mt-4 space-y-3">
+            {abVariants.map((v, i) => (
+              <label key={v.id} className="flex items-center gap-3 text-[13px]">
+                <span className="w-24 font-medium text-[#1c1f23]">Variant {v.key}</span>
+                <InputNumber
+                  min={1}
+                  max={99}
+                  className="flex-1"
+                  value={abModalWeights[i]}
+                  onChange={(val) => {
+                    setAbModalWeights((prev) => {
+                      const next = abVariants.map((_, j) => prev[j] ?? 1);
+                      next[i] = Math.max(1, Math.trunc(Number(val) || 1));
+                      return next;
+                    });
+                  }}
+                />
+                <span className="text-[#5c6166]">weight</span>
+              </label>
+            ))}
+          </div>
+        ) : null}
+      </Modal>
     </fetcher.Form>
   );
 }

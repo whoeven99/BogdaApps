@@ -49,6 +49,7 @@ import {
   parseSelectedProductIds,
   sanitizeHexColor,
   sanitizeSingleLineText,
+  parseAbTestOfferSettingsBlock,
 } from "../../utils/offerParsing";
 
 type OfferListItem = {
@@ -1447,6 +1448,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       64,
       40,
     );
+    const abTestPayloadRaw = String(formData.get("abTestPayloadJson") || "").trim();
     const abGroupADiscountPercent = clampNumber(
       formData.get("abGroupADiscountPercent"),
       0,
@@ -1466,7 +1468,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       50,
     );
     const abSaltRaw = sanitizeSingleLineText(formData.get("abSalt"), 120, "");
-    const abSalt =
+    const abSaltFallback =
       abSaltRaw || sanitizeSingleLineText(process.env.AB_TEST_SALT, 120, "") || generateAbTestSalt();
 
     const title = sanitizeSingleLineText(
@@ -1501,9 +1503,31 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         );
       }
     }
+    let abTestStored = parseAbTestOfferSettingsBlock(
+      {
+        groupADiscountPercent: abGroupADiscountPercent,
+        groupBDiscountPercent: abGroupBDiscountPercent,
+        bucketSplitPercent: abBucketSplitPercent,
+        salt: abSaltFallback,
+      },
+      abSaltFallback,
+    );
     if (offerType === "abTest") {
-      if (abBucketSplitPercent < 1 || abBucketSplitPercent > 99) {
-        return offerActionErrorResponse("A/B hash split bucket must be between 1 and 99.", 400);
+      if (!abTestPayloadRaw) {
+        return offerActionErrorResponse("Missing A/B test configuration (abTestPayloadJson).", 400);
+      }
+      try {
+        const raw = JSON.parse(abTestPayloadRaw) as Record<string, unknown>;
+        const saltFromPayload = sanitizeSingleLineText(raw?.salt, 120, abSaltFallback);
+        abTestStored = parseAbTestOfferSettingsBlock(raw, saltFromPayload || abSaltFallback);
+      } catch {
+        return offerActionErrorResponse("Invalid A/B test configuration JSON.", 400);
+      }
+      if (!abTestStored.variants || abTestStored.variants.length < 2) {
+        return offerActionErrorResponse("A/B test requires at least two variants.", 400);
+      }
+      if (abTestStored.variants.length > 24) {
+        return offerActionErrorResponse("A/B test supports at most 24 variants.", 400);
       }
     }
 
@@ -1521,6 +1545,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return offerActionErrorResponse("Invalid progressive gifts JSON.", 400);
       }
     }
+
+    const abSaltFinal =
+      offerType === "abTest"
+        ? abTestStored.salt || abSaltFallback
+        : abSaltFallback;
 
     const offerSettingsJson = JSON.stringify({
       title,
@@ -1560,12 +1589,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       chooseButtonColor,
       chooseButtonSize,
       chooseImageSize,
-      abTest: {
-        groupADiscountPercent: abGroupADiscountPercent,
-        groupBDiscountPercent: abGroupBDiscountPercent,
-        bucketSplitPercent: abBucketSplitPercent,
-        salt: abSalt,
-      },
+      abTest:
+        offerType === "abTest"
+          ? {
+              salt: abSaltFinal,
+              allocationMode: abTestStored.allocationMode,
+              trafficWeights: abTestStored.trafficWeights,
+              variants: abTestStored.variants,
+            }
+          : {
+              groupADiscountPercent: abGroupADiscountPercent,
+              groupBDiscountPercent: abGroupBDiscountPercent,
+              bucketSplitPercent: abBucketSplitPercent,
+              salt: abSaltFinal,
+            },
       scheduleTimezone: scheduleTimezoneRaw || undefined,
       progressiveGifts: progressiveGiftsConfigToStorableJson(progressiveGiftsSanitized),
     });

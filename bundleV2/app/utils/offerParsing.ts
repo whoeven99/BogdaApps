@@ -216,6 +216,35 @@ export function isProgressiveGiftUnlocked(
   return Math.max(1, Math.trunc(selectedBarIndex)) >= needBar;
 }
 
+export type DiscountRule = {
+  count: number;
+  discountPercent: number;
+  title?: string;
+  subtitle?: string;
+  badge?: string;
+  isDefault?: boolean;
+};
+
+/** A/B 变体：每路独立阶梯折扣（与 quantity bundle 的 discountRules 结构一致） */
+export type AbTestVariantStored = {
+  id: string;
+  key: string;
+  discountRules: DiscountRule[];
+};
+
+/** 落库/主题侧读取的 A/B 配置（含归一化后的流量权重，长度与 variants 一致） */
+export type AbTestOfferSettingsStored = {
+  salt: string;
+  allocationMode: "even" | "custom";
+  /** 各 variant 流量占比（整数，总和 100） */
+  trafficWeights: number[];
+  variants: AbTestVariantStored[];
+  /** 旧版双桶字段，仅用于兼容读取 */
+  groupADiscountPercent?: number;
+  groupBDiscountPercent?: number;
+  bucketSplitPercent?: number;
+};
+
 export type OfferSettings = {
   title: string;
   layoutFormat: "vertical" | "horizontal" | "card" | "compact";
@@ -247,146 +276,8 @@ export type OfferSettings = {
   chooseButtonSize?: number;
   chooseImageSize?: number;
   scheduleTimezone?: string;
-  abTest?: {
-    groupADiscountPercent: number;
-    groupBDiscountPercent: number;
-    bucketSplitPercent: number;
-    salt?: string;
-  };
+  abTest?: AbTestOfferSettingsStored;
   progressiveGifts: ProgressiveGiftsConfig;
-};
-
-export function parseOfferSettings(offerSettingsJson?: string | null): OfferSettings {
-  if (!offerSettingsJson) {
-    return {
-      title: "Bundle & Save",
-      layoutFormat: "vertical",
-      totalBudget: null,
-      dailyBudget: null,
-      customerSegments: null,
-      markets: null,
-      usageLimitPerCustomer: "unlimited",
-      accentColor: "#008060",
-      cardBackgroundColor: "#ffffff",
-      titleFontSize: 14,
-      titleFontWeight: "600",
-      titleColor: "#111111",
-      borderColor: "#dfe3e8",
-      labelColor: "#ffffff",
-      buttonText: "Add to Cart",
-      buttonPrimaryColor: "#008060",
-      showCustomButton: true,
-      subscriptionEnabled: false,
-      subscriptionPosition: "below-bundle-bars",
-      subscriptionTitle: "Subscribe & Save 20%",
-      subscriptionSubtitle: "Delivered weekly",
-      oneTimeTitle: "One-time purchase",
-      oneTimeSubtitle: "",
-      subscriptionDefaultSelected: true,
-      enableMultiProductBundle: false,
-      chooseButtonText: "Choose",
-      chooseButtonColor: "#111111",
-      chooseButtonSize: 28,
-      chooseImageSize: 40,
-      scheduleTimezone: undefined,
-      abTest: {
-        groupADiscountPercent: 10,
-        groupBDiscountPercent: 90,
-        bucketSplitPercent: 50,
-        salt: "",
-      },
-      progressiveGifts: { ...DEFAULT_PROGRESSIVE_GIFTS },
-    };
-  }
-
-  try {
-    const parsed = JSON.parse(offerSettingsJson) as Partial<OfferSettings> &
-      Record<string, unknown>;
-    const layout = parsed.layoutFormat;
-    const layoutFormat: OfferSettings["layoutFormat"] = [
-      "vertical",
-      "horizontal",
-      "card",
-      "compact",
-    ].includes(String(layout))
-      ? (layout as OfferSettings["layoutFormat"])
-      : "vertical";
-
-    return {
-      title: parsed.title || "Bundle & Save",
-      layoutFormat,
-      totalBudget:
-        parsed.totalBudget !== undefined
-          ? parseNonNegativeNumberOrNull(parsed.totalBudget)
-          : null,
-      dailyBudget:
-        parsed.dailyBudget !== undefined
-          ? parseNonNegativeNumberOrNull(parsed.dailyBudget)
-          : null,
-      customerSegments:
-        parsed.customerSegments !== undefined ? parsed.customerSegments ?? null : null,
-      markets: parsed.markets !== undefined ? parsed.markets ?? null : null,
-      usageLimitPerCustomer: parsed.usageLimitPerCustomer ?? "unlimited",
-      accentColor: sanitizeHexColor(parsed.accentColor, "#008060"),
-      cardBackgroundColor: sanitizeHexColor(parsed.cardBackgroundColor, "#ffffff"),
-      titleFontSize: clampNumber(parsed.titleFontSize, 10, 36, 14),
-      titleFontWeight: ["400", "500", "600", "700"].includes(String(parsed.titleFontWeight))
-        ? String(parsed.titleFontWeight)
-        : "600",
-      titleColor: sanitizeHexColor(parsed.titleColor, "#111111"),
-      borderColor: sanitizeHexColor(parsed.borderColor, "#dfe3e8"),
-      labelColor: sanitizeHexColor(parsed.labelColor, "#ffffff"),
-      buttonText: parsed.buttonText || "Add to Cart",
-      buttonPrimaryColor: sanitizeHexColor(parsed.buttonPrimaryColor, "#008060"),
-      showCustomButton: parsed.showCustomButton !== false,
-      subscriptionEnabled: parsed.subscriptionEnabled === true,
-      subscriptionPosition: "below-bundle-bars",
-      subscriptionTitle: parsed.subscriptionTitle || "Subscribe & Save 20%",
-      subscriptionSubtitle: parsed.subscriptionSubtitle || "Delivered weekly",
-      oneTimeTitle: parsed.oneTimeTitle || "One-time purchase",
-      oneTimeSubtitle: parsed.oneTimeSubtitle || "",
-      subscriptionDefaultSelected: parsed.subscriptionDefaultSelected !== false,
-      enableMultiProductBundle: parsed.enableMultiProductBundle === true,
-      chooseButtonText: parsed.chooseButtonText || "Choose",
-      chooseButtonColor: sanitizeHexColor(parsed.chooseButtonColor, "#111111"),
-      chooseButtonSize: clampNumber(parsed.chooseButtonSize, 24, 44, 28),
-      chooseImageSize: clampNumber(parsed.chooseImageSize, 24, 64, 40),
-      scheduleTimezone: parsed.scheduleTimezone,
-      abTest: {
-        groupADiscountPercent: clampNumber(
-          (parsed as any)?.abTest?.groupADiscountPercent,
-          0,
-          100,
-          10,
-        ),
-        groupBDiscountPercent: clampNumber(
-          (parsed as any)?.abTest?.groupBDiscountPercent,
-          0,
-          100,
-          90,
-        ),
-        bucketSplitPercent: clampNumber(
-          (parsed as any)?.abTest?.bucketSplitPercent,
-          1,
-          99,
-          50,
-        ),
-        salt: sanitizeSingleLineText((parsed as any)?.abTest?.salt, 120, ""),
-      },
-      progressiveGifts: parseProgressiveGiftsConfig(parsed.progressiveGifts),
-    };
-  } catch {
-    return parseOfferSettings(null);
-  }
-}
-
-export type DiscountRule = {
-  count: number;
-  discountPercent: number;
-  title?: string;
-  subtitle?: string;
-  badge?: string;
-  isDefault?: boolean;
 };
 
 export type BxgyDiscountRule = {
@@ -490,6 +381,280 @@ export function parseDiscountRules(discountRulesJson?: string | null): DiscountR
     return out;
   } catch {
     return [];
+  }
+}
+
+const DEFAULT_AB_DISCOUNT_RULES: DiscountRule[] = [
+  { count: 2, discountPercent: 15, title: "", subtitle: "", badge: "", isDefault: true },
+];
+
+/** 将 N 路流量均分（整数权重，总和 100） */
+export function computeEvenTrafficWeights(variantCount: number): number[] {
+  const n = Math.max(2, Math.min(24, Math.trunc(variantCount) || 2));
+  const base = Math.floor(100 / n);
+  const weights = Array.from({ length: n }, () => base);
+  let rem = 100 - base * n;
+  for (let i = 0; i < n && rem > 0; i += 1, rem -= 1) {
+    weights[i] += 1;
+  }
+  return weights;
+}
+
+/** 将自定义权重归一为整数且总和 100；非法时退回均分 */
+export function normalizeTrafficWeights(
+  mode: "even" | "custom",
+  raw: number[] | undefined,
+  variantCount: number,
+): number[] {
+  const n = Math.max(2, Math.min(24, Math.trunc(variantCount) || 2));
+  if (mode !== "custom" || !raw || raw.length !== n) {
+    return computeEvenTrafficWeights(n);
+  }
+  const floored = raw.map((x) => {
+    const v = Number(x);
+    if (!Number.isFinite(v)) return 1;
+    return Math.max(1, Math.floor(v));
+  });
+  let sum = floored.reduce((a, b) => a + b, 0);
+  if (sum <= 0) return computeEvenTrafficWeights(n);
+  const scaled = floored.map((w) => Math.max(1, Math.round((w * 100) / sum)));
+  let s2 = scaled.reduce((a, b) => a + b, 0);
+  let diff = 100 - s2;
+  const out = [...scaled];
+  let idx = 0;
+  while (diff !== 0 && out.length > 0) {
+    const step = diff > 0 ? 1 : -1;
+    const j = idx % out.length;
+    if (step < 0 && out[j] <= 1) {
+      idx += 1;
+      if (idx > out.length * 100) break;
+      continue;
+    }
+    out[j] += step;
+    diff -= step;
+    idx += 1;
+  }
+  if (out.reduce((a, b) => a + b, 0) !== 100) return computeEvenTrafficWeights(n);
+  return out;
+}
+
+function cloneDefaultAbRules(): DiscountRule[] {
+  return DEFAULT_AB_DISCOUNT_RULES.map((r) => ({ ...r }));
+}
+
+function buildDefaultAbTestStored(salt: string): AbTestOfferSettingsStored {
+  const variants: AbTestVariantStored[] = [
+    { id: "abv_default_a", key: "A", discountRules: cloneDefaultAbRules() },
+    {
+      id: "abv_default_b",
+      key: "B",
+      discountRules: cloneDefaultAbRules().map((r, i) =>
+        i === 0 ? { ...r, isDefault: false } : r,
+      ),
+    },
+  ];
+  return {
+    salt,
+    allocationMode: "even",
+    trafficWeights: computeEvenTrafficWeights(variants.length),
+    variants,
+  };
+}
+
+/** 从原始 JSON 解析 A/B 块：支持多 variant；兼容旧版 groupA/B + bucketSplit */
+export function parseAbTestOfferSettingsBlock(
+  abRaw: unknown,
+  saltHint: string,
+): AbTestOfferSettingsStored {
+  const salt = sanitizeSingleLineText(saltHint, 120, "");
+  const ab =
+    abRaw && typeof abRaw === "object" && !Array.isArray(abRaw)
+      ? (abRaw as Record<string, unknown>)
+      : {};
+
+  const variantsIn = Array.isArray(ab.variants) ? ab.variants : null;
+  if (variantsIn && variantsIn.length >= 2) {
+    const variants: AbTestVariantStored[] = [];
+    for (const row of variantsIn) {
+      if (variants.length >= 24) break;
+      if (!row || typeof row !== "object") continue;
+      const o = row as Record<string, unknown>;
+      const id = sanitizeSingleLineText(o.id, 80, "");
+      const key = sanitizeSingleLineText(o.key, 8, "");
+      let rules: DiscountRule[] = [];
+      if (Array.isArray(o.discountRules)) {
+        rules = parseDiscountRules(JSON.stringify(o.discountRules));
+      } else if (typeof o.discountRules === "string") {
+        rules = parseDiscountRules(o.discountRules);
+      }
+      if (!id || !key || !rules.length) continue;
+      variants.push({ id, key, discountRules: rules });
+    }
+    if (variants.length < 2) {
+      return buildDefaultAbTestStored(salt);
+    }
+    const mode = ab.allocationMode === "custom" ? "custom" : "even";
+    const rawW = Array.isArray(ab.customWeights)
+      ? (ab.customWeights as unknown[]).map((x) => Number(x))
+      : Array.isArray(ab.trafficWeights)
+        ? (ab.trafficWeights as unknown[]).map((x) => Number(x))
+        : undefined;
+    const trafficWeights = normalizeTrafficWeights(mode, rawW, variants.length);
+    return {
+      salt,
+      allocationMode: mode,
+      trafficWeights,
+      variants,
+    };
+  }
+
+  const ga = clampNumber(ab.groupADiscountPercent, 0, 100, 10);
+  const gb = clampNumber(ab.groupBDiscountPercent, 0, 100, 90);
+  const sp = clampNumber(ab.bucketSplitPercent, 1, 99, 50);
+  const v0: AbTestVariantStored = {
+    id: "ab_legacy_a",
+    key: "A",
+    discountRules: [
+      {
+        count: 2,
+        discountPercent: ga,
+        title: "A",
+        subtitle: "",
+        badge: "A",
+        isDefault: true,
+      },
+    ],
+  };
+  const v1: AbTestVariantStored = {
+    id: "ab_legacy_b",
+    key: "B",
+    discountRules: [
+      {
+        count: 2,
+        discountPercent: gb,
+        title: "B",
+        subtitle: "",
+        badge: "B",
+        isDefault: false,
+      },
+    ],
+  };
+  return {
+    salt,
+    allocationMode: "custom",
+    trafficWeights: [sp, 100 - sp],
+    variants: [v0, v1],
+    groupADiscountPercent: ga,
+    groupBDiscountPercent: gb,
+    bucketSplitPercent: sp,
+  };
+}
+
+export function parseOfferSettings(offerSettingsJson?: string | null): OfferSettings {
+  if (!offerSettingsJson) {
+    return {
+      title: "Bundle & Save",
+      layoutFormat: "vertical",
+      totalBudget: null,
+      dailyBudget: null,
+      customerSegments: null,
+      markets: null,
+      usageLimitPerCustomer: "unlimited",
+      accentColor: "#008060",
+      cardBackgroundColor: "#ffffff",
+      titleFontSize: 14,
+      titleFontWeight: "600",
+      titleColor: "#111111",
+      borderColor: "#dfe3e8",
+      labelColor: "#ffffff",
+      buttonText: "Add to Cart",
+      buttonPrimaryColor: "#008060",
+      showCustomButton: true,
+      subscriptionEnabled: false,
+      subscriptionPosition: "below-bundle-bars",
+      subscriptionTitle: "Subscribe & Save 20%",
+      subscriptionSubtitle: "Delivered weekly",
+      oneTimeTitle: "One-time purchase",
+      oneTimeSubtitle: "",
+      subscriptionDefaultSelected: true,
+      enableMultiProductBundle: false,
+      chooseButtonText: "Choose",
+      chooseButtonColor: "#111111",
+      chooseButtonSize: 28,
+      chooseImageSize: 40,
+      scheduleTimezone: undefined,
+      abTest: buildDefaultAbTestStored(""),
+      progressiveGifts: { ...DEFAULT_PROGRESSIVE_GIFTS },
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(offerSettingsJson) as Partial<OfferSettings> &
+      Record<string, unknown>;
+    const layout = parsed.layoutFormat;
+    const layoutFormat: OfferSettings["layoutFormat"] = [
+      "vertical",
+      "horizontal",
+      "card",
+      "compact",
+    ].includes(String(layout))
+      ? (layout as OfferSettings["layoutFormat"])
+      : "vertical";
+
+    const abRaw = (parsed as Record<string, unknown>).abTest;
+    const abSalt = sanitizeSingleLineText(
+      abRaw && typeof abRaw === "object" && !Array.isArray(abRaw)
+        ? (abRaw as Record<string, unknown>).salt
+        : undefined,
+      120,
+      "",
+    );
+
+    return {
+      title: parsed.title || "Bundle & Save",
+      layoutFormat,
+      totalBudget:
+        parsed.totalBudget !== undefined
+          ? parseNonNegativeNumberOrNull(parsed.totalBudget)
+          : null,
+      dailyBudget:
+        parsed.dailyBudget !== undefined
+          ? parseNonNegativeNumberOrNull(parsed.dailyBudget)
+          : null,
+      customerSegments:
+        parsed.customerSegments !== undefined ? parsed.customerSegments ?? null : null,
+      markets: parsed.markets !== undefined ? parsed.markets ?? null : null,
+      usageLimitPerCustomer: parsed.usageLimitPerCustomer ?? "unlimited",
+      accentColor: sanitizeHexColor(parsed.accentColor, "#008060"),
+      cardBackgroundColor: sanitizeHexColor(parsed.cardBackgroundColor, "#ffffff"),
+      titleFontSize: clampNumber(parsed.titleFontSize, 10, 36, 14),
+      titleFontWeight: ["400", "500", "600", "700"].includes(String(parsed.titleFontWeight))
+        ? String(parsed.titleFontWeight)
+        : "600",
+      titleColor: sanitizeHexColor(parsed.titleColor, "#111111"),
+      borderColor: sanitizeHexColor(parsed.borderColor, "#dfe3e8"),
+      labelColor: sanitizeHexColor(parsed.labelColor, "#ffffff"),
+      buttonText: parsed.buttonText || "Add to Cart",
+      buttonPrimaryColor: sanitizeHexColor(parsed.buttonPrimaryColor, "#008060"),
+      showCustomButton: parsed.showCustomButton !== false,
+      subscriptionEnabled: parsed.subscriptionEnabled === true,
+      subscriptionPosition: "below-bundle-bars",
+      subscriptionTitle: parsed.subscriptionTitle || "Subscribe & Save 20%",
+      subscriptionSubtitle: parsed.subscriptionSubtitle || "Delivered weekly",
+      oneTimeTitle: parsed.oneTimeTitle || "One-time purchase",
+      oneTimeSubtitle: parsed.oneTimeSubtitle || "",
+      subscriptionDefaultSelected: parsed.subscriptionDefaultSelected !== false,
+      enableMultiProductBundle: parsed.enableMultiProductBundle === true,
+      chooseButtonText: parsed.chooseButtonText || "Choose",
+      chooseButtonColor: sanitizeHexColor(parsed.chooseButtonColor, "#111111"),
+      chooseButtonSize: clampNumber(parsed.chooseButtonSize, 24, 44, 28),
+      chooseImageSize: clampNumber(parsed.chooseImageSize, 24, 64, 40),
+      scheduleTimezone: parsed.scheduleTimezone,
+      abTest: parseAbTestOfferSettingsBlock(abRaw, abSalt),
+      progressiveGifts: parseProgressiveGiftsConfig(parsed.progressiveGifts),
+    };
+  } catch {
+    return parseOfferSettings(null);
   }
 }
 

@@ -57,6 +57,38 @@ const AB_TEST_REDIS_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 type AbTestGroup = "abtest1" | "abtest2";
 
+function parseJsonArrayOfStrings(raw: string): string[] {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((x) => String(x ?? "").trim()).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function parseJsonArrayOfNumbers(raw: string): number[] {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((x) => Number(x)).filter((n) => Number.isFinite(n));
+  } catch {
+    return [];
+  }
+}
+
+/** 按 cumulative 权重将 0–99 的 bucket 映射到 variant 下标 */
+function resolveVariantIndexByWeights(bucket: number, weights: number[]): number {
+  const w = weights.length ? weights : [50, 50];
+  let cum = 0;
+  const b = Math.max(0, Math.min(99, Math.trunc(bucket)));
+  for (let i = 0; i < w.length; i += 1) {
+    cum += Math.max(0, Math.trunc(w[i]));
+    if (b < cum) return i;
+  }
+  return Math.max(0, w.length - 1);
+}
+
 function getAbSaltFromEnvOrRandom(): string {
   const envSalt = String(process.env.AB_TEST_SALT || "").trim();
   if (envSalt) return envSalt;
@@ -79,6 +111,20 @@ function computeAbBucketByHash(customerId: string, salt: string): number {
 function resolveAbGroupByBucket(bucket: number, splitPercent: number): AbTestGroup {
   const split = Math.max(1, Math.min(99, Math.trunc(splitPercent || 50)));
   return bucket < split ? "abtest1" : "abtest2";
+}
+
+function resolveAbGroupOrVariantId(params: {
+  bucket: number;
+  splitPercent: number;
+  variantIds: string[];
+  trafficWeights: number[];
+}): string {
+  const { bucket, splitPercent, variantIds, trafficWeights } = params;
+  if (variantIds.length >= 2 && trafficWeights.length === variantIds.length) {
+    const idx = resolveVariantIndexByWeights(bucket, trafficWeights);
+    return variantIds[idx] || variantIds[0] || "abtest1";
+  }
+  return resolveAbGroupByBucket(bucket, splitPercent);
 }
 
 function buildAbRedisKey(shopName: string, offerId: string, identityKey: string): string {
@@ -343,6 +389,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const customerId = String(url.searchParams.get("customerId") || "").trim();
     const anonId = String(url.searchParams.get("anonId") || "").trim();
     const splitPercent = Number(url.searchParams.get("splitPercent") || "50");
+    const variantIds = parseJsonArrayOfStrings(
+      String(url.searchParams.get("variantIds") || "[]"),
+    );
+    const trafficWeights = parseJsonArrayOfNumbers(
+      String(url.searchParams.get("trafficWeights") || "[]"),
+    );
     const salt = String(url.searchParams.get("salt") || "").trim() || getAbSaltFromEnvOrRandom();
     const identityKey = customerId ? `customer:${customerId}` : `anon:${anonId}`;
 
@@ -352,6 +404,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       customerId,
       anonId,
       splitPercent,
+      variantIdsCount: variantIds.length,
+      trafficWeightsCount: trafficWeights.length,
       identityKey,
     });
     console.log("[abtest] customerId resolved", { customerId: customerId || null });
@@ -377,6 +431,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             bucket: parsed.bucket,
             salt: parsed.salt || salt,
             splitPercent: parsed.splitPercent ?? splitPercent,
+            variantIds: parsed.variantIds,
+            trafficWeights: parsed.trafficWeights,
           }),
           { status: 200, headers: corsHeaders },
         );
@@ -389,12 +445,22 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const bucket = isCustomer
       ? computeAbBucketByHash(customerId, salt)
       : Math.floor(Math.random() * 100);
-    const group = resolveAbGroupByBucket(bucket, splitPercent);
+    const group = resolveAbGroupOrVariantId({
+      bucket,
+      splitPercent,
+      variantIds,
+      trafficWeights,
+    });
     const payload = {
       group,
       bucket,
       salt,
       splitPercent: Math.max(1, Math.min(99, Math.trunc(splitPercent || 50))),
+      variantIds: variantIds.length >= 2 ? variantIds : undefined,
+      trafficWeights:
+        variantIds.length >= 2 && trafficWeights.length === variantIds.length
+          ? trafficWeights
+          : undefined,
       identityKey,
       assignedAt: Date.now(),
       source: isCustomer ? "hash" : "random_first_touch",
@@ -418,6 +484,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const orderId = String(url.searchParams.get("orderId") || "").trim();
     const anonId = String(url.searchParams.get("anonId") || "").trim();
     const splitPercent = Number(url.searchParams.get("splitPercent") || "50");
+    const variantIds = parseJsonArrayOfStrings(
+      String(url.searchParams.get("variantIds") || "[]"),
+    );
+    const trafficWeights = parseJsonArrayOfNumbers(
+      String(url.searchParams.get("trafficWeights") || "[]"),
+    );
     const salt = String(url.searchParams.get("salt") || "").trim() || getAbSaltFromEnvOrRandom();
     if (!shopName || !offerId || !orderId || !anonId) {
       return new Response(
@@ -451,7 +523,12 @@ query GetOrderCustomerId($id: ID!) {
       }
 
       const customerBucket = computeAbBucketByHash(customerId, salt);
-      const customerGroup = resolveAbGroupByBucket(customerBucket, splitPercent);
+      const customerGroup = resolveAbGroupOrVariantId({
+        bucket: customerBucket,
+        splitPercent,
+        variantIds,
+        trafficWeights,
+      });
       const anonKey = buildAbRedisKey(shopName, offerId, `anon:${anonId}`);
       const customerKey = buildAbRedisKey(shopName, offerId, `customer:${customerId}`);
 
@@ -462,8 +539,8 @@ query GetOrderCustomerId($id: ID!) {
         if (existingAnon) {
           const parsedAnon = JSON.parse(existingAnon) as Record<string, unknown>;
           if (typeof parsedAnon.group === "string" && typeof parsedAnon.bucket === "number") {
-            finalGroup = parsedAnon.group as AbTestGroup;
-            finalBucket = parsedAnon.bucket;
+            finalGroup = String(parsedAnon.group);
+            finalBucket = Number(parsedAnon.bucket);
           }
         }
       } catch (error) {
@@ -474,6 +551,11 @@ query GetOrderCustomerId($id: ID!) {
         group: finalGroup,
         bucket: finalBucket,
         splitPercent: Math.max(1, Math.min(99, Math.trunc(splitPercent || 50))),
+        variantIds: variantIds.length >= 2 ? variantIds : undefined,
+        trafficWeights:
+          variantIds.length >= 2 && trafficWeights.length === variantIds.length
+            ? trafficWeights
+            : undefined,
         salt,
         customerId,
         source: "bind_order_keep_first_random",
