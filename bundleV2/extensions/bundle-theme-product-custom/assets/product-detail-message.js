@@ -33,6 +33,19 @@ function getBundlesConfigRaw() {
   }
 }
 
+/** 应用根 URL（无尾斜杠），来自店铺 metafield ciwi-bundle-api-origin，由后台同步 offers 时写入 */
+function resolveBundleApiOrigin() {
+  const raw = getBundlesConfigRaw();
+  const s = raw && raw.bundleApiOrigin != null ? String(raw.bundleApiOrigin).trim() : "";
+  return s.replace(/\/+$/, "");
+}
+
+function buildWebpixerAliAbsoluteUrl(queryString) {
+  const origin = resolveBundleApiOrigin();
+  if (!origin) return "";
+  return `${origin}/webpixerToAli?${queryString}`;
+}
+
 function getCurrentCustomerId() {
   const config = getBundlesConfigRaw();
   const customerId = config?.customerId != null ? String(config.customerId).trim() : "";
@@ -1450,16 +1463,72 @@ function ensureAbTestAssignmentForOffer(offer) {
       params.set("variantIds", JSON.stringify(cfg.variantIds));
       params.set("trafficWeights", JSON.stringify(cfg.trafficWeights));
     }
-    fetch(`/webpixerToAli?${params.toString()}`, { method: "GET" })
-      .then((res) => res.json())
-      .then((json) => {
-        if (!json?.success) return;
-        console.log("[abtest] assign api result", json);
-      })
-      .catch((error) => {
-        console.error("[abtest] assign api failed", error);
-      });
-  } catch (e) {}
+    const qs = params.toString();
+    const assignUrl = buildWebpixerAliAbsoluteUrl(qs);
+    const bundleApiOrigin = resolveBundleApiOrigin();
+    console.log("[abtest] assign api — before fetch", {
+      bundleApiOrigin: bundleApiOrigin || "(empty)",
+      assignUrl: assignUrl || "(not built — will skip fetch)",
+      shopName,
+      offerId: String(offer.id || ""),
+      identityKey,
+      cfgMode: cfg.mode,
+      variantIdsLen: Array.isArray(cfg.variantIds) ? cfg.variantIds.length : 0,
+      trafficWeightsLen: Array.isArray(cfg.trafficWeights) ? cfg.trafficWeights.length : 0,
+      splitPercent: cfg.bucketSplitPercent,
+      saltLen: cfg.salt ? String(cfg.salt).length : 0,
+      queryStringSample: qs.slice(0, 280),
+    });
+    if (!assignUrl) {
+      console.warn(
+        "[abtest] assign api skipped: bundleApiOrigin missing in theme JSON. " +
+          "Cause: storefront fetch(/webpixerToAli) hits the shop domain and returns HTML, not JSON. " +
+          "Fix: set SHOPIFY_APP_URL on the app host and re-sync offers (admin) so metafield ciwi-bundle-api-origin is written.",
+      );
+    } else {
+      fetch(assignUrl, { method: "GET" })
+        .then(async (res) => {
+          const contentType = res.headers.get("content-type") || "";
+          const text = await res.text();
+          const preview = text.slice(0, 320).replace(/\s+/g, " ");
+          console.log("[abtest] assign api — response received", {
+            ok: res.ok,
+            status: res.status,
+            contentType,
+            bodyByteLength: text.length,
+            bodyPreview: preview,
+          });
+          let json;
+          try {
+            json = JSON.parse(text);
+          } catch (parseErr) {
+            console.error("[abtest] assign api — JSON.parse failed (likely HTML or non-JSON)", {
+              message: parseErr && parseErr.message ? parseErr.message : String(parseErr),
+              requestUrl: assignUrl,
+              status: res.status,
+              contentType,
+              bodyPreview: preview,
+            });
+            throw parseErr;
+          }
+          if (!json || !json.success) {
+            console.warn("[abtest] assign api — success false or empty body", { json });
+            return;
+          }
+          console.log("[abtest] assign api — success", json);
+        })
+        .catch((error) => {
+          console.error("[abtest] assign api — fetch chain failed", {
+            message: error && error.message ? error.message : String(error),
+            assignUrl,
+          });
+        });
+    }
+  } catch (e) {
+    console.error("[abtest] assign api — outer try failed", {
+      message: e && e.message ? e.message : String(e),
+    });
+  }
 
   const rules = pickAbDiscountRulesForGroup(offer, group);
   const featured = rules.find((r) => r && r.isDefault) || rules[0];

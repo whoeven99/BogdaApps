@@ -3,9 +3,11 @@
   class="ciwi-product-message-src"
 ></div>
 
+{% assign ciwi_bundle_api_origin = shop.metafields.ciwi_bundle["ciwi-bundle-api-origin"] %}
 <script id="ciwi-bundles-config" type="application/json">
   {
     "shopifyDomain": "{{ shop.domain }}",
+    "bundleApiOrigin": {% if ciwi_bundle_api_origin != blank %}{{ ciwi_bundle_api_origin.value | json }}{% else %}""{% endif %},
     "customerId": {{ customer.id | json }},
     "moneyFormat": "{{ shop.money_format | escape }}",
     "productId": {{ product.id | default: "null" }},

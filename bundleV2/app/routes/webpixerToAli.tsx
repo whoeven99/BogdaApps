@@ -384,6 +384,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   if (request.method === "GET" && mode === "abtest-assign") {
+    console.log("[abtest] assign — loader entry", {
+      method: request.method,
+      mode,
+      fullUrl: request.url,
+      origin: url.origin,
+      pathname: url.pathname,
+      queryKeys: [...url.searchParams.keys()],
+    });
     const shopName = String(url.searchParams.get("shopName") || "").trim();
     const offerId = String(url.searchParams.get("offerId") || "").trim();
     const customerId = String(url.searchParams.get("customerId") || "").trim();
@@ -411,10 +419,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.log("[abtest] customerId resolved", { customerId: customerId || null });
 
     if (!shopName || !offerId || (!customerId && !anonId)) {
-      return new Response(
-        JSON.stringify({ success: false, message: "shopName/offerId/customerId|anonId is required" }),
-        { status: 400, headers: corsHeaders },
-      );
+      const errBody = {
+        success: false,
+        message: "shopName/offerId/customerId|anonId is required",
+        received: { shopName, offerId, hasCustomerId: Boolean(customerId), hasAnonId: Boolean(anonId) },
+      };
+      console.warn("[abtest] assign — validation failed", errBody);
+      return new Response(JSON.stringify(errBody), { status: 400, headers: corsHeaders });
     }
 
     const redisKey = buildAbRedisKey(shopName, offerId, identityKey);
@@ -472,6 +483,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       console.error("[abtest] write redis failed", { redisKey, error: String(error) });
     }
 
+    console.log("[abtest] assign — computed new assignment", {
+      redisKey,
+      group: payload.group,
+      bucket: payload.bucket,
+      source: payload.source,
+    });
     return new Response(
       JSON.stringify({ success: true, ...payload }),
       { status: 200, headers: corsHeaders },

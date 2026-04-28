@@ -103,6 +103,8 @@ type ShopOffersMetafieldSyncResult =
 
 const BUNDLE_METAFIELD_NAMESPACE = "ciwi_bundle";
 const BUNDLE_METAFIELD_BASE_KEY = "ciwi-bundle-offers";
+/** 主题端 A/B assign 等请求使用的应用根 URL（与 SHOPIFY_APP_URL 一致，无尾斜杠） */
+const BUNDLE_METAFIELD_API_ORIGIN_KEY = "ciwi-bundle-api-origin";
 const BUNDLE_METAFIELD_ACTIVE_ENV_KEY = "ciwi-bundle-offers-active-env";
 const BUNDLE_METAFIELD_ENABLED_PROD_KEY = "ciwi-bundle-enabled-prod";
 const BUNDLE_METAFIELD_ENABLED_TEST_KEY = "ciwi-bundle-enabled-test";
@@ -130,8 +132,15 @@ function buildOfferMetafieldsInput(
   ownerId: string,
   offersPayload: string,
   _themeExtensionEnabled: boolean,
+  bundleApiOrigin: string | null,
 ) {
-  return [
+  const rows: Array<{
+    ownerId: string;
+    namespace: string;
+    key: string;
+    type: string;
+    value: string;
+  }> = [
     {
       ownerId,
       namespace: BUNDLE_METAFIELD_NAMESPACE,
@@ -140,6 +149,19 @@ function buildOfferMetafieldsInput(
       value: offersPayload,
     },
   ];
+  const origin = String(bundleApiOrigin || "")
+    .trim()
+    .replace(/\/+$/, "");
+  if (origin) {
+    rows.push({
+      ownerId,
+      namespace: BUNDLE_METAFIELD_NAMESPACE,
+      key: BUNDLE_METAFIELD_API_ORIGIN_KEY,
+      type: "single_line_text_field",
+      value: origin,
+    });
+  }
+  return rows;
 }
 
 function buildHydratedCompleteBundleSelectedProductsJson(
@@ -330,11 +352,16 @@ async function syncShopOffersMetafield(
       };
     }
 
+    const bundleApiOrigin =
+      String(process.env.SHOPIFY_APP_URL || "")
+        .trim()
+        .replace(/\/+$/, "") || null;
     console.log("[offers-sync] writing shop metafield", {
       shopId,
       namespace: BUNDLE_METAFIELD_NAMESPACE,
       key: BUNDLE_METAFIELD_BASE_KEY,
       payloadLength: storefrontMetafieldValue.length,
+      bundleApiOrigin: bundleApiOrigin || "(empty — theme A/B assign will skip until SHOPIFY_APP_URL is set)",
     });
     const metafieldsSetResponse = await admin.graphql(
       `#graphql
@@ -358,6 +385,7 @@ async function syncShopOffersMetafield(
             shopId,
             storefrontMetafieldValue,
             themeExtensionEnabled,
+            bundleApiOrigin,
           ),
         },
       },
