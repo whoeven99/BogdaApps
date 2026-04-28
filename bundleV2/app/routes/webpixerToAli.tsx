@@ -1091,6 +1091,33 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const productId = String(data?.productId ?? "");
   const clientId = String(data?.clientId ?? "");
   const extra = String(data?.extra ?? "{}");
+  let parsedExtra: Record<string, unknown> = {};
+  try {
+    parsedExtra = extra ? (JSON.parse(extra) as Record<string, unknown>) : {};
+  } catch (error) {
+    console.warn("[web-pixel] extra json parse failed", {
+      event,
+      shopName,
+      clientId,
+      message: error instanceof Error ? error.message : String(error),
+      extraPreview: extra.slice(0, 320),
+    });
+    parsedExtra = {};
+  }
+  const bundle = Array.isArray(parsedExtra?.bundle)
+    ? (parsedExtra.bundle as Array<Record<string, unknown>>)
+    : [];
+  const abBundleItems = bundle
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      offerId: String(row.offerId || ""),
+      variantId: String(row.variantId || row.id || ""),
+      title: String(row.title || ""),
+      abGroup: String(row.abGroup || ""),
+      abBucket: Number(row.abBucket),
+      abDiscountPercent: Number(row.abDiscountPercent),
+    }))
+    .filter((row) => row.abGroup);
 
   console.log("[web-pixel] webpixerToAli request received", {
     event,
@@ -1098,6 +1125,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     productId,
     clientId,
     extraLength: extra.length,
+    bundleItems: bundle.length,
+    abBundleItemsCount: abBundleItems.length,
+    abBundleItems,
   });
 
   const slsProjectName = projectName();

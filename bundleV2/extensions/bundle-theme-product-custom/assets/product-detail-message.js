@@ -1309,6 +1309,13 @@ function syncCurrentBundleToSessionStorage(offer) {
   const offerId = String(offer?.offerId || offer?.id || "");
   const bundleTitle = getOfferBundleTitle(offer);
   const currentProductGid = getCurrentProductGid() || "";
+  const abGroup = String(offer?.__ciwiAbGroup || "");
+  const abBucketRaw = Number(offer?.__ciwiAbBucket);
+  const abBucket = Number.isFinite(abBucketRaw) ? abBucketRaw : null;
+  const abDiscountPercentRaw = Number(offer?.__ciwiAbDiscountPercent);
+  const abDiscountPercent = Number.isFinite(abDiscountPercentRaw)
+    ? abDiscountPercentRaw
+    : null;
   const data = readSessionStorageJson(SESSION_STORAGE_BUNDLE_RULE_KEY, {});
   data[variantId] = {
     title: bundleTitle,
@@ -1317,6 +1324,10 @@ function syncCurrentBundleToSessionStorage(offer) {
     productId: currentProductGid,
     variantId,
     source: "bundle-theme-product-custom",
+    abGroup,
+    abBucket,
+    abDiscountPercent,
+    syncedAt: new Date().toISOString(),
   };
 
   try {
@@ -1324,6 +1335,15 @@ function syncCurrentBundleToSessionStorage(offer) {
       SESSION_STORAGE_BUNDLE_RULE_KEY,
       JSON.stringify(data),
     );
+    console.log("[abtest] session storage synced", {
+      variantId,
+      offerId,
+      bundleTitle,
+      productId: currentProductGid,
+      abGroup: abGroup || "(empty)",
+      abBucket,
+      abDiscountPercent,
+    });
   } catch (error) {
     console.error("[ciwi] failed to persist bundle session data", error);
   }
@@ -1419,6 +1439,19 @@ function ensureAbTestAssignmentForOffer(offer) {
   const cached = localAssignments[localKey];
   let bucket = Number(cached?.bucket);
   let group = String(cached?.group || "");
+  console.log("[abtest] assignment evaluate (before local resolve)", {
+    offerId: String(offer?.id || ""),
+    customerId: customerId || null,
+    anonId: anonId || null,
+    identityKey,
+    localKey,
+    cached: cached || null,
+    cfgMode: cfg.mode,
+    cfgSplitPercent: cfg.bucketSplitPercent,
+    cfgVariantIds: cfg.variantIds,
+    cfgTrafficWeights: cfg.trafficWeights,
+    cfgSaltLength: cfg.salt ? String(cfg.salt).length : 0,
+  });
   if (!Number.isFinite(bucket) || !group) {
     if (customerId) {
       bucket = simpleHashBucket(`${customerId}:${cfg.salt}`);
@@ -1537,6 +1570,16 @@ function ensureAbTestAssignmentForOffer(offer) {
   offer.__ciwiAbBucket = bucket;
   offer.__ciwiAbDiscountPercent = chosenPercent;
   offer.discountRulesJson = JSON.stringify(rules);
+  console.log("[abtest] assignment applied to offer", {
+    offerId: String(offer?.id || ""),
+    offerName: String(offer?.name || ""),
+    group,
+    bucket,
+    chosenPercent,
+    rulesCount: Array.isArray(rules) ? rules.length : 0,
+    customerId: customerId || null,
+    localAssignmentSource: cached?.source || localAssignments?.[localKey]?.source || "new",
+  });
   return offer;
 }
 
@@ -1693,7 +1736,17 @@ function getCurrentOffer(offersConfig) {
     }
 
     if (offer.offerType === "abTest") {
-      return ensureAbTestAssignmentForOffer(offer);
+      const assignedOffer = ensureAbTestAssignmentForOffer(offer);
+      console.log("[abtest] offer selected for render", {
+        offerId: String(assignedOffer?.id || ""),
+        offerName: String(assignedOffer?.name || ""),
+        currentProductGid,
+        currentMarketId: currentMarketId || null,
+        abGroup: String(assignedOffer?.__ciwiAbGroup || ""),
+        abBucket: assignedOffer?.__ciwiAbBucket ?? null,
+        abDiscountPercent: assignedOffer?.__ciwiAbDiscountPercent ?? null,
+      });
+      return assignedOffer;
     }
     return offer;
   }

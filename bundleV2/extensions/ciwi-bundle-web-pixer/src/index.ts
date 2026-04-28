@@ -45,6 +45,9 @@ const getBundlePayloadByVariantId = (
         productId: String(record.productId || ""),
         variantId: variantId || "",
         source: String(record.source || ""),
+        abGroup: String(record.abGroup || ""),
+        abBucket: Number(record.abBucket),
+        abDiscountPercent: Number(record.abDiscountPercent),
       };
     }
   }
@@ -100,6 +103,9 @@ const mergeCheckoutBundle = (
     productId: hasSessionBundle ? sessionBundle.productId || "" : "",
     variantId: hasSessionBundle ? sessionBundle.variantId || id : id,
     source: hasSessionBundle ? sessionBundle.source || "" : "",
+    abGroup: hasSessionBundle ? String(sessionBundle.abGroup || "") : "",
+    abBucket: hasSessionBundle ? Number(sessionBundle.abBucket) : Number.NaN,
+    abDiscountPercent: hasSessionBundle ? Number(sessionBundle.abDiscountPercent) : Number.NaN,
     // 中文注释：把订阅信息注入到 bundle 数据项里，后端 SLS 查询 / 账单页面可按需使用
     sellingPlanId: subscription.sellingPlanId,
     sellingPlanName: subscription.sellingPlanName,
@@ -112,6 +118,10 @@ const mergeCheckoutBundle = (
 
 register(({ analytics, browser, settings }) => {
   const { shopName, server } = settings;
+  console.log("[ciwi][web-pixel] init", {
+    shopName: shopName || "(empty)",
+    server: server || "(empty)",
+  });
 
   analytics.subscribe("product_viewed", async (event) => {
     await sleep(500);
@@ -119,13 +129,19 @@ register(({ analytics, browser, settings }) => {
       (await browser.sessionStorage.getItem(BUNDLE_SESSION_KEY)) || "{}";
     const bundleIdJSON = parseBundleSessionData(bundleIdJSONString);
     const variantId = event.data.productVariant?.id || "";
+    const bundlePayload = getBundlePayloadByVariantId(bundleIdJSON, variantId);
+    console.log("[ciwi][web-pixel] product_viewed payload", {
+      variantId,
+      clientId: event.clientId,
+      bundlePayload,
+    });
     WebpixerToAli({
       server,
       event: "product_viewed",
       shopName,
       clientId: event.clientId,
       extra: JSON.stringify({
-        bundle: [getBundlePayloadByVariantId(bundleIdJSON, variantId)],
+        bundle: [bundlePayload],
       }),
     });
   });
@@ -147,6 +163,7 @@ register(({ analytics, browser, settings }) => {
     };
     console.log("[ciwi][web-pixel] product_added_to_cart", {
       variantId,
+      bundlePayload,
       isSubscription: subscription.isSubscription,
       sellingPlanId: subscription.sellingPlanId,
     });
@@ -176,6 +193,15 @@ register(({ analytics, browser, settings }) => {
     console.log("[ciwi][web-pixel] checkout_started bundle summary", {
       totalLineItems: bundleItems.length,
       subscriptionItemCount,
+      abItems: bundleItems
+        .filter((b) => typeof b.abGroup === "string" && b.abGroup)
+        .map((b) => ({
+          variantId: b.variantId || b.id,
+          offerId: b.offerId || "",
+          abGroup: b.abGroup,
+          abBucket: b.abBucket,
+          abDiscountPercent: b.abDiscountPercent,
+        })),
     });
     WebpixerToAli({
       server,
@@ -212,6 +238,15 @@ register(({ analytics, browser, settings }) => {
       totalLineItems: bundleItems.length,
       subscriptionItemCount,
       hasSubscriptionOrder,
+      abItems: bundleItems
+        .filter((b) => typeof b.abGroup === "string" && b.abGroup)
+        .map((b) => ({
+          variantId: b.variantId || b.id,
+          offerId: b.offerId || "",
+          abGroup: b.abGroup,
+          abBucket: b.abBucket,
+          abDiscountPercent: b.abDiscountPercent,
+        })),
       subscriptions: bundleItems
         .filter((b) => b.isSubscription)
         .map((b) => ({
