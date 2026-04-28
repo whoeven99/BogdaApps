@@ -7,11 +7,13 @@ import type {
 
 type DiscountRuleLite = { count: number };
 type BxgyRuleLite = { count: number };
+type DifferentProductsRuleLite = { count: number; tierType: "bxgy" | "simple" };
 
 type Props = {
   offerType: string;
   normalizedDiscountRules: DiscountRuleLite[];
   bxgyDiscountRules: BxgyRuleLite[];
+  differentProductsDiscountRules: DifferentProductsRuleLite[];
   value: ProgressiveGiftsConfig;
   onChange: (next: ProgressiveGiftsConfig) => void;
   showToggle?: boolean;
@@ -22,11 +24,21 @@ function buildBarOptions(
   offerType: string,
   normalizedDiscountRules: DiscountRuleLite[],
   bxgyDiscountRules: BxgyRuleLite[],
+  differentProductsDiscountRules: DifferentProductsRuleLite[],
 ): { value: number; label: string }[] {
   if (offerType === "bxgy") {
     return bxgyDiscountRules.map((r, i) => ({
       value: i + 1,
       label: `Bar #${i + 1} (count >= ${r.count})`,
+    }));
+  }
+  if (offerType === "quantity-breaks-different") {
+    return differentProductsDiscountRules.map((r, i) => ({
+      value: i + 1,
+      label:
+        r.tierType === "bxgy"
+          ? `Tier #${i + 1} (BXGY, count >= ${r.count})`
+          : `Tier #${i + 1} (simple, count >= ${r.count})`,
     }));
   }
   return [
@@ -46,11 +58,17 @@ export function ProgressiveGiftsSection({
   offerType,
   normalizedDiscountRules,
   bxgyDiscountRules,
+  differentProductsDiscountRules,
   value,
   onChange,
   showToggle = true,
 }: Props) {
-  const barOptions = buildBarOptions(offerType, normalizedDiscountRules, bxgyDiscountRules);
+  const barOptions = buildBarOptions(
+    offerType,
+    normalizedDiscountRules,
+    bxgyDiscountRules,
+    differentProductsDiscountRules,
+  );
 
   const patch = (partial: Partial<ProgressiveGiftsConfig>) => {
     onChange({ ...value, ...partial });

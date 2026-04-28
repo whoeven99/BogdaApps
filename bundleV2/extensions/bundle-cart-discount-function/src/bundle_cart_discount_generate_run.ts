@@ -89,6 +89,7 @@ type BxgyDiscountRule = {
   getProductIds: string[];
   discountPercent: number;
   maxUsesPerOrder: number;
+  tierType?: "bxgy" | "simple";
 };
 
 type Offer = NonNullable<OfferMetafieldPayload["offers"]>[number];
@@ -588,11 +589,16 @@ export function bundleCartDiscountGenerateRun(
   const marketId = input.localization?.market?.id;
   const nowMs = resolveNowMs();
   const bxgyOffers = offers.filter(
-    (o) => o.offerType === "bxgy" && offerPassesScheduleAndMarket(o, marketId, nowMs),
+    (o) =>
+      (o.offerType === "bxgy" || o.offerType === "quantity-breaks-different") &&
+      offerPassesScheduleAndMarket(o, marketId, nowMs),
   );
   /** 普通数量阶梯：不含 BXGY 与 complete-bundle（后两者有独立分支） */
   const regularOffers = offers.filter(
-    (o) => o.offerType !== "bxgy" && !isCompleteBundleOfferType(o.offerType),
+    (o) =>
+      o.offerType !== "bxgy" &&
+      o.offerType !== "quantity-breaks-different" &&
+      !isCompleteBundleOfferType(o.offerType),
   );
   log("offer_groups_resolved", {
     totalOffers: offers.length,
@@ -795,6 +801,7 @@ function parseBxgyDiscountRules(discountRulesJson?: string | null): BxgyDiscount
       const getQuantity = Number((item as { getQuantity?: unknown }).getQuantity);
       const discountPercent = Number((item as { discountPercent?: unknown }).discountPercent);
       const maxUsesPerOrder = Number((item as { maxUsesPerOrder?: unknown }).maxUsesPerOrder) || 1;
+      const tierType = (item as { tierType?: unknown }).tierType;
       
       const buyProductIds = (item as { buyProductIds?: unknown }).buyProductIds;
       const getProductIds = (item as { getProductIds?: unknown }).getProductIds;
@@ -814,6 +821,7 @@ function parseBxgyDiscountRules(discountRulesJson?: string | null): BxgyDiscount
         getProductIds: getProductIds.filter(id => typeof id === "string") as string[],
         discountPercent: Math.max(0, Math.min(100, discountPercent)),
         maxUsesPerOrder: Math.max(1, Math.trunc(maxUsesPerOrder)),
+        tierType: tierType === "bxgy" ? "bxgy" : "simple",
       });
     }
     
@@ -842,7 +850,7 @@ function calculateBxgyDiscount(
     // Calculate total buy quantity across all buyProductIds in the first rule
     // (all rules within an offer share the same buyProductIds)
     const rule = bxgyRules[0];
-    if (!rule.buyProductIds.length || !rule.getProductIds.length) continue;
+    if (!rule.buyProductIds.length) continue;
 
     // totalBuyQuantity = total cart items (all products) — to check against count threshold
     let totalBuyQuantity = 0;
@@ -904,7 +912,46 @@ function calculateBxgyDiscount(
       maxUsesPerOrder: selectedRule.maxUsesPerOrder,
       selectedBuyQuantity: selectedRule.buyQuantity,
       selectedCount: selectedRule.count,
+      tierType: selectedRule.tierType,
     });
+
+    if (selectedRule.tierType === "simple") {
+      const discountTargetQty = maxPromotionTimes * selectedRule.buyQuantity;
+      let remaining = discountTargetQty;
+
+      for (const line of cartLines) {
+        if (remaining <= 0) break;
+        const productId = line.merchandise?.product?.id;
+        const variantId = line.merchandise?.id;
+        const isBuyProduct =
+          (productId && selectedRule.buyProductIds.includes(productId)) ||
+          (variantId && selectedRule.buyProductIds.includes(variantId));
+        if (!isBuyProduct) continue;
+
+        const discountQuantity = Math.min(line.quantity, remaining);
+        if (discountQuantity > 0) {
+          candidates.push({
+            message: offer.cartTitle || "Bundle Discount",
+            targets: [{ cartLine: { id: line.id, quantity: discountQuantity } }],
+            value: {
+              percentage: {
+                value: selectedRule.discountPercent.toFixed(1),
+              },
+            },
+          });
+          remaining -= discountQuantity;
+          log("simple_tier_candidate_added", {
+            offerId: offer.id,
+            cartLineId: line.id,
+            quantity: discountQuantity,
+            discountPercent: selectedRule.discountPercent,
+          });
+        }
+      }
+
+      allCandidates.push(...candidates);
+      continue;
+    }
 
     // Find get products and apply discount
     let remainingGetQuantity = maxPromotionTimes * selectedRule.getQuantity;
@@ -995,6 +1042,13 @@ const parseSelectedIds = (selectedProductsJson?: string | null): string[] => {
     
     // Handle BXGY format: { buyProducts: string[], getProducts: string[] }
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const productIds = (parsed as { productIds?: unknown }).productIds;
+      if (Array.isArray(productIds)) {
+        return productIds
+          .map((id) => String(id || "").trim())
+          .filter(Boolean);
+      }
+
       /** complete-bundle：{ bars: [{ products: [{ productId }] }] } */
       const bars = (parsed as { bars?: unknown }).bars;
       if (Array.isArray(bars) && bars.length) {

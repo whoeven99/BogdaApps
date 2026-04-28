@@ -1,5 +1,6 @@
 export type OfferTypeId =
   | "quantity-breaks-same"
+  | "quantity-breaks-different"
   | "bxgy"
   | "complete-bundle"
   | "subscription"
@@ -17,6 +18,12 @@ export const OFFER_TYPE_OPTIONS: OfferTypeOption[] = [
     name: "Quantity breaks for the same product",
     description:
       "Offer discounts when customers buy multiple quantities of the same product",
+  },
+  {
+    id: "quantity-breaks-different",
+    name: "Quantity breaks for different products",
+    description:
+      "Offer simple or BXGY-style quantity breaks across a shared pool of different products",
   },
   {
     id: "bxgy",

@@ -35,11 +35,13 @@ import StarterTemplatePicker from "./StarterTemplatePicker";
 import {
   OFFER_TEXT_LIMITS,
   buildLegacyFieldsFromCampaignConfig,
+  buildDifferentProductsDiscountRulesJson,
   migrateLegacyOfferToCampaignConfig,
   normalizeOfferNameKey,
   parseCampaignConfig,
   parseDiscountRules,
   parseBxgyDiscountRules,
+  parseDifferentProductsDiscountRules,
   parseFreeGiftRules,
   parseOfferSettings,
   parseSelectedProductIds,
@@ -54,6 +56,7 @@ import {
   type CompleteBundleProduct,
   type CompleteBundlePricingMode,
   type CampaignConfig,
+  type DifferentProductsDiscountRule,
   type FreeGiftRule,
 } from "../../../utils/offerParsing";
 import { type OfferTypeId } from "./offerTypeOptions";
@@ -790,6 +793,12 @@ export function CreateNewOffer({
       initialCampaignLegacy?.discountRulesJson ?? initialOffer?.discountRulesJson,
     ),
   );
+  const [differentProductsDiscountRules, setDifferentProductsDiscountRules] =
+    useState<DifferentProductsDiscountRule[]>(
+      parseDifferentProductsDiscountRules(
+        initialCampaignLegacy?.discountRulesJson ?? initialOffer?.discountRulesJson,
+      ),
+    );
   const [buyProducts, setBuyProducts] = useState<string[]>(() => {
     const selectedProductsJson =
       initialCampaignLegacy?.offerType === "bxgy"
@@ -1292,6 +1301,15 @@ export function CreateNewOffer({
         label: `Bar #${i + 1} (count ≥ ${r.count})`,
       }));
     }
+    if (offerType === "quantity-breaks-different") {
+      return differentProductsDiscountRules.map((r, i) => ({
+        value: i + 1,
+        label:
+          r.tierType === "bxgy"
+            ? `Tier #${i + 1} (BXGY, count ≥ ${r.count})`
+            : `Tier #${i + 1} (simple, count ≥ ${r.count})`,
+      }));
+    }
     if (offerType === "free-gift") {
       return freeGiftRules.map((r, i) => ({
         value: i + 1,
@@ -1305,7 +1323,12 @@ export function CreateNewOffer({
         label: `Bar #${i + 2} (qty ${r.count})`,
       })),
     ];
-  }, [offerType, bxgyDiscountRules, normalizedDiscountRules]);
+  }, [
+    offerType,
+    bxgyDiscountRules,
+    differentProductsDiscountRules,
+    normalizedDiscountRules,
+  ]);
   const currentCampaignConfig = useMemo<CampaignConfig | null>(() => {
     const buildOfferCardConfig = () => ({
       title: widgetTitle,
@@ -1342,6 +1365,20 @@ export function CreateNewOffer({
               badge: rule.badge || "",
               isDefault: !!rule.isDefault,
             })),
+          },
+        },
+      ];
+    } else if (offerType === "quantity-breaks-different") {
+      logicBlockId = "logic-quantity-breaks-different";
+      scopeProductIds = selectedProductsData.map((product) => String(product.id));
+      logicBlocks = [
+        {
+          id: logicBlockId,
+          type: "quantity-breaks-different",
+          config: {
+            tiers: buildDifferentProductsDiscountRulesJson(
+              differentProductsDiscountRules,
+            ),
           },
         },
       ];
@@ -1466,6 +1503,7 @@ export function CreateNewOffer({
     countdownLabel,
     customerSegments,
     dailyBudget,
+    differentProductsDiscountRules,
     endTime,
     freeGiftRules,
     freeGiftTriggerProducts,
@@ -1550,6 +1588,7 @@ export function CreateNewOffer({
       progressiveGifts,
       normalizedDiscountRules,
       bxgyDiscountRules,
+      differentProductsDiscountRules,
       freeGiftRules,
       subscriptionEnabled,
     }),
@@ -1577,6 +1616,7 @@ export function CreateNewOffer({
       progressiveGifts,
       normalizedDiscountRules,
       bxgyDiscountRules,
+      differentProductsDiscountRules,
       freeGiftRules,
       subscriptionEnabled,
     ],
@@ -1587,6 +1627,7 @@ export function CreateNewOffer({
     handleSelectProducts,
     setDiscountRules,
     setBxgyDiscountRules,
+    setDifferentProductsDiscountRules,
     setActiveBundleBarId,
     addCompleteBundleBar,
     removeCompleteBundleBar,
@@ -1726,6 +1767,68 @@ export function CreateNewOffer({
       });
     }
 
+    if (offerType === "quantity-breaks-different" && differentProductsDiscountRules.length > 0) {
+      const differentProductsHasDefault = differentProductsDiscountRules.some(
+        (r) => r.isDefault,
+      );
+      return differentProductsDiscountRules.map((rule, index) => {
+        const isFeatured = differentProductsHasDefault
+          ? !!rule.isDefault
+          : index === 0;
+        const products =
+          (rule.tierType === "bxgy"
+            ? rule.getProductIds.length > 0
+              ? rule.getProductIds
+              : rule.buyProductIds
+            : rule.buyProductIds
+          )
+            .map((productId) =>
+              selectedProductsData.find(
+                (product) => String(product.id) === String(productId),
+              ),
+            )
+            .filter((product): product is (typeof selectedProductsData)[number] => Boolean(product))
+            .slice(0, 4)
+            .map((product) => ({
+              image: product.image,
+              name: product.title,
+            }));
+
+        return {
+          id: `different-products-tier-${rule.count}-${rule.tierType}`,
+          title:
+            rule.title ||
+            (rule.tierType === "bxgy"
+              ? `Buy ${rule.buyQuantity}, Get ${rule.getQuantity}`
+              : `${rule.count} mixed items`),
+          subtitle:
+            rule.subtitle ||
+            (rule.tierType === "bxgy"
+              ? `Across ${rule.buyProductIds.length} buy products`
+              : `Mix products and save ${rule.discountPercent}%`),
+          price:
+            rule.tierType === "bxgy"
+              ? rule.discountPercent === 100
+                ? `${rule.getQuantity} FREE`
+                : `${rule.discountPercent}% OFF`
+              : `${rule.discountPercent}% OFF`,
+          featured: isFeatured,
+          badge:
+            rule.badge ||
+            (isFeatured
+              ? rule.tierType === "bxgy"
+                ? "Best Reward"
+                : "Most Popular"
+              : ""),
+          saveLabel:
+            rule.tierType === "bxgy"
+              ? `BUY ${rule.buyQuantity} + GET ${rule.getQuantity}`
+              : `COUNT ${rule.count}+`,
+          products,
+        };
+      });
+    }
+
     return [
       {
         id: "single",
@@ -1757,7 +1860,9 @@ export function CreateNewOffer({
     offerType,
     completeBundleBars,
     bxgyDiscountRules,
+    differentProductsDiscountRules,
     freeGiftRules,
+    selectedProductsData,
     normalizedDiscountRules,
     baseUnitPrice,
     formatPreviewPrice,
@@ -1875,7 +1980,11 @@ export function CreateNewOffer({
           return;
         }
 
-        const hasHighDiscount = normalizedDiscountRules.some(r => r.discountPercent >= 90);
+        const hasHighDiscount =
+          normalizedDiscountRules.some((r) => r.discountPercent >= 90) ||
+          differentProductsDiscountRules.some(
+            (r) => r.discountPercent >= 90,
+          );
         if (hasHighDiscount && !confirmedHighDiscountRef.current) {
           e.preventDefault();
           Modal.confirm({

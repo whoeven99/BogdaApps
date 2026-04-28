@@ -1,6 +1,7 @@
 import {
   buildBxgyDiscountRulesJson,
   buildCompleteBundleConfig,
+  buildDifferentProductsDiscountRulesJson,
   buildFreeGiftRulesJson,
 } from "../../../utils/offerParsing";
 import type { CampaignDraft, DraftDiscountRule } from "./campaignDraft";
@@ -21,6 +22,13 @@ const META_BY_OFFER_TYPE: Record<OfferTypeId, CampaignBuilderMeta> = {
       "Reward larger quantities of the same product with progressively better pricing.",
     stepTwoDescription:
       "Select the products in scope and define the quantity tiers that drive the promotion.",
+  },
+  "quantity-breaks-different": {
+    logicBlockLabel: "Cross-product Quantity Breaks",
+    logicBlockDescription:
+      "Mix simple quantity discounts and BXGY-style tiers across a shared pool of different products.",
+    stepTwoDescription:
+      "Select the shared product pool, then configure the cross-product tiers customers can unlock.",
   },
   bxgy: {
     logicBlockLabel: "Buy X Get Y",
@@ -62,6 +70,8 @@ export function getCampaignScopeSummary(
   ctx: CampaignBuilderRegistryContext,
 ): string {
   switch (ctx.offerType) {
+    case "quantity-breaks-different":
+      return `${ctx.selectedProductsData.length} products in the shared pool`;
     case "bxgy":
       return `${ctx.buyProducts.length} buy products + ${ctx.getProducts.length} get products`;
     case "complete-bundle": {
@@ -83,6 +93,13 @@ export function getCampaignLogicSummary(
   ctx: CampaignBuilderRegistryContext,
 ): string {
   switch (ctx.offerType) {
+    case "quantity-breaks-different": {
+      const bxgyTierCount = ctx.differentProductsDiscountRules.filter(
+        (rule) => rule.tierType === "bxgy",
+      ).length;
+      const simpleTierCount = ctx.differentProductsDiscountRules.length - bxgyTierCount;
+      return `${simpleTierCount} simple tiers, ${bxgyTierCount} BXGY tiers`;
+    }
     case "bxgy": {
       const bestDiscount = ctx.bxgyDiscountRules.reduce(
         (max, rule) => Math.max(max, rule.discountPercent),
@@ -122,6 +139,10 @@ export function buildSelectedProductsPayload(
   ctx: CampaignBuilderRegistryContext,
 ): unknown {
   switch (ctx.offerType) {
+    case "quantity-breaks-different":
+      return {
+        productIds: ctx.selectedProductsData.map((product) => String(product.id)),
+      };
     case "bxgy":
       return { buyProducts: ctx.buyProducts, getProducts: ctx.getProducts };
     case "complete-bundle":
@@ -141,6 +162,10 @@ export function buildDiscountRulesPayload(
   buildQuantityRulesJson: (rules: DraftDiscountRule[]) => unknown,
 ): unknown {
   switch (ctx.offerType) {
+    case "quantity-breaks-different":
+      return buildDifferentProductsDiscountRulesJson(
+        ctx.differentProductsDiscountRules,
+      );
     case "bxgy":
       return buildBxgyDiscountRulesJson(ctx.bxgyDiscountRules);
     case "complete-bundle":
@@ -165,6 +190,11 @@ export function validateScopeAndLogicStep(
   ctx: CampaignBuilderRegistryContext,
 ): string | null {
   switch (ctx.offerType) {
+    case "quantity-breaks-different":
+      return ctx.selectedProductsData.length === 0 ||
+        ctx.differentProductsDiscountRules.length === 0
+        ? "Please select the shared product pool and configure at least one cross-product tier."
+        : null;
     case "bxgy":
       return ctx.buyProducts.length === 0 || ctx.getProducts.length === 0
         ? "Please select both Buy and Get products for a BXGY offer."
@@ -194,6 +224,11 @@ export function validateFinalSubmitScopeAndLogic(
   ctx: CampaignBuilderRegistryContext,
 ): string | null {
   switch (ctx.offerType) {
+    case "quantity-breaks-different":
+      return ctx.selectedProductsData.length === 0 ||
+        ctx.differentProductsDiscountRules.length === 0
+        ? "Cross-product quantity breaks require a shared product pool and at least one tier."
+        : null;
     case "bxgy":
       return ctx.buyProducts.length === 0 || ctx.getProducts.length === 0
         ? "For BXGY offers, you must select both Buy Products and Get Products."

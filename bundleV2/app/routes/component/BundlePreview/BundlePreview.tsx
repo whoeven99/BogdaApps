@@ -19,6 +19,7 @@ type Props = {
   showCustomButton?: boolean;
   title?: string;
   items?: PreviewItem[];
+  showProductImages?: boolean;
   /** 阶梯赠品配置（可选） */
   progressiveGifts?: ProgressiveGiftsConfig | null;
   /** 预览用：模拟当前 Bar 序号（与 __ciwi_bundle_tier 一致） */
@@ -48,6 +49,7 @@ export default function BundlePreview({
   showCustomButton,
   title = "Bundle & Save",
   items,
+  showProductImages = true,
   progressiveGifts,
   progressivePreviewBarIndex = 1,
   progressivePreviewLineQty = 1,
@@ -73,6 +75,7 @@ export default function BundlePreview({
     buttonPrimaryColor,
     showCustomButton,
     items,
+    showProductImages,
     showSubscriptionPreview,
     subscriptionPreviewStyle,
     subscriptionTitle,

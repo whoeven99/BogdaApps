@@ -499,6 +499,7 @@ function parseBxgyDiscountRulesJson(discountRulesJson) {
           discountPercent: discountPercent,
           buyProductIds: buyProductIds,
           getProductIds: getProductIds,
+          tierType: item.tierType === "bxgy" ? "bxgy" : "simple",
           title: item.title || "",
           subtitle: item.subtitle || "",
           badge: item.badge || "",
@@ -519,6 +520,11 @@ function parseSelectedProductIds(selectedProductsJson) {
   }
   try {
     const parsed = JSON.parse(selectedProductsJson);
+    if (parsed && typeof parsed === "object" && Array.isArray(parsed.productIds)) {
+      return parsed.productIds
+        .map((id) => String(id || "").trim())
+        .filter(Boolean);
+    }
     if (!Array.isArray(parsed)) return [];
     const ids = [];
     for (const item of parsed) {
@@ -948,7 +954,7 @@ function getProgressiveGiftsConfigFromOffer(offer) {
  */
 function computeSelectedBarIndexForOffer(offer) {
   const sc = Number(window.__ciwiBundleState?.selectedCount ?? 1);
-  if (offer.offerType === "bxgy") {
+  if (offer.offerType === "bxgy" || offer.offerType === "quantity-breaks-different") {
     const rules = parseBxgyDiscountRulesJson(offer.discountRulesJson);
     const idx = rules.findIndex((r) => Number(r.count) === sc);
     return idx >= 0 ? idx + 1 : 1;
@@ -1910,6 +1916,123 @@ function renderBundlePreviewHtml(offer) {
         ${esc(buttonText)}
       </button>` : ""}
     </div>` + progressiveBxgy;
+  }
+
+  if (offer.offerType === "quantity-breaks-different") {
+    const differentRules = parseBxgyDiscountRulesJson(offer?.discountRulesJson);
+    if (!differentRules.length) return "";
+
+    if (!window.__ciwiBundleState.selectedCount) {
+      const defaultRule = differentRules.find((r) => r.isDefault);
+      window.__ciwiBundleState.selectedCount = defaultRule
+        ? defaultRule.count
+        : (differentRules[0]?.count || 1);
+      setTimeout(() => updateThemeQuantityInput(window.__ciwiBundleState.selectedCount), 0);
+    }
+    const selectedCount = window.__ciwiBundleState.selectedCount;
+
+    let offerSettings = {};
+    try {
+      if (offer?.offerSettingsJson) {
+        offerSettings = JSON.parse(offer.offerSettingsJson);
+      }
+    } catch (e) {
+      console.error("[ciwi] failed to parse offerSettingsJson", e);
+    }
+
+    const layoutFormat = offerSettings.layoutFormat || "vertical";
+    const accentColor = offerSettings.accentColor || "#008060";
+    const cardBackgroundColor = offerSettings.cardBackgroundColor || "#ffffff";
+    const borderColor = offerSettings.borderColor || "#dfe3e8";
+    const labelColor = offerSettings.labelColor || "#ffffff";
+    const titleFontSize = offerSettings.titleFontSize || 14;
+    const titleFontWeight = offerSettings.titleFontWeight || "600";
+    const titleColor = offerSettings.titleColor || "#111111";
+    const buttonText = offerSettings.buttonText || "Add to Cart";
+    const buttonPrimaryColor = offerSettings.buttonPrimaryColor || "#008060";
+    const showCustomButton = offerSettings.showCustomButton !== false;
+    const widgetTitle = offerSettings.title || "Bundle & Save";
+    const hasDefault = differentRules.some((r) => r.isDefault);
+
+    const currentPool = parseSelectedProductIds(offer.selectedProductsJson);
+    if (currentPool.length > 0 && getCurrentProductGid() && !currentPool.includes(getCurrentProductGid())) {
+      return "";
+    }
+
+    const items = differentRules.map((rule, index) => {
+      const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
+      const title =
+        rule.title ||
+        (rule.tierType === "bxgy"
+          ? `Buy ${rule.buyQuantity}, Get ${rule.getQuantity}`
+          : `${rule.count} mixed items`);
+      const subtitle =
+        rule.subtitle ||
+        (rule.tierType === "bxgy"
+          ? `Across ${rule.buyProductIds.length} buy products`
+          : `Mix products and save ${rule.discountPercent}%`);
+      return {
+        count: rule.count || 1,
+        title,
+        subtitle,
+        price:
+          rule.tierType === "bxgy"
+            ? rule.discountPercent === 100
+              ? `${rule.getQuantity} FREE`
+              : `${rule.discountPercent}% OFF`
+            : `${rule.discountPercent}% OFF`,
+        badge: rule.badge || (isFeatured ? "Most Popular" : ""),
+        saveLabel:
+          rule.tierType === "bxgy"
+            ? `BUY ${rule.buyQuantity} + GET ${rule.getQuantity}`
+            : `COUNT ${rule.count}+`,
+      };
+    });
+
+    const itemsHtml = items
+      .map((item) => {
+        const isSelected = item.count === selectedCount;
+        const featuredClass = isSelected
+          ? " create-offer-style-preview-item--featured"
+          : "";
+        const featuredStyle = isSelected
+          ? `border-color: ${esc(accentColor)} !important; background: ${esc(cardBackgroundColor)} !important; box-shadow: 0 8px 18px ${esc(accentColor)}25 !important; cursor: pointer;`
+          : `border-color: ${esc(borderColor)} !important; background: ${esc(cardBackgroundColor)} !important; cursor: pointer;`;
+
+        return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}" data-ciwi-bundle-count="${esc(item.count)}">
+        ${
+          item.badge
+            ? `<div class="create-offer-style-preview-badge" style="background:${esc(accentColor)} !important; color:${esc(labelColor)} !important;">${esc(item.badge)}</div>`
+            : ""
+        }
+        <div class="create-offer-style-preview-item-title">${esc(item.title)}</div>
+        <div class="create-offer-style-preview-item-subtitle">${esc(item.subtitle)}</div>
+        ${
+          item.saveLabel
+            ? `<div class="create-offer-style-preview-item-subtitle">${esc(item.saveLabel)}</div>`
+            : ""
+        }
+        <div class="create-offer-style-preview-item-price">${esc(item.price)}</div>
+      </div>`;
+      })
+      .join("");
+
+    const barIdxDifferent = computeSelectedBarIndexForOffer(offer);
+    const progressiveDifferent = renderProgressiveGiftsStorefrontHtml(
+      offer,
+      barIdxDifferent,
+      selectedCount,
+    );
+
+    return `<div class="create-offer-preview-card">
+      <div class="create-offer-style-preview-header" style="color:${esc(titleColor)} !important; font-size: ${esc(titleFontSize)}px !important; font-weight: ${esc(titleFontWeight)} !important;">${esc(widgetTitle)}</div>
+      <div class="create-offer-style-preview-list create-offer-style-preview-list--${layoutFormat}">
+        ${itemsHtml}
+      </div>
+      ${showCustomButton ? `<button class="create-offer-preview-button" onclick="window.ciwiHandleBundleAddToCart()" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
+        ${esc(buttonText)}
+      </button>` : ""}
+    </div>` + progressiveDifferent;
   }
   
   // Existing logic for quantity breaks

@@ -341,6 +341,32 @@ export type DiscountRule = {
   isDefault?: boolean;
 };
 
+export type PerProductDiscountRule = {
+  productId?: string;
+  variantId?: string;
+  count: number;
+  discountPercent: number;
+  title?: string;
+  subtitle?: string;
+  badge?: string;
+  isDefault?: boolean;
+};
+
+export type DifferentProductsDiscountRule = {
+  count: number;
+  discountPercent: number;
+  buyQuantity: number;
+  getQuantity: number;
+  buyProductIds: string[];
+  getProductIds: string[];
+  maxUsesPerOrder: number;
+  tierType: "bxgy" | "simple";
+  title?: string;
+  subtitle?: string;
+  badge?: string;
+  isDefault?: boolean;
+};
+
 export type CampaignScope = {
   productIds: string[];
   markets: string[];
@@ -361,6 +387,14 @@ export type QuantityBreaksLogicBlock = {
   type: "quantity-breaks";
   config: {
     tiers: QuantityBreakTier[];
+  };
+};
+
+export type QuantityBreaksDifferentLogicBlock = {
+  id: string;
+  type: "quantity-breaks-different";
+  config: {
+    tiers: DifferentProductsDiscountRule[];
   };
 };
 
@@ -522,6 +556,7 @@ export type SubscriptionLogicBlock = {
 
 export type LogicBlock =
   | QuantityBreaksLogicBlock
+  | QuantityBreaksDifferentLogicBlock
   | BxgyLogicBlock
   | FreeGiftLogicBlock
   | CompleteBundleLogicBlock
@@ -642,6 +677,52 @@ function sanitizeBxgyTier(raw: unknown): BxgyDiscountRule | null {
   };
 }
 
+function sanitizeDifferentProductsTier(
+  raw: unknown,
+): DifferentProductsDiscountRule | null {
+  if (!raw || typeof raw !== "object") return null;
+  const item = raw as Record<string, unknown>;
+  const count = Math.trunc(Number(item.count));
+  const buyQuantity = Math.trunc(Number(item.buyQuantity ?? 1));
+  const getQuantity = Math.trunc(Number(item.getQuantity ?? 0));
+  const discountPercent = Number(item.discountPercent);
+  const maxUsesPerOrder = Math.trunc(Number(item.maxUsesPerOrder ?? 1));
+  const buyProductIds = Array.isArray(item.buyProductIds)
+    ? item.buyProductIds.map((id) => String(id || "").trim()).filter(Boolean)
+    : [];
+  const getProductIds = Array.isArray(item.getProductIds)
+    ? item.getProductIds.map((id) => String(id || "").trim()).filter(Boolean)
+    : [];
+  const tierType = item.tierType === "bxgy" ? "bxgy" : "simple";
+
+  if (!Number.isFinite(count) || count < 1) return null;
+  if (!Number.isFinite(buyQuantity) || buyQuantity < 1) return null;
+  if (!Number.isFinite(discountPercent)) return null;
+  if (buyProductIds.length === 0) return null;
+  if (tierType === "bxgy") {
+    if (!Number.isFinite(getQuantity) || getQuantity < 1) return null;
+    if (getProductIds.length === 0) return null;
+  }
+
+  return {
+    count,
+    discountPercent: Math.max(0, Math.min(100, discountPercent)),
+    buyQuantity,
+    getQuantity: tierType === "bxgy" ? getQuantity : 0,
+    buyProductIds,
+    getProductIds: tierType === "bxgy" ? getProductIds : [],
+    maxUsesPerOrder:
+      Number.isFinite(maxUsesPerOrder) && maxUsesPerOrder > 0
+        ? maxUsesPerOrder
+        : 1,
+    tierType,
+    title: typeof item.title === "string" ? item.title : "",
+    subtitle: typeof item.subtitle === "string" ? item.subtitle : "",
+    badge: typeof item.badge === "string" ? item.badge : "",
+    isDefault: !!item.isDefault,
+  };
+}
+
 function sanitizeFreeGiftTier(raw: unknown): FreeGiftRule | null {
   if (!raw || typeof raw !== "object") return null;
   const item = raw as Record<string, unknown>;
@@ -698,6 +779,29 @@ function sanitizeLogicBlock(raw: unknown): LogicBlock | null {
     return {
       id: typeof item.id === "string" && item.id ? item.id : "logic-quantity-breaks",
       type: "quantity-breaks",
+      config: { tiers },
+    };
+  }
+
+  if (item.type === "quantity-breaks-different") {
+    const tiersRaw = Array.isArray(configRecord.tiers) ? configRecord.tiers : [];
+    const tiers = tiersRaw
+      .map((tier) => sanitizeDifferentProductsTier(tier))
+      .filter((tier): tier is DifferentProductsDiscountRule => tier !== null)
+      .sort((a, b) => a.count - b.count)
+      .filter(
+        (tier, index, arr) =>
+          index === arr.findIndex((it) => it.count === tier.count),
+      );
+
+    if (tiers.length === 0) return null;
+
+    return {
+      id:
+        typeof item.id === "string" && item.id
+          ? item.id
+          : "logic-quantity-breaks-different",
+      type: "quantity-breaks-different",
       config: { tiers },
     };
   }
@@ -1041,6 +1145,60 @@ export function migrateLegacyOfferToCampaignConfig(params: {
     };
   }
 
+  if (offerType === "quantity-breaks-different") {
+    const differentProductsRules = buildDifferentProductsDiscountRulesJson(
+      parseDifferentProductsDiscountRules(params.discountRulesJson),
+    );
+    const differentScopeProductIds = parseSelectedProductIds(
+      params.selectedProductsJson,
+    );
+    const tiers =
+      differentProductsRules.length > 0
+        ? differentProductsRules
+        : [
+            {
+              count: 2,
+              discountPercent: 15,
+              buyQuantity: 2,
+              getQuantity: 0,
+              buyProductIds: differentScopeProductIds,
+              getProductIds: [],
+              maxUsesPerOrder: 1,
+              tierType: "simple" as const,
+              title: "",
+              subtitle: "",
+              badge: "",
+              isDefault: true,
+            },
+          ];
+    return {
+      version: 1,
+      scope: {
+        productIds: differentScopeProductIds,
+        markets: offerSettings.markets ? offerSettings.markets.split(",") : ["all"],
+        customerSegments: offerSettings.customerSegments
+          ? offerSettings.customerSegments.split(",")
+          : ["all"],
+      },
+      logicBlocks: [
+        {
+          id: "logic-quantity-breaks-different",
+          type: "quantity-breaks-different",
+          config: { tiers },
+        },
+      ],
+      displayBlocks: [
+        {
+          id: "display-offer-card",
+          type: "offer-card",
+          logicBlockRef: "logic-quantity-breaks-different",
+          config: buildDefaultOfferCardConfig(offerSettings),
+        },
+      ],
+      settings,
+    };
+  }
+
   if (offerType === "free-gift") {
     const freeGiftSelectedProducts = parseFreeGiftSelectedProducts(
       params.selectedProductsJson,
@@ -1223,6 +1381,10 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
   const quantityBreaks = config.logicBlocks.find(
     (block): block is QuantityBreaksLogicBlock => block.type === "quantity-breaks",
   );
+  const quantityBreaksDifferent = config.logicBlocks.find(
+    (block): block is QuantityBreaksDifferentLogicBlock =>
+      block.type === "quantity-breaks-different",
+  );
   const bxgy = config.logicBlocks.find(
     (block): block is BxgyLogicBlock => block.type === "bxgy",
   );
@@ -1248,6 +1410,9 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
     isDefault: !!tier.isDefault,
   }));
   const bxgyRules = buildBxgyDiscountRulesJson(bxgy?.config.tiers ?? []);
+  const differentProductsRules = buildDifferentProductsDiscountRulesJson(
+    quantityBreaksDifferent?.config.tiers ?? [],
+  );
   const bxgyBuyProducts = Array.from(
     new Set(bxgyRules.flatMap((tier) => tier.buyProductIds)),
   );
@@ -1293,6 +1458,8 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
   return {
     offerType: quantityBreaks
       ? "quantity-breaks-same"
+      : quantityBreaksDifferent
+        ? "quantity-breaks-different"
       : bxgy
         ? "bxgy"
         : freeGift
@@ -1303,7 +1470,11 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
             ? "subscription"
         : "campaign-builder",
     selectedProductsJson:
-      bxgy
+      quantityBreaksDifferent
+        ? JSON.stringify({
+            productIds: config.scope.productIds,
+          })
+      : bxgy
         ? JSON.stringify({
             buyProducts: bxgyBuyProducts,
             getProducts: bxgyGetProducts,
@@ -1321,6 +1492,8 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
     discountRulesJson:
       quantityBreaks && discountRules.length > 0
         ? JSON.stringify(discountRules)
+        : quantityBreaksDifferent && differentProductsRules.length > 0
+          ? JSON.stringify(differentProductsRules)
         : bxgy && bxgyRules.length > 0
           ? JSON.stringify(bxgyRules)
           : freeGift && freeGiftRules.length > 0
@@ -1350,11 +1523,17 @@ export function getOfferDisplayType(
   const config = parseCampaignConfig(campaignConfigJson);
   const primaryBlock = config?.logicBlocks[0];
   if (primaryBlock?.type === "quantity-breaks") return "Quantity breaks";
+  if (primaryBlock?.type === "quantity-breaks-different") {
+    return "Quantity breaks (different products)";
+  }
   if (primaryBlock?.type === "bxgy") return "Buy X Get Y";
   if (primaryBlock?.type === "free-gift") return "Free gift";
   if (primaryBlock?.type === "complete-bundle") return "Complete bundle";
   if (primaryBlock?.type === "subscription") return "Subscription";
   if (offerType === "quantity-breaks-same") return "Quantity breaks";
+  if (offerType === "quantity-breaks-different") {
+    return "Quantity breaks (different products)";
+  }
   if (offerType === "bxgy") return "Buy X Get Y";
   if (offerType === "free-gift") return "Free gift";
   if (offerType === "complete-bundle") return "Complete bundle";
@@ -1380,6 +1559,20 @@ export function getOfferRulesText(params: {
     const bxgy = config.logicBlocks.find(
       (block): block is BxgyLogicBlock => block.type === "bxgy",
     );
+    const differentProducts = config.logicBlocks.find(
+      (block): block is QuantityBreaksDifferentLogicBlock =>
+        block.type === "quantity-breaks-different",
+    );
+    const differentProductsTiers = differentProducts?.config.tiers ?? [];
+    if (differentProductsTiers.length > 0) {
+      return differentProductsTiers
+        .map((tier) =>
+          tier.tierType === "bxgy"
+            ? `Buy ${tier.buyQuantity} Get ${tier.getQuantity} ${tier.discountPercent === 100 ? "Free" : `${tier.discountPercent}% Off`}`
+            : `Buy ${tier.count} Get ${tier.discountPercent}% Off`,
+        )
+        .join(", ");
+    }
     const bxgyTiers = bxgy?.config.tiers ?? [];
     if (bxgyTiers.length > 0) {
       return bxgyTiers
@@ -1470,6 +1663,11 @@ export function parseSelectedProductIds(selectedProductsJson?: string | null): s
 
   try {
     const parsed = JSON.parse(selectedProductsJson);
+    if (parsed && typeof parsed === "object" && Array.isArray(parsed.productIds)) {
+      return parsed.productIds
+        .map((id: unknown) => String(id || "").trim())
+        .filter(Boolean);
+    }
     if (!Array.isArray(parsed)) return [];
 
     const ids: string[] = [];
@@ -1490,6 +1688,116 @@ export function parseSelectedProductIds(selectedProductsJson?: string | null): s
   } catch {
     return [];
   }
+}
+
+export function parsePerProductDiscountRules(
+  discountRulesJson?: string | null,
+): PerProductDiscountRule[] {
+  if (!discountRulesJson) return [];
+
+  try {
+    const parsed = JSON.parse(discountRulesJson) as unknown;
+    if (!Array.isArray(parsed)) return [];
+
+    const out: PerProductDiscountRule[] = [];
+    for (const item of parsed) {
+      if (!item || typeof item !== "object") continue;
+      const count = Number((item as { count?: unknown }).count);
+      const discountPercent = Number(
+        (item as { discountPercent?: unknown }).discountPercent,
+      );
+      if (!Number.isFinite(count) || count < 1) continue;
+      if (!Number.isFinite(discountPercent)) continue;
+
+      const productId = (item as { productId?: unknown }).productId;
+      const variantId = (item as { variantId?: unknown }).variantId;
+
+      out.push({
+        productId:
+          typeof productId === "string" && productId ? productId : undefined,
+        variantId:
+          typeof variantId === "string" && variantId ? variantId : undefined,
+        count: Math.trunc(count),
+        discountPercent: Math.max(0, Math.min(100, discountPercent)),
+        title: (item as { title?: string }).title || "",
+        subtitle: (item as { subtitle?: string }).subtitle || "",
+        badge: (item as { badge?: string }).badge || "",
+        isDefault: !!(item as { isDefault?: boolean }).isDefault,
+      });
+    }
+    out.sort((a, b) => a.count - b.count);
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+export function buildPerProductDiscountRulesJson(
+  tiers: PerProductDiscountRule[],
+): PerProductDiscountRule[] {
+  const seen = new Set<string>();
+  const out: PerProductDiscountRule[] = [];
+
+  for (const tier of tiers) {
+    if (!Number.isFinite(tier.count) || tier.count < 1) continue;
+    if (!Number.isFinite(tier.discountPercent)) continue;
+    const key = `${tier.productId ?? ""}|${tier.variantId ?? ""}|${Math.trunc(tier.count)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      productId: tier.productId,
+      variantId: tier.variantId,
+      count: Math.trunc(tier.count),
+      discountPercent: Math.max(0, Math.min(100, tier.discountPercent)),
+      title: tier.title || "",
+      subtitle: tier.subtitle || "",
+      badge: tier.badge || "",
+      isDefault: !!tier.isDefault,
+    });
+  }
+
+  return out.sort((a, b) => a.count - b.count);
+}
+
+export function calculateQuantityBreakPricing(
+  unitPrice: number,
+  quantity: number,
+  discountPercent: number,
+): {
+  originalTotal: number;
+  discountedTotal: number;
+  saved: number;
+  discountedUnitPrice: number;
+  originalUnitPrice: number;
+} {
+  const MONEY_SCALE = 10_000;
+  const safeQty = Math.max(1, Math.trunc(Number(quantity) || 1));
+  const safeDiscountPercent = Math.max(
+    0,
+    Math.min(100, Number(discountPercent) || 0),
+  );
+  const unitPriceScaled = Math.round(Number(unitPrice) * MONEY_SCALE);
+  const originalTotalScaled = unitPriceScaled * safeQty;
+  const discountedUnitPriceScaled = Math.round(
+    unitPriceScaled * (1 - safeDiscountPercent / 100),
+  );
+  const discountedTotalScaled = Math.round(
+    originalTotalScaled * (1 - safeDiscountPercent / 100),
+  );
+  const originalTotal = Math.round(originalTotalScaled / (MONEY_SCALE / 100)) / 100;
+  const discountedTotal =
+    Math.round(discountedTotalScaled / (MONEY_SCALE / 100)) / 100;
+  const saved = Math.round((originalTotal - discountedTotal) * 100) / 100;
+  const discountedUnitPrice =
+    Math.round(discountedUnitPriceScaled / (MONEY_SCALE / 100)) / 100;
+
+  return {
+    originalTotal,
+    discountedTotal,
+    saved,
+    discountedUnitPrice,
+    originalUnitPrice: Number(unitPrice),
+  };
 }
 
 export function parseFreeGiftSelectedProducts(selectedProductsJson?: string | null): {
@@ -1630,6 +1938,40 @@ export function buildBxgyDiscountRulesJson(tiers: BxgyDiscountRule[]): BxgyDisco
       badge: tier.badge || "",
       isDefault: !!tier.isDefault,
     });
+  }
+  return Array.from(dedupedByCount.values()).sort((a, b) => a.count - b.count);
+}
+
+export function parseDifferentProductsDiscountRules(
+  discountRulesJson?: string | null,
+): DifferentProductsDiscountRule[] {
+  if (!discountRulesJson) return [];
+
+  try {
+    const parsed = JSON.parse(discountRulesJson) as unknown;
+    if (!Array.isArray(parsed)) return [];
+
+    const out: DifferentProductsDiscountRule[] = [];
+    for (const item of parsed) {
+      const tier = sanitizeDifferentProductsTier(item);
+      if (tier) out.push(tier);
+    }
+
+    out.sort((a, b) => a.count - b.count);
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+export function buildDifferentProductsDiscountRulesJson(
+  tiers: DifferentProductsDiscountRule[],
+): DifferentProductsDiscountRule[] {
+  const dedupedByCount = new Map<number, DifferentProductsDiscountRule>();
+  for (const tier of tiers) {
+    const sanitized = sanitizeDifferentProductsTier(tier);
+    if (!sanitized) continue;
+    dedupedByCount.set(sanitized.count, sanitized);
   }
   return Array.from(dedupedByCount.values()).sort((a, b) => a.count - b.count);
 }

@@ -9,6 +9,7 @@ import type {
 } from "./campaignDraft";
 import BxgyLogicEditor from "./BxgyLogicEditor";
 import CompleteBundleEditor from "./CompleteBundleEditor";
+import DifferentProductsLogicEditor from "./DifferentProductsLogicEditor";
 import FreeGiftLogicEditor from "./FreeGiftLogicEditor";
 import { ProgressiveGiftsSection } from "./ProgressiveGiftsSection";
 import QuantityBreaksLogicEditor from "./QuantityBreaksLogicEditor";
@@ -139,6 +140,9 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
             offerType={props.draft.offerType}
             normalizedDiscountRules={props.draft.normalizedDiscountRules}
             bxgyDiscountRules={props.draft.bxgyDiscountRules}
+            differentProductsDiscountRules={
+              props.draft.differentProductsDiscountRules
+            }
             value={props.draft.progressiveGifts}
             onChange={props.actions.setProgressiveGifts}
             showToggle={false}
@@ -212,6 +216,9 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
             offerType={props.draft.offerType}
             normalizedDiscountRules={props.draft.normalizedDiscountRules}
             bxgyDiscountRules={props.draft.bxgyDiscountRules}
+            differentProductsDiscountRules={
+              props.draft.differentProductsDiscountRules
+            }
             value={props.draft.progressiveGifts}
             onChange={props.actions.setProgressiveGifts}
             showToggle={false}
@@ -381,6 +388,73 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
             offerType={props.draft.offerType}
             normalizedDiscountRules={props.draft.normalizedDiscountRules}
             bxgyDiscountRules={props.draft.bxgyDiscountRules}
+            differentProductsDiscountRules={
+              props.draft.differentProductsDiscountRules
+            }
+            value={props.draft.progressiveGifts}
+            onChange={props.actions.setProgressiveGifts}
+            showToggle={false}
+          />
+        ),
+      },
+    ],
+  },
+  "quantity-breaks-different": {
+    components: (props) => [
+      {
+        id: "scope",
+        title: "Scope",
+        description:
+          "Select the shared product pool that participates in this cross-product campaign.",
+        required: true,
+        active: true,
+        render: () => renderDefaultScopeEditor(props),
+      },
+      {
+        id: "different-products-rules",
+        title: "Cross-product Tiers",
+        description:
+          "Mix simple tiers and BXGY-style tiers across the shared pool of selected products.",
+        required: true,
+        active: true,
+        render: () => (
+          <DifferentProductsLogicEditor
+            selectedProductsData={props.draft.selectedProductsData}
+            differentProductsDiscountRules={
+              props.draft.differentProductsDiscountRules
+            }
+            setDifferentProductsDiscountRules={
+              props.actions.setDifferentProductsDiscountRules
+            }
+          />
+        ),
+      },
+      {
+        id: "progressive-gifts",
+        title: "Progressive Gifts",
+        description:
+          "Add a progressive free shipping reward block that unlocks alongside cross-product tiers.",
+        required: false,
+        active: props.draft.progressiveGifts.enabled,
+        addLabel: "Add Progressive Gifts",
+        onAdd: () =>
+          props.actions.setProgressiveGifts({
+            ...props.draft.progressiveGifts,
+            enabled: true,
+          }),
+        onRemove: () =>
+          props.actions.setProgressiveGifts({
+            ...props.draft.progressiveGifts,
+            enabled: false,
+          }),
+        render: () => (
+          <ProgressiveGiftsSection
+            offerType={props.draft.offerType}
+            normalizedDiscountRules={props.draft.normalizedDiscountRules}
+            bxgyDiscountRules={props.draft.bxgyDiscountRules}
+            differentProductsDiscountRules={
+              props.draft.differentProductsDiscountRules
+            }
             value={props.draft.progressiveGifts}
             onChange={props.actions.setProgressiveGifts}
             showToggle={false}
@@ -453,6 +527,9 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
             offerType={props.draft.offerType}
             normalizedDiscountRules={props.draft.normalizedDiscountRules}
             bxgyDiscountRules={props.draft.bxgyDiscountRules}
+            differentProductsDiscountRules={
+              props.draft.differentProductsDiscountRules
+            }
             value={props.draft.progressiveGifts}
             onChange={props.actions.setProgressiveGifts}
             showToggle={false}

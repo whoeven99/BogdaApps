@@ -555,6 +555,8 @@ function collectReferencedProductIds(offers: OfferListItem[]): string[] {
     const selectedIds =
       offer.offerType === "bxgy"
         ? parseBxgySelectedProductIds(offer.selectedProductsJson)
+        : offer.offerType === "quantity-breaks-different"
+          ? parseSelectedProductIds(offer.selectedProductsJson)
         : offer.offerType === "free-gift"
           ? [
               ...parseFreeGiftSelectedProducts(offer.selectedProductsJson).triggerProducts,

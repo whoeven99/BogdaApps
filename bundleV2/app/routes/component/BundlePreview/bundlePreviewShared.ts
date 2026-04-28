@@ -12,6 +12,13 @@ export type PreviewItem = {
   featured?: boolean;
   badge?: string;
   saveLabel?: string;
+  products?: PreviewProduct[];
+};
+
+export type PreviewProduct = {
+  image: string;
+  name: string;
+  variant?: string;
 };
 
 export const PREVIEW_ITEMS: PreviewItem[] = [
@@ -126,6 +133,7 @@ export function renderBundlePreviewHtml({
   buttonPrimaryColor = "#008060",
   showCustomButton = true,
   items = PREVIEW_ITEMS,
+  showProductImages = true,
   showSubscriptionPreview = false,
   subscriptionPreviewStyle = "dashed",
   subscriptionTitle = "Subscribe & Save 20%",
@@ -147,6 +155,7 @@ export function renderBundlePreviewHtml({
   buttonPrimaryColor?: string;
   showCustomButton?: boolean;
   items?: PreviewItem[];
+  showProductImages?: boolean;
   showSubscriptionPreview?: boolean;
   subscriptionPreviewStyle?: "solid" | "dashed";
   subscriptionTitle?: string;
@@ -158,6 +167,26 @@ export function renderBundlePreviewHtml({
   const safeLayout: LayoutFormat = ["vertical", "horizontal", "card", "compact"].includes(layoutFormat)
     ? layoutFormat
     : "vertical";
+
+  function renderProductsHtml(products?: PreviewProduct[]): string {
+    if (!showProductImages || !products || products.length === 0) return "";
+    return `<div class="create-offer-preview-products" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+      ${products
+        .map(
+          (product) => `
+            <div class="create-offer-preview-product" style="position:relative;width:48px;height:48px;border-radius:8px;overflow:hidden;border:1px solid ${esc(borderColor)};">
+              <img src="${esc(product.image)}" alt="${esc(product.name)}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none'" />
+              ${
+                product.variant
+                  ? `<span style="position:absolute;bottom:0;left:0;right:0;background:${esc(accentColor)};color:${esc(labelColor)};font-size:8px;text-align:center;padding:1px;">${esc(product.variant)}</span>`
+                  : ""
+              }
+            </div>
+          `,
+        )
+        .join("")}
+    </div>`;
+  }
 
   const itemsHtml = items.map((item) => {
     const featuredClass = item.featured ? " create-offer-style-preview-item--featured" : "";
@@ -171,6 +200,7 @@ export function renderBundlePreviewHtml({
           ? `<div class="create-offer-style-preview-badge" style="background:${esc(accentColor)} !important; color:${esc(labelColor)} !important;">${esc(item.badge)}</div>`
           : ""
       }
+      ${renderProductsHtml(item.products)}
       <div class="create-offer-style-preview-item-title">${esc(item.title)}</div>
       <div class="create-offer-style-preview-item-subtitle">${esc(item.subtitle)}</div>
       ${

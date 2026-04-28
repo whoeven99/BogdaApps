@@ -1,5 +1,6 @@
 import type {
   CompleteBundleBar,
+  DifferentProductsDiscountRule,
   FreeGiftRule,
   ProgressiveGiftsConfig,
 } from "../../../utils/offerParsing";
@@ -43,6 +44,7 @@ export type CampaignDraft = {
   discountRules: DraftDiscountRule[];
   normalizedDiscountRules: DraftDiscountRule[];
   bxgyDiscountRules: DraftBxgyDiscountRule[];
+  differentProductsDiscountRules: DifferentProductsDiscountRule[];
   buyProducts: string[];
   getProducts: string[];
   completeBundleBars: CompleteBundleBar[];
@@ -76,6 +78,9 @@ export type CampaignDraftActions = {
   setDiscountRules: React.Dispatch<React.SetStateAction<DraftDiscountRule[]>>;
   setBxgyDiscountRules: React.Dispatch<
     React.SetStateAction<DraftBxgyDiscountRule[]>
+  >;
+  setDifferentProductsDiscountRules: React.Dispatch<
+    React.SetStateAction<DifferentProductsDiscountRule[]>
   >;
   setActiveBundleBarId: (barId: string) => void;
   addCompleteBundleBar: (type: "quantity-break-same" | "bxgy") => void;
