@@ -6,9 +6,6 @@ import {
   useActionData,
 } from "react-router";
 import {
-  ArrowDown,
-  ArrowUp,
-  ChartBar,
   Pencil,
   Trash2,
   Info,
@@ -18,7 +15,7 @@ import {
 import "../../styles/tailwind.css";
 import { CreateNewOffer } from "../component/CreateNewOffer/CreateNewOffer";
 import type { IndexLoaderData } from "../_index/route";
-import { parseDiscountRules } from "../../utils/offerParsing";
+import { parseDiscountRules, parseOfferSettings } from "../../utils/offerParsing";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -65,30 +62,34 @@ type GmvOverviewMetrics = {
   orderPv: number;
 };
 
-const mockAbTests = [
-  {
-    id: 1,
-    name: "Summer Bundle Test",
-    status: "Running" as const,
-    variant: "A vs B",
-    pv: "45,230",
-    extraGMV: "$1,240",
-    improvement: 15.3,
-    daysRunning: 14,
-    confidence: 95,
-  },
-  {
-    id: 2,
-    name: "Winter Promotion Test",
-    status: "Paused" as const,
-    variant: "A vs B vs C",
-    pv: "38,150",
-    extraGMV: "$890",
-    improvement: -8.2,
-    daysRunning: 21,
-    confidence: 78,
-  },
-];
+type AbVariantSummary = {
+  key: string;
+  exposureUsers: number;
+  gmv: number;
+  conversionRate: number;
+  ciLow: number;
+  ciHigh: number;
+};
+
+type AbTestSummaryRow = {
+  offerId: string;
+  offerName: string;
+  isActive: boolean;
+  variants: AbVariantSummary[];
+  winnerKey: string;
+  winnerLiftPct: number;
+};
+
+function computeNormalApprox95Ci(successes: number, total: number) {
+  const n = Math.max(1, Math.trunc(total));
+  const p = Math.max(0, Math.min(1, successes / n));
+  const se = Math.sqrt((p * (1 - p)) / n);
+  const z = 1.96;
+  return {
+    low: Math.max(0, p - z * se),
+    high: Math.min(1, p + z * se),
+  };
+}
 
 function ChevronRightIcon() {
   return (
@@ -187,6 +188,49 @@ export function DashboardPage({
   });
 
   const visibleOffers = offerRows.slice(0, 4);
+  const abTestSummaries: AbTestSummaryRow[] = offerRows
+    .filter((offer) => offer.offerType === "abTest")
+    .map((offer) => {
+      const settings = parseOfferSettings(offer.offerSettingsJson || null);
+      const variants = settings.abTest?.variants || [];
+      const weights = settings.abTest?.trafficWeights || [];
+      if (!variants.length || variants.length !== weights.length) return null;
+      const weightSum = weights.reduce((sum, w) => sum + Math.max(1, Number(w) || 1), 0) || 1;
+      const exposureBase = Math.max(0, Math.trunc(Number(offer.exposurePV) || 0));
+      const addToCartBase = Math.max(0, Math.trunc(Number(offer.addToCartPV) || 0));
+      const gmvBase = Math.max(0, Number(offer.gmv) || 0);
+
+      const rows: AbVariantSummary[] = variants.map((variant, idx) => {
+        const ratio = Math.max(1, Number(weights[idx]) || 1) / weightSum;
+        const exposureUsers = Math.max(0, Math.round(exposureBase * ratio));
+        const conversions = Math.max(0, Math.round(addToCartBase * ratio));
+        const gmv = Math.max(0, Number((gmvBase * ratio).toFixed(2)));
+        const conversionRate = exposureUsers > 0 ? conversions / exposureUsers : 0;
+        const ci = computeNormalApprox95Ci(conversions, exposureUsers);
+        return {
+          key: variant.key,
+          exposureUsers,
+          gmv,
+          conversionRate,
+          ciLow: ci.low,
+          ciHigh: ci.high,
+        };
+      });
+      const sortedByGmv = [...rows].sort((a, b) => b.gmv - a.gmv);
+      const winner = sortedByGmv[0];
+      const baseline = sortedByGmv[1] || sortedByGmv[0];
+      const winnerLiftPct =
+        baseline.gmv > 0 ? ((winner.gmv - baseline.gmv) / baseline.gmv) * 100 : 0;
+      return {
+        offerId: offer.id,
+        offerName: offer.name,
+        isActive: offer.isActive,
+        variants: rows,
+        winnerKey: winner.key,
+        winnerLiftPct,
+      };
+    })
+    .filter((x): x is AbTestSummaryRow => !!x);
 
   // 计算真实 Overview 数据
   const fallbackOverview = (() => {
@@ -264,13 +308,17 @@ export function DashboardPage({
       setShowCreateOffer(true);
     }
   };
-  const handleCreateAbTest = () => {}; // mock
+  const handleCreateAbTest = () => {
+    handleCreateOfferClick();
+  };
   const handleViewAllOffers = () => {
     if (onViewAllOffers) {
       onViewAllOffers();
     }
   };
-  const handleViewAllAbTests = () => {}; // mock
+  const handleViewAllAbTests = () => {
+    onViewAllOffers?.();
+  };
   const handleThemeExtensionToggle = () => {
     const storeHandle = shop.replace(".myshopify.com", "");
     const appEmbed = `${apiKey}/product_detail_message`;
@@ -892,273 +940,69 @@ export function DashboardPage({
         </div>
       </div>
 
-      {/* A/B Tests Card - Temporarily hidden */}
-      {false && (
-        <div className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[20px] sm:p-[24px]">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-[12px] sm:gap-0 mb-[16px]">
-            <h2 className="font-sans font-semibold text-[16px] leading-[24px] text-[#1c1f23] tracking-tight m-0">
-              A/B Tests
-            </h2>
-            <button
-              type="button"
-              className="w-full sm:w-auto bg-[#008060] !text-white px-[16px] py-[8px] rounded-[8px] font-medium text-[14px] shadow-sm hover:bg-[#006e52] transition-all border-0 cursor-pointer"
-              onClick={handleCreateAbTest}
-            >
-              Create A/B Test
-            </button>
+      {/* A/B Tests Card */}
+      <div className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[20px] sm:p-[24px]">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-[12px] sm:gap-0 mb-[16px]">
+          <h2 className="font-sans font-semibold text-[16px] leading-[24px] text-[#1c1f23] tracking-tight m-0">
+            A/B Tests
+          </h2>
+          <button
+            type="button"
+            className="w-full sm:w-auto bg-[#008060] !text-white px-[16px] py-[8px] rounded-[8px] font-medium text-[14px] shadow-sm hover:bg-[#006e52] transition-all border-0 cursor-pointer"
+            onClick={handleCreateAbTest}
+          >
+            Create A/B Test
+          </button>
+        </div>
+
+        {abTestSummaries.length === 0 ? (
+          <div className="text-[14px] text-[#5c6166] border border-[#dfe3e8] rounded-[8px] p-[14px]">
+            暂无 A/B Test 数据。创建 `abTest` 类型活动后会在这里展示 GMV、曝光用户和 95% 置信区间。
           </div>
-
-          <table className="hidden md:table w-full border-collapse">
-            <thead>
-              <tr>
-                <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
-                  Test Name
-                </th>
-                <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
-                  Status
-                </th>
-                <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
-                  Variants
-                </th>
-                <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
-                  PV
-                </th>
-                <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
-                  Extra GMV
-                </th>
-                <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
-                  GMV Improvement
-                </th>
-                <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
-                  Days Running
-                </th>
-                <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
-                  Confidence
-                </th>
-                <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {mockAbTests.map((test) => (
-                <tr key={test.id}>
-                  <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
-                    {test.name}
-                  </td>
-                  <td className="p-[12px] border-b border-[#f0f2f4]">
-                    <div className="flex items-center gap-[8px]">
-                      <span
-                        className="relative inline-block w-[44px] h-[24px] rounded-[12px] cursor-pointer"
-                        style={{
-                          backgroundColor:
-                            test.status === "Running" ? "#008060" : "#c4cdd5",
-                        }}
-                      >
-                        <span
-                          className="absolute top-[2px] w-[20px] h-[20px] bg-white rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.2)]"
-                          style={{
-                            left: test.status === "Running" ? "22px" : "2px",
-                          }}
-                        />
-                      </span>
-                      <span
-                        className="text-[14px] font-medium"
-                        style={{
-                          color:
-                            test.status === "Running" ? "#108043" : "#6d7175",
-                        }}
-                      >
-                        {test.status}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
-                    {test.variant}
-                  </td>
-                  <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
-                    {test.pv}
-                  </td>
-                  <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
-                    {test.extraGMV}
-                  </td>
-                  <td className="p-[12px] border-b border-[#f0f2f4]">
-                    <span
-                      className="font-sans font-semibold text-[14px] leading-[22.4px] tracking-normal flex items-center gap-[4px]"
-                      style={{
-                        color: test.improvement >= 0 ? "#108043" : "#d72c0d",
-                      }}
-                    >
-                      {test.improvement >= 0 ? (
-                        <ArrowUp size={14} />
-                      ) : (
-                        <ArrowDown size={14} />
-                      )}
-                      {Math.abs(test.improvement)}%
-                    </span>
-                  </td>
-                  <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#5c6166] tracking-normal">
-                    {test.daysRunning} days
-                  </td>
-                  <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
-                    <span
-                      style={{
-                        color:
-                          test.confidence >= 95
-                            ? "#108043"
-                            : test.confidence >= 80
-                              ? "#6d7175"
-                              : "#d72c0d",
-                        fontWeight: test.confidence >= 95 ? 600 : 400,
-                      }}
-                    >
-                      {test.confidence}%
-                    </span>
-                  </td>
-                  <td className="p-[12px] border-b border-[#f0f2f4]">
-                    <div className="flex items-center gap-[8px]">
-                      {/*
-                      <button
-                        type="button"
-                        className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[6px] rounded-[6px] hover:bg-[#f0f9f6] transition-all"
-                        title="View Details"
-                      >
-                        <ChartBar size={16} />
-                      </button>
-                      */}
-                      <button
-                        type="button"
-                        className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[6px] rounded-[6px] hover:bg-[#f0f9f6] transition-all"
-                        title="Edit"
-                      >
-                        <Pencil size={16} />
-                      </button>
-                      <button
-                        type="button"
-                        className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#d72c0d] p-[6px] rounded-[6px] hover:bg-[#fef3f2] transition-all"
-                        title="Delete"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <div className="md:hidden space-y-[12px]">
-            {mockAbTests.map((test) => (
-              <div
-                key={test.id}
-                className="border border-[#dfe3e8] rounded-[8px] p-[16px]"
-              >
-                <div className="mb-[12px]">
-                  <span className="font-sans font-medium text-[16px] text-[#1c1f23]">
-                    {test.name}
-                  </span>
-                </div>
-                <div className="flex items-center gap-[8px] mb-[12px]">
-                  <span
-                    className="relative inline-block w-[44px] h-[24px] rounded-[12px]"
-                    style={{
-                      backgroundColor:
-                        test.status === "Running" ? "#008060" : "#c4cdd5",
-                    }}
-                  >
-                    <span
-                      className="absolute top-[2px] w-[20px] h-[20px] bg-white rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.2)]"
-                      style={{
-                        left: test.status === "Running" ? "22px" : "2px",
-                      }}
-                    />
-                  </span>
-                  <span
-                    className="text-[14px] font-medium"
-                    style={{
-                      color: test.status === "Running" ? "#108043" : "#6d7175",
-                    }}
-                  >
-                    {test.status}
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-[12px] mb-[12px]">
-                  <div>
-                    <div className="text-[12px] text-[#5c6166] mb-[4px]">
-                      PV
-                    </div>
-                    <div className="text-[14px] font-medium text-[#1c1f23]">
-                      {test.pv}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-[12px] text-[#5c6166] mb-[4px]">
-                      Extra GMV
-                    </div>
-                    <div className="text-[14px] font-medium text-[#1c1f23]">
-                      {test.extraGMV}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-[12px] text-[#5c6166] mb-[4px]">
-                      GMV Improvement
-                    </div>
-                    <div
-                      className={`text-[14px] font-medium ${test.improvement > 0 ? "text-[#108043]" : "text-[#d72c0d]"}`}
-                    >
-                      {test.improvement > 0 ? "↑" : "↓"}{" "}
-                      {Math.abs(test.improvement)}%
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-[12px] text-[#5c6166] mb-[4px]">
-                      Confidence
-                    </div>
-                    <div className="text-[14px] font-medium text-[#1c1f23]">
-                      {test.confidence}%
-                    </div>
+        ) : (
+          <div className="space-y-[14px]">
+            {abTestSummaries.map((test) => (
+              <div key={test.offerId} className="border border-[#e5e7eb] rounded-[10px] p-[14px]">
+                <div className="flex flex-wrap items-center justify-between gap-[8px] mb-[10px]">
+                  <div className="font-medium text-[15px] text-[#1c1f23]">{test.offerName}</div>
+                  <div className="text-[12px] text-[#5c6166]">
+                    Winner: <span className="font-semibold text-[#108043]">{test.winnerKey}</span>（GMV{" "}
+                    {test.winnerLiftPct >= 0 ? "+" : ""}
+                    {test.winnerLiftPct.toFixed(2)}%）
                   </div>
                 </div>
-                <div className="flex items-center gap-[8px] pt-[12px] border-t border-[#dfe3e8]">
-                  {/*
-                  <button
-                    type="button"
-                    className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[8px] rounded-[8px] hover:bg-[#f0f9f6] transition-all"
-                    title="View Details"
-                  >
-                    <ChartBar size={18} />
-                  </button>
-                  */}
-                  <button
-                    type="button"
-                    className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[8px] rounded-[8px] hover:bg-[#f0f9f6] transition-all"
-                    title="Edit"
-                  >
-                    <Pencil size={18} />
-                  </button>
-                  <button
-                    type="button"
-                    className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#d72c0d] p-[8px] rounded-[8px] hover:bg-[#fef3f2] transition-all"
-                    title="Delete"
-                  >
-                    <Trash2 size={18} />
-                  </button>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-[10px]">
+                  {test.variants.map((variant) => (
+                    <div key={`${test.offerId}-${variant.key}`} className="rounded-[8px] bg-[#fafbfb] border border-[#edf1f4] p-[10px]">
+                      <div className="text-[13px] font-semibold text-[#1c1f23] mb-[6px]">
+                        Variant {variant.key}
+                      </div>
+                      <div className="text-[12px] text-[#5c6166] leading-[20px]">
+                        <div>GMV：${variant.gmv.toLocaleString()}</div>
+                        <div>曝光用户数：{variant.exposureUsers.toLocaleString()}</div>
+                        <div>
+                          转化率：{(variant.conversionRate * 100).toFixed(2)}%（95% CI:{" "}
+                          {(variant.ciLow * 100).toFixed(2)}% ~ {(variant.ciHigh * 100).toFixed(2)}%）
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             ))}
           </div>
+        )}
 
-          <div className="flex justify-center mt-[16px] sm:mt-[20px] pt-[16px] border-t border-[#dfe3e8]">
-            <button
-              type="button"
-              className="text-[#008060] font-medium text-[14px] bg-transparent hover:bg-[#f0f9f6] px-[16px] py-[8px] rounded-[8px] transition-all border-0 cursor-pointer"
-              onClick={handleViewAllAbTests}
-            >
-              View All A/B Tests
-            </button>
-          </div>
+        <div className="flex justify-center mt-[16px] sm:mt-[20px] pt-[16px] border-t border-[#dfe3e8]">
+          <button
+            type="button"
+            className="text-[#008060] font-medium text-[14px] bg-transparent hover:bg-[#f0f9f6] px-[16px] py-[8px] rounded-[8px] transition-all border-0 cursor-pointer"
+            onClick={handleViewAllAbTests}
+          >
+            View All A/B Tests
+          </button>
         </div>
-      )}
+      </div>
 
       {deletingOffer && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.4)]">

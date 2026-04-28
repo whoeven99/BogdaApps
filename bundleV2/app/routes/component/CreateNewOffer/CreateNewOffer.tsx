@@ -1382,6 +1382,7 @@ export function CreateNewOffer({
 
   const previewItems: PreviewItem[] = useMemo(() => {
     if (offerType === "abTest" && abVariants.length > 0) {
+      const firstProduct = selectedProductsData[0];
       const rules = normalizedAbActiveDiscountRules;
       return [
         {
@@ -1389,6 +1390,9 @@ export function CreateNewOffer({
           title: "Single",
           subtitle: "Standard price",
           price: formatPreviewPrice(baseUnitPrice),
+          image: firstProduct?.image,
+          variantTitle: firstProduct?.title,
+          productPrice: firstProduct?.price,
         },
         ...rules.map((rule, index) => {
           const { originalTotal, discountedTotal, saved } = calculatePreviewBundleAmounts(
@@ -1406,6 +1410,9 @@ export function CreateNewOffer({
             featured: isFeatured,
             badge: rule.badge || (isFeatured ? "Most Popular" : ""),
             saveLabel: `SAVE ${formatPreviewPrice(saved)}`,
+            image: firstProduct?.image,
+            variantTitle: firstProduct?.title,
+            productPrice: firstProduct?.price,
           };
         }),
       ];
@@ -1671,7 +1678,7 @@ export function CreateNewOffer({
   const handleAddAbVariant = useCallback(() => {
     let newId = "";
     setAbVariants((prev) => {
-      if (prev.length >= 8) return prev;
+      if (prev.length >= 4) return prev;
       newId = newAbVariantId();
       const key = nextAbVariantKey(prev);
       const discountRules: DiscountRule[] = [
@@ -1767,8 +1774,13 @@ export function CreateNewOffer({
           <div className="flex flex-col items-center gap-1">
             <button
               type="button"
-              className="flex h-10 w-10 items-center justify-center rounded-md border border-[#dfe3e8] bg-white text-[#111]"
+              className={`flex h-10 w-10 items-center justify-center rounded-md border ${
+                abVariants.length >= 4
+                  ? "border-[#e5e7eb] bg-[#f5f5f5] text-[#9ca3af] cursor-not-allowed"
+                  : "border-[#dfe3e8] bg-white text-[#111]"
+              }`}
               onClick={handleAddAbVariant}
+              disabled={abVariants.length >= 4}
               aria-label="Add variant"
             >
               <Plus size={18} />

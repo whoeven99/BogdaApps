@@ -1526,8 +1526,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       if (!abTestStored.variants || abTestStored.variants.length < 2) {
         return offerActionErrorResponse("A/B test requires at least two variants.", 400);
       }
-      if (abTestStored.variants.length > 24) {
-        return offerActionErrorResponse("A/B test supports at most 24 variants.", 400);
+      if (abTestStored.variants.length > 4) {
+        return offerActionErrorResponse("A/B test supports at most 4 variants.", 400);
       }
     }
 
