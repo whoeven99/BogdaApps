@@ -26,7 +26,9 @@ import {
 } from "./campaignBuilderRegistry";
 import DisplayBlocksEditor from "./DisplayBlocksEditor";
 import LogicEditorsRenderer from "./LogicEditorsRenderer";
+import QuantityBreaksDisplayCustomizer from "./QuantityBreaksDisplayCustomizer";
 import ScheduleTargetingEditor from "./ScheduleTargetingEditor";
+import { getStarterTemplateDefaults } from "./starterTemplateDefaults";
 import {
   OFFER_TEXT_LIMITS,
   buildLegacyFieldsFromCampaignConfig,
@@ -333,6 +335,10 @@ export function CreateNewOffer({
       ) ?? null,
     [initialCampaignConfig],
   );
+  const starterTemplateDefaults = useMemo(() => {
+    if (initialOffer || !initialOfferType) return null;
+    return getStarterTemplateDefaults(initialOfferType);
+  }, [initialOffer, initialOfferType]);
 
   useEffect(() => {
     if (fetcher.state === "submitting") {
@@ -403,9 +409,10 @@ export function CreateNewOffer({
   const [startTimeError, setStartTimeError] = useState("");
   const [endTimeError, setEndTimeError] = useState("");
 
-  const offerSettings = parseOfferSettings(
+  const persistedOfferSettings = parseOfferSettings(
     initialCampaignLegacy?.offerSettingsJson ?? initialOffer?.offerSettingsJson,
   );
+  const offerSettings = starterTemplateDefaults?.offerSettings ?? persistedOfferSettings;
 
   const [progressiveGifts, setProgressiveGifts] = useState<ProgressiveGiftsConfig>(
     () => offerSettings.progressiveGifts,
@@ -774,25 +781,29 @@ export function CreateNewOffer({
   };
 
   const [discountRules, setDiscountRules] = useState<DiscountRule[]>(() =>
-    parseDiscountRules(
-      initialCampaignLegacy?.discountRulesJson ?? initialOffer?.discountRulesJson,
-    ),
+    starterTemplateDefaults?.discountRules ??
+      parseDiscountRules(
+        initialCampaignLegacy?.discountRulesJson ?? initialOffer?.discountRulesJson,
+      ),
   );
   const [bxgyDiscountRules, setBxgyDiscountRules] = useState<BxgyDiscountRule[]>(
-    parseBxgyDiscountRules(
-      initialCampaignLegacy?.discountRulesJson ?? initialOffer?.discountRulesJson,
-    ),
+    starterTemplateDefaults?.bxgyDiscountRules ??
+      parseBxgyDiscountRules(
+        initialCampaignLegacy?.discountRulesJson ?? initialOffer?.discountRulesJson,
+      ),
   );
   const [freeGiftRules, setFreeGiftRules] = useState<FreeGiftRule[]>(
-    parseFreeGiftRules(
-      initialCampaignLegacy?.discountRulesJson ?? initialOffer?.discountRulesJson,
-    ),
+    starterTemplateDefaults?.freeGiftRules ??
+      parseFreeGiftRules(
+        initialCampaignLegacy?.discountRulesJson ?? initialOffer?.discountRulesJson,
+      ),
   );
   const [differentProductsDiscountRules, setDifferentProductsDiscountRules] =
     useState<DifferentProductsDiscountRule[]>(
-      parseDifferentProductsDiscountRules(
-        initialCampaignLegacy?.discountRulesJson ?? initialOffer?.discountRulesJson,
-      ),
+      starterTemplateDefaults?.differentProductsDiscountRules ??
+        parseDifferentProductsDiscountRules(
+          initialCampaignLegacy?.discountRulesJson ?? initialOffer?.discountRulesJson,
+        ),
     );
   const [buyProducts, setBuyProducts] = useState<string[]>(() => {
     const selectedProductsJson =
@@ -839,6 +850,8 @@ export function CreateNewOffer({
         initialOffer?.offerType === "complete-bundle") &&
       initialCompleteBundleConfig.bars.length > 0
         ? initialCompleteBundleConfig.bars
+        : starterTemplateDefaults?.completeBundleBars?.length
+          ? starterTemplateDefaults.completeBundleBars
         : [
             {
               id: `bar-${Date.now()}`,
@@ -852,7 +865,10 @@ export function CreateNewOffer({
           ],
   );
   const [activeBundleBarId, setActiveBundleBarId] = useState<string>(
-    () => initialCompleteBundleConfig.bars[0]?.id || "",
+    () =>
+      initialCompleteBundleConfig.bars[0]?.id ||
+      starterTemplateDefaults?.completeBundleBars?.[0]?.id ||
+      "",
   );
   const [status, setStatus] = useState<boolean>(
     initialCampaignConfig
@@ -862,12 +878,12 @@ export function CreateNewOffer({
         : true,
   );
   const [showCountdownBlock, setShowCountdownBlock] = useState(
-    initialCountdownBlock !== null,
+    initialCountdownBlock !== null || starterTemplateDefaults?.showCountdownBlock === true,
   );
   const [countdownLabel, setCountdownLabel] = useState(
     initialCountdownBlock?.type === "countdown"
       ? initialCountdownBlock.config.label
-      : "Limited time offer",
+      : starterTemplateDefaults?.countdownLabel || "Limited time offer",
   );
   const activeBundleBar =
     completeBundleBars.find((bar) => bar.id === activeBundleBarId) ||
@@ -1648,6 +1664,37 @@ export function CreateNewOffer({
 
   const previewItems: PreviewItem[] = useMemo(() => {
     if (offerType === "complete-bundle" && completeBundleBars.length > 0) {
+      const hasConfiguredProducts = completeBundleBars.some(
+        (bar) => Array.isArray(bar.products) && bar.products.length > 0,
+      );
+      if (!hasConfiguredProducts && starterTemplateDefaults?.previewFallbackItems?.length) {
+        const starterBar = completeBundleBars[0];
+        const fallbackFirst = starterTemplateDefaults.previewFallbackItems[0];
+        const fallbackOffer = starterTemplateDefaults.previewFallbackItems[1];
+        return [
+          fallbackFirst,
+          {
+            ...(fallbackOffer || {
+              id: "starter-complete-bundle-offer",
+              title: "Complete the bundle",
+              subtitle: "Save EUR14.99",
+              price: "EUR50.00",
+              featured: true,
+              badge: "Most Popular",
+              saveLabel: "SAVE EUR14.99",
+            }),
+            id: starterBar?.id || fallbackOffer?.id || "starter-complete-bundle-offer",
+            title:
+              starterBar?.title ||
+              fallbackOffer?.title ||
+              "Complete the bundle",
+            subtitle:
+              starterBar?.subtitle ||
+              fallbackOffer?.subtitle ||
+              "Save EUR14.99",
+          },
+        ];
+      }
       return completeBundleBars.map((bar, index) => {
         const productsCount = Array.isArray(bar.products) ? bar.products.length : 0;
         let sumOriginal = 0;
@@ -2558,273 +2605,306 @@ export function CreateNewOffer({
                   setCountdownLabel={setCountdownLabel}
                 />
 
-                <div className="mb-6">
-                  <label className="block text-[14px] font-medium text-[#1c1f23] mb-2">
-                    Widget Title
-                  </label>
-                  <Input
-                    size="large"
-                    value={widgetTitle}
-                    placeholder="e.g. Bundle & Save"
-                    onChange={(e) =>
-                      setWidgetTitle(e.target.value.replace(/[]+/g, " "))
-                    }
-                    maxLength={OFFER_TEXT_LIMITS.widgetTitle}
-                    showCount
+                {offerType === "quantity-breaks-same" ? (
+                  <QuantityBreaksDisplayCustomizer
+                    discountRules={discountRules}
+                    setDiscountRules={setDiscountRules}
+                    widgetTitle={widgetTitle}
+                    setWidgetTitle={setWidgetTitle}
+                    layoutFormat={layoutFormat}
+                    setLayoutFormat={setLayoutFormat}
+                    cardBackgroundColor={cardBackgroundColor}
+                    setCardBackgroundColor={setCardBackgroundColor}
+                    accentColor={accentColor}
+                    setAccentColor={setAccentColor}
+                    borderColor={borderColor}
+                    setBorderColor={setBorderColor}
+                    labelColor={labelColor}
+                    setLabelColor={setLabelColor}
+                    titleFontSize={titleFontSize}
+                    setTitleFontSize={setTitleFontSize}
+                    titleFontWeight={titleFontWeight}
+                    setTitleFontWeight={setTitleFontWeight}
+                    titleColor={titleColor}
+                    setTitleColor={setTitleColor}
+                    showCustomButton={showCustomButton}
+                    setShowCustomButton={setShowCustomButton}
+                    buttonText={buttonText}
+                    setButtonText={setButtonText}
+                    buttonPrimaryColor={buttonPrimaryColor}
+                    setButtonPrimaryColor={setButtonPrimaryColor}
                   />
-                  <p className="text-[13px] text-[#5c6166] mt-1">
-                    The main heading displayed above your bundle options
-                  </p>
-                </div>
-
-                <div className="mb-6">
-                  <label className="block text-[14px] font-medium text-[#1c1f23] mb-2">
-                    Layout Format
-                  </label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div
-                      role="button"
-                      tabIndex={0}
-                      className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
-                        layoutFormat === "vertical"
-                          ? "border-[#008060] bg-[#f0faf6]"
-                          : "border-gray-200 bg-white"
-                      }`}
-                      onClick={(e) => {
-                        setLayoutFormat("vertical");
-                        e.preventDefault();
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          setLayoutFormat("vertical");
-                          e.preventDefault();
-                        }
-                      }}
-                    >
-                      <div className="font-medium mb-1 text-[#1c1f23]">
-                        Vertical Stack
-                      </div>
-                      <div className="text-[13px] text-[#5c6166]">
-                        Products stacked vertically
-                      </div>
-                    </div>
-                    <div
-                      role="button"
-                      tabIndex={0}
-                      className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
-                        layoutFormat === "horizontal"
-                          ? "border-[#008060] bg-[#f0faf6]"
-                          : "border-gray-200 bg-white"
-                      }`}
-                      onClick={(e) => {
-                        setLayoutFormat("horizontal");
-                        e.preventDefault();
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          setLayoutFormat("horizontal");
-                          e.preventDefault();
-                        }
-                      }}
-                    >
-                      <div className="font-medium mb-1 text-[#1c1f23]">
-                        Horizontal Grid
-                      </div>
-                      <div className="text-[13px] text-[#5c6166]">
-                        Products in a row
-                      </div>
-                    </div>
-                    <div
-                      role="button"
-                      tabIndex={0}
-                      className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
-                        layoutFormat === "card"
-                          ? "border-[#008060] bg-[#f0faf6]"
-                          : "border-gray-200 bg-white"
-                      }`}
-                      onClick={(e) => {
-                        setLayoutFormat("card");
-                        e.preventDefault();
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          setLayoutFormat("card");
-                          e.preventDefault();
-                        }
-                      }}
-                    >
-                      <div className="font-medium mb-1 text-[#1c1f23]">
-                        Card Grid
-                      </div>
-                      <div className="text-[13px] text-[#5c6166]">
-                        2x2 grid layout
-                      </div>
-                    </div>
-                    <div
-                      role="button"
-                      tabIndex={0}
-                      className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
-                        layoutFormat === "compact"
-                          ? "border-[#008060] bg-[#f0faf6]"
-                          : "border-gray-200 bg-white"
-                      }`}
-                      onClick={(e) => {
-                        setLayoutFormat("compact");
-                        e.preventDefault();
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          setLayoutFormat("compact");
-                          e.preventDefault();
-                        }
-                      }}
-                    >
-                      <div className="font-medium mb-1 text-[#1c1f23]">
-                        Compact List
-                      </div>
-                      <div className="text-[13px] text-[#5c6166]">
-                        Condensed view
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mb-6">
-                  <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                    Card & Typography Colors
-                  </h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <label className="block text-[14px] font-medium text-[#1c1f23]">
-                      Card Background Color
-                      <input
-                        type="color"
-                        value={cardBackgroundColor}
-                        onChange={(e) =>
-                          setCardBackgroundColor(e.target.value)
-                        }
-                        className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1 cursor-pointer"
-                      />
-                    </label>
-                    <label className="block text-[14px] font-medium text-[#1c1f23]">
-                      Accent Color
-                      <input
-                        type="color"
-                        value={accentColor}
-                        onChange={(e) => setAccentColor(e.target.value)}
-                        className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1 cursor-pointer"
-                      />
-                    </label>
-                    <label className="block text-[14px] font-medium text-[#1c1f23]">
-                      Border Color
-                      <input
-                        type="color"
-                        value={borderColor}
-                        onChange={(e) => setBorderColor(e.target.value)}
-                        className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1 cursor-pointer"
-                      />
-                    </label>
-                    <label className="block text-[14px] font-medium text-[#1c1f23]">
-                      Label Text Color
-                      <input
-                        type="color"
-                        value={labelColor}
-                        onChange={(e) => setLabelColor(e.target.value)}
-                        className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1 cursor-pointer"
-                      />
-                    </label>
-                  </div>
-                </div>
-
-                <div className="mb-6">
-                  <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                    Title Typography
-                  </h3>
-                  <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-                    <label className="block text-[14px] font-medium text-[#1c1f23]">
-                      Font Size (px)
+                ) : (
+                  <>
+                    <div className="mb-6">
+                      <label className="block text-[14px] font-medium text-[#1c1f23] mb-2">
+                        Widget Title
+                      </label>
                       <Input
                         size="large"
-                        type="number"
-                        min={10}
-                        max={36}
-                        value={titleFontSize}
-                        onChange={(e) => setTitleFontSize(Number(e.target.value))}
-                        className="mt-1"
+                        value={widgetTitle}
+                        placeholder="e.g. Bundle & Save"
+                        onChange={(e) =>
+                          setWidgetTitle(e.target.value.replace(/[]+/g, " "))
+                        }
+                        maxLength={OFFER_TEXT_LIMITS.widgetTitle}
+                        showCount
                       />
-                    </label>
-                    <label className="block text-[14px] font-medium text-[#1c1f23]">
-                      Font Weight
-                      <Select
-                        size="large"
-                        value={titleFontWeight}
-                        onChange={(val) => setTitleFontWeight(val)}
-                        className="w-full mt-1"
-                        options={[
-                          { label: "Regular (400)", value: "400" },
-                          { label: "Medium (500)", value: "500" },
-                          { label: "Semi Bold (600)", value: "600" },
-                          { label: "Bold (700)", value: "700" }
-                        ]}
-                      />
-                    </label>
-                    <label className="block text-[14px] font-medium text-[#1c1f23]">
-                      Title Color
-                      <input
-                        type="color"
-                        value={titleColor}
-                        onChange={(e) => setTitleColor(e.target.value)}
-                        className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1 cursor-pointer"
-                      />
-                    </label>
-                  </div>
-                </div>
+                      <p className="text-[13px] text-[#5c6166] mt-1">
+                        The main heading displayed above your bundle options
+                      </p>
+                    </div>
 
-                <div className="mb-6">
-                  <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                    Button Style & Extra
-                  </h3>
-                  <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg mb-4">
-                    <div>
-                      <div className="text-[14px] font-medium text-[#1c1f23]">
-                        Show App's Add to Cart Button
-                      </div>
-                      <div className="text-[13px] text-[#5c6166]">
-                        If disabled, customers will use your theme's native Add to Cart button.
+                    <div className="mb-6">
+                      <label className="block text-[14px] font-medium text-[#1c1f23] mb-2">
+                        Layout Format
+                      </label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
+                            layoutFormat === "vertical"
+                              ? "border-[#008060] bg-[#f0faf6]"
+                              : "border-gray-200 bg-white"
+                          }`}
+                          onClick={(e) => {
+                            setLayoutFormat("vertical");
+                            e.preventDefault();
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              setLayoutFormat("vertical");
+                              e.preventDefault();
+                            }
+                          }}
+                        >
+                          <div className="font-medium mb-1 text-[#1c1f23]">
+                            Vertical Stack
+                          </div>
+                          <div className="text-[13px] text-[#5c6166]">
+                            Products stacked vertically
+                          </div>
+                        </div>
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
+                            layoutFormat === "horizontal"
+                              ? "border-[#008060] bg-[#f0faf6]"
+                              : "border-gray-200 bg-white"
+                          }`}
+                          onClick={(e) => {
+                            setLayoutFormat("horizontal");
+                            e.preventDefault();
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              setLayoutFormat("horizontal");
+                              e.preventDefault();
+                            }
+                          }}
+                        >
+                          <div className="font-medium mb-1 text-[#1c1f23]">
+                            Horizontal Grid
+                          </div>
+                          <div className="text-[13px] text-[#5c6166]">
+                            Products in a row
+                          </div>
+                        </div>
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
+                            layoutFormat === "card"
+                              ? "border-[#008060] bg-[#f0faf6]"
+                              : "border-gray-200 bg-white"
+                          }`}
+                          onClick={(e) => {
+                            setLayoutFormat("card");
+                            e.preventDefault();
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              setLayoutFormat("card");
+                              e.preventDefault();
+                            }
+                          }}
+                        >
+                          <div className="font-medium mb-1 text-[#1c1f23]">
+                            Card Grid
+                          </div>
+                          <div className="text-[13px] text-[#5c6166]">
+                            2x2 grid layout
+                          </div>
+                        </div>
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
+                            layoutFormat === "compact"
+                              ? "border-[#008060] bg-[#f0faf6]"
+                              : "border-gray-200 bg-white"
+                          }`}
+                          onClick={(e) => {
+                            setLayoutFormat("compact");
+                            e.preventDefault();
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              setLayoutFormat("compact");
+                              e.preventDefault();
+                            }
+                          }}
+                        >
+                          <div className="font-medium mb-1 text-[#1c1f23]">
+                            Compact List
+                          </div>
+                          <div className="text-[13px] text-[#5c6166]">
+                            Condensed view
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    <Switch
-                      checked={showCustomButton}
-                      onChange={(checked) => setShowCustomButton(checked)}
-                    />
-                  </div>
-                  
-                  {showCustomButton && (
-                    <div className="grid grid-cols-2 gap-4">
-                      <label className="block text-[14px] font-medium text-[#1c1f23]">
-                        Button Text
-                        <Input
-                          size="large"
-                          value={buttonText}
-                          onChange={(e) =>
-                            setButtonText(e.target.value.replace(/[]+/g, " "))
-                          }
-                          className="mt-1"
-                          maxLength={OFFER_TEXT_LIMITS.buttonText}
-                          showCount
-                        />
-                      </label>
-                      <label className="block text-[14px] font-medium text-[#1c1f23]">
-                        Button Color
-                        <input
-                          type="color"
-                          value={buttonPrimaryColor}
-                          onChange={(e) => setButtonPrimaryColor(e.target.value)}
-                          className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1 cursor-pointer"
-                        />
-                      </label>
+
+                    <div className="mb-6">
+                      <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
+                        Card & Typography Colors
+                      </h3>
+                      <div className="grid grid-cols-2 gap-4">
+                        <label className="block text-[14px] font-medium text-[#1c1f23]">
+                          Card Background Color
+                          <input
+                            type="color"
+                            value={cardBackgroundColor}
+                            onChange={(e) =>
+                              setCardBackgroundColor(e.target.value)
+                            }
+                            className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1 cursor-pointer"
+                          />
+                        </label>
+                        <label className="block text-[14px] font-medium text-[#1c1f23]">
+                          Accent Color
+                          <input
+                            type="color"
+                            value={accentColor}
+                            onChange={(e) => setAccentColor(e.target.value)}
+                            className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1 cursor-pointer"
+                          />
+                        </label>
+                        <label className="block text-[14px] font-medium text-[#1c1f23]">
+                          Border Color
+                          <input
+                            type="color"
+                            value={borderColor}
+                            onChange={(e) => setBorderColor(e.target.value)}
+                            className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1 cursor-pointer"
+                          />
+                        </label>
+                        <label className="block text-[14px] font-medium text-[#1c1f23]">
+                          Label Text Color
+                          <input
+                            type="color"
+                            value={labelColor}
+                            onChange={(e) => setLabelColor(e.target.value)}
+                            className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1 cursor-pointer"
+                          />
+                        </label>
+                      </div>
                     </div>
-                  )}
-                </div>
+
+                    <div className="mb-6">
+                      <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
+                        Title Typography
+                      </h3>
+                      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                        <label className="block text-[14px] font-medium text-[#1c1f23]">
+                          Font Size (px)
+                          <Input
+                            size="large"
+                            type="number"
+                            min={10}
+                            max={36}
+                            value={titleFontSize}
+                            onChange={(e) => setTitleFontSize(Number(e.target.value))}
+                            className="mt-1"
+                          />
+                        </label>
+                        <label className="block text-[14px] font-medium text-[#1c1f23]">
+                          Font Weight
+                          <Select
+                            size="large"
+                            value={titleFontWeight}
+                            onChange={(val) => setTitleFontWeight(val)}
+                            className="w-full mt-1"
+                            options={[
+                              { label: "Regular (400)", value: "400" },
+                              { label: "Medium (500)", value: "500" },
+                              { label: "Semi Bold (600)", value: "600" },
+                              { label: "Bold (700)", value: "700" }
+                            ]}
+                          />
+                        </label>
+                        <label className="block text-[14px] font-medium text-[#1c1f23]">
+                          Title Color
+                          <input
+                            type="color"
+                            value={titleColor}
+                            onChange={(e) => setTitleColor(e.target.value)}
+                            className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1 cursor-pointer"
+                          />
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="mb-6">
+                      <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
+                        Button Style & Extra
+                      </h3>
+                      <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg mb-4">
+                        <div>
+                          <div className="text-[14px] font-medium text-[#1c1f23]">
+                            Show App's Add to Cart Button
+                          </div>
+                          <div className="text-[13px] text-[#5c6166]">
+                            If disabled, customers will use your theme's native Add to Cart button.
+                          </div>
+                        </div>
+                        <Switch
+                          checked={showCustomButton}
+                          onChange={(checked) => setShowCustomButton(checked)}
+                        />
+                      </div>
+                      
+                      {showCustomButton && (
+                        <div className="grid grid-cols-2 gap-4">
+                          <label className="block text-[14px] font-medium text-[#1c1f23]">
+                            Button Text
+                            <Input
+                              size="large"
+                              value={buttonText}
+                              onChange={(e) =>
+                                setButtonText(e.target.value.replace(/[]+/g, " "))
+                              }
+                              className="mt-1"
+                              maxLength={OFFER_TEXT_LIMITS.buttonText}
+                              showCount
+                            />
+                          </label>
+                          <label className="block text-[14px] font-medium text-[#1c1f23]">
+                            Button Color
+                            <input
+                              type="color"
+                              value={buttonPrimaryColor}
+                              onChange={(e) => setButtonPrimaryColor(e.target.value)}
+                              className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1 cursor-pointer"
+                            />
+                          </label>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="create-offer-sticky-preview">

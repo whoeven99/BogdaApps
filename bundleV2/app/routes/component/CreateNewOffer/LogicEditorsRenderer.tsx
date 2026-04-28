@@ -489,21 +489,6 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
         ),
       },
       {
-        id: "quantity-breaks-content",
-        title: "Card Content",
-        description:
-          "Control the title, subtitle, badge, and default selected state for each quantity tier card.",
-        required: true,
-        active: true,
-        render: () => (
-          <QuantityBreaksLogicEditor
-            discountRules={props.draft.discountRules}
-            setDiscountRules={props.actions.setDiscountRules}
-            section="presentation"
-          />
-        ),
-      },
-      {
         id: "progressive-gifts",
         title: "Progressive Gifts",
         description:
@@ -637,19 +622,6 @@ export default function LogicEditorsRenderer({
     <div className="flex flex-col gap-4">
       <div className="rounded-[12px] border border-[#e3e8ed] bg-[#fafbfb] p-4">
         <div className="flex flex-col gap-3">
-          <div>
-            <div className="text-[12px] font-medium uppercase tracking-[0.08em] text-[#5c6166]">
-              Campaign Components
-            </div>
-            <h3 className="m-0 mt-1 text-[16px] font-semibold text-[#1c1f23]">
-              Manage the structure of this campaign
-            </h3>
-            <p className="m-0 mt-2 text-[13px] text-[#5c6166]">
-              Your base campaign type is already selected. Use the stack below to
-              manage the sections, tiers, bars, and optional components that belong
-              to this campaign.
-            </p>
-          </div>
           {inactiveOptionalComponents.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               <Dropdown
