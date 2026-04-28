@@ -116,6 +116,47 @@ const mergeCheckoutBundle = (
   };
 };
 
+const logAliSendBoundary = async (params: {
+  server: string;
+  event: string;
+  shopName: string;
+  clientId: string;
+  extra: string;
+  context: Record<string, unknown>;
+}) => {
+  const { server, event, shopName, clientId, extra, context } = params;
+  const startAt = Date.now();
+  console.log("[ciwi][web-pixel] ali-send start", {
+    event,
+    shopName: shopName || "(empty)",
+    server: server || "(empty)",
+    clientId: clientId || "(empty)",
+    extraLength: extra.length,
+    context,
+  });
+  try {
+    await WebpixerToAli({
+      server,
+      event,
+      shopName,
+      clientId,
+      extra,
+    });
+    console.log("[ciwi][web-pixel] ali-send success", {
+      event,
+      costMs: Date.now() - startAt,
+      context,
+    });
+  } catch (error) {
+    console.error("[ciwi][web-pixel] ali-send throw", {
+      event,
+      costMs: Date.now() - startAt,
+      context,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+};
+
 register(({ analytics, browser, settings }) => {
   const { shopName, server } = settings;
   console.log("[ciwi][web-pixel] init", {
@@ -135,7 +176,7 @@ register(({ analytics, browser, settings }) => {
       clientId: event.clientId,
       bundlePayload,
     });
-    WebpixerToAli({
+    await logAliSendBoundary({
       server,
       event: "product_viewed",
       shopName,
@@ -143,6 +184,10 @@ register(({ analytics, browser, settings }) => {
       extra: JSON.stringify({
         bundle: [bundlePayload],
       }),
+      context: {
+        stage: "product_viewed",
+        variantId,
+      },
     });
   });
 
@@ -167,7 +212,7 @@ register(({ analytics, browser, settings }) => {
       isSubscription: subscription.isSubscription,
       sellingPlanId: subscription.sellingPlanId,
     });
-    WebpixerToAli({
+    await logAliSendBoundary({
       server,
       event: "product_added_to_cart",
       shopName,
@@ -175,6 +220,11 @@ register(({ analytics, browser, settings }) => {
       extra: JSON.stringify({
         bundle: [bundlePayload],
       }),
+      context: {
+        stage: "product_added_to_cart",
+        variantId,
+        isSubscription: subscription.isSubscription,
+      },
     });
   });
 
@@ -203,7 +253,7 @@ register(({ analytics, browser, settings }) => {
           abDiscountPercent: b.abDiscountPercent,
         })),
     });
-    WebpixerToAli({
+    await logAliSendBoundary({
       server,
       event: "checkout_started",
       shopName,
@@ -214,6 +264,11 @@ register(({ analytics, browser, settings }) => {
         hasSubscriptionOrder: subscriptionItemCount > 0,
         subscriptionItemCount,
       }),
+      context: {
+        stage: "checkout_started",
+        totalLineItems: bundleItems.length,
+        subscriptionItemCount,
+      },
     });
   });
 
@@ -258,7 +313,7 @@ register(({ analytics, browser, settings }) => {
         })),
     });
 
-    WebpixerToAli({
+    await logAliSendBoundary({
       server,
       event: "checkout_completed",
       shopName,
@@ -270,6 +325,12 @@ register(({ analytics, browser, settings }) => {
         hasSubscriptionOrder,
         subscriptionItemCount,
       }),
+      context: {
+        stage: "checkout_completed",
+        totalLineItems: bundleItems.length,
+        subscriptionItemCount,
+        orderId: event.data.checkout.order?.id || "",
+      },
     });
   });
 });
