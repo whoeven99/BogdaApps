@@ -1,13 +1,22 @@
 // AllOffersPage.tsx
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import "../../styles/tailwind.css";
-import { Trash2, Pencil, X, AlertCircle } from "lucide-react";
+import { Trash2, Pencil } from "lucide-react";
 import { Form, useNavigation, useSearchParams, useActionData } from "react-router";
 import type { IndexLoaderData } from "../_index/route";
 import { parseDiscountRules } from "../../utils/offerParsing";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
+import {
+  AdminEmptyState,
+  AdminModal,
+  AdminPageHeader,
+  ThemeExtensionBanner,
+  adminPrimaryButtonClass,
+  adminSecondaryButtonClass,
+  adminSurfaceCardClass,
+} from "../component/adminUi";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -56,7 +65,6 @@ export function AllOffersPage({
       onEditOffer(id);
     }
   };
-  const handleDelete = () => {};
 
   const rows: AllOffersRow[] = (offers ?? []).map((offer) => {
     const isActive = !!offer.status;
@@ -79,6 +87,9 @@ export function AllOffersPage({
   const [deletingOffer, setDeletingOffer] = useState<AllOffersRow | null>(null);
   const [togglingIds, setTogglingIds] = useState<string[]>([]);
   const [showThemeExtensionModal, setShowThemeExtensionModal] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [sortKey, setSortKey] = useState<"updated-desc" | "created-desc" | "name-asc">("updated-desc");
   const [hideBanner, setHideBanner] = useState(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("hideThemeExtensionBanner") === "true";
@@ -100,6 +111,34 @@ export function AllOffersPage({
   };
 
   const toast = searchParams.get("toast") || actionData?.toast;
+  const activeOffersCount = rows.filter((offer) => offer.isActive).length;
+  const filteredRows = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    const nextRows = rows.filter((offer) => {
+      const matchesSearch =
+        !normalizedSearch ||
+        offer.name.toLowerCase().includes(normalizedSearch) ||
+        offer.cartTitle.toLowerCase().includes(normalizedSearch) ||
+        offer.offerType.toLowerCase().includes(normalizedSearch);
+      const matchesStatus =
+        statusFilter === "all" ||
+        (statusFilter === "active" && offer.isActive) ||
+        (statusFilter === "inactive" && !offer.isActive);
+      return matchesSearch && matchesStatus;
+    });
+
+    nextRows.sort((a, b) => {
+      if (sortKey === "name-asc") {
+        return a.name.localeCompare(b.name);
+      }
+      if (sortKey === "created-desc") {
+        return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+      }
+      return new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime();
+    });
+
+    return nextRows;
+  }, [rows, searchTerm, statusFilter, sortKey]);
 
   useEffect(() => {
     if (toast?.startsWith("delete-success")) {
@@ -125,98 +164,136 @@ export function AllOffersPage({
   }, [navigation.state, navigation.formData, togglingIds.length]);
 
   const getIsToggling = (offerId: string) => togglingIds.includes(offerId);
+  const formatTime = (offer: AllOffersRow, timeStr: string | Date | undefined) => {
+    if (!timeStr) return "-";
+    const d = dayjs(timeStr);
+    if (!d.isValid()) return "-";
+    let tz = ianaTimezone;
+    try {
+      if (offer.offerSettingsJson) {
+        const parsed = JSON.parse(offer.offerSettingsJson);
+        if (parsed.scheduleTimezone) tz = parsed.scheduleTimezone;
+      }
+    } catch (e) {}
+    return d.tz(tz).format("YYYY-MM-DD HH:mm:ss") + ` (UTC${d.tz(tz).format('Z')})`;
+  };
 
   return (
     <div className="max-w-[1280px] mx-auto pb-[24px]">
       {!themeExtensionEnabled && !hideBanner && (
-        <div className="bg-[#fff4f4] border border-[#ffc9c9] rounded-[8px] p-[16px] mb-[24px] flex items-start justify-between">
-          <div className="flex gap-[12px]">
-            <div className="text-[#d72c0d] mt-[2px]">
-              <AlertCircle size={20} />
-            </div>
-            <div>
-              <h3 className="font-sans font-semibold text-[14px] leading-[20px] text-[#1c1f23] mb-[4px] m-0">
-                Action required: Activate Theme Extension
-              </h3>
-              <p className="font-sans text-[14px] leading-[20px] text-[#5c6166] m-0">
-                Your offer has been created, but it won't be visible on your store until you activate the theme extension.
-              </p>
-              <div className="mt-[12px]">
-                <button
-                  type="button"
-                  onClick={handleThemeExtensionToggle}
-                  className="bg-transparent text-[#1c1f23] px-[12px] py-[6px] rounded-[6px] font-normal text-[16px] border border-[#1c1f23] hover:bg-black/5 transition-all cursor-pointer"
-                >
-                  Activate Theme Extension
-                </button>
-              </div>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={handleCloseBanner}
-            className="text-[#5c6166] hover:text-[#1c1f23] bg-transparent border-0 cursor-pointer p-[4px]"
-          >
-            <X size={20} />
-          </button>
-        </div>
+        <ThemeExtensionBanner
+          onActivate={handleThemeExtensionToggle}
+          onDismiss={handleCloseBanner}
+        />
       )}
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-[12px] sm:gap-0 mb-[24px]">
-        <div>
-          <h1 className="font-sans font-semibold text-[24px] leading-[32px] text-[#1c1f23] tracking-normal m-0">
-            All Offers
-          </h1>
-          <p className="font-sans font-normal text-[14px] leading-[22.4px] text-[#5c6166] mt-[4px]">
-            Manage all your bundle offers
-          </p>
-        </div>
-        <div className="flex flex-col sm:flex-row gap-[8px] sm:gap-[12px] w-full sm:w-auto">
-          <button
-            type="button"
-            className="bg-transparent text-[#1c1f23] px-[16px] py-[8px] rounded-[8px] font-medium text-[14px] border border-[#c4cdd5] hover:bg-[#f4f6f8] transition-all cursor-pointer"
-            onClick={handleShowGuide}
-          >
-            Show Guide
-          </button>
-          <button
-            type="button"
-            className="bg-[#008060] !text-white px-[16px] py-[8px] rounded-[8px] font-medium text-[14px] shadow-sm hover:bg-[#006e52] transition-all border-0 cursor-pointer"
-            onClick={handleCreateOffer}
-          >
-            Create New Offer
-          </button>
-        </div>
-      </div>
+      <AdminPageHeader
+        title="All Offers"
+        subtitle="Search, review, and manage offer status from a single list built for routine merchant operations."
+        meta={
+          <>
+            <span className="inline-flex items-center rounded-full bg-[#f6f6f7] px-[10px] py-[4px] text-[12px] font-medium text-[#5c6166]">
+              {rows.length} total offers
+            </span>
+            <span className="inline-flex items-center rounded-full bg-[#f0f9f6] px-[10px] py-[4px] text-[12px] font-medium text-[#108043]">
+              {activeOffersCount} active
+            </span>
+            <span className="inline-flex items-center rounded-full bg-[#fcfcfd] px-[10px] py-[4px] text-[12px] font-medium text-[#5c6166]">
+              {filteredRows.length} shown
+            </span>
+          </>
+        }
+        actions={
+          <>
+            <button
+              type="button"
+              className={adminSecondaryButtonClass}
+              onClick={handleShowGuide}
+            >
+              Show Guide
+            </button>
+            <button
+              type="button"
+              className={adminPrimaryButtonClass}
+              onClick={handleCreateOffer}
+            >
+              Create New Offer
+            </button>
+          </>
+        }
+      />
 
       {/* Table */}
-      <div className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[24px]">
-        <table className="w-full border-collapse">
+      <div className={`${adminSurfaceCardClass} p-[20px] sm:p-[24px]`}>
+        <div className="mb-[16px] flex flex-col gap-[12px]">
+          <div>
+            <h2 className="m-0 text-[18px] font-semibold leading-[28px] text-[#1c1f23]">
+              Offer list
+            </h2>
+          </div>
+          <div className="grid grid-cols-1 gap-[12px] lg:grid-cols-[minmax(0,1fr)_180px_180px]">
+            <label className="block text-[13px] font-medium text-[#1c1f23]">
+              Search
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search by offer name, display name, or type"
+                className="mt-[6px] w-full rounded-[8px] border border-[#dfe3e8] px-[12px] py-[9px] text-[14px] text-[#1c1f23] outline-none transition-colors placeholder:text-[#8c9196] focus:border-[#008060]"
+              />
+            </label>
+            <label className="block text-[13px] font-medium text-[#1c1f23]">
+              Status
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as "all" | "active" | "inactive")}
+                className="mt-[6px] w-full rounded-[8px] border border-[#dfe3e8] bg-white px-[12px] py-[9px] text-[14px] text-[#1c1f23] outline-none focus:border-[#008060]"
+              >
+                <option value="all">All statuses</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </label>
+            <label className="block text-[13px] font-medium text-[#1c1f23]">
+              Sort by
+              <select
+                value={sortKey}
+                onChange={(e) => setSortKey(e.target.value as "updated-desc" | "created-desc" | "name-asc")}
+                className="mt-[6px] w-full rounded-[8px] border border-[#dfe3e8] bg-white px-[12px] py-[9px] text-[14px] text-[#1c1f23] outline-none focus:border-[#008060]"
+              >
+                <option value="updated-desc">Recently updated</option>
+                <option value="created-desc">Recently created</option>
+                <option value="name-asc">Name A-Z</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+        <table className="w-full border-collapse overflow-hidden rounded-[10px]">
           <thead>
-            <tr>
-              <th className="text-left p-[12px] border-b border-[#f0f2f4] text-[13px] text-[#5c6166] font-sans font-semibold">
+            <tr className="bg-[#f9fafb]">
+              <th className="text-left p-[12px] border-b border-[#eef1f4] text-[13px] text-[#5c6166] font-sans font-semibold">
                 Offer Name
               </th>
-              <th className="text-left p-[12px] border-b border-[#f0f2f4] text-[13px] text-[#5c6166] font-sans font-semibold">
+              <th className="text-left p-[12px] border-b border-[#eef1f4] text-[13px] text-[#5c6166] font-sans font-semibold">
                 Display name
               </th>
-              <th className="text-left p-[12px] border-b border-[#f0f2f4] text-[13px] text-[#5c6166] font-sans font-semibold">
+              <th className="text-left p-[12px] border-b border-[#eef1f4] text-[13px] text-[#5c6166] font-sans font-semibold">
                 Discount type
               </th>
-              <th className="text-left p-[12px] border-b border-[#f0f2f4] text-[13px] text-[#5c6166] font-sans font-semibold">
+              <th className="text-left p-[12px] border-b border-[#eef1f4] text-[13px] text-[#5c6166] font-sans font-semibold">
                 Discount rules
               </th>
-              <th className="text-left p-[12px] border-b border-[#f0f2f4] text-[13px] text-[#5c6166] font-sans font-semibold">
+              <th className="text-left p-[12px] border-b border-[#eef1f4] text-[13px] text-[#5c6166] font-sans font-semibold">
                 Status
               </th>
-              <th className="text-left p-[12px] border-b border-[#f0f2f4] text-[13px] text-[#5c6166] font-sans font-semibold">
+              <th className="text-left p-[12px] border-b border-[#eef1f4] text-[13px] text-[#5c6166] font-sans font-semibold">
                 Create time
               </th>
-              <th className="text-left p-[12px] border-b border-[#f0f2f4] text-[13px] text-[#5c6166] font-sans font-semibold">
+              <th className="text-left p-[12px] border-b border-[#eef1f4] text-[13px] text-[#5c6166] font-sans font-semibold">
                 Update time
               </th>
-              <th className="text-left p-[12px] border-b border-[#f0f2f4] text-[13px] text-[#5c6166] font-sans font-semibold">
+              <th className="text-left p-[12px] border-b border-[#eef1f4] text-[13px] text-[#5c6166] font-sans font-semibold">
                 Actions
               </th>
             </tr>
@@ -224,24 +301,18 @@ export function AllOffersPage({
           <tbody>
             {offersLoading ? (
               <tr>
-                <td
-                  colSpan={8}
-                  className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#5c6166] font-sans"
-                >
-                  Loading offers...
+                <td colSpan={8} className="p-[12px] border-b border-[#eef1f4]">
+                  <AdminEmptyState message="Loading offers..." />
                 </td>
               </tr>
-            ) : rows.length === 0 ? (
+            ) : filteredRows.length === 0 ? (
               <tr>
-                <td
-                  colSpan={8}
-                  className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#5c6166] font-sans"
-                >
-                  No offers yet. Create your first offer to see it here.
+                <td colSpan={8} className="p-[12px] border-b border-[#eef1f4]">
+                  <AdminEmptyState message="No matching offers found. Adjust your search or filters." />
                 </td>
               </tr>
             ) : (
-              rows.map((offer) => {
+              filteredRows.map((offer) => {
                 const isToggling = getIsToggling(offer.id);
                 const displayIsActive = themeExtensionEnabled ? offer.isActive : false;
                 const statusLabel = displayIsActive ? "Active" : "Inactive";
@@ -251,38 +322,24 @@ export function AllOffersPage({
                 const rulesText = rules.length > 0 
                   ? rules.map(r => `Buy ${r.count} Get ${r.discountPercent}% Off`).join(", ")
                   : "-";
-                  
-                const formatTime = (timeStr: string | Date | undefined) => {
-                  if (!timeStr) return "-";
-                  const d = dayjs(timeStr);
-                  if (!d.isValid()) return "-";
-                  let tz = ianaTimezone;
-                  try {
-                    if (offer.offerSettingsJson) {
-                      const parsed = JSON.parse(offer.offerSettingsJson);
-                      if (parsed.scheduleTimezone) tz = parsed.scheduleTimezone;
-                    }
-                  } catch (e) {}
-                  return d.tz(tz).format("YYYY-MM-DD HH:mm:ss") + ` (UTC${d.tz(tz).format('Z')})`;
-                };
 
                 return (
-                  <tr key={offer.id}>
-                    <td className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#1c1f23] font-sans">
+                  <tr key={offer.id} className="hover:bg-[#fafbfc]">
+                    <td className="p-[12px] border-b border-[#eef1f4] text-[14px] text-[#1c1f23] font-sans">
                       <div className="flex items-center gap-[8px]">
                         {offer.name}
                       </div>
                     </td>
-                    <td className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#1c1f23] font-sans">
+                    <td className="p-[12px] border-b border-[#eef1f4] text-[14px] text-[#1c1f23] font-sans">
                       {offer.cartTitle}
                     </td>
-                    <td className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#1c1f23] font-sans">
+                    <td className="p-[12px] border-b border-[#eef1f4] text-[14px] text-[#1c1f23] font-sans">
                       {displayType}
                     </td>
-                    <td className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#1c1f23] font-sans">
+                    <td className="p-[12px] border-b border-[#eef1f4] text-[14px] text-[#1c1f23] font-sans">
                       {rulesText}
                     </td>
-                    <td className="p-[12px] border-b border-[#f0f2f4]">
+                    <td className="p-[12px] border-b border-[#eef1f4]">
                       <Form method="post">
                         <input type="hidden" name="intent" value="toggle-offer-status" />
                         <input type="hidden" name="offerId" value={offer.id} />
@@ -332,13 +389,13 @@ export function AllOffersPage({
                         </button>
                       </Form>
                     </td>
-                    <td className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#1c1f23] font-sans">
-                      {formatTime(offer.createdAt)}
+                    <td className="p-[12px] border-b border-[#eef1f4] text-[14px] text-[#1c1f23] font-sans">
+                      {formatTime(offer, offer.createdAt)}
                     </td>
-                    <td className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#1c1f23] font-sans">
-                      {formatTime(offer.updatedAt)}
+                    <td className="p-[12px] border-b border-[#eef1f4] text-[14px] text-[#1c1f23] font-sans">
+                      {formatTime(offer, offer.updatedAt)}
                     </td>
-                    <td className="p-[12px] border-b border-[#f0f2f4]">
+                    <td className="p-[12px] border-b border-[#eef1f4]">
                   <div className="flex items-center gap-[8px]">
                     <button
                       type="button"
@@ -364,25 +421,24 @@ export function AllOffersPage({
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {deletingOffer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.4)]">
-          <div className="bg-white rounded-[16px] shadow-[0_8px_24px_rgba(0,0,0,0.12)] max-w-[400px] w-[90%] p-[24px]">
-            <h2 className="font-sans font-semibold text-[18px] leading-[27px] text-[#1c1f23] mb-[8px]">
-              Delete offer
-            </h2>
-            <p className="font-sans text-[14px] leading-[21px] text-[#5c6166] mb-[16px]">
+        <AdminModal
+          title="Delete offer"
+          description={
+            <>
               Are you sure you want to delete offer{" "}
-              <span className="font-semibold text-[#1c1f23]">
-                {deletingOffer.name}
-              </span>
+              <span className="font-semibold text-[#1c1f23]">{deletingOffer.name}</span>
               ? This action cannot be undone.
-            </p>
-            <div className="flex justify-end gap-[8px]">
+            </>
+          }
+          actions={
+            <>
               <button
                 type="button"
-                className="px-[12px] py-[6px] rounded-[6px] border border-[#dfe3e8] bg-white text-[#1c1f23] text-[14px] font-sans hover:bg-[#f4f6f8]"
+                className="rounded-[6px] border border-[#dfe3e8] bg-white px-[12px] py-[6px] text-[14px] text-[#1c1f23] hover:bg-[#f4f6f8]"
                 onClick={() => setDeletingOffer(null)}
               >
                 Cancel
@@ -392,29 +448,25 @@ export function AllOffersPage({
                 <input type="hidden" name="offerId" value={deletingOffer.id} />
                 <button
                   type="submit"
-                  className="px-[12px] py-[6px] rounded-[6px] bg-[#d72c0d] !text-white text-[14px] font-sans hover:bg-[#bc2200]"
+                  className="rounded-[6px] bg-[#d72c0d] px-[12px] py-[6px] text-[14px] text-white hover:bg-[#bc2200]"
                 >
                   Delete
                 </button>
               </Form>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        />
       )}
 
       {showThemeExtensionModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.4)]">
-          <div className="bg-white rounded-[16px] shadow-[0_8px_24px_rgba(0,0,0,0.12)] max-w-[400px] w-[90%] p-[24px]">
-            <h2 className="font-sans font-semibold text-[18px] leading-[27px] text-[#1c1f23] mb-[8px]">
-              Activate Theme Extension
-            </h2>
-            <p className="font-sans text-[14px] leading-[21px] text-[#5c6166] mb-[16px]">
-              You need to activate the theme extension first before you can turn on any offers.
-            </p>
-            <div className="flex justify-end gap-[8px]">
+        <AdminModal
+          title="Activate Theme Extension"
+          description="You need to activate the theme extension first before you can turn on any offers."
+          actions={
+            <>
               <button
                 type="button"
-                className="px-[12px] py-[6px] rounded-[6px] border border-[#dfe3e8] bg-white text-[#1c1f23] text-[14px] font-sans hover:bg-[#f4f6f8]"
+                className="rounded-[6px] border border-[#dfe3e8] bg-white px-[12px] py-[6px] text-[14px] text-[#1c1f23] hover:bg-[#f4f6f8]"
                 onClick={() => setShowThemeExtensionModal(false)}
               >
                 Cancel
@@ -425,13 +477,13 @@ export function AllOffersPage({
                   setShowThemeExtensionModal(false);
                   handleThemeExtensionToggle();
                 }}
-                className="px-[12px] py-[6px] rounded-[6px] bg-[#008060] !text-white text-[14px] font-sans hover:bg-[#006e52]"
+                className="rounded-[6px] bg-[#008060] px-[12px] py-[6px] text-[14px] text-white hover:bg-[#006e52]"
               >
                 Activate Now
               </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        />
       )}
     </div>
   );

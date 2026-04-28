@@ -13,6 +13,12 @@ let offersConfigCache = null;
 let priceSyncController = null;
 let bundlePriceDebounceT = null;
 let currentMainForm = null;
+const CIWI_SUBSCRIPTION_MODE_NAME = "ciwi-subscription-mode";
+
+// 中文注释：程序化写入 quantity / selling_plan 时会 synthetic dispatch change，否则会冒泡到
+// document 上 attachBundlePriceSync 的 capture 监听器 → scheduleBundlePriceRefresh →
+// 全量重绘 innerHTML → 再次 sync… 形成 F12 日志刷屏的死循环
+let __ciwiSuppressBundlePriceSync = false;
 
 function esc(value) {
   return String(value ?? "")
@@ -244,6 +250,52 @@ function getSelectedVariantId() {
   const input = form?.querySelector("input[name='id']");
   if (!input) return "";
   return String(input.value || "").trim();
+}
+
+function getCurrentProductHasSubscription() {
+  const configEl = document.getElementById("ciwi-bundles-config");
+  if (!configEl) return false;
+  try {
+    const config = JSON.parse(configEl.textContent || "{}");
+    return config.hasSubscription === true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function getCurrentProductSubscriptionData() {
+  const configEl = document.getElementById("ciwi-bundles-config");
+  if (!configEl) return { hasSubscription: false, sellingPlanGroups: [] };
+  try {
+    const config = JSON.parse(configEl.textContent || "{}");
+    return {
+      hasSubscription: config.hasSubscription === true,
+      sellingPlanGroups: Array.isArray(config.sellingPlanGroups)
+        ? config.sellingPlanGroups
+        : [],
+    };
+  } catch (e) {
+    return { hasSubscription: false, sellingPlanGroups: [] };
+  }
+}
+
+function getDefaultSellingPlanId() {
+  const data = getCurrentProductSubscriptionData();
+  // 中文注释：遍历所有 selling_plan_groups，拿到第一个有效的 selling_plan.id
+  for (const group of data.sellingPlanGroups) {
+    const plans = Array.isArray(group?.sellingPlans) ? group.sellingPlans : [];
+    const firstPlan = plans.find(
+      (plan) => plan && (plan.id !== undefined && plan.id !== null && plan.id !== ""),
+    );
+    if (firstPlan?.id !== undefined && firstPlan?.id !== null) {
+      return String(firstPlan.id);
+    }
+  }
+  console.warn(
+    "[ciwi][subscription] getDefaultSellingPlanId: no selling plan id found",
+    { sellingPlanGroups: data.sellingPlanGroups },
+  );
+  return "";
 }
 
 function isCurrentVariantAvailable() {
@@ -1186,7 +1238,7 @@ function getCurrentOffer(offersConfig) {
         continue;
       }
     } else {
-      // quantity-breaks-same
+      // quantity-breaks-same / subscription
       const discountRules = parseDiscountRulesJson(offer.discountRulesJson);
       if (!discountRules.length) {
         console.log("[ciwi] offer skipped: no valid quantity discount rules", offer.id);
@@ -1203,6 +1255,12 @@ function getCurrentOffer(offersConfig) {
           continue;
         }
       }
+
+      // 中文注释：订阅型 offer 需要当前商品本身具备 selling plan，否则前台不展示订阅区块
+      if (offer.offerType === "subscription" && !getCurrentProductHasSubscription()) {
+        console.log("[ciwi] subscription offer skipped: current product has no selling plan", offer.id);
+        continue;
+      }
     }
 
     return offer;
@@ -1217,6 +1275,8 @@ window.__ciwiBundleState = window.__ciwiBundleState || {
   selectedBundleVariants: {},
   /** complete-bundle：顾客在多个 bar 中选中的那一档（仅该档加入购物车） */
   selectedCompleteBundleBarId: null,
+  subscriptionMode: null,
+  selectedSellingPlanId: "",
 };
 
 function updateThemeQuantityInput(count) {
@@ -1245,11 +1305,18 @@ function updateThemeQuantityInput(count) {
     }
 
     // 4. 更新所有找到的输入框，但禁用多余的，防止重复提交导致数量翻倍
+    __ciwiSuppressBundlePriceSync = true;
+    try {
     allQtyInputs.forEach((input, index) => {
+      const prev = String(input.value);
       input.value = count;
       if (index === 0) {
         input.disabled = false;
         // 触发 change 和 input 事件，以兼容不同主题的事件监听
+        if (String(count) === prev) {
+          return;
+        }
+        // 中文注释：必须在 suppress 块内 dispatch，避免触发整卡 bundle 重绘死循环
         input.dispatchEvent(new Event("change", { bubbles: true }));
         input.dispatchEvent(new Event("input", { bubbles: true }));
       } else {
@@ -1258,7 +1325,80 @@ function updateThemeQuantityInput(count) {
         input.disabled = true;
       }
     });
+    } finally {
+      __ciwiSuppressBundlePriceSync = false;
+    }
   }
+}
+
+function updateThemeSellingPlanInput(sellingPlanId) {
+  const form = getAddToCartForm();
+  if (!form) return;
+
+  const innerInputs = Array.from(form.querySelectorAll("[name='selling_plan']"));
+  const formId = form.getAttribute("id");
+  const linkedInputs = formId
+    ? Array.from(document.querySelectorAll(`[name="selling_plan"][form="${formId}"]`))
+    : [];
+  const allInputs = Array.from(new Set([...innerInputs, ...linkedInputs]));
+
+  if (allInputs.length === 0) {
+    const newInput = document.createElement("input");
+    newInput.type = "hidden";
+    newInput.name = "selling_plan";
+    form.appendChild(newInput);
+    allInputs.push(newInput);
+  }
+
+  // 中文注释：订阅模式写入 selling_plan，一次性购买则清空并禁用，避免旧值被提交
+  __ciwiSuppressBundlePriceSync = true;
+  try {
+  allInputs.forEach((input, index) => {
+    const prevVal = String(input.value);
+    const prevDisabled = input.disabled;
+    if (sellingPlanId) {
+      input.value = sellingPlanId;
+      input.disabled = index > 0;
+    } else {
+      input.value = "";
+      input.disabled = true;
+    }
+    const valChanged = String(input.value) !== prevVal;
+    const disabledChanged = input.disabled !== prevDisabled;
+    if (!valChanged && !disabledChanged) {
+      return;
+    }
+    // 中文注释：synthetic 事件会触发 document capture 的 refresh，必须用 suppress 打断反馈环
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  } finally {
+    __ciwiSuppressBundlePriceSync = false;
+  }
+}
+
+function syncSubscriptionSelectionToTheme(offer) {
+  if (!offer || offer.offerType !== "subscription") {
+    console.log(
+      "[ciwi][subscription] syncSubscriptionSelectionToTheme skipped: offer is not subscription type",
+      { offerType: offer?.offerType },
+    );
+    return;
+  }
+  const defaultSellingPlanId = getDefaultSellingPlanId();
+  const mode = window.__ciwiBundleState?.subscriptionMode || "one-time";
+  console.log("[ciwi][subscription] syncSubscriptionSelectionToTheme", {
+    mode,
+    defaultSellingPlanId,
+    offerId: offer.offerId || offer.id,
+  });
+  if (mode === "subscription" && defaultSellingPlanId) {
+    window.__ciwiBundleState.selectedSellingPlanId = defaultSellingPlanId;
+    updateThemeSellingPlanInput(defaultSellingPlanId);
+    return;
+  }
+  window.__ciwiBundleState.selectedSellingPlanId = "";
+  updateThemeSellingPlanInput("");
 }
 
 window.ciwiSelectBundleOption = function(count) {
@@ -1274,7 +1414,11 @@ window.ciwiSelectBundleOption = function(count) {
   const wrap = document.querySelector(".ciwi-bundle-wrapper");
   if (wrap && currentOffer) {
     const html = renderBundlePreviewHtml(currentOffer);
-    if (html) wrap.innerHTML = html;
+    if (html) {
+      wrap.innerHTML = html;
+      bindBundleInteractions(wrap);
+      syncSubscriptionSelectionToTheme(currentOffer);
+    }
   }
   if (currentOffer?.offerType === "complete-bundle") {
     void hydrateCompleteBundleOfferInPlace(currentOffer).then((changed) => {
@@ -1287,6 +1431,110 @@ window.ciwiSelectBundleOption = function(count) {
   }
 };
 
+window.ciwiSelectSubscriptionMode = function(mode) {
+  console.log("[ciwi][subscription] ciwiSelectSubscriptionMode called", { mode });
+  if (!window.__ciwiBundleState) {
+    console.warn("[ciwi][subscription] __ciwiBundleState is not initialized");
+    return;
+  }
+  const nextMode = mode === "subscription" ? "subscription" : "one-time";
+  const prevMode = window.__ciwiBundleState.subscriptionMode;
+  window.__ciwiBundleState.subscriptionMode = nextMode;
+  console.log("[ciwi][subscription] mode changed", { prevMode, nextMode });
+
+  // 中文注释：如果用户选择订阅，但商品没有可用的 selling plan，直接给用户反馈而不是静默回退
+  if (nextMode === "subscription") {
+    const defaultSellingPlanId = getDefaultSellingPlanId();
+    if (!defaultSellingPlanId) {
+      console.error(
+        "[ciwi][subscription] cannot switch to subscription mode: product has no selling plan",
+      );
+    }
+  }
+
+  const currentOffer = getCurrentOffer(offersConfigCache);
+  syncSubscriptionSelectionToTheme(currentOffer);
+  const wrap = document.querySelector(".ciwi-bundle-wrapper");
+  if (!wrap) {
+    console.warn("[ciwi][subscription] .ciwi-bundle-wrapper not found in DOM, cannot re-render");
+    return;
+  }
+  if (!currentOffer) {
+    console.warn(
+      "[ciwi][subscription] getCurrentOffer returned null, cannot re-render. Check offer rules/market/product GID.",
+    );
+    return;
+  }
+  const html = renderBundlePreviewHtml(currentOffer);
+  if (html) {
+    wrap.innerHTML = html;
+    bindBundleInteractions(wrap);
+    syncSubscriptionSelectionToTheme(currentOffer);
+    console.log("[ciwi][subscription] bundle UI re-rendered after mode change");
+  } else {
+    console.warn("[ciwi][subscription] renderBundlePreviewHtml returned empty, UI not updated");
+  }
+};
+
+function bindBundleInteractions(root) {
+  if (!root) return;
+
+  const bundleOptions = Array.from(
+    root.querySelectorAll("[data-ciwi-bundle-count]"),
+  );
+  bundleOptions.forEach((option) => {
+    if (option.dataset.ciwiBound === "true") return;
+    option.dataset.ciwiBound = "true";
+    option.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const nextCount = Number(option.getAttribute("data-ciwi-bundle-count"));
+      if (Number.isFinite(nextCount) && nextCount > 0) {
+        window.ciwiSelectBundleOption(nextCount);
+      }
+    });
+  });
+
+  const subscriptionOptions = Array.from(
+    root.querySelectorAll("[data-ciwi-subscription-mode]"),
+  );
+  console.log("[ciwi][subscription] bindBundleInteractions — subscription options count:", subscriptionOptions.length);
+
+  subscriptionOptions.forEach((option) => {
+    if (option.dataset.ciwiBound === "true") return;
+    option.dataset.ciwiBound = "true";
+    const mode = option.getAttribute("data-ciwi-subscription-mode");
+
+    // 中文注释：label 的 click 负责主交互；为兼容主题事件拦截，用 capture 监听防止被中途 stopPropagation
+    option.addEventListener(
+      "click",
+      (event) => {
+        console.log("[ciwi][subscription] click on option", {
+          mode,
+          target: event.target?.tagName,
+        });
+        event.preventDefault();
+        event.stopPropagation();
+        window.ciwiSelectSubscriptionMode(mode);
+      },
+      { capture: false },
+    );
+
+    // 中文注释：radio input 的 change 事件作为兜底，防止某些主题拦截 label click
+    const radio = option.querySelector("input[type='radio']");
+    if (radio) {
+      radio.addEventListener("change", () => {
+        if (!radio.checked) return;
+        console.log("[ciwi][subscription] radio change fallback", { mode });
+        // 中文注释：ciwiSelectSubscriptionMode 幂等，重复调用安全
+        window.ciwiSelectSubscriptionMode(mode);
+      });
+    } else {
+      console.warn("[ciwi][subscription] no radio input found under option label", { mode });
+    }
+  });
+}
+
 window.ciwiHandleBundleAddToCart = function(event) {
   if (event) {
     event.preventDefault();
@@ -1294,6 +1542,8 @@ window.ciwiHandleBundleAddToCart = function(event) {
   }
   const count = window.__ciwiBundleState?.selectedCount || 1;
   updateThemeQuantityInput(count);
+  const currentOffer = getCurrentOffer(offersConfigCache);
+  syncSubscriptionSelectionToTheme(currentOffer);
   const form = getAddToCartForm();
   
   if (form) {
@@ -1630,7 +1880,7 @@ function renderBundlePreviewHtml(offer) {
           ? `border-color: ${esc(accentColor)} !important; background: ${esc(cardBackgroundColor)} !important; box-shadow: 0 8px 18px ${esc(accentColor)}25 !important; cursor: pointer;`
           : `border-color: ${esc(borderColor)} !important; background: ${esc(cardBackgroundColor)} !important; cursor: pointer;`;
 
-        return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}" onclick="window.ciwiSelectBundleOption(${item.count})">
+        return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}" data-ciwi-bundle-count="${esc(item.count)}">
         ${
           item.badge
             ? `<div class="create-offer-style-preview-badge" style="background:${esc(accentColor)} !important; color:${esc(labelColor)} !important;">${esc(item.badge)}</div>`
@@ -1734,7 +1984,7 @@ function renderBundlePreviewHtml(offer) {
         ? `border-color: ${esc(accentColor)} !important; background: ${esc(cardBackgroundColor)} !important; box-shadow: 0 8px 18px ${esc(accentColor)}25 !important; cursor: pointer;`
         : `border-color: ${esc(borderColor)} !important; background: ${esc(cardBackgroundColor)} !important; cursor: pointer;`;
         
-      return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}" onclick="window.ciwiSelectBundleOption(${item.count})">
+      return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}" data-ciwi-bundle-count="${esc(item.count)}">
       ${
         item.badge
           ? `<div class="create-offer-style-preview-badge" style="background:${esc(accentColor)} !important; color:${esc(labelColor)} !important;">${esc(item.badge)}</div>`
@@ -1759,12 +2009,89 @@ function renderBundlePreviewHtml(offer) {
 
   const barIdxQty = computeSelectedBarIndexForOffer(offer);
   const progressiveQty = renderProgressiveGiftsStorefrontHtml(offer, barIdxQty, selectedCount);
+  let subscriptionHtml = "";
+  const hasProductSubscription = getCurrentProductHasSubscription();
+  console.log("[ciwi][subscription] render pre-check", {
+    offerType: offer?.offerType,
+    hasProductSubscription,
+    subscriptionEnabled: offerSettings.subscriptionEnabled,
+  });
+  if (offer?.offerType === "subscription" && hasProductSubscription) {
+    const subscriptionEnabled = offerSettings.subscriptionEnabled === true;
+    if (!subscriptionEnabled) {
+      console.warn(
+        "[ciwi][subscription] offer.subscriptionEnabled is false — subscription UI not rendered",
+        { offerId: offer.offerId || offer.id },
+      );
+    }
+    if (subscriptionEnabled) {
+      const defaultSellingPlanId = getDefaultSellingPlanId();
+      const subscriptionTitle = offerSettings.subscriptionTitle || "Subscribe & Save 20%";
+      const subscriptionSubtitle = offerSettings.subscriptionSubtitle || "Delivered weekly";
+      const oneTimeTitle = offerSettings.oneTimeTitle || "One-time purchase";
+      const oneTimeSubtitle = offerSettings.oneTimeSubtitle || "";
+      const subscriptionDefaultSelected =
+        offerSettings.subscriptionDefaultSelected !== false;
+      const defaultMode =
+        subscriptionDefaultSelected && defaultSellingPlanId
+          ? "subscription"
+          : "one-time";
+
+      if (!window.__ciwiBundleState.subscriptionMode) {
+        window.__ciwiBundleState.subscriptionMode = defaultMode;
+      }
+      // 中文注释：这里曾经把 subscriptionMode 强制回退为 "one-time"（当 defaultSellingPlanId 为空时），
+      // 会导致「点击 Subscribe 时 UI 立刻弹回 One-time」的视觉错觉。
+      // 现改为只在渲染时读取状态，不再覆盖用户的显式选择，便于暴露真实的问题（selling_plan 未配置等）。
+      if (
+        window.__ciwiBundleState.subscriptionMode === "subscription" &&
+        !defaultSellingPlanId
+      ) {
+        console.warn(
+          "[ciwi][subscription] subscriptionMode is 'subscription' but no selling plan id — UI will still render, but add-to-cart will not carry selling_plan.",
+          {
+            sellingPlanGroups: getCurrentProductSubscriptionData().sellingPlanGroups,
+          },
+        );
+      }
+      const selectedMode = window.__ciwiBundleState.subscriptionMode;
+      console.log("[ciwi][subscription] render subscription block", {
+        selectedMode,
+        defaultSellingPlanId,
+        subscriptionTitle,
+        oneTimeTitle,
+      });
+      setTimeout(() => {
+        syncSubscriptionSelectionToTheme(offer);
+      }, 0);
+
+      subscriptionHtml = `
+        <div class="ciwi-subscription-box">
+          <label class="ciwi-subscription-option ${selectedMode === "subscription" ? "is-selected" : ""}" data-ciwi-subscription-mode="subscription">
+            <input type="radio" name="${CIWI_SUBSCRIPTION_MODE_NAME}" ${selectedMode === "subscription" ? "checked" : ""} />
+            <span>
+              <span class="ciwi-subscription-title">${esc(subscriptionTitle)}</span>
+              <span class="ciwi-subscription-subtitle">${esc(subscriptionSubtitle)}</span>
+            </span>
+          </label>
+          <label class="ciwi-subscription-option ${selectedMode === "one-time" ? "is-selected" : ""}" data-ciwi-subscription-mode="one-time">
+            <input type="radio" name="${CIWI_SUBSCRIPTION_MODE_NAME}" ${selectedMode === "one-time" ? "checked" : ""} />
+            <span>
+              <span class="ciwi-subscription-title">${esc(oneTimeTitle)}</span>
+              <span class="ciwi-subscription-subtitle">${esc(oneTimeSubtitle)}</span>
+            </span>
+          </label>
+        </div>
+      `;
+    }
+  }
 
   return `<div class="create-offer-preview-card">
     <div class="create-offer-style-preview-header" style="color:${esc(titleColor)} !important; font-size: ${esc(titleFontSize)}px !important; font-weight: ${esc(titleFontWeight)} !important;">${esc(widgetTitle)}</div>
     <div class="create-offer-style-preview-list create-offer-style-preview-list--${layoutFormat}">
       ${itemsHtml}
     </div>
+    ${subscriptionHtml}
     ${showCustomButton ? `<button type="button" class="create-offer-preview-button" onclick="window.ciwiHandleBundleAddToCart(event)" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
       ${esc(buttonText)}
     </button>` : ""}
@@ -1885,6 +2212,8 @@ function buildBundleUi(offer) {
   wrapper.className = "ciwi-bundle-wrapper";
   wrapper.innerHTML = renderBundlePreviewHtml(offer);
   if (!wrapper.innerHTML.trim()) return null;
+  bindBundleInteractions(wrapper);
+  syncSubscriptionSelectionToTheme(offer);
   wrapper.style.display = isCurrentVariantAvailable() ? "block" : "none";
   ensureBundleLineProperties(offer);
   return wrapper;
@@ -1901,6 +2230,8 @@ function scheduleBundlePriceRefresh(offer) {
     const html = renderBundlePreviewHtml(offer);
     if (html) {
       wrap.innerHTML = html;
+      bindBundleInteractions(wrap);
+      syncSubscriptionSelectionToTheme(offer);
       wrap.style.display = isCurrentVariantAvailable() ? "block" : "none";
     } else {
       wrap.style.display = "none";
@@ -1929,7 +2260,12 @@ function attachBundlePriceSync(offer) {
   priceSyncController = ac;
   const { signal } = ac;
 
-  const refresh = () => scheduleBundlePriceRefresh(offer);
+  const refresh = () => {
+    if (__ciwiSuppressBundlePriceSync) {
+      return;
+    }
+    scheduleBundlePriceRefresh(offer);
+  };
 
   document.addEventListener("variant:change", refresh, { signal });
   document.addEventListener("shopify:variant:change", refresh, { signal });

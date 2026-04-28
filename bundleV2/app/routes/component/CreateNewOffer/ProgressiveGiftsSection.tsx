@@ -25,14 +25,14 @@ function buildBarOptions(
   if (offerType === "bxgy") {
     return bxgyDiscountRules.map((r, i) => ({
       value: i + 1,
-      label: `Bar #${i + 1}（count ≥ ${r.count}）`,
+      label: `Bar #${i + 1} (count >= ${r.count})`,
     }));
   }
   return [
-    { value: 1, label: "Bar #1（Single，数量 1）" },
+    { value: 1, label: "Bar #1 (Single, qty 1)" },
     ...normalizedDiscountRules.map((r, i) => ({
       value: i + 2,
-      label: `Bar #${i + 2}（数量 ${r.count}）`,
+      label: `Bar #${i + 2} (qty ${r.count})`,
     })),
   ];
 }
@@ -92,16 +92,22 @@ export function ProgressiveGiftsSection({
         <div>
           <h3 className="text-[16px] font-semibold text-[#1c1f23] m-0">Progressive gifts</h3>
           <p className="text-[13px] text-[#5c6166] m-0 mt-1">
-            阶梯赠品：当前支持「免邮 / Free shipping」奖励；结账时由配送类 Discount Function 生效。免邮依赖商店内已激活的
-            SHIPPING 类自动 App 折扣；若主题未把加购行属性带到结账，Function 会按「商品 + 行数量」推断档位（同一商品多个活动同时开启阶梯赠品时需行上带
-            offer id）。
+            Progressive gifts currently support the "Free shipping" reward. It is
+            applied at checkout by the delivery Discount Function. Free shipping
+            depends on an active SHIPPING automatic app discount in the store. If
+            the theme does not pass line item properties to checkout, the
+            Function infers the unlocked tier by product plus line quantity. If
+            multiple offers for the same product use progressive gifts at the
+            same time, each line should include the offer id.
           </p>
         </div>
         <Switch checked={value.enabled} onChange={(checked) => patch({ enabled: checked })} />
       </div>
 
       {!value.enabled ? (
-        <p className="text-[13px] text-[#5c6166]">关闭时不会展示前台区域，也不会参与免邮判定。</p>
+        <p className="text-[13px] text-[#5c6166]">
+          When disabled, the storefront block is hidden and free shipping checks do not apply.
+        </p>
       ) : (
         <Tabs
           items={[
@@ -112,7 +118,7 @@ export function ProgressiveGiftsSection({
                 <div className="flex flex-col gap-4 pt-2">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <label className="block text-[14px] font-medium text-[#1c1f23]">
-                      区域标题
+                      Section title
                       <Input
                         className="mt-1"
                         value={value.title}
@@ -121,7 +127,7 @@ export function ProgressiveGiftsSection({
                       />
                     </label>
                     <label className="block text-[14px] font-medium text-[#1c1f23]">
-                      副标题（可选）
+                      Subtitle (optional)
                       <Input
                         className="mt-1"
                         value={value.subtitle}
@@ -132,14 +138,14 @@ export function ProgressiveGiftsSection({
                   </div>
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center justify-between p-3 border border-gray-100 rounded-md bg-white">
-                      <span className="text-[14px] text-[#1c1f23]">未解锁前隐藏赠品卡片</span>
+                      <span className="text-[14px] text-[#1c1f23]">Hide gift cards until unlocked</span>
                       <Switch
                         checked={value.hideGiftsUntilUnlocked}
                         onChange={(c) => patch({ hideGiftsUntilUnlocked: c })}
                       />
                     </div>
                     <div className="flex items-center justify-between p-3 border border-gray-100 rounded-md bg-white">
-                      <span className="text-[14px] text-[#1c1f23]">锁定状态仍显示标签</span>
+                      <span className="text-[14px] text-[#1c1f23]">Show labels while locked</span>
                       <Switch
                         checked={value.showLabelsForLockedGifts}
                         onChange={(c) => patch({ showLabelsForLockedGifts: c })}
@@ -149,13 +155,13 @@ export function ProgressiveGiftsSection({
 
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-[14px] font-medium text-[#1c1f23]">赠品槽位</span>
+                      <span className="text-[14px] font-medium text-[#1c1f23]">Gift slots</span>
                       <Button type="dashed" size="small" onClick={addGift}>
-                        + 添加赠品
+                        + Add gift
                       </Button>
                     </div>
                     {value.gifts.length === 0 ? (
-                      <p className="text-[13px] text-[#5c6166]">暂无赠品，请点击「添加赠品」。</p>
+                      <p className="text-[13px] text-[#5c6166]">No gifts yet. Click "Add gift" to create one.</p>
                     ) : (
                       <div className="flex flex-col gap-3">
                         {value.gifts.map((gift) => (
@@ -164,16 +170,16 @@ export function ProgressiveGiftsSection({
                             className="border border-gray-200 rounded-md p-3 bg-white grid grid-cols-1 md:grid-cols-2 gap-3"
                           >
                             <label className="block text-[13px] font-medium text-[#1c1f23]">
-                              类型
+                              Type
                               <Select
                                 className="mt-1 w-full"
                                 value={gift.type}
-                                options={[{ value: "free_shipping", label: "Free shipping（免邮）" }]}
+                                options={[{ value: "free_shipping", label: "Free shipping" }]}
                                 onChange={(v) => patchGift(gift.id, { type: v as ProgressiveGift["type"] })}
                               />
                             </label>
                             <label className="block text-[13px] font-medium text-[#1c1f23]">
-                              展示标题
+                              Display title
                               <Input
                                 className="mt-1"
                                 value={gift.title}
@@ -181,7 +187,7 @@ export function ProgressiveGiftsSection({
                               />
                             </label>
                             <label className="block text-[13px] font-medium text-[#1c1f23] md:col-span-2">
-                              副文案
+                              Subtitle
                               <Input
                                 className="mt-1"
                                 value={gift.subtitle}
@@ -189,7 +195,7 @@ export function ProgressiveGiftsSection({
                               />
                             </label>
                             <label className="block text-[13px] font-medium text-[#1c1f23] md:col-span-2">
-                              图片 URL（可选）
+                              Image URL (optional)
                               <Input
                                 className="mt-1"
                                 value={gift.imageUrl}
@@ -198,13 +204,13 @@ export function ProgressiveGiftsSection({
                               />
                             </label>
                             <label className="block text-[13px] font-medium text-[#1c1f23]">
-                              解锁方式
+                              Unlock mode
                               <Select
                                 className="mt-1 w-full"
                                 value={gift.unlockMode}
                                 options={[
-                                  { value: "tier_index", label: "按 Bar 档位（tier_index）" },
-                                  { value: "at_count", label: "按购物车数量（at_count）" },
+                                  { value: "tier_index", label: "By bar tier (tier_index)" },
+                                  { value: "at_count", label: "By cart quantity (at_count)" },
                                 ]}
                                 onChange={(v) =>
                                   patchGift(gift.id, { unlockMode: v as ProgressiveGiftUnlockMode })
@@ -213,7 +219,7 @@ export function ProgressiveGiftsSection({
                             </label>
                             {gift.unlockMode === "tier_index" ? (
                               <label className="block text-[13px] font-medium text-[#1c1f23]">
-                                解锁起始 Bar
+                                Unlock from bar
                                 <Select
                                   className="mt-1 w-full"
                                   value={gift.unlockTierIndex}
@@ -223,7 +229,7 @@ export function ProgressiveGiftsSection({
                               </label>
                             ) : (
                               <label className="block text-[13px] font-medium text-[#1c1f23]">
-                                解锁所需数量
+                            Required quantity to unlock
                                 <Input
                                   type="number"
                                   min={1}
@@ -237,13 +243,13 @@ export function ProgressiveGiftsSection({
                               </label>
                             )}
                             <label className="block text-[13px] font-medium text-[#1c1f23] md:col-span-2">
-                              免邮最高可覆盖运费（可选，留空=不限制）
+                              Max shipping rate covered by free shipping (optional, blank = no limit)
                               <Input
                                 type="number"
                                 min={0}
                                 step={0.01}
                                 className="mt-1"
-                                placeholder="例如 9.99 — 仅对标价 ≤ 此金额的配送方式给 100% 折扣"
+                                placeholder="e.g. 9.99 - only shipping rates priced at or below this amount get a 100% discount"
                                 value={
                                   gift.freeShippingMaxRateAmount == null
                                     ? ""
@@ -261,12 +267,12 @@ export function ProgressiveGiftsSection({
                                 }}
                               />
                               <span className="text-[12px] text-[#5c6166] block mt-1">
-                                说明：与结账页配送选项的标价（amount）比较；超过阈值的配送方式不参与免邮。
+                                Compared against the checkout shipping rate amount. Rates above this threshold do not qualify for free shipping.
                               </span>
                             </label>
                             <div className="md:col-span-2 flex justify-end">
                               <Button danger type="link" size="small" onClick={() => removeGift(gift.id)}>
-                                删除该赠品
+                                Remove gift
                               </Button>
                             </div>
                           </div>
@@ -283,7 +289,7 @@ export function ProgressiveGiftsSection({
               children: (
                 <div className="flex flex-col gap-3 pt-2 max-w-md">
                   <label className="block text-[14px] font-medium text-[#1c1f23]">
-                    赠品区布局
+                    Gift area layout
                     <Select
                       className="mt-1 w-full"
                       value={value.layout}
@@ -299,7 +305,7 @@ export function ProgressiveGiftsSection({
                     />
                   </label>
                   <p className="text-[12px] text-[#5c6166]">
-                    与主 Bundle 卡片使用同一套 CSS 类名，便于主题侧风格统一。
+                    Uses the same CSS class set as the main bundle card for consistent storefront styling.
                   </p>
                 </div>
               ),

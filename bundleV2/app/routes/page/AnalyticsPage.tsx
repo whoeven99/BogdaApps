@@ -2,6 +2,10 @@ import { Select } from "antd";
 import { CircleHelp } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import BasicLineChart from "../component/BasicLineChart/BasicLineChart";
+import {
+  AdminPageHeader,
+  adminSurfaceCardClass,
+} from "../component/adminUi";
 
 interface AnalyticsDataType {
   visitors: number;
@@ -137,77 +141,105 @@ export function AnalyticsPage({ shop, offers, defaultOfferId }: AnalyticsPagePro
 
   return (
     <div className="max-w-[1280px] mx-auto pb-[24px]">
-      <div className="mb-[24px]">
-        <h1 className="text-[20px] font-semibold text-[#1c1f23] m-0">
-          Analytics
-        </h1>
-      </div>
+      <AdminPageHeader
+        title="Analytics"
+        subtitle="Track bundle reach, order conversion, and added revenue with compact merchant-friendly reporting."
+      />
 
       {/* Filters Bar */}
-      <div className="flex items-center gap-[12px] mb-[24px]">
-        <Select
-          value={selectedTimeRange}
-          onChange={(e) => setSelectedTimeRange(e)}
-          options={timeRangeOptions}
-          style={{ width: 200 }}
-        />
-        <Select
-          value={selectedOffer}
-          onChange={(e) => setSelectedOffer(e)}
-          options={offerOptions}
-          style={{ width: 200 }}
-        />
+      <div className={`${adminSurfaceCardClass} mb-[24px] p-[16px] sm:p-[20px]`}>
+        <div className="grid grid-cols-1 gap-[12px] md:grid-cols-2">
+          <label className="block text-[13px] font-medium text-[#1c1f23]">
+            Time range
+            <Select
+              value={selectedTimeRange}
+              onChange={(e) => setSelectedTimeRange(e)}
+              options={timeRangeOptions}
+              className="mt-[6px] w-full max-w-[220px]"
+            />
+          </label>
+          <label className="block text-[13px] font-medium text-[#1c1f23]">
+            Offer
+            <Select
+              value={selectedOffer}
+              onChange={(e) => setSelectedOffer(e)}
+              options={offerOptions}
+              className="mt-[6px] w-full max-w-[280px]"
+            />
+          </label>
+        </div>
       </div>
 
       {/* Metrics Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-[16px] mb-[24px]">
         {/* Visitors */}
-        <div className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[24px]">
+        <div className={`${adminSurfaceCardClass} p-[20px] sm:p-[24px]`}>
+          <div className="mb-[8px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
+            Reach
+          </div>
           <div className="flex items-center justify-between mb-[12px]">
-            <span className="font-sans font-normal text-[14px] text-[#5c6166]">
+            <span className="font-sans font-medium text-[14px] text-[#5c6166]">
               Visitors
             </span>
             <CircleHelp size={16} className="text-[#5c6166]" />
           </div>
-          <h3 className="font-sans font-semibold text-[20px] text-[#1c1f23] m-0">
+          <h3 className="m-0 font-sans text-[28px] font-semibold leading-[38px] text-[#1c1f23]">
             {analyticsData.visitors.toLocaleString()}
           </h3>
+          <p className="mt-[8px] mb-0 text-[13px] leading-[20px] text-[#5c6166]">
+            Unique shoppers who reached a bundle-enabled buying surface.
+          </p>
         </div>
 
         {/* Bundle orders */}
-        <div className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[24px]">
+        <div className={`${adminSurfaceCardClass} p-[20px] sm:p-[24px]`}>
+          <div className="mb-[8px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
+            Orders
+          </div>
           <div className="flex items-center justify-between mb-[12px]">
-            <span className="font-sans font-normal text-[14px] text-[#5c6166]">
+            <span className="font-sans font-medium text-[14px] text-[#5c6166]">
               Bundle orders
             </span>
             <CircleHelp size={16} className="text-[#5c6166]" />
           </div>
-          <h3 className="font-sans font-semibold text-[20px] text-[#1c1f23] m-0">
+          <h3 className="m-0 font-sans text-[28px] font-semibold leading-[38px] text-[#1c1f23]">
             {analyticsData.bundleOrders.toLocaleString()}
           </h3>
+          <p className="mt-[8px] mb-0 text-[13px] leading-[20px] text-[#5c6166]">
+            Orders that completed with a bundle purchase attached.
+          </p>
         </div>
 
         {/* Conversion to bundle */}
-        <div className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[24px]">
+        <div className={`${adminSurfaceCardClass} p-[20px] sm:p-[24px]`}>
+          <div className="mb-[8px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
+            Efficiency
+          </div>
           <div className="flex items-center justify-between mb-[12px]">
-            <span className="font-sans font-normal text-[14px] text-[#5c6166]">
+            <span className="font-sans font-medium text-[14px] text-[#5c6166]">
               Conversion to bundle
             </span>
             <CircleHelp size={16} className="text-[#5c6166]" />
           </div>
-          <h3 className="font-sans font-semibold text-[20px] text-[#1c1f23] m-0">
-                        {(analyticsData.conversionRate * 100).toFixed(2)}%
+          <h3 className="m-0 font-sans text-[28px] font-semibold leading-[38px] text-[#1c1f23]">
+            {(analyticsData.conversionRate * 100).toFixed(2)}%
           </h3>
+          <p className="mt-[8px] mb-0 text-[13px] leading-[20px] text-[#5c6166]">
+            Share of visitors who converted into bundle orders.
+          </p>
         </div>
       </div>
 
       {/* Daily added revenue - Line Chart */}
-      <div className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[24px]">
-        <h3 className="font-sans font-semibold text-[14px] text-[#1c1f23] m-0 mb-[8px]">
+      <div className={`${adminSurfaceCardClass} p-[20px] sm:p-[24px]`}>
+        <div className="mb-[6px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
+          Revenue Trend
+        </div>
+        <h3 className="m-0 mb-[8px] font-sans text-[18px] font-semibold leading-[28px] text-[#1c1f23]">
           Daily added revenue
         </h3>
-        <p className="font-sans font-normal text-[13px] text-[#5c6166] mb-[24px]">
-          See how much additional revenue you're making with this app every day.
+        <p className="mb-[24px] font-sans text-[13px] leading-[20px] text-[#5c6166]">
+          See how much additional revenue your bundles contribute each day over the selected range.
         </p>
         <BasicLineChart
           Xdata={basicLineChartData.Xdata}

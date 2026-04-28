@@ -25,6 +25,13 @@ type Props = {
   progressivePreviewBarIndex?: number;
   /** 预览用：模拟购物车行数量（at_count 解锁） */
   progressivePreviewLineQty?: number;
+  showSubscriptionPreview?: boolean;
+  subscriptionPreviewStyle?: "solid" | "dashed";
+  subscriptionTitle?: string;
+  subscriptionSubtitle?: string;
+  showSubscriptionExplanation?: boolean;
+  subscriptionExplanationTitle?: string;
+  subscriptionExplanationBody?: string;
 };
 
 export default function BundlePreview({
@@ -44,6 +51,13 @@ export default function BundlePreview({
   progressiveGifts,
   progressivePreviewBarIndex = 1,
   progressivePreviewLineQty = 1,
+  showSubscriptionPreview,
+  subscriptionPreviewStyle,
+  subscriptionTitle,
+  subscriptionSubtitle,
+  showSubscriptionExplanation,
+  subscriptionExplanationTitle,
+  subscriptionExplanationBody,
 }: Props) {
   const html = renderBundlePreviewHtml({
     title,
@@ -59,6 +73,13 @@ export default function BundlePreview({
     buttonPrimaryColor,
     showCustomButton,
     items,
+    showSubscriptionPreview,
+    subscriptionPreviewStyle,
+    subscriptionTitle,
+    subscriptionSubtitle,
+    showSubscriptionExplanation,
+    subscriptionExplanationTitle,
+    subscriptionExplanationBody,
   });
 
   const prog =

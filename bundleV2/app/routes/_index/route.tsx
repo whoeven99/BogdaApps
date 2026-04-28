@@ -21,7 +21,7 @@ import { AllOffersPage } from "../page/AllOffersPage";
 import { AnalyticsPage } from "../page/AnalyticsPage";
 import { PricingPage } from "../page/PricingPage";
 import { CreateNewOffer } from "../component/CreateNewOffer/CreateNewOffer";
-import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
+import { OfferTypeSelection } from "../component/CreateNewOffer/OfferTypeSelection";
 import prisma from "../../db.server";
 import {
   getCachedShopOffers,
@@ -49,6 +49,7 @@ import {
   sanitizeHexColor,
   sanitizeSingleLineText,
 } from "../../utils/offerParsing";
+import type { OfferTypeId } from "../component/CreateNewOffer/offerTypeOptions";
 
 type OfferListItem = {
   id: string;
@@ -97,7 +98,6 @@ type ShopOffersMetafieldSyncResult =
 
 const BUNDLE_METAFIELD_NAMESPACE = "ciwi_bundle";
 const BUNDLE_METAFIELD_BASE_KEY = "ciwi-bundle-offers";
-const BUNDLE_METAFIELD_ACTIVE_ENV_KEY = "ciwi-bundle-offers-active-env";
 const BUNDLE_METAFIELD_ENABLED_PROD_KEY = "ciwi-bundle-enabled-prod";
 const BUNDLE_METAFIELD_ENABLED_TEST_KEY = "ciwi-bundle-enabled-test";
 const PROD_SHOPIFY_API_KEY = "bfc13ad696f2a8d2a77ba6eee1e26966";
@@ -178,7 +178,6 @@ function buildHydratedCompleteBundleSelectedProductsJson(
 }
 
 async function buildCompactOffersPayload(
-  admin: any,
   shopOffers: OfferListItem[],
 ): Promise<string> {
   // 仅同步 status=true 的活动，避免无效活动占用 payload 体积并干扰函数计算
@@ -207,7 +206,7 @@ async function buildStorefrontOffersPayload(
   shopOffers: OfferListItem[],
 ): Promise<string> {
   const activeOffers = shopOffers.filter((offer) => offer.status === true);
-  const compactPayload = await buildCompactOffersPayload(admin, shopOffers);
+  const compactPayload = await buildCompactOffersPayload(shopOffers);
   const compactPayloadParsed = JSON.parse(compactPayload) as {
     updatedAt?: string;
     offers?: Array<{
@@ -279,7 +278,7 @@ async function syncShopOffersMetafield(
       updatedAt: new Date().toISOString(),
       offers: shopOffers,
     });
-    const functionMetafieldValue = await buildCompactOffersPayload(admin, shopOffers);
+    const functionMetafieldValue = await buildCompactOffersPayload(shopOffers);
     const storefrontMetafieldValue = await buildStorefrontOffersPayload(admin, shopOffers);
     console.log("[offers-sync] payload size snapshot", {
       totalOffers: shopOffers.length,
@@ -426,6 +425,7 @@ export type StoreProductItem = {
     price: string;
     selectedOptions: Array<{ name: string; value: string }>;
   }>;
+  hasSubscription: boolean;
 };
 
 type AdminProductNode = {
@@ -445,6 +445,9 @@ type AdminProductNode = {
         } | null> | null;
       } | null;
     }>;
+  } | null;
+  sellingPlanGroups?: {
+    edges?: Array<{ node?: { id?: string | null } | null }>;
   } | null;
 } | null;
 
@@ -507,6 +510,8 @@ function mapAdminProductNodeToStoreProductItem(
                 }))
             : [],
         })) || [],
+    hasSubscription:
+      ((node?.sellingPlanGroups?.edges as Array<unknown> | undefined) ?? []).length > 0,
   };
 }
 
@@ -589,6 +594,13 @@ async function fetchStoreProducts(
                     }
                   }
                 }
+                sellingPlanGroups(first: 1) {
+                  edges {
+                    node {
+                      id
+                    }
+                  }
+                }
               }
             }
           }
@@ -647,6 +659,13 @@ async function fetchStoreProducts(
                         name
                         value
                       }
+                    }
+                  }
+                }
+                sellingPlanGroups(first: 1) {
+                  edges {
+                    node {
+                      id
                     }
                   }
                 }
@@ -1102,6 +1121,95 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
     return Response.json({ storeProducts });
   }
+  if (intent === "get-product-subscription-status") {
+    const productId = String(formData.get("productId") || "").trim();
+    if (!productId) {
+      return Response.json(
+        { ok: false as const, error: "Missing product ID" },
+        { status: 400 },
+      );
+    }
+
+    try {
+      const response = await admin.graphql(
+        `#graphql
+          query GetProductSubscriptionStatus($id: ID!) {
+            product(id: $id) {
+              id
+              title
+              sellingPlanGroups(first: 10) {
+                edges {
+                  node {
+                    id
+                    name
+                  }
+                }
+              }
+              requiresSellingPlan
+            }
+          }
+        `,
+        {
+          variables: {
+            id: productId,
+          },
+        },
+      );
+      const json = (await response.json()) as {
+        data?: {
+          product?: {
+            id?: string;
+            title?: string;
+            requiresSellingPlan?: boolean;
+            sellingPlanGroups?: {
+              edges?: Array<{
+                node?: {
+                  id?: string;
+                  name?: string;
+                } | null;
+              }>;
+            };
+          } | null;
+        };
+        errors?: unknown;
+      };
+
+      if (json.errors) {
+        console.error("GraphQL errors fetching product subscription status:", json.errors);
+      }
+
+      const product = json.data?.product;
+      const sellingPlanGroups =
+        product?.sellingPlanGroups?.edges
+          ?.map((edge) => edge?.node)
+          .filter(
+            (
+              node,
+            ): node is {
+              id?: string;
+              name?: string;
+            } => !!node,
+          ) ?? [];
+
+      return Response.json({
+        ok: true as const,
+        product: {
+          id: product?.id ?? productId,
+          title: product?.title ?? "",
+          requiresSellingPlan: product?.requiresSellingPlan === true,
+          sellingPlanGroups,
+          hasSubscription:
+            product?.requiresSellingPlan === true || sellingPlanGroups.length > 0,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to fetch product subscription status", error);
+      return Response.json(
+        { ok: false as const, error: "Failed to fetch product subscription status" },
+        { status: 500 },
+      );
+    }
+  }
   if (intent === "load-offers") {
     const offers = await fetchShopOffers(session.shop);
     return Response.json({ offers });
@@ -1273,6 +1381,43 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
     const showCustomButtonRaw = String(formData.get("showCustomButton") || "");
     const showCustomButton = showCustomButtonRaw !== "false";
+    const subscriptionEnabledRaw = String(
+      formData.get("subscriptionEnabled") || "",
+    );
+    const subscriptionEnabled = subscriptionEnabledRaw === "true";
+    const subscriptionPositionRaw = String(
+      formData.get("subscriptionPosition") || "below-bundle-bars",
+    ).trim();
+    const subscriptionPosition = ["below-bundle-bars"].includes(
+      subscriptionPositionRaw,
+    )
+      ? subscriptionPositionRaw
+      : "below-bundle-bars";
+    const subscriptionTitle = sanitizeSingleLineText(
+      formData.get("subscriptionTitle"),
+      60,
+      "Subscribe & Save 20%",
+    );
+    const subscriptionSubtitle = sanitizeSingleLineText(
+      formData.get("subscriptionSubtitle"),
+      60,
+      "Delivered weekly",
+    );
+    const oneTimeTitle = sanitizeSingleLineText(
+      formData.get("oneTimeTitle"),
+      60,
+      "One-time purchase",
+    );
+    const oneTimeSubtitle = sanitizeSingleLineText(
+      formData.get("oneTimeSubtitle"),
+      60,
+      "",
+    );
+    const subscriptionDefaultSelectedRaw = String(
+      formData.get("subscriptionDefaultSelected") || "",
+    );
+    const subscriptionDefaultSelected =
+      subscriptionDefaultSelectedRaw === "true";
 
     const title = sanitizeSingleLineText(
       formData.get("title"),
@@ -1348,6 +1493,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       titleFontWeight,
       buttonText,
       showCustomButton,
+      subscriptionEnabled,
+      subscriptionPosition,
+      subscriptionTitle,
+      subscriptionSubtitle,
+      oneTimeTitle,
+      oneTimeSubtitle,
+      subscriptionDefaultSelected,
       scheduleTimezone: scheduleTimezoneRaw || undefined,
       progressiveGifts: progressiveGiftsConfigToStorableJson(progressiveGiftsSanitized),
     });
@@ -1634,6 +1786,7 @@ export default function Index() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<HomeTabKey>("dashboard");
   const [showCreateOffer, setShowCreateOffer] = useState(false);
+  const [createOfferType, setCreateOfferType] = useState<OfferTypeId | null>(null);
   const [editingOfferId, setEditingOfferId] = useState<string | null>(null);
   const [analyticsOfferId, setAnalyticsOfferId] = useState<string | null>(null);
   const offersFetcher = useFetcher<{ offers: OfferListItem[] }>();
@@ -1644,8 +1797,9 @@ export default function Index() {
   const storeProducts = storeProductsFetcher.data?.storeProducts ?? [];
   const isOffersLoading =
     !offersFetcher.data?.offers && offersFetcher.state !== "idle";
+  const shouldShowOfferBuilder = Boolean(editingOfferId || (showCreateOffer && createOfferType));
   const isStoreProductsLoading =
-    (showCreateOffer || !!editingOfferId) &&
+    shouldShowOfferBuilder &&
     !storeProductsFetcher.data?.storeProducts &&
     storeProductsFetcher.state !== "idle";
 
@@ -1666,14 +1820,17 @@ export default function Index() {
     if (toast?.startsWith("create-success")) {
       setToastMessage("Offer created successfully");
       setShowCreateOffer(false);
+      setCreateOfferType(null);
       setEditingOfferId(null);
     } else if (toast?.startsWith("update-success")) {
       setToastMessage("Offer updated successfully");
       setShowCreateOffer(false);
+      setCreateOfferType(null);
       setEditingOfferId(null);
     } else if (toast?.startsWith("delete-success")) {
       setToastMessage("Offer deleted successfully");
       setShowCreateOffer(false);
+      setCreateOfferType(null);
       setEditingOfferId(null);
     } else if (toast?.startsWith("toggle-success")) {
       setToastMessage("Offer status updated successfully");
@@ -1722,7 +1879,7 @@ export default function Index() {
   }, [toast, offersFetcher, offersFetcher.state]);
 
   useEffect(() => {
-    const shouldLoadStoreProducts = showCreateOffer || !!editingOfferId;
+    const shouldLoadStoreProducts = shouldShowOfferBuilder;
     if (!shouldLoadStoreProducts) return;
     if (storeProductsFetcher.data?.storeProducts) return;
     if (storeProductsFetcher.state !== "idle") return;
@@ -1732,8 +1889,7 @@ export default function Index() {
       { method: "post" },
     );
   }, [
-    showCreateOffer,
-    editingOfferId,
+    shouldShowOfferBuilder,
     storeProductsFetcher,
     storeProductsFetcher.data,
     storeProductsFetcher.state,
@@ -1742,7 +1898,7 @@ export default function Index() {
   return (
     <AppProvider embedded apiKey={apiKey}>
       <div className="flex flex-col min-h-screen">
-        <div className="flex-1 max-w-[1280px] w-full mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px] relative">
+        <div className="flex-1 max-w-[1280px] w-full mx-auto px-[16px] sm:px-[24px] pt-[12px] sm:pt-[16px] relative">
           {toastMessage && (
           <div className="fixed z-50 top-4 left-1/2 -translate-x-1/2 bg-[rgba(0,0,0,0.75)] backdrop-blur-sm !text-white px-4 py-2 rounded shadow-lg text-sm font-sans">
             {toastMessage}
@@ -1750,17 +1906,22 @@ export default function Index() {
         )}
         {/* Tabs */}
         {!showCreateOffer && !editingOfferId && (
-          <nav className="flex flex-col sm:flex-row gap-[8px] sm:gap-[16px] items-stretch sm:items-start pb-0 mb-[16px] sm:mb-[24px] border-b border-[#e3e8ed]">
+          <nav className="mb-[12px] sm:mb-[16px] overflow-x-auto">
+            <div className="inline-flex min-w-max gap-[6px] rounded-[10px] border border-[#e5e7eb] bg-white p-[4px]">
             <button
               type="button"
               onClick={() => {
                 setShowCreateOffer(false);
                 setActiveTab("dashboard");
               }}
-              className={`px-[16px] py-[12px] text-center sm:text-left cursor-pointer transition-all border-b-2 ${activeTab === "dashboard" ? "border-[#008060] text-[#1c1f23]" : "border-transparent hover:border-[#8c9196] text-[#5c6166]"}`}
+              className={`rounded-[8px] px-[12px] py-[8px] text-center cursor-pointer transition-all ${
+                activeTab === "dashboard"
+                  ? "bg-[#f6f6f7] text-[#1c1f23]"
+                  : "text-[#5c6166] hover:bg-[#f6f6f7] hover:text-[#1c1f23]"
+              }`}
             >
               <span
-                className={`font-sans leading-[24px] text-[14px] font-medium tracking-normal ${activeTab === "dashboard" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
+                className={`font-sans leading-[20px] text-[13px] font-medium tracking-normal ${activeTab === "dashboard" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
               >
                 Dashboard
               </span>
@@ -1772,10 +1933,14 @@ export default function Index() {
                 setShowCreateOffer(false);
                 setActiveTab("offers");
               }}
-              className={`px-[16px] py-[12px] text-center sm:text-left cursor-pointer transition-all border-b-2 ${activeTab === "offers" ? "border-[#008060] text-[#1c1f23]" : "border-transparent hover:border-[#8c9196] text-[#5c6166]"}`}
+              className={`rounded-[8px] px-[12px] py-[8px] text-center cursor-pointer transition-all ${
+                activeTab === "offers"
+                  ? "bg-[#f6f6f7] text-[#1c1f23]"
+                  : "text-[#5c6166] hover:bg-[#f6f6f7] hover:text-[#1c1f23]"
+              }`}
             >
               <span
-                className={`font-sans leading-[24px] text-[14px] font-medium tracking-normal ${activeTab === "offers" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
+                className={`font-sans leading-[20px] text-[13px] font-medium tracking-normal ${activeTab === "offers" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
               >
                 All Offers
               </span>
@@ -1787,15 +1952,37 @@ export default function Index() {
                 setShowCreateOffer(false);
                 setActiveTab("analytics");
               }}
-              className={`px-[16px] py-[12px] text-center sm:text-left cursor-pointer transition-all border-b-2 ${activeTab === "analytics" ? "border-[#008060] text-[#1c1f23]" : "border-transparent hover:border-[#8c9196] text-[#5c6166]"}`}
+              className={`rounded-[8px] px-[12px] py-[8px] text-center cursor-pointer transition-all ${
+                activeTab === "analytics"
+                  ? "bg-[#f6f6f7] text-[#1c1f23]"
+                  : "text-[#5c6166] hover:bg-[#f6f6f7] hover:text-[#1c1f23]"
+              }`}
             >
               <span
-                className={`font-sans leading-[24px] text-[14px] font-medium tracking-normal ${activeTab === "analytics" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
+                className={`font-sans leading-[20px] text-[13px] font-medium tracking-normal ${activeTab === "analytics" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
               >
                 Analytics
               </span>
             </button>
-
+            <button
+              type="button"
+              onClick={() => {
+                setShowCreateOffer(false);
+                setActiveTab("pricing");
+              }}
+              className={`rounded-[8px] px-[12px] py-[8px] text-center cursor-pointer transition-all ${
+                activeTab === "pricing"
+                  ? "bg-[#f6f6f7] text-[#1c1f23]"
+                  : "text-[#5c6166] hover:bg-[#f6f6f7] hover:text-[#1c1f23]"
+              }`}
+            >
+              <span
+                className={`font-sans leading-[20px] text-[13px] font-medium tracking-normal ${activeTab === "pricing" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
+              >
+                Pricing
+              </span>
+            </button>
+            </div>
           </nav>
         )}
 
@@ -1821,6 +2008,7 @@ export default function Index() {
             }}
             onCreateOffer={() => {
               setShowCreateOffer(true);
+              setCreateOfferType(null);
               setEditingOfferId(null);
               setActiveTab("offers");
             }}
@@ -1836,15 +2024,29 @@ export default function Index() {
             apiKey={apiKey}
             onCreateOffer={() => {
               setShowCreateOffer(true);
+              setCreateOfferType(null);
               setEditingOfferId(null);
             }}
             onEditOffer={(id) => {
               setEditingOfferId(id);
               setShowCreateOffer(false);
+              setCreateOfferType(null);
             }}
           />
         )}
-        {(showCreateOffer || editingOfferId) &&
+        {showCreateOffer && !createOfferType && !editingOfferId && (
+          <OfferTypeSelection
+            onBack={() => {
+              setShowCreateOffer(false);
+              setCreateOfferType(null);
+              setEditingOfferId(null);
+            }}
+            onSelect={(offerType) => {
+              setCreateOfferType(offerType);
+            }}
+          />
+        )}
+        {(shouldShowOfferBuilder || editingOfferId) &&
           (isStoreProductsLoading ? (
             <div className="bg-white rounded-[12px] border border-[#e3e8ed] p-[24px] shadow-sm">
               <div className="animate-pulse space-y-[12px]">
@@ -1860,10 +2062,15 @@ export default function Index() {
           ) : (
             <CreateNewOffer
               onBack={() => {
-                setShowCreateOffer(false);
-                setEditingOfferId(null);
+                if (editingOfferId) {
+                  setShowCreateOffer(false);
+                  setEditingOfferId(null);
+                  return;
+                }
+                setCreateOfferType(null);
               }}
               initialOffer={editingOfferId ? offers.find(o => o.id === editingOfferId) as any : undefined}
+              initialOfferType={createOfferType ?? undefined}
               storeProducts={storeProducts}
               markets={markets}
               existingOffers={offers.map((o) => ({
@@ -1888,8 +2095,8 @@ export default function Index() {
           />
         )}
         </div>
-        <div className="py-8 text-center text-sm text-[#666] w-full">
-          <a 
+        <div className="mt-[8px] mb-[24px] flex w-full flex-wrap items-center justify-center gap-[10px] rounded-[12px] border border-[#e9edf1] bg-[#fcfcfd] px-[16px] py-[14px] text-[13px] text-[#666]">
+          <a
             href="mailto:support@ciwi.ai" 
             target="_blank" 
             rel="noopener noreferrer" 
@@ -1897,8 +2104,8 @@ export default function Index() {
           >
             Contact Us
           </a>
-          |
-          <a 
+          <span className="text-[#c4cdd5]">|</span>
+          <a
             href="https://iw73s3ld6wy.feishu.cn/wiki/UEumwgOLJi90rEknevWcZp7HnQg?from=from_copylink" 
             target="_blank" 
             rel="noopener noreferrer" 

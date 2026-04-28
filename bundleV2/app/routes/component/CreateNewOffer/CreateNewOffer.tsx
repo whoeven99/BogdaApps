@@ -12,6 +12,9 @@ import {
 dayjs.extend(utc);
 dayjs.extend(timezone);
 import "./CreateNewOffer.css";
+import {
+  AdminPageHeader,
+} from "../adminUi";
 import BundlePreview from "../BundlePreview/BundlePreview";
 import { PreviewItem } from "../BundlePreview/bundlePreviewShared";
 import { ProgressiveGiftsSection } from "./ProgressiveGiftsSection";
@@ -31,6 +34,10 @@ import {
   type CompleteBundleProduct,
   type CompleteBundlePricingMode,
 } from "../../../utils/offerParsing";
+import {
+  OFFER_TYPE_OPTIONS,
+  type OfferTypeId,
+} from "./offerTypeOptions";
 
 type DiscountRule = {
   // 数量阈值：例如 count=2 表示"买 2 件及以上"生效
@@ -69,6 +76,7 @@ type Product = {
     price?: string;
     selectedOptions?: Array<{ name: string; value: string }>;
   }>;
+  hasSubscription?: boolean;
 };
 
 type CompleteBundleProductDraft = {
@@ -159,6 +167,7 @@ interface MarketItem {
 interface CreateNewOfferProps {
   onBack?: () => void;
   initialOffer?: InitialOffer;
+  initialOfferType?: OfferTypeId;
   storeProducts?: Product[];
   markets?: MarketItem[];
   /** 当前店铺已有 offers，用于名称重复校验（与后台 normalize 规则一致） */
@@ -178,12 +187,6 @@ function isOfferActionErrorBody(data: unknown): data is OfferActionErrorBody {
   return (
     o._offerActionError === true && typeof o.message === "string"
   );
-}
-
-function formatForDateTimeLocal(value: string | Date) {
-  const d = typeof value === "string" ? new Date(value) : value;
-  if (isNaN(d.getTime())) return "";
-  return d.toISOString();
 }
 
 function buildDiscountRulesJson(tiers: DiscountRule[]): DiscountRule[] {
@@ -260,12 +263,24 @@ function sanitizeDiscountRules(tiers: DiscountRule[]): DiscountRule[] {
 export function CreateNewOffer({
   onBack,
   initialOffer,
+  initialOfferType,
   storeProducts = [],
   markets: shopMarkets = [],
   existingOffers = [],
   ianaTimezone = "UTC",
 }: CreateNewOfferProps) {
   const fetcher = useFetcher();
+  const subscriptionStatusFetcher = useFetcher<{
+    ok: boolean;
+    error?: string;
+    product?: {
+      id: string;
+      title: string;
+      requiresSellingPlan: boolean;
+      sellingPlanGroups: Array<{ id?: string; name?: string }>;
+      hasSubscription: boolean;
+    };
+  }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [submitErrorToast, setSubmitErrorToast] = useState<string | null>(null);
@@ -300,21 +315,11 @@ export function CreateNewOffer({
   const baseUnitPrice = 100;
   const formatPreviewPrice = (value: number) =>
     `€${value.toFixed(2).replace(".", ",")}`;
-  const startTimeInputRef = useRef<HTMLInputElement | null>(null);
-  const endTimeInputRef = useRef<HTMLInputElement | null>(null);
-  const openDateTimePicker = (input: HTMLInputElement | null) => {
-    const pickerInput = input as
-      | (HTMLInputElement & {
-          showPicker?: () => void;
-        })
-      | null;
-    if (!pickerInput) return;
-    pickerInput.focus();
-    pickerInput.showPicker?.();
-  };
   const [step, setStep] = useState(1);
-  const [offerType, setOfferType] = useState(
-    initialOffer?.offerType ?? "quantity-breaks-same",
+  const [offerType, setOfferType] = useState<OfferTypeId>(
+    (initialOffer?.offerType as OfferTypeId | undefined) ??
+      initialOfferType ??
+      "quantity-breaks-same",
   );
   const initialCompleteBundleConfig = useMemo(
     () => parseCompleteBundleConfig(initialOffer?.selectedProductsJson),
@@ -416,6 +421,25 @@ export function CreateNewOffer({
   const [buttonText, setButtonText] = useState(offerSettings.buttonText);
   const [buttonPrimaryColor, setButtonPrimaryColor] = useState(offerSettings.buttonPrimaryColor);
   const [showCustomButton, setShowCustomButton] = useState(offerSettings.showCustomButton);
+  const [subscriptionEnabled, setSubscriptionEnabled] = useState(
+    offerSettings.subscriptionEnabled,
+  );
+  const [subscriptionPosition, setSubscriptionPosition] = useState(
+    offerSettings.subscriptionPosition,
+  );
+  const [subscriptionTitle, setSubscriptionTitle] = useState(
+    offerSettings.subscriptionTitle,
+  );
+  const [subscriptionSubtitle, setSubscriptionSubtitle] = useState(
+    offerSettings.subscriptionSubtitle,
+  );
+  const [oneTimeTitle, setOneTimeTitle] = useState(offerSettings.oneTimeTitle);
+  const [oneTimeSubtitle, setOneTimeSubtitle] = useState(
+    offerSettings.oneTimeSubtitle,
+  );
+  const [subscriptionDefaultSelected, setSubscriptionDefaultSelected] = useState(
+    offerSettings.subscriptionDefaultSelected,
+  );
   const [widgetTitle, setWidgetTitle] = useState(offerSettings.title);
   const [customerSegments, setCustomerSegments] = useState<string[]>(
     offerSettings.customerSegments ? offerSettings.customerSegments.split(",") : ["all"]
@@ -432,6 +456,7 @@ export function CreateNewOffer({
     image: string;
     price: string;
     variantsCount: number;
+    hasSubscription: boolean;
   }[]>(() => {
     const ids = initialOffer?.selectedProductsJson
       ? parseSelectedProductIds(initialOffer.selectedProductsJson)
@@ -455,6 +480,7 @@ export function CreateNewOffer({
           image: savedObj.image || "https://via.placeholder.com/60",
           price: savedObj.price || "€0.00",
           variantsCount: savedObj.variantsCount || 1,
+          hasSubscription: savedObj.hasSubscription === true,
         };
       }
 
@@ -465,15 +491,18 @@ export function CreateNewOffer({
         image: found?.image ?? "https://via.placeholder.com/60",
         price: found?.price ?? "€0.00",
         variantsCount: 1,
+        hasSubscription: found?.hasSubscription === true,
       };
     });
   });
 
-  const handleSelectProducts = async (type: "buy" | "get" | "normal" = "normal") => {
+  const handleSelectProducts = async (
+    type: "buy" | "get" | "normal" = "normal",
+  ) => {
     const selected = await (window as any).shopify.resourcePicker({
       type: "product",
       action: "select",
-      multiple: true,
+      multiple: type === "normal" && offerType === "subscription" ? false : true,
       selectionIds: type === "buy" 
         ? buyProducts.map((id) => ({ id }))
         : type === "get"
@@ -482,12 +511,20 @@ export function CreateNewOffer({
     });
 
     if (selected) {
-      const newData = selected.map((item: any) => ({
+      const selectedList = Array.isArray(selected) ? selected : [selected];
+      const newData = selectedList.map((item: any) => ({
         id: item.id,
         title: item.title,
         image: item.images?.[0]?.originalSrc || "https://via.placeholder.com/60",
         price: item.variants?.[0]?.price || "€0.00",
         variantsCount: item.variants?.length || 1,
+        // 资源选择器不稳定返回 sellingPlan 字段，因此回退到 loader 的 GraphQL 结果
+        hasSubscription:
+          ((item.sellingPlanGroups?.edges as Array<unknown> | undefined) ?? [])
+            .length > 0 ||
+          storeProducts.some(
+            (p) => String(p.id) === String(item.id) && p.hasSubscription,
+          ),
       }));
       
       if (type === "buy") {
@@ -495,7 +532,20 @@ export function CreateNewOffer({
       } else if (type === "get") {
         setGetProducts(newData.map((item: any) => item.id));
       } else {
-        setSelectedProductsData(newData);
+        const nextProducts =
+          offerType === "subscription" ? newData.slice(0, 1) : newData;
+        setSelectedProductsData(nextProducts);
+
+        // 中文注释：订阅型 offer 选完商品后，使用用户指定的 GraphQL 单独校验该商品是否有 selling plan
+        if (offerType === "subscription" && nextProducts[0]?.id) {
+          subscriptionStatusFetcher.submit(
+            {
+              intent: "get-product-subscription-status",
+              productId: String(nextProducts[0].id),
+            },
+            { method: "post" },
+          );
+        }
       }
     }
   };
@@ -714,16 +764,6 @@ export function CreateNewOffer({
       return changed ? next : prev;
     });
   }, [offerType, storeProductMap]);
-  // 统一格式化价格，优先显示为欧元格式，避免预览里丢失价格展示
-  const formatBundlePrice = (raw?: string) => {
-    if (!raw) return "€0.00";
-    const cleaned = String(raw).trim();
-    if (/[€$£¥]/.test(cleaned)) return cleaned;
-    const parsed = Number(cleaned.replace(",", "."));
-    if (Number.isFinite(parsed)) return `€${parsed.toFixed(2)}`;
-    return cleaned;
-  };
-
   const updateBundleBarProductVariant = (
     barId: string,
     productId: string,
@@ -926,7 +966,7 @@ export function CreateNewOffer({
     return (
       <div
         key={product.productId}
-        className="border border-[#dfe3e8] rounded-md p-3 bg-[#fafbfc]"
+        className="create-offer-bundle-product-card"
       >
         <div className="flex items-start gap-2 mb-2 justify-between">
           <div className="flex items-start gap-2 flex-1 min-w-0">
@@ -1070,13 +1110,27 @@ export function CreateNewOffer({
     }
   }, [offerType, completeBundleBars, activeBundleBarId]);
 
-  const [status, setStatus] = useState<boolean>(
-    initialOffer ? initialOffer.status : true
-  );
+  const status = initialOffer ? initialOffer.status : true;
+
+  useEffect(() => {
+    if (subscriptionStatusFetcher.state !== "idle") return;
+    if (!subscriptionStatusFetcher.data?.ok) return;
+    const result = subscriptionStatusFetcher.data.product;
+    if (!result?.id) return;
+
+    setSelectedProductsData((prev) =>
+      prev.map((item) =>
+        String(item.id) === String(result.id)
+          ? {
+              ...item,
+              hasSubscription: result.hasSubscription,
+            }
+          : item,
+      ),
+    );
+  }, [subscriptionStatusFetcher.state, subscriptionStatusFetcher.data]);
 
   const normalizedDiscountRules = sanitizeDiscountRules(discountRules);
-  const featuredRule = normalizedDiscountRules[0];
-
   const previewBarOptions = useMemo(() => {
     if (offerType === "bxgy") {
       return bxgyDiscountRules.map((r, i) => ({
@@ -1191,26 +1245,149 @@ export function CreateNewOffer({
     "Schedule & Budget",
   ];
 
-  const offerTypes = [
-    {
-      id: "quantity-breaks-same",
-      name: "Quantity breaks for the same product",
-      description:
-        "Offer discounts when customers buy multiple quantities of the same product",
-    },
-    {
-      id: "bxgy",
-      name: "Buy X, Get Y (BXGY)",
-      description:
-        "Buy X products and get Y products with discount (e.g., Buy 2 get 1 free)",
-    },
-    {
-      id: "complete-bundle",
-      name: "Complete the bundle",
-      description:
-        "Create multiple bundle bars and let customers choose product variants/options",
-    },
-  ];
+  const offerTypes = OFFER_TYPE_OPTIONS;
+  const isOfferTypeLocked = !initialOffer && !!initialOfferType;
+
+  const allSelectedProductsHaveSubscription = useMemo(
+    () =>
+      selectedProductsData.length > 0 &&
+      selectedProductsData.every((item) => item.hasSubscription),
+    [selectedProductsData],
+  );
+  const shouldShowSubscriptionPreview =
+    offerType === "subscription" && subscriptionEnabled;
+  const subscriptionPreviewStyle = allSelectedProductsHaveSubscription
+    ? "solid"
+    : "dashed";
+  const shouldShowSubscriptionExplanation =
+    shouldShowSubscriptionPreview && !allSelectedProductsHaveSubscription;
+  const subscriptionExplanationTitle =
+    selectedProductsData.length > 0
+      ? "Some products aren't eligible for subscriptions"
+      : "Select products to check subscription eligibility";
+  const subscriptionExplanationBody =
+    selectedProductsData.length > 0
+      ? "Subscription bar will only be shown in products that are eligible for subscription. You can select those products in your subscription app."
+      : "After selecting products, the app checks whether they have selling plans and decides whether to show a solid or dashed subscription bar.";
+  useEffect(() => {
+    // 中文注释：当用户在第 1 步切换到 Subscription 类型时，默认自动打开订阅开关
+    if (offerType === "subscription") {
+      setSubscriptionEnabled(true);
+    }
+  }, [offerType]);
+
+  const renderSubscriptionSettings = () => (
+    <div className="mb-6 rounded-[12px] border border-[#e3e8ed] p-4 bg-[#fafbfb]">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-[14px] font-medium text-[#1c1f23] m-0">
+          Subscription
+        </h3>
+        <Switch
+          checked={subscriptionEnabled}
+          onChange={(checked) => setSubscriptionEnabled(checked)}
+        />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label className="block text-[13px] text-[#5c6166] mb-1">
+            Subscribe title
+          </label>
+          <Input
+            size="large"
+            value={subscriptionTitle}
+            onChange={(e) => setSubscriptionTitle(e.target.value)}
+            maxLength={60}
+          />
+        </div>
+        <div>
+          <label className="block text-[13px] text-[#5c6166] mb-1">
+            Subscribe subtitle
+          </label>
+          <Input
+            size="large"
+            value={subscriptionSubtitle}
+            onChange={(e) => setSubscriptionSubtitle(e.target.value)}
+            maxLength={60}
+          />
+        </div>
+        <div>
+          <label className="block text-[13px] text-[#5c6166] mb-1">
+            One-time title
+          </label>
+          <Input
+            size="large"
+            value={oneTimeTitle}
+            onChange={(e) => setOneTimeTitle(e.target.value)}
+            maxLength={60}
+          />
+        </div>
+        <div>
+          <label className="block text-[13px] text-[#5c6166] mb-1">
+            One-time subtitle
+          </label>
+          <Input
+            size="large"
+            value={oneTimeSubtitle}
+            onChange={(e) => setOneTimeSubtitle(e.target.value)}
+            maxLength={60}
+          />
+        </div>
+      </div>
+      <div className="mt-3">
+        <Select
+          value={subscriptionPosition}
+          onChange={(value) =>
+            setSubscriptionPosition(value as "below-bundle-bars")
+          }
+          options={[
+            {
+              value: "below-bundle-bars",
+              label: "Below bundle deal bars",
+            },
+          ]}
+          style={{ width: "100%" }}
+        />
+      </div>
+      <div className="mt-3">
+        <Checkbox
+          checked={subscriptionDefaultSelected}
+          onChange={(e) => setSubscriptionDefaultSelected(e.target.checked)}
+        >
+          Make subscription option selected by default
+        </Checkbox>
+      </div>
+
+      {/* 中文注释：选中商品全部有 selling plan 时显示实线，否则显示虚线并补充解释文案 */}
+      {shouldShowSubscriptionPreview && (
+        <div className="mt-4">
+          <div
+            className={`rounded-[10px] p-3 ${
+              allSelectedProductsHaveSubscription
+                ? "border border-[#c9ccd0]"
+                : "border border-dashed border-[#b7b7b7]"
+            }`}
+          >
+            <div className="text-[14px] font-semibold text-[#1c1f23]">
+              {subscriptionTitle || "Subscribe & Save 20%"}
+            </div>
+            <div className="text-[13px] text-[#8c9196] mt-1">
+              {subscriptionSubtitle || "Delivered weekly"}
+            </div>
+          </div>
+          {shouldShowSubscriptionExplanation && (
+            <div className="mt-3 rounded-[10px] bg-[#eaf4ff] p-3">
+              <div className="text-[13px] font-semibold text-[#1c1f23]">
+                {subscriptionExplanationTitle}
+              </div>
+              <div className="text-[12px] text-[#4f5b67] mt-1 leading-[1.5]">
+                {subscriptionExplanationBody}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 
 
   return (
@@ -1327,7 +1504,7 @@ export function CreateNewOffer({
           {submitErrorToast}
         </div>
       )}
-      <div className="mb-6">
+      <div className="mb-4">
         <div>
           <Button
             type="text"
@@ -1339,11 +1516,8 @@ export function CreateNewOffer({
           >
             ← Back
           </Button>
-          <div className="flex items-center justify-between w-full gap-[16px] mt-1">
-            <h1 className="text-[24px] font-semibold m-0 text-[#1c1f23]">
-              {initialOffer ? "Edit Offer" : "Create New Offer"}
-            </h1>
-            
+          <div className="mt-[8px]">
+            <AdminPageHeader title={initialOffer ? "Edit Offer" : "Create New Offer"} />
           </div>
         </div>
       </div>
@@ -1374,6 +1548,29 @@ export function CreateNewOffer({
       <input type="hidden" name="buttonText" value={buttonText} />
       <input type="hidden" name="buttonPrimaryColor" value={buttonPrimaryColor} />
       <input type="hidden" name="showCustomButton" value={showCustomButton ? "true" : "false"} />
+      <input
+        type="hidden"
+        name="subscriptionEnabled"
+        value={subscriptionEnabled ? "true" : "false"}
+      />
+      <input
+        type="hidden"
+        name="subscriptionPosition"
+        value={subscriptionPosition}
+      />
+      <input type="hidden" name="subscriptionTitle" value={subscriptionTitle} />
+      <input
+        type="hidden"
+        name="subscriptionSubtitle"
+        value={subscriptionSubtitle}
+      />
+      <input type="hidden" name="oneTimeTitle" value={oneTimeTitle} />
+      <input type="hidden" name="oneTimeSubtitle" value={oneTimeSubtitle} />
+      <input
+        type="hidden"
+        name="subscriptionDefaultSelected"
+        value={subscriptionDefaultSelected ? "true" : "false"}
+      />
       <input
         type="hidden"
         name="cardBackgroundColor"
@@ -1427,8 +1624,9 @@ export function CreateNewOffer({
         value={JSON.stringify(progressiveGiftsConfigToStorableJson(progressiveGifts))}
       />
 
-      <div className="bg-[#ffffff] rounded-[8px] shadow-[0_1px_3px_rgba(0,0,0,0.1)] p-[20px] mb-[100px]">
-        <div className="grid grid-cols-2 sm:flex sm:gap-[12px] gap-[8px] mb-6">
+      <div className="mb-[100px] rounded-[12px] border border-[#dfe3e8] bg-[#ffffff] p-[20px] shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-[24px]">
+        <div className="mb-[16px] rounded-[12px] border border-[#e9edf1] bg-[#fcfcfd] p-[14px] sm:p-[16px]">
+          <div className="grid grid-cols-1 gap-[8px] md:grid-cols-4">
           {steps.map((stepName, index) => {
             const stepNumber = index + 1;
             const isActive = step === stepNumber;
@@ -1438,14 +1636,14 @@ export function CreateNewOffer({
                 key={index}
                 role="button"
                 tabIndex={isClickable ? 0 : -1}
-                className={`flex-1 py-[10px] px-2 sm:p-[12px] rounded-md text-center text-[13px] sm:text-[14px] font-medium transition-colors ${
+                className={`rounded-[10px] border px-[12px] py-[12px] text-left transition-all ${
                   isActive
-                    ? "bg-[#008060] !text-white"
-                    : "bg-[#f4f6f8] text-[#5c6166]"
+                    ? "border-[#008060] bg-[#f0faf6] shadow-[inset_0_0_0_1px_rgba(0,128,96,0.08)]"
+                    : "border-[#e5e7eb] bg-[#ffffff]"
                 } ${
                   isClickable
-                    ? "cursor-pointer hover:opacity-80"
-                    : "cursor-not-allowed opacity-50"
+                    ? "cursor-pointer hover:border-[#bfd7cd] hover:bg-[#ffffff]"
+                    : "cursor-not-allowed opacity-60"
                 }`}
                 onClick={(e) => {
                   if (isClickable) {
@@ -1460,13 +1658,28 @@ export function CreateNewOffer({
                   }
                 }}
               >
-                <span className="hidden sm:inline">
-                  {stepNumber}.{" "}
-                </span>
-                {stepName}
+                <div className="flex items-center gap-[10px]">
+                  <div
+                    className={`flex h-[28px] w-[28px] items-center justify-center rounded-full text-[12px] font-semibold ${
+                      isActive
+                        ? "bg-[#008060] text-white"
+                        : "bg-[#f4f6f8] text-[#5c6166]"
+                    }`}
+                  >
+                    {stepNumber}
+                  </div>
+                  <div
+                    className={`text-[14px] font-semibold leading-[20px] ${
+                      isActive ? "text-[#1c1f23]" : "text-[#5c6166]"
+                    }`}
+                  >
+                    {stepName}
+                  </div>
+                </div>
               </div>
             );
           })}
+          </div>
         </div>
 
         <div>
@@ -1474,9 +1687,6 @@ export function CreateNewOffer({
             <div className="create-offer-basic-grid lg:grid-cols-[1fr_400px]">
               <div className="flex flex-col gap-6">
                 <div>
-                  <h2 className="text-[20px] font-semibold mb-4 text-[#1c1f23]">
-                    Basic Information
-                  </h2>
                   <div className="flex flex-col gap-4">
                     <div>
                       <label className="block">
@@ -1513,12 +1723,17 @@ export function CreateNewOffer({
                         <Select
                           size="large"
                           value={offerType}
-                          onChange={(val) => setOfferType(val)}
-                          disabled={!!initialOffer}
+                          onChange={(val) => setOfferType(val as OfferTypeId)}
+                          disabled={!!initialOffer || isOfferTypeLocked}
                           className="w-full"
                           options={offerTypes.map(t => ({ label: t.name, value: t.id }))}
                         />
                       </label>
+                      {isOfferTypeLocked && (
+                        <div className="mt-1 text-[13px] text-[#5c6166]">
+                          To change the offer type, go back and choose another template.
+                        </div>
+                      )}
                     </div>
                     
                     <div>
@@ -1555,38 +1770,36 @@ export function CreateNewOffer({
               </div>
 
               <div className="create-offer-sticky-preview">
-                <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                  Live Preview
-                </h3>
-                <p className="text-[13px] text-[#5c6166] mb-6 font-normal">
-                  {
-                    offerTypes.find(
-                      (type) => type.id === offerType,
-                    )?.description
-                  }
-                </p>
+                <div className="create-offer-preview-shell">
+                  <div className="create-offer-preview-shell__eyebrow">Preview</div>
+                  <h3 className="create-offer-preview-shell__title">Live Preview</h3>
 
-                <BundlePreview
-                  layoutFormat={layoutFormat}
-                  cardBackgroundColor={cardBackgroundColor}
-                  accentColor={accentColor}
-                  borderColor={borderColor}
-                  labelColor={labelColor}
-                  titleFontSize={titleFontSize}
-                  titleFontWeight={titleFontWeight}
-                  titleColor={titleColor}
-                  buttonText={buttonText}
-                  buttonPrimaryColor={buttonPrimaryColor}
-                  showCustomButton={showCustomButton}
-                  title={widgetTitle}
-                  items={previewItems}
-                  progressiveGifts={progressiveGifts}
-                  progressivePreviewBarIndex={previewGiftBar}
-                  progressivePreviewLineQty={previewGiftQty}
-                />
-                <p className="text-[12px] text-[#5c6166] mt-3 italic font-normal">
-                  Note: This is a live preview. Changes will update in real-time when state is connected.
-                </p>
+                  <BundlePreview
+                    layoutFormat={layoutFormat}
+                    cardBackgroundColor={cardBackgroundColor}
+                    accentColor={accentColor}
+                    borderColor={borderColor}
+                    labelColor={labelColor}
+                    titleFontSize={titleFontSize}
+                    titleFontWeight={titleFontWeight}
+                    titleColor={titleColor}
+                    buttonText={buttonText}
+                    buttonPrimaryColor={buttonPrimaryColor}
+                    showCustomButton={showCustomButton}
+                    title={widgetTitle}
+                    items={previewItems}
+                    progressiveGifts={progressiveGifts}
+                    progressivePreviewBarIndex={previewGiftBar}
+                    progressivePreviewLineQty={previewGiftQty}
+                    showSubscriptionPreview={shouldShowSubscriptionPreview}
+                    subscriptionPreviewStyle={subscriptionPreviewStyle}
+                    subscriptionTitle={subscriptionTitle}
+                    subscriptionSubtitle={subscriptionSubtitle}
+                    showSubscriptionExplanation={shouldShowSubscriptionExplanation}
+                    subscriptionExplanationTitle={subscriptionExplanationTitle}
+                    subscriptionExplanationBody={subscriptionExplanationBody}
+                  />
+                </div>
               </div>
             </div>
           )}
@@ -1595,105 +1808,134 @@ export function CreateNewOffer({
             <>
               <div className="create-offer-products-grid">
                 <div>
-                  <h2 className="text-[20px] font-semibold mb-6 text-[#1c1f23]">
+                  <div className="mb-6">
+                    <h2 className="m-0 text-[20px] font-semibold text-[#1c1f23]">
                     Products & Discounts
-                  </h2>
+                    </h2>
+                  </div>
 
                   {offerType === "bxgy" ? (
                     <>
                       <div className="mb-6">
-                        <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                          Buy Products (X)
-                        </h3>
-                        {buyProducts.length === 0 ? (
-                          <Button
-                            size="large"
-                            className="text-[#008060] border-[#008060] hover:text-[#006e52] hover:border-[#006e52] hover:bg-[#f0f9f6]"
-                            onClick={(e) => {
-                              handleSelectProducts("buy");
-                              e.preventDefault();
-                            }}
-                          >
-                            Select buy products
-                          </Button>
-                        ) : (
-                          <div>
-                            <div className="text-[12px] text-[#5c6166] mb-2">
-                              {buyProducts.length} product{buyProducts.length > 1 ? "s" : ""} selected
+                        <div className="create-offer-panel create-offer-panel--muted">
+                          <div className="create-offer-panel__header">
+                            <div>
+                              <div className="create-offer-panel__eyebrow">BXGY Setup</div>
+                              <h3 className="create-offer-panel__title">Buy Products (X)</h3>
                             </div>
+                            {buyProducts.length > 0 ? (
+                              <div className="create-offer-kpi-badge">
+                                {buyProducts.length} selected
+                              </div>
+                            ) : null}
+                          </div>
+                          {buyProducts.length === 0 ? (
                             <Button
-                              size="small"
+                              size="large"
+                              className="text-[#008060] border-[#008060] hover:text-[#006e52] hover:border-[#006e52] hover:bg-[#f0f9f6]"
                               onClick={(e) => {
                                 handleSelectProducts("buy");
                                 e.preventDefault();
                               }}
                             >
-                              Edit buy products
+                              Select buy products
                             </Button>
-                          </div>
-                        )}
+                          ) : (
+                            <div className="create-offer-panel__footer">
+                              <Button
+                                size="small"
+                                onClick={(e) => {
+                                  handleSelectProducts("buy");
+                                  e.preventDefault();
+                                }}
+                              >
+                                Edit buy products
+                              </Button>
+                            </div>
+                          )}
+                        </div>
                       </div>
 
                       <div className="mb-8">
-                        <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                          Get Products (Y) 
-                        </h3>
-                        {getProducts.length === 0 ? (
-                          <Button
-                            size="large"
-                            className="text-[#008060] border-[#008060] hover:text-[#006e52] hover:border-[#006e52] hover:bg-[#f0f9f6]"
-                            onClick={(e) => {
-                              handleSelectProducts("get");
-                              e.preventDefault();
-                            }}
-                          >
-                            Select get products
-                          </Button>
-                        ) : (
-                          <div>
-                            <div className="text-[12px] text-[#5c6166] mb-2">
-                              {getProducts.length} product{getProducts.length > 1 ? "s" : ""} selected
+                        <div className="create-offer-panel create-offer-panel--muted">
+                          <div className="create-offer-panel__header">
+                            <div>
+                              <div className="create-offer-panel__eyebrow">BXGY Setup</div>
+                              <h3 className="create-offer-panel__title">Get Products (Y)</h3>
                             </div>
+                            {getProducts.length > 0 ? (
+                              <div className="create-offer-kpi-badge">
+                                {getProducts.length} selected
+                              </div>
+                            ) : null}
+                          </div>
+                          {getProducts.length === 0 ? (
                             <Button
-                              size="small"
+                              size="large"
+                              className="text-[#008060] border-[#008060] hover:text-[#006e52] hover:border-[#006e52] hover:bg-[#f0f9f6]"
                               onClick={(e) => {
                                 handleSelectProducts("get");
                                 e.preventDefault();
                               }}
                             >
-                              Edit get products
+                              Select get products
                             </Button>
-                          </div>
-                        )}
+                          ) : (
+                            <div className="create-offer-panel__footer">
+                              <Button
+                                size="small"
+                                onClick={(e) => {
+                                  handleSelectProducts("get");
+                                  e.preventDefault();
+                                }}
+                              >
+                                Edit get products
+                              </Button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </>
                   ) : offerType === "complete-bundle" ? (
                     <div className="mb-8">
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-[14px] font-medium text-[#1c1f23]">
-                          Bundle bars
-                        </h3>
-                        <Dropdown
-                          trigger={["click"]}
-                          menu={{
-                            items: [
-                              { key: "quantity", label: "Add Quantity bar" },
-                              { key: "bxgy", label: "Add Buy X Get Y bar" },
-                            ],
-                            onClick: ({ key }) => {
-                              if (key === "bxgy") addCompleteBundleBar("bxgy");
-                              else addCompleteBundleBar("quantity-break-same");
-                            },
-                          }}
-                        >
-                          <Button size="small">Add bar</Button>
-                        </Dropdown>
+                      <div className="create-offer-panel create-offer-panel--muted">
+                        <div className="create-offer-panel__header">
+                          <div>
+                            <div className="create-offer-panel__eyebrow">Bundle Structure</div>
+                            <h3 className="create-offer-panel__title">Bundle bars</h3>
+                          </div>
+                          <div className="create-offer-panel__actions">
+                            <Dropdown
+                              trigger={["click"]}
+                              menu={{
+                                items: [
+                                  { key: "quantity", label: "Add Quantity bar" },
+                                  { key: "bxgy", label: "Add Buy X Get Y bar" },
+                                ],
+                                onClick: ({ key }) => {
+                                  if (key === "bxgy") addCompleteBundleBar("bxgy");
+                                  else addCompleteBundleBar("quantity-break-same");
+                                },
+                              }}
+                            >
+                              <Button size="small">Add bar</Button>
+                            </Dropdown>
+                          </div>
+                        </div>
+                        <div className="create-offer-panel__meta">
+                          {completeBundleBars.length} bar
+                          {completeBundleBars.length > 1 ? "s" : ""} configured
+                        </div>
                       </div>
                       <div className="flex flex-col gap-3">
                         {completeBundleBars.map((bar, index) => (
                           <div
                             key={bar.id}
-                            className={`border rounded-md p-3 ${activeBundleBar?.id === bar.id ? "border-[#008060]" : "border-[#dfe3e8]"}`}
+                            className={`create-offer-bundle-bar ${
+                              activeBundleBar?.id === bar.id
+                                ? "create-offer-bundle-bar--active"
+                                : ""
+                            }`}
                           >
                             <div className="flex items-center justify-between gap-3 mb-2">
                               <Button
@@ -1809,91 +2051,109 @@ export function CreateNewOffer({
                     </div>
                   ) : (
                     <div className="mb-8">
-                      <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                        Products eligible for offer
-                      </h3>
+                      <div className="create-offer-panel create-offer-panel--muted">
+                        <div className="create-offer-panel__header">
+                          <div>
+                            <div className="create-offer-panel__eyebrow">Product Scope</div>
+                            <h3 className="create-offer-panel__title">
+                              Products eligible for offer
+                            </h3>
+                          </div>
+                        </div>
 
-                      {selectedProductsData.length === 0 ? (
-                        <Button
-                          size="large"
-                          className="text-[#008060] border-[#008060] hover:text-[#006e52] hover:border-[#006e52] hover:bg-[#f0f9f6]"
-                          onClick={(e) => {
-                            handleSelectProducts();
-                            e.preventDefault();
-                          }}
-                        >
-                          Add products eligible for offer
-                        </Button>
-                      ) : (
-                        <div>
-                          <div className="create-offer-selected-grid">
-                            {selectedProductsData.slice(0, 3).map((product) => (
-                              <div
-                                key={product.id}
-                                className="create-offer-selected-card"
-                              >
-                                <button
-                                  type="button"
-                                  className="create-offer-selected-remove"
-                                  onClick={(e) => {
-                                    setSelectedProductsData(
-                                      selectedProductsData.filter(
-                                        (p) => p.id !== product.id,
-                                      ),
-                                    );
-                                    e.preventDefault();
-                                  }}
-                                  aria-label={`Remove ${product.title}`}
-                                >
-                                  <X size={14} />
-                                </button>
-                                <img
-                                  src={product.image}
-                                  alt={product.title}
-                                  className="create-offer-selected-image"
-                                />
-                                <div className="create-offer-selected-name">
-                                  {product.title}
-                                </div>
-                                <div className="create-offer-selected-price">
-                                  {product.price}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                          <div className="create-offer-selected-count">
-                            {selectedProductsData.length} product
-                            {selectedProductsData.length > 1 ? "s" : ""}{" "}
-                            selected
-                            {(() => {
-                              const totalVariants = selectedProductsData.reduce(
-                                (sum, p) => sum + (p.variantsCount || 1),
-                                0
-                              );
-                              return totalVariants > 0
-                                ? ` (${totalVariants} variant${totalVariants > 1 ? "s" : ""})`
-                                : "";
-                            })()}
-                          </div>
+                        {selectedProductsData.length === 0 ? (
                           <Button
-                            type="link"
+                            size="large"
+                            className="text-[#008060] border-[#008060] hover:text-[#006e52] hover:border-[#006e52] hover:bg-[#f0f9f6]"
                             onClick={(e) => {
                               handleSelectProducts();
                               e.preventDefault();
                             }}
-                            className="px-0"
                           >
-                            Edit products
+                            Add products eligible for offer
                           </Button>
-                        </div>
-                      )}
+                        ) : (
+                          <div>
+                            <div className="create-offer-selected-grid">
+                              {selectedProductsData.slice(0, 3).map((product) => (
+                                <div
+                                  key={product.id}
+                                  className="create-offer-selected-card"
+                                >
+                                  <button
+                                    type="button"
+                                    className="create-offer-selected-remove"
+                                    onClick={(e) => {
+                                      setSelectedProductsData(
+                                        selectedProductsData.filter(
+                                          (p) => p.id !== product.id,
+                                        ),
+                                      );
+                                      e.preventDefault();
+                                    }}
+                                    aria-label={`Remove ${product.title}`}
+                                  >
+                                    <X size={14} />
+                                  </button>
+                                  <img
+                                    src={product.image}
+                                    alt={product.title}
+                                    className="create-offer-selected-image"
+                                  />
+                                  <div className="create-offer-selected-name">
+                                    {product.title}
+                                  </div>
+                                  <div className="create-offer-selected-price">
+                                    {product.price}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="create-offer-panel__footer">
+                              <div className="create-offer-selected-count">
+                                {selectedProductsData.length} product
+                                {selectedProductsData.length > 1 ? "s" : ""}{" "}
+                                selected
+                                {(() => {
+                                  const totalVariants = selectedProductsData.reduce(
+                                    (sum, p) => sum + (p.variantsCount || 1),
+                                    0
+                                  );
+                                  return totalVariants > 0
+                                    ? ` (${totalVariants} variant${totalVariants > 1 ? "s" : ""})`
+                                    : "";
+                                })()}
+                              </div>
+                              <Button
+                                type="link"
+                                onClick={(e) => {
+                                  handleSelectProducts();
+                                  e.preventDefault();
+                                }}
+                                className="px-0"
+                              >
+                                Edit products
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
+
+                  {offerType === "subscription" && renderSubscriptionSettings()}
 
                   {/* complete-bundle 的定价与变体已并入各 Bundle bar 卡片，此处仅渲染 BXGY 或普通折扣阶梯 */}
                   {offerType === "bxgy" ? (
                     <div>
-                      <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">BXGY Rules</h3>
+                      <div className="create-offer-panel create-offer-panel--muted mb-4">
+                        <div className="create-offer-panel__header">
+                          <div>
+                            <div className="create-offer-panel__eyebrow">Discount Logic</div>
+                            <h3 className="create-offer-panel__title">BXGY Rules</h3>
+                          </div>
+                        </div>
+                      </div>
                         {bxgyDiscountRules.map((rule, index) => (
                           <div className="create-offer-discount-card" key={index}>
                             <div className="create-offer-discount-body">
@@ -2001,7 +2261,7 @@ export function CreateNewOffer({
                                 </label>
                               </div>
 
-                              <div className="create-offer-discount-form-row" style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                              <div className="create-offer-inline-grid-3">
                                 <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
                                   Title
                                   <Input
@@ -2043,7 +2303,7 @@ export function CreateNewOffer({
                                 </label>
                               </div>
 
-                              <div className="create-offer-discount-form-row" style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                              <div className="create-offer-inline-grid-2">
                                 <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
                                   Max Uses Per Order
                                   <Input
@@ -2069,7 +2329,7 @@ export function CreateNewOffer({
                                 </label>
                               </div>
 
-                              <div className="create-offer-discount-form-row" style={{ marginTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div className="create-offer-inline-row">
                                 <Checkbox
                                   checked={!!rule.isDefault}
                                   onChange={(e) => {
@@ -2121,9 +2381,16 @@ export function CreateNewOffer({
                           + Add BXGY tier
                         </Button>
                     </div>
-                    ) : offerType === "complete-bundle" ? null : (
+                    ) : offerType === "complete-bundle" || offerType === "subscription" ? null : (
                     <div>
-                      <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">Discount Setting</h3>
+                      <div className="create-offer-panel create-offer-panel--muted mb-4">
+                        <div className="create-offer-panel__header">
+                          <div>
+                            <div className="create-offer-panel__eyebrow">Discount Logic</div>
+                            <h3 className="create-offer-panel__title">Discount Setting</h3>
+                          </div>
+                        </div>
+                      </div>
                         {discountRules.map((rule, index) => (
                           <div className="create-offer-discount-card" key={index}>
                             <div className="create-offer-discount-body">
@@ -2191,7 +2458,7 @@ export function CreateNewOffer({
                               </div>
                               
                               {/* 新增的文本配置字段 */}
-                              <div className="create-offer-discount-form-row" style={{ marginTop: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                              <div className="create-offer-inline-grid-3">
                                 <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
                                   Title
                                   <Input
@@ -2233,7 +2500,7 @@ export function CreateNewOffer({
                                 </label>
                               </div>
                               
-                              <div className="create-offer-discount-form-row" style={{ marginTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div className="create-offer-inline-row">
                                 <Checkbox
                                   checked={!!rule.isDefault}
                                   onChange={(e) => {
@@ -2291,16 +2558,9 @@ export function CreateNewOffer({
                 </div>
 
                 <div className="create-offer-sticky-preview">
-                  <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                    Live Preview
-                  </h3>
-                  <p className="text-[13px] text-[#5c6166] mb-6 font-normal">
-                    {
-                      offerTypes.find(
-                        (type) => type.id === offerType,
-                      )?.description
-                    }
-                  </p>
+                  <div className="create-offer-preview-shell">
+                    <div className="create-offer-preview-shell__eyebrow">Preview</div>
+                    <h3 className="create-offer-preview-shell__title">Live Preview</h3>
                   {progressiveGifts.enabled && offerType !== "complete-bundle" ? (
                     <div className="mb-4 space-y-2">
                       <div className="text-[13px] font-medium text-[#1c1f23]">
@@ -2308,7 +2568,7 @@ export function CreateNewOffer({
                       </div>
                       <div className="grid grid-cols-1 gap-2">
                         <label className="block text-[12px] text-[#5c6166]">
-                          Simulated bar #（联动免邮解锁预览）
+                          Simulated bar # (free shipping unlock preview)
                           <Select
                             size="small"
                             className="mt-1 w-full"
@@ -2318,7 +2578,7 @@ export function CreateNewOffer({
                           />
                         </label>
                         <label className="block text-[12px] text-[#5c6166]">
-                          Simulated line qty（at_count 模式）
+                          Simulated line qty (at_count mode)
                           <Input
                             size="small"
                             type="number"
@@ -2583,11 +2843,16 @@ export function CreateNewOffer({
                       progressiveGifts={progressiveGifts}
                       progressivePreviewBarIndex={previewGiftBar}
                       progressivePreviewLineQty={previewGiftQty}
+                      showSubscriptionPreview={shouldShowSubscriptionPreview}
+                      subscriptionPreviewStyle={subscriptionPreviewStyle}
+                      subscriptionTitle={subscriptionTitle}
+                      subscriptionSubtitle={subscriptionSubtitle}
+                      showSubscriptionExplanation={shouldShowSubscriptionExplanation}
+                      subscriptionExplanationTitle={subscriptionExplanationTitle}
+                      subscriptionExplanationBody={subscriptionExplanationBody}
                     />
                   )}
-                  <p className="text-[12px] text-[#5c6166] mt-3 italic font-normal">
-                    Note: This is a live preview. Changes will update in real-time when state is connected.
-                  </p>
+                  </div>
                 </div>
               </div>
             </>
@@ -2596,12 +2861,11 @@ export function CreateNewOffer({
           {step === 3 && (
             <div className="create-offer-style-grid">
               <div>
-                <h2 className="text-[20px] font-semibold mb-2 text-[#1c1f23]">
+                <div className="mb-6">
+                  <h2 className="m-0 text-[20px] font-semibold text-[#1c1f23]">
                   Style Design
-                </h2>
-                <p className="text-[13px] text-[#5c6166] mb-6 font-normal">
-                  Customize the appearance of your bundle widget
-                </p>
+                  </h2>
+                </div>
 
                 <div className="mb-6">
                   <label className="block text-[14px] font-medium text-[#1c1f23] mb-2">
@@ -2873,16 +3137,9 @@ export function CreateNewOffer({
               </div>
 
               <div className="create-offer-sticky-preview">
-                <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                  Live Preview
-                </h3>
-                <p className="text-[13px] text-[#5c6166] mb-6 font-normal">
-                  {
-                    offerTypes.find(
-                      (type) => type.id === offerType,
-                    )?.description
-                  }
-                </p>
+                <div className="create-offer-preview-shell">
+                  <div className="create-offer-preview-shell__eyebrow">Preview</div>
+                  <h3 className="create-offer-preview-shell__title">Live Preview</h3>
                 {progressiveGifts.enabled ? (
                   <div className="mb-4 space-y-2">
                     <div className="text-[13px] font-medium text-[#1c1f23]">
@@ -2933,24 +3190,35 @@ export function CreateNewOffer({
                   progressiveGifts={progressiveGifts}
                   progressivePreviewBarIndex={previewGiftBar}
                   progressivePreviewLineQty={previewGiftQty}
+                  showSubscriptionPreview={shouldShowSubscriptionPreview}
+                  subscriptionPreviewStyle={subscriptionPreviewStyle}
+                  subscriptionTitle={subscriptionTitle}
+                  subscriptionSubtitle={subscriptionSubtitle}
+                  showSubscriptionExplanation={shouldShowSubscriptionExplanation}
+                  subscriptionExplanationTitle={subscriptionExplanationTitle}
+                  subscriptionExplanationBody={subscriptionExplanationBody}
                 />
-                <p className="text-[12px] text-[#5c6166] mt-3 italic font-normal">
-                  Note: This is a live preview. Changes will update in real-time when state is connected.
-                </p>
+                </div>
               </div>
             </div>
           )}
 
           {step === 4 && (
             <div>
-              <h2 className="text-[20px] font-semibold mb-6 text-[#1c1f23]">
+              <div className="mb-6">
+                <h2 className="m-0 text-[20px] font-semibold text-[#1c1f23]">
                 Targeting & Settings
-              </h2>
+                </h2>
+              </div>
 
               <div className="mb-8">
-                <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                  Target Audience
-                </h3>
+                <div className="create-offer-panel create-offer-panel--muted">
+                  <div className="create-offer-panel__header">
+                    <div>
+                      <div className="create-offer-panel__eyebrow">Visibility</div>
+                      <h3 className="create-offer-panel__title">Target Audience</h3>
+                    </div>
+                  </div>
                 <div className="flex flex-col gap-4">
                   {/* Hidden Customer Segments */}
                   {false && <div>
@@ -3036,7 +3304,8 @@ export function CreateNewOffer({
                     <label className="block text-[14px] font-medium text-[#1c1f23] mb-2">
                       Market Visibility
                     </label>
-                    <div className="grid grid-cols-2 gap-3 border border-gray-200 rounded-md p-4">
+                    <div className="create-offer-setting-card">
+                      <div className="create-offer-setting-grid">
                       <Checkbox
                         checked={markets.includes("all")}
                         onChange={(e) => {
@@ -3062,19 +3331,23 @@ export function CreateNewOffer({
                           {market.name}
                         </Checkbox>
                       ))}
+                      </div>
                     </div>
                     <p className="text-[13px] text-[#5c6166] mt-2">
                       Select which markets can see this offer
                     </p>
                   </div>
                 </div>
+                </div>
               </div>
 
               <div className="mb-8">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-[14px] font-medium text-[#1c1f23] flex items-center">
-                    Schedule
-                  </h3>
+                <div className="create-offer-panel create-offer-panel--muted">
+                  <div className="create-offer-panel__header">
+                    <div>
+                      <div className="create-offer-panel__eyebrow">Timing</div>
+                      <h3 className="create-offer-panel__title">Schedule</h3>
+                    </div>
                   <div className="flex items-center gap-2">
                     <span className="text-[13px] text-[#5c6166]">Timezone:</span>
                     <Select
@@ -3087,7 +3360,7 @@ export function CreateNewOffer({
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="create-offer-setting-grid">
                   <label className="block text-[14px] font-medium text-[#1c1f23]">
                     Start Time
                     <DatePicker
@@ -3150,6 +3423,7 @@ export function CreateNewOffer({
                       </p>
                     )}
                   </label>
+                </div>
                 </div>
               </div>
 
@@ -3226,7 +3500,9 @@ export function CreateNewOffer({
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#dfe3e8] py-4 px-6 flex justify-center items-center gap-3 z-[100] shadow-[0_-2px_8px_rgba(0,0,0,0.1)]">
+      <div className="fixed bottom-0 left-0 right-0 z-[100] border-t border-[#dfe3e8] bg-[rgba(255,255,255,0.96)] px-[16px] py-[14px] backdrop-blur-sm shadow-[0_-8px_24px_rgba(15,23,42,0.08)] sm:px-[24px]">
+        <div className="mx-auto flex max-w-[1280px] flex-col items-center gap-[12px]">
+          <div className="flex items-center justify-center gap-3">
         {step > 1 && (
           <Button
             size="large"
@@ -3336,6 +3612,8 @@ export function CreateNewOffer({
                 : "Create Offer"
               : "Next"}
         </Button>
+          </div>
+        </div>
       </div>
     </fetcher.Form>
   );
