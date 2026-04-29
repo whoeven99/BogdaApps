@@ -10,6 +10,7 @@ import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { ConfigProvider } from "antd";
 
 import { authenticate } from "../shopify.server";
+import { sanitizeEnvLikeValue, sanitizeUrlLikeEnvValue } from "../utils/env";
 
 const ensureWebPixel = async (admin: any, shop: string) => {
   let currentWebPixelId: string | undefined;
@@ -63,7 +64,7 @@ const ensureWebPixel = async (admin: any, shop: string) => {
         webPixel: {
           settings: {
             shopName: shop,
-            server: process.env.SHOPIFY_APP_URL || "",
+            server: sanitizeUrlLikeEnvValue(process.env.SHOPIFY_APP_URL),
           },
         },
       },
@@ -113,7 +114,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   });
 
   // eslint-disable-next-line no-undef
-  return { apiKey: process.env.SHOPIFY_API_KEY || "", ianaTimezone };
+  return {
+    apiKey: sanitizeEnvLikeValue(process.env.SHOPIFY_API_KEY),
+    ianaTimezone,
+  };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {

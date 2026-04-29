@@ -21,6 +21,11 @@ import type { CampaignDraft, CampaignDraftActions } from "./campaignDraft";
 import {
   buildDiscountRulesPayload,
   buildSelectedProductsPayload,
+  getCampaignBuilderMeta,
+  getCampaignLogicSummary,
+  getCampaignPublishSupportSummary,
+  getCampaignRuleTypeSummary,
+  getCampaignScopeSummary,
   validateFinalSubmitScopeAndLogic,
   validateScopeAndLogicStep,
 } from "./campaignBuilderRegistry";
@@ -28,10 +33,8 @@ import DisplayBlocksEditor from "./DisplayBlocksEditor";
 import LogicEditorsRenderer from "./LogicEditorsRenderer";
 import OfferComponentsDisplayCustomizer from "./OfferComponentsDisplayCustomizer";
 import { ProgressiveGiftsSection } from "./ProgressiveGiftsSection";
-import QuantityBreaksDisplayCustomizer from "./QuantityBreaksDisplayCustomizer";
 import ScheduleTargetingEditor from "./ScheduleTargetingEditor";
 import { getStarterTemplateDefaults } from "./starterTemplateDefaults";
-import { getUnifiedRuleBlockingMessage, isExecutableDiscountRule } from "./unifiedRuleModel";
 import {
   OFFER_TEXT_LIMITS,
   buildLegacyFieldsFromCampaignConfig,
@@ -60,6 +63,33 @@ import {
   type FreeGiftRule,
 } from "../../../utils/offerParsing";
 import { type OfferTypeId } from "./offerTypeOptions";
+import { buildUnifiedRulesSnapshot } from "./unifiedRulesAdapters";
+import UnifiedRulesAuditPanel from "./UnifiedRulesAuditPanel";
+import {
+  buildSubscriptionDisplayCustomizerItems,
+  buildUnifiedDisplayCustomizerItems,
+} from "./unifiedRulesDisplay";
+import {
+  type RulePresentationPatch,
+  updateBxgyRulePresentation,
+  updateCompleteBundleBarPresentation,
+  updateDifferentProductsRulePresentation,
+  updateDiscountRulePresentation,
+  updateFreeGiftRulePresentation,
+} from "./unifiedRulePresentation";
+import { buildUnifiedPreviewItems } from "./unifiedRulesPreview";
+import {
+  type UnifiedRuleValuePatch,
+  updateBxgyRuleValues,
+  updateCompleteBundleRuleValues,
+  updateDifferentProductsRuleValues,
+  updateFreeGiftRuleValues,
+  updateUnifiedDiscountRuleValues,
+} from "./unifiedRuleValues";
+import {
+  getUnifiedRuleAuditIssues,
+  getUnifiedRuleBlockingMessage,
+} from "./unifiedRulesValidation";
 
 type DiscountRule = {
   // 数量阈值：例如 count=2 表示"买 2 件及以上"生效
@@ -77,6 +107,10 @@ type DiscountRule = {
   rewardType?: "percentage_off" | "gift_product" | "free_shipping";
   rewardProductIds?: string[];
   giftQuantity?: number;
+  logicType?: "standard" | "bxgy";
+  buyQuantity?: number;
+  getQuantity?: number;
+  maxUsesPerOrder?: number;
 };
 
 type BxgyDiscountRule = {
@@ -248,47 +282,53 @@ function buildDiscountRulesJson(tiers: DiscountRule[]): DiscountRule[] {
         tier.rewardType === "gift_product"
           ? Math.max(1, Math.trunc(Number(tier.giftQuantity) || 1))
           : undefined,
+      logicType: tier.logicType === "bxgy" ? "bxgy" : "standard",
+      buyQuantity:
+        tier.logicType === "bxgy"
+          ? Math.max(1, Math.trunc(Number(tier.buyQuantity) || 2))
+          : undefined,
+      getQuantity:
+        tier.logicType === "bxgy"
+          ? Math.max(1, Math.trunc(Number(tier.getQuantity) || 1))
+          : undefined,
+      maxUsesPerOrder:
+        tier.logicType === "bxgy"
+          ? Math.max(1, Math.trunc(Number(tier.maxUsesPerOrder) || 1))
+          : undefined,
     });
   }
 
   return out
     .sort((a, b) => a.count - b.count)
-    .filter((tier, index, arr) =>
-      index === arr.findIndex((x) => x.count === tier.count),
-    );
-}
-
-function calculatePreviewBundleAmounts(
-  unitPrice: number,
-  quantity: number,
-  discountPercent: number,
-) {
-  const MONEY_SCALE = 10000;
-  const safeQty = Math.max(1, Math.trunc(Number(quantity) || 1));
-  const safeDiscountPercent = Math.max(
-    0,
-    Math.min(100, Number(discountPercent) || 0),
-  );
-  const unitPriceScaled = Math.round(unitPrice * MONEY_SCALE);
-  const originalTotalScaled = unitPriceScaled * safeQty;
-  const discountedTotalScaled = Math.round(
-    originalTotalScaled * (1 - safeDiscountPercent / 100),
-  );
-  const originalTotal = Math.round(originalTotalScaled / (MONEY_SCALE / 100)) / 100;
-  const discountedTotal =
-    Math.round(discountedTotalScaled / (MONEY_SCALE / 100)) / 100;
-
-  return {
-    originalTotal,
-    discountedTotal,
-    saved: originalTotal - discountedTotal,
-  };
+    .filter((tier, index, arr) => {
+      const tierKey = [
+        tier.logicType || "standard",
+        tier.count,
+        tier.conditionType || "item_quantity",
+        tier.amountThreshold ?? "",
+        tier.buyQuantity ?? "",
+        tier.getQuantity ?? "",
+      ].join("|");
+      return (
+        index ===
+        arr.findIndex((x) => {
+          const key = [
+            x.logicType || "standard",
+            x.count,
+            x.conditionType || "item_quantity",
+            x.amountThreshold ?? "",
+            x.buyQuantity ?? "",
+            x.getQuantity ?? "",
+          ].join("|");
+          return key === tierKey;
+        })
+      );
+    });
 }
 
 function sanitizeDiscountRules(tiers: DiscountRule[]): DiscountRule[] {
   const dedupedByKey = new Map<string, DiscountRule>();
   for (const tier of tiers) {
-    if (!isExecutableDiscountRule(tier)) continue;
     if (!Number.isFinite(tier.count) || tier.count < 1) continue;
     if (
       tier.rewardType === "percentage_off" &&
@@ -302,6 +342,7 @@ function sanitizeDiscountRules(tiers: DiscountRule[]): DiscountRule[] {
         ? Math.max(0, Number(tier.amountThreshold) || 0)
         : undefined;
     const key = [
+      tier.logicType || "standard",
       tier.discountClass || "product",
       tier.conditionType || "item_quantity",
       normalizedThreshold ?? normalizedCount,
@@ -331,6 +372,19 @@ function sanitizeDiscountRules(tiers: DiscountRule[]): DiscountRule[] {
       giftQuantity:
         tier.rewardType === "gift_product"
           ? Math.max(1, Math.trunc(Number(tier.giftQuantity) || 1))
+          : undefined,
+      logicType: tier.logicType === "bxgy" ? "bxgy" : "standard",
+      buyQuantity:
+        tier.logicType === "bxgy"
+          ? Math.max(1, Math.trunc(Number(tier.buyQuantity) || 2))
+          : undefined,
+      getQuantity:
+        tier.logicType === "bxgy"
+          ? Math.max(1, Math.trunc(Number(tier.getQuantity) || 1))
+          : undefined,
+      maxUsesPerOrder:
+        tier.logicType === "bxgy"
+          ? Math.max(1, Math.trunc(Number(tier.maxUsesPerOrder) || 1))
           : undefined,
     });
   }
@@ -1390,7 +1444,10 @@ export function CreateNewOffer({
       { value: 1, label: "Bar #1 (Single, qty 1)" },
       ...normalizedDiscountRules.map((r, i) => ({
         value: i + 2,
-        label: `Bar #${i + 2} (qty ${r.count})`,
+          label:
+            r.logicType === "bxgy"
+              ? `Bar #${i + 2} (BXGY, buy ${r.buyQuantity || 2} get ${r.getQuantity || 1})`
+              : `Bar #${i + 2} (qty ${r.count})`,
       })),
     ];
   }, [
@@ -1443,6 +1500,10 @@ export function CreateNewOffer({
                 ? rule.rewardProductIds
                 : [],
               giftQuantity: rule.giftQuantity,
+              logicType: rule.logicType === "bxgy" ? "bxgy" : "standard",
+              buyQuantity: rule.buyQuantity,
+              getQuantity: rule.getQuantity,
+              maxUsesPerOrder: rule.maxUsesPerOrder,
             })),
           },
         },
@@ -1638,6 +1699,37 @@ export function CreateNewOffer({
     selectedProductsData.length > 0
       ? "Subscription bar will only be shown in products that are eligible for subscription. You can select those products in your subscription app."
       : "After selecting products, the app checks whether they have selling plans and decides whether to show a solid or dashed subscription bar.";
+  const unifiedRulesSnapshot = useMemo(
+    () =>
+      buildUnifiedRulesSnapshot({
+        offerType,
+        selectedProductIds: selectedProductsData.map((product) => String(product.id)),
+        buyProductIds: buyProducts,
+        getProductIds: getProducts,
+        freeGiftTriggerProductIds: freeGiftTriggerProducts,
+        freeGiftGiftProductIds: giftProductsData.map((product) => String(product.id)),
+        discountRules: normalizedDiscountRules,
+        bxgyDiscountRules,
+        freeGiftRules,
+        differentProductsDiscountRules,
+        completeBundleBars,
+        subscriptionEnabled,
+      }),
+    [
+      offerType,
+      selectedProductsData,
+      buyProducts,
+      getProducts,
+      freeGiftTriggerProducts,
+      giftProductsData,
+      normalizedDiscountRules,
+      bxgyDiscountRules,
+      freeGiftRules,
+      differentProductsDiscountRules,
+      completeBundleBars,
+      subscriptionEnabled,
+    ],
+  );
   const campaignDraft = useMemo<CampaignDraft>(
     () => ({
       offerType,
@@ -1666,6 +1758,7 @@ export function CreateNewOffer({
       differentProductsDiscountRules,
       freeGiftRules,
       subscriptionEnabled,
+      unifiedRulesSnapshot,
     }),
     [
       offerType,
@@ -1694,8 +1787,96 @@ export function CreateNewOffer({
       differentProductsDiscountRules,
       freeGiftRules,
       subscriptionEnabled,
+      unifiedRulesSnapshot,
     ],
   );
+  const stepTwoMeta = getCampaignBuilderMeta(offerType);
+  const stepTwoScopeSummary = getCampaignScopeSummary(campaignDraft);
+  const stepTwoLogicSummary = getCampaignLogicSummary(campaignDraft);
+  const stepTwoRuleTypeSummary = getCampaignRuleTypeSummary(campaignDraft);
+  const stepTwoPublishSummary = getCampaignPublishSupportSummary(campaignDraft);
+  const unifiedRuleAuditIssues = getUnifiedRuleAuditIssues(campaignDraft);
+  const updateUnifiedRulePresentation = (
+    id: string,
+    patch: RulePresentationPatch,
+  ) => {
+    if (offerType === "subscription") {
+      if (id === "subscription-option") {
+        if (typeof patch.title === "string") setSubscriptionTitle(patch.title);
+        if (typeof patch.subtitle === "string") setSubscriptionSubtitle(patch.subtitle);
+        if (typeof patch.isDefault === "boolean") {
+          setSubscriptionDefaultSelected(patch.isDefault);
+        }
+        return;
+      }
+      if (id === "one-time-option") {
+        if (typeof patch.title === "string") setOneTimeTitle(patch.title);
+        if (typeof patch.subtitle === "string") setOneTimeSubtitle(patch.subtitle);
+      }
+      return;
+    }
+
+    const index = campaignDraft.unifiedRulesSnapshot.findIndex((rule) => rule.id === id);
+    if (index < 0) return;
+
+    switch (offerType) {
+      case "quantity-breaks-same":
+        setDiscountRules((prev) =>
+          updateDiscountRulePresentation(prev, index, patch),
+        );
+        return;
+      case "bxgy":
+        setBxgyDiscountRules((prev) =>
+          updateBxgyRulePresentation(prev, index, patch),
+        );
+        return;
+      case "free-gift":
+        setFreeGiftRules((prev) =>
+          updateFreeGiftRulePresentation(prev, index, patch),
+        );
+        return;
+      case "quantity-breaks-different":
+        setDifferentProductsDiscountRules((prev) =>
+          updateDifferentProductsRulePresentation(prev, index, patch),
+        );
+        return;
+      case "complete-bundle":
+        setCompleteBundleBars((prev) =>
+          updateCompleteBundleBarPresentation(prev, id, patch),
+        );
+        return;
+      default:
+        return;
+    }
+  };
+  const updateUnifiedRuleValues = (
+    id: string,
+    patch: UnifiedRuleValuePatch,
+  ) => {
+    switch (offerType) {
+      case "quantity-breaks-same":
+        setDiscountRules((prev) => updateUnifiedDiscountRuleValues(prev, id, patch));
+        return;
+      case "bxgy":
+        setBxgyDiscountRules((prev) => updateBxgyRuleValues(prev, id, patch));
+        return;
+      case "free-gift":
+        setFreeGiftRules((prev) => updateFreeGiftRuleValues(prev, id, patch));
+        return;
+      case "quantity-breaks-different":
+        setDifferentProductsDiscountRules((prev) =>
+          updateDifferentProductsRuleValues(prev, id, patch),
+        );
+        return;
+      case "complete-bundle":
+        setCompleteBundleBars((prev) =>
+          updateCompleteBundleRuleValues(prev, id, patch),
+        );
+        return;
+      default:
+        return;
+    }
+  };
   const campaignDraftActions: CampaignDraftActions = {
     setOfferType,
     setSelectedProductsData,
@@ -1719,6 +1900,8 @@ export function CreateNewOffer({
     setFreeGiftTriggerProducts,
     setFreeGiftRules,
     setProgressiveGifts,
+    updateUnifiedRulePresentation,
+    updateUnifiedRuleValues,
   };
   const countdownPreviewText = useMemo(() => {
     if (!showCountdownBlock || !endTime || !dayjs(endTime).isValid()) {
@@ -1728,8 +1911,6 @@ export function CreateNewOffer({
       .tz(scheduleTimezone)
       .format("YYYY-MM-DD HH:mm")}`;
   }, [countdownLabel, endTime, scheduleTimezone, showCountdownBlock]);
-  const hasDefault = normalizedDiscountRules.some(r => r.isDefault);
-
   const previewItems: PreviewItem[] = useMemo(() => {
     if (offerType === "complete-bundle" && completeBundleBars.length > 0) {
       const hasConfiguredProducts = completeBundleBars.some(
@@ -1763,174 +1944,28 @@ export function CreateNewOffer({
           },
         ];
       }
-      return completeBundleBars.map((bar, index) => {
-        const productsCount = Array.isArray(bar.products) ? bar.products.length : 0;
-        let sumOriginal = 0;
-        let sumFinal = 0;
-        for (const p of bar.products) {
-          const selectedVariant =
-            p.variants?.find((v) => v.id === p.selectedVariantId) || p.variants?.[0];
-          const base = parseMoneyStringToNumber(selectedVariant?.price || p.price);
-          const mode = p.pricing?.mode ?? "full_price";
-          const val = p.pricing?.value ?? 0;
-          const { final, original } = applyCompleteBundleProductPricing(mode, val, base);
-          sumOriginal += original;
-          sumFinal += final;
-        }
-        const saved = Math.max(0, sumOriginal - sumFinal);
-        return {
-          id: bar.id,
-          title: bar.title || `Bar #${index + 1}`,
-          subtitle:
-            bar.subtitle ||
-            `${bar.type === "bxgy" ? "Buy X Get Y" : "Quantity break"} · ${productsCount} products`,
-          price: formatPreviewPrice(sumFinal),
-          original: sumOriginal > sumFinal ? formatPreviewPrice(sumOriginal) : undefined,
-          featured: index === 0,
-          badge: index === 0 ? "Most Popular" : "",
-          saveLabel:
-            saved > 0 ? `SAVE ${formatPreviewPrice(saved)}` : `Qty ${Math.max(1, Number(bar.quantity) || 1)}`,
-        };
-      });
     }
 
-    if (offerType === "bxgy" && bxgyDiscountRules.length > 0) {
-      const bxgyHasDefault = bxgyDiscountRules.some(r => r.isDefault);
-      return bxgyDiscountRules.map((rule, index) => {
-        const isFeatured = bxgyHasDefault ? !!rule.isDefault : index === 0;
-        const displayCount = rule.count || 1;
-        return {
-          id: `bxgy-tier-${rule.count}`,
-          title: rule.title || `${displayCount} items`,
-          subtitle: rule.subtitle || `Buy ${rule.buyQuantity}, Get ${rule.getQuantity}`,
-          price: rule.discountPercent === 100
-            ? `${rule.getQuantity} FREE`
-            : `${rule.discountPercent}% OFF`,
-          featured: isFeatured,
-          badge: rule.badge || (isFeatured ? "Most Popular" : ""),
-          saveLabel: `BUY ${rule.buyQuantity} + GET ${rule.getQuantity}`,
-        };
-      });
-    }
-
-    if (offerType === "free-gift" && freeGiftRules.length > 0) {
-      const freeGiftHasDefault = freeGiftRules.some((r) => r.isDefault);
-      return freeGiftRules.map((rule, index) => {
-        const isFeatured = freeGiftHasDefault ? !!rule.isDefault : index === 0;
-        return {
-          id: `free-gift-tier-${rule.count}`,
-          title: rule.title || `Buy ${rule.count}`,
-          subtitle:
-            rule.subtitle ||
-            `Unlock ${rule.giftQuantity} free gift${rule.giftQuantity > 1 ? "s" : ""}`,
-          price: `${rule.giftQuantity} FREE`,
-          featured: isFeatured,
-          badge: rule.badge || (isFeatured ? "Gift included" : ""),
-          saveLabel: `TRIGGER AT ${rule.count}`,
-        };
-      });
-    }
-
-    if (offerType === "quantity-breaks-different" && differentProductsDiscountRules.length > 0) {
-      const differentProductsHasDefault = differentProductsDiscountRules.some(
-        (r) => r.isDefault,
-      );
-      return differentProductsDiscountRules.map((rule, index) => {
-        const isFeatured = differentProductsHasDefault
-          ? !!rule.isDefault
-          : index === 0;
-        const products =
-          (rule.tierType === "bxgy"
-            ? rule.getProductIds.length > 0
-              ? rule.getProductIds
-              : rule.buyProductIds
-            : rule.buyProductIds
-          )
-            .map((productId) =>
-              selectedProductsData.find(
-                (product) => String(product.id) === String(productId),
-              ),
-            )
-            .filter((product): product is (typeof selectedProductsData)[number] => Boolean(product))
-            .slice(0, 4)
-            .map((product) => ({
-              image: product.image,
-              name: product.title,
-            }));
-
-        return {
-          id: `different-products-tier-${rule.count}-${rule.tierType}`,
-          title:
-            rule.title ||
-            (rule.tierType === "bxgy"
-              ? `Buy ${rule.buyQuantity}, Get ${rule.getQuantity}`
-              : `${rule.count} mixed items`),
-          subtitle:
-            rule.subtitle ||
-            (rule.tierType === "bxgy"
-              ? `Across ${rule.buyProductIds.length} buy products`
-              : `Mix products and save ${rule.discountPercent}%`),
-          price:
-            rule.tierType === "bxgy"
-              ? rule.discountPercent === 100
-                ? `${rule.getQuantity} FREE`
-                : `${rule.discountPercent}% OFF`
-              : `${rule.discountPercent}% OFF`,
-          featured: isFeatured,
-          badge:
-            rule.badge ||
-            (isFeatured
-              ? rule.tierType === "bxgy"
-                ? "Best Reward"
-                : "Most Popular"
-              : ""),
-          saveLabel:
-            rule.tierType === "bxgy"
-              ? `BUY ${rule.buyQuantity} + GET ${rule.getQuantity}`
-              : `COUNT ${rule.count}+`,
-          products,
-        };
-      });
-    }
-
-    return [
-      {
-        id: "single",
-        title: "Single",
-        subtitle: "Standard price",
-        price: formatPreviewPrice(baseUnitPrice),
-      },
-      ...normalizedDiscountRules.map((rule, index) => {
-        const { originalTotal, discountedTotal, saved } =
-          calculatePreviewBundleAmounts(
-            baseUnitPrice,
-            rule.count,
-            rule.discountPercent,
-          );
-        const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
-        return {
-          id: `tier-${rule.count}`,
-          title: rule.title || `${rule.count} items`,
-          subtitle: rule.subtitle || `You save ${rule.discountPercent}%`,
-          price: formatPreviewPrice(discountedTotal),
-          original: formatPreviewPrice(originalTotal),
-          featured: isFeatured,
-          badge: rule.badge || (isFeatured ? "Most Popular" : ""),
-          saveLabel: `SAVE ${formatPreviewPrice(saved)}`,
-        };
-      }),
-    ];
+    return buildUnifiedPreviewItems({
+      offerType,
+      rules: campaignDraft.unifiedRulesSnapshot,
+      selectedProducts: selectedProductsData.map((product) => ({
+        id: product.id,
+        title: product.title,
+        image: product.image,
+      })),
+      completeBundleBars,
+      baseUnitPrice,
+      formatPrice: formatPreviewPrice,
+    });
   }, [
     offerType,
+    campaignDraft.unifiedRulesSnapshot,
     completeBundleBars,
-    bxgyDiscountRules,
-    differentProductsDiscountRules,
-    freeGiftRules,
     selectedProductsData,
-    normalizedDiscountRules,
     baseUnitPrice,
     formatPreviewPrice,
-    hasDefault,
+    starterTemplateDefaults,
   ]);
 
   const steps = [
@@ -1973,6 +2008,28 @@ export function CreateNewOffer({
     buttonPrimaryColor,
     setButtonPrimaryColor,
   };
+  const unifiedDisplayItems = useMemo(
+    () => buildUnifiedDisplayCustomizerItems(campaignDraft.unifiedRulesSnapshot),
+    [campaignDraft.unifiedRulesSnapshot],
+  );
+  const subscriptionDisplayItems = useMemo(
+    () =>
+      buildSubscriptionDisplayCustomizerItems({
+        subscriptionTitle,
+        subscriptionSubtitle,
+        subscriptionDefaultSelected,
+        oneTimeTitle,
+        oneTimeSubtitle,
+      }),
+    [
+      subscriptionTitle,
+      subscriptionSubtitle,
+      subscriptionDefaultSelected,
+      oneTimeTitle,
+      oneTimeSubtitle,
+    ],
+  );
+
 
   const progressiveGiftDisplaySections =
     progressiveGifts.enabled && offerType !== "complete-bundle"
@@ -2001,10 +2058,14 @@ export function CreateNewOffer({
   const renderDisplayCustomizer = () => {
     if (offerType === "quantity-breaks-same") {
       return (
-        <QuantityBreaksDisplayCustomizer
-          discountRules={discountRules}
-          setDiscountRules={setDiscountRules}
+        <OfferComponentsDisplayCustomizer
+          heading="Offer Components"
+          intro="Customize the quantity break components from here. Open a tier to edit its copy or default selection behavior."
+          itemGroupTitle="Tier Components"
+          itemGroupDescription="Each rule controls how the quantity break offer is presented in the widget."
           extraSections={progressiveGiftDisplaySections}
+          items={unifiedDisplayItems}
+          onUpdateItem={campaignDraftActions.updateUnifiedRulePresentation}
           {...displayCustomizerCommonProps}
         />
       );
@@ -2018,32 +2079,8 @@ export function CreateNewOffer({
           itemGroupTitle="BXGY Components"
           itemGroupDescription="Each rule controls how the BXGY offer is presented in the widget."
           extraSections={progressiveGiftDisplaySections}
-          items={bxgyDiscountRules.map((rule, index) => ({
-            id: `bxgy-${index}`,
-            title: rule.title || "",
-            displayTitle: rule.title || `BXGY Rule ${index + 1}`,
-            description: `Buy ${rule.buyQuantity}, get ${rule.getQuantity} • ${rule.discountPercent}% off`,
-            subtitle: rule.subtitle || "",
-            badge: rule.badge || "",
-            isDefault: !!rule.isDefault,
-            placeholders: {
-              title: `e.g. Buy ${rule.buyQuantity}, Get ${rule.getQuantity}`,
-              subtitle: `e.g. Buy ${rule.buyQuantity}, get ${rule.getQuantity}`,
-              badge: "e.g. Best value",
-            },
-          }))}
-          onUpdateItem={(id, patch) => {
-            const index = Number(id.replace("bxgy-", ""));
-            setBxgyDiscountRules((prev) =>
-              prev.map((rule, ruleIndex) => {
-                if (patch.isDefault === true) {
-                  return { ...rule, isDefault: ruleIndex === index };
-                }
-                if (ruleIndex !== index) return rule;
-                return { ...rule, ...patch };
-              }),
-            );
-          }}
+          items={unifiedDisplayItems}
+          onUpdateItem={campaignDraftActions.updateUnifiedRulePresentation}
           {...displayCustomizerCommonProps}
         />
       );
@@ -2057,32 +2094,8 @@ export function CreateNewOffer({
           itemGroupTitle="Free Gift Components"
           itemGroupDescription="Each rule controls how the gift unlock state is described in the widget."
           extraSections={progressiveGiftDisplaySections}
-          items={freeGiftRules.map((rule, index) => ({
-            id: `free-gift-${index}`,
-            title: rule.title || "",
-            displayTitle: rule.title || `Gift Rule ${index + 1}`,
-            description: `${rule.count} items unlock ${rule.giftQuantity} gift${rule.giftQuantity > 1 ? "s" : ""}`,
-            subtitle: rule.subtitle || "",
-            badge: rule.badge || "",
-            isDefault: !!rule.isDefault,
-            placeholders: {
-              title: "e.g. Free sample",
-              subtitle: `e.g. Buy ${rule.count} and unlock a gift`,
-              badge: "e.g. Gift included",
-            },
-          }))}
-          onUpdateItem={(id, patch) => {
-            const index = Number(id.replace("free-gift-", ""));
-            setFreeGiftRules((prev) =>
-              prev.map((rule, ruleIndex) => {
-                if (patch.isDefault === true) {
-                  return { ...rule, isDefault: ruleIndex === index };
-                }
-                if (ruleIndex !== index) return rule;
-                return { ...rule, ...patch };
-              }),
-            );
-          }}
+          items={unifiedDisplayItems}
+          onUpdateItem={campaignDraftActions.updateUnifiedRulePresentation}
           {...displayCustomizerCommonProps}
         />
       );
@@ -2096,41 +2109,8 @@ export function CreateNewOffer({
           itemGroupTitle="Cross-product Components"
           itemGroupDescription="Each rule controls how quantity-break or BXGY logic is presented across the shared product pool."
           extraSections={progressiveGiftDisplaySections}
-          items={differentProductsDiscountRules.map((rule, index) => ({
-            id: `different-${index}`,
-            title: rule.title || "",
-            displayTitle:
-              rule.title ||
-              `${rule.tierType === "bxgy" ? "BXGY" : "Quantity Break"} Rule ${index + 1}`,
-            description:
-              rule.tierType === "bxgy"
-                ? `Buy ${rule.buyQuantity}, get ${rule.getQuantity} • ${rule.discountPercent}% off`
-                : `${rule.count} items • ${rule.discountPercent}% off`,
-            subtitle: rule.subtitle || "",
-            badge: rule.badge || "",
-            isDefault: !!rule.isDefault,
-            placeholders: {
-              title:
-                rule.tierType === "bxgy" ? "e.g. Mix & Match BXGY" : "e.g. Mix & Match Trio",
-              subtitle:
-                rule.tierType === "bxgy"
-                  ? `e.g. Buy ${rule.buyQuantity}, get ${rule.getQuantity}`
-                  : `e.g. Buy any ${rule.count} and save ${rule.discountPercent}%`,
-              badge: "e.g. Shared pool deal",
-            },
-          }))}
-          onUpdateItem={(id, patch) => {
-            const index = Number(id.replace("different-", ""));
-            setDifferentProductsDiscountRules((prev) =>
-              prev.map((rule, ruleIndex) => {
-                if (patch.isDefault === true) {
-                  return { ...rule, isDefault: ruleIndex === index };
-                }
-                if (ruleIndex !== index) return rule;
-                return { ...rule, ...patch };
-              }),
-            );
-          }}
+          items={unifiedDisplayItems}
+          onUpdateItem={campaignDraftActions.updateUnifiedRulePresentation}
           {...displayCustomizerCommonProps}
         />
       );
@@ -2143,27 +2123,8 @@ export function CreateNewOffer({
           intro="Customize the bundle structure components from here. Open a bar to edit its visible title."
           itemGroupTitle="Bundle Components"
           itemGroupDescription="Each bundle bar is shown as a separate display component."
-          items={completeBundleBars.map((bar, index) => ({
-            id: bar.id,
-            title: bar.title || "",
-            displayTitle: bar.title || `Bar ${index + 1}`,
-            description: `${bar.type === "bxgy" ? "BXGY" : "Quantity"} • ${bar.quantity} item target`,
-            fields: {
-              title: true,
-              subtitle: false,
-              badge: false,
-              isDefault: false,
-            },
-            placeholders: {
-              title:
-                bar.type === "bxgy" ? "e.g. Buy X, Get Y" : "e.g. Complete the bundle",
-            },
-          }))}
-          onUpdateItem={(id, patch) => {
-            if (typeof patch.title === "string") {
-              updateCompleteBundleBar(id, { title: patch.title });
-            }
-          }}
+          items={unifiedDisplayItems}
+          onUpdateItem={campaignDraftActions.updateUnifiedRulePresentation}
           {...displayCustomizerCommonProps}
         />
       );
@@ -2177,47 +2138,8 @@ export function CreateNewOffer({
           itemGroupTitle="Subscription Components"
           itemGroupDescription="The subscription option and one-time option are edited as separate storefront components."
           extraSections={progressiveGiftDisplaySections}
-          items={[
-            {
-              id: "subscription-option",
-              title: subscriptionTitle || "",
-              displayTitle: subscriptionTitle || "Subscription Option",
-              description: "Primary recurring purchase option shown beside the main offer.",
-              subtitle: subscriptionSubtitle || "",
-              isDefault: subscriptionDefaultSelected,
-              fields: { title: true, subtitle: true, badge: false, isDefault: true },
-              placeholders: {
-                title: "e.g. Subscribe & Save 20%",
-                subtitle: "e.g. Delivered weekly",
-              },
-            },
-            {
-              id: "one-time-option",
-              title: oneTimeTitle || "",
-              displayTitle: oneTimeTitle || "One-time Option",
-              description: "Fallback one-time purchase option shown in the decision switcher.",
-              subtitle: oneTimeSubtitle || "",
-              fields: { title: true, subtitle: true, badge: false, isDefault: false },
-              placeholders: {
-                title: "e.g. One-time purchase",
-                subtitle: "e.g. No subscription commitment",
-              },
-            },
-          ]}
-          onUpdateItem={(id, patch) => {
-            if (id === "subscription-option") {
-              if (typeof patch.title === "string") setSubscriptionTitle(patch.title);
-              if (typeof patch.subtitle === "string") setSubscriptionSubtitle(patch.subtitle);
-              if (typeof patch.isDefault === "boolean") {
-                setSubscriptionDefaultSelected(patch.isDefault);
-              }
-              return;
-            }
-            if (id === "one-time-option") {
-              if (typeof patch.title === "string") setOneTimeTitle(patch.title);
-              if (typeof patch.subtitle === "string") setOneTimeSubtitle(patch.subtitle);
-            }
-          }}
+          items={subscriptionDisplayItems}
+          onUpdateItem={campaignDraftActions.updateUnifiedRulePresentation}
           {...displayCustomizerCommonProps}
         />
       );
@@ -2252,29 +2174,6 @@ export function CreateNewOffer({
           return;
         }
 
-        if (offerType === "bxgy" && (buyProducts.length === 0 || getProducts.length === 0)) {
-          e.preventDefault();
-          Modal.error({
-            title: "Validation Error",
-            content: "For BXGY offers, you must select both Buy Products and Get Products.",
-          });
-          setStep(2);
-          return;
-        }
-        if (offerType === "complete-bundle") {
-          const hasInvalidBar = completeBundleBars.some(
-            (bar) => !bar.products?.length || !Number.isFinite(Number(bar.quantity)) || Number(bar.quantity) < 1,
-          );
-          if (hasInvalidBar) {
-            e.preventDefault();
-            Modal.error({
-              title: "Validation Error",
-              content: "Each bundle bar must contain at least one product and a valid quantity.",
-            });
-            setStep(2);
-            return;
-          }
-        }
         const finalScopeLogicError =
           validateFinalSubmitScopeAndLogic(campaignDraft);
         if (finalScopeLogicError) {
@@ -2286,17 +2185,15 @@ export function CreateNewOffer({
           setStep(2);
           return;
         }
-        if (offerType === "quantity-breaks-same") {
-          const unifiedRuleBlockingMessage = getUnifiedRuleBlockingMessage(discountRules);
-          if (unifiedRuleBlockingMessage) {
-            e.preventDefault();
-            Modal.error({
-              title: "Validation Error",
-              content: unifiedRuleBlockingMessage,
-            });
-            setStep(2);
-            return;
-          }
+        const unifiedRuleBlockingMessage = getUnifiedRuleBlockingMessage(campaignDraft);
+        if (unifiedRuleBlockingMessage) {
+          e.preventDefault();
+          Modal.error({
+            title: "Validation Error",
+            content: unifiedRuleBlockingMessage,
+          });
+          setStep(2);
+          return;
         }
 
         let hasError = false;
@@ -2639,6 +2536,8 @@ export function CreateNewOffer({
                 <div>
                   <BuilderStepIntro
                     title="Scope & Logic"
+                    meta={`${stepTwoMeta.logicBlockLabel} • ${stepTwoRuleTypeSummary}`}
+                    description={`${stepTwoMeta.stepTwoDescription} Scope: ${stepTwoScopeSummary}. Logic: ${stepTwoLogicSummary}. Publish: ${stepTwoPublishSummary}.`}
                   />
 
                   <LogicEditorsRenderer
@@ -2648,6 +2547,12 @@ export function CreateNewOffer({
                       renderCompleteBundleProductPricingCard
                     }
                   />
+                  <div className="mt-4">
+                    <UnifiedRulesAuditPanel
+                      rules={campaignDraft.unifiedRulesSnapshot}
+                      issues={unifiedRuleAuditIssues}
+                    />
+                  </div>
                 </div>
 
                 <div className="create-offer-sticky-preview">
@@ -3043,35 +2948,6 @@ export function CreateNewOffer({
               <BuilderStepIntro
                 title="Targeting"
               />
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-8">
-                <div className="rounded-lg border border-[#dfe3e8] bg-white p-3">
-                  <div className="text-[12px] font-semibold uppercase tracking-[0.04em] text-[#5c6166]">
-                    Schedule
-                  </div>
-                  <div className="mt-1 text-[14px] text-[#1c1f23]">
-                    {startTime && endTime ? "Start and end time set" : "Schedule needs attention"}
-                  </div>
-                </div>
-                <div className="rounded-lg border border-[#dfe3e8] bg-white p-3">
-                  <div className="text-[12px] font-semibold uppercase tracking-[0.04em] text-[#5c6166]">
-                    Markets
-                  </div>
-                  <div className="mt-1 text-[14px] text-[#1c1f23]">
-                    {markets.includes("all")
-                      ? "Visible in all markets"
-                      : `${markets.length} market${markets.length > 1 ? "s" : ""} selected`}
-                  </div>
-                </div>
-                <div className="rounded-lg border border-[#dfe3e8] bg-white p-3">
-                  <div className="text-[12px] font-semibold uppercase tracking-[0.04em] text-[#5c6166]">
-                    Status
-                  </div>
-                  <div className="mt-1 text-[14px] text-[#1c1f23]">
-                    {status ? "Campaign will be active after save" : "Campaign will be saved as inactive"}
-                  </div>
-                </div>
-              </div>
-
               <ScheduleTargetingEditor
                 markets={markets}
                 setMarkets={setMarkets}
@@ -3233,15 +3109,13 @@ export function CreateNewOffer({
                 e.preventDefault();
                 return;
               }
-              if (offerType === "quantity-breaks-same") {
-                const unifiedRuleBlockingMessage = getUnifiedRuleBlockingMessage(
-                  discountRules,
-                );
-                if (unifiedRuleBlockingMessage) {
-                  message.error(unifiedRuleBlockingMessage);
-                  e.preventDefault();
-                  return;
-                }
+              const unifiedRuleBlockingMessage = getUnifiedRuleBlockingMessage(
+                campaignDraft,
+              );
+              if (unifiedRuleBlockingMessage) {
+                message.error(unifiedRuleBlockingMessage);
+                e.preventDefault();
+                return;
               }
               setStep(3);
               e.preventDefault();

@@ -1,4 +1,5 @@
 import { Checkbox, Input, Select, Switch } from "antd";
+import type { RulePresentationPatch } from "./unifiedRulePresentation";
 
 type Props = {
   subscriptionEnabled: boolean;
@@ -21,6 +22,7 @@ type Props = {
   subscriptionExplanationTitle: string;
   subscriptionExplanationBody: string;
   section?: "subscription-offer" | "one-time-message" | "all";
+  updateRulePresentation?: (id: string, patch: RulePresentationPatch) => void;
 };
 
 export default function SubscriptionSettingsEditor({
@@ -44,6 +46,7 @@ export default function SubscriptionSettingsEditor({
   subscriptionExplanationTitle,
   subscriptionExplanationBody,
   section = "all",
+  updateRulePresentation,
 }: Props) {
   const showSubscriptionOffer =
     section === "all" || section === "subscription-offer";
@@ -71,7 +74,13 @@ export default function SubscriptionSettingsEditor({
               <Input
                 size="large"
                 value={subscriptionTitle}
-                onChange={(e) => setSubscriptionTitle(e.target.value)}
+                onChange={(e) =>
+                  updateRulePresentation
+                    ? updateRulePresentation("subscription-option", {
+                        title: e.target.value,
+                      })
+                    : setSubscriptionTitle(e.target.value)
+                }
                 maxLength={60}
               />
             </div>
@@ -82,7 +91,13 @@ export default function SubscriptionSettingsEditor({
               <Input
                 size="large"
                 value={subscriptionSubtitle}
-                onChange={(e) => setSubscriptionSubtitle(e.target.value)}
+                onChange={(e) =>
+                  updateRulePresentation
+                    ? updateRulePresentation("subscription-option", {
+                        subtitle: e.target.value,
+                      })
+                    : setSubscriptionSubtitle(e.target.value)
+                }
                 maxLength={60}
               />
             </div>
@@ -130,7 +145,13 @@ export default function SubscriptionSettingsEditor({
                 <Input
                   size="large"
                   value={oneTimeTitle}
-                  onChange={(e) => setOneTimeTitle(e.target.value)}
+                  onChange={(e) =>
+                    updateRulePresentation
+                      ? updateRulePresentation("one-time-option", {
+                          title: e.target.value,
+                        })
+                      : setOneTimeTitle(e.target.value)
+                  }
                   maxLength={60}
                 />
               </div>
@@ -141,7 +162,13 @@ export default function SubscriptionSettingsEditor({
                 <Input
                   size="large"
                   value={oneTimeSubtitle}
-                  onChange={(e) => setOneTimeSubtitle(e.target.value)}
+                  onChange={(e) =>
+                    updateRulePresentation
+                      ? updateRulePresentation("one-time-option", {
+                          subtitle: e.target.value,
+                        })
+                      : setOneTimeSubtitle(e.target.value)
+                  }
                   maxLength={60}
                 />
               </div>
@@ -165,7 +192,13 @@ export default function SubscriptionSettingsEditor({
           <div className="mt-3">
             <Checkbox
               checked={subscriptionDefaultSelected}
-              onChange={(e) => setSubscriptionDefaultSelected(e.target.checked)}
+              onChange={(e) =>
+                updateRulePresentation
+                  ? updateRulePresentation("subscription-option", {
+                      isDefault: e.target.checked,
+                    })
+                  : setSubscriptionDefaultSelected(e.target.checked)
+              }
             >
               Make subscription option selected by default
             </Checkbox>

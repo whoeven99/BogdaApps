@@ -5,6 +5,9 @@ import type {
   ProgressiveGiftsConfig,
 } from "../../../utils/offerParsing";
 import type { OfferTypeId } from "./offerTypeOptions";
+import type { RulePresentationPatch } from "./unifiedRulePresentation";
+import type { UnifiedRuleValuePatch } from "./unifiedRuleValues";
+import type { UnifiedRuleNode } from "./unifiedRulesSchema";
 
 export type DraftDiscountRule = {
   id?: string;
@@ -21,6 +24,10 @@ export type DraftDiscountRule = {
   rewardType?: "percentage_off" | "gift_product" | "free_shipping";
   rewardProductIds?: string[];
   giftQuantity?: number;
+  logicType?: "standard" | "bxgy";
+  buyQuantity?: number;
+  getQuantity?: number;
+  maxUsesPerOrder?: number;
 };
 
 export type DraftBxgyDiscountRule = {
@@ -73,6 +80,7 @@ export type CampaignDraft = {
   giftProductsData: DraftSelectedProduct[];
   freeGiftRules: FreeGiftRule[];
   progressiveGifts: ProgressiveGiftsConfig;
+  unifiedRulesSnapshot: UnifiedRuleNode[];
 };
 
 export type CampaignDraftActions = {
@@ -111,4 +119,12 @@ export type CampaignDraftActions = {
   >;
   setFreeGiftRules: React.Dispatch<React.SetStateAction<FreeGiftRule[]>>;
   setProgressiveGifts: (value: ProgressiveGiftsConfig) => void;
+  updateUnifiedRulePresentation: (
+    id: string,
+    patch: RulePresentationPatch,
+  ) => void;
+  updateUnifiedRuleValues: (
+    id: string,
+    patch: UnifiedRuleValuePatch,
+  ) => void;
 };

@@ -35,7 +35,7 @@ export default function ScopeEditor({
             e.preventDefault();
           }}
         >
-          Add products eligible for offer
+          Add products
         </Button>
       ) : (
         <div>

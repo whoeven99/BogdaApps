@@ -1,5 +1,15 @@
-import { Button, Checkbox, Dropdown, Input } from "antd";
+import { Button, Checkbox, Dropdown, Input, Select } from "antd";
 import type { BxgyDiscountRule } from "../../../utils/offerParsing";
+import {
+  OfferRuleCard,
+  OfferRuleSummaryBox,
+  OfferRulesSection,
+} from "./OfferRulesShared";
+import type { RulePresentationPatch } from "./unifiedRulePresentation";
+import {
+  getBxgyUnifiedRuleId,
+  type UnifiedRuleValuePatch,
+} from "./unifiedRuleValues";
 
 type Props = {
   buyProductsCount: number;
@@ -9,6 +19,8 @@ type Props = {
   bxgyDiscountRules: BxgyDiscountRule[];
   setBxgyDiscountRules: React.Dispatch<React.SetStateAction<BxgyDiscountRule[]>>;
   section?: "buy-products" | "get-products" | "rules" | "all";
+  updateRuleValues?: (id: string, patch: UnifiedRuleValuePatch) => void;
+  updateRulePresentation?: (id: string, patch: RulePresentationPatch) => void;
 };
 
 export default function BxgyLogicEditor({
@@ -19,7 +31,11 @@ export default function BxgyLogicEditor({
   bxgyDiscountRules,
   setBxgyDiscountRules,
   section = "all",
+  updateRuleValues,
+  updateRulePresentation,
 }: Props) {
+  const discountTypeOptions = [{ label: "BXGY", value: "bxgy" }];
+  const conditionTypeOptions = [{ label: "Buy X, Get Y", value: "buy_x_get_y" }];
   const showBuyProducts = section === "all" || section === "buy-products";
   const showGetProducts = section === "all" || section === "get-products";
   const showRules = section === "all" || section === "rules";
@@ -131,80 +147,56 @@ export default function BxgyLogicEditor({
       ) : null}
 
       {showRules ? (
-        <div>
-          <h3 className="mb-3 text-[14px] font-medium text-[#1c1f23]">
-            Logic Block: Offer Rules
-          </h3>
-          <p className="mb-4 text-[13px] font-normal text-[#5c6166]">
-            BXGY rules use a fixed discount type. Configure the buy condition, the
-            reward quantity, and the reward discount per rule.
-          </p>
+        <OfferRulesSection description="BXGY rules use a fixed discount type. Configure the buy condition, the reward quantity, and the reward discount per rule.">
           {bxgyDiscountRules.map((rule, index) => (
-            <div className="create-offer-discount-card" key={index}>
-              <div className="create-offer-discount-body">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div className="text-[14px] font-semibold text-[#1c1f23]">
-                    Rule {index + 1}
-                  </div>
-                  <Button
-                    danger
-                    size="small"
-                    onClick={() => {
-                      setBxgyDiscountRules((prev) => {
-                        if (prev.length <= 1) return prev;
-                        return prev.filter((_, currentIndex) => currentIndex !== index);
-                      });
-                    }}
-                    disabled={bxgyDiscountRules.length <= 1}
-                  >
-                    Remove
-                  </Button>
-                </div>
-
+            <OfferRuleCard
+              key={index}
+              index={index}
+              disableRemove={bxgyDiscountRules.length <= 1}
+              onRemove={() => {
+                setBxgyDiscountRules((prev) => {
+                  if (prev.length <= 1) return prev;
+                  return prev.filter((_, currentIndex) => currentIndex !== index);
+                });
+              }}
+            >
+                {(() => {
+                  const ruleId = getBxgyUnifiedRuleId(index);
+                  return (
+                    <>
                 <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-                  <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-3 py-3">
-                    <div className="text-[12px] font-medium uppercase tracking-[0.05em] text-[#5c6166]">
-                      Discount Type
-                    </div>
-                    <div className="mt-1 text-[14px] font-medium text-[#1c1f23]">
-                      BXGY
-                    </div>
-                    <div className="mt-1 text-[12px] text-[#5c6166]">
-                      Buy qualifying products and reward the Y products from the
-                      selected reward scope.
-                    </div>
-                  </div>
+                  <label className="block text-[14px] font-medium text-[#1c1f23]">
+                    Discount Type
+                    <Select
+                      size="large"
+                      className="mt-1 w-full"
+                      value="bxgy"
+                      options={discountTypeOptions}
+                      disabled
+                    />
+                  </label>
 
-                  <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-3 py-3">
-                    <div className="text-[12px] font-medium uppercase tracking-[0.05em] text-[#5c6166]">
-                      Condition Type
-                    </div>
-                    <div className="mt-1 text-[14px] font-medium text-[#1c1f23]">
-                      Buy X, Get Y
-                    </div>
-                    <div className="mt-1 text-[12px] text-[#5c6166]">
-                      Uses the buy and get quantities below to define the unlock
-                      rule.
-                    </div>
-                  </div>
+                  <label className="block text-[14px] font-medium text-[#1c1f23]">
+                    Condition Type
+                    <Select
+                      size="large"
+                      className="mt-1 w-full"
+                      value="buy_x_get_y"
+                      options={conditionTypeOptions}
+                      disabled
+                    />
+                  </label>
 
-                  <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-3 py-3">
-                    <div className="text-[12px] font-medium uppercase tracking-[0.05em] text-[#5c6166]">
-                      Reward Summary
-                    </div>
-                    <div className="mt-1 text-[14px] font-medium text-[#1c1f23]">
-                      Percentage discount on Y products
-                    </div>
-                    <div className="mt-1 text-[12px] text-[#5c6166]">
-                      Set the reward percentage below. `100%` means the reward
-                      products are free.
-                    </div>
-                  </div>
+                  <OfferRuleSummaryBox
+                    label="Reward Summary"
+                    value="Percentage discount on Y products"
+                    description="Set the reward percentage below. `100%` means the reward products are free."
+                  />
                 </div>
 
                 <div className="create-offer-discount-form-row create-offer-discount-form-row--inline">
                   <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                    Activation Quantity
+                    Trigger Quantity
                     <Input
                       size="large"
                       type="number"
@@ -218,6 +210,10 @@ export default function BxgyLogicEditor({
                           Number.isFinite(parsedValue) && parsedValue >= 1
                             ? Math.trunc(parsedValue)
                             : 1;
+                        if (updateRuleValues) {
+                          updateRuleValues(ruleId, { count: nextCount });
+                          return;
+                        }
                         setBxgyDiscountRules((prev) =>
                           prev.map((currentRule, currentIndex) =>
                             currentIndex === index
@@ -243,6 +239,10 @@ export default function BxgyLogicEditor({
                           Number.isFinite(parsedValue) && parsedValue >= 1
                             ? Math.trunc(parsedValue)
                             : 1;
+                        if (updateRuleValues) {
+                          updateRuleValues(ruleId, { buyQuantity: nextCount });
+                          return;
+                        }
                         setBxgyDiscountRules((prev) =>
                           prev.map((currentRule, currentIndex) =>
                             currentIndex === index
@@ -268,6 +268,10 @@ export default function BxgyLogicEditor({
                           Number.isFinite(parsedValue) && parsedValue >= 1
                             ? Math.trunc(parsedValue)
                             : 1;
+                        if (updateRuleValues) {
+                          updateRuleValues(ruleId, { getQuantity: nextCount });
+                          return;
+                        }
                         setBxgyDiscountRules((prev) =>
                           prev.map((currentRule, currentIndex) =>
                             currentIndex === index
@@ -295,6 +299,10 @@ export default function BxgyLogicEditor({
                           Number.isFinite(parsedValue) && parsedValue >= 0
                             ? parsedValue
                             : 0;
+                        if (updateRuleValues) {
+                          updateRuleValues(ruleId, { discountPercent: nextPercent });
+                          return;
+                        }
                         setBxgyDiscountRules((prev) =>
                           prev.map((currentRule, currentIndex) =>
                             currentIndex === index
@@ -322,6 +330,10 @@ export default function BxgyLogicEditor({
                       placeholder="e.g. Duo, Trio"
                       onChange={(e) => {
                         const value = e.target.value;
+                        if (updateRulePresentation) {
+                          updateRulePresentation(ruleId, { title: value });
+                          return;
+                        }
                         setBxgyDiscountRules((prev) =>
                           prev.map((currentRule, currentIndex) =>
                             currentIndex === index
@@ -341,6 +353,10 @@ export default function BxgyLogicEditor({
                       placeholder="e.g. Buy 2, get 1 free"
                       onChange={(e) => {
                         const value = e.target.value;
+                        if (updateRulePresentation) {
+                          updateRulePresentation(ruleId, { subtitle: value });
+                          return;
+                        }
                         setBxgyDiscountRules((prev) =>
                           prev.map((currentRule, currentIndex) =>
                             currentIndex === index
@@ -360,6 +376,10 @@ export default function BxgyLogicEditor({
                       placeholder="e.g. Most Popular"
                       onChange={(e) => {
                         const value = e.target.value;
+                        if (updateRulePresentation) {
+                          updateRulePresentation(ruleId, { badge: value });
+                          return;
+                        }
                         setBxgyDiscountRules((prev) =>
                           prev.map((currentRule, currentIndex) =>
                             currentIndex === index
@@ -388,6 +408,10 @@ export default function BxgyLogicEditor({
                           Number.isFinite(parsedValue) && parsedValue >= 1
                             ? Math.trunc(parsedValue)
                             : 1;
+                        if (updateRuleValues) {
+                          updateRuleValues(ruleId, { maxUsesPerOrder: nextMax });
+                          return;
+                        }
                         setBxgyDiscountRules((prev) =>
                           prev.map((currentRule, currentIndex) =>
                             currentIndex === index
@@ -410,6 +434,10 @@ export default function BxgyLogicEditor({
                     checked={!!rule.isDefault}
                     onChange={(e) => {
                       const checked = e.target.checked;
+                      if (updateRulePresentation) {
+                        updateRulePresentation(ruleId, { isDefault: checked });
+                        return;
+                      }
                       setBxgyDiscountRules((prev) =>
                         prev.map((currentRule, currentIndex) => ({
                           ...currentRule,
@@ -421,8 +449,10 @@ export default function BxgyLogicEditor({
                     Set as Default Selected
                   </Checkbox>
                 </div>
-              </div>
-            </div>
+                    </>
+                  );
+                })()}
+            </OfferRuleCard>
           ))}
           <Dropdown
             trigger={["click"]}
@@ -435,7 +465,7 @@ export default function BxgyLogicEditor({
               + Add rule
             </Button>
           </Dropdown>
-        </div>
+        </OfferRulesSection>
       ) : null}
     </>
   );

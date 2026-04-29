@@ -74,6 +74,8 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
             onSelectGetProducts={() => props.actions.handleSelectProducts("get")}
             bxgyDiscountRules={props.draft.bxgyDiscountRules}
             setBxgyDiscountRules={props.actions.setBxgyDiscountRules}
+            updateRuleValues={props.actions.updateUnifiedRuleValues}
+            updateRulePresentation={props.actions.updateUnifiedRulePresentation}
             section="buy-products"
           />
         ),
@@ -93,6 +95,8 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
             onSelectGetProducts={() => props.actions.handleSelectProducts("get")}
             bxgyDiscountRules={props.draft.bxgyDiscountRules}
             setBxgyDiscountRules={props.actions.setBxgyDiscountRules}
+            updateRuleValues={props.actions.updateUnifiedRuleValues}
+            updateRulePresentation={props.actions.updateUnifiedRulePresentation}
             section="get-products"
           />
         ),
@@ -112,6 +116,8 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
             onSelectGetProducts={() => props.actions.handleSelectProducts("get")}
             bxgyDiscountRules={props.draft.bxgyDiscountRules}
             setBxgyDiscountRules={props.actions.setBxgyDiscountRules}
+            updateRuleValues={props.actions.updateUnifiedRuleValues}
+            updateRulePresentation={props.actions.updateUnifiedRulePresentation}
             section="rules"
           />
         ),
@@ -189,6 +195,8 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
             onSelectGiftProducts={() => props.actions.handleSelectProducts("gift")}
             freeGiftRules={props.draft.freeGiftRules}
             setFreeGiftRules={props.actions.setFreeGiftRules}
+            updateRuleValues={props.actions.updateUnifiedRuleValues}
+            updateRulePresentation={props.actions.updateUnifiedRulePresentation}
           />
         ),
       },
@@ -243,6 +251,8 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
             addCompleteBundleBar={props.actions.addCompleteBundleBar}
             removeCompleteBundleBar={props.actions.removeCompleteBundleBar}
             updateCompleteBundleBar={props.actions.updateCompleteBundleBar}
+            updateRuleValues={props.actions.updateUnifiedRuleValues}
+            updateRulePresentation={props.actions.updateUnifiedRulePresentation}
             handleSelectProductsForBundleBar={props.actions.handleSelectProductsForBundleBar}
             appendProductsToBundleBar={props.actions.appendProductsToBundleBar}
             renderCompleteBundleProductPricingCard={
@@ -267,6 +277,8 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
             addCompleteBundleBar={props.actions.addCompleteBundleBar}
             removeCompleteBundleBar={props.actions.removeCompleteBundleBar}
             updateCompleteBundleBar={props.actions.updateCompleteBundleBar}
+            updateRuleValues={props.actions.updateUnifiedRuleValues}
+            updateRulePresentation={props.actions.updateUnifiedRulePresentation}
             handleSelectProductsForBundleBar={props.actions.handleSelectProductsForBundleBar}
             appendProductsToBundleBar={props.actions.appendProductsToBundleBar}
             renderCompleteBundleProductPricingCard={
@@ -324,6 +336,7 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
             }
             subscriptionExplanationTitle={props.draft.subscriptionExplanationTitle}
             subscriptionExplanationBody={props.draft.subscriptionExplanationBody}
+            updateRulePresentation={props.actions.updateUnifiedRulePresentation}
             section="subscription-offer"
           />
         ),
@@ -360,6 +373,7 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
             }
             subscriptionExplanationTitle={props.draft.subscriptionExplanationTitle}
             subscriptionExplanationBody={props.draft.subscriptionExplanationBody}
+            updateRulePresentation={props.actions.updateUnifiedRulePresentation}
             section="one-time-message"
           />
         ),
@@ -425,6 +439,8 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
             setDifferentProductsDiscountRules={
               props.actions.setDifferentProductsDiscountRules
             }
+            updateRuleValues={props.actions.updateUnifiedRuleValues}
+            updateRulePresentation={props.actions.updateUnifiedRulePresentation}
           />
         ),
       },
@@ -466,9 +482,8 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
     components: (props) => [
       {
         id: "scope",
-        title: "Template Products",
-        description:
-          "Select the products included in this quantity break campaign.",
+        title: "",
+        description: "",
         required: true,
         active: true,
         render: () => renderDefaultScopeEditor(props),
@@ -487,6 +502,8 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
             selectedProductsData={props.draft.selectedProductsData}
             offerType={props.draft.offerType}
             section="tiers"
+            updateRuleValues={props.actions.updateUnifiedRuleValues}
+            updateRulePresentation={props.actions.updateUnifiedRulePresentation}
           />
         ),
       },
@@ -569,24 +586,38 @@ export default function LogicEditorsRenderer({
           key={component.id}
           className="rounded-[12px] border border-[#e3e8ed] bg-white p-4"
         >
-          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-            <div>
-              <h3 className="m-0 text-[16px] font-semibold text-[#1c1f23]">
-                {component.title}
-              </h3>
-              <p className="m-0 mt-2 text-[13px] text-[#5c6166]">
-                {component.description}
-              </p>
-            </div>
-            {!component.required && component.onRemove ? (
-              <div className="flex flex-wrap gap-2">
-                <Button size="small" onClick={component.onRemove}>
-                  Remove
-                </Button>
+          {component.title || component.description || (!component.required && component.onRemove) ? (
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div>
+                {component.title ? (
+                  <h3 className="m-0 text-[16px] font-semibold text-[#1c1f23]">
+                    {component.title}
+                  </h3>
+                ) : null}
+                {component.description ? (
+                  <p className="m-0 mt-2 text-[13px] text-[#5c6166]">
+                    {component.description}
+                  </p>
+                ) : null}
               </div>
-            ) : null}
+              {!component.required && component.onRemove ? (
+                <div className="flex flex-wrap gap-2">
+                  <Button size="small" onClick={component.onRemove}>
+                    Remove
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          <div
+            className={
+              component.title || component.description || (!component.required && component.onRemove)
+                ? "mt-4"
+                : ""
+            }
+          >
+            {component.render()}
           </div>
-          <div className="mt-4">{component.render()}</div>
         </div>
       ))}
     </div>

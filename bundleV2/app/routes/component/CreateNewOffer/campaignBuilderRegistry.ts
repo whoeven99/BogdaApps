@@ -6,6 +6,10 @@ import {
 } from "../../../utils/offerParsing";
 import type { CampaignDraft, DraftDiscountRule } from "./campaignDraft";
 import type { OfferTypeId } from "./offerTypeOptions";
+import {
+  getRuleCapability,
+  getUnifiedRuleTypeLabel,
+} from "./unifiedRulesSchema";
 
 export type CampaignBuilderRegistryContext = CampaignDraft;
 
@@ -126,13 +130,60 @@ export function getCampaignLogicSummary(
       return `${ctx.freeGiftRules.length} gift tiers, up to ${bestGiftQty} free gift${bestGiftQty > 1 ? "s" : ""}`;
     }
     default: {
+      const bxgyTierCount = ctx.normalizedDiscountRules.filter(
+        (rule) => rule.logicType === "bxgy",
+      ).length;
+      const standardTierCount = ctx.normalizedDiscountRules.length - bxgyTierCount;
       const bestDiscount = ctx.normalizedDiscountRules.reduce(
         (max, rule) => Math.max(max, rule.discountPercent),
         0,
       );
-      return `${ctx.normalizedDiscountRules.length} quantity tiers, up to ${bestDiscount}% off`;
+      return bxgyTierCount > 0
+        ? `${standardTierCount} standard tiers, ${bxgyTierCount} BXGY tiers, up to ${bestDiscount}% off`
+        : `${ctx.normalizedDiscountRules.length} quantity tiers, up to ${bestDiscount}% off`;
     }
   }
+}
+
+export function getCampaignRuleTypeSummary(
+  ctx: CampaignBuilderRegistryContext,
+): string {
+  const uniqueTypes = Array.from(
+    new Set(ctx.unifiedRulesSnapshot.map((rule) => rule.type)),
+  );
+
+  if (uniqueTypes.length === 0) {
+    return "No rules yet";
+  }
+
+  return uniqueTypes.map((type) => getUnifiedRuleTypeLabel(type)).join(", ");
+}
+
+export function getCampaignPublishSupportSummary(
+  ctx: CampaignBuilderRegistryContext,
+): string {
+  const capability = getRuleCapability(ctx.offerType);
+  const publishStates = Array.from(
+    new Set(ctx.unifiedRulesSnapshot.map((rule) => rule.publishSupport)),
+  );
+
+  if (publishStates.length === 0) {
+    return capability.publishSupport === "supported"
+      ? "Publish-ready path"
+      : capability.publishSupport === "draft_only"
+        ? "Draft-only path"
+        : "Specialized editor path";
+  }
+
+  if (publishStates.includes("specialized_editor_only")) {
+    return "Specialized editor publish path";
+  }
+
+  if (publishStates.includes("draft_only")) {
+    return "Mixed publish support";
+  }
+
+  return "Publish-ready path";
 }
 
 export function buildSelectedProductsPayload(

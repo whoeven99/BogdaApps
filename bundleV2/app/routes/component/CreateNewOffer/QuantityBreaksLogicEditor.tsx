@@ -1,5 +1,10 @@
 import { Checkbox, Input } from "antd";
 import type { DiscountRule } from "../../../utils/offerParsing";
+import type {
+  RulePresentationPatch,
+} from "./unifiedRulePresentation";
+import type { UnifiedRuleValuePatch } from "./unifiedRuleValues";
+import { getUnifiedDiscountRuleId } from "./unifiedRuleValues";
 import UnifiedRulesEditor from "./UnifiedRulesEditor";
 
 type Props = {
@@ -15,6 +20,8 @@ type Props = {
   }>;
   offerType?: string;
   section?: "tiers" | "presentation" | "all";
+  updateRuleValues?: (id: string, patch: UnifiedRuleValuePatch) => void;
+  updateRulePresentation?: (id: string, patch: RulePresentationPatch) => void;
 };
 
 export default function QuantityBreaksLogicEditor({
@@ -23,6 +30,8 @@ export default function QuantityBreaksLogicEditor({
   selectedProductsData = [],
   offerType,
   section = "all",
+  updateRuleValues,
+  updateRulePresentation,
 }: Props) {
   const showTiers = section === "all" || section === "tiers";
   const showPresentation = section === "all" || section === "presentation";
@@ -30,20 +39,10 @@ export default function QuantityBreaksLogicEditor({
   return (
     <div>
       {showTiers ? (
-        <>
-          <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-            Logic Block: Unified Rules
-          </h3>
-          <p className="text-[13px] text-[#5c6166] mb-4 font-normal">
-            Configure the condition and reward per rule so the same model can grow
-            into product, order, shipping, and mixed incentives.
-          </p>
-        </>
-      ) : null}
-      {showTiers ? (
         <UnifiedRulesEditor
           rules={discountRules}
           setRules={setDiscountRules}
+          updateRuleValues={updateRuleValues}
           selectedProductsData={selectedProductsData}
           offerType={offerType}
         />
@@ -81,6 +80,11 @@ export default function QuantityBreaksLogicEditor({
                       placeholder="e.g. Duo, Trio"
                       onChange={(e) => {
                         const value = e.target.value;
+                        const ruleId = getUnifiedDiscountRuleId(rule, index);
+                        if (updateRulePresentation) {
+                          updateRulePresentation(ruleId, { title: value });
+                          return;
+                        }
                         setDiscountRules((prev) =>
                           prev.map((currentRule, currentIndex) =>
                             currentIndex === index
@@ -100,6 +104,11 @@ export default function QuantityBreaksLogicEditor({
                       placeholder="e.g. You save 20%"
                       onChange={(e) => {
                         const value = e.target.value;
+                        const ruleId = getUnifiedDiscountRuleId(rule, index);
+                        if (updateRulePresentation) {
+                          updateRulePresentation(ruleId, { subtitle: value });
+                          return;
+                        }
                         setDiscountRules((prev) =>
                           prev.map((currentRule, currentIndex) =>
                             currentIndex === index
@@ -119,6 +128,11 @@ export default function QuantityBreaksLogicEditor({
                       placeholder="e.g. Most Popular"
                       onChange={(e) => {
                         const value = e.target.value;
+                        const ruleId = getUnifiedDiscountRuleId(rule, index);
+                        if (updateRulePresentation) {
+                          updateRulePresentation(ruleId, { badge: value });
+                          return;
+                        }
                         setDiscountRules((prev) =>
                           prev.map((currentRule, currentIndex) =>
                             currentIndex === index
@@ -144,6 +158,11 @@ export default function QuantityBreaksLogicEditor({
                     checked={!!rule.isDefault}
                     onChange={(e) => {
                       const checked = e.target.checked;
+                      const ruleId = getUnifiedDiscountRuleId(rule, index);
+                      if (updateRulePresentation) {
+                        updateRulePresentation(ruleId, { isDefault: checked });
+                        return;
+                      }
                       setDiscountRules((prev) =>
                         prev.map((currentRule, currentIndex) => ({
                           ...currentRule,

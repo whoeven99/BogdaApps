@@ -1,9 +1,19 @@
-import { Button, Dropdown, Input } from "antd";
+import { Button, Dropdown, Input, Select } from "antd";
 import type { ReactNode } from "react";
 import type {
   CompleteBundleBar,
   CompleteBundleProduct,
 } from "../../../utils/offerParsing";
+import {
+  OfferRuleCard,
+  OfferRuleSummaryBox,
+  OfferRulesSection,
+} from "./OfferRulesShared";
+import type { RulePresentationPatch } from "./unifiedRulePresentation";
+import {
+  getCompleteBundleUnifiedRuleId,
+  type UnifiedRuleValuePatch,
+} from "./unifiedRuleValues";
 
 type Props = {
   completeBundleBars: CompleteBundleBar[];
@@ -21,7 +31,18 @@ type Props = {
     isFirstBar: boolean,
   ) => ReactNode;
   section?: "bars" | "products" | "all";
+  updateRuleValues?: (id: string, patch: UnifiedRuleValuePatch) => void;
+  updateRulePresentation?: (id: string, patch: RulePresentationPatch) => void;
 };
+
+const BAR_TYPE_OPTIONS = [
+  { label: "Complete Bundle", value: "quantity-break-same" },
+  { label: "BXGY", value: "bxgy" },
+] as const;
+
+function getDefaultBarTitle(type: "quantity-break-same" | "bxgy") {
+  return type === "bxgy" ? "Buy X, Get Y" : "Complete the bundle";
+}
 
 export default function CompleteBundleEditor({
   completeBundleBars,
@@ -34,6 +55,8 @@ export default function CompleteBundleEditor({
   appendProductsToBundleBar,
   renderCompleteBundleProductPricingCard,
   section = "all",
+  updateRuleValues,
+  updateRulePresentation,
 }: Props) {
   const showBars = section === "all" || section === "bars";
   const showProducts = section === "all" || section === "products";
@@ -47,45 +70,31 @@ export default function CompleteBundleEditor({
   return (
     <div className="mb-8">
       {showBars ? (
-        <>
-          <div className="create-offer-panel create-offer-panel--muted">
-            <div className="create-offer-panel__header">
-              <div>
-                <div className="create-offer-panel__eyebrow">Bundle Structure</div>
-                <h3 className="create-offer-panel__title">Bundle bars</h3>
-              </div>
-              <div className="create-offer-panel__actions">
-                <Dropdown
-                  trigger={["click"]}
-                  menu={{
-                    items: [
-                      { key: "quantity", label: "Add Quantity bar" },
-                      { key: "bxgy", label: "Add Buy X Get Y bar" },
-                    ],
-                    onClick: ({ key }) => {
-                      if (key === "bxgy") addCompleteBundleBar("bxgy");
-                      else addCompleteBundleBar("quantity-break-same");
-                    },
-                  }}
-                >
-                  <Button size="small">Add bar</Button>
-                </Dropdown>
-              </div>
-            </div>
-            <div className="create-offer-panel__meta">
-              {completeBundleBars.length} bar
-              {completeBundleBars.length > 1 ? "s" : ""} configured
-            </div>
-          </div>
+        <OfferRulesSection description="Define each rule, then attach products and pricing in the section below.">
           <div className="mt-3 flex flex-col gap-3">
             {completeBundleBars.map((bar, index) => (
-              <div
+              <OfferRuleCard
                 key={bar.id}
-                className={`create-offer-bundle-bar ${
-                  activeBundleBarId === bar.id ? "create-offer-bundle-bar--active" : ""
-                }`}
+                index={index}
+                onRemove={
+                  completeBundleBars.length > 1
+                    ? () => {
+                        removeCompleteBundleBar(bar.id);
+                      }
+                    : undefined
+                }
+                disableRemove={completeBundleBars.length <= 1}
               >
-                <div className="flex items-center justify-between gap-3 mb-2">
+                {(() => {
+                  const ruleId = getCompleteBundleUnifiedRuleId(bar.id);
+                  return (
+                    <>
+                <div
+                  className={`create-offer-bundle-bar ${
+                    activeBundleBarId === bar.id ? "create-offer-bundle-bar--active" : ""
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3 mb-2">
                   <Button
                     type="link"
                     className="px-0"
@@ -94,56 +103,129 @@ export default function CompleteBundleEditor({
                       e.preventDefault();
                     }}
                   >
-                    Bar #{index + 1} -{" "}
-                    {bar.title ||
-                      (bar.type === "bxgy" ? "Buy X, Get Y" : "Complete the bundle")}
+                    Rule #{index + 1} - {bar.title || getDefaultBarTitle(bar.type)}
                   </Button>
-                  {completeBundleBars.length > 1 && (
-                    <Button
-                      size="small"
-                      danger
-                      onClick={(e) => {
-                        removeCompleteBundleBar(bar.id);
-                        e.preventDefault();
-                      }}
-                    >
-                      Remove
-                    </Button>
-                  )}
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="block text-[12px]">
-                    <span className="block mb-1">Title</span>
-                    <Input
-                      size="small"
-                      value={bar.title || ""}
-                      onChange={(e) =>
-                        updateCompleteBundleBar(bar.id, { title: e.target.value })
+                  </div>
+                  <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+                    <label className="block text-[14px] font-medium text-[#1c1f23]">
+                      Discount Type
+                      <Select
+                        size="large"
+                        className="mt-1 w-full"
+                        value={bar.type}
+                        options={BAR_TYPE_OPTIONS.map((option) => ({
+                          label: option.label,
+                          value: option.value,
+                        }))}
+                        onChange={(value) => {
+                          const nextType = value as "quantity-break-same" | "bxgy";
+                          const shouldResetTitle =
+                            !bar.title ||
+                            bar.title === getDefaultBarTitle("quantity-break-same") ||
+                            bar.title === getDefaultBarTitle("bxgy");
+                          if (updateRuleValues || updateRulePresentation) {
+                            updateRuleValues?.(ruleId, {
+                              tierType: nextType === "bxgy" ? "bxgy" : "simple",
+                            });
+                            if (shouldResetTitle) {
+                              updateRulePresentation?.(ruleId, {
+                                title: getDefaultBarTitle(nextType),
+                              });
+                            }
+                            return;
+                          }
+                          updateCompleteBundleBar(bar.id, {
+                            type: nextType,
+                            title: shouldResetTitle ? getDefaultBarTitle(nextType) : bar.title,
+                          });
+                        }}
+                      />
+                    </label>
+                    <label className="block text-[14px] font-medium text-[#1c1f23]">
+                      Title
+                      <Input
+                        size="large"
+                        className="mt-1"
+                        value={bar.title || ""}
+                        onChange={(e) => {
+                          if (updateRulePresentation) {
+                            updateRulePresentation(ruleId, { title: e.target.value });
+                            return;
+                          }
+                          updateCompleteBundleBar(bar.id, { title: e.target.value });
+                        }}
+                      />
+                    </label>
+                    <label className="block text-[14px] font-medium text-[#1c1f23]">
+                      Trigger Quantity
+                      <Input
+                        size="large"
+                        type="number"
+                        min={1}
+                        className="mt-1"
+                        value={bar.quantity}
+                        onChange={(e) => {
+                          const nextQuantity = Math.max(
+                            1,
+                            Math.trunc(Number(e.target.value) || 1),
+                          );
+                          if (updateRuleValues) {
+                            updateRuleValues(ruleId, { count: nextQuantity });
+                            return;
+                          }
+                          updateCompleteBundleBar(bar.id, {
+                            quantity: nextQuantity,
+                          });
+                        }}
+                      />
+                    </label>
+                  </div>
+                  <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
+                    <OfferRuleSummaryBox
+                      label="Condition Type"
+                      value={bar.type === "bxgy" ? "Buy X, Get Y" : "Bundle completion"}
+                      description={
+                        bar.type === "bxgy"
+                          ? "Customers unlock this bar when the buy/get rule is satisfied."
+                          : "Customers unlock this bar by completing the configured bundle group."
                       }
                     />
-                  </label>
-                  <label className="block text-[12px]">
-                    <span className="block mb-1">Quantity</span>
-                    <Input
-                      size="small"
-                      type="number"
-                      min={1}
-                      value={bar.quantity}
-                      onChange={(e) =>
-                        updateCompleteBundleBar(bar.id, {
-                          quantity: Math.max(1, Math.trunc(Number(e.target.value) || 1)),
-                        })
-                      }
+                    <OfferRuleSummaryBox
+                      label="Reward Summary"
+                      value={`${bar.products.length} configured product${bar.products.length === 1 ? "" : "s"}`}
+                      description="Product selection and pricing stay aligned in the Products & pricing section."
                     />
-                  </label>
+                  </div>
+                  <div className="text-[12px] text-[#5c6166] mt-3">
+                    {bar.products.length} products selected
+                  </div>
                 </div>
-                <div className="text-[12px] text-[#5c6166] mt-2">
-                  {bar.products.length} products selected
-                </div>
-              </div>
+                    </>
+                  );
+                })()}
+              </OfferRuleCard>
             ))}
           </div>
-        </>
+          <div className="mt-4">
+            <Dropdown
+              trigger={["click"]}
+              menu={{
+                items: [
+                  { key: "quantity", label: "Add Complete Bundle Rule" },
+                  { key: "bxgy", label: "Add BXGY Rule" },
+                ],
+                onClick: ({ key }) => {
+                  if (key === "bxgy") addCompleteBundleBar("bxgy");
+                  else addCompleteBundleBar("quantity-break-same");
+                },
+              }}
+            >
+              <Button type="dashed" className="w-full">
+                + Add rule
+              </Button>
+            </Dropdown>
+          </div>
+        </OfferRulesSection>
       ) : null}
 
       {showProducts && activeBar ? (

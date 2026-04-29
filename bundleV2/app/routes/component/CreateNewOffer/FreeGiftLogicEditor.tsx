@@ -1,5 +1,15 @@
-import { Button, Checkbox, Dropdown, Input } from "antd";
+import { Button, Checkbox, Dropdown, Input, Select } from "antd";
 import type { FreeGiftRule } from "../../../utils/offerParsing";
+import {
+  OfferRuleCard,
+  OfferRuleSummaryBox,
+  OfferRulesSection,
+} from "./OfferRulesShared";
+import type { RulePresentationPatch } from "./unifiedRulePresentation";
+import {
+  getFreeGiftUnifiedRuleId,
+  type UnifiedRuleValuePatch,
+} from "./unifiedRuleValues";
 
 type Props = {
   triggerProductsCount: number;
@@ -8,6 +18,8 @@ type Props = {
   onSelectGiftProducts: () => void | Promise<void>;
   freeGiftRules: FreeGiftRule[];
   setFreeGiftRules: React.Dispatch<React.SetStateAction<FreeGiftRule[]>>;
+  updateRuleValues?: (id: string, patch: UnifiedRuleValuePatch) => void;
+  updateRulePresentation?: (id: string, patch: RulePresentationPatch) => void;
 };
 
 export default function FreeGiftLogicEditor({
@@ -17,7 +29,13 @@ export default function FreeGiftLogicEditor({
   onSelectGiftProducts,
   freeGiftRules,
   setFreeGiftRules,
+  updateRuleValues,
+  updateRulePresentation,
 }: Props) {
+  const discountTypeOptions = [{ label: "Free Gift", value: "free_gift" }];
+  const conditionTypeOptions = [
+    { label: "Quantity threshold", value: "quantity_threshold" },
+  ];
   const appendFreeGiftTier = () => {
     setFreeGiftRules((prev) => {
       const maxCount = prev.reduce(
@@ -116,77 +134,56 @@ export default function FreeGiftLogicEditor({
         </div>
       </div>
 
-      <div>
-        <h3 className="mb-3 text-[14px] font-medium text-[#1c1f23]">
-          Logic Block: Offer Rules
-        </h3>
-        <p className="mb-4 text-[13px] font-normal text-[#5c6166]">
-          Free gift rules use a fixed discount type. Configure the trigger
-          threshold and how many gift items unlock for each rule.
-        </p>
+      <OfferRulesSection description="Free gift rules use a fixed discount type. Configure the trigger threshold and how many gift items unlock for each rule.">
         {freeGiftRules.map((rule, index) => (
-          <div className="create-offer-discount-card" key={index}>
-            <div className="create-offer-discount-body">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div className="text-[14px] font-semibold text-[#1c1f23]">
-                  Rule {index + 1}
-                </div>
-                <Button
-                  danger
-                  size="small"
-                  onClick={() => {
-                    setFreeGiftRules((prev) => {
-                      if (prev.length <= 1) return prev;
-                      return prev.filter((_, currentIndex) => currentIndex !== index);
-                    });
-                  }}
-                  disabled={freeGiftRules.length <= 1}
-                >
-                  Remove
-                </Button>
-              </div>
-
+          <OfferRuleCard
+            key={index}
+            index={index}
+            disableRemove={freeGiftRules.length <= 1}
+            onRemove={() => {
+              setFreeGiftRules((prev) => {
+                if (prev.length <= 1) return prev;
+                return prev.filter((_, currentIndex) => currentIndex !== index);
+              });
+            }}
+          >
+              {(() => {
+                const ruleId = getFreeGiftUnifiedRuleId(index);
+                return (
+                  <>
               <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-                <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-3 py-3">
-                  <div className="text-[12px] font-medium uppercase tracking-[0.05em] text-[#5c6166]">
-                    Discount Type
-                  </div>
-                  <div className="mt-1 text-[14px] font-medium text-[#1c1f23]">
-                    Free Gift
-                  </div>
-                  <div className="mt-1 text-[12px] text-[#5c6166]">
-                    Unlocks gift items from the selected reward products.
-                  </div>
-                </div>
+                <label className="block text-[14px] font-medium text-[#1c1f23]">
+                  Discount Type
+                  <Select
+                    size="large"
+                    className="mt-1 w-full"
+                    value="free_gift"
+                    options={discountTypeOptions}
+                    disabled
+                  />
+                </label>
 
-                <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-3 py-3">
-                  <div className="text-[12px] font-medium uppercase tracking-[0.05em] text-[#5c6166]">
-                    Condition Type
-                  </div>
-                  <div className="mt-1 text-[14px] font-medium text-[#1c1f23]">
-                    Quantity threshold
-                  </div>
-                  <div className="mt-1 text-[12px] text-[#5c6166]">
-                    The customer must reach the trigger quantity to unlock the gift.
-                  </div>
-                </div>
+                <label className="block text-[14px] font-medium text-[#1c1f23]">
+                  Condition Type
+                  <Select
+                    size="large"
+                    className="mt-1 w-full"
+                    value="quantity_threshold"
+                    options={conditionTypeOptions}
+                    disabled
+                  />
+                </label>
 
-                <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-3 py-3">
-                  <div className="text-[12px] font-medium uppercase tracking-[0.05em] text-[#5c6166]">
-                    Reward Summary
-                  </div>
-                  <div className="mt-1 text-[14px] font-medium text-[#1c1f23]">
-                    Gift quantity from reward scope
-                  </div>
-                  <div className="mt-1 text-[12px] text-[#5c6166]">
-                    Gift products are selected in the module above.
-                  </div>
-                </div>
+                <OfferRuleSummaryBox
+                  label="Reward Summary"
+                  value="Gift quantity from reward scope"
+                  description="Gift products are selected in the module above."
+                />
               </div>
 
               <div className="create-offer-discount-form-row create-offer-discount-form-row--inline">
                 <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                  Activation Quantity
+                    Trigger Quantity
                   <Input
                     size="large"
                     type="number"
@@ -200,6 +197,10 @@ export default function FreeGiftLogicEditor({
                         Number.isFinite(parsedValue) && parsedValue >= 1
                           ? Math.trunc(parsedValue)
                           : 1;
+                      if (updateRuleValues) {
+                        updateRuleValues(ruleId, { count: nextCount });
+                        return;
+                      }
                       setFreeGiftRules((prev) =>
                         prev.map((currentRule, currentIndex) =>
                           currentIndex === index
@@ -225,6 +226,10 @@ export default function FreeGiftLogicEditor({
                         Number.isFinite(parsedValue) && parsedValue >= 1
                           ? Math.trunc(parsedValue)
                           : 1;
+                      if (updateRuleValues) {
+                        updateRuleValues(ruleId, { giftQuantity: nextQty });
+                        return;
+                      }
                       setFreeGiftRules((prev) =>
                         prev.map((currentRule, currentIndex) =>
                           currentIndex === index
@@ -247,6 +252,10 @@ export default function FreeGiftLogicEditor({
                     placeholder="e.g. Free sample"
                     onChange={(e) => {
                       const value = e.target.value;
+                      if (updateRulePresentation) {
+                        updateRulePresentation(ruleId, { title: value });
+                        return;
+                      }
                       setFreeGiftRules((prev) =>
                         prev.map((currentRule, currentIndex) =>
                           currentIndex === index
@@ -266,6 +275,10 @@ export default function FreeGiftLogicEditor({
                     placeholder="e.g. Buy 2 and unlock a free gift"
                     onChange={(e) => {
                       const value = e.target.value;
+                      if (updateRulePresentation) {
+                        updateRulePresentation(ruleId, { subtitle: value });
+                        return;
+                      }
                       setFreeGiftRules((prev) =>
                         prev.map((currentRule, currentIndex) =>
                           currentIndex === index
@@ -285,6 +298,10 @@ export default function FreeGiftLogicEditor({
                     placeholder="e.g. Gift included"
                     onChange={(e) => {
                       const value = e.target.value;
+                      if (updateRulePresentation) {
+                        updateRulePresentation(ruleId, { badge: value });
+                        return;
+                      }
                       setFreeGiftRules((prev) =>
                         prev.map((currentRule, currentIndex) =>
                           currentIndex === index
@@ -302,6 +319,10 @@ export default function FreeGiftLogicEditor({
                   checked={!!rule.isDefault}
                   onChange={(e) => {
                     const checked = e.target.checked;
+                    if (updateRulePresentation) {
+                      updateRulePresentation(ruleId, { isDefault: checked });
+                      return;
+                    }
                     setFreeGiftRules((prev) =>
                       prev.map((currentRule, currentIndex) => ({
                         ...currentRule,
@@ -313,8 +334,10 @@ export default function FreeGiftLogicEditor({
                   Set as Default Selected
                 </Checkbox>
               </div>
-            </div>
-          </div>
+                  </>
+                );
+              })()}
+          </OfferRuleCard>
         ))}
         <Dropdown
           trigger={["click"]}
@@ -327,7 +350,7 @@ export default function FreeGiftLogicEditor({
             + Add rule
           </Button>
         </Dropdown>
-      </div>
+      </OfferRulesSection>
     </>
   );
 }

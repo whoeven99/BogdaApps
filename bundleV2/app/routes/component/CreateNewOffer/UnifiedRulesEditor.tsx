@@ -10,10 +10,19 @@ import {
   getUnifiedRuleIssues,
   syncRuleDependencies,
 } from "./unifiedRuleModel";
+import {
+  getUnifiedDiscountRuleId,
+  type UnifiedRuleValuePatch,
+} from "./unifiedRuleValues";
+import {
+  OfferRuleCard,
+  OfferRuleSummaryBox,
+} from "./OfferRulesShared";
 
 type Props = {
   rules: DiscountRule[];
   setRules: React.Dispatch<React.SetStateAction<DiscountRule[]>>;
+  updateRuleValues?: (id: string, patch: UnifiedRuleValuePatch) => void;
   selectedProductsData: DraftSelectedProduct[];
   offerType?: string;
 };
@@ -21,6 +30,7 @@ type Props = {
 export default function UnifiedRulesEditor({
   rules,
   setRules,
+  updateRuleValues,
   selectedProductsData,
   offerType,
 }: Props) {
@@ -32,6 +42,11 @@ export default function UnifiedRulesEditor({
   const discountTypeOptions = getAvailableDiscountTypes(offerType);
 
   const updateRule = (index: number, patch: Partial<DiscountRule>) => {
+    const ruleId = getUnifiedDiscountRuleId(rules[index], index);
+    if (updateRuleValues) {
+      updateRuleValues(ruleId, patch);
+      return;
+    }
     setRules((prev) =>
       prev.map((rule, ruleIndex) =>
         ruleIndex === index
@@ -54,14 +69,6 @@ export default function UnifiedRulesEditor({
 
   return (
     <div>
-      <h3 className="mb-3 text-[14px] font-medium text-[#1c1f23]">
-        Logic Block: Unified Rules
-      </h3>
-      <p className="mb-4 text-[13px] font-normal text-[#5c6166]">
-        Choose the discount type first. The rule form then switches to the right
-        condition and reward fields automatically.
-      </p>
-
       {issues.length > 0 ? (
         <div className="mb-4 space-y-2">
           {issues.map((issue, index) => (
@@ -83,35 +90,23 @@ export default function UnifiedRulesEditor({
       <div className="flex flex-col gap-4">
         {rules.map((rule, index) => {
           const discountType = getDiscountTypeFromRule(rule);
-          const usesCartAmount = rule.conditionType === "cart_amount";
+          const usesBxgy = discountType === "bxgy";
+          const usesCartAmount = !usesBxgy && rule.conditionType === "cart_amount";
           const usesGiftReward = rule.rewardType === "gift_product";
           const usesShippingReward = rule.rewardType === "free_shipping";
           const usesPercentageReward = rule.rewardType === "percentage_off";
           const usesQuantityBreak = discountType === "quantity_break";
           const usesOrderDiscount = discountType === "order_discount";
-          const usesBxgy = discountType === "bxgy";
 
           return (
-            <div
+            <OfferRuleCard
               key={rule.id || `rule-${index}`}
-              className="rounded-[12px] border border-[#e3e8ed] bg-white p-4"
+              index={index}
+              disableRemove={rules.length <= 1}
+              onRemove={() =>
+                setRules((prev) => prev.filter((_, ruleIndex) => ruleIndex !== index))
+              }
             >
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div className="text-[14px] font-semibold text-[#1c1f23]">
-                  Rule {index + 1}
-                </div>
-                <Button
-                  danger
-                  size="small"
-                  onClick={() =>
-                    setRules((prev) => prev.filter((_, ruleIndex) => ruleIndex !== index))
-                  }
-                  disabled={rules.length <= 1}
-                >
-                  Remove
-                </Button>
-              </div>
-
               <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
                 <label className="block text-[14px] font-medium text-[#1c1f23]">
                   Discount Type
@@ -129,18 +124,26 @@ export default function UnifiedRulesEditor({
                   <Select
                     size="large"
                     className="mt-1 w-full"
-                    value={rule.conditionType || "item_quantity"}
-                    options={CONDITION_TYPE_OPTIONS}
-                    onChange={(value) => updateRule(index, { conditionType: value })}
+                    value={usesBxgy ? "buy_x_get_y" : rule.conditionType || "item_quantity"}
+                    options={
+                      usesBxgy
+                        ? [{ label: "Buy X, Get Y", value: "buy_x_get_y" }]
+                        : CONDITION_TYPE_OPTIONS
+                    }
+                    disabled={usesBxgy}
+                    onChange={(value) => {
+                      if (usesBxgy) return;
+                      updateRule(index, {
+                        conditionType: value as "item_quantity" | "cart_amount",
+                      });
+                    }}
                   />
                 </label>
 
-                <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-3 py-3">
-                  <div className="text-[12px] font-medium uppercase tracking-[0.05em] text-[#5c6166]">
-                    Reward Summary
-                  </div>
-                  <div className="mt-1 text-[14px] font-medium text-[#1c1f23]">
-                    {usesGiftReward
+                <OfferRuleSummaryBox
+                  label="Reward Summary"
+                  value={
+                    usesGiftReward
                       ? "Gift product reward"
                       : usesShippingReward
                         ? "Free shipping reward"
@@ -148,20 +151,20 @@ export default function UnifiedRulesEditor({
                           ? "Order percentage discount"
                           : usesBxgy
                             ? "BXGY percentage discount"
-                            : "Product percentage discount"}
-                  </div>
-                  <div className="mt-1 text-[12px] text-[#5c6166]">
-                    {usesGiftReward
+                            : "Product percentage discount"
+                  }
+                  description={
+                    usesGiftReward
                       ? "Reward products are configured below."
                       : usesShippingReward
                         ? "This rule maps to the shipping discount function automatically."
                         : usesOrderDiscount
                           ? "Applies a subtotal-level order discount when the rule is satisfied."
                           : usesBxgy
-                            ? "This type will later expand into buy/get specific rule fields."
-                            : "Applies a percentage discount to the matched products."}
-                  </div>
-                </div>
+                            ? "Configure buy/get quantities below. This shared BXGY rule shape is currently draft-only."
+                            : "Applies a percentage discount to the matched products."
+                  }
+                />
               </div>
 
               <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
@@ -169,7 +172,7 @@ export default function UnifiedRulesEditor({
                   {usesCartAmount
                     ? "Cart Amount Threshold"
                     : usesBxgy
-                      ? "Buy Quantity"
+                      ? "Trigger Quantity"
                       : "Item Quantity"}
                   <Input
                     size="large"
@@ -219,6 +222,72 @@ export default function UnifiedRulesEditor({
                   </label>
                 ) : null}
 
+                {usesBxgy ? (
+                  <label className="block text-[14px] font-medium text-[#1c1f23]">
+                    Buy Quantity (X)
+                    <Input
+                      size="large"
+                      type="number"
+                      min={1}
+                      step={1}
+                      className="mt-1"
+                      value={rule.buyQuantity || 2}
+                      onChange={(e) =>
+                        updateRule(index, {
+                          buyQuantity: Math.max(
+                            1,
+                            Math.trunc(Number(e.target.value) || 1),
+                          ),
+                        })
+                      }
+                    />
+                  </label>
+                ) : null}
+
+                {usesBxgy ? (
+                  <label className="block text-[14px] font-medium text-[#1c1f23]">
+                    Get Quantity (Y)
+                    <Input
+                      size="large"
+                      type="number"
+                      min={1}
+                      step={1}
+                      className="mt-1"
+                      value={rule.getQuantity || 1}
+                      onChange={(e) =>
+                        updateRule(index, {
+                          getQuantity: Math.max(
+                            1,
+                            Math.trunc(Number(e.target.value) || 1),
+                          ),
+                        })
+                      }
+                    />
+                  </label>
+                ) : null}
+
+                {usesBxgy ? (
+                  <label className="block text-[14px] font-medium text-[#1c1f23]">
+                    Max Uses Per Order
+                    <Input
+                      size="large"
+                      type="number"
+                      min={1}
+                      step={1}
+                      className="mt-1"
+                      value={rule.maxUsesPerOrder || 1}
+                      onChange={(e) =>
+                        updateRule(index, {
+                          maxUsesPerOrder: Math.max(
+                            1,
+                            Math.trunc(Number(e.target.value) || 1),
+                          ),
+                        })
+                      }
+                    />
+                  </label>
+                ) : null}
+
                 {usesGiftReward ? (
                   <label className="block text-[14px] font-medium text-[#1c1f23]">
                     Gift Quantity
@@ -245,7 +314,7 @@ export default function UnifiedRulesEditor({
                   <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-3 py-3 text-[13px] text-[#5c6166]">
                     {usesShippingReward
                       ? "Free shipping rules map to the delivery discount function target."
-                      : "BXGY is currently represented by the shared rule shell; buy/get product selectors are the next step."}
+                      : "BXGY in this unified editor reuses the same product scope on both the buy and get sides for now."}
                   </div>
                 ) : null}
               </div>
@@ -266,7 +335,7 @@ export default function UnifiedRulesEditor({
                   </label>
                 </div>
               ) : null}
-            </div>
+            </OfferRuleCard>
           );
         })}
       </div>

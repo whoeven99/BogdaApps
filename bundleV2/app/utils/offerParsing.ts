@@ -347,6 +347,10 @@ export type DiscountRule = {
   rewardType?: "percentage_off" | "gift_product" | "free_shipping";
   rewardProductIds?: string[];
   giftQuantity?: number;
+  logicType?: "standard" | "bxgy";
+  buyQuantity?: number;
+  getQuantity?: number;
+  maxUsesPerOrder?: number;
 };
 
 export type PerProductDiscountRule = {
@@ -395,6 +399,10 @@ export type QuantityBreakTier = {
   rewardType?: "percentage_off" | "gift_product" | "free_shipping";
   rewardProductIds?: string[];
   giftQuantity?: number;
+  logicType?: "standard" | "bxgy";
+  buyQuantity?: number;
+  getQuantity?: number;
+  maxUsesPerOrder?: number;
 };
 
 export type QuantityBreaksLogicBlock = {
@@ -641,6 +649,28 @@ export function parseDiscountRules(discountRulesJson?: string | null): DiscountR
         )
           ? Math.max(1, Math.trunc(Number((item as { giftQuantity?: unknown }).giftQuantity)))
           : undefined,
+        logicType:
+          (item as { logicType?: unknown }).logicType === "bxgy"
+            ? "bxgy"
+            : "standard",
+        buyQuantity: Number.isFinite(
+          Number((item as { buyQuantity?: unknown }).buyQuantity),
+        )
+          ? Math.max(1, Math.trunc(Number((item as { buyQuantity?: unknown }).buyQuantity)))
+          : undefined,
+        getQuantity: Number.isFinite(
+          Number((item as { getQuantity?: unknown }).getQuantity),
+        )
+          ? Math.max(1, Math.trunc(Number((item as { getQuantity?: unknown }).getQuantity)))
+          : undefined,
+        maxUsesPerOrder: Number.isFinite(
+          Number((item as { maxUsesPerOrder?: unknown }).maxUsesPerOrder),
+        )
+          ? Math.max(
+              1,
+              Math.trunc(Number((item as { maxUsesPerOrder?: unknown }).maxUsesPerOrder)),
+            )
+          : undefined,
       });
     }
     out.sort((a, b) => a.count - b.count);
@@ -714,6 +744,16 @@ function sanitizeQuantityBreakTier(raw: unknown): QuantityBreakTier | null {
       : [],
     giftQuantity: Number.isFinite(Number(item.giftQuantity))
       ? Math.max(1, Math.trunc(Number(item.giftQuantity)))
+      : undefined,
+    logicType: item.logicType === "bxgy" ? "bxgy" : "standard",
+    buyQuantity: Number.isFinite(Number(item.buyQuantity))
+      ? Math.max(1, Math.trunc(Number(item.buyQuantity)))
+      : undefined,
+    getQuantity: Number.isFinite(Number(item.getQuantity))
+      ? Math.max(1, Math.trunc(Number(item.getQuantity)))
+      : undefined,
+    maxUsesPerOrder: Number.isFinite(Number(item.maxUsesPerOrder))
+      ? Math.max(1, Math.trunc(Number(item.maxUsesPerOrder)))
       : undefined,
   };
 }
@@ -1503,6 +1543,10 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
       ? tier.rewardProductIds
       : [],
     giftQuantity: tier.giftQuantity,
+    logicType: tier.logicType === "bxgy" ? "bxgy" : "standard",
+    buyQuantity: tier.buyQuantity,
+    getQuantity: tier.getQuantity,
+    maxUsesPerOrder: tier.maxUsesPerOrder,
   }));
   const bxgyRules = buildBxgyDiscountRulesJson(bxgy?.config.tiers ?? []);
   const differentProductsRules = buildDifferentProductsDiscountRulesJson(

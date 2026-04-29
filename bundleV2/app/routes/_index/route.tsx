@@ -53,6 +53,7 @@ import {
   sanitizeHexColor,
   sanitizeSingleLineText,
 } from "../../utils/offerParsing";
+import { sanitizeEnvLikeValue, sanitizeUrlLikeEnvValue } from "../../utils/env";
 import type { OfferTypeId } from "../component/CreateNewOffer/offerTypeOptions";
 
 type OfferListItem = {
@@ -90,6 +91,28 @@ function offerActionErrorResponse(message: string, status: number) {
   );
 }
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
+function isMissingOfferCampaignConfigColumnError(error: unknown): boolean {
+  const message = getErrorMessage(error).toLowerCase();
+  return (
+    message.includes("campaignconfigjson") &&
+    (
+      message.includes("no such column") ||
+      message.includes("has no column named") ||
+      message.includes("column does not exist")
+    )
+  );
+}
+
 function sanitizeHexColorParam(
   raw: string | null | undefined,
   fallback: string,
@@ -118,7 +141,7 @@ function resolveBundleEnvironment(): BundleEnvironment {
   if (explicit === "prod" || explicit === "production") return "prod";
   if (explicit === "test" || explicit === "staging") return "test";
 
-  const apiKey = String(process.env.SHOPIFY_API_KEY || "").trim();
+  const apiKey = sanitizeEnvLikeValue(process.env.SHOPIFY_API_KEY);
   if (apiKey === PROD_SHOPIFY_API_KEY) return "prod";
   if (apiKey === TEST_SHOPIFY_API_KEY) return "test";
 
@@ -269,10 +292,46 @@ async function syncShopOffersMetafield(
       shopName: shopNameToSync,
       themeExtensionEnabled,
     });
-    const shopOffers = (await prismaAny.offer.findMany({
-      where: { shopName: shopNameToSync },
-      orderBy: { createdAt: "desc" },
-    })) as OfferListItem[];
+    let shopOffers: OfferListItem[];
+    try {
+      shopOffers = (await prismaAny.offer.findMany({
+        where: { shopName: shopNameToSync },
+        orderBy: { createdAt: "desc" },
+      })) as OfferListItem[];
+    } catch (error) {
+      if (!isMissingOfferCampaignConfigColumnError(error)) {
+        throw error;
+      }
+      console.warn(
+        "[offers-sync] campaignConfigJson column missing, falling back to legacy offer read",
+      );
+      const legacyRows = await prismaAny.offer.findMany({
+        where: { shopName: shopNameToSync },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          name: true,
+          cartTitle: true,
+          offerType: true,
+          startTime: true,
+          endTime: true,
+          status: true,
+          selectedProductsJson: true,
+          discountRulesJson: true,
+          offerSettingsJson: true,
+          exposurePV: true,
+          addToCartPV: true,
+          gmv: true,
+          conversion: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+      shopOffers = legacyRows.map((offer: any) => ({
+        ...offer,
+        campaignConfigJson: null,
+      })) as OfferListItem[];
+    }
     console.log("[offers-sync] loaded offers from db", {
       shopName: shopNameToSync,
       offerCount: shopOffers.length,
@@ -758,7 +817,7 @@ const ensureWebPixel = async (admin: any, shop: string) => {
         webPixel: {
           settings: {
             shopName: shop,
-            server: process.env.SHOPIFY_APP_URL || "",
+            server: sanitizeUrlLikeEnvValue(process.env.SHOPIFY_APP_URL),
           },
         },
       },
@@ -943,8 +1002,10 @@ const getThemeExtensionEnabled = async (
 };
 
 async function getCurrentThemeExtensionEnabled(admin: any): Promise<boolean> {
-  const apiKey = process.env.SHOPIFY_API_KEY || "";
-  const appDisplayName = process.env.SHOPIFY_APP_NAME || process.env.APP_NAME;
+  const apiKey = sanitizeEnvLikeValue(process.env.SHOPIFY_API_KEY);
+  const appDisplayName =
+    sanitizeEnvLikeValue(process.env.SHOPIFY_APP_NAME) ||
+    sanitizeEnvLikeValue(process.env.APP_NAME);
   try {
     return await getThemeExtensionEnabled(
       admin,
@@ -1041,7 +1102,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   });
 
   // eslint-disable-next-line no-undef
-  const apiKey = process.env.SHOPIFY_API_KEY || "";
+  const apiKey = sanitizeEnvLikeValue(process.env.SHOPIFY_API_KEY);
 
   // 获取商店时区
   let ianaTimezone = "UTC";
@@ -1634,6 +1695,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       selectedProductsJson: selectedProductsJson || null,
       discountRulesJson: discountRulesJson || null,
     };
+    const legacyData = {
+      ...data,
+      campaignConfigJson: undefined,
+    };
 
     const url = new URL(request.url);
 
@@ -1642,7 +1707,35 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         await writeOfferWithRetry(() => prismaAny.offer.create({ data }));
         url.searchParams.set("toast", `create-success-${Date.now()}`);
       } catch (error: any) {
-        if (
+        if (isMissingOfferCampaignConfigColumnError(error)) {
+          console.warn(
+            "[offer-create] campaignConfigJson column missing, retrying with legacy payload only",
+          );
+          try {
+            await writeOfferWithRetry(() => prismaAny.offer.create({ data: legacyData }));
+            url.searchParams.set("toast", `create-success-${Date.now()}`);
+          } catch (legacyError: any) {
+            if (legacyError.code === "P2002") {
+              return offerActionErrorResponse(
+                "An offer with this name already exists. Please choose a different name.",
+                409,
+              );
+            }
+            console.error("offer create failed after legacy fallback", {
+              error: legacyError,
+              form: {
+                nameRaw,
+                offerType,
+                startTimeRaw,
+                endTimeRaw,
+                selectedProductsJson,
+                discountRulesJson,
+                offerSettingsJson,
+              },
+            });
+            return offerActionErrorResponse("Failed to create offer. Please try again later.", 500);
+          }
+        } else if (
           error.code === "P2002"
         ) {
           return offerActionErrorResponse(
@@ -1677,7 +1770,41 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         );
         url.searchParams.set("toast", `update-success-${Date.now()}`);
       } catch (error: any) {
-        if (
+        if (isMissingOfferCampaignConfigColumnError(error)) {
+          console.warn(
+            "[offer-update] campaignConfigJson column missing, retrying with legacy payload only",
+          );
+          try {
+            await writeOfferWithRetry(() =>
+              prismaAny.offer.update({
+                where: { id: idRaw },
+                data: legacyData,
+              }),
+            );
+            url.searchParams.set("toast", `update-success-${Date.now()}`);
+          } catch (legacyError: any) {
+            if (legacyError.code === "P2002") {
+              return offerActionErrorResponse(
+                "An offer with this name already exists. Please choose a different name.",
+                409,
+              );
+            }
+            console.error("offer update failed after legacy fallback", {
+              error: legacyError,
+              form: {
+                idRaw,
+                nameRaw,
+                offerType,
+                startTimeRaw,
+                endTimeRaw,
+                selectedProductsJson,
+                discountRulesJson,
+                offerSettingsJson,
+              },
+            });
+            return offerActionErrorResponse("Failed to update offer. Please try again later.", 500);
+          }
+        } else if (
           error.code === "P2002"
         ) {
           return offerActionErrorResponse(

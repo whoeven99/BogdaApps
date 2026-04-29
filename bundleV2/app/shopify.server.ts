@@ -6,6 +6,7 @@ import {
 } from "@shopify/shopify-app-react-router/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
+import { sanitizeEnvLikeValue, sanitizeUrlLikeEnvValue } from "./utils/env";
 
 const CART_LINES_DISCOUNT_FUNCTION_TITLE = "Bundle Cart Discount Function";
 const CART_LINES_DISCOUNT_AUTO_TITLE = "Ciwi Bundle Auto Discount";
@@ -19,13 +20,13 @@ const LEGACY_OFFERS_METAFIELD_NAMESPACE = "ciwi_bundle";
 const LEGACY_OFFERS_METAFIELD_KEY = "ciwi-bundle-offers";
 
 function getAutoDiscountTitle(): string {
-  const appName = process.env.SHOPIFY_APP_NAME?.trim();
+  const appName = sanitizeEnvLikeValue(process.env.SHOPIFY_APP_NAME);
   if (!appName) return CART_LINES_DISCOUNT_AUTO_TITLE;
   return `${appName} - ${CART_LINES_DISCOUNT_AUTO_TITLE}`;
 }
 
 function getAutoShippingDiscountTitle(): string {
-  const appName = process.env.SHOPIFY_APP_NAME?.trim();
+  const appName = sanitizeEnvLikeValue(process.env.SHOPIFY_APP_NAME);
   if (!appName) return DELIVERY_DISCOUNT_AUTO_TITLE;
   return `${appName} - ${DELIVERY_DISCOUNT_AUTO_TITLE}`;
 }
@@ -676,11 +677,11 @@ export async function ensureBundleDeliveryAutomaticDiscount(admin: any) {
 }
 
 const shopify = shopifyApp({
-  apiKey: process.env.SHOPIFY_API_KEY,
+  apiKey: sanitizeEnvLikeValue(process.env.SHOPIFY_API_KEY),
   apiSecretKey: process.env.SHOPIFY_API_SECRET || "",
   apiVersion: ApiVersion.October25,
   scopes: process.env.SCOPES?.split(","),
-  appUrl: process.env.SHOPIFY_APP_URL || "",
+  appUrl: sanitizeUrlLikeEnvValue(process.env.SHOPIFY_APP_URL),
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma) as any,
   distribution: AppDistribution.AppStore,
@@ -714,4 +715,3 @@ export const unauthenticated = shopify.unauthenticated;
 export const login = shopify.login;
 export const registerWebhooks = shopify.registerWebhooks;
 export const sessionStorage = shopify.sessionStorage;
-

@@ -2,6 +2,8 @@
  * 客户端与服务器共用的计费常量（勿放在 *.server.ts，否则无法被路由组件引用）。
  */
 
+import { sanitizeUrlLikeEnvValue } from "./utils/env";
+
 export type BillingPlanId = "starter" | "professional" | "enterprise";
 
 export type BillingCycle = "monthly" | "yearly";
@@ -49,7 +51,7 @@ const BILLING_RETURN_QS = "billing_return=1";
  */
 export function buildBillingReturnUrl(request: Request): string {
   const reqUrl = new URL(request.url);
-  const envRoot = process.env.SHOPIFY_APP_URL?.trim();
+  const envRoot = sanitizeUrlLikeEnvValue(process.env.SHOPIFY_APP_URL);
 
   const withRoot = (root: string) => {
     const r = root.replace(/\/$/, "");
