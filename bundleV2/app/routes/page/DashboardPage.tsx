@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Form,
   useNavigation,
@@ -191,7 +191,10 @@ export function DashboardPage({
   });
 
   const visibleOffers = offerRows.slice(0, 4);
-  const abTestOffers = offerRows.filter((offer) => offer.offerType === "abTest");
+  const abTestRawOffers = useMemo(
+    () => (offers ?? []).filter((offer) => offer.offerType === "abTest"),
+    [offers],
+  );
 
   // 计算真实 Overview 数据
   const fallbackOverview = (() => {
@@ -367,14 +370,14 @@ export function DashboardPage({
     const from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
     const fetchAbSummary = async () => {
-      if (!abTestOffers.length) {
+      if (!abTestRawOffers.length) {
         setAbTestSummaries([]);
         return;
       }
       setAbTestLoading(true);
       try {
         const rows = await Promise.all(
-          abTestOffers.map(async (offer) => {
+          abTestRawOffers.map(async (offer) => {
             const query = new URLSearchParams({
               mode: "abtest-offer-summary",
               shopName: shop,
@@ -445,7 +448,7 @@ export function DashboardPage({
             return {
               offerId: offer.id,
               offerName: offer.name,
-              isActive: offer.isActive,
+              isActive: !!offer.status,
               variants: mergedVariants,
               winnerKey: winner.key,
               winnerLiftPct,
@@ -466,7 +469,7 @@ export function DashboardPage({
     fetchAbSummary();
 
     return () => controller.abort();
-  }, [shop, abTestOffers]);
+  }, [shop, abTestRawOffers]);
 
   useEffect(() => {
     if (
