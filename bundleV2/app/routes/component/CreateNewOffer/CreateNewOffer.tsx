@@ -2536,7 +2536,7 @@ export function CreateNewOffer({
                   <BuilderStepIntro
                     title="Scope & Logic"
                     meta={`${stepTwoMeta.logicBlockLabel} • ${stepTwoRuleTypeSummary}`}
-                    description={`Configure the business rules first. If the selected template includes special modules such as Complete Bundle or Subscription, those sections appear below the rules area. Scope: ${stepTwoScopeSummary}. Logic: ${stepTwoLogicSummary}. Publish: ${stepTwoPublishSummary}.`}
+                    description={`Work through the scope, rules, and optional modules for this template. Scope: ${stepTwoScopeSummary}. Logic: ${stepTwoLogicSummary}. Publish: ${stepTwoPublishSummary}.`}
                   />
 
                   <LogicEditorsRenderer

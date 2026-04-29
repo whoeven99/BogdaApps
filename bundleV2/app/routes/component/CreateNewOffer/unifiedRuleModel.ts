@@ -219,22 +219,6 @@ export function applyDiscountType(rule: DiscountRule, discountType: DiscountType
   });
 }
 
-export function getAvailableDiscountTypes(offerType?: string): Array<{
-  label: string;
-  value: DiscountTypeId;
-}> {
-  if (offerType === "bxgy") {
-    return [{ label: "BXGY", value: "bxgy" }];
-  }
-  if (offerType === "free-gift") {
-    return [
-      { label: "Free gift", value: "free_gift" },
-      { label: "Free shipping", value: "free_shipping" },
-    ];
-  }
-  return DISCOUNT_TYPE_OPTIONS;
-}
-
 export function syncRuleDependencies(rule: DiscountRule): DiscountRule {
   const normalized = normalizeUnifiedRule(rule);
 

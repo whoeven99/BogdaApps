@@ -5,7 +5,9 @@ import type {
   CompleteBundleProduct,
 } from "../../../utils/offerParsing";
 import {
+  OfferRuleAddPanel,
   OfferRuleCard,
+  OfferRuleFormGrid,
   OfferRuleSummaryBox,
   OfferRulesSection,
 } from "./OfferRulesShared";
@@ -14,6 +16,10 @@ import {
   getCompleteBundleUnifiedRuleId,
   type UnifiedRuleValuePatch,
 } from "./unifiedRuleValues";
+import {
+  getCompleteBundleRuleCapability,
+  type CompleteBundleRuleTemplateId,
+} from "./ruleCapabilityRegistry";
 
 type Props = {
   completeBundleBars: CompleteBundleBar[];
@@ -35,11 +41,6 @@ type Props = {
   updateRulePresentation?: (id: string, patch: RulePresentationPatch) => void;
 };
 
-const BAR_TYPE_OPTIONS = [
-  { label: "Complete Bundle", value: "quantity-break-same" },
-  { label: "BXGY", value: "bxgy" },
-] as const;
-
 function getDefaultBarTitle(type: "quantity-break-same" | "bxgy") {
   return type === "bxgy" ? "Buy X, Get Y" : "Complete the bundle";
 }
@@ -58,6 +59,7 @@ export default function CompleteBundleEditor({
   updateRuleValues,
   updateRulePresentation,
 }: Props) {
+  const { barTypeOptions, addMenuItems } = getCompleteBundleRuleCapability();
   const showBars = section === "all" || section === "bars";
   const showProducts = section === "all" || section === "products";
   const activeBar =
@@ -106,14 +108,14 @@ export default function CompleteBundleEditor({
                     Rule #{index + 1} - {bar.title || getDefaultBarTitle(bar.type)}
                   </Button>
                   </div>
-                  <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+                  <OfferRuleFormGrid columns={3}>
                     <label className="block text-[14px] font-medium text-[#1c1f23]">
                       Discount Type
                       <Select
                         size="large"
                         className="mt-1 w-full"
                         value={bar.type}
-                        options={BAR_TYPE_OPTIONS.map((option) => ({
+                        options={barTypeOptions.map((option) => ({
                           label: option.label,
                           value: option.value,
                         }))}
@@ -179,7 +181,7 @@ export default function CompleteBundleEditor({
                         }}
                       />
                     </label>
-                  </div>
+                  </OfferRuleFormGrid>
                   <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
                     <OfferRuleSummaryBox
                       label="Condition Type"
@@ -206,25 +208,21 @@ export default function CompleteBundleEditor({
               </OfferRuleCard>
             ))}
           </div>
-          <div className="mt-4">
+          <OfferRuleAddPanel description="Add another bundle bar when this offer needs more bundle paths or a BXGY alternative.">
             <Dropdown
               trigger={["click"]}
               menu={{
-                items: [
-                  { key: "quantity", label: "Add Complete Bundle Rule" },
-                  { key: "bxgy", label: "Add BXGY Rule" },
-                ],
+                items: addMenuItems,
                 onClick: ({ key }) => {
-                  if (key === "bxgy") addCompleteBundleBar("bxgy");
-                  else addCompleteBundleBar("quantity-break-same");
+                  addCompleteBundleBar(
+                    key as CompleteBundleRuleTemplateId,
+                  );
                 },
               }}
             >
-              <Button type="dashed" className="w-full">
-                + Add rule
-              </Button>
+              <Button type="dashed">+ Add rule</Button>
             </Dropdown>
-          </div>
+          </OfferRuleAddPanel>
         </OfferRulesSection>
       ) : null}
 
@@ -233,7 +231,7 @@ export default function CompleteBundleEditor({
           <div className="create-offer-panel create-offer-panel--muted">
             <div className="create-offer-panel__header">
               <div>
-                <div className="create-offer-panel__eyebrow">Bundle Products</div>
+                <div className="create-offer-panel__eyebrow">Scope</div>
                 <h3 className="create-offer-panel__title">Products & pricing</h3>
               </div>
             </div>

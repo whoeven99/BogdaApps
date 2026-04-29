@@ -5,7 +5,6 @@ import {
   applyDiscountType,
   CONDITION_TYPE_OPTIONS,
   createRuleFromTemplate,
-  getAvailableDiscountTypes,
   getDiscountTypeFromRule,
   getUnifiedRuleIssues,
   syncRuleDependencies,
@@ -15,9 +14,14 @@ import {
   type UnifiedRuleValuePatch,
 } from "./unifiedRuleValues";
 import {
+  OfferRuleAddPanel,
   OfferRuleCard,
   OfferRuleSummaryBox,
 } from "./OfferRulesShared";
+import {
+  getUnifiedRuleCapability,
+  type UnifiedRuleTemplateId,
+} from "./ruleCapabilityRegistry";
 
 type Props = {
   rules: DiscountRule[];
@@ -39,7 +43,7 @@ export default function UnifiedRulesEditor({
     label: product.title,
     value: String(product.id),
   }));
-  const discountTypeOptions = getAvailableDiscountTypes(offerType);
+  const { discountTypeOptions, addMenuItems } = getUnifiedRuleCapability(offerType);
 
   const updateRule = (index: number, patch: Partial<DiscountRule>) => {
     const ruleId = getUnifiedDiscountRuleId(rules[index], index);
@@ -56,14 +60,7 @@ export default function UnifiedRulesEditor({
     );
   };
 
-  const appendRule = (
-    template:
-      | "product_discount"
-      | "order_discount"
-      | "shipping_discount"
-      | "free_gift"
-      | "bxgy",
-  ) => {
+  const appendRule = (template: UnifiedRuleTemplateId) => {
     setRules((prev) => [...prev.map(syncRuleDependencies), createRuleFromTemplate(template)]);
   };
 
@@ -340,37 +337,17 @@ export default function UnifiedRulesEditor({
         })}
       </div>
 
-      <Dropdown
-        trigger={["click"]}
-        menu={{
-          items: discountTypeOptions.map((option) => ({
-            key:
-              option.value === "quantity_break"
-                ? "product_discount"
-                : option.value === "order_discount"
-                  ? "order_discount"
-                  : option.value === "free_shipping"
-                    ? "shipping_discount"
-                    : option.value === "free_gift"
-                      ? "free_gift"
-                      : "bxgy",
-            label: `Add ${option.label} Rule`,
-          })),
-          onClick: ({ key }) =>
-            appendRule(
-              key as
-                | "product_discount"
-                | "order_discount"
-                | "shipping_discount"
-                | "free_gift"
-                | "bxgy",
-            ),
-        }}
-      >
-        <Button type="dashed" className="mt-4 w-full">
-          + Add rule
-        </Button>
-      </Dropdown>
+      <OfferRuleAddPanel description="Choose the next rule type that should be available in this offer.">
+        <Dropdown
+          trigger={["click"]}
+          menu={{
+            items: addMenuItems,
+            onClick: ({ key }) => appendRule(key as UnifiedRuleTemplateId),
+          }}
+        >
+          <Button type="dashed">+ Add rule</Button>
+        </Dropdown>
+      </OfferRuleAddPanel>
     </div>
   );
 }

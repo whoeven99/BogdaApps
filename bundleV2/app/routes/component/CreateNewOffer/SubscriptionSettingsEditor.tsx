@@ -54,13 +54,18 @@ export default function SubscriptionSettingsEditor({
     section === "all" || section === "one-time-message";
 
   return (
-    <div className="mb-6 rounded-[12px] border border-[#e3e8ed] p-4 bg-[#fafbfb]">
+    <div className="flex flex-col gap-4">
       {showSubscriptionOffer ? (
         <>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-[14px] font-medium text-[#1c1f23] m-0">
-              Subscription
-            </h3>
+          <div className="flex items-center justify-between rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-4 py-3">
+            <div>
+              <div className="text-[14px] font-medium text-[#1c1f23]">
+                Enable subscription option
+              </div>
+              <div className="mt-1 text-[12px] text-[#5c6166]">
+                Turn this on to show a subscription choice next to one-time purchase.
+              </div>
+            </div>
             <Switch
               checked={subscriptionEnabled}
               onChange={(checked) => setSubscriptionEnabled(checked)}
@@ -136,42 +141,40 @@ export default function SubscriptionSettingsEditor({
 
       {showOneTimeMessage ? (
         <>
-          <div className={showSubscriptionOffer ? "mt-4" : ""}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[13px] text-[#5c6166] mb-1">
-                  One-time title
-                </label>
-                <Input
-                  size="large"
-                  value={oneTimeTitle}
-                  onChange={(e) =>
-                    updateRulePresentation
-                      ? updateRulePresentation("one-time-option", {
-                          title: e.target.value,
-                        })
-                      : setOneTimeTitle(e.target.value)
-                  }
-                  maxLength={60}
-                />
-              </div>
-              <div>
-                <label className="block text-[13px] text-[#5c6166] mb-1">
-                  One-time subtitle
-                </label>
-                <Input
-                  size="large"
-                  value={oneTimeSubtitle}
-                  onChange={(e) =>
-                    updateRulePresentation
-                      ? updateRulePresentation("one-time-option", {
-                          subtitle: e.target.value,
-                        })
-                      : setOneTimeSubtitle(e.target.value)
-                  }
-                  maxLength={60}
-                />
-              </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[13px] text-[#5c6166] mb-1">
+                One-time title
+              </label>
+              <Input
+                size="large"
+                value={oneTimeTitle}
+                onChange={(e) =>
+                  updateRulePresentation
+                    ? updateRulePresentation("one-time-option", {
+                        title: e.target.value,
+                      })
+                    : setOneTimeTitle(e.target.value)
+                }
+                maxLength={60}
+              />
+            </div>
+            <div>
+              <label className="block text-[13px] text-[#5c6166] mb-1">
+                One-time subtitle
+              </label>
+              <Input
+                size="large"
+                value={oneTimeSubtitle}
+                onChange={(e) =>
+                  updateRulePresentation
+                    ? updateRulePresentation("one-time-option", {
+                        subtitle: e.target.value,
+                      })
+                    : setOneTimeSubtitle(e.target.value)
+                }
+                maxLength={60}
+              />
             </div>
           </div>
           <div className="mt-3">

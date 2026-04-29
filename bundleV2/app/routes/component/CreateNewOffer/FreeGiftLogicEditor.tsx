@@ -1,7 +1,10 @@
 import { Button, Checkbox, Dropdown, Input, Select } from "antd";
 import type { FreeGiftRule } from "../../../utils/offerParsing";
 import {
+  OfferRuleAddPanel,
   OfferRuleCard,
+  OfferRuleFooterRow,
+  OfferRuleFormGrid,
   OfferRuleSummaryBox,
   OfferRulesSection,
 } from "./OfferRulesShared";
@@ -10,6 +13,7 @@ import {
   getFreeGiftUnifiedRuleId,
   type UnifiedRuleValuePatch,
 } from "./unifiedRuleValues";
+import { getFreeGiftRuleCapability } from "./ruleCapabilityRegistry";
 
 type Props = {
   triggerProductsCount: number;
@@ -32,7 +36,7 @@ export default function FreeGiftLogicEditor({
   updateRuleValues,
   updateRulePresentation,
 }: Props) {
-  const discountTypeOptions = [{ label: "Free Gift", value: "free_gift" }];
+  const { discountTypeOptions, addMenuItems } = getFreeGiftRuleCapability();
   const conditionTypeOptions = [
     { label: "Quantity threshold", value: "quantity_threshold" },
   ];
@@ -62,7 +66,7 @@ export default function FreeGiftLogicEditor({
         <div className="create-offer-panel create-offer-panel--muted">
           <div className="create-offer-panel__header">
             <div>
-              <div className="create-offer-panel__eyebrow">Free Gift Setup</div>
+              <div className="create-offer-panel__eyebrow">Scope</div>
               <h3 className="create-offer-panel__title">Trigger Products</h3>
             </div>
             {triggerProductsCount > 0 ? (
@@ -100,7 +104,7 @@ export default function FreeGiftLogicEditor({
         <div className="create-offer-panel create-offer-panel--muted">
           <div className="create-offer-panel__header">
             <div>
-              <div className="create-offer-panel__eyebrow">Free Gift Setup</div>
+              <div className="create-offer-panel__eyebrow">Scope</div>
               <h3 className="create-offer-panel__title">Gift Products</h3>
             </div>
             {giftProductsCount > 0 ? (
@@ -242,7 +246,7 @@ export default function FreeGiftLogicEditor({
                 </label>
               </div>
 
-              <div className="create-offer-inline-grid-3">
+              <OfferRuleFormGrid columns={3}>
                 <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
                   Title
                   <Input
@@ -312,9 +316,9 @@ export default function FreeGiftLogicEditor({
                     }}
                   />
                 </label>
-              </div>
+              </OfferRuleFormGrid>
 
-              <div className="create-offer-inline-row">
+              <OfferRuleFooterRow>
                 <Checkbox
                   checked={!!rule.isDefault}
                   onChange={(e) => {
@@ -333,23 +337,23 @@ export default function FreeGiftLogicEditor({
                 >
                   Set as Default Selected
                 </Checkbox>
-              </div>
+              </OfferRuleFooterRow>
                   </>
                 );
               })()}
           </OfferRuleCard>
         ))}
-        <Dropdown
-          trigger={["click"]}
-          menu={{
-            items: [{ key: "free-gift", label: "Add Free Gift Rule" }],
-            onClick: appendFreeGiftTier,
-          }}
-        >
-          <Button type="dashed" className="w-full">
-            + Add rule
-          </Button>
-        </Dropdown>
+        <OfferRuleAddPanel description="Each free gift rule adds another quantity threshold and reward level.">
+          <Dropdown
+            trigger={["click"]}
+            menu={{
+              items: addMenuItems,
+              onClick: appendFreeGiftTier,
+            }}
+          >
+            <Button type="dashed">+ Add rule</Button>
+          </Dropdown>
+        </OfferRuleAddPanel>
       </OfferRulesSection>
     </>
   );

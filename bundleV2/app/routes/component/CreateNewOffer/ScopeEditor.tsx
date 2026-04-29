@@ -21,11 +21,7 @@ export default function ScopeEditor({
   onRemoveProduct,
 }: Props) {
   return (
-    <div className="mb-8">
-      <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-        Scope: Products in this campaign
-      </h3>
-
+    <div>
       {selectedProductsData.length === 0 ? (
         <Button
           size="large"

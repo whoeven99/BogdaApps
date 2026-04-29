@@ -1,7 +1,11 @@
 import { Button, Checkbox, Dropdown, Input, Select } from "antd";
 import type { BxgyDiscountRule } from "../../../utils/offerParsing";
 import {
+  OfferRuleAddPanel,
   OfferRuleCard,
+  OfferRuleFooterRow,
+  OfferRuleFormGrid,
+  OfferRuleNotice,
   OfferRuleSummaryBox,
   OfferRulesSection,
 } from "./OfferRulesShared";
@@ -10,6 +14,7 @@ import {
   getBxgyUnifiedRuleId,
   type UnifiedRuleValuePatch,
 } from "./unifiedRuleValues";
+import { getBxgyRuleCapability } from "./ruleCapabilityRegistry";
 
 type Props = {
   buyProductsCount: number;
@@ -34,7 +39,7 @@ export default function BxgyLogicEditor({
   updateRuleValues,
   updateRulePresentation,
 }: Props) {
-  const discountTypeOptions = [{ label: "BXGY", value: "bxgy" }];
+  const { discountTypeOptions, addMenuItems } = getBxgyRuleCapability();
   const conditionTypeOptions = [{ label: "Buy X, Get Y", value: "buy_x_get_y" }];
   const showBuyProducts = section === "all" || section === "buy-products";
   const showGetProducts = section === "all" || section === "get-products";
@@ -71,7 +76,7 @@ export default function BxgyLogicEditor({
           <div className="create-offer-panel create-offer-panel--muted">
             <div className="create-offer-panel__header">
               <div>
-                <div className="create-offer-panel__eyebrow">BXGY Setup</div>
+                <div className="create-offer-panel__eyebrow">Scope</div>
                 <h3 className="create-offer-panel__title">Buy Products (X)</h3>
               </div>
               {buyProductsCount > 0 ? (
@@ -111,7 +116,7 @@ export default function BxgyLogicEditor({
           <div className="create-offer-panel create-offer-panel--muted">
             <div className="create-offer-panel__header">
               <div>
-                <div className="create-offer-panel__eyebrow">BXGY Setup</div>
+                <div className="create-offer-panel__eyebrow">Scope</div>
                 <h3 className="create-offer-panel__title">Get Products (Y)</h3>
               </div>
               {getProductsCount > 0 ? (
@@ -320,7 +325,7 @@ export default function BxgyLogicEditor({
                   </label>
                 </div>
 
-                <div className="create-offer-inline-grid-3">
+                <OfferRuleFormGrid columns={3}>
                   <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
                     Title
                     <Input
@@ -390,9 +395,9 @@ export default function BxgyLogicEditor({
                       }}
                     />
                   </label>
-                </div>
+                </OfferRuleFormGrid>
 
-                <div className="create-offer-inline-grid-2">
+                <OfferRuleFormGrid columns={2}>
                   <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
                     Max Uses Per Order
                     <Input
@@ -422,14 +427,14 @@ export default function BxgyLogicEditor({
                       }}
                     />
                   </label>
-                  <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-3 py-3 text-[13px] text-[#5c6166]">
+                  <OfferRuleNotice>
                     Buy scope and reward scope are managed in the modules above,
                     so each BXGY rule here only controls the unlock math and
                     reward intensity.
-                  </div>
-                </div>
+                  </OfferRuleNotice>
+                </OfferRuleFormGrid>
 
-                <div className="create-offer-inline-row">
+                <OfferRuleFooterRow>
                   <Checkbox
                     checked={!!rule.isDefault}
                     onChange={(e) => {
@@ -448,23 +453,23 @@ export default function BxgyLogicEditor({
                   >
                     Set as Default Selected
                   </Checkbox>
-                </div>
+                </OfferRuleFooterRow>
                     </>
                   );
                 })()}
             </OfferRuleCard>
           ))}
-          <Dropdown
-            trigger={["click"]}
-            menu={{
-              items: [{ key: "bxgy", label: "Add BXGY Rule" }],
-              onClick: appendBxgyTier,
-            }}
-          >
-            <Button type="dashed" className="w-full">
-              + Add rule
-            </Button>
-          </Dropdown>
+          <OfferRuleAddPanel description="BXGY offers use a fixed rule type, so each new rule adds another unlock tier.">
+            <Dropdown
+              trigger={["click"]}
+              menu={{
+                items: addMenuItems,
+                onClick: appendBxgyTier,
+              }}
+            >
+              <Button type="dashed">+ Add rule</Button>
+            </Dropdown>
+          </OfferRuleAddPanel>
         </OfferRulesSection>
       ) : null}
     </>

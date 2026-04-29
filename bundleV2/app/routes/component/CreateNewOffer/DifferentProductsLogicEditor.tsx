@@ -2,7 +2,10 @@ import { Button, Checkbox, Dropdown, Input, Select } from "antd";
 import type { DifferentProductsDiscountRule } from "../../../utils/offerParsing";
 import type { DraftSelectedProduct } from "./campaignDraft";
 import {
+  OfferRuleAddPanel,
   OfferRuleCard,
+  OfferRuleFooterRow,
+  OfferRuleFormGrid,
   OfferRuleSummaryBox,
   OfferRulesSection,
 } from "./OfferRulesShared";
@@ -11,6 +14,10 @@ import {
   getDifferentProductsUnifiedRuleId,
   type UnifiedRuleValuePatch,
 } from "./unifiedRuleValues";
+import {
+  getDifferentProductsRuleCapability,
+  type DifferentProductsRuleTemplateId,
+} from "./ruleCapabilityRegistry";
 
 type Props = {
   selectedProductsData: DraftSelectedProduct[];
@@ -50,10 +57,8 @@ export default function DifferentProductsLogicEditor({
   updateRuleValues,
   updateRulePresentation,
 }: Props) {
-  const discountTypeOptions = [
-    { label: "Quantity Break", value: "simple" },
-    { label: "BXGY", value: "bxgy" },
-  ];
+  const { discountTypeOptions, addMenuItems } =
+    getDifferentProductsRuleCapability();
   const productOptions = selectedProductsData.map((product) => ({
     label: product.title,
     value: String(product.id),
@@ -74,7 +79,7 @@ export default function DifferentProductsLogicEditor({
       ),
     );
   };
-  const appendTier = (tierType: DifferentProductsDiscountRule["tierType"]) => {
+  const appendTier = (tierType: DifferentProductsRuleTemplateId) => {
     setDifferentProductsDiscountRules((prev) => [
       ...prev,
       buildDefaultTier(selectedProductsData, tierType),
@@ -218,16 +223,7 @@ export default function DifferentProductsLogicEditor({
                 </label>
               </div>
 
-              <div
-                className="create-offer-discount-form-row"
-                style={{
-                  marginTop: "12px",
-                  display: "grid",
-                  gridTemplateColumns:
-                    rule.tierType === "bxgy" ? "1fr 1fr 1fr 1fr" : "1fr 1fr",
-                  gap: "12px",
-                }}
-              >
+              <OfferRuleFormGrid columns={rule.tierType === "bxgy" ? 4 : 2}>
                 <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
                   Buy Quantity
                   <Input
@@ -308,17 +304,9 @@ export default function DifferentProductsLogicEditor({
                     />
                   </label>
                 )}
-              </div>
+              </OfferRuleFormGrid>
 
-              <div
-                className="create-offer-discount-form-row"
-                style={{
-                  marginTop: "12px",
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr 1fr",
-                  gap: "12px",
-                }}
-              >
+              <OfferRuleFormGrid columns={3}>
                 <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
                   Title
                   <Input
@@ -367,7 +355,7 @@ export default function DifferentProductsLogicEditor({
                     }}
                   />
                 </label>
-              </div>
+              </OfferRuleFormGrid>
 
               {(buyProductsData.length > 0 || getProductsData.length > 0) && (
                 <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -420,15 +408,7 @@ export default function DifferentProductsLogicEditor({
                 </div>
               )}
 
-              <div
-                className="create-offer-discount-form-row"
-                style={{
-                  marginTop: "12px",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
+              <OfferRuleFooterRow>
                 <Checkbox
                   checked={!!rule.isDefault}
                   onChange={(e) => {
@@ -447,7 +427,7 @@ export default function DifferentProductsLogicEditor({
                 >
                   Set as Default Selected
                 </Checkbox>
-              </div>
+              </OfferRuleFooterRow>
                   </>
                 );
               })()}
@@ -455,22 +435,19 @@ export default function DifferentProductsLogicEditor({
         );
       })}
 
-      <div className="flex flex-wrap gap-3">
+      <OfferRuleAddPanel description="Mix quantity-break and BXGY tiers inside the same shared product pool.">
         <Dropdown
           trigger={["click"]}
           menu={{
-            items: [
-              { key: "simple", label: "Add Quantity Break Rule" },
-              { key: "bxgy", label: "Add BXGY Rule" },
-            ],
+            items: addMenuItems,
             onClick: ({ key }) => {
-              appendTier(key === "bxgy" ? "bxgy" : "simple");
+              appendTier(key as DifferentProductsRuleTemplateId);
             },
           }}
         >
           <Button type="dashed">+ Add rule</Button>
         </Dropdown>
-      </div>
+      </OfferRuleAddPanel>
     </OfferRulesSection>
   );
 }

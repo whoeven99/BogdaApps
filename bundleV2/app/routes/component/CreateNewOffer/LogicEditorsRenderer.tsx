@@ -36,8 +36,11 @@ type LogicEditorRegistryEntry = {
   components: (props: Props) => LogicEditorComponent[];
 };
 
+type LogicEditorGroup = "scope" | "rules" | "optional";
+
 type LogicEditorComponent = {
   id: string;
+  group: LogicEditorGroup;
   title: string;
   description: string;
   required: boolean;
@@ -46,6 +49,29 @@ type LogicEditorComponent = {
   onAdd?: () => void;
   onRemove?: () => void;
   render: () => ReactNode;
+};
+
+const GROUP_ORDER: LogicEditorGroup[] = ["scope", "rules", "optional"];
+
+const GROUP_META: Record<
+  LogicEditorGroup,
+  { title: string; description: string }
+> = {
+  scope: {
+    title: "Scope",
+    description:
+      "Select the products or entities that participate in this campaign.",
+  },
+  rules: {
+    title: "Offer Rules",
+    description:
+      "Configure the business logic, thresholds, and reward behavior for this offer.",
+  },
+  optional: {
+    title: "Optional Modules",
+    description:
+      "Add supporting modules that extend the core offer without changing its main logic.",
+  },
 };
 
 const renderDefaultScopeEditor = (props: Props) => (
@@ -65,6 +91,7 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
     components: (props) => [
       {
         id: "bxgy-buy-scope",
+        group: "scope",
         title: "Buy Products",
         description:
           "Choose which products count toward the X side of the BXGY condition.",
@@ -86,6 +113,7 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
       },
       {
         id: "bxgy-get-scope",
+        group: "scope",
         title: "Reward Products",
         description:
           "Choose which products can be discounted or given away on the Y side.",
@@ -107,6 +135,7 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
       },
       {
         id: "bxgy-rules",
+        group: "rules",
         title: "Offer Rules",
         description:
           "Define the BXGY unlock logic, reward quantities, discount values, and labels for each rule.",
@@ -128,6 +157,7 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
       },
       {
         id: "progressive-gifts",
+        group: "optional",
         title: "Progressive Gifts",
         description:
           "Add a progressive free shipping reward block that unlocks on higher bars or quantities.",
@@ -164,6 +194,7 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
     components: (props) => [
       {
         id: "scope",
+        group: "scope",
         title: "Trigger Products",
         description:
           "Select which products count toward unlocking the free gift rules.",
@@ -186,6 +217,7 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
       },
       {
         id: "free-gift-logic",
+        group: "rules",
         title: "Offer Rules",
         description:
           "Select reward products and define the trigger and gift quantity for each rule.",
@@ -206,6 +238,7 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
       },
       {
         id: "progressive-gifts",
+        group: "optional",
         title: "Progressive Gifts",
         description:
           "Add a progressive free shipping reward block alongside the free gift flow.",
@@ -242,7 +275,8 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
     components: (props) => [
       {
         id: "complete-bundle-bars",
-        title: "Bundle Structure",
+        group: "rules",
+        title: "Bundle Rules",
         description:
           "Define the bundle bars, their titles, quantities, and the structure of the bundle flow.",
         required: true,
@@ -268,7 +302,8 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
       },
       {
         id: "complete-bundle-products",
-        title: "Bundle Products",
+        group: "scope",
+        title: "Products & Pricing",
         description:
           "Manage products inside the active bar, then configure pricing and variant preview details.",
         required: true,
@@ -298,7 +333,8 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
     components: (props) => [
       {
         id: "scope",
-        title: "Template Products",
+        group: "scope",
+        title: "Campaign Products",
         description:
           "Select the products that should display the subscription decision block.",
         required: true,
@@ -307,7 +343,8 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
       },
       {
         id: "subscription-offer",
-        title: "Subscription Option",
+        group: "rules",
+        title: "Subscription Message",
         description:
           "Configure the subscription message and preview how it appears beside the main offer.",
         required: false,
@@ -347,7 +384,8 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
       },
       {
         id: "subscription-one-time",
-        title: "One-time Option",
+        group: "rules",
+        title: "One-time Message",
         description:
           "Define the one-time purchase copy, placement, and default selected behavior.",
         required: true,
@@ -384,6 +422,7 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
       },
       {
         id: "progressive-gifts",
+        group: "optional",
         title: "Progressive Gifts",
         description:
           "Add a progressive free shipping reward block next to the subscription offer.",
@@ -420,7 +459,8 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
     components: (props) => [
       {
         id: "scope",
-        title: "Template Products",
+        group: "scope",
+        title: "Campaign Products",
         description:
           "Select the shared product pool that participates in these cross-product rules.",
         required: true,
@@ -429,6 +469,7 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
       },
       {
         id: "different-products-rules",
+        group: "rules",
         title: "Offer Rules",
         description:
           "Mix quantity-break and BXGY rules across the shared pool of selected products.",
@@ -450,6 +491,7 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
       },
       {
         id: "progressive-gifts",
+        group: "optional",
         title: "Progressive Gifts",
         description:
           "Add a progressive free shipping reward block that unlocks alongside cross-product tiers.",
@@ -486,14 +528,17 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
     components: (props) => [
       {
         id: "scope",
-        title: "",
-        description: "",
+        group: "scope",
+        title: "Campaign Products",
+        description:
+          "Select the products that should participate in these quantity-based offer rules.",
         required: true,
         active: true,
         render: () => renderDefaultScopeEditor(props),
       },
       {
         id: "quantity-breaks-rules",
+        group: "rules",
         title: "Offer Rules",
         description:
           "Define the discount type, trigger condition, and reward details for each rule entry.",
@@ -513,6 +558,7 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
       },
       {
         id: "progressive-gifts",
+        group: "optional",
         title: "Progressive Gifts",
         description:
           "Add a progressive free shipping reward block that customers can unlock as they add more items.",
@@ -566,73 +612,117 @@ export default function LogicEditorsRenderer({
     label: component.addLabel || `Add ${component.title}`,
   }));
 
-  return (
-    <div className="flex flex-col gap-4">
-      {inactiveOptionalComponents.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
-          <Dropdown
-            trigger={["click"]}
-            menu={{
-              items: addComponentMenuItems,
-              onClick: ({ key }) => {
-                const component = inactiveOptionalComponents.find(
-                  (entry) => entry.id === key,
-                );
-                component?.onAdd?.();
-              },
-            }}
-          >
-            <Button size="small">Add component</Button>
-          </Dropdown>
-        </div>
-      ) : null}
-
-      {activeComponents.map((component) => (
-        <div
-          key={component.id}
-          className="rounded-[12px] border border-[#e3e8ed] bg-white p-4"
-        >
-          {component.title || component.description || (!component.required && component.onRemove) ? (
-            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-              <div>
-                {component.title ? (
-                  <h3 className="m-0 text-[16px] font-semibold text-[#1c1f23]">
-                    {component.title}
-                  </h3>
-                ) : null}
-                {component.description ? (
-                  <p className="m-0 mt-2 text-[13px] text-[#5c6166]">
-                    {component.description}
-                  </p>
-                ) : null}
-              </div>
-              {!component.required && component.onRemove ? (
-                <div className="flex flex-wrap gap-2">
-                  <Button size="small" onClick={component.onRemove}>
-                    Remove
-                  </Button>
-                </div>
-              ) : null}
+  const renderComponentCard = (component: LogicEditorComponent) => (
+    <div
+      key={component.id}
+      className="rounded-[12px] border border-[#e3e8ed] bg-white p-4"
+    >
+      {component.title ||
+      component.description ||
+      (!component.required && component.onRemove) ? (
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            {component.title ? (
+              <h3 className="m-0 text-[16px] font-semibold text-[#1c1f23]">
+                {component.title}
+              </h3>
+            ) : null}
+            {component.description ? (
+              <p className="m-0 mt-2 text-[13px] text-[#5c6166]">
+                {component.description}
+              </p>
+            ) : null}
+          </div>
+          {!component.required && component.onRemove ? (
+            <div className="flex flex-wrap gap-2">
+              <Button size="small" onClick={component.onRemove}>
+                Remove
+              </Button>
             </div>
           ) : null}
-          <div
-            className={
-              component.title || component.description || (!component.required && component.onRemove)
-                ? "mt-4"
-                : ""
-            }
-          >
-            {component.render()}
-          </div>
         </div>
-      ))}
-
-      {typeof unifiedRulesCount === "number" && unifiedRuleAuditIssues ? (
-        <UnifiedRulesAuditPanel
-          rulesCount={unifiedRulesCount}
-          issues={unifiedRuleAuditIssues}
-        />
       ) : null}
+      <div
+        className={
+          component.title ||
+          component.description ||
+          (!component.required && component.onRemove)
+            ? "mt-4"
+            : ""
+        }
+      >
+        {component.render()}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="flex flex-col gap-4">
+      {GROUP_ORDER.map((group) => {
+        const sectionComponents = activeComponents.filter(
+          (component) => component.group === group,
+        );
+        const shouldRenderOptionalMenu =
+          group === "optional" && inactiveOptionalComponents.length > 0;
+        if (sectionComponents.length === 0 && !shouldRenderOptionalMenu) {
+          return null;
+        }
+
+        const meta = GROUP_META[group];
+
+        return (
+          <div key={group} className="flex flex-col gap-3">
+            <div className="px-1">
+              <h2 className="m-0 text-[18px] font-semibold text-[#1c1f23]">
+                {meta.title}
+              </h2>
+              <p className="m-0 mt-1 text-[13px] text-[#5c6166]">
+                {meta.description}
+              </p>
+            </div>
+
+            {sectionComponents.map(renderComponentCard)}
+
+            {group === "rules" &&
+            typeof unifiedRulesCount === "number" &&
+            unifiedRuleAuditIssues ? (
+              <UnifiedRulesAuditPanel
+                rulesCount={unifiedRulesCount}
+                issues={unifiedRuleAuditIssues}
+              />
+            ) : null}
+
+            {shouldRenderOptionalMenu ? (
+              <div className="rounded-[12px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] p-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <div className="text-[14px] font-medium text-[#1c1f23]">
+                      Add optional module
+                    </div>
+                    <div className="mt-1 text-[13px] text-[#5c6166]">
+                      Extend the offer with supporting modules when the core setup is ready.
+                    </div>
+                  </div>
+                  <Dropdown
+                    trigger={["click"]}
+                    menu={{
+                      items: addComponentMenuItems,
+                      onClick: ({ key }) => {
+                        const component = inactiveOptionalComponents.find(
+                          (entry) => entry.id === key,
+                        );
+                        component?.onAdd?.();
+                      },
+                    }}
+                  >
+                    <Button size="small">Add component</Button>
+                  </Dropdown>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
     </div>
   );
 }
