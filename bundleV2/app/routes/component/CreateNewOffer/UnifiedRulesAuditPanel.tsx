@@ -1,44 +1,91 @@
 import type { UnifiedRuleAuditIssue } from "./unifiedRulesValidation";
-import {
-  describeUnifiedRuleCondition,
-  describeUnifiedRuleReward,
-  describeUnifiedRuleScope,
-  getPublishSupportLabel,
-  getUnifiedRuleTypeLabel,
-  type UnifiedRuleNode,
-} from "./unifiedRulesSchema";
 
 type Props = {
-  rules: UnifiedRuleNode[];
+  rulesCount: number;
   issues: UnifiedRuleAuditIssue[];
 };
 
-function getSupportClasses(support: UnifiedRuleNode["publishSupport"]) {
-  if (support === "supported") {
-    return "border-[#b7ebc6] bg-[#f6ffed] text-[#237804]";
+function getStatusTone(issues: UnifiedRuleAuditIssue[]) {
+  const hasError = issues.some((issue) => issue.severity === "error");
+  const hasWarning = issues.some((issue) => issue.severity === "warning");
+
+  if (hasError) {
+    return {
+      badge: "Needs fixes",
+      badgeClasses: "border-[#ffd6d2] bg-[#fff1f0] text-[#b42318]",
+      title: "Fix these rule issues before continuing.",
+      description:
+        "Some configurations in this rules setup are not publishable in the current flow.",
+    };
   }
-  if (support === "draft_only") {
-    return "border-[#ffe58f] bg-[#fffbe6] text-[#ad6800]";
+
+  if (hasWarning) {
+    return {
+      badge: "Check setup",
+      badgeClasses: "border-[#ffe58f] bg-[#fffbe6] text-[#ad6800]",
+      title: "Review this rules setup before continuing.",
+      description:
+        "The current rules state is incomplete or needs confirmation before moving on.",
+    };
   }
-  return "border-[#d9d9d9] bg-[#fafafa] text-[#595959]";
+
+  return {
+    badge: "Ready",
+    badgeClasses: "border-[#b7ebc6] bg-[#f6ffed] text-[#237804]",
+    title: "Rules are ready for the next step.",
+    description:
+      "This configuration passes the current unified compatibility and publishability checks.",
+  };
 }
 
-export default function UnifiedRulesAuditPanel({ rules, issues }: Props) {
+export default function UnifiedRulesAuditPanel({ rulesCount, issues }: Props) {
+  const errorCount = issues.filter((issue) => issue.severity === "error").length;
+  const warningCount = issues.filter(
+    (issue) => issue.severity === "warning",
+  ).length;
+  const status = getStatusTone(issues);
+
   return (
-    <div className="rounded-[12px] border border-[#e3e8ed] bg-white p-4">
+    <div className="rounded-[12px] border border-[#e3e8ed] bg-[#fcfcfd] p-4">
       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
         <div>
           <h3 className="m-0 text-[16px] font-semibold text-[#1c1f23]">
-            Unified Rule Audit
+            Rule Status
           </h3>
           <p className="m-0 mt-2 text-[13px] text-[#5c6166]">
-            Cross-checks the current editor state against the unified rule schema,
-            including scope, condition, reward, and publish support.
+            Checks whether the current rules setup can continue through this builder
+            and whether any draft-only or unsupported combinations still need attention.
           </p>
         </div>
-        <div className="inline-flex w-fit items-center rounded-full border border-[#dfe3e8] bg-[#f6f6f7] px-3 py-1 text-[12px] font-medium text-[#5c6166]">
-          {rules.length} rule{rules.length === 1 ? "" : "s"}
+        <div className="flex flex-wrap gap-2">
+          <div
+            className={`inline-flex w-fit items-center rounded-full border px-3 py-1 text-[12px] font-medium ${status.badgeClasses}`}
+          >
+            {status.badge}
+          </div>
+          <div className="inline-flex w-fit items-center rounded-full border border-[#dfe3e8] bg-white px-3 py-1 text-[12px] font-medium text-[#5c6166]">
+            {rulesCount} rule{rulesCount === 1 ? "" : "s"}
+          </div>
         </div>
+      </div>
+
+      <div className="mt-4 rounded-[10px] border border-dashed border-[#dfe3e8] bg-white px-4 py-3">
+        <div className="text-[14px] font-medium text-[#1c1f23]">{status.title}</div>
+        <div className="mt-1 text-[13px] text-[#5c6166]">{status.description}</div>
+        {issues.length > 0 ? (
+          <div className="mt-3 flex flex-wrap gap-2 text-[12px] font-medium">
+            {errorCount > 0 ? (
+              <span className="rounded-full bg-[#fff1f0] px-2 py-1 text-[#b42318]">
+                {errorCount} error{errorCount === 1 ? "" : "s"}
+              </span>
+            ) : null}
+            {warningCount > 0 ? (
+              <span className="rounded-full bg-[#fffbe6] px-2 py-1 text-[#ad6800]">
+                {warningCount} warning{warningCount === 1 ? "" : "s"}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       {issues.length > 0 ? (
@@ -57,68 +104,6 @@ export default function UnifiedRulesAuditPanel({ rules, issues }: Props) {
           ))}
         </div>
       ) : null}
-
-      <div className="mt-4 flex flex-col gap-3">
-        {rules.map((rule, index) => (
-          <div
-            key={rule.id}
-            className="rounded-[12px] border border-[#e3e8ed] bg-[#fcfcfd] p-4"
-          >
-            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-              <div>
-                <div className="text-[14px] font-semibold text-[#1c1f23]">
-                  Rule {index + 1}: {rule.presentation.title || getUnifiedRuleTypeLabel(rule.type)}
-                </div>
-                <div className="mt-1 text-[12px] text-[#5c6166]">
-                  {rule.presentation.subtitle || describeUnifiedRuleCondition(rule.condition)}
-                </div>
-              </div>
-              <div
-                className={`inline-flex w-fit items-center rounded-full border px-3 py-1 text-[12px] font-medium ${getSupportClasses(
-                  rule.publishSupport,
-                )}`}
-              >
-                {getPublishSupportLabel(rule.publishSupport)}
-              </div>
-            </div>
-
-            <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-4">
-              <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-white px-3 py-3">
-                <div className="text-[12px] font-medium uppercase tracking-[0.05em] text-[#5c6166]">
-                  Type
-                </div>
-                <div className="mt-1 text-[14px] font-medium text-[#1c1f23]">
-                  {getUnifiedRuleTypeLabel(rule.type)}
-                </div>
-              </div>
-              <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-white px-3 py-3">
-                <div className="text-[12px] font-medium uppercase tracking-[0.05em] text-[#5c6166]">
-                  Scope
-                </div>
-                <div className="mt-1 text-[14px] font-medium text-[#1c1f23]">
-                  {describeUnifiedRuleScope(rule.scope)}
-                </div>
-              </div>
-              <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-white px-3 py-3">
-                <div className="text-[12px] font-medium uppercase tracking-[0.05em] text-[#5c6166]">
-                  Condition
-                </div>
-                <div className="mt-1 text-[14px] font-medium text-[#1c1f23]">
-                  {describeUnifiedRuleCondition(rule.condition)}
-                </div>
-              </div>
-              <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-white px-3 py-3">
-                <div className="text-[12px] font-medium uppercase tracking-[0.05em] text-[#5c6166]">
-                  Reward
-                </div>
-                <div className="mt-1 text-[14px] font-medium text-[#1c1f23]">
-                  {describeUnifiedRuleReward(rule.reward)}
-                </div>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

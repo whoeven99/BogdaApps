@@ -64,7 +64,6 @@ import {
 } from "../../../utils/offerParsing";
 import { type OfferTypeId } from "./offerTypeOptions";
 import { buildUnifiedRulesSnapshot } from "./unifiedRulesAdapters";
-import UnifiedRulesAuditPanel from "./UnifiedRulesAuditPanel";
 import {
   buildSubscriptionDisplayCustomizerItems,
   buildUnifiedDisplayCustomizerItems,
@@ -2543,16 +2542,12 @@ export function CreateNewOffer({
                   <LogicEditorsRenderer
                     draft={campaignDraft}
                     actions={campaignDraftActions}
+                    unifiedRulesCount={campaignDraft.unifiedRulesSnapshot.length}
+                    unifiedRuleAuditIssues={unifiedRuleAuditIssues}
                     renderCompleteBundleProductPricingCard={
                       renderCompleteBundleProductPricingCard
                     }
                   />
-                  <div className="mt-4">
-                    <UnifiedRulesAuditPanel
-                      rules={campaignDraft.unifiedRulesSnapshot}
-                      issues={unifiedRuleAuditIssues}
-                    />
-                  </div>
                 </div>
 
                 <div className="create-offer-sticky-preview">

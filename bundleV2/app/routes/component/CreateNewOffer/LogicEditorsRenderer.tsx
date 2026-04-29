@@ -15,11 +15,15 @@ import { ProgressiveGiftsSection } from "./ProgressiveGiftsSection";
 import QuantityBreaksLogicEditor from "./QuantityBreaksLogicEditor";
 import ScopeEditor from "./ScopeEditor";
 import SubscriptionSettingsEditor from "./SubscriptionSettingsEditor";
+import UnifiedRulesAuditPanel from "./UnifiedRulesAuditPanel";
+import type { UnifiedRuleAuditIssue } from "./unifiedRulesValidation";
 import { type OfferTypeId } from "./offerTypeOptions";
 
 type Props = {
   draft: CampaignDraft;
   actions: CampaignDraftActions;
+  unifiedRulesCount?: number;
+  unifiedRuleAuditIssues?: UnifiedRuleAuditIssue[];
   renderCompleteBundleProductPricingCard: (
     bar: CampaignDraft["completeBundleBars"][number],
     product: CompleteBundleProduct,
@@ -546,6 +550,8 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
 export default function LogicEditorsRenderer({
   draft,
   actions,
+  unifiedRulesCount,
+  unifiedRuleAuditIssues,
   renderCompleteBundleProductPricingCard,
 }: Props) {
   const props = { draft, actions, renderCompleteBundleProductPricingCard };
@@ -620,6 +626,13 @@ export default function LogicEditorsRenderer({
           </div>
         </div>
       ))}
+
+      {typeof unifiedRulesCount === "number" && unifiedRuleAuditIssues ? (
+        <UnifiedRulesAuditPanel
+          rulesCount={unifiedRulesCount}
+          issues={unifiedRuleAuditIssues}
+        />
+      ) : null}
     </div>
   );
 }
