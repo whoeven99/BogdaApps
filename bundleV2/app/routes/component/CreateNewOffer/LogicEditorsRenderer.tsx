@@ -61,9 +61,9 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
     components: (props) => [
       {
         id: "bxgy-buy-scope",
-        title: "Buy Scope",
+        title: "Buy Products",
         description:
-          "Choose which products count toward the buy condition in this BXGY campaign.",
+          "Choose which products count toward the X side of the BXGY condition.",
         required: true,
         active: true,
         render: () => (
@@ -80,9 +80,9 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
       },
       {
         id: "bxgy-get-scope",
-        title: "Reward Scope",
+        title: "Reward Products",
         description:
-          "Choose which products can be discounted or given away as the Y reward.",
+          "Choose which products can be discounted or given away on the Y side.",
         required: true,
         active: true,
         render: () => (
@@ -99,9 +99,9 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
       },
       {
         id: "bxgy-rules",
-        title: "BXGY Rules",
+        title: "Offer Rules",
         description:
-          "Define the quantities, discount values, labels, and default choice for each BXGY tier.",
+          "Define the BXGY unlock logic, reward quantities, discount values, and labels for each rule.",
         required: true,
         active: true,
         render: () => (
@@ -154,9 +154,9 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
     components: (props) => [
       {
         id: "scope",
-        title: "Scope",
+        title: "Trigger Products",
         description:
-          "Select the trigger products that participate in this campaign.",
+          "Select which products count toward unlocking the free gift rules.",
         required: true,
         active: true,
         render: () => (
@@ -176,9 +176,9 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
       },
       {
         id: "free-gift-logic",
-        title: "Free Gift Logic",
+        title: "Offer Rules",
         description:
-          "Select gift products and define the quantity tiers that unlock them.",
+          "Select reward products and define the trigger and gift quantity for each rule.",
         required: true,
         active: true,
         render: () => (
@@ -230,9 +230,9 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
     components: (props) => [
       {
         id: "complete-bundle-bars",
-        title: "Bundle Bars",
+        title: "Bundle Structure",
         description:
-          "Define the bundle bars, their titles, quantities, and the overall bundle structure.",
+          "Define the bundle bars, their titles, quantities, and the structure of the bundle flow.",
         required: true,
         active: true,
         render: () => (
@@ -254,9 +254,9 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
       },
       {
         id: "complete-bundle-products",
-        title: "Products & Pricing",
+        title: "Bundle Products",
         description:
-          "Manage the products inside the active bar, then configure pricing and variant preview details.",
+          "Manage products inside the active bar, then configure pricing and variant preview details.",
         required: true,
         active: true,
         render: () => (
@@ -282,18 +282,18 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
     components: (props) => [
       {
         id: "scope",
-        title: "Scope",
+        title: "Template Products",
         description:
-          "Select the products that should show the subscription decision block.",
+          "Select the products that should display the subscription decision block.",
         required: true,
         active: true,
         render: () => renderDefaultScopeEditor(props),
       },
       {
         id: "subscription-offer",
-        title: "Subscription Offer",
+        title: "Subscription Option",
         description:
-          "Configure the subscription messaging block and preview how it appears beside the main offer.",
+          "Configure the subscription message and preview how it appears beside the main offer.",
         required: false,
         active: props.draft.subscriptionEnabled,
         addLabel: "Add Subscription Settings",
@@ -330,9 +330,9 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
       },
       {
         id: "subscription-one-time",
-        title: "One-time Message",
+        title: "One-time Option",
         description:
-          "Define the one-time purchase copy, placement, and default selected behavior for the purchase mode switcher.",
+          "Define the one-time purchase copy, placement, and default selected behavior.",
         required: true,
         active: props.draft.subscriptionEnabled,
         render: () => (
@@ -402,18 +402,18 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
     components: (props) => [
       {
         id: "scope",
-        title: "Scope",
+        title: "Template Products",
         description:
-          "Select the shared product pool that participates in this cross-product campaign.",
+          "Select the shared product pool that participates in these cross-product rules.",
         required: true,
         active: true,
         render: () => renderDefaultScopeEditor(props),
       },
       {
         id: "different-products-rules",
-        title: "Cross-product Tiers",
+        title: "Offer Rules",
         description:
-          "Mix simple tiers and BXGY-style tiers across the shared pool of selected products.",
+          "Mix quantity-break and BXGY rules across the shared pool of selected products.",
         required: true,
         active: true,
         render: () => (
@@ -466,7 +466,7 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
     components: (props) => [
       {
         id: "scope",
-        title: "Scope",
+        title: "Template Products",
         description:
           "Select the products included in this quantity break campaign.",
         required: true,
@@ -477,7 +477,7 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
         id: "quantity-breaks-rules",
         title: "Offer Rules",
         description:
-          "Define the condition, Shopify discount class, and reward for each rule entry.",
+          "Define the discount type, trigger condition, and reward details for each rule entry.",
         required: true,
         active: true,
         render: () => (
@@ -485,6 +485,7 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
             discountRules={props.draft.discountRules}
             setDiscountRules={props.actions.setDiscountRules}
             selectedProductsData={props.draft.selectedProductsData}
+            offerType={props.draft.offerType}
             section="tiers"
           />
         ),

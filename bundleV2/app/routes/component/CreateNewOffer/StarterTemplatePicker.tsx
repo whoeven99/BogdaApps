@@ -262,6 +262,14 @@ export default function StarterTemplatePicker({
           >
             <OfferTypePreview offerType={option.id} />
             <div className="flex flex-1 flex-col px-[4px] pt-[14px]">
+              <div className="mb-[8px] flex flex-wrap gap-[6px]">
+                <span className="rounded-full bg-[#f0f9f6] px-[8px] py-[3px] text-[11px] font-semibold text-[#108043]">
+                  {option.primaryDiscountScope}
+                </span>
+                <span className="rounded-full bg-[#f6f6f7] px-[8px] py-[3px] text-[11px] font-semibold text-[#5c6166]">
+                  {option.primaryRuleType}
+                </span>
+              </div>
               <h2 className="m-0 text-[16px] font-semibold leading-[24px] text-[#1c1f23]">
                 {option.name}
               </h2>

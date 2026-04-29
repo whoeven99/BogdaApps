@@ -26,6 +26,8 @@ import {
 } from "./campaignBuilderRegistry";
 import DisplayBlocksEditor from "./DisplayBlocksEditor";
 import LogicEditorsRenderer from "./LogicEditorsRenderer";
+import OfferComponentsDisplayCustomizer from "./OfferComponentsDisplayCustomizer";
+import { ProgressiveGiftsSection } from "./ProgressiveGiftsSection";
 import QuantityBreaksDisplayCustomizer from "./QuantityBreaksDisplayCustomizer";
 import ScheduleTargetingEditor from "./ScheduleTargetingEditor";
 import { getStarterTemplateDefaults } from "./starterTemplateDefaults";
@@ -1945,6 +1947,285 @@ export function CreateNewOffer({
     }
   }, [offerType]);
 
+  const displayCustomizerCommonProps = {
+    widgetTitle,
+    setWidgetTitle,
+    layoutFormat,
+    setLayoutFormat,
+    cardBackgroundColor,
+    setCardBackgroundColor,
+    accentColor,
+    setAccentColor,
+    borderColor,
+    setBorderColor,
+    labelColor,
+    setLabelColor,
+    titleFontSize,
+    setTitleFontSize,
+    titleFontWeight,
+    setTitleFontWeight,
+    titleColor,
+    setTitleColor,
+    showCustomButton,
+    setShowCustomButton,
+    buttonText,
+    setButtonText,
+    buttonPrimaryColor,
+    setButtonPrimaryColor,
+  };
+
+  const progressiveGiftDisplaySections =
+    progressiveGifts.enabled && offerType !== "complete-bundle"
+      ? [
+          {
+            id: "progressive-gifts",
+            title: "Progressive Gifts",
+            description:
+              "Customize the progressive free-shipping component, unlock points, and gift slot copy.",
+            content: (
+              <ProgressiveGiftsSection
+                offerType={offerType}
+                normalizedDiscountRules={normalizedDiscountRules}
+                bxgyDiscountRules={bxgyDiscountRules}
+                differentProductsDiscountRules={differentProductsDiscountRules}
+                value={progressiveGifts}
+                onChange={setProgressiveGifts}
+                showToggle={false}
+                embedded
+              />
+            ),
+          },
+        ]
+      : [];
+
+  const renderDisplayCustomizer = () => {
+    if (offerType === "quantity-breaks-same") {
+      return (
+        <QuantityBreaksDisplayCustomizer
+          discountRules={discountRules}
+          setDiscountRules={setDiscountRules}
+          extraSections={progressiveGiftDisplaySections}
+          {...displayCustomizerCommonProps}
+        />
+      );
+    }
+
+    if (offerType === "bxgy") {
+      return (
+        <OfferComponentsDisplayCustomizer
+          heading="Offer Components"
+          intro="Customize the BXGY components from here. Open a component to edit its copy or default selection behavior."
+          itemGroupTitle="BXGY Components"
+          itemGroupDescription="Each rule controls how the BXGY offer is presented in the widget."
+          extraSections={progressiveGiftDisplaySections}
+          items={bxgyDiscountRules.map((rule, index) => ({
+            id: `bxgy-${index}`,
+            title: rule.title || "",
+            displayTitle: rule.title || `BXGY Rule ${index + 1}`,
+            description: `Buy ${rule.buyQuantity}, get ${rule.getQuantity} • ${rule.discountPercent}% off`,
+            subtitle: rule.subtitle || "",
+            badge: rule.badge || "",
+            isDefault: !!rule.isDefault,
+            placeholders: {
+              title: `e.g. Buy ${rule.buyQuantity}, Get ${rule.getQuantity}`,
+              subtitle: `e.g. Buy ${rule.buyQuantity}, get ${rule.getQuantity}`,
+              badge: "e.g. Best value",
+            },
+          }))}
+          onUpdateItem={(id, patch) => {
+            const index = Number(id.replace("bxgy-", ""));
+            setBxgyDiscountRules((prev) =>
+              prev.map((rule, ruleIndex) => {
+                if (patch.isDefault === true) {
+                  return { ...rule, isDefault: ruleIndex === index };
+                }
+                if (ruleIndex !== index) return rule;
+                return { ...rule, ...patch };
+              }),
+            );
+          }}
+          {...displayCustomizerCommonProps}
+        />
+      );
+    }
+
+    if (offerType === "free-gift") {
+      return (
+        <OfferComponentsDisplayCustomizer
+          heading="Offer Components"
+          intro="Customize the free gift components from here. Open a component to edit its copy or default selection behavior."
+          itemGroupTitle="Free Gift Components"
+          itemGroupDescription="Each rule controls how the gift unlock state is described in the widget."
+          extraSections={progressiveGiftDisplaySections}
+          items={freeGiftRules.map((rule, index) => ({
+            id: `free-gift-${index}`,
+            title: rule.title || "",
+            displayTitle: rule.title || `Gift Rule ${index + 1}`,
+            description: `${rule.count} items unlock ${rule.giftQuantity} gift${rule.giftQuantity > 1 ? "s" : ""}`,
+            subtitle: rule.subtitle || "",
+            badge: rule.badge || "",
+            isDefault: !!rule.isDefault,
+            placeholders: {
+              title: "e.g. Free sample",
+              subtitle: `e.g. Buy ${rule.count} and unlock a gift`,
+              badge: "e.g. Gift included",
+            },
+          }))}
+          onUpdateItem={(id, patch) => {
+            const index = Number(id.replace("free-gift-", ""));
+            setFreeGiftRules((prev) =>
+              prev.map((rule, ruleIndex) => {
+                if (patch.isDefault === true) {
+                  return { ...rule, isDefault: ruleIndex === index };
+                }
+                if (ruleIndex !== index) return rule;
+                return { ...rule, ...patch };
+              }),
+            );
+          }}
+          {...displayCustomizerCommonProps}
+        />
+      );
+    }
+
+    if (offerType === "quantity-breaks-different") {
+      return (
+        <OfferComponentsDisplayCustomizer
+          heading="Offer Components"
+          intro="Customize the cross-product offer components from here. Open a component to edit its copy or default selection behavior."
+          itemGroupTitle="Cross-product Components"
+          itemGroupDescription="Each rule controls how quantity-break or BXGY logic is presented across the shared product pool."
+          extraSections={progressiveGiftDisplaySections}
+          items={differentProductsDiscountRules.map((rule, index) => ({
+            id: `different-${index}`,
+            title: rule.title || "",
+            displayTitle:
+              rule.title ||
+              `${rule.tierType === "bxgy" ? "BXGY" : "Quantity Break"} Rule ${index + 1}`,
+            description:
+              rule.tierType === "bxgy"
+                ? `Buy ${rule.buyQuantity}, get ${rule.getQuantity} • ${rule.discountPercent}% off`
+                : `${rule.count} items • ${rule.discountPercent}% off`,
+            subtitle: rule.subtitle || "",
+            badge: rule.badge || "",
+            isDefault: !!rule.isDefault,
+            placeholders: {
+              title:
+                rule.tierType === "bxgy" ? "e.g. Mix & Match BXGY" : "e.g. Mix & Match Trio",
+              subtitle:
+                rule.tierType === "bxgy"
+                  ? `e.g. Buy ${rule.buyQuantity}, get ${rule.getQuantity}`
+                  : `e.g. Buy any ${rule.count} and save ${rule.discountPercent}%`,
+              badge: "e.g. Shared pool deal",
+            },
+          }))}
+          onUpdateItem={(id, patch) => {
+            const index = Number(id.replace("different-", ""));
+            setDifferentProductsDiscountRules((prev) =>
+              prev.map((rule, ruleIndex) => {
+                if (patch.isDefault === true) {
+                  return { ...rule, isDefault: ruleIndex === index };
+                }
+                if (ruleIndex !== index) return rule;
+                return { ...rule, ...patch };
+              }),
+            );
+          }}
+          {...displayCustomizerCommonProps}
+        />
+      );
+    }
+
+    if (offerType === "complete-bundle") {
+      return (
+        <OfferComponentsDisplayCustomizer
+          heading="Offer Components"
+          intro="Customize the bundle structure components from here. Open a bar to edit its visible title."
+          itemGroupTitle="Bundle Components"
+          itemGroupDescription="Each bundle bar is shown as a separate display component."
+          items={completeBundleBars.map((bar, index) => ({
+            id: bar.id,
+            title: bar.title || "",
+            displayTitle: bar.title || `Bar ${index + 1}`,
+            description: `${bar.type === "bxgy" ? "BXGY" : "Quantity"} • ${bar.quantity} item target`,
+            fields: {
+              title: true,
+              subtitle: false,
+              badge: false,
+              isDefault: false,
+            },
+            placeholders: {
+              title:
+                bar.type === "bxgy" ? "e.g. Buy X, Get Y" : "e.g. Complete the bundle",
+            },
+          }))}
+          onUpdateItem={(id, patch) => {
+            if (typeof patch.title === "string") {
+              updateCompleteBundleBar(id, { title: patch.title });
+            }
+          }}
+          {...displayCustomizerCommonProps}
+        />
+      );
+    }
+
+    if (offerType === "subscription") {
+      return (
+        <OfferComponentsDisplayCustomizer
+          heading="Offer Components"
+          intro="Customize the subscription decision components from here. Open a component to edit its copy and selection behavior."
+          itemGroupTitle="Subscription Components"
+          itemGroupDescription="The subscription option and one-time option are edited as separate storefront components."
+          extraSections={progressiveGiftDisplaySections}
+          items={[
+            {
+              id: "subscription-option",
+              title: subscriptionTitle || "",
+              displayTitle: subscriptionTitle || "Subscription Option",
+              description: "Primary recurring purchase option shown beside the main offer.",
+              subtitle: subscriptionSubtitle || "",
+              isDefault: subscriptionDefaultSelected,
+              fields: { title: true, subtitle: true, badge: false, isDefault: true },
+              placeholders: {
+                title: "e.g. Subscribe & Save 20%",
+                subtitle: "e.g. Delivered weekly",
+              },
+            },
+            {
+              id: "one-time-option",
+              title: oneTimeTitle || "",
+              displayTitle: oneTimeTitle || "One-time Option",
+              description: "Fallback one-time purchase option shown in the decision switcher.",
+              subtitle: oneTimeSubtitle || "",
+              fields: { title: true, subtitle: true, badge: false, isDefault: false },
+              placeholders: {
+                title: "e.g. One-time purchase",
+                subtitle: "e.g. No subscription commitment",
+              },
+            },
+          ]}
+          onUpdateItem={(id, patch) => {
+            if (id === "subscription-option") {
+              if (typeof patch.title === "string") setSubscriptionTitle(patch.title);
+              if (typeof patch.subtitle === "string") setSubscriptionSubtitle(patch.subtitle);
+              if (typeof patch.isDefault === "boolean") {
+                setSubscriptionDefaultSelected(patch.isDefault);
+              }
+              return;
+            }
+            if (id === "one-time-option") {
+              if (typeof patch.title === "string") setOneTimeTitle(patch.title);
+              if (typeof patch.subtitle === "string") setOneTimeSubtitle(patch.subtitle);
+            }
+          }}
+          {...displayCustomizerCommonProps}
+        />
+      );
+    }
+
+    return null;
+  };
+
   return (
     <fetcher.Form
       className="relative max-w-[1280px] mx-auto pb-6 px-6"
@@ -2683,306 +2964,7 @@ export function CreateNewOffer({
                   setCountdownLabel={setCountdownLabel}
                 />
 
-                {offerType === "quantity-breaks-same" ? (
-                  <QuantityBreaksDisplayCustomizer
-                    discountRules={discountRules}
-                    setDiscountRules={setDiscountRules}
-                    widgetTitle={widgetTitle}
-                    setWidgetTitle={setWidgetTitle}
-                    layoutFormat={layoutFormat}
-                    setLayoutFormat={setLayoutFormat}
-                    cardBackgroundColor={cardBackgroundColor}
-                    setCardBackgroundColor={setCardBackgroundColor}
-                    accentColor={accentColor}
-                    setAccentColor={setAccentColor}
-                    borderColor={borderColor}
-                    setBorderColor={setBorderColor}
-                    labelColor={labelColor}
-                    setLabelColor={setLabelColor}
-                    titleFontSize={titleFontSize}
-                    setTitleFontSize={setTitleFontSize}
-                    titleFontWeight={titleFontWeight}
-                    setTitleFontWeight={setTitleFontWeight}
-                    titleColor={titleColor}
-                    setTitleColor={setTitleColor}
-                    showCustomButton={showCustomButton}
-                    setShowCustomButton={setShowCustomButton}
-                    buttonText={buttonText}
-                    setButtonText={setButtonText}
-                    buttonPrimaryColor={buttonPrimaryColor}
-                    setButtonPrimaryColor={setButtonPrimaryColor}
-                  />
-                ) : (
-                  <>
-                    <div className="mb-6">
-                      <label className="block text-[14px] font-medium text-[#1c1f23] mb-2">
-                        Widget Title
-                      </label>
-                      <Input
-                        size="large"
-                        value={widgetTitle}
-                        placeholder="e.g. Bundle & Save"
-                        onChange={(e) =>
-                          setWidgetTitle(e.target.value.replace(/[]+/g, " "))
-                        }
-                        maxLength={OFFER_TEXT_LIMITS.widgetTitle}
-                        showCount
-                      />
-                      <p className="text-[13px] text-[#5c6166] mt-1">
-                        The main heading displayed above your bundle options
-                      </p>
-                    </div>
-
-                    <div className="mb-6">
-                      <label className="block text-[14px] font-medium text-[#1c1f23] mb-2">
-                        Layout Format
-                      </label>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div
-                          role="button"
-                          tabIndex={0}
-                          className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
-                            layoutFormat === "vertical"
-                              ? "border-[#008060] bg-[#f0faf6]"
-                              : "border-gray-200 bg-white"
-                          }`}
-                          onClick={(e) => {
-                            setLayoutFormat("vertical");
-                            e.preventDefault();
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              setLayoutFormat("vertical");
-                              e.preventDefault();
-                            }
-                          }}
-                        >
-                          <div className="font-medium mb-1 text-[#1c1f23]">
-                            Vertical Stack
-                          </div>
-                          <div className="text-[13px] text-[#5c6166]">
-                            Products stacked vertically
-                          </div>
-                        </div>
-                        <div
-                          role="button"
-                          tabIndex={0}
-                          className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
-                            layoutFormat === "horizontal"
-                              ? "border-[#008060] bg-[#f0faf6]"
-                              : "border-gray-200 bg-white"
-                          }`}
-                          onClick={(e) => {
-                            setLayoutFormat("horizontal");
-                            e.preventDefault();
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              setLayoutFormat("horizontal");
-                              e.preventDefault();
-                            }
-                          }}
-                        >
-                          <div className="font-medium mb-1 text-[#1c1f23]">
-                            Horizontal Grid
-                          </div>
-                          <div className="text-[13px] text-[#5c6166]">
-                            Products in a row
-                          </div>
-                        </div>
-                        <div
-                          role="button"
-                          tabIndex={0}
-                          className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
-                            layoutFormat === "card"
-                              ? "border-[#008060] bg-[#f0faf6]"
-                              : "border-gray-200 bg-white"
-                          }`}
-                          onClick={(e) => {
-                            setLayoutFormat("card");
-                            e.preventDefault();
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              setLayoutFormat("card");
-                              e.preventDefault();
-                            }
-                          }}
-                        >
-                          <div className="font-medium mb-1 text-[#1c1f23]">
-                            Card Grid
-                          </div>
-                          <div className="text-[13px] text-[#5c6166]">
-                            2x2 grid layout
-                          </div>
-                        </div>
-                        <div
-                          role="button"
-                          tabIndex={0}
-                          className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
-                            layoutFormat === "compact"
-                              ? "border-[#008060] bg-[#f0faf6]"
-                              : "border-gray-200 bg-white"
-                          }`}
-                          onClick={(e) => {
-                            setLayoutFormat("compact");
-                            e.preventDefault();
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              setLayoutFormat("compact");
-                              e.preventDefault();
-                            }
-                          }}
-                        >
-                          <div className="font-medium mb-1 text-[#1c1f23]">
-                            Compact List
-                          </div>
-                          <div className="text-[13px] text-[#5c6166]">
-                            Condensed view
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mb-6">
-                      <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                        Card & Typography Colors
-                      </h3>
-                      <div className="grid grid-cols-2 gap-4">
-                        <label className="block text-[14px] font-medium text-[#1c1f23]">
-                          Card Background Color
-                          <input
-                            type="color"
-                            value={cardBackgroundColor}
-                            onChange={(e) =>
-                              setCardBackgroundColor(e.target.value)
-                            }
-                            className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1 cursor-pointer"
-                          />
-                        </label>
-                        <label className="block text-[14px] font-medium text-[#1c1f23]">
-                          Accent Color
-                          <input
-                            type="color"
-                            value={accentColor}
-                            onChange={(e) => setAccentColor(e.target.value)}
-                            className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1 cursor-pointer"
-                          />
-                        </label>
-                        <label className="block text-[14px] font-medium text-[#1c1f23]">
-                          Border Color
-                          <input
-                            type="color"
-                            value={borderColor}
-                            onChange={(e) => setBorderColor(e.target.value)}
-                            className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1 cursor-pointer"
-                          />
-                        </label>
-                        <label className="block text-[14px] font-medium text-[#1c1f23]">
-                          Label Text Color
-                          <input
-                            type="color"
-                            value={labelColor}
-                            onChange={(e) => setLabelColor(e.target.value)}
-                            className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1 cursor-pointer"
-                          />
-                        </label>
-                      </div>
-                    </div>
-
-                    <div className="mb-6">
-                      <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                        Title Typography
-                      </h3>
-                      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-                        <label className="block text-[14px] font-medium text-[#1c1f23]">
-                          Font Size (px)
-                          <Input
-                            size="large"
-                            type="number"
-                            min={10}
-                            max={36}
-                            value={titleFontSize}
-                            onChange={(e) => setTitleFontSize(Number(e.target.value))}
-                            className="mt-1"
-                          />
-                        </label>
-                        <label className="block text-[14px] font-medium text-[#1c1f23]">
-                          Font Weight
-                          <Select
-                            size="large"
-                            value={titleFontWeight}
-                            onChange={(val) => setTitleFontWeight(val)}
-                            className="w-full mt-1"
-                            options={[
-                              { label: "Regular (400)", value: "400" },
-                              { label: "Medium (500)", value: "500" },
-                              { label: "Semi Bold (600)", value: "600" },
-                              { label: "Bold (700)", value: "700" }
-                            ]}
-                          />
-                        </label>
-                        <label className="block text-[14px] font-medium text-[#1c1f23]">
-                          Title Color
-                          <input
-                            type="color"
-                            value={titleColor}
-                            onChange={(e) => setTitleColor(e.target.value)}
-                            className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1 cursor-pointer"
-                          />
-                        </label>
-                      </div>
-                    </div>
-
-                    <div className="mb-6">
-                      <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                        Button Style & Extra
-                      </h3>
-                      <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg mb-4">
-                        <div>
-                          <div className="text-[14px] font-medium text-[#1c1f23]">
-                            Show App's Add to Cart Button
-                          </div>
-                          <div className="text-[13px] text-[#5c6166]">
-                            If disabled, customers will use your theme's native Add to Cart button.
-                          </div>
-                        </div>
-                        <Switch
-                          checked={showCustomButton}
-                          onChange={(checked) => setShowCustomButton(checked)}
-                        />
-                      </div>
-                      
-                      {showCustomButton && (
-                        <div className="grid grid-cols-2 gap-4">
-                          <label className="block text-[14px] font-medium text-[#1c1f23]">
-                            Button Text
-                            <Input
-                              size="large"
-                              value={buttonText}
-                              onChange={(e) =>
-                                setButtonText(e.target.value.replace(/[]+/g, " "))
-                              }
-                              className="mt-1"
-                              maxLength={OFFER_TEXT_LIMITS.buttonText}
-                              showCount
-                            />
-                          </label>
-                          <label className="block text-[14px] font-medium text-[#1c1f23]">
-                            Button Color
-                            <input
-                              type="color"
-                              value={buttonPrimaryColor}
-                              onChange={(e) => setButtonPrimaryColor(e.target.value)}
-                              className="w-full h-10 mt-1 border border-gray-300 rounded-md p-1 cursor-pointer"
-                            />
-                          </label>
-                        </div>
-                      )}
-                    </div>
-                  </>
-                )}
+                {renderDisplayCustomizer()}
               </div>
 
               <div className="create-offer-sticky-preview">

@@ -61,11 +61,11 @@ export default function DifferentProductsLogicEditor({
   return (
     <div>
       <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-        Logic Block: Cross-product Tiers
+        Logic Block: Offer Rules
       </h3>
       <p className="text-[13px] text-[#5c6166] mb-4 font-normal">
-        Mix simple quantity discounts and BXGY-style tiers across the shared product
-        pool. Each tier can target different buy and reward products.
+        Configure cross-product rules across the shared pool. Each rule can be a
+        quantity break or a BXGY reward flow.
       </p>
 
       {differentProductsDiscountRules.map((rule, index) => {
@@ -82,34 +82,85 @@ export default function DifferentProductsLogicEditor({
         return (
           <div className="create-offer-discount-card" key={`${rule.tierType}-${index}`}>
             <div className="create-offer-discount-body">
-              <div className="mb-3">
-                <div className="mb-1 text-[12px] font-medium text-[#5c6166]">
-                  Tier Type
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="text-[14px] font-semibold text-[#1c1f23]">
+                  Rule {index + 1}
                 </div>
-                <Segmented
-                  value={rule.tierType}
-                  options={[
-                    { label: "Simple", value: "simple" },
-                    { label: "BXGY", value: "bxgy" },
-                  ]}
-                  onChange={(value) => {
-                    const tierType = value as DifferentProductsDiscountRule["tierType"];
-                    updateRule(index, {
-                      tierType,
-                      getQuantity: tierType === "bxgy" ? Math.max(1, rule.getQuantity || 1) : 0,
-                      getProductIds: tierType === "bxgy" ? rule.getProductIds : [],
-                      discountPercent:
-                        tierType === "bxgy" && rule.discountPercent === 0
-                          ? 100
-                          : rule.discountPercent,
+                <Button
+                  danger
+                  size="small"
+                  onClick={() => {
+                    setDifferentProductsDiscountRules((prev) => {
+                      if (prev.length <= 1) return prev;
+                      return prev.filter((_, currentIndex) => currentIndex !== index);
                     });
                   }}
-                />
+                  disabled={differentProductsDiscountRules.length <= 1}
+                >
+                  Remove
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+                <div>
+                  <div className="mb-1 text-[12px] font-medium text-[#5c6166]">
+                    Discount Type
+                  </div>
+                  <Segmented
+                    value={rule.tierType}
+                    options={[
+                      { label: "Quantity Break", value: "simple" },
+                      { label: "BXGY", value: "bxgy" },
+                    ]}
+                    onChange={(value) => {
+                      const tierType = value as DifferentProductsDiscountRule["tierType"];
+                      updateRule(index, {
+                        tierType,
+                        getQuantity: tierType === "bxgy" ? Math.max(1, rule.getQuantity || 1) : 0,
+                        getProductIds: tierType === "bxgy" ? rule.getProductIds : [],
+                        discountPercent:
+                          tierType === "bxgy" && rule.discountPercent === 0
+                            ? 100
+                            : rule.discountPercent,
+                      });
+                    }}
+                  />
+                </div>
+
+                <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-3 py-3">
+                  <div className="text-[12px] font-medium uppercase tracking-[0.05em] text-[#5c6166]">
+                    Condition Type
+                  </div>
+                  <div className="mt-1 text-[14px] font-medium text-[#1c1f23]">
+                    {rule.tierType === "bxgy" ? "Buy X, Get Y" : "Quantity threshold"}
+                  </div>
+                  <div className="mt-1 text-[12px] text-[#5c6166]">
+                    {rule.tierType === "bxgy"
+                      ? "Uses dedicated buy and get quantities across the selected product pool."
+                      : "Unlocks a shared discount when customers reach the threshold."}
+                  </div>
+                </div>
+
+                <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-3 py-3">
+                  <div className="text-[12px] font-medium uppercase tracking-[0.05em] text-[#5c6166]">
+                    Reward Summary
+                  </div>
+                  <div className="mt-1 text-[14px] font-medium text-[#1c1f23]">
+                    {rule.tierType === "bxgy"
+                      ? "Percentage discount on reward products"
+                      : "Percentage discount on eligible products"}
+                  </div>
+                  <div className="mt-1 text-[12px] text-[#5c6166]">
+                    {rule.tierType === "bxgy"
+                      ? "Reward products can be narrower than the buy scope."
+                      : "The selected product pool shares the same discount rule."}
+                  </div>
+                </div>
               </div>
 
               <div className="create-offer-discount-form-row create-offer-discount-form-row--inline">
                 <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                  Count Threshold
+                  Activation Quantity
                   <Input
                     size="large"
                     type="number"
@@ -127,7 +178,7 @@ export default function DifferentProductsLogicEditor({
                   />
                 </label>
                 <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                  Discount (%)
+                  {rule.tierType === "bxgy" ? "Reward Discount (%)" : "Discount (%)"}
                   <Input
                     size="large"
                     type="number"
@@ -372,18 +423,6 @@ export default function DifferentProductsLogicEditor({
                 >
                   Set as Default Selected
                 </Checkbox>
-                <Button
-                  danger
-                  onClick={() => {
-                    setDifferentProductsDiscountRules((prev) => {
-                      if (prev.length <= 1) return prev;
-                      return prev.filter((_, currentIndex) => currentIndex !== index);
-                    });
-                  }}
-                  disabled={differentProductsDiscountRules.length <= 1}
-                >
-                  Remove
-                </Button>
               </div>
             </div>
           </div>
@@ -395,15 +434,15 @@ export default function DifferentProductsLogicEditor({
           trigger={["click"]}
           menu={{
             items: [
-              { key: "simple", label: "Add Simple Tier" },
-              { key: "bxgy", label: "Add BXGY Tier" },
+              { key: "simple", label: "Add Quantity Break Rule" },
+              { key: "bxgy", label: "Add BXGY Rule" },
             ],
             onClick: ({ key }) => {
               appendTier(key === "bxgy" ? "bxgy" : "simple");
             },
           }}
         >
-          <Button type="dashed">+ Add tier</Button>
+          <Button type="dashed">+ Add rule</Button>
         </Dropdown>
       </div>
     </div>

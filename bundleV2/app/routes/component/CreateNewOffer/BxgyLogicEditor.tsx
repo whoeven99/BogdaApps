@@ -132,20 +132,79 @@ export default function BxgyLogicEditor({
 
       {showRules ? (
         <div>
-          <div className="create-offer-panel create-offer-panel--muted mb-4">
-            <div className="create-offer-panel__header">
-              <div>
-                <div className="create-offer-panel__eyebrow">Discount Logic</div>
-                <h3 className="create-offer-panel__title">BXGY Rules</h3>
-              </div>
-            </div>
-          </div>
+          <h3 className="mb-3 text-[14px] font-medium text-[#1c1f23]">
+            Logic Block: Offer Rules
+          </h3>
+          <p className="mb-4 text-[13px] font-normal text-[#5c6166]">
+            BXGY rules use a fixed discount type. Configure the buy condition, the
+            reward quantity, and the reward discount per rule.
+          </p>
           {bxgyDiscountRules.map((rule, index) => (
             <div className="create-offer-discount-card" key={index}>
               <div className="create-offer-discount-body">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div className="text-[14px] font-semibold text-[#1c1f23]">
+                    Rule {index + 1}
+                  </div>
+                  <Button
+                    danger
+                    size="small"
+                    onClick={() => {
+                      setBxgyDiscountRules((prev) => {
+                        if (prev.length <= 1) return prev;
+                        return prev.filter((_, currentIndex) => currentIndex !== index);
+                      });
+                    }}
+                    disabled={bxgyDiscountRules.length <= 1}
+                  >
+                    Remove
+                  </Button>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+                  <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-3 py-3">
+                    <div className="text-[12px] font-medium uppercase tracking-[0.05em] text-[#5c6166]">
+                      Discount Type
+                    </div>
+                    <div className="mt-1 text-[14px] font-medium text-[#1c1f23]">
+                      BXGY
+                    </div>
+                    <div className="mt-1 text-[12px] text-[#5c6166]">
+                      Buy qualifying products and reward the Y products from the
+                      selected reward scope.
+                    </div>
+                  </div>
+
+                  <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-3 py-3">
+                    <div className="text-[12px] font-medium uppercase tracking-[0.05em] text-[#5c6166]">
+                      Condition Type
+                    </div>
+                    <div className="mt-1 text-[14px] font-medium text-[#1c1f23]">
+                      Buy X, Get Y
+                    </div>
+                    <div className="mt-1 text-[12px] text-[#5c6166]">
+                      Uses the buy and get quantities below to define the unlock
+                      rule.
+                    </div>
+                  </div>
+
+                  <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-3 py-3">
+                    <div className="text-[12px] font-medium uppercase tracking-[0.05em] text-[#5c6166]">
+                      Reward Summary
+                    </div>
+                    <div className="mt-1 text-[14px] font-medium text-[#1c1f23]">
+                      Percentage discount on Y products
+                    </div>
+                    <div className="mt-1 text-[12px] text-[#5c6166]">
+                      Set the reward percentage below. `100%` means the reward
+                      products are free.
+                    </div>
+                  </div>
+                </div>
+
                 <div className="create-offer-discount-form-row create-offer-discount-form-row--inline">
                   <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                    Cart quantity
+                    Activation Quantity
                     <Input
                       size="large"
                       type="number"
@@ -220,7 +279,7 @@ export default function BxgyLogicEditor({
                     />
                   </label>
                   <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                    Discount (%)
+                    Reward Discount (%)
                     <Input
                       size="large"
                       type="number"
@@ -339,6 +398,11 @@ export default function BxgyLogicEditor({
                       }}
                     />
                   </label>
+                  <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-3 py-3 text-[13px] text-[#5c6166]">
+                    Buy scope and reward scope are managed in the modules above,
+                    so each BXGY rule here only controls the unlock math and
+                    reward intensity.
+                  </div>
                 </div>
 
                 <div className="create-offer-inline-row">
@@ -356,18 +420,6 @@ export default function BxgyLogicEditor({
                   >
                     Set as Default Selected
                   </Checkbox>
-                  <Button
-                    danger
-                    onClick={() => {
-                      setBxgyDiscountRules((prev) => {
-                        if (prev.length <= 1) return prev;
-                        return prev.filter((_, currentIndex) => currentIndex !== index);
-                      });
-                    }}
-                    disabled={bxgyDiscountRules.length <= 1}
-                  >
-                    Remove
-                  </Button>
                 </div>
               </div>
             </div>
@@ -375,12 +427,12 @@ export default function BxgyLogicEditor({
           <Dropdown
             trigger={["click"]}
             menu={{
-              items: [{ key: "bxgy", label: "Add BXGY Tier" }],
+              items: [{ key: "bxgy", label: "Add BXGY Rule" }],
               onClick: appendBxgyTier,
             }}
           >
             <Button type="dashed" className="w-full">
-              + Add tier
+              + Add rule
             </Button>
           </Dropdown>
         </div>

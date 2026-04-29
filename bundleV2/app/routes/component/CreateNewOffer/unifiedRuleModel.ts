@@ -1,10 +1,18 @@
 import type { DiscountRule } from "../../../utils/offerParsing";
 
-export const DISCOUNT_CLASS_OPTIONS = [
-  { label: "Product discount", value: "product" },
-  { label: "Order discount", value: "order" },
-  { label: "Shipping discount", value: "shipping" },
-] as Array<{ label: string; value: "product" | "order" | "shipping" }>;
+export type DiscountTypeId =
+  | "quantity_break"
+  | "order_discount"
+  | "free_shipping"
+  | "free_gift"
+  | "bxgy";
+
+export const DISCOUNT_TYPE_OPTIONS = [
+  { label: "Quantity break", value: "quantity_break" },
+  { label: "Order discount", value: "order_discount" },
+  { label: "Free shipping", value: "free_shipping" },
+  { label: "Free gift", value: "free_gift" },
+] as Array<{ label: string; value: DiscountTypeId }>;
 
 export const CONDITION_TYPE_OPTIONS = [
   { label: "Item quantity", value: "item_quantity" },
@@ -80,7 +88,8 @@ export function createRuleFromTemplate(
     | "product_discount"
     | "order_discount"
     | "shipping_discount"
-    | "free_gift",
+    | "free_gift"
+    | "bxgy",
 ): DiscountRule {
   if (template === "shipping_discount") {
     return normalizeUnifiedRule({
@@ -108,6 +117,18 @@ export function createRuleFromTemplate(
     });
   }
 
+  if (template === "bxgy") {
+    return normalizeUnifiedRule({
+      id: buildRuleId(),
+      count: 2,
+      discountPercent: 50,
+      discountClass: "product",
+      offerKind: "percentage_discount",
+      conditionType: "item_quantity",
+      rewardType: "percentage_off",
+    });
+  }
+
   return normalizeUnifiedRule({
     id: buildRuleId(),
     count: 2,
@@ -117,6 +138,82 @@ export function createRuleFromTemplate(
     conditionType: "item_quantity",
     rewardType: "percentage_off",
   });
+}
+
+export function getDiscountTypeFromRule(rule: DiscountRule): DiscountTypeId {
+  const normalized = normalizeUnifiedRule(rule);
+  if (normalized.rewardType === "gift_product") return "free_gift";
+  if (normalized.rewardType === "free_shipping") return "free_shipping";
+  if (normalized.discountClass === "order") return "order_discount";
+  return "quantity_break";
+}
+
+export function applyDiscountType(rule: DiscountRule, discountType: DiscountTypeId): DiscountRule {
+  const normalized = normalizeUnifiedRule(rule);
+
+  if (discountType === "free_shipping") {
+    return syncRuleDependencies({
+      ...normalized,
+      discountClass: "shipping",
+      offerKind: "free_shipping",
+      rewardType: "free_shipping",
+      discountPercent: 0,
+    });
+  }
+
+  if (discountType === "free_gift") {
+    return syncRuleDependencies({
+      ...normalized,
+      discountClass: "product",
+      offerKind: "free_gift",
+      rewardType: "gift_product",
+      giftQuantity: Math.max(1, Math.trunc(Number(normalized.giftQuantity) || 1)),
+      discountPercent: 0,
+    });
+  }
+
+  if (discountType === "order_discount") {
+    return syncRuleDependencies({
+      ...normalized,
+      discountClass: "order",
+      offerKind: "percentage_discount",
+      rewardType: "percentage_off",
+      discountPercent: Math.max(1, Number(normalized.discountPercent) || 15),
+    });
+  }
+
+  if (discountType === "bxgy") {
+    return syncRuleDependencies({
+      ...normalized,
+      discountClass: "product",
+      offerKind: "percentage_discount",
+      rewardType: "percentage_off",
+    });
+  }
+
+  return syncRuleDependencies({
+    ...normalized,
+    discountClass: "product",
+    offerKind: "percentage_discount",
+    rewardType: "percentage_off",
+    discountPercent: Math.max(1, Number(normalized.discountPercent) || 15),
+  });
+}
+
+export function getAvailableDiscountTypes(offerType?: string): Array<{
+  label: string;
+  value: DiscountTypeId;
+}> {
+  if (offerType === "bxgy") {
+    return [{ label: "BXGY", value: "bxgy" }];
+  }
+  if (offerType === "free-gift") {
+    return [
+      { label: "Free gift", value: "free_gift" },
+      { label: "Free shipping", value: "free_shipping" },
+    ];
+  }
+  return DISCOUNT_TYPE_OPTIONS;
 }
 
 export function syncRuleDependencies(rule: DiscountRule): DiscountRule {

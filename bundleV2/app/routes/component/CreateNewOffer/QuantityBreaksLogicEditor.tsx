@@ -13,6 +13,7 @@ type Props = {
     variantsCount: number;
     hasSubscription: boolean;
   }>;
+  offerType?: string;
   section?: "tiers" | "presentation" | "all";
 };
 
@@ -20,6 +21,7 @@ export default function QuantityBreaksLogicEditor({
   discountRules,
   setDiscountRules,
   selectedProductsData = [],
+  offerType,
   section = "all",
 }: Props) {
   const showTiers = section === "all" || section === "tiers";
@@ -43,6 +45,7 @@ export default function QuantityBreaksLogicEditor({
           rules={discountRules}
           setRules={setDiscountRules}
           selectedProductsData={selectedProductsData}
+          offerType={offerType}
         />
       ) : null}
       {showPresentation ? (

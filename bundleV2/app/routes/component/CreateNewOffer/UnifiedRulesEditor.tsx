@@ -2,10 +2,11 @@ import { Button, Dropdown, Input, Select } from "antd";
 import type { DraftSelectedProduct } from "./campaignDraft";
 import type { DiscountRule } from "../../../utils/offerParsing";
 import {
+  applyDiscountType,
   CONDITION_TYPE_OPTIONS,
-  DISCOUNT_CLASS_OPTIONS,
   createRuleFromTemplate,
-  getRuleRewardOptions,
+  getAvailableDiscountTypes,
+  getDiscountTypeFromRule,
   getUnifiedRuleIssues,
   syncRuleDependencies,
 } from "./unifiedRuleModel";
@@ -14,18 +15,21 @@ type Props = {
   rules: DiscountRule[];
   setRules: React.Dispatch<React.SetStateAction<DiscountRule[]>>;
   selectedProductsData: DraftSelectedProduct[];
+  offerType?: string;
 };
 
 export default function UnifiedRulesEditor({
   rules,
   setRules,
   selectedProductsData,
+  offerType,
 }: Props) {
   const issues = getUnifiedRuleIssues(rules);
   const productOptions = selectedProductsData.map((product) => ({
     label: product.title,
     value: String(product.id),
   }));
+  const discountTypeOptions = getAvailableDiscountTypes(offerType);
 
   const updateRule = (index: number, patch: Partial<DiscountRule>) => {
     setRules((prev) =>
@@ -42,7 +46,8 @@ export default function UnifiedRulesEditor({
       | "product_discount"
       | "order_discount"
       | "shipping_discount"
-      | "free_gift",
+      | "free_gift"
+      | "bxgy",
   ) => {
     setRules((prev) => [...prev.map(syncRuleDependencies), createRuleFromTemplate(template)]);
   };
@@ -53,9 +58,8 @@ export default function UnifiedRulesEditor({
         Logic Block: Unified Rules
       </h3>
       <p className="mb-4 text-[13px] font-normal text-[#5c6166]">
-        Define what condition qualifies, which Shopify discount class it belongs to,
-        and what reward the customer receives. This is the foundation for mixed
-        discount configuration.
+        Choose the discount type first. The rule form then switches to the right
+        condition and reward fields automatically.
       </p>
 
       {issues.length > 0 ? (
@@ -78,10 +82,14 @@ export default function UnifiedRulesEditor({
 
       <div className="flex flex-col gap-4">
         {rules.map((rule, index) => {
-          const rewardOptions = getRuleRewardOptions(rule.discountClass);
+          const discountType = getDiscountTypeFromRule(rule);
           const usesCartAmount = rule.conditionType === "cart_amount";
           const usesGiftReward = rule.rewardType === "gift_product";
           const usesShippingReward = rule.rewardType === "free_shipping";
+          const usesPercentageReward = rule.rewardType === "percentage_off";
+          const usesQuantityBreak = discountType === "quantity_break";
+          const usesOrderDiscount = discountType === "order_discount";
+          const usesBxgy = discountType === "bxgy";
 
           return (
             <div
@@ -106,23 +114,13 @@ export default function UnifiedRulesEditor({
 
               <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
                 <label className="block text-[14px] font-medium text-[#1c1f23]">
-                  Discount Class
+                  Discount Type
                   <Select
                     size="large"
                     className="mt-1 w-full"
-                    value={rule.discountClass || "product"}
-                    options={DISCOUNT_CLASS_OPTIONS}
-                    onChange={(value) =>
-                      updateRule(index, {
-                        discountClass: value,
-                        rewardType:
-                          value === "shipping"
-                            ? "free_shipping"
-                            : rule.rewardType === "free_shipping"
-                              ? "percentage_off"
-                              : rule.rewardType,
-                      })
-                    }
+                    value={discountType}
+                    options={discountTypeOptions}
+                    onChange={(value) => updateRule(index, applyDiscountType(rule, value))}
                   />
                 </label>
 
@@ -137,21 +135,42 @@ export default function UnifiedRulesEditor({
                   />
                 </label>
 
-                <label className="block text-[14px] font-medium text-[#1c1f23]">
-                  Reward Type
-                  <Select
-                    size="large"
-                    className="mt-1 w-full"
-                    value={rule.rewardType || "percentage_off"}
-                    options={rewardOptions}
-                    onChange={(value) => updateRule(index, { rewardType: value })}
-                  />
-                </label>
+                <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-3 py-3">
+                  <div className="text-[12px] font-medium uppercase tracking-[0.05em] text-[#5c6166]">
+                    Reward Summary
+                  </div>
+                  <div className="mt-1 text-[14px] font-medium text-[#1c1f23]">
+                    {usesGiftReward
+                      ? "Gift product reward"
+                      : usesShippingReward
+                        ? "Free shipping reward"
+                        : usesOrderDiscount
+                          ? "Order percentage discount"
+                          : usesBxgy
+                            ? "BXGY percentage discount"
+                            : "Product percentage discount"}
+                  </div>
+                  <div className="mt-1 text-[12px] text-[#5c6166]">
+                    {usesGiftReward
+                      ? "Reward products are configured below."
+                      : usesShippingReward
+                        ? "This rule maps to the shipping discount function automatically."
+                        : usesOrderDiscount
+                          ? "Applies a subtotal-level order discount when the rule is satisfied."
+                          : usesBxgy
+                            ? "This type will later expand into buy/get specific rule fields."
+                            : "Applies a percentage discount to the matched products."}
+                  </div>
+                </div>
               </div>
 
               <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
                 <label className="block text-[14px] font-medium text-[#1c1f23]">
-                  {usesCartAmount ? "Cart Amount Threshold" : "Item Quantity"}
+                  {usesCartAmount
+                    ? "Cart Amount Threshold"
+                    : usesBxgy
+                      ? "Buy Quantity"
+                      : "Item Quantity"}
                   <Input
                     size="large"
                     type="number"
@@ -171,9 +190,15 @@ export default function UnifiedRulesEditor({
                   />
                 </label>
 
-                {rule.rewardType === "percentage_off" ? (
+                {usesPercentageReward ? (
                   <label className="block text-[14px] font-medium text-[#1c1f23]">
-                    Discount (%)
+                    {usesOrderDiscount
+                      ? "Order Discount (%)"
+                      : usesBxgy
+                        ? "Reward Discount (%)"
+                        : usesQuantityBreak
+                          ? "Discount (%)"
+                          : "Discount (%)"}
                     <Input
                       size="large"
                       type="number"
@@ -216,10 +241,11 @@ export default function UnifiedRulesEditor({
                   </label>
                 ) : null}
 
-                {usesShippingReward ? (
+                {usesShippingReward || usesBxgy ? (
                   <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-3 py-3 text-[13px] text-[#5c6166]">
-                    Shipping discount rules will later map to the delivery discount
-                    function target.
+                    {usesShippingReward
+                      ? "Free shipping rules map to the delivery discount function target."
+                      : "BXGY is currently represented by the shared rule shell; buy/get product selectors are the next step."}
                   </div>
                 ) : null}
               </div>
@@ -248,19 +274,27 @@ export default function UnifiedRulesEditor({
       <Dropdown
         trigger={["click"]}
         menu={{
-          items: [
-            { key: "product_discount", label: "Add Product Discount Rule" },
-            { key: "order_discount", label: "Add Order Discount Rule" },
-            { key: "shipping_discount", label: "Add Shipping Discount Rule" },
-            { key: "free_gift", label: "Add Free Gift Rule" },
-          ],
+          items: discountTypeOptions.map((option) => ({
+            key:
+              option.value === "quantity_break"
+                ? "product_discount"
+                : option.value === "order_discount"
+                  ? "order_discount"
+                  : option.value === "free_shipping"
+                    ? "shipping_discount"
+                    : option.value === "free_gift"
+                      ? "free_gift"
+                      : "bxgy",
+            label: `Add ${option.label} Rule`,
+          })),
           onClick: ({ key }) =>
             appendRule(
               key as
                 | "product_discount"
                 | "order_discount"
                 | "shipping_discount"
-                | "free_gift",
+                | "free_gift"
+                | "bxgy",
             ),
         }}
       >

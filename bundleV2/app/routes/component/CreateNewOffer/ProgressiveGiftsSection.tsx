@@ -17,6 +17,7 @@ type Props = {
   value: ProgressiveGiftsConfig;
   onChange: (next: ProgressiveGiftsConfig) => void;
   showToggle?: boolean;
+  embedded?: boolean;
 };
 
 /** 生成「Bar #N」下拉选项，与店面前台档位顺序一致 */
@@ -62,6 +63,7 @@ export function ProgressiveGiftsSection({
   value,
   onChange,
   showToggle = true,
+  embedded = false,
 }: Props) {
   const barOptions = buildBarOptions(
     offerType,
@@ -107,27 +109,29 @@ export function ProgressiveGiftsSection({
   };
 
   return (
-    <div className="mt-8 border border-gray-200 rounded-lg p-4 bg-[#fafbfb]">
-      <div className="flex items-center justify-between gap-3 mb-4">
-        <div>
-          <h3 className="text-[16px] font-semibold text-[#1c1f23] m-0">Progressive gifts</h3>
-          <p className="text-[13px] text-[#5c6166] m-0 mt-1">
-            Progressive gifts currently support the "Free shipping" reward. It is
-            applied at checkout by the delivery Discount Function. Free shipping
-            depends on an active SHIPPING automatic app discount in the store. If
-            the theme does not pass line item properties to checkout, the
-            Function infers the unlocked tier by product plus line quantity. If
-            multiple offers for the same product use progressive gifts at the
-            same time, each line should include the offer id.
-          </p>
+    <div className={embedded ? "" : "mt-8 rounded-lg border border-gray-200 bg-[#fafbfb] p-4"}>
+      {!embedded ? (
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h3 className="m-0 text-[16px] font-semibold text-[#1c1f23]">Progressive gifts</h3>
+            <p className="m-0 mt-1 text-[13px] text-[#5c6166]">
+              Progressive gifts currently support the "Free shipping" reward. It is
+              applied at checkout by the delivery Discount Function. Free shipping
+              depends on an active SHIPPING automatic app discount in the store. If
+              the theme does not pass line item properties to checkout, the
+              Function infers the unlocked tier by product plus line quantity. If
+              multiple offers for the same product use progressive gifts at the
+              same time, each line should include the offer id.
+            </p>
+          </div>
+          {showToggle ? (
+            <Switch
+              checked={value.enabled}
+              onChange={(checked) => patch({ enabled: checked })}
+            />
+          ) : null}
         </div>
-        {showToggle ? (
-          <Switch
-            checked={value.enabled}
-            onChange={(checked) => patch({ enabled: checked })}
-          />
-        ) : null}
-      </div>
+      ) : null}
 
       {!value.enabled ? (
         <p className="text-[13px] text-[#5c6166]">

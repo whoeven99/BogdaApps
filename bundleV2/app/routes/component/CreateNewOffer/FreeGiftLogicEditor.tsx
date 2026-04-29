@@ -117,20 +117,76 @@ export default function FreeGiftLogicEditor({
       </div>
 
       <div>
-        <div className="create-offer-panel create-offer-panel--muted mb-4">
-          <div className="create-offer-panel__header">
-            <div>
-              <div className="create-offer-panel__eyebrow">Reward Logic</div>
-              <h3 className="create-offer-panel__title">Free Gift Tiers</h3>
-            </div>
-          </div>
-        </div>
+        <h3 className="mb-3 text-[14px] font-medium text-[#1c1f23]">
+          Logic Block: Offer Rules
+        </h3>
+        <p className="mb-4 text-[13px] font-normal text-[#5c6166]">
+          Free gift rules use a fixed discount type. Configure the trigger
+          threshold and how many gift items unlock for each rule.
+        </p>
         {freeGiftRules.map((rule, index) => (
           <div className="create-offer-discount-card" key={index}>
             <div className="create-offer-discount-body">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="text-[14px] font-semibold text-[#1c1f23]">
+                  Rule {index + 1}
+                </div>
+                <Button
+                  danger
+                  size="small"
+                  onClick={() => {
+                    setFreeGiftRules((prev) => {
+                      if (prev.length <= 1) return prev;
+                      return prev.filter((_, currentIndex) => currentIndex !== index);
+                    });
+                  }}
+                  disabled={freeGiftRules.length <= 1}
+                >
+                  Remove
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+                <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-3 py-3">
+                  <div className="text-[12px] font-medium uppercase tracking-[0.05em] text-[#5c6166]">
+                    Discount Type
+                  </div>
+                  <div className="mt-1 text-[14px] font-medium text-[#1c1f23]">
+                    Free Gift
+                  </div>
+                  <div className="mt-1 text-[12px] text-[#5c6166]">
+                    Unlocks gift items from the selected reward products.
+                  </div>
+                </div>
+
+                <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-3 py-3">
+                  <div className="text-[12px] font-medium uppercase tracking-[0.05em] text-[#5c6166]">
+                    Condition Type
+                  </div>
+                  <div className="mt-1 text-[14px] font-medium text-[#1c1f23]">
+                    Quantity threshold
+                  </div>
+                  <div className="mt-1 text-[12px] text-[#5c6166]">
+                    The customer must reach the trigger quantity to unlock the gift.
+                  </div>
+                </div>
+
+                <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-3 py-3">
+                  <div className="text-[12px] font-medium uppercase tracking-[0.05em] text-[#5c6166]">
+                    Reward Summary
+                  </div>
+                  <div className="mt-1 text-[14px] font-medium text-[#1c1f23]">
+                    Gift quantity from reward scope
+                  </div>
+                  <div className="mt-1 text-[12px] text-[#5c6166]">
+                    Gift products are selected in the module above.
+                  </div>
+                </div>
+              </div>
+
               <div className="create-offer-discount-form-row create-offer-discount-form-row--inline">
                 <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                  Cart quantity
+                  Activation Quantity
                   <Input
                     size="large"
                     type="number"
@@ -155,7 +211,7 @@ export default function FreeGiftLogicEditor({
                   />
                 </label>
                 <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                  Gift quantity
+                  Gift Quantity
                   <Input
                     size="large"
                     type="number"
@@ -256,18 +312,6 @@ export default function FreeGiftLogicEditor({
                 >
                   Set as Default Selected
                 </Checkbox>
-                <Button
-                  danger
-                  onClick={() => {
-                    setFreeGiftRules((prev) => {
-                      if (prev.length <= 1) return prev;
-                      return prev.filter((_, currentIndex) => currentIndex !== index);
-                    });
-                  }}
-                  disabled={freeGiftRules.length <= 1}
-                >
-                  Remove
-                </Button>
               </div>
             </div>
           </div>
@@ -275,12 +319,12 @@ export default function FreeGiftLogicEditor({
         <Dropdown
           trigger={["click"]}
           menu={{
-            items: [{ key: "free-gift", label: "Add Free Gift Tier" }],
+            items: [{ key: "free-gift", label: "Add Free Gift Rule" }],
             onClick: appendFreeGiftTier,
           }}
         >
           <Button type="dashed" className="w-full">
-            + Add tier
+            + Add rule
           </Button>
         </Dropdown>
       </div>
