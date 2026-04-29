@@ -72,6 +72,14 @@ type ProgressiveGiftsPayload = {
   gifts?: ProgressiveGiftRow[];
 };
 
+type UnifiedShippingRule = {
+  count: number;
+  conditionType: "item_quantity" | "cart_amount";
+  amountThreshold?: number;
+  discountClass: "product" | "order" | "shipping";
+  rewardType: "percentage_off" | "gift_product" | "free_shipping";
+};
+
 function resolveNowMs(): number | null {
   const v = Date.now();
   return Number.isFinite(v) && v > 0 ? v : null;
@@ -181,6 +189,59 @@ function parseMoneyAmount(raw: unknown): number | null {
   const n = typeof raw === "string" ? Number.parseFloat(raw) : Number(raw);
   if (!Number.isFinite(n)) return null;
   return n;
+}
+
+function extractShopifyNumericId(raw: string | undefined | null): string {
+  if (!raw) return "";
+  const source = String(raw).trim();
+  const matched = source.match(/(\d+)\s*$/);
+  return matched ? matched[1] : source;
+}
+
+function idsMatch(a: string | undefined, b: string): boolean {
+  const left = extractShopifyNumericId(a);
+  const right = extractShopifyNumericId(b);
+  if (left && right) return left === right;
+  return String(a || "") === String(b || "");
+}
+
+function parseUnifiedShippingRules(discountRulesJson?: string | null): UnifiedShippingRule[] {
+  if (!discountRulesJson) return [];
+  try {
+    const parsed = JSON.parse(discountRulesJson) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    const out: UnifiedShippingRule[] = [];
+    for (const item of parsed) {
+      if (!item || typeof item !== "object") continue;
+      const count = Math.trunc(Number((item as { count?: unknown }).count));
+      if (!Number.isFinite(count) || count < 1) continue;
+      out.push({
+        count,
+        conditionType:
+          (item as { conditionType?: unknown }).conditionType === "cart_amount"
+            ? "cart_amount"
+            : "item_quantity",
+        amountThreshold: Number.isFinite(
+          Number((item as { amountThreshold?: unknown }).amountThreshold),
+        )
+          ? Math.max(0, Number((item as { amountThreshold?: unknown }).amountThreshold))
+          : undefined,
+        discountClass:
+          (item as { discountClass?: unknown }).discountClass === "order" ||
+          (item as { discountClass?: unknown }).discountClass === "shipping"
+            ? ((item as { discountClass: "order" | "shipping" }).discountClass)
+            : "product",
+        rewardType:
+          (item as { rewardType?: unknown }).rewardType === "gift_product" ||
+          (item as { rewardType?: unknown }).rewardType === "free_shipping"
+            ? ((item as { rewardType: "gift_product" | "free_shipping" }).rewardType)
+            : "percentage_off",
+      });
+    }
+    return out;
+  } catch {
+    return [];
+  }
 }
 
 function readLineBundleProps(
@@ -347,6 +408,55 @@ function resolveOfferAndTierForProgressiveLine(
   return { offer, tier };
 }
 
+function getScopedRegularLines(
+  lines: CartDeliveryDiscountInput["cart"]["lines"],
+  offer: OfferRow,
+): CartDeliveryDiscountInput["cart"]["lines"] {
+  const selected = parseSelectedIds(offer.selectedProductsJson);
+  if (!selected.length) {
+    return lines.filter((line) => line.merchandise.__typename === "ProductVariant");
+  }
+  return lines.filter((line) => {
+    if (line.merchandise.__typename !== "ProductVariant") return false;
+    const productId = line.merchandise.product?.id;
+    const variantId = line.merchandise.id;
+    return selected.some(
+      (sid) =>
+        (!!productId && idsMatch(productId, sid)) ||
+        (!!variantId && idsMatch(variantId, sid)),
+    );
+  });
+}
+
+function hasEligibleShippingRule(
+  offer: OfferRow,
+  lines: CartDeliveryDiscountInput["cart"]["lines"],
+): boolean {
+  const scopedLines = getScopedRegularLines(lines, offer);
+  if (!scopedLines.length) return false;
+
+  const metrics = scopedLines.reduce(
+    (acc, line) => ({
+      totalQuantity: acc.totalQuantity + Math.max(1, Math.trunc(Number(line.quantity) || 1)),
+      subtotalAmount:
+        acc.subtotalAmount +
+        (parseMoneyAmount(line.cost?.amountPerQuantity?.amount) ?? 0) *
+          Math.max(1, Math.trunc(Number(line.quantity) || 1)),
+    }),
+    { totalQuantity: 0, subtotalAmount: 0 },
+  );
+
+  return parseUnifiedShippingRules(offer.discountRulesJson).some((rule) => {
+    if (rule.discountClass !== "shipping" || rule.rewardType !== "free_shipping") {
+      return false;
+    }
+    if (rule.conditionType === "cart_amount") {
+      return metrics.subtotalAmount >= Math.max(0, Number(rule.amountThreshold) || 0);
+    }
+    return metrics.totalQuantity >= Math.max(1, Math.trunc(Number(rule.count) || 1));
+  });
+}
+
 export function bundleDeliveryDiscountGenerateRun(
   input: CartDeliveryDiscountInput,
 ): CartDeliveryOptionsDiscountsGenerateRunResult {
@@ -381,6 +491,23 @@ export function bundleDeliveryDiscountGenerateRun(
 
   const marketId = input.localization.market?.id ?? undefined;
   const handlesToDiscount = new Set<string>();
+  const regularShippingOffers = offers.filter(
+    (offer) =>
+      offer.offerType !== "bxgy" &&
+      offer.offerType !== "quantity-breaks-different" &&
+      offer.offerType !== "complete-bundle" &&
+      offerScheduleAndMarketOk(offer, marketId),
+  );
+
+  for (const offer of regularShippingOffers) {
+    if (!hasEligibleShippingRule(offer, input.cart.lines)) continue;
+    for (const group of input.cart.deliveryGroups) {
+      for (const opt of group.deliveryOptions) {
+        if (opt.deliveryMethodType !== DeliveryMethod.Shipping) continue;
+        handlesToDiscount.add(String(opt.handle));
+      }
+    }
+  }
 
   for (const line of input.cart.lines) {
     if (line.merchandise.__typename !== "ProductVariant") {

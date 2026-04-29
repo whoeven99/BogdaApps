@@ -1,5 +1,10 @@
 query CartInput {
   cart {
+    cost {
+      subtotalAmount {
+        amount
+      }
+    }
     lines {
       id
       quantity

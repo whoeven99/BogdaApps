@@ -162,13 +162,32 @@ export function syncRuleDependencies(rule: DiscountRule): DiscountRule {
   };
 }
 
-export function isLegacyExecutableDiscountRule(rule: DiscountRule): boolean {
+export function isExecutableDiscountRule(rule: DiscountRule): boolean {
   const normalized = normalizeUnifiedRule(rule);
-  return (
+  if (
     normalized.discountClass === "product" &&
     normalized.conditionType === "item_quantity" &&
     normalized.rewardType === "percentage_off"
-  );
+  ) {
+    return true;
+  }
+  if (
+    normalized.discountClass === "order" &&
+    normalized.rewardType === "percentage_off" &&
+    (normalized.conditionType === "item_quantity" ||
+      normalized.conditionType === "cart_amount")
+  ) {
+    return true;
+  }
+  if (
+    normalized.discountClass === "shipping" &&
+    normalized.rewardType === "free_shipping" &&
+    (normalized.conditionType === "item_quantity" ||
+      normalized.conditionType === "cart_amount")
+  ) {
+    return true;
+  }
+  return false;
 }
 
 export function getRuleRewardOptions(discountClass: DiscountRule["discountClass"]) {
@@ -258,12 +277,12 @@ export function getUnifiedRuleIssues(rules: DiscountRule[]): UnifiedRuleIssue[] 
       seenKeys.set(duplicateKey, index);
     }
 
-    if (!isLegacyExecutableDiscountRule(rule)) {
+    if (!isExecutableDiscountRule(rule)) {
       issues.push({
         ruleIndex: index,
         severity: "warning",
         message:
-          "This rule is captured in the new rule model, but the current execution layer still only applies product percentage discounts by item quantity.",
+          "This rule is captured in the new rule model, but the current execution layer does not fully support this combination yet.",
       });
     }
   });
@@ -280,10 +299,10 @@ export function getUnifiedRuleBlockingMessage(rules: DiscountRule[]): string | n
   }
 
   const unsupportedRule = normalizeUnifiedRules(rules).find(
-    (rule) => !isLegacyExecutableDiscountRule(rule),
+    (rule) => !isExecutableDiscountRule(rule),
   );
   if (unsupportedRule) {
-    return "Only product percentage discounts triggered by item quantity can be published right now. Order, shipping, cart amount, and gift-product execution will need the next backend mapping step.";
+    return "Gift product rewards and other unsupported combinations cannot be published yet. Supported combinations are: product percentage by item quantity, order percentage by item quantity or cart amount, and free shipping by item quantity or cart amount.";
   }
 
   return null;

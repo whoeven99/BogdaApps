@@ -29,7 +29,7 @@ import LogicEditorsRenderer from "./LogicEditorsRenderer";
 import QuantityBreaksDisplayCustomizer from "./QuantityBreaksDisplayCustomizer";
 import ScheduleTargetingEditor from "./ScheduleTargetingEditor";
 import { getStarterTemplateDefaults } from "./starterTemplateDefaults";
-import { getUnifiedRuleBlockingMessage, isLegacyExecutableDiscountRule } from "./unifiedRuleModel";
+import { getUnifiedRuleBlockingMessage, isExecutableDiscountRule } from "./unifiedRuleModel";
 import {
   OFFER_TEXT_LIMITS,
   buildLegacyFieldsFromCampaignConfig,
@@ -286,11 +286,26 @@ function calculatePreviewBundleAmounts(
 function sanitizeDiscountRules(tiers: DiscountRule[]): DiscountRule[] {
   const dedupedByKey = new Map<string, DiscountRule>();
   for (const tier of tiers) {
-    if (!isLegacyExecutableDiscountRule(tier)) continue;
+    if (!isExecutableDiscountRule(tier)) continue;
     if (!Number.isFinite(tier.count) || tier.count < 1) continue;
-    if (!Number.isFinite(tier.discountPercent)) continue;
+    if (
+      tier.rewardType === "percentage_off" &&
+      !Number.isFinite(tier.discountPercent)
+    ) {
+      continue;
+    }
     const normalizedCount = Math.trunc(tier.count);
-    dedupedByKey.set(String(normalizedCount), {
+    const normalizedThreshold =
+      tier.conditionType === "cart_amount"
+        ? Math.max(0, Number(tier.amountThreshold) || 0)
+        : undefined;
+    const key = [
+      tier.discountClass || "product",
+      tier.conditionType || "item_quantity",
+      normalizedThreshold ?? normalizedCount,
+      tier.rewardType || "percentage_off",
+    ].join("|");
+    dedupedByKey.set(key, {
       id: tier.id,
       count: normalizedCount,
       discountPercent: Math.max(0, Math.min(100, tier.discountPercent)),
@@ -298,12 +313,23 @@ function sanitizeDiscountRules(tiers: DiscountRule[]): DiscountRule[] {
       subtitle: tier.subtitle || "",
       badge: tier.badge || "",
       isDefault: !!tier.isDefault,
-      discountClass: "product",
-      offerKind: "percentage_discount",
-      conditionType: "item_quantity",
-      rewardType: "percentage_off",
-      rewardProductIds: [],
-      giftQuantity: undefined,
+      discountClass: tier.discountClass || "product",
+      offerKind:
+        tier.rewardType === "free_shipping"
+          ? "free_shipping"
+          : tier.rewardType === "gift_product"
+            ? "free_gift"
+            : "percentage_discount",
+      conditionType: tier.conditionType || "item_quantity",
+      amountThreshold: normalizedThreshold,
+      rewardType: tier.rewardType || "percentage_off",
+      rewardProductIds: Array.isArray(tier.rewardProductIds)
+        ? tier.rewardProductIds
+        : [],
+      giftQuantity:
+        tier.rewardType === "gift_product"
+          ? Math.max(1, Math.trunc(Number(tier.giftQuantity) || 1))
+          : undefined,
     });
   }
 

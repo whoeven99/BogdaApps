@@ -1,6 +1,12 @@
 query CartDeliveryDiscountInput {
   cart {
+    cost {
+      subtotalAmount {
+        amount
+      }
+    }
     lines {
+      id
       quantity
       bundleTierProp: attribute(key: "__ciwi_bundle_tier") {
         key
@@ -17,6 +23,11 @@ query CartDeliveryDiscountInput {
           product {
             id
           }
+        }
+      }
+      cost {
+        amountPerQuantity {
+          amount
         }
       }
     }

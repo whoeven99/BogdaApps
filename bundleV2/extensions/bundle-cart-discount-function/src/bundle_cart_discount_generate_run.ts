@@ -2,6 +2,8 @@ import {
   CartInput,
   CartLinesDiscountsGenerateRunResult,
   DiscountClass,
+  OrderDiscountCandidate,
+  OrderDiscountSelectionStrategy,
   ProductDiscountCandidate,
   ProductDiscountSelectionStrategy,
 } from "../generated/api";
@@ -577,14 +579,20 @@ export function bundleCartDiscountGenerateRun(
     log("early_exit", {
       reason: "checkValid_failed",
       cartLineCount: input.cart.lines.length,
-      hasProductDiscountClass: input.discount.discountClasses.includes(
-        DiscountClass.Product,
-      ),
+      discountClasses: input.discount.discountClasses,
     });
     return { operations: [] };
   }
 
+  const hasProductDiscountClass = input.discount.discountClasses.includes(
+    DiscountClass.Product,
+  );
+  const hasOrderDiscountClass = input.discount.discountClasses.includes(
+    DiscountClass.Order,
+  );
+
   const productCandidates: ProductDiscountCandidate[] = [];
+  const orderCandidates: OrderDiscountCandidate[] = [];
 
   const marketId = input.localization?.market?.id;
   const nowMs = resolveNowMs();
@@ -608,13 +616,15 @@ export function bundleCartDiscountGenerateRun(
   });
 
   // ① 优先处理 BXGY（买 X 送 Y 等）
-  const bxgyCandidates = calculateBxgyDiscount(input.cart.lines, bxgyOffers);
-  if (bxgyCandidates.length > 0) {
-    productCandidates.push(...bxgyCandidates);
+  if (hasProductDiscountClass) {
+    const bxgyCandidates = calculateBxgyDiscount(input.cart.lines, bxgyOffers);
+    if (bxgyCandidates.length > 0) {
+      productCandidates.push(...bxgyCandidates);
+    }
   }
 
   // ② 再处理 complete-bundle：多 SKU 成套，与 discountRulesJson 阶梯无关
-  if (productCandidates.length === 0) {
+  if (hasProductDiscountClass && productCandidates.length === 0) {
     log("complete_bundle_evaluation_start", {
       marketId,
       cartLineCount: input.cart.lines.length,
@@ -638,7 +648,7 @@ export function bundleCartDiscountGenerateRun(
   }
 
   // ③ 最后按行匹配普通 bundle 的 discountRulesJson 数量阶梯
-  if (productCandidates.length === 0) {
+  if (hasProductDiscountClass && productCandidates.length === 0) {
     for (const line of input.cart.lines) {
       if (line.merchandise.__typename !== "ProductVariant") {
         log("line_skip", {
@@ -727,25 +737,43 @@ export function bundleCartDiscountGenerateRun(
     }
   }
 
-  if (!productCandidates.length) {
+  if (hasOrderDiscountClass) {
+    orderCandidates.push(
+      ...buildOrderDiscountCandidates(input, regularOffers, marketId, nowMs),
+    );
+  }
+
+  if (!productCandidates.length && !orderCandidates.length) {
     log("early_exit", {
-      reason: "no_product_candidates_after_lines",
+      reason: "no_discount_candidates_after_evaluation",
       linesProcessed: input.cart.lines.length,
     });
     return { operations: [] };
   }
 
-  const operations = [
-    {
+  const operations: CartLinesDiscountsGenerateRunResult["operations"] = [];
+
+  if (productCandidates.length > 0) {
+    operations.push({
       productDiscountsAdd: {
         candidates: productCandidates,
         selectionStrategy: ProductDiscountSelectionStrategy.All,
       },
-    },
-  ];
+    });
+  }
+
+  if (orderCandidates.length > 0) {
+    operations.push({
+      orderDiscountsAdd: {
+        candidates: orderCandidates,
+        selectionStrategy: OrderDiscountSelectionStrategy.Maximum,
+      },
+    });
+  }
 
   log("run_success", {
     candidateCount: productCandidates.length,
+    orderCandidateCount: orderCandidates.length,
     operationsJsonLength: JSON.stringify(operations).length,
   });
 
@@ -755,6 +783,10 @@ export function bundleCartDiscountGenerateRun(
 type DiscountTier = {
   count: number;
   discountPercent: number;
+  discountClass: "product" | "order" | "shipping";
+  conditionType: "item_quantity" | "cart_amount";
+  amountThreshold?: number;
+  rewardType: "percentage_off" | "gift_product" | "free_shipping";
 };
 
 function parseDiscountRulesJson(
@@ -775,7 +807,29 @@ function parseDiscountRulesJson(
       );
       if (!Number.isFinite(count) || count < 1) continue;
       if (!Number.isFinite(discountPercent) || discountPercent < 0) continue;
-      tiers.push({ count: Math.trunc(count), discountPercent });
+      tiers.push({
+        count: Math.trunc(count),
+        discountPercent,
+        discountClass:
+          (item as { discountClass?: unknown }).discountClass === "order" ||
+          (item as { discountClass?: unknown }).discountClass === "shipping"
+            ? ((item as { discountClass: "order" | "shipping" }).discountClass)
+            : "product",
+        conditionType:
+          (item as { conditionType?: unknown }).conditionType === "cart_amount"
+            ? "cart_amount"
+            : "item_quantity",
+        amountThreshold: Number.isFinite(
+          Number((item as { amountThreshold?: unknown }).amountThreshold),
+        )
+          ? Math.max(0, Number((item as { amountThreshold?: unknown }).amountThreshold))
+          : undefined,
+        rewardType:
+          (item as { rewardType?: unknown }).rewardType === "gift_product" ||
+          (item as { rewardType?: unknown }).rewardType === "free_shipping"
+            ? ((item as { rewardType: "gift_product" | "free_shipping" }).rewardType)
+            : "percentage_off",
+      });
     }
 
     tiers.sort((a, b) => a.count - b.count);
@@ -1010,13 +1064,51 @@ function formatDiscountPercentValue(percent: number): string {
   return percent.toFixed(1);
 }
 
-function getDiscountPercentValue(
+function getScopedLinesForOffer(
+  cartLines: CartInput["cart"]["lines"],
+  offer: Offer,
+): CartInput["cart"]["lines"] {
+  const selectedIds = parseSelectedIds(offer.selectedProductsJson);
+  if (!selectedIds.length) {
+    return cartLines.filter(
+      (line) => line.merchandise.__typename === "ProductVariant",
+    );
+  }
+
+  return cartLines.filter((line) => {
+    if (line.merchandise.__typename !== "ProductVariant") return false;
+    const productId = line.merchandise.product?.id;
+    const variantId = line.merchandise.id;
+    return selectedIds.some(
+      (sid) =>
+        (productId && productIdsMatch(productId, sid)) ||
+        (variantId && productIdsMatch(variantId, sid)),
+    );
+  });
+}
+
+function evaluateRuleCondition(
+  rule: DiscountTier,
+  metrics: { totalQuantity: number; subtotalAmount: number },
+): boolean {
+  if (rule.conditionType === "cart_amount") {
+    const threshold = Math.max(0, Number(rule.amountThreshold) || 0);
+    return threshold > 0 && metrics.subtotalAmount >= threshold;
+  }
+  return metrics.totalQuantity >= Math.max(1, Math.trunc(Number(rule.count) || 1));
+}
+
+function getBestProductDiscountPercentValue(
   discountRulesJson: string | null | undefined,
   quantity: number,
 ): string | null {
-  const tiers = parseDiscountRulesJson(discountRulesJson);
+  const tiers = parseDiscountRulesJson(discountRulesJson).filter(
+    (tier) =>
+      tier.discountClass === "product" &&
+      tier.rewardType === "percentage_off" &&
+      tier.conditionType === "item_quantity",
+  );
 
-  // 规则为空：与历史「默认 10%」行为一致
   if (tiers.length === 0) {
     log("discount_rules_fallback_default", { quantity });
     return DEFAULT_DISCOUNT_PERCENTAGE;
@@ -1028,10 +1120,79 @@ function getDiscountPercentValue(
   }
 
   if (!best) {
-    log("discount_rules_no_tier_met", { quantity, tierCounts: tiers.map((t) => t.count) });
+    log("discount_rules_no_tier_met", {
+      quantity,
+      tierCounts: tiers.map((t) => t.count),
+    });
     return null;
   }
   return formatDiscountPercentValue(best.discountPercent);
+}
+
+function buildOrderDiscountCandidates(
+  input: CartInput,
+  offers: Offer[],
+  marketId: string | undefined,
+  nowMs: number | null,
+): OrderDiscountCandidate[] {
+  const candidates: OrderDiscountCandidate[] = [];
+  const allCartLineIds = input.cart.lines.map((line) => line.id);
+
+  for (const offer of offers) {
+    if (!offerPassesScheduleAndMarket(offer, marketId, nowMs)) continue;
+    const scopedLines = getScopedLinesForOffer(input.cart.lines, offer);
+    if (!scopedLines.length) continue;
+
+    const metrics = scopedLines.reduce(
+      (acc, line) => ({
+        totalQuantity: acc.totalQuantity + Math.max(1, Math.trunc(Number(line.quantity) || 1)),
+        subtotalAmount:
+          acc.subtotalAmount +
+          parseMoneyAmount(line.cost?.amountPerQuantity?.amount) *
+            Math.max(1, Math.trunc(Number(line.quantity) || 1)),
+      }),
+      { totalQuantity: 0, subtotalAmount: 0 },
+    );
+
+    const eligibleRules = parseDiscountRulesJson(offer.discountRulesJson).filter(
+      (rule) =>
+        rule.discountClass === "order" &&
+        rule.rewardType === "percentage_off" &&
+        evaluateRuleCondition(rule, metrics),
+    );
+    if (!eligibleRules.length) continue;
+
+    const bestRule = eligibleRules.reduce((best, current) =>
+      current.discountPercent > best.discountPercent ? current : best,
+    );
+    const scopedIds = new Set(scopedLines.map((line) => line.id));
+    const excludedCartLineIds = allCartLineIds.filter((id) => !scopedIds.has(id));
+
+    candidates.push({
+      message: offer.cartTitle || "Bundle order discount",
+      targets: [
+        {
+          orderSubtotal: {
+            excludedCartLineIds,
+          },
+        },
+      ],
+      value: {
+        percentage: {
+          value: formatDiscountPercentValue(bestRule.discountPercent),
+        },
+      },
+    });
+  }
+
+  return candidates;
+}
+
+function getDiscountPercentValue(
+  discountRulesJson: string | null | undefined,
+  quantity: number,
+): string | null {
+  return getBestProductDiscountPercentValue(discountRulesJson, quantity);
 }
 
 const parseSelectedIds = (selectedProductsJson?: string | null): string[] => {
@@ -1248,21 +1409,8 @@ const findOffer = (
 };
 
 /**
- * 校验是否允许生成本次折扣：购物车非空，且商家在自动折扣里启用了「商品级」折扣类。
- * 若后台未勾选 Line item / Product 类折扣，函数不会运行，前台将始终显示原价。
+ * 校验是否允许生成本次折扣：购物车非空。
  */
 const checkValid = (input: CartInput): boolean => {
-  if (!input.cart.lines.length) {
-    return false;
-  }
-
-  const hasProductDiscountClass = input.discount.discountClasses.includes(
-    DiscountClass.Product,
-  );
-
-  if (!hasProductDiscountClass) {
-    return false;
-  }
-
-  return true;
+  return input.cart.lines.length > 0;
 };
