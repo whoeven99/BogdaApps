@@ -65,6 +65,7 @@ type GmvOverviewMetrics = {
 type AbVariantSummary = {
   key: string;
   exposureUsers: number;
+  checkoutUsers: number;
   gmv: number;
   conversionRate: number;
   ciLow: number;
@@ -149,6 +150,8 @@ export function DashboardPage({
   };
 
   const [showThemeExtensionModal, setShowThemeExtensionModal] = useState(false);
+  const [abTestSummaries, setAbTestSummaries] = useState<AbTestSummaryRow[]>([]);
+  const [abTestLoading, setAbTestLoading] = useState(false);
   const [hideBanner, setHideBanner] = useState(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("hideThemeExtensionBanner") === "true";
@@ -188,49 +191,7 @@ export function DashboardPage({
   });
 
   const visibleOffers = offerRows.slice(0, 4);
-  const abTestSummaries: AbTestSummaryRow[] = offerRows
-    .filter((offer) => offer.offerType === "abTest")
-    .map((offer) => {
-      const settings = parseOfferSettings(offer.offerSettingsJson || null);
-      const variants = settings.abTest?.variants || [];
-      const weights = settings.abTest?.trafficWeights || [];
-      if (!variants.length || variants.length !== weights.length) return null;
-      const weightSum = weights.reduce((sum, w) => sum + Math.max(1, Number(w) || 1), 0) || 1;
-      const exposureBase = Math.max(0, Math.trunc(Number(offer.exposurePV) || 0));
-      const addToCartBase = Math.max(0, Math.trunc(Number(offer.addToCartPV) || 0));
-      const gmvBase = Math.max(0, Number(offer.gmv) || 0);
-
-      const rows: AbVariantSummary[] = variants.map((variant, idx) => {
-        const ratio = Math.max(1, Number(weights[idx]) || 1) / weightSum;
-        const exposureUsers = Math.max(0, Math.round(exposureBase * ratio));
-        const conversions = Math.max(0, Math.round(addToCartBase * ratio));
-        const gmv = Math.max(0, Number((gmvBase * ratio).toFixed(2)));
-        const conversionRate = exposureUsers > 0 ? conversions / exposureUsers : 0;
-        const ci = computeNormalApprox95Ci(conversions, exposureUsers);
-        return {
-          key: variant.key,
-          exposureUsers,
-          gmv,
-          conversionRate,
-          ciLow: ci.low,
-          ciHigh: ci.high,
-        };
-      });
-      const sortedByGmv = [...rows].sort((a, b) => b.gmv - a.gmv);
-      const winner = sortedByGmv[0];
-      const baseline = sortedByGmv[1] || sortedByGmv[0];
-      const winnerLiftPct =
-        baseline.gmv > 0 ? ((winner.gmv - baseline.gmv) / baseline.gmv) * 100 : 0;
-      return {
-        offerId: offer.id,
-        offerName: offer.name,
-        isActive: offer.isActive,
-        variants: rows,
-        winnerKey: winner.key,
-        winnerLiftPct,
-      };
-    })
-    .filter((x): x is AbTestSummaryRow => !!x);
+  const abTestOffers = offerRows.filter((offer) => offer.offerType === "abTest");
 
   // 计算真实 Overview 数据
   const fallbackOverview = (() => {
@@ -399,6 +360,113 @@ export function DashboardPage({
 
     fetchData();
   }, [shop]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const now = new Date();
+    const from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    const fetchAbSummary = async () => {
+      if (!abTestOffers.length) {
+        setAbTestSummaries([]);
+        return;
+      }
+      setAbTestLoading(true);
+      try {
+        const rows = await Promise.all(
+          abTestOffers.map(async (offer) => {
+            const query = new URLSearchParams({
+              mode: "abtest-offer-summary",
+              shopName: shop,
+              offerId: offer.id,
+              from: from.toISOString(),
+              to: now.toISOString(),
+            });
+            const response = await fetch(`/webpixerToAli?${query.toString()}`, {
+              signal: controller.signal,
+            });
+            if (!response.ok) {
+              throw new Error(`abtest-offer-summary failed: ${response.status}`);
+            }
+            const data = (await response.json()) as {
+              success?: boolean;
+              rows?: Array<{
+                key?: string;
+                exposureUsers?: number;
+                checkoutUsers?: number;
+                gmv?: number;
+                conversionRate?: number;
+                ciLow?: number;
+                ciHigh?: number;
+              }>;
+            };
+            const apiVariants: AbVariantSummary[] = Array.isArray(data?.rows)
+              ? data.rows
+                  .map((row) => ({
+                    key: String(row.key || "").trim(),
+                    exposureUsers: Math.max(0, Number(row.exposureUsers) || 0),
+                    checkoutUsers: Math.max(0, Number(row.checkoutUsers) || 0),
+                    gmv: Math.max(0, Number(row.gmv) || 0),
+                    conversionRate: Math.max(0, Number(row.conversionRate) || 0),
+                    ciLow: Math.max(0, Number(row.ciLow) || 0),
+                    ciHigh: Math.max(0, Number(row.ciHigh) || 0),
+                  }))
+                  .filter((v) => Boolean(v.key))
+              : [];
+
+            // 中文注释：若 SLS 暂无该活动数据，则按配置的 variant key 兜底显示空值行，避免卡片消失。
+            const fallbackVariants: AbVariantSummary[] = (() => {
+              const settings = parseOfferSettings(offer.offerSettingsJson || null);
+              const variants = settings.abTest?.variants || [];
+              return variants.map((variant) => ({
+                key: variant.key,
+                exposureUsers: 0,
+                checkoutUsers: 0,
+                gmv: 0,
+                conversionRate: 0,
+                ciLow: 0,
+                ciHigh: 0,
+              }));
+            })();
+            const mergedVariants = apiVariants.length ? apiVariants : fallbackVariants;
+            const sortedByGmv = [...mergedVariants].sort((a, b) => b.gmv - a.gmv);
+            const winner = sortedByGmv[0] || {
+              key: "-",
+              exposureUsers: 0,
+              checkoutUsers: 0,
+              gmv: 0,
+              conversionRate: 0,
+              ciLow: 0,
+              ciHigh: 0,
+            };
+            const baseline = sortedByGmv[1] || winner;
+            const winnerLiftPct =
+              baseline.gmv > 0 ? ((winner.gmv - baseline.gmv) / baseline.gmv) * 100 : 0;
+            return {
+              offerId: offer.id,
+              offerName: offer.name,
+              isActive: offer.isActive,
+              variants: mergedVariants,
+              winnerKey: winner.key,
+              winnerLiftPct,
+            } satisfies AbTestSummaryRow;
+          }),
+        );
+        setAbTestSummaries(rows);
+      } catch (error) {
+        if ((error as Error)?.name !== "AbortError") {
+          console.error("Failed to fetch A/B summary", error);
+          setAbTestSummaries([]);
+        }
+      } finally {
+        setAbTestLoading(false);
+      }
+    };
+
+    fetchAbSummary();
+
+    return () => controller.abort();
+  }, [shop, abTestOffers]);
 
   useEffect(() => {
     if (
@@ -955,7 +1023,11 @@ export function DashboardPage({
           </button>
         </div>
 
-        {abTestSummaries.length === 0 ? (
+        {abTestLoading ? (
+          <div className="text-[14px] text-[#5c6166] border border-[#dfe3e8] rounded-[8px] p-[14px]">
+            正在加载 A/B Test 统计数据...
+          </div>
+        ) : abTestSummaries.length === 0 ? (
           <div className="text-[14px] text-[#5c6166] border border-[#dfe3e8] rounded-[8px] p-[14px]">
             暂无 A/B Test 数据。创建 `abTest` 类型活动后会在这里展示 GMV、曝光用户和 95% 置信区间。
           </div>
@@ -980,6 +1052,7 @@ export function DashboardPage({
                       <div className="text-[12px] text-[#5c6166] leading-[20px]">
                         <div>GMV：${variant.gmv.toLocaleString()}</div>
                         <div>曝光用户数：{variant.exposureUsers.toLocaleString()}</div>
+                        <div>下单用户数：{variant.checkoutUsers.toLocaleString()}</div>
                         <div>
                           转化率：{(variant.conversionRate * 100).toFixed(2)}%（95% CI:{" "}
                           {(variant.ciLow * 100).toFixed(2)}% ~ {(variant.ciHigh * 100).toFixed(2)}%）

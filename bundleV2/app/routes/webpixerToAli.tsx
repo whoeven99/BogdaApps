@@ -156,6 +156,20 @@ function toNumber(input: unknown): number {
   return 0;
 }
 
+function computeNormalApprox95Ci(successes: number, total: number): {
+  low: number;
+  high: number;
+} {
+  const n = Math.max(1, Math.trunc(total));
+  const p = Math.max(0, Math.min(1, successes / n));
+  const se = Math.sqrt((p * (1 - p)) / n);
+  const z = 1.96;
+  return {
+    low: Math.max(0, p - z * se),
+    high: Math.min(1, p + z * se),
+  };
+}
+
 function parseExtra(extraRaw: unknown): Record<string, unknown> {
   if (typeof extraRaw !== "string") return {};
   try {
@@ -371,6 +385,32 @@ async function runSlsSql(
     firstRow,
   });
   return firstRow;
+}
+
+async function runSlsSqlRows(
+  sls: Client,
+  fromDate: Date,
+  toDate: Date,
+  sql: string,
+  label: string,
+): Promise<Record<string, unknown>[]> {
+  console.log("[web-pixel][overview-query][abTest] SLS SQL rows", { label, sql });
+  const resp = (await sls.getLogs(projectName(), logstoreName(), fromDate, toDate, {
+    query: sql,
+    line: 1000,
+    reverse: false,
+  })) as unknown;
+  const rows = Array.isArray(resp)
+    ? (resp as Record<string, unknown>[])
+    : Array.isArray((resp as { logs?: unknown })?.logs)
+      ? (((resp as { logs?: unknown[] }).logs ?? []) as Record<string, unknown>[])
+      : [];
+  console.log("[web-pixel][overview-query][abTest] SLS SQL rows result", {
+    label,
+    rows: rows.length,
+    firstRow: rows[0] ?? {},
+  });
+  return rows;
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -593,6 +633,121 @@ query GetOrderCustomerId($id: ID!) {
       });
       return new Response(
         JSON.stringify({ success: false, message: String(error) }),
+        { status: 500, headers: corsHeaders },
+      );
+    }
+  }
+
+  if (request.method === "GET" && mode === "abtest-offer-summary") {
+    const shopName = String(url.searchParams.get("shopName") || "").trim();
+    const offerId = String(url.searchParams.get("offerId") || "").trim();
+    const fromRaw = url.searchParams.get("from");
+    const toRaw = url.searchParams.get("to");
+    const now = new Date();
+    const defaultFrom = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const fromDate = fromRaw ? new Date(fromRaw) : defaultFrom;
+    const toDate = toRaw ? new Date(toRaw) : now;
+
+    if (!shopName || !offerId) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: "shopName and offerId are required",
+        }),
+        { status: 400, headers: corsHeaders },
+      );
+    }
+    if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+      return new Response(
+        JSON.stringify({ success: false, message: "invalid from/to date" }),
+        { status: 400, headers: corsHeaders },
+      );
+    }
+
+    const sls = createSlsClient();
+    if (!sls) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message:
+            "Missing Alibaba Log credentials (ALIBABA_CLOUD_ACCESS_KEY_ID, ALIBABA_CLOUD_ACCESS_KEY_SECRET, ALIBABA_CLOUD_ENDPOINT)",
+        }),
+        { status: 503, headers: corsHeaders },
+      );
+    }
+
+    try {
+      const safeShopName = escapeSlsString(shopName);
+      const safeOfferId = escapeSlsString(offerId);
+
+      const exposureSql = `__topic__: "product_viewed" and shopName: "${safeShopName}" and extra: "${safeOfferId}" | set session mode=scan; SELECT JSON_EXTRACT_SCALAR(bundle_item, '$.abGroup') AS ab_group, COUNT(DISTINCT clientId) AS exposure_users FROM log CROSS JOIN UNNEST(CAST(JSON_EXTRACT(extra, '$.bundle') AS ARRAY(JSON))) AS t(bundle_item) WHERE JSON_EXTRACT_SCALAR(bundle_item, '$.offerId') = '${safeOfferId}' AND JSON_EXTRACT_SCALAR(bundle_item, '$.title') != '${NO_BUNDLE_TITLE}' AND JSON_EXTRACT_SCALAR(bundle_item, '$.abGroup') IS NOT NULL GROUP BY JSON_EXTRACT_SCALAR(bundle_item, '$.abGroup')`;
+
+      const checkoutSql = `__topic__: "checkout_completed" and shopName: "${safeShopName}" and extra: "${safeOfferId}" | set session mode=scan; SELECT JSON_EXTRACT_SCALAR(bundle_item, '$.abGroup') AS ab_group, COUNT(DISTINCT COALESCE(JSON_EXTRACT_SCALAR(extra, '$.orderId'), clientId)) AS checkout_users, ROUND(SUM(CAST(JSON_EXTRACT_SCALAR(bundle_item, '$.price.amount') AS DOUBLE)), 2) AS gmv FROM log CROSS JOIN UNNEST(CAST(JSON_EXTRACT(extra, '$.bundle') AS ARRAY(JSON))) AS t(bundle_item) WHERE JSON_EXTRACT_SCALAR(bundle_item, '$.offerId') = '${safeOfferId}' AND JSON_EXTRACT_SCALAR(bundle_item, '$.title') != '${NO_BUNDLE_TITLE}' AND JSON_EXTRACT_SCALAR(bundle_item, '$.abGroup') IS NOT NULL GROUP BY JSON_EXTRACT_SCALAR(bundle_item, '$.abGroup')`;
+
+      const [exposureRows, checkoutRows] = await Promise.all([
+        runSlsSqlRows(sls, fromDate, toDate, exposureSql, "abtest-exposure-by-group"),
+        runSlsSqlRows(sls, fromDate, toDate, checkoutSql, "abtest-checkout-by-group"),
+      ]);
+
+      const byGroup = new Map<
+        string,
+        { key: string; exposureUsers: number; checkoutUsers: number; gmv: number }
+      >();
+      const ensure = (key: string) => {
+        const hit = byGroup.get(key);
+        if (hit) return hit;
+        const seed = { key, exposureUsers: 0, checkoutUsers: 0, gmv: 0 };
+        byGroup.set(key, seed);
+        return seed;
+      };
+
+      for (const row of exposureRows) {
+        const key = String(row.ab_group || "").trim();
+        if (!key) continue;
+        const acc = ensure(key);
+        acc.exposureUsers = toNumber(row.exposure_users);
+      }
+      for (const row of checkoutRows) {
+        const key = String(row.ab_group || "").trim();
+        if (!key) continue;
+        const acc = ensure(key);
+        acc.checkoutUsers = toNumber(row.checkout_users);
+        acc.gmv = toNumber(row.gmv);
+      }
+
+      const rows = Array.from(byGroup.values()).map((row) => {
+        const conversionRate =
+          row.exposureUsers > 0 ? row.checkoutUsers / row.exposureUsers : 0;
+        const ci = computeNormalApprox95Ci(row.checkoutUsers, row.exposureUsers);
+        return {
+          key: row.key,
+          exposureUsers: row.exposureUsers,
+          checkoutUsers: row.checkoutUsers,
+          gmv: Number(row.gmv.toFixed(2)),
+          conversionRate,
+          ciLow: ci.low,
+          ciHigh: ci.high,
+        };
+      });
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          offerId,
+          rows,
+          range: {
+            from: fromDate.toISOString(),
+            to: toDate.toISOString(),
+          },
+        }),
+        { status: 200, headers: corsHeaders },
+      );
+    } catch (error) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: String(error),
+        }),
         { status: 500, headers: corsHeaders },
       );
     }
