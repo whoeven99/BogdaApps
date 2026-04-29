@@ -2054,8 +2054,8 @@ export function CreateNewOffer({
           },
         ]
       : [];
-
   const renderDisplayCustomizer = () => {
+
     if (offerType === "quantity-breaks-same") {
       return (
         <OfferComponentsDisplayCustomizer
@@ -2537,7 +2537,7 @@ export function CreateNewOffer({
                   <BuilderStepIntro
                     title="Scope & Logic"
                     meta={`${stepTwoMeta.logicBlockLabel} • ${stepTwoRuleTypeSummary}`}
-                    description={`${stepTwoMeta.stepTwoDescription} Scope: ${stepTwoScopeSummary}. Logic: ${stepTwoLogicSummary}. Publish: ${stepTwoPublishSummary}.`}
+                    description={`Configure the business rules first. If the selected template includes special modules such as Complete Bundle or Subscription, those sections appear below the rules area. Scope: ${stepTwoScopeSummary}. Logic: ${stepTwoLogicSummary}. Publish: ${stepTwoPublishSummary}.`}
                   />
 
                   <LogicEditorsRenderer
@@ -2860,6 +2860,7 @@ export function CreateNewOffer({
               <div>
                 <BuilderStepIntro
                   title="Display"
+                  description="Customize copy, defaults, layout, and visual styling for the configured rules and any special template modules."
                 />
 
                 <DisplayBlocksEditor
