@@ -450,22 +450,31 @@ export function normalizeTrafficWeights(
   if (mode !== "custom" || !raw || raw.length !== n) {
     return computeEvenTrafficWeights(n);
   }
+  // 注意：这里允许出现 0 权重，用于表达“全量给某个组，其它组为 0”。
+  // 仅当输入非法/无有效权重时，才回退均分。
   const floored = raw.map((x) => {
     const v = Number(x);
-    if (!Number.isFinite(v)) return 1;
-    return Math.max(1, Math.floor(v));
+    if (!Number.isFinite(v)) return 0;
+    return Math.max(0, Math.floor(v));
   });
-  let sum = floored.reduce((a, b) => a + b, 0);
+  const sum = floored.reduce((a, b) => a + b, 0);
   if (sum <= 0) return computeEvenTrafficWeights(n);
-  const scaled = floored.map((w) => Math.max(1, Math.round((w * 100) / sum)));
-  let s2 = scaled.reduce((a, b) => a + b, 0);
+  // 允许 0：用于表达全量给某个 bucket，其它 bucket 为 0。
+  const scaled = floored.map((w) => Math.max(0, Math.round((w * 100) / sum)));
+  const s2 = scaled.reduce((a, b) => a + b, 0);
   let diff = 100 - s2;
   const out = [...scaled];
   let idx = 0;
   while (diff !== 0 && out.length > 0) {
     const step = diff > 0 ? 1 : -1;
     const j = idx % out.length;
-    if (step < 0 && out[j] <= 1) {
+    if (step < 0 && out[j] <= 0) {
+      idx += 1;
+      if (idx > out.length * 100) break;
+      continue;
+    }
+    // 增加 diff 时优先给已有正权重的 bucket，尽量避免把 0 权重“强行 +1”。
+    if (step > 0 && out[j] === 0 && out.some((w) => w > 0)) {
       idx += 1;
       if (idx > out.length * 100) break;
       continue;
@@ -516,7 +525,8 @@ export function parseAbTestOfferSettingsBlock(
   if (variantsIn && variantsIn.length >= 2) {
     const variants: AbTestVariantStored[] = [];
     for (const row of variantsIn) {
-      if (variants.length >= 24) break;
+      // A/B 测试每组最多 4 个 variant（前端/写入处也会校验，这里做兜底）。
+      if (variants.length >= 4) break;
       if (!row || typeof row !== "object") continue;
       const o = row as Record<string, unknown>;
       const id = sanitizeSingleLineText(o.id, 80, "");
@@ -534,11 +544,15 @@ export function parseAbTestOfferSettingsBlock(
       return buildDefaultAbTestStored(salt);
     }
     const mode = ab.allocationMode === "custom" ? "custom" : "even";
-    const rawW = Array.isArray(ab.customWeights)
+    let rawW = Array.isArray(ab.customWeights)
       ? (ab.customWeights as unknown[]).map((x) => Number(x))
       : Array.isArray(ab.trafficWeights)
         ? (ab.trafficWeights as unknown[]).map((x) => Number(x))
         : undefined;
+    // 若 raw 权重长度比 variant 数多（历史数据），截断到一致长度，避免回退均分。
+    if (Array.isArray(rawW) && rawW.length > variants.length) {
+      rawW = rawW.slice(0, variants.length);
+    }
     const trafficWeights = normalizeTrafficWeights(mode, rawW, variants.length);
     return {
       salt,

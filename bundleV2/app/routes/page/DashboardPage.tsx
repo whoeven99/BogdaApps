@@ -11,11 +11,17 @@ import {
   Info,
   X,
   AlertCircle,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import "../../styles/tailwind.css";
 import { CreateNewOffer } from "../component/CreateNewOffer/CreateNewOffer";
 import type { IndexLoaderData } from "../_index/route";
-import { parseDiscountRules, parseOfferSettings } from "../../utils/offerParsing";
+import {
+  parseAbTestOfferSettingsBlock,
+  parseDiscountRules,
+  parseOfferSettings,
+} from "../../utils/offerParsing";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -92,6 +98,34 @@ function computeNormalApprox95Ci(successes: number, total: number) {
   };
 }
 
+function extractAbVariantKeysFromOfferSettings(offerSettingsJson: string | null) {
+  if (!offerSettingsJson) return [];
+  try {
+    const parsed = JSON.parse(String(offerSettingsJson)) as Record<string, unknown>;
+    const abRaw = parsed?.abTest as Record<string, unknown> | undefined;
+    if (!abRaw || typeof abRaw !== "object") return [];
+    const variantsRaw = (abRaw as any)?.variants;
+    if (!Array.isArray(variantsRaw) || variantsRaw.length < 2) return [];
+    const saltHint = String((abRaw as any)?.salt || "");
+    const stored = parseAbTestOfferSettingsBlock(abRaw, saltHint);
+    return stored.variants.map((v) => v.key).slice(0, 4);
+  } catch {
+    return [];
+  }
+}
+
+function renderDeltaArrow(value: number, baseValue: number) {
+  const a = Number.isFinite(value) ? value : 0;
+  const b = Number.isFinite(baseValue) ? baseValue : 0;
+  const diff = a - b;
+  if (Math.abs(diff) < 1e-9) return null;
+  return diff > 0 ? (
+    <ArrowUp size={14} className="text-[#108043]" />
+  ) : (
+    <ArrowDown size={14} className="text-[#d72c0d]" />
+  );
+}
+
 function ChevronRightIcon() {
   return (
     <svg
@@ -163,6 +197,24 @@ export function DashboardPage({
     setHideBanner(true);
     localStorage.setItem("hideThemeExtensionBanner", "true");
   };
+
+  const [showAbSplitModal, setShowAbSplitModal] = useState(false);
+  const [abSplitOffer, setAbSplitOffer] = useState<DashboardOfferRow | null>(null);
+
+  const openAbSplitModal = (offer: DashboardOfferRow) => {
+    // 若 Theme Extension 未启用，前台折扣也不会生效，因此引导用户先激活。
+    if (!themeExtensionEnabled) {
+      setShowThemeExtensionModal(true);
+      return;
+    }
+    setAbSplitOffer(offer);
+    setShowAbSplitModal(true);
+  };
+
+  const abSplitVariantKeys = useMemo(
+    () => extractAbVariantKeysFromOfferSettings(abSplitOffer?.offerSettingsJson ?? null),
+    [abSplitOffer],
+  );
 
   const offerRows: DashboardOfferRow[] = (offers ?? []).map((offer) => {
     const isActive = !!offer.status;
@@ -419,19 +471,40 @@ export function DashboardPage({
 
             // 中文注释：若 SLS 暂无该活动数据，则按配置的 variant key 兜底显示空值行，避免卡片消失。
             const fallbackVariants: AbVariantSummary[] = (() => {
-              const settings = parseOfferSettings(offer.offerSettingsJson || null);
-              const variants = settings.abTest?.variants || [];
-              return variants.map((variant) => ({
-                key: variant.key,
-                exposureUsers: 0,
-                checkoutUsers: 0,
-                gmv: 0,
-                conversionRate: 0,
-                ciLow: 0,
-                ciHigh: 0,
-              }));
+              if (!offer.offerSettingsJson) return [];
+              try {
+                const settingsParsed = JSON.parse(String(offer.offerSettingsJson)) as Record<
+                  string,
+                  unknown
+                >;
+                const abTest = settingsParsed?.abTest as Record<string, unknown> | undefined;
+                const variants = Array.isArray((abTest as any)?.variants)
+                  ? ((abTest as any).variants as any[])
+                  : [];
+                const keys = variants
+                  .map((v) => (v && typeof v === "object" ? String((v as any).key || "").trim() : ""))
+                  .filter(Boolean)
+                  .slice(0, 4);
+
+                return keys.map((key) => ({
+                  key,
+                  exposureUsers: 0,
+                  checkoutUsers: 0,
+                  gmv: 0,
+                  conversionRate: 0,
+                  ciLow: 0,
+                  ciHigh: 0,
+                }));
+              } catch {
+                return [];
+              }
             })();
-            const mergedVariants = apiVariants.length ? apiVariants : fallbackVariants;
+            const apiVariantMap = new Map(apiVariants.map((v) => [v.key, v] as const));
+            // 以配置中的 variants 作为必有集合：缺失或为 0 的 key 也要展示出来。
+            const mergedVariants = fallbackVariants.length
+              ? fallbackVariants.map((v) => apiVariantMap.get(v.key) ?? v)
+              : apiVariants;
+
             const sortedByGmv = [...mergedVariants].sort((a, b) => b.gmv - a.gmv);
             const winner = sortedByGmv[0] || {
               key: "-",
@@ -475,10 +548,13 @@ export function DashboardPage({
     if (
       toast?.startsWith("create-success") ||
       toast?.startsWith("update-success") ||
-      toast?.startsWith("delete-success")
+      toast?.startsWith("delete-success") ||
+      toast?.startsWith("toggle-success")
     ) {
       setShowCreateOffer(false);
       setDeletingOffer(null);
+      setShowAbSplitModal(false);
+      setAbSplitOffer(null);
     }
   }, [toast]);
 
@@ -847,6 +923,17 @@ export function DashboardPage({
                         >
                           <Pencil size={16} />
                         </button>
+                        {offer.offerType === "abTest" &&
+                        offer.name?.startsWith("#offer") ? (
+                          <button
+                            type="button"
+                            className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[6px] rounded-[6px] hover:bg-[#f0f9f6] transition-all"
+                            title="配置修改"
+                            onClick={() => openAbSplitModal(offer)}
+                          >
+                            <Info size={16} />
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#d72c0d] p-[6px] rounded-[6px] hover:bg-[#fef3f2] transition-all"
@@ -985,6 +1072,17 @@ export function DashboardPage({
                     >
                       <Pencil size={18} />
                     </button>
+                    {offer.offerType === "abTest" &&
+                    offer.name?.startsWith("#offer") ? (
+                      <button
+                        type="button"
+                        className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[8px] rounded-[8px] hover:bg-[#f0f9f6] transition-all"
+                        title="配置修改"
+                        onClick={() => openAbSplitModal(offer)}
+                      >
+                        <Info size={18} />
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#d72c0d] p-[8px] rounded-[8px] hover:bg-[#fef3f2] transition-all"
@@ -1047,22 +1145,55 @@ export function DashboardPage({
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-[10px]">
-                  {test.variants.map((variant) => (
-                    <div key={`${test.offerId}-${variant.key}`} className="rounded-[8px] bg-[#fafbfb] border border-[#edf1f4] p-[10px]">
-                      <div className="text-[13px] font-semibold text-[#1c1f23] mb-[6px]">
-                        Variant {variant.key}
-                      </div>
-                      <div className="text-[12px] text-[#5c6166] leading-[20px]">
-                        <div>GMV：${variant.gmv.toLocaleString()}</div>
-                        <div>曝光用户数：{variant.exposureUsers.toLocaleString()}</div>
-                        <div>下单用户数：{variant.checkoutUsers.toLocaleString()}</div>
-                        <div>
-                          转化率：{(variant.conversionRate * 100).toFixed(2)}%（95% CI:{" "}
-                          {(variant.ciLow * 100).toFixed(2)}% ~ {(variant.ciHigh * 100).toFixed(2)}%）
+                  {test.variants.map((variant) => {
+                    const baseVariant =
+                      test.variants.find((v) => v.key === "A") || test.variants[0];
+                    const baseKey = baseVariant?.key || "";
+                    const showDelta = variant.key !== baseKey;
+
+                    return (
+                      <div
+                        key={`${test.offerId}-${variant.key}`}
+                        className="rounded-[8px] bg-[#fafbfb] border border-[#edf1f4] p-[10px]"
+                      >
+                        <div className="text-[13px] font-semibold text-[#1c1f23] mb-[6px]">
+                          Variant {variant.key}
+                        </div>
+                        <div className="text-[12px] text-[#5c6166] leading-[20px]">
+                          <div>
+                            GMV：{variant.gmv.toLocaleString()}
+                            {showDelta ? renderDeltaArrow(variant.gmv, baseVariant.gmv) : null}
+                          </div>
+                          <div>
+                            曝光用户数：{variant.exposureUsers.toLocaleString()}
+                            {showDelta
+                              ? renderDeltaArrow(variant.exposureUsers, baseVariant.exposureUsers)
+                              : null}
+                          </div>
+                          <div>
+                            下单用户数：{variant.checkoutUsers.toLocaleString()}
+                            {showDelta
+                              ? renderDeltaArrow(
+                                  variant.checkoutUsers,
+                                  baseVariant.checkoutUsers,
+                                )
+                              : null}
+                          </div>
+                          <div>
+                            转化率：{(variant.conversionRate * 100).toFixed(2)}%
+                            {showDelta
+                              ? renderDeltaArrow(
+                                  variant.conversionRate,
+                                  baseVariant.conversionRate,
+                                )
+                              : null}
+                            （95% CI: {(variant.ciLow * 100).toFixed(2)}% ~{" "}
+                            {(variant.ciHigh * 100).toFixed(2)}%）
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ))}
@@ -1111,6 +1242,70 @@ export function DashboardPage({
                   Delete
                 </button>
               </Form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAbSplitModal && abSplitOffer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.4)]">
+          <div className="bg-white rounded-[16px] shadow-[0_8px_24px_rgba(0,0,0,0.12)] max-w-[520px] w-[90%] p-[24px]">
+            <h2 className="font-sans font-semibold text-[18px] leading-[27px] text-[#1c1f23] mb-[8px]">
+              配置修改（A/B 分流）
+            </h2>
+            <p className="font-sans text-[14px] leading-[21px] text-[#5c6166] mb-[16px]">
+              当前 offer：
+              <span className="font-semibold text-[#1c1f23]">{abSplitOffer.name}</span>
+              <br />
+              你可以将流量全量分到某个 variant，或关闭该 A/B 实验。
+            </p>
+
+            {abSplitVariantKeys.length === 0 ? (
+              <div className="border border-[#dfe3e8] rounded-[8px] p-[12px] text-[14px] text-[#5c6166]">
+                未检测到当前 offer 的 A/B variants（至少需要 2 个）。请先在编辑器中补齐配置。
+              </div>
+            ) : (
+              <div className="space-y-[10px]">
+                {abSplitVariantKeys.map((key) => (
+                  <Form method="post" key={key}>
+                    <input type="hidden" name="intent" value="abtest-force-split" />
+                    <input type="hidden" name="offerId" value={abSplitOffer.id} />
+                    <input type="hidden" name="splitMode" value="full" />
+                    <input type="hidden" name="targetVariantKey" value={key} />
+                    <button
+                      type="submit"
+                      className="w-full bg-[#008060] !text-white px-[16px] py-[10px] rounded-[8px] font-medium text-[14px] shadow-sm hover:bg-[#006e52] transition-all border-0 cursor-pointer"
+                    >
+                      全量给 {key}
+                    </button>
+                  </Form>
+                ))}
+
+                <Form method="post">
+                  <input type="hidden" name="intent" value="abtest-force-split" />
+                  <input type="hidden" name="offerId" value={abSplitOffer.id} />
+                  <input type="hidden" name="splitMode" value="disable" />
+                  <button
+                    type="submit"
+                    className="w-full bg-transparent border border-[#dfe3e8] !text-[#1c1f23] px-[16px] py-[10px] rounded-[8px] font-medium text-[14px] hover:bg-[#f4f6f8] transition-all cursor-pointer"
+                  >
+                    关闭 A/B 实验
+                  </button>
+                </Form>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-[8px] mt-[16px]">
+              <button
+                type="button"
+                className="px-[12px] py-[6px] rounded-[6px] border border-[#dfe3e8] bg-white text-[#1c1f23] text-[14px] font-sans hover:bg-[#f4f6f8]"
+                onClick={() => {
+                  setShowAbSplitModal(false);
+                  setAbSplitOffer(null);
+                }}
+              >
+                取消
+              </button>
             </div>
           </div>
         </div>

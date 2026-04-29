@@ -507,7 +507,34 @@ export type IndexLoaderData = {
 async function fetchShopOffers(shop: string): Promise<OfferListItem[]> {
   try {
     const prismaOffers = await getCachedShopOffers(shop);
-    return prismaOffers as unknown as OfferListItem[];
+    const offers = prismaOffers as unknown as OfferListItem[];
+
+    // 强制：同一店铺内最多只有一个启用中的 abTest offer
+    // 若历史数据不一致（同时存在多个 status=true 的 abTest offer），则自动兜底关闭其它。
+    const activeAbTests = offers.filter((o) => o.offerType === "abTest" && o.status === true);
+    if (activeAbTests.length > 1) {
+      const keep = activeAbTests[0];
+      try {
+        const prismaAny: any = prisma;
+        await prismaAny.offer.updateMany({
+          where: {
+            shopName: shop,
+            offerType: "abTest",
+            status: true,
+            id: { not: keep.id },
+          },
+          data: { status: false },
+        });
+        invalidateShopOffersCache(shop);
+        const refreshed = (await getCachedShopOffers(shop)) as unknown as OfferListItem[];
+        return refreshed;
+      } catch (e) {
+        console.error("Failed to enforce single active abTest offer on load", e);
+        return offers;
+      }
+    }
+
+    return offers;
   } catch (error) {
     console.error("Failed to get cached shop offers", error);
     return [];
@@ -1778,7 +1805,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     if (intent === "create-offer") {
       try {
-        await writeOfferWithRetry(() => prismaAny.offer.create({ data }));
+        const createdOffer: any = await writeOfferWithRetry(() =>
+          prismaAny.offer.create({ data }),
+        );
+        // 强制同一店铺内只允许一个启用中的 abTest offer
+        if (offerType === "abTest" && status === true && createdOffer?.id) {
+          await prismaAny.offer.updateMany({
+            where: {
+              shopName,
+              offerType: "abTest",
+              id: { not: createdOffer.id },
+            },
+            data: { status: false },
+          });
+        }
         url.searchParams.set("toast", `create-success-${Date.now()}`);
       } catch (error: any) {
         if (
@@ -1808,12 +1848,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return offerActionErrorResponse("Missing offer ID, cannot update.", 400);
       }
       try {
-        await writeOfferWithRetry(() =>
+        const updatedOfferRecord: any = await writeOfferWithRetry(() =>
           prismaAny.offer.update({
             where: { id: idRaw },
             data,
           }),
         );
+        // 强制同一店铺内只允许一个启用中的 abTest offer
+        if (offerType === "abTest" && status === true && updatedOfferRecord?.id) {
+          await prismaAny.offer.updateMany({
+            where: {
+              shopName,
+              offerType: "abTest",
+              id: { not: updatedOfferRecord.id },
+            },
+            data: { status: false },
+          });
+        }
         url.searchParams.set("toast", `update-success-${Date.now()}`);
       } catch (error: any) {
         if (
@@ -1887,6 +1938,22 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return offerActionErrorResponse("Toggle status failed.", 500);
     }
 
+    // 强制：如果将某个 abTest offer 切为启用，则同一店铺其它 abTest offer 全部关闭
+    try {
+      if (updatedOffer?.offerType === "abTest" && nextStatus === true && updatedOffer?.shopName) {
+        await prismaAny.offer.updateMany({
+          where: {
+            shopName: String(updatedOffer.shopName),
+            offerType: "abTest",
+            id: { not: idRaw },
+          },
+          data: { status: false },
+        });
+      }
+    } catch (e) {
+      console.error("toggle-offer-status abTest single-enable enforcement failed", e);
+    }
+
     // Sync metafield
     try {
       const shopNameToSync = updatedOffer?.shopName as string | undefined;
@@ -1913,6 +1980,135 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     return Response.json({ success: true, toast: `toggle-success-${Date.now()}` });
+  }
+
+  if (intent === "abtest-force-split") {
+    const offerIdRaw = String(formData.get("offerId") || "").trim();
+    const splitModeRaw = String(formData.get("splitMode") || "").trim();
+    const targetVariantKeyRaw = String(formData.get("targetVariantKey") || "").trim();
+
+    if (!offerIdRaw) {
+      return offerActionErrorResponse("Missing offerId.", 400);
+    }
+    if (!splitModeRaw || !["full", "disable"].includes(splitModeRaw)) {
+      return offerActionErrorResponse("Invalid splitMode.", 400);
+    }
+
+    const offer = await prismaAny.offer.findUnique({
+      where: { id: offerIdRaw },
+    });
+
+    if (!offer) {
+      return offerActionErrorResponse("Offer not found.", 404);
+    }
+    if (offer.offerType !== "abTest") {
+      return offerActionErrorResponse("Offer is not abTest.", 400);
+    }
+    if (!offer.shopName) {
+      return offerActionErrorResponse("Missing shopName for offer.", 400);
+    }
+
+    const shopNameToSync = String(offer.shopName);
+
+    // 1) 先处理启用/关闭关系：同一店铺只有一个启用中的 abTest offer
+    if (splitModeRaw === "disable") {
+      await prismaAny.offer.updateMany({
+        where: { shopName: shopNameToSync, offerType: "abTest" },
+        data: { status: false },
+      });
+    } else {
+      // full：其它 abTest 都先关掉，再把当前 offer 开启
+      await prismaAny.offer.updateMany({
+        where: {
+          shopName: shopNameToSync,
+          offerType: "abTest",
+          id: { not: offerIdRaw },
+        },
+        data: { status: false },
+      });
+    }
+
+    // 2) 仅当 full 时才写 trafficWeights（其它 variant=0）
+    let nextOfferSettingsJson: string | null = null;
+    if (splitModeRaw === "full") {
+      if (!targetVariantKeyRaw) {
+        return offerActionErrorResponse("Missing targetVariantKey for full split.", 400);
+      }
+      if (!offer.offerSettingsJson) {
+        return offerActionErrorResponse("Missing offerSettingsJson.", 400);
+      }
+
+      let parsedSettings: Record<string, unknown>;
+      try {
+        parsedSettings = JSON.parse(String(offer.offerSettingsJson)) as Record<string, unknown>;
+      } catch {
+        return offerActionErrorResponse("Invalid offerSettingsJson.", 400);
+      }
+
+      const abRaw = parsedSettings?.abTest;
+      const saltHint = abRaw && typeof abRaw === "object" && (abRaw as any).salt ? String((abRaw as any).salt) : "";
+      const parsedAb = parseAbTestOfferSettingsBlock(abRaw, saltHint);
+
+      const variants = parsedAb.variants || [];
+      if (variants.length < 2) {
+        return offerActionErrorResponse("abTest variants insufficient.", 400);
+      }
+
+      const targetIdx = variants.findIndex((v) => String(v.key) === targetVariantKeyRaw);
+      if (targetIdx < 0) {
+        return offerActionErrorResponse(
+          `targetVariantKey not found in this offer: ${targetVariantKeyRaw}`,
+          400,
+        );
+      }
+
+      const nextTrafficWeights = variants.map((_, idx) => (idx === targetIdx ? 100 : 0));
+
+      // 写回：只调整 trafficWeights（并显式 allocationMode=custom），variants 保持来自解析后的稳定结构
+      const nextAbTest = {
+        ...(typeof abRaw === "object" && abRaw ? abRaw : {}),
+        salt: parsedAb.salt,
+        allocationMode: "custom",
+        trafficWeights: nextTrafficWeights,
+        variants: parsedAb.variants,
+      };
+
+      parsedSettings.abTest = nextAbTest as unknown as Record<string, unknown>;
+      nextOfferSettingsJson = JSON.stringify(parsedSettings);
+    }
+
+    // 3) 更新当前 offer：full 时置为启用，disable 时无需再修改设置，只需 status=false 已完成
+    if (splitModeRaw === "full") {
+      await prismaAny.offer.update({
+        where: { id: offerIdRaw },
+        data: {
+          status: true,
+          offerSettingsJson: nextOfferSettingsJson,
+        },
+      });
+    }
+
+    // 4) Sync metafield + 缓存失效
+    try {
+      const themeExtensionEnabled = await getCurrentThemeExtensionEnabled(admin);
+      const syncResult = await syncShopOffersMetafield(
+        admin,
+        shopNameToSync,
+        themeExtensionEnabled,
+      );
+      if (!syncResult.ok) {
+        console.error("Failed to sync offers metafield after abtest-force-split", {
+          shopName: shopNameToSync,
+          message: syncResult.message,
+        });
+      }
+    } catch (error) {
+      console.error("Failed to sync offers metafield after abtest-force-split", error);
+    }
+
+    invalidateShopOffersCache(shopNameToSync);
+
+    return Response.json({ success: true, toast: `update-success-${Date.now()}` });
   }
 
   if (intent === "delete-offer") {
