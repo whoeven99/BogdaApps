@@ -114,6 +114,51 @@ function extractAbVariantKeysFromOfferSettings(offerSettingsJson: string | null)
   }
 }
 
+/**
+ * 解决图 1 “A/B 数据像是查不到”的关键：
+ * web 侧打点（nway 模式）里 `abGroup` 可能是 variant.id，
+ * 但本页面合并逻辑按 variant.key（A/B）去匹配，导致 GMV 等回退为 0。
+ * 这里构建一个映射：把 API 返回的 rawKey 转成页面期望的 variant.key。
+ */
+function buildAbVariantKeyMapperFromOfferSettings(offerSettingsJson: string | null) {
+  const fallback = {
+    mapRawKeyToVariantKey: (rawKey: string) => String(rawKey ?? "").trim(),
+  };
+
+  if (!offerSettingsJson) return fallback;
+  try {
+    const settingsParsed = JSON.parse(String(offerSettingsJson)) as Record<string, unknown>;
+    const abRaw = settingsParsed?.abTest as Record<string, unknown> | undefined;
+    if (!abRaw || typeof abRaw !== "object") return fallback;
+
+    const saltHint = String((abRaw as any)?.salt || "");
+    const stored = parseAbTestOfferSettingsBlock(abRaw, saltHint);
+
+    const idToKey = new Map<string, string>();
+    for (const v of stored.variants) {
+      if (!v?.id || !v?.key) continue;
+      idToKey.set(String(v.id), String(v.key));
+    }
+
+    // legacy 模式：abGroup 使用 "abtest1"/"abtest2"（由 bucket<split 决定）
+    const keyA = stored.variants?.[0]?.key ? String(stored.variants[0].key) : "A";
+    const keyB = stored.variants?.[1]?.key ? String(stored.variants[1].key) : "B";
+
+    return {
+      mapRawKeyToVariantKey: (rawKey: string) => {
+        const k = String(rawKey ?? "").trim();
+        if (!k) return "";
+        if (idToKey.has(k)) return idToKey.get(k) || "";
+        if (k === "abtest1") return keyA;
+        if (k === "abtest2") return keyB;
+        return k;
+      },
+    };
+  } catch {
+    return fallback;
+  }
+}
+
 function renderDeltaArrow(value: number, baseValue: number) {
   const a = Number.isFinite(value) ? value : 0;
   const b = Number.isFinite(baseValue) ? baseValue : 0;
@@ -455,10 +500,15 @@ export function DashboardPage({
                 ciHigh?: number;
               }>;
             };
+            const variantKeyMapper = buildAbVariantKeyMapperFromOfferSettings(
+              offer.offerSettingsJson,
+            );
             const apiVariants: AbVariantSummary[] = Array.isArray(data?.rows)
               ? data.rows
                   .map((row) => ({
-                    key: String(row.key || "").trim(),
+                    key: variantKeyMapper.mapRawKeyToVariantKey(
+                      String(row.key || "").trim(),
+                    ),
                     exposureUsers: Math.max(0, Number(row.exposureUsers) || 0),
                     checkoutUsers: Math.max(0, Number(row.checkoutUsers) || 0),
                     gmv: Math.max(0, Number(row.gmv) || 0),
@@ -923,17 +973,6 @@ export function DashboardPage({
                         >
                           <Pencil size={16} />
                         </button>
-                        {offer.offerType === "abTest" &&
-                        offer.name?.startsWith("#offer") ? (
-                          <button
-                            type="button"
-                            className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[6px] rounded-[6px] hover:bg-[#f0f9f6] transition-all"
-                            title="配置修改"
-                            onClick={() => openAbSplitModal(offer)}
-                          >
-                            <Info size={16} />
-                          </button>
-                        ) : null}
                         <button
                           type="button"
                           className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#d72c0d] p-[6px] rounded-[6px] hover:bg-[#fef3f2] transition-all"
@@ -1072,17 +1111,6 @@ export function DashboardPage({
                     >
                       <Pencil size={18} />
                     </button>
-                    {offer.offerType === "abTest" &&
-                    offer.name?.startsWith("#offer") ? (
-                      <button
-                        type="button"
-                        className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[8px] rounded-[8px] hover:bg-[#f0f9f6] transition-all"
-                        title="配置修改"
-                        onClick={() => openAbSplitModal(offer)}
-                      >
-                        <Info size={18} />
-                      </button>
-                    ) : null}
                     <button
                       type="button"
                       className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#d72c0d] p-[8px] rounded-[8px] hover:bg-[#fef3f2] transition-all"
@@ -1138,10 +1166,36 @@ export function DashboardPage({
               <div key={test.offerId} className="border border-[#e5e7eb] rounded-[10px] p-[14px]">
                 <div className="flex flex-wrap items-center justify-between gap-[8px] mb-[10px]">
                   <div className="font-medium text-[15px] text-[#1c1f23]">{test.offerName}</div>
-                  <div className="text-[12px] text-[#5c6166]">
-                    Winner: <span className="font-semibold text-[#108043]">{test.winnerKey}</span>（GMV{" "}
-                    {test.winnerLiftPct >= 0 ? "+" : ""}
-                    {test.winnerLiftPct.toFixed(2)}%）
+                  <div className="flex items-center gap-[10px]">
+                    <div className="text-[12px] text-[#5c6166]">
+                      Winner:{" "}
+                      <span className="font-semibold text-[#108043]">
+                        {test.winnerKey}
+                      </span>
+                      （GMV{" "}
+                      {test.winnerLiftPct >= 0 ? "+" : ""}
+                      {test.winnerLiftPct.toFixed(2)}%）
+                    </div>
+                    {(() => {
+                      const abOffer = offerRows.find((o) => o.id === test.offerId);
+                      if (
+                        !abOffer ||
+                        abOffer.offerType !== "abTest" ||
+                        !abOffer.name?.startsWith("#offer")
+                      ) {
+                        return null;
+                      }
+                      return (
+                        <button
+                          type="button"
+                          className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[6px] rounded-[6px] hover:bg-[#f0f9f6] transition-all"
+                          title="配置修改"
+                          onClick={() => openAbSplitModal(abOffer)}
+                        >
+                          <Info size={16} />
+                        </button>
+                      );
+                    })()}
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-[10px]">
