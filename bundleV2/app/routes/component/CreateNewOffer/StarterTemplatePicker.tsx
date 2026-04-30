@@ -102,6 +102,31 @@ function QuantityBreakPreview() {
   );
 }
 
+function DifferentProductsPreview() {
+  return (
+    <div className="flex min-h-[260px] flex-col rounded-[16px] border border-[#dfe3e8] bg-[#f6f6f7] p-[14px]">
+      <div className="space-y-[8px]">
+        <PreviewRow
+          title="Mix any 2 items"
+          subtitle="Shared pool discount"
+          price="15% OFF"
+          badge="Recommended"
+          selected
+        />
+        <PreviewRow
+          title="Buy 2, get 1 mix-and-match"
+          subtitle="Reward comes from the same pool"
+          price="1 FREE"
+          badge="BXGY"
+        />
+        <div className="rounded-[10px] bg-white px-[12px] py-[9px] text-[12px] text-[#5c6166] shadow-[inset_0_0_0_1px_rgba(17,24,39,0.08)]">
+          Customers can mix different products inside one shared bundle pool.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BxgyPreview() {
   return (
     <div className="flex min-h-[260px] flex-col rounded-[16px] border border-[#dfe3e8] bg-[#f6f6f7] p-[14px]">
@@ -213,6 +238,7 @@ function FreeGiftPreview() {
 
 function OfferTypePreview({ offerType }: { offerType: OfferTypeId }) {
   if (offerType === "bxgy") return <BxgyPreview />;
+  if (offerType === "quantity-breaks-different") return <DifferentProductsPreview />;
   if (offerType === "complete-bundle") return <CompleteBundlePreview />;
   if (offerType === "subscription") return <SubscriptionPreview />;
   if (offerType === "free-gift") return <FreeGiftPreview />;

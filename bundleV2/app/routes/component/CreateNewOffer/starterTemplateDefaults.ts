@@ -128,6 +128,12 @@ export function getStarterTemplateDefaults(
             title: "Camera with 2K microphone",
             subtitle: "Standard price",
             price: "EUR65.00",
+            products: [
+              {
+                image: "https://via.placeholder.com/48",
+                name: "Camera",
+              },
+            ],
           },
           {
             id: "starter-complete-bundle-offer",
@@ -137,6 +143,16 @@ export function getStarterTemplateDefaults(
             featured: true,
             badge: "Most Popular",
             saveLabel: "SAVE EUR14.99",
+            products: [
+              {
+                image: "https://via.placeholder.com/48",
+                name: "Wireless Dog Fence",
+              },
+              {
+                image: "https://via.placeholder.com/48",
+                name: "Siemens Tablets",
+              },
+            ],
           },
         ],
       };
@@ -239,6 +255,20 @@ export function getStarterTemplateDefaults(
             subtitle: "You save 15%",
             badge: "Recommended",
             isDefault: true,
+          },
+          {
+            count: 3,
+            discountPercent: 100,
+            buyQuantity: 2,
+            getQuantity: 1,
+            buyProductIds: [],
+            getProductIds: [],
+            maxUsesPerOrder: 1,
+            tierType: "bxgy",
+            title: "Buy 2, get 1 mix-and-match",
+            subtitle: "Reward a third item from the same pool",
+            badge: "BXGY",
+            isDefault: false,
           },
         ],
         completeBundleBars: [],

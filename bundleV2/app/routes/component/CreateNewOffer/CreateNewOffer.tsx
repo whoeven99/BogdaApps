@@ -28,7 +28,6 @@ import {
 import {
   buildDiscountRulesPayload,
   buildSelectedProductsPayload,
-  getCampaignPublishSupportSummary,
   validateFinalSubmitScopeAndLogic,
   validateScopeAndLogicStep,
 } from "./campaignBuilderRegistry";
@@ -183,54 +182,6 @@ type CompleteBundleProductDraft = {
     selectedOptions?: Array<{ name: string; value: string }>;
   }>;
 };
-
-/** 从价格字符串解析为数字（支持 12.99 / 12,99 / €12.99） */
-function parseMoneyStringToNumber(raw?: string): number {
-  if (raw == null) return 0;
-  const stripped = String(raw).trim().replace(/[^\d.,-]/g, "");
-  if (!stripped) return 0;
-  const lastComma = stripped.lastIndexOf(",");
-  const lastDot = stripped.lastIndexOf(".");
-  let normalized = stripped;
-  if (lastComma > lastDot) {
-    normalized = stripped.replace(/\./g, "").replace(",", ".");
-  } else {
-    normalized = stripped.replace(/,/g, "");
-  }
-  const n = Number(normalized);
-  return Number.isFinite(n) ? n : 0;
-}
-
-/**
- * 单件商品定价：原价 / 百分比优惠 / 立减金额 / 固定价
- * full_price：原价；percentage_off：按百分比减价；amount_off：减固定金额；fixed_price：指定售价
- */
-function applyCompleteBundleProductPricing(
-  mode: CompleteBundlePricingMode,
-  value: number,
-  basePrice: number,
-): { final: number; original: number } {
-  const original = Math.max(0, basePrice);
-  if (mode === "full_price") {
-    return { final: original, original };
-  }
-  if (mode === "percentage_off") {
-    const pct = Math.max(0, Math.min(100, Number(value) || 0));
-    const final = Math.round(original * (1 - pct / 100) * 100) / 100;
-    return { final, original };
-  }
-  if (mode === "amount_off") {
-    const off = Math.max(0, Number(value) || 0);
-    const final = Math.max(0, Math.round((original - off) * 100) / 100);
-    return { final, original };
-  }
-  const fixed = Math.max(0, Number(value) || 0);
-  return { final: Math.round(fixed * 100) / 100, original };
-}
-
-function formatEuroFromNumber(amount: number): string {
-  return `€${amount.toFixed(2).replace(".", ",")}`;
-}
 
 interface InitialOffer {
   id: string;
@@ -1222,10 +1173,6 @@ export function CreateNewOffer({
       );
     }
   }, [initialCampaignConfig]);
-  const activeBundleBar =
-    completeBundleBars.find((bar) => bar.id === activeBundleBarId) ||
-    completeBundleBars[0] ||
-    null;
   const mainBundleProduct = completeBundleBars[0]?.products?.[0];
   const storeProductMap = useMemo(
     () =>
@@ -2263,7 +2210,6 @@ export function CreateNewOffer({
       unifiedRulesSnapshot,
     ],
   );
-  const stepTwoPublishSummary = getCampaignPublishSupportSummary(campaignDraft);
   const compositionBars = getCampaignCompositionBars(campaignDraft);
   const compositionModules = getCampaignCompositionModules(campaignDraft, {
     showCountdownBlock,
@@ -2302,9 +2248,6 @@ export function CreateNewOffer({
     [orderedCompositionRulesSnapshot],
   );
   const activeDisplayRules = orderedCompositionRulesSnapshot;
-  const enabledCompositionModuleCount = compositionModules.filter(
-    (module) => module.enabled,
-  ).length;
   const getModuleBlockingMessage = () => {
     if (productBundleEnabled && productBundleProductIds.length === 0) {
       return "Product bundle module requires at least one selected product.";
@@ -3236,10 +3179,7 @@ export function CreateNewOffer({
 
           {step === 2 && (
             <>
-              <BuilderStepIntro
-                title="Scope & Logic"
-                meta={`${compositionBars.length} bars • ${enabledCompositionModuleCount} components enabled • ${stepTwoPublishSummary}`}
-              />
+              <BuilderStepIntro title="Scope & Logic" />
 
               <StepTwoCompositionBuilder
                 draft={campaignDraft}
@@ -3274,283 +3214,34 @@ export function CreateNewOffer({
                 preview={
                   <PreviewShell meta={previewPanelMeta}>
                     {progressiveGiftPreviewControls}
-                    {offerType === "complete-bundle" ? (
-                      <div className="create-offer-preview-card">
-                        <div className="create-offer-style-preview-header">
-                          {widgetTitle || "Bundle & Save"}
-                        </div>
-                        <div className="create-offer-style-preview-list create-offer-style-preview-list--vertical">
-                          {completeBundleBars.map((bar, barIndex) => (
-                            <div
-                              key={bar.id}
-                              className="create-offer-style-preview-item"
-                              style={{
-                                borderColor:
-                                  activeBundleBar?.id === bar.id ? accentColor : borderColor,
-                                background: cardBackgroundColor,
-                              }}
-                            >
-                              <div className="flex items-start gap-2 mb-1">
-                                <input
-                                  type="radio"
-                                  name="complete-bundle-live-preview-bar"
-                                  className="mt-1 shrink-0"
-                                  checked={activeBundleBarId === bar.id}
-                                  onChange={() => setActiveBundleBarId(bar.id)}
-                                  aria-label={`Select bundle bar ${barIndex + 1}`}
-                                />
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center justify-between gap-2">
-                                    <div className="create-offer-style-preview-item-title">
-                                      {bar.title || `Bar #${barIndex + 1}`}
-                                    </div>
-                                    <Button
-                                      type="link"
-                                      className="px-0 h-auto shrink-0"
-                                      onClick={(e) => {
-                                        setActiveBundleBarId(bar.id);
-                                        handleSelectProductsForBundleBar(bar.id);
-                                        e.preventDefault();
-                                      }}
-                                    >
-                                      {bar.products.length
-                                        ? "Edit bar products"
-                                        : "Select bar products"}
-                                    </Button>
-                                  </div>
-                                  <div className="create-offer-style-preview-item-subtitle">
-                                    {bar.subtitle ||
-                                      `${bar.type === "bxgy" ? "Buy X Get Y" : "Quantity break"} · Qty ${bar.quantity}`}
-                                  </div>
-                                </div>
-                              </div>
-                              {bar.products.length >= 1
-                                ? (() => {
-                                    let sumOriginal = 0;
-                                    let sumFinal = 0;
-                                    for (const p of bar.products) {
-                                      const v =
-                                        p.variants?.find(
-                                          (x) => x.id === p.selectedVariantId,
-                                        ) || p.variants?.[0];
-                                      const base = parseMoneyStringToNumber(v?.price || p.price);
-                                      const { final, original } =
-                                        applyCompleteBundleProductPricing(
-                                          p.pricing?.mode ?? "full_price",
-                                          p.pricing?.value ?? 0,
-                                          base,
-                                        );
-                                      sumOriginal += original;
-                                      sumFinal += final;
-                                    }
-                                    const saved = Math.max(0, sumOriginal - sumFinal);
-                                    return (
-                                      <>
-                                        <div className="mt-2 text-[13px] font-semibold text-[#1c1f23] flex flex-wrap items-baseline gap-2">
-                                          <span>{formatEuroFromNumber(sumFinal)}</span>
-                                          {sumOriginal > sumFinal ? (
-                                            <span className="text-[12px] text-[#9aa0a6] line-through font-normal">
-                                              {formatEuroFromNumber(sumOriginal)}
-                                            </span>
-                                          ) : null}
-                                        </div>
-                                        {saved > 0 ? (
-                                          <div className="mt-1 text-[12px] text-[#008060] font-medium">
-                                            Save {formatEuroFromNumber(saved)}!
-                                          </div>
-                                        ) : null}
-                                      </>
-                                    );
-                                  })()
-                                : null}
-                              <div
-                                className={
-                                  bar.products.length >= 2
-                                    ? "mt-2 flex flex-wrap items-stretch gap-2"
-                                    : "mt-2 flex flex-col gap-2"
-                                }
-                              >
-                                {bar.products.length === 0 ? (
-                                  <div className="text-[12px] text-[#5c6166]">
-                                    No products selected.
-                                  </div>
-                                ) : (
-                                  bar.products.map((product, pIdx) => {
-                                    const selectedVariant =
-                                      product.variants?.find(
-                                        (v) => v.id === product.selectedVariantId,
-                                      ) || product.variants?.[0];
-                                    const optionNames = Array.from(
-                                      new Set(
-                                        (product.variants || [])
-                                          .flatMap((variant) => variant.selectedOptions || [])
-                                          .map((opt) => opt.name)
-                                          .filter(Boolean),
-                                      ),
-                                    );
-                                    const selectedOptionsMap = Object.fromEntries(
-                                      (selectedVariant?.selectedOptions || []).map((opt) => [
-                                        opt.name,
-                                        opt.value,
-                                      ]),
-                                    );
-                                    const base = parseMoneyStringToNumber(
-                                      selectedVariant?.price || product.price,
-                                    );
-                                    const { final, original } =
-                                      applyCompleteBundleProductPricing(
-                                        product.pricing?.mode ?? "full_price",
-                                        product.pricing?.value ?? 0,
-                                        base,
-                                      );
-                                    return (
-                                      <div key={product.productId} className="contents">
-                                        {bar.products.length >= 2 && pIdx > 0 ? (
-                                          <div className="flex items-center justify-center px-1 text-[16px] font-bold text-[#9aa0a6] self-center">
-                                            +
-                                          </div>
-                                        ) : null}
-                                        <div
-                                          className={
-                                            bar.products.length >= 2
-                                              ? "rounded border border-[#e5e7eb] p-2 flex-1 min-w-[140px] bg-white"
-                                              : "rounded border border-[#e5e7eb] p-2 bg-white"
-                                          }
-                                        >
-                                          {product.image ? (
-                                            <img
-                                              src={product.image}
-                                              alt={product.title || "product"}
-                                              className="w-12 h-12 rounded object-cover mb-2"
-                                            />
-                                          ) : null}
-                                          <div className="text-[11px] font-medium text-[#1c1f23] line-clamp-2">
-                                            {product.title || product.productId}
-                                          </div>
-                                          <div className="text-[12px] mt-1 flex flex-wrap items-baseline gap-1">
-                                            <span className="font-semibold text-[#1c1f23]">
-                                              {formatEuroFromNumber(final)}
-                                            </span>
-                                            {original > final ? (
-                                              <span className="text-[11px] text-[#9aa0a6] line-through">
-                                                {formatEuroFromNumber(original)}
-                                              </span>
-                                            ) : null}
-                                          </div>
-                                          {Array.isArray(product.variants) &&
-                                          product.variants.length > 0 &&
-                                          optionNames.length === 0 ? (
-                                            <Select
-                                              size="small"
-                                              className="w-full mt-2"
-                                              value={
-                                                product.selectedVariantId ||
-                                                product.variants[0].id
-                                              }
-                                              onChange={(variantId) =>
-                                                updateBundleBarProductVariant(
-                                                  bar.id,
-                                                  product.productId,
-                                                  String(variantId),
-                                                )
-                                              }
-                                              options={product.variants.map((variant) => ({
-                                                label: variant.title || "Default",
-                                                value: variant.id,
-                                              }))}
-                                            />
-                                          ) : null}
-                                          {optionNames.length > 0 ? (
-                                            <div className="grid grid-cols-1 gap-2 mt-2">
-                                              {optionNames.map((optionName) => {
-                                                const optionValues = Array.from(
-                                                  new Set(
-                                                    (product.variants || [])
-                                                      .flatMap(
-                                                        (variant) =>
-                                                          variant.selectedOptions || [],
-                                                      )
-                                                      .filter(
-                                                        (opt) => opt.name === optionName,
-                                                      )
-                                                      .map((opt) => opt.value)
-                                                      .filter(Boolean),
-                                                  ),
-                                                );
-                                                return (
-                                                  <Select
-                                                    key={`${product.productId}-${optionName}-live`}
-                                                    size="small"
-                                                    className="w-full"
-                                                    value={
-                                                      selectedOptionsMap[optionName] ||
-                                                      optionValues[0]
-                                                    }
-                                                    onChange={(value) =>
-                                                      updateBundleBarProductOption(
-                                                        bar.id,
-                                                        product.productId,
-                                                        optionName,
-                                                        String(value),
-                                                      )
-                                                    }
-                                                    options={optionValues.map((value) => ({
-                                                      label: value,
-                                                      value,
-                                                    }))}
-                                                  />
-                                                );
-                                              })}
-                                            </div>
-                                          ) : null}
-                                        </div>
-                                      </div>
-                                    );
-                                  })
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                        {showCustomButton ? (
-                          <button
-                            className="create-offer-preview-button"
-                            style={{ background: buttonPrimaryColor, marginTop: 12 }}
-                          >
-                            {buttonText}
-                          </button>
-                        ) : null}
-                      </div>
-                    ) : (
-                      <BundlePreview
-                        layoutFormat={layoutFormat}
-                        cardBackgroundColor={cardBackgroundColor}
-                        accentColor={accentColor}
-                        borderColor={borderColor}
-                        labelColor={labelColor}
-                        titleFontSize={titleFontSize}
-                        titleFontWeight={titleFontWeight}
-                        titleColor={titleColor}
-                        buttonText={buttonText}
-                        buttonPrimaryColor={buttonPrimaryColor}
-                        showCustomButton={showCustomButton}
-                        title={widgetTitle}
-                        items={previewItems}
-                        progressiveGifts={progressiveGifts}
-                        progressivePreviewBarIndex={previewGiftBar}
-                        progressivePreviewLineQty={previewGiftQty}
-                        showSubscriptionPreview={shouldShowSubscriptionPreview}
-                        subscriptionPreviewStyle={subscriptionPreviewStyle}
-                        subscriptionTitle={subscriptionTitle}
-                        subscriptionSubtitle={subscriptionSubtitle}
-                        showSubscriptionExplanation={shouldShowSubscriptionExplanation}
-                        productBundlePreview={productBundlePreview}
-                        checkboxUpsellPreview={checkboxUpsellPreview}
-                        stickyAddToCartPreview={stickyAddToCartPreview}
-                        subscriptionExplanationTitle={subscriptionExplanationTitle}
-                        subscriptionExplanationBody={subscriptionExplanationBody}
-                      />
-                    )}
+                    <BundlePreview
+                      layoutFormat={layoutFormat}
+                      cardBackgroundColor={cardBackgroundColor}
+                      accentColor={accentColor}
+                      borderColor={borderColor}
+                      labelColor={labelColor}
+                      titleFontSize={titleFontSize}
+                      titleFontWeight={titleFontWeight}
+                      titleColor={titleColor}
+                      buttonText={buttonText}
+                      buttonPrimaryColor={buttonPrimaryColor}
+                      showCustomButton={showCustomButton}
+                      title={widgetTitle}
+                      items={previewItems}
+                      progressiveGifts={progressiveGifts}
+                      progressivePreviewBarIndex={previewGiftBar}
+                      progressivePreviewLineQty={previewGiftQty}
+                      showSubscriptionPreview={shouldShowSubscriptionPreview}
+                      subscriptionPreviewStyle={subscriptionPreviewStyle}
+                      subscriptionTitle={subscriptionTitle}
+                      subscriptionSubtitle={subscriptionSubtitle}
+                      showSubscriptionExplanation={shouldShowSubscriptionExplanation}
+                      productBundlePreview={productBundlePreview}
+                      checkboxUpsellPreview={checkboxUpsellPreview}
+                      stickyAddToCartPreview={stickyAddToCartPreview}
+                      subscriptionExplanationTitle={subscriptionExplanationTitle}
+                      subscriptionExplanationBody={subscriptionExplanationBody}
+                    />
                   </PreviewShell>
                 }
               />

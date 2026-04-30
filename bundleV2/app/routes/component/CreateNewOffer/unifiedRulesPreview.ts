@@ -320,6 +320,20 @@ function buildCompleteBundleItem(
   }
 
   const saved = Math.max(0, sumOriginal - sumFinal);
+  const products = (bar?.products || []).slice(0, 4).map((product) => {
+    const selectedVariant =
+      product.variants?.find((variant) => variant.id === product.selectedVariantId) ||
+      product.variants?.[0];
+    return {
+      image: product.image || "https://via.placeholder.com/48",
+      name: product.title || "Bundle product",
+      variant:
+        selectedVariant?.title && selectedVariant.title !== "Default Title"
+          ? selectedVariant.title
+          : undefined,
+    };
+  });
+
   return {
     id: rule.id,
     title: rule.presentation.title || `Bar #${index + 1}`,
@@ -336,6 +350,7 @@ function buildCompleteBundleItem(
         : rule.condition.kind === "bundle_completion"
           ? `Qty ${Math.max(1, Number(rule.condition.quantity) || 1)}`
           : undefined,
+    products: products.length > 0 ? products : undefined,
   };
 }
 

@@ -598,7 +598,10 @@ export function bundleCartDiscountGenerateRun(
   const nowMs = resolveNowMs();
   const bxgyOffers = offers.filter(
     (o) =>
-      (o.offerType === "bxgy" || o.offerType === "quantity-breaks-different") &&
+      (o.offerType === "bxgy" ||
+        o.offerType === "quantity-breaks-different" ||
+        (o.offerType === "quantity-breaks-same" &&
+          hasUnifiedBxgyTier(o.discountRulesJson))) &&
       offerPassesScheduleAndMarket(o, marketId, nowMs),
   );
   /** 普通数量阶梯：不含 BXGY 与 complete-bundle（后两者有独立分支） */
@@ -787,6 +790,11 @@ type DiscountTier = {
   conditionType: "item_quantity" | "cart_amount";
   amountThreshold?: number;
   rewardType: "percentage_off" | "gift_product" | "free_shipping";
+  logicType: "standard" | "bxgy";
+  buyQuantity?: number;
+  getQuantity?: number;
+  maxUsesPerOrder?: number;
+  rewardProductIds: string[];
 };
 
 function parseDiscountRulesJson(
@@ -829,6 +837,41 @@ function parseDiscountRulesJson(
           (item as { rewardType?: unknown }).rewardType === "free_shipping"
             ? ((item as { rewardType: "gift_product" | "free_shipping" }).rewardType)
             : "percentage_off",
+        logicType:
+          (item as { logicType?: unknown }).logicType === "bxgy"
+            ? "bxgy"
+            : "standard",
+        buyQuantity: Number.isFinite(
+          Number((item as { buyQuantity?: unknown }).buyQuantity),
+        )
+          ? Math.max(
+              1,
+              Math.trunc(Number((item as { buyQuantity?: unknown }).buyQuantity)),
+            )
+          : undefined,
+        getQuantity: Number.isFinite(
+          Number((item as { getQuantity?: unknown }).getQuantity),
+        )
+          ? Math.max(
+              1,
+              Math.trunc(Number((item as { getQuantity?: unknown }).getQuantity)),
+            )
+          : undefined,
+        maxUsesPerOrder: Number.isFinite(
+          Number((item as { maxUsesPerOrder?: unknown }).maxUsesPerOrder),
+        )
+          ? Math.max(
+              1,
+              Math.trunc(Number((item as { maxUsesPerOrder?: unknown }).maxUsesPerOrder)),
+            )
+          : undefined,
+        rewardProductIds: Array.isArray(
+          (item as { rewardProductIds?: unknown }).rewardProductIds,
+        )
+          ? ((item as { rewardProductIds: unknown[] }).rewardProductIds)
+              .map((id) => String(id || "").trim())
+              .filter(Boolean)
+          : [],
       });
     }
 
@@ -886,6 +929,59 @@ function parseBxgyDiscountRules(discountRulesJson?: string | null): BxgyDiscount
   }
 }
 
+function hasUnifiedBxgyTier(discountRulesJson?: string | null): boolean {
+  return parseDiscountRulesJson(discountRulesJson).some(
+    (tier) =>
+      tier.logicType === "bxgy" &&
+      tier.discountClass === "product" &&
+      tier.rewardType === "percentage_off" &&
+      tier.conditionType === "item_quantity",
+  );
+}
+
+function buildBxgyRulesFromUnifiedDiscountRules(offer: Offer): BxgyDiscountRule[] {
+  const productPool = parseSelectedIds(offer.selectedProductsJson);
+  if (!productPool.length) return [];
+
+  const tiers = parseDiscountRulesJson(offer.discountRulesJson).filter(
+    (tier) =>
+      tier.logicType === "bxgy" &&
+      tier.discountClass === "product" &&
+      tier.rewardType === "percentage_off" &&
+      tier.conditionType === "item_quantity",
+  );
+  if (!tiers.length) return [];
+
+  return tiers.map((tier) => {
+    const configuredRewardPool =
+      Array.isArray(tier.rewardProductIds) && tier.rewardProductIds.length > 0
+        ? tier.rewardProductIds
+        : productPool;
+    return {
+      count: Math.max(1, Math.trunc(Number(tier.count) || 1)),
+      buyQuantity: Math.max(1, Math.trunc(Number(tier.buyQuantity) || 1)),
+      getQuantity: Math.max(1, Math.trunc(Number(tier.getQuantity) || 1)),
+      buyProductIds: productPool,
+      getProductIds: configuredRewardPool,
+      discountPercent: Math.max(0, Math.min(100, Number(tier.discountPercent) || 0)),
+      maxUsesPerOrder: Math.max(1, Math.trunc(Number(tier.maxUsesPerOrder) || 1)),
+      tierType: "bxgy",
+    };
+  });
+}
+
+function matchesAnyConfiguredId(
+  configuredIds: string[],
+  productId: string | undefined,
+  variantId: string | undefined,
+): boolean {
+  return configuredIds.some(
+    (configuredId) =>
+      (productId && productIdsMatch(productId, configuredId)) ||
+      (variantId && productIdsMatch(variantId, configuredId)),
+  );
+}
+
 /**
  * 计算 BXGY 折扣 — 支持多层级 (tier)，按 buyQuantity 字段选择最优匹配层级
  */
@@ -896,7 +992,11 @@ function calculateBxgyDiscount(
   const allCandidates: ProductDiscountCandidate[] = [];
 
   for (const offer of offers) {
-    const bxgyRules = parseBxgyDiscountRules(offer.discountRulesJson);
+    const dedicatedBxgyRules = parseBxgyDiscountRules(offer.discountRulesJson);
+    const bxgyRules =
+      dedicatedBxgyRules.length > 0
+        ? dedicatedBxgyRules
+        : buildBxgyRulesFromUnifiedDiscountRules(offer);
     if (!bxgyRules.length) continue;
 
     const candidates: ProductDiscountCandidate[] = [];
@@ -914,8 +1014,7 @@ function calculateBxgyDiscount(
       totalBuyQuantity += line.quantity;
       const productId = line.merchandise?.product?.id;
       const variantId = line.merchandise?.id;
-      if ((productId && rule.buyProductIds.includes(productId)) ||
-          (variantId && rule.buyProductIds.includes(variantId))) {
+      if (matchesAnyConfiguredId(rule.buyProductIds, productId, variantId)) {
         buyProductCount += line.quantity;
       }
     }
@@ -977,9 +1076,11 @@ function calculateBxgyDiscount(
         if (remaining <= 0) break;
         const productId = line.merchandise?.product?.id;
         const variantId = line.merchandise?.id;
-        const isBuyProduct =
-          (productId && selectedRule.buyProductIds.includes(productId)) ||
-          (variantId && selectedRule.buyProductIds.includes(variantId));
+        const isBuyProduct = matchesAnyConfiguredId(
+          selectedRule.buyProductIds,
+          productId,
+          variantId,
+        );
         if (!isBuyProduct) continue;
 
         const discountQuantity = Math.min(line.quantity, remaining);
@@ -1016,8 +1117,13 @@ function calculateBxgyDiscount(
 
       if (remainingGetQuantity <= 0) break;
 
-      if ((productId && selectedRule.getProductIds.includes(productId)) ||
-          (variantId && selectedRule.getProductIds.includes(variantId))) {
+      if (
+        matchesAnyConfiguredId(
+          selectedRule.getProductIds,
+          productId,
+          variantId,
+        )
+      ) {
 
         const discountQuantity = Math.min(line.quantity, remainingGetQuantity);
 

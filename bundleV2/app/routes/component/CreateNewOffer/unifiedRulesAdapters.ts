@@ -47,7 +47,7 @@ export function adaptDiscountRules(
     condition: buildDiscountRuleCondition(rule),
     reward: buildDiscountRuleReward(rule),
     presentation: buildDiscountRulePresentation(rule),
-    publishSupport: rule.logicType === "bxgy" ? "draft_only" : "supported",
+    publishSupport: "supported",
   }));
 }
 

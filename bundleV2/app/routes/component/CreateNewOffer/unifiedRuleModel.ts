@@ -291,7 +291,14 @@ export function isExecutableDiscountRule(rule: DiscountRule): boolean {
     normalized.conditionType === "item_quantity" &&
     normalized.rewardType === "percentage_off"
   ) {
-    return false;
+    return (
+      Number.isFinite(Number(normalized.buyQuantity)) &&
+      Number(normalized.buyQuantity) >= 1 &&
+      Number.isFinite(Number(normalized.getQuantity)) &&
+      Number(normalized.getQuantity) >= 1 &&
+      Number.isFinite(Number(normalized.maxUsesPerOrder)) &&
+      Number(normalized.maxUsesPerOrder) >= 1
+    );
   }
   if (
     normalized.discountClass === "product" &&
@@ -416,7 +423,7 @@ export function getUnifiedRuleBlockingMessage(rules: DiscountRule[]): string | n
     (rule) => !isExecutableDiscountRule(rule),
   );
   if (unsupportedRule) {
-    return "BXGY rules inside the unified quantity rules editor, gift product rewards, and other unsupported combinations cannot be published yet. Supported combinations are: product percentage by item quantity, order percentage by item quantity or cart amount, and free shipping by item quantity or cart amount.";
+    return "Some rule combinations are not supported yet. Supported combinations are: product percentage by item quantity (including BXGY with valid buy/get quantities), order percentage by item quantity or cart amount, and free shipping by item quantity or cart amount.";
   }
 
   return null;

@@ -11,6 +11,7 @@ import {
   adaptBxgyRules,
   adaptCompleteBundleBars,
   adaptDiscountRules,
+  adaptDifferentProductsRules,
   adaptFreeGiftRules,
 } from "./unifiedRulesAdapters";
 import type { UnifiedRuleNode } from "./unifiedRulesSchema";
@@ -97,9 +98,7 @@ export function getCampaignCompositionBars(
         collection: "discountRules" as const,
         index,
       },
-      supportState: (rule.logicType === "bxgy"
-        ? "draft_only"
-        : "supported") as "draft_only" | "supported",
+      supportState: "supported" as const,
     };
   });
 
@@ -219,6 +218,10 @@ export function getCampaignCompositionRulesSnapshot(
         draft.giftProductsData.map((product) => String(product.id)),
       ),
     );
+  }
+
+  if (draft.differentProductsDiscountRules.length > 0) {
+    rules.push(...adaptDifferentProductsRules(draft.differentProductsDiscountRules));
   }
 
   if (draft.completeBundleBars.length > 0) {

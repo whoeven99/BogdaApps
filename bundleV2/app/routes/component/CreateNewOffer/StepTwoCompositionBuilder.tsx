@@ -17,6 +17,7 @@ import {
   type StepTwoModuleId,
 } from "./campaignCompositionAdapter";
 import CompleteBundleEditor from "./CompleteBundleEditor";
+import DifferentProductsLogicEditor from "./DifferentProductsLogicEditor";
 import { ProgressiveGiftsSection } from "./ProgressiveGiftsSection";
 import SubscriptionSettingsEditor from "./SubscriptionSettingsEditor";
 
@@ -70,7 +71,7 @@ function DetailSection({
   children: ReactNode;
 }) {
   return (
-    <div className="rounded-[12px] border border-[#e3e8ed] bg-white px-5 py-4">
+    <section className="space-y-4">
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -84,8 +85,8 @@ function DetailSection({
         </div>
         {actions ? <div className="shrink-0">{actions}</div> : null}
       </div>
-      <div className="mt-5">{children}</div>
-    </div>
+      <div>{children}</div>
+    </section>
   );
 }
 
@@ -649,6 +650,14 @@ export default function StepTwoCompositionBuilder({
   preview,
 }: Props) {
   const [activeModuleId, setActiveModuleId] = useState<ActiveModuleId>(null);
+  const visibleModules = useMemo(
+    () =>
+      modules.filter(
+        (module) =>
+          !(draft.offerType === "complete-bundle" && module.id === "complete_bundle"),
+      ),
+    [draft.offerType, modules],
+  );
 
   const clearBarDefaults = () => {
     actions.setDiscountRules((prev) =>
@@ -663,23 +672,26 @@ export default function StepTwoCompositionBuilder({
   };
 
   useEffect(() => {
-    if (activeModuleId && modules.some((module) => module.id === activeModuleId)) {
+    if (
+      activeModuleId &&
+      visibleModules.some((module) => module.id === activeModuleId)
+    ) {
       return;
     }
-    if (modules.length > 0) {
-      const firstEnabledModule = modules.find((module) => module.enabled);
-      setActiveModuleId((firstEnabledModule || modules[0]).id);
+    if (visibleModules.length > 0) {
+      const firstEnabledModule = visibleModules.find((module) => module.enabled);
+      setActiveModuleId((firstEnabledModule || visibleModules[0]).id);
       return;
     }
     setActiveModuleId(null);
-  }, [activeModuleId, modules]);
+  }, [activeModuleId, visibleModules]);
 
   const activeModule = useMemo(
     () =>
-      modules.find((module) => module.id === activeModuleId) ||
-      modules.find((module) => module.enabled) ||
-      modules[0],
-    [activeModuleId, modules],
+      visibleModules.find((module) => module.id === activeModuleId) ||
+      visibleModules.find((module) => module.enabled) ||
+      visibleModules[0],
+    [activeModuleId, visibleModules],
   );
 
   const showGlobalProductPool =
@@ -696,7 +708,7 @@ export default function StepTwoCompositionBuilder({
     draft.selectedProductsData.length ||
     draft.buyProducts.length ||
     draft.freeGiftTriggerProducts.length;
-  const enabledModuleCount = modules.filter((module) => module.enabled).length;
+  const enabledModuleCount = visibleModules.filter((module) => module.enabled).length;
 
   const renderPoolCard = ({
     title,
@@ -1032,6 +1044,58 @@ export default function StepTwoCompositionBuilder({
     }
   };
 
+  const primaryBarsCount =
+    draft.offerType === "complete-bundle"
+      ? draft.completeBundleBars.length
+      : draft.offerType === "quantity-breaks-different"
+        ? draft.differentProductsDiscountRules.length
+        : bars.length;
+
+  const renderBarsSection = () => {
+    if (draft.offerType === "quantity-breaks-different") {
+      return (
+        <DifferentProductsLogicEditor
+          selectedProductsData={draft.selectedProductsData}
+          differentProductsDiscountRules={draft.differentProductsDiscountRules}
+          setDifferentProductsDiscountRules={actions.setDifferentProductsDiscountRules}
+          updateRuleValues={actions.updateUnifiedRuleValues}
+          updateRulePresentation={actions.updateUnifiedRulePresentation}
+        />
+      );
+    }
+
+    if (draft.offerType === "complete-bundle") {
+      return (
+        <CompleteBundleEditor
+          completeBundleBars={draft.completeBundleBars}
+          activeBundleBarId={draft.activeBundleBarId}
+          setActiveBundleBarId={actions.setActiveBundleBarId}
+          addCompleteBundleBar={actions.addCompleteBundleBar}
+          removeCompleteBundleBar={actions.removeCompleteBundleBar}
+          updateCompleteBundleBar={actions.updateCompleteBundleBar}
+          handleSelectProductsForBundleBar={actions.handleSelectProductsForBundleBar}
+          appendProductsToBundleBar={actions.appendProductsToBundleBar}
+          renderCompleteBundleProductPricingCard={renderCompleteBundleProductPricingCard}
+          updateRuleValues={actions.updateUnifiedRuleValues}
+          updateRulePresentation={actions.updateUnifiedRulePresentation}
+          section="all"
+        />
+      );
+    }
+
+    return (
+      <div className="space-y-4">
+        {bars.length === 0 ? (
+          <QuietEmptyState>
+            No bars yet. Add one to start defining the campaign logic.
+          </QuietEmptyState>
+        ) : (
+          bars.map((bar, index) => renderBarDetail(bar, index))
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -1061,8 +1125,12 @@ export default function StepTwoCompositionBuilder({
 
           <DetailSection
             title="Bars"
-            meta={`${bars.length} configured`}
+            meta={`${primaryBarsCount} configured`}
             actions={
+              draft.offerType === "quantity-breaks-different" ||
+              draft.offerType === "complete-bundle"
+                ? undefined
+                : (
               <Dropdown
                 trigger={["click"]}
                 menu={{
@@ -1077,17 +1145,10 @@ export default function StepTwoCompositionBuilder({
               >
                 <Button type="dashed">+ Add bar</Button>
               </Dropdown>
+                )
             }
           >
-            <div className="space-y-4">
-              {bars.length === 0 ? (
-                <QuietEmptyState>
-                  No bars yet. Add one to start defining the campaign logic.
-                </QuietEmptyState>
-              ) : (
-                bars.map((bar, index) => renderBarDetail(bar, index))
-              )}
-            </div>
+            {renderBarsSection()}
           </DetailSection>
 
           <DetailSection
@@ -1095,7 +1156,7 @@ export default function StepTwoCompositionBuilder({
             meta={`${enabledModuleCount} enabled`}
           >
             <div className="flex flex-col gap-2">
-              {modules.map((module) => (
+              {visibleModules.map((module) => (
                 (() => {
                   const isActive = activeModule?.id === module.id;
                   const tone = getModuleStatusTone(module, isActive);

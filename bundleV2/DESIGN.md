@@ -173,6 +173,7 @@ For multistep configuration pages like offer creation:
 - Collapse to one column on smaller screens
 - Use a persistent bottom action area only when forms are long enough to justify it
 - Step navigation must stay compact and should not push form content below the fold
+- In dense builder steps, top-level groups like `Product pool`, `Bars`, and `Components` can be separated by headings and vertical spacing alone; do not add another outer bordered card when inner controls already provide enough structure
 
 ### Cards
 

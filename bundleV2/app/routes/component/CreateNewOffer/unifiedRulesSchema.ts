@@ -140,7 +140,7 @@ export const OFFER_TYPE_RULE_CAPABILITIES: OfferTypeRuleCapability[] = [
     scopeModel: "selected_products",
     publishSupport: "supported",
     notes:
-      "Standard quantity/order/shipping rules are publishable; unified BXGY remains draft-only.",
+      "Supports standard quantity/order/shipping rules and unified BXGY tiers within the selected product pool.",
   },
   {
     offerType: "quantity-breaks-different",
