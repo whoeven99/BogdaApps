@@ -78,7 +78,7 @@ export function getUnifiedRuleAuditIssuesForRules(
     issues.push({
       severity: "error",
       message:
-        "BXGY bars require both buy products and reward products before continuing.",
+        "BXGY bars require the global Buy pool and reward products inside every bar before continuing.",
     });
   }
 
@@ -92,7 +92,7 @@ export function getUnifiedRuleAuditIssuesForRules(
     issues.push({
       severity: "error",
       message:
-        "Free gift bars require both trigger products and gift products before continuing.",
+        "Free-gift bars require the global trigger pool and gift products inside every bar before continuing.",
     });
   }
 

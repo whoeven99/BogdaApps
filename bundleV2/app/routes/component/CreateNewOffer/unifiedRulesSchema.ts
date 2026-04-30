@@ -276,9 +276,9 @@ export function describeUnifiedRuleScope(scope: UnifiedRuleScope): string {
     case "shared_product_pool":
       return `${scope.productIds.length} products in shared pool`;
     case "buy_get_products":
-      return `${scope.buyProductIds.length} buy products, ${scope.getProductIds.length} get products`;
+      return `${scope.buyProductIds.length} products in global Buy pool, ${scope.getProductIds.length} reward products in this bar`;
     case "trigger_gift_products":
-      return `${scope.triggerProductIds.length} trigger products, ${scope.giftProductIds.length} gift products`;
+      return `${scope.triggerProductIds.length} products in global trigger pool, ${scope.giftProductIds.length} gift products in this bar`;
     case "bundle_bar_products":
       return `${scope.productIds.length} products in this bundle bar`;
     case "subscription_products":

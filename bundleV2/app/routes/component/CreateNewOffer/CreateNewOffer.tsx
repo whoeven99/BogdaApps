@@ -693,37 +693,29 @@ export function CreateNewOffer({
       };
     });
   });
-  const [giftProductsData, setGiftProductsData] = useState<{
-    id: string;
-    title: string;
-    image: string;
-    price: string;
-    variantsCount: number;
-    hasSubscription: boolean;
-  }[]>(() => {
-    const selectedProductsJson =
-      initialCampaignLegacy?.selectedProductsJson ??
-      initialOffer?.selectedProductsJson;
-    const selectedSourceOfferType =
-      (initialCampaignLegacy?.offerType as OfferTypeId | undefined) ??
-      (initialOffer?.offerType as OfferTypeId | undefined);
-    const giftIds =
-      selectedSourceOfferType === "free-gift"
-        ? parseFreeGiftSelectedProducts(selectedProductsJson).giftProducts
-        : [];
+  const selectedProductsJsonForLegacyRewards =
+    initialCampaignLegacy?.selectedProductsJson ??
+    initialOffer?.selectedProductsJson;
+  const selectedSourceOfferTypeForLegacyRewards =
+    (initialCampaignLegacy?.offerType as OfferTypeId | undefined) ??
+    (initialOffer?.offerType as OfferTypeId | undefined);
+  const legacyFreeGiftRewardIds =
+    selectedSourceOfferTypeForLegacyRewards === "free-gift"
+      ? parseFreeGiftSelectedProducts(selectedProductsJsonForLegacyRewards).giftProducts
+      : [];
 
-    return giftIds.map((id: string) => {
-      const found = storeProducts.find((p) => String(p.id) === id);
+  const mapProductIdsToDraftProducts = (ids: string[]) =>
+    ids.map((id) => {
+      const found = storeProducts.find((p) => String(p.id) === String(id));
       return {
-        id,
+        id: String(id),
         title: found?.name ?? "Unknown product",
         image: found?.image ?? "https://via.placeholder.com/60",
         price: found?.price ?? "€0.00",
-        variantsCount: 1,
+        variantsCount: Array.isArray(found?.variants) ? found.variants.length : 1,
         hasSubscription: found?.hasSubscription === true,
       };
     });
-  });
 
   const handleSelectProducts = async (
     type: "buy" | "get" | "gift" | "normal" | "product_bundle" = "normal",
@@ -735,9 +727,9 @@ export function CreateNewOffer({
       selectionIds: type === "buy" 
         ? buyProducts.map((id) => ({ id }))
         : type === "get"
-        ? getProducts.map((id) => ({ id }))
+        ? aggregatedBxgyRewardProductIds.map((id) => ({ id }))
         : type === "gift"
-        ? giftProductsData.map((p) => ({ id: p.id }))
+        ? aggregatedFreeGiftRewardProductIds.map((id) => ({ id }))
         : type === "product_bundle"
         ? productBundleProductIds.map((id) => ({ id }))
         : selectedProductsData.map((p) => ({ id: p.id })),
@@ -763,9 +755,22 @@ export function CreateNewOffer({
       if (type === "buy") {
         setBuyProducts(newData.map((item: any) => item.id));
       } else if (type === "get") {
-        setGetProducts(newData.map((item: any) => item.id));
+        const nextIds = newData.map((item: any) => String(item.id));
+        setGetProducts(nextIds);
+        setBxgyDiscountRules((prev) =>
+          prev.map((rule) => ({
+            ...rule,
+            getProductIds: nextIds,
+          })),
+        );
       } else if (type === "gift") {
-        setGiftProductsData(newData);
+        const nextIds = newData.map((item: any) => String(item.id));
+        setFreeGiftRules((prev) =>
+          prev.map((rule) => ({
+            ...rule,
+            giftProductIds: nextIds,
+          })),
+        );
       } else if (type === "product_bundle") {
         setProductBundleProductIds(newData.map((item: any) => String(item.id)));
       } else if (offerType === "free-gift") {
@@ -788,6 +793,42 @@ export function CreateNewOffer({
         }
       }
     }
+  };
+  const selectBxgyRewardProducts = async (ruleIndex: number) => {
+    const targetRule = bxgyDiscountRules[ruleIndex];
+    if (!targetRule) return;
+    const selected = await (window as any).shopify.resourcePicker({
+      type: "product",
+      action: "select",
+      multiple: true,
+      selectionIds: (targetRule.getProductIds || []).map((id) => ({ id })),
+    });
+    if (!selected) return;
+    const selectedList = Array.isArray(selected) ? selected : [selected];
+    const nextIds = selectedList.map((item: any) => String(item.id));
+    setBxgyDiscountRules((prev) =>
+      prev.map((rule, index) =>
+        index === ruleIndex ? { ...rule, getProductIds: nextIds } : rule,
+      ),
+    );
+  };
+  const selectFreeGiftRewardProducts = async (ruleIndex: number) => {
+    const targetRule = freeGiftRules[ruleIndex];
+    if (!targetRule) return;
+    const selected = await (window as any).shopify.resourcePicker({
+      type: "product",
+      action: "select",
+      multiple: true,
+      selectionIds: (targetRule.giftProductIds || []).map((id) => ({ id })),
+    });
+    if (!selected) return;
+    const selectedList = Array.isArray(selected) ? selected : [selected];
+    const nextIds = selectedList.map((item: any) => String(item.id));
+    setFreeGiftRules((prev) =>
+      prev.map((rule, index) =>
+        index === ruleIndex ? { ...rule, giftProductIds: nextIds } : rule,
+      ),
+    );
   };
   const addCompleteBundleBar = (type: "quantity-break-same" | "bxgy") => {
     const id = `bar-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -921,7 +962,13 @@ export function CreateNewOffer({
     starterTemplateDefaults?.freeGiftRules ??
       parseFreeGiftRules(
         initialCampaignLegacy?.discountRulesJson ?? initialOffer?.discountRulesJson,
-      ),
+      ).map((rule) => ({
+        ...rule,
+        giftProductIds:
+          Array.isArray(rule.giftProductIds) && rule.giftProductIds.length > 0
+            ? rule.giftProductIds
+            : legacyFreeGiftRewardIds,
+      })),
   );
   const [differentProductsDiscountRules, setDifferentProductsDiscountRules] =
     useState<DifferentProductsDiscountRule[]>(
@@ -945,6 +992,21 @@ export function CreateNewOffer({
       return [];
     }
   });
+  const aggregatedFreeGiftRewardProductIds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          freeGiftRules.flatMap((rule) =>
+            Array.isArray(rule.giftProductIds) ? rule.giftProductIds : [],
+          ),
+        ),
+      ),
+    [freeGiftRules],
+  );
+  const giftProductsData = useMemo(
+    () => mapProductIdsToDraftProducts(aggregatedFreeGiftRewardProductIds),
+    [aggregatedFreeGiftRewardProductIds, storeProducts],
+  );
   const [getProducts, setGetProducts] = useState<string[]>(() => {
     const selectedProductsJson =
       initialCampaignLegacy?.offerType === "bxgy"
@@ -960,6 +1022,17 @@ export function CreateNewOffer({
       return [];
     }
   });
+  const aggregatedBxgyRewardProductIds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          bxgyDiscountRules.flatMap((rule) =>
+            Array.isArray(rule.getProductIds) ? rule.getProductIds : [],
+          ),
+        ),
+      ),
+    [bxgyDiscountRules],
+  );
   const [freeGiftTriggerProducts, setFreeGiftTriggerProducts] = useState<string[]>(() => {
     const selectedProductsJson =
       initialCampaignLegacy?.offerType === "free-gift"
@@ -1460,7 +1533,10 @@ export function CreateNewOffer({
           ...rule,
           count: rule.count || 1,
           buyProductIds: buyProducts,
-          getProductIds: getProducts,
+          getProductIds:
+            Array.isArray(rule.getProductIds) && rule.getProductIds.length > 0
+              ? rule.getProductIds
+              : getProducts,
         })),
       );
     }
@@ -1604,7 +1680,7 @@ export function CreateNewOffer({
       ];
     } else if (offerType === "bxgy") {
       logicBlockId = "logic-bxgy";
-      scopeProductIds = Array.from(new Set([...buyProducts, ...getProducts]));
+      scopeProductIds = Array.from(new Set([...buyProducts, ...aggregatedBxgyRewardProductIds]));
       logicBlocks = [
         {
           id: logicBlockId,
@@ -1636,7 +1712,7 @@ export function CreateNewOffer({
       scopeProductIds = Array.from(
         new Set([
           ...freeGiftTriggerProducts,
-          ...giftProductsData.map((product) => String(product.id)),
+          ...aggregatedFreeGiftRewardProductIds,
         ]),
       );
       logicBlocks = [
@@ -1645,7 +1721,7 @@ export function CreateNewOffer({
           type: "free-gift",
           config: {
             triggerProductIds: freeGiftTriggerProducts,
-            giftProductIds: giftProductsData.map((product) => String(product.id)),
+            giftProductIds: aggregatedFreeGiftRewardProductIds,
             tiers: buildFreeGiftRulesJson(freeGiftRules),
           },
         },
@@ -1723,7 +1799,7 @@ export function CreateNewOffer({
           tiers: buildBxgyDiscountRulesJson(bxgyDiscountRules),
         },
       });
-      addScopeProducts([...buyProducts, ...getProducts]);
+      addScopeProducts([...buyProducts, ...aggregatedBxgyRewardProductIds]);
     }
 
     if (offerType !== "free-gift" && freeGiftRules.length > 0) {
@@ -1732,13 +1808,13 @@ export function CreateNewOffer({
         type: "free-gift",
         config: {
           triggerProductIds: freeGiftTriggerProducts,
-          giftProductIds: giftProductsData.map((product) => String(product.id)),
+          giftProductIds: aggregatedFreeGiftRewardProductIds,
           tiers: buildFreeGiftRulesJson(freeGiftRules),
         },
       });
       addScopeProducts([
         ...freeGiftTriggerProducts,
-        ...giftProductsData.map((product) => String(product.id)),
+        ...aggregatedFreeGiftRewardProductIds,
       ]);
     }
 
@@ -1878,7 +1954,7 @@ export function CreateNewOffer({
     endTime,
     freeGiftRules,
     freeGiftTriggerProducts,
-    giftProductsData,
+    aggregatedFreeGiftRewardProductIds,
     compositionBarOrder,
     labelColor,
     layoutFormat,
@@ -1893,7 +1969,7 @@ export function CreateNewOffer({
     productBundleTitle,
     scheduleTimezone,
     selectedProductsData,
-    getProducts,
+    aggregatedBxgyRewardProductIds,
     showCountdownBlock,
     showCustomButton,
     startTime,
@@ -1998,9 +2074,9 @@ export function CreateNewOffer({
         offerType,
         selectedProductIds: selectedProductsData.map((product) => String(product.id)),
         buyProductIds: buyProducts,
-        getProductIds: getProducts,
+        getProductIds: aggregatedBxgyRewardProductIds,
         freeGiftTriggerProductIds: freeGiftTriggerProducts,
-        freeGiftGiftProductIds: giftProductsData.map((product) => String(product.id)),
+        freeGiftGiftProductIds: aggregatedFreeGiftRewardProductIds,
         discountRules: normalizedDiscountRules,
         bxgyDiscountRules,
         freeGiftRules,
@@ -2012,9 +2088,9 @@ export function CreateNewOffer({
       offerType,
       selectedProductsData,
       buyProducts,
-      getProducts,
+      aggregatedBxgyRewardProductIds,
       freeGiftTriggerProducts,
-      giftProductsData,
+      aggregatedFreeGiftRewardProductIds,
       normalizedDiscountRules,
       bxgyDiscountRules,
       freeGiftRules,
@@ -2029,7 +2105,7 @@ export function CreateNewOffer({
       selectedProductsData,
       discountRules,
       buyProducts,
-      getProducts,
+      getProducts: aggregatedBxgyRewardProductIds,
       activeBundleBarId,
       completeBundleBars,
       productBundleEnabled,
@@ -2072,7 +2148,7 @@ export function CreateNewOffer({
       selectedProductsData,
       discountRules,
       buyProducts,
-      getProducts,
+      aggregatedBxgyRewardProductIds,
       activeBundleBarId,
       completeBundleBars,
       productBundleEnabled,
@@ -2379,6 +2455,8 @@ export function CreateNewOffer({
     setSubscriptionDefaultSelected,
     setFreeGiftTriggerProducts,
     setFreeGiftRules,
+    selectBxgyRewardProducts,
+    selectFreeGiftRewardProducts,
     setProgressiveGifts,
     updateUnifiedRulePresentation,
     updateUnifiedRuleValues,

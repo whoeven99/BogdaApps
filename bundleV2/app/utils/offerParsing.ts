@@ -611,6 +611,7 @@ export type BxgyDiscountRule = {
 export type FreeGiftRule = {
   count: number;
   giftQuantity: number;
+  giftProductIds?: string[];
   title?: string;
   subtitle?: string;
   badge?: string;
@@ -2289,6 +2290,11 @@ export function parseFreeGiftRules(discountRulesJson?: string | null): FreeGiftR
       out.push({
         count: Math.trunc(count),
         giftQuantity: Math.trunc(giftQuantity),
+        giftProductIds: Array.isArray((item as { giftProductIds?: unknown }).giftProductIds)
+          ? ((item as { giftProductIds: unknown[] }).giftProductIds)
+              .map((id) => String(id || "").trim())
+              .filter(Boolean)
+          : [],
         title: (item as { title?: string }).title || "",
         subtitle: (item as { subtitle?: string }).subtitle || "",
         badge: (item as { badge?: string }).badge || "",
@@ -2374,6 +2380,9 @@ export function buildFreeGiftRulesJson(tiers: FreeGiftRule[]): FreeGiftRule[] {
     dedupedByCount.set(Math.trunc(tier.count), {
       count: Math.trunc(tier.count),
       giftQuantity: Math.trunc(tier.giftQuantity),
+      giftProductIds: Array.isArray(tier.giftProductIds)
+        ? tier.giftProductIds.filter((id) => typeof id === "string")
+        : [],
       title: tier.title || "",
       subtitle: tier.subtitle || "",
       badge: tier.badge || "",

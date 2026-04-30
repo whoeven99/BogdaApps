@@ -54,7 +54,7 @@ export function adaptDiscountRules(
 export function adaptBxgyRules(
   rules: BxgyDiscountRule[],
   buyProductIds: string[],
-  getProductIds: string[],
+  fallbackGetProductIds: string[],
 ): UnifiedRuleNode[] {
   return rules.map((rule, index) => ({
     id: buildNodeId("bxgy-rule", index),
@@ -63,7 +63,10 @@ export function adaptBxgyRules(
     scope: {
       kind: "buy_get_products",
       buyProductIds,
-      getProductIds,
+      getProductIds:
+        Array.isArray(rule.getProductIds) && rule.getProductIds.length > 0
+          ? rule.getProductIds
+          : fallbackGetProductIds,
     },
     condition: {
       kind: "buy_x_get_y",
@@ -85,7 +88,7 @@ export function adaptBxgyRules(
 export function adaptFreeGiftRules(
   rules: FreeGiftRule[],
   triggerProductIds: string[],
-  giftProductIds: string[],
+  fallbackGiftProductIds: string[],
 ): UnifiedRuleNode[] {
   return rules.map((rule, index) => ({
     id: buildNodeId("free-gift-rule", index),
@@ -94,7 +97,10 @@ export function adaptFreeGiftRules(
     scope: {
       kind: "trigger_gift_products",
       triggerProductIds,
-      giftProductIds,
+      giftProductIds:
+        Array.isArray(rule.giftProductIds) && rule.giftProductIds.length > 0
+          ? rule.giftProductIds
+          : fallbackGiftProductIds,
     },
     condition: {
       kind: "item_quantity",

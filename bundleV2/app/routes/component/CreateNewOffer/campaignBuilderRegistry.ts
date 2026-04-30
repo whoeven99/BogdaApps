@@ -19,6 +19,34 @@ type CampaignBuilderMeta = {
   stepTwoDescription: string;
 };
 
+function getBxgyRewardBarCount(ctx: CampaignBuilderRegistryContext) {
+  return ctx.bxgyDiscountRules.filter(
+    (rule) => Array.isArray(rule.getProductIds) && rule.getProductIds.length > 0,
+  ).length;
+}
+
+function getFreeGiftRewardBarCount(ctx: CampaignBuilderRegistryContext) {
+  return ctx.freeGiftRules.filter(
+    (rule) => Array.isArray(rule.giftProductIds) && rule.giftProductIds.length > 0,
+  ).length;
+}
+
+function getBxgyRewardProductCount(ctx: CampaignBuilderRegistryContext) {
+  return new Set(
+    ctx.bxgyDiscountRules.flatMap((rule) =>
+      Array.isArray(rule.getProductIds) ? rule.getProductIds : [],
+    ),
+  ).size;
+}
+
+function getFreeGiftRewardProductCount(ctx: CampaignBuilderRegistryContext) {
+  return new Set(
+    ctx.freeGiftRules.flatMap((rule) =>
+      Array.isArray(rule.giftProductIds) ? rule.giftProductIds : [],
+    ),
+  ).size;
+}
+
 const META_BY_OFFER_TYPE: Record<OfferTypeId, CampaignBuilderMeta> = {
   "quantity-breaks-same": {
     logicBlockLabel: "Quantity Breaks",
@@ -37,9 +65,9 @@ const META_BY_OFFER_TYPE: Record<OfferTypeId, CampaignBuilderMeta> = {
   bxgy: {
     logicBlockLabel: "Buy X Get Y",
     logicBlockDescription:
-      "Promote a buy-and-reward mechanic with separate buy and get product groups.",
+      "Promote a buy-and-reward mechanic with a global trigger pool and bar-specific reward products.",
     stepTwoDescription:
-      "Choose the buy and get product groups, then define the reward tiers customers can unlock.",
+      "Choose the global Buy trigger pool, then configure reward products and quantities inside each BXGY bar.",
   },
   "complete-bundle": {
     logicBlockLabel: "Complete Bundle",
@@ -58,9 +86,9 @@ const META_BY_OFFER_TYPE: Record<OfferTypeId, CampaignBuilderMeta> = {
   "free-gift": {
     logicBlockLabel: "Free Gift",
     logicBlockDescription:
-      "Reward shoppers with a free gift after they reach the trigger quantity for selected products.",
+      "Reward shoppers with a global trigger pool and bar-specific gift rewards.",
     stepTwoDescription:
-      "Choose trigger and gift products, then define the quantity tiers that unlock each free gift reward.",
+      "Choose the global trigger pool, then configure gift products and quantities inside each free-gift bar.",
   },
 };
 
@@ -77,7 +105,7 @@ export function getCampaignScopeSummary(
     case "quantity-breaks-different":
       return `${ctx.selectedProductsData.length} products in the shared pool`;
     case "bxgy":
-      return `${ctx.buyProducts.length} buy products + ${ctx.getProducts.length} get products`;
+      return `${ctx.buyProducts.length} products in the global Buy pool, ${getBxgyRewardBarCount(ctx)} bars with reward products`;
     case "complete-bundle": {
       const uniqueProductCount = new Set(
         ctx.completeBundleBars.flatMap((bar) =>
@@ -87,7 +115,7 @@ export function getCampaignScopeSummary(
       return `${uniqueProductCount} products across ${ctx.completeBundleBars.length} bars`;
     }
     case "free-gift":
-      return `${ctx.freeGiftTriggerProducts.length} trigger products + ${ctx.giftProductsData.length} gift products`;
+      return `${ctx.freeGiftTriggerProducts.length} products in the global trigger pool, ${getFreeGiftRewardBarCount(ctx)} bars with gift products`;
     default:
       return `${ctx.selectedProductsData.length} selected products`;
   }
@@ -109,7 +137,7 @@ export function getCampaignLogicSummary(
         (max, rule) => Math.max(max, rule.discountPercent),
         0,
       );
-      return `${ctx.bxgyDiscountRules.length} BXGY tiers, up to ${bestDiscount}% off`;
+      return `${ctx.bxgyDiscountRules.length} BXGY bars, ${getBxgyRewardProductCount(ctx)} reward products, up to ${bestDiscount}% off`;
     }
     case "complete-bundle": {
       const bxgyBars = ctx.completeBundleBars.filter(
@@ -127,7 +155,7 @@ export function getCampaignLogicSummary(
         (max, rule) => Math.max(max, rule.giftQuantity),
         0,
       );
-      return `${ctx.freeGiftRules.length} gift tiers, up to ${bestGiftQty} free gift${bestGiftQty > 1 ? "s" : ""}`;
+      return `${ctx.freeGiftRules.length} gift bars, ${getFreeGiftRewardProductCount(ctx)} reward products, up to ${bestGiftQty} free gift${bestGiftQty > 1 ? "s" : ""}`;
     }
     default: {
       const bxgyTierCount = ctx.normalizedDiscountRules.filter(
@@ -195,13 +223,28 @@ export function buildSelectedProductsPayload(
         productIds: ctx.selectedProductsData.map((product) => String(product.id)),
       };
     case "bxgy":
-      return { buyProducts: ctx.buyProducts, getProducts: ctx.getProducts };
+      return {
+        buyProducts: ctx.buyProducts,
+        getProducts: Array.from(
+          new Set(
+            ctx.bxgyDiscountRules.flatMap((rule) =>
+              Array.isArray(rule.getProductIds) ? rule.getProductIds : [],
+            ),
+          ),
+        ),
+      };
     case "complete-bundle":
       return buildCompleteBundleConfig({ bars: ctx.completeBundleBars });
     case "free-gift":
       return {
         triggerProducts: ctx.freeGiftTriggerProducts,
-        giftProducts: ctx.giftProductsData.map((product) => String(product.id)),
+        giftProducts: Array.from(
+          new Set(
+            ctx.freeGiftRules.flatMap((rule) =>
+              Array.isArray(rule.giftProductIds) ? rule.giftProductIds : [],
+            ),
+          ),
+        ),
       };
     default:
       return ctx.selectedProductsData;
@@ -247,8 +290,11 @@ export function validateScopeAndLogicStep(
         ? "Please select the shared product pool and configure at least one cross-product tier."
         : null;
     case "bxgy":
-      return ctx.buyProducts.length === 0 || ctx.getProducts.length === 0
-        ? "Please select both Buy and Get products for a BXGY offer."
+      return ctx.buyProducts.length === 0 ||
+        ctx.bxgyDiscountRules.some(
+          (rule) => !Array.isArray(rule.getProductIds) || rule.getProductIds.length === 0,
+        )
+        ? "Please select the global Buy pool and configure reward products inside every BXGY bar."
         : null;
     case "complete-bundle": {
       const hasEmptyBar = ctx.completeBundleBars.some(
@@ -260,9 +306,11 @@ export function validateScopeAndLogicStep(
     }
     case "free-gift":
       return ctx.freeGiftTriggerProducts.length === 0 ||
-        ctx.giftProductsData.length === 0 ||
+        ctx.freeGiftRules.some(
+          (rule) => !Array.isArray(rule.giftProductIds) || rule.giftProductIds.length === 0,
+        ) ||
         ctx.freeGiftRules.length === 0
-        ? "Please configure trigger products, gift products, and at least one free gift tier."
+        ? "Please configure the global trigger pool, gift products inside every free-gift bar, and at least one free-gift bar."
         : null;
     default:
       return ctx.selectedProductsData.length === 0
@@ -281,8 +329,11 @@ export function validateFinalSubmitScopeAndLogic(
         ? "Cross-product quantity breaks require a shared product pool and at least one tier."
         : null;
     case "bxgy":
-      return ctx.buyProducts.length === 0 || ctx.getProducts.length === 0
-        ? "For BXGY offers, you must select both Buy Products and Get Products."
+      return ctx.buyProducts.length === 0 ||
+        ctx.bxgyDiscountRules.some(
+          (rule) => !Array.isArray(rule.getProductIds) || rule.getProductIds.length === 0,
+        )
+        ? "For BXGY offers, you must configure the global Buy pool and reward products inside every BXGY bar."
         : null;
     case "complete-bundle": {
       const hasInvalidBar = ctx.completeBundleBars.some(
@@ -297,9 +348,11 @@ export function validateFinalSubmitScopeAndLogic(
     }
     case "free-gift":
       return ctx.freeGiftTriggerProducts.length === 0 ||
-        ctx.giftProductsData.length === 0 ||
+        ctx.freeGiftRules.some(
+          (rule) => !Array.isArray(rule.giftProductIds) || rule.giftProductIds.length === 0,
+        ) ||
         ctx.freeGiftRules.length === 0
-        ? "Free gift offers require trigger products, gift products, and at least one gift tier."
+        ? "Free gift offers require a global trigger pool, gift products inside every free-gift bar, and at least one bar."
         : null;
     default:
       return null;

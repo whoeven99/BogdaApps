@@ -144,6 +144,8 @@ export type CampaignDraftActions = {
     React.SetStateAction<string[]>
   >;
   setFreeGiftRules: React.Dispatch<React.SetStateAction<FreeGiftRule[]>>;
+  selectBxgyRewardProducts: (ruleIndex: number) => void | Promise<void>;
+  selectFreeGiftRewardProducts: (ruleIndex: number) => void | Promise<void>;
   setProgressiveGifts: (value: ProgressiveGiftsConfig) => void;
   updateUnifiedRulePresentation: (
     id: string,
