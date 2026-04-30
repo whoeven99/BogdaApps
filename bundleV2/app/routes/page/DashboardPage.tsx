@@ -5,15 +5,7 @@ import {
   useSearchParams,
   useActionData,
 } from "react-router";
-import {
-  Pencil,
-  Trash2,
-  Info,
-  X,
-  AlertCircle,
-  ArrowUp,
-  ArrowDown,
-} from "lucide-react";
+import { Pencil, Trash2, Info, X, AlertCircle } from "lucide-react";
 import "../../styles/tailwind.css";
 import { CreateNewOffer } from "../component/CreateNewOffer/CreateNewOffer";
 import type { IndexLoaderData } from "../_index/route";
@@ -22,6 +14,10 @@ import {
   parseDiscountRules,
   parseOfferSettings,
 } from "../../utils/offerParsing";
+import {
+  isConversionDifferenceCredibleVsBaseline,
+  waldProportion95ConfidenceInterval,
+} from "../../utils/abTestStatistics";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -87,17 +83,6 @@ type AbTestSummaryRow = {
   winnerLiftPct: number;
 };
 
-function computeNormalApprox95Ci(successes: number, total: number) {
-  const n = Math.max(1, Math.trunc(total));
-  const p = Math.max(0, Math.min(1, successes / n));
-  const se = Math.sqrt((p * (1 - p)) / n);
-  const z = 1.96;
-  return {
-    low: Math.max(0, p - z * se),
-    high: Math.min(1, p + z * se),
-  };
-}
-
 function extractAbVariantKeysFromOfferSettings(offerSettingsJson: string | null) {
   if (!offerSettingsJson) return [];
   try {
@@ -159,15 +144,81 @@ function buildAbVariantKeyMapperFromOfferSettings(offerSettingsJson: string | nu
   }
 }
 
-function renderDeltaArrow(value: number, baseValue: number) {
-  const a = Number.isFinite(value) ? value : 0;
-  const b = Number.isFinite(baseValue) ? baseValue : 0;
-  const diff = a - b;
-  if (Math.abs(diff) < 1e-9) return null;
-  return diff > 0 ? (
-    <ArrowUp size={14} className="text-[#108043]" />
-  ) : (
-    <ArrowDown size={14} className="text-[#d72c0d]" />
+/** 表格行顺序：优先 key「A」为第一行（基准），其余按配置 keys 顺序补齐。 */
+function orderAbTestVariantsForDisplay(
+  variants: AbVariantSummary[],
+  configKeys: string[],
+): AbVariantSummary[] {
+  const map = new Map(variants.map((v) => [v.key, v]));
+  const fromConfig = configKeys.filter((k) => map.has(k));
+  const tail = variants.map((v) => v.key).filter((k) => !fromConfig.includes(k));
+  let keys = [...new Set([...fromConfig, ...tail])];
+  if (keys.includes("A")) {
+    keys = ["A", ...keys.filter((k) => k !== "A")];
+  }
+  return keys.map((k) => map.get(k)).filter((v): v is AbVariantSummary => Boolean(v));
+}
+
+function getAbVariantDisplayName(key: string, offerSettingsJson: string | null) {
+  const base = `Variant ${key}`;
+  if (!offerSettingsJson) return base;
+  try {
+    const parsed = JSON.parse(String(offerSettingsJson)) as Record<string, unknown>;
+    const abRaw = parsed?.abTest as Record<string, unknown> | undefined;
+    const list = abRaw && Array.isArray((abRaw as { variants?: unknown }).variants)
+      ? ((abRaw as { variants: unknown[] }).variants as Record<string, unknown>[])
+      : [];
+    const row = list.find((v) => String(v?.key || "") === key);
+    const rules = row?.discountRules;
+    const title =
+      Array.isArray(rules) && rules[0] && typeof rules[0] === "object"
+        ? String((rules[0] as { title?: string }).title || "").trim()
+        : "";
+    return title ? `${base}（${title}）` : base;
+  } catch {
+    return base;
+  }
+}
+
+/** 较基准变化百分比：上升红 #d72c0d，下降绿 #108043（业务指定配色）。 */
+function formatRelativeChangeVsBaseline(
+  baseline: number,
+  value: number,
+): { text: string; className: string } | null {
+  if (!Number.isFinite(baseline) || !Number.isFinite(value)) return null;
+  if (Math.abs(baseline) < 1e-12) {
+    if (Math.abs(value) < 1e-12) return null;
+    return { text: "较基准 n/a（基准为 0）", className: "text-[#5c6166] text-[11px]" };
+  }
+  const pct = ((value - baseline) / baseline) * 100;
+  if (Math.abs(pct) < 1e-6) {
+    return { text: "较基准 0.00%", className: "text-[#5c6166] text-[11px]" };
+  }
+  const sign = pct > 0 ? "+" : "";
+  const text = `较基准 ${sign}${pct.toFixed(2)}%`;
+  const className =
+    pct > 0 ? "text-[#d72c0d] text-[11px]" : "text-[#108043] text-[11px]";
+  return { text, className };
+}
+
+function CellWithDelta({
+  baseline,
+  value,
+  formatPrimary,
+  showDelta,
+}: {
+  baseline: number;
+  value: number;
+  formatPrimary: (n: number) => string;
+  showDelta: boolean;
+}) {
+  const delta =
+    showDelta ? formatRelativeChangeVsBaseline(baseline, value) : null;
+  return (
+    <div className="leading-snug">
+      <div className="text-[#1c1f23]">{formatPrimary(value)}</div>
+      {delta ? <div className={delta.className}>{delta.text}</div> : null}
+    </div>
   );
 }
 
@@ -1162,30 +1213,37 @@ export function DashboardPage({
           </div>
         ) : (
           <div className="space-y-[14px]">
-            {abTestSummaries.map((test) => (
-              <div key={test.offerId} className="border border-[#e5e7eb] rounded-[10px] p-[14px]">
-                <div className="flex flex-wrap items-center justify-between gap-[8px] mb-[10px]">
-                  <div className="font-medium text-[15px] text-[#1c1f23]">{test.offerName}</div>
-                  <div className="flex items-center gap-[10px]">
-                    <div className="text-[12px] text-[#5c6166]">
-                      Winner:{" "}
-                      <span className="font-semibold text-[#108043]">
-                        {test.winnerKey}
-                      </span>
-                      （GMV{" "}
-                      {test.winnerLiftPct >= 0 ? "+" : ""}
-                      {test.winnerLiftPct.toFixed(2)}%）
-                    </div>
-                    {(() => {
-                      const abOffer = offerRows.find((o) => o.id === test.offerId);
-                      if (
-                        !abOffer ||
-                        abOffer.offerType !== "abTest" ||
-                        !abOffer.name?.startsWith("#offer")
-                      ) {
-                        return null;
-                      }
-                      return (
+            {abTestSummaries.map((test) => {
+              const abOffer = offerRows.find((o) => o.id === test.offerId);
+              const settingsJson = abOffer?.offerSettingsJson ?? null;
+              const ordered = orderAbTestVariantsForDisplay(
+                test.variants,
+                extractAbVariantKeysFromOfferSettings(settingsJson),
+              );
+              const baseline = ordered[0];
+              const fmtMoney = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+              const fmtInt = (n: number) => n.toLocaleString();
+
+              return (
+                <div
+                  key={test.offerId}
+                  className="border border-[#e5e7eb] rounded-[10px] p-[14px] overflow-x-auto"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-[8px] mb-[12px]">
+                    <div className="font-medium text-[15px] text-[#1c1f23]">{test.offerName}</div>
+                    <div className="flex items-center gap-[10px]">
+                      <div className="text-[12px] text-[#5c6166]">
+                        Winner:{" "}
+                        <span className="font-semibold text-[#108043]">
+                          {test.winnerKey}
+                        </span>
+                        （GMV{" "}
+                        {test.winnerLiftPct >= 0 ? "+" : ""}
+                        {test.winnerLiftPct.toFixed(2)}%）
+                      </div>
+                      {abOffer &&
+                      abOffer.offerType === "abTest" &&
+                      abOffer.name?.startsWith("#offer") ? (
                         <button
                           type="button"
                           className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[6px] rounded-[6px] hover:bg-[#f0f9f6] transition-all"
@@ -1194,63 +1252,126 @@ export function DashboardPage({
                         >
                           <Info size={16} />
                         </button>
-                      );
-                    })()}
+                      ) : null}
+                    </div>
                   </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-[10px]">
-                  {test.variants.map((variant) => {
-                    const baseVariant =
-                      test.variants.find((v) => v.key === "A") || test.variants[0];
-                    const baseKey = baseVariant?.key || "";
-                    const showDelta = variant.key !== baseKey;
 
-                    return (
-                      <div
-                        key={`${test.offerId}-${variant.key}`}
-                        className="rounded-[8px] bg-[#fafbfb] border border-[#edf1f4] p-[10px]"
-                      >
-                        <div className="text-[13px] font-semibold text-[#1c1f23] mb-[6px]">
-                          Variant {variant.key}
-                        </div>
-                        <div className="text-[12px] text-[#5c6166] leading-[20px]">
-                          <div>
-                            GMV：{variant.gmv.toLocaleString()}
-                            {showDelta ? renderDeltaArrow(variant.gmv, baseVariant.gmv) : null}
-                          </div>
-                          <div>
-                            曝光用户数：{variant.exposureUsers.toLocaleString()}
-                            {showDelta
-                              ? renderDeltaArrow(variant.exposureUsers, baseVariant.exposureUsers)
-                              : null}
-                          </div>
-                          <div>
-                            下单用户数：{variant.checkoutUsers.toLocaleString()}
-                            {showDelta
-                              ? renderDeltaArrow(
-                                  variant.checkoutUsers,
-                                  baseVariant.checkoutUsers,
-                                )
-                              : null}
-                          </div>
-                          <div>
-                            转化率：{(variant.conversionRate * 100).toFixed(2)}%
-                            {showDelta
-                              ? renderDeltaArrow(
-                                  variant.conversionRate,
-                                  baseVariant.conversionRate,
-                                )
-                              : null}
-                            （95% CI: {(variant.ciLow * 100).toFixed(2)}% ~{" "}
-                            {(variant.ciHigh * 100).toFixed(2)}%）
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                  <table className="w-full min-w-[720px] text-[13px] border-collapse">
+                    <thead>
+                      <tr className="text-left text-[#5c6166] border-b border-[#e3e8ed]">
+                        <th className="py-[8px] pr-[12px] font-medium whitespace-nowrap">分组角色</th>
+                        <th className="py-[8px] pr-[12px] font-medium whitespace-nowrap">Variant Name</th>
+                        <th className="py-[8px] pr-[12px] font-medium whitespace-nowrap">GMV</th>
+                        <th className="py-[8px] pr-[12px] font-medium whitespace-nowrap">曝光用户数</th>
+                        <th className="py-[8px] pr-[12px] font-medium whitespace-nowrap">下单用户数</th>
+                        <th className="py-[8px] pr-[12px] font-medium whitespace-nowrap">转化率（含 95% CI）</th>
+                        <th className="py-[8px] font-medium whitespace-nowrap">置信度</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ordered.map((variant, idx) => {
+                        const isBaseline = idx === 0;
+                        const showDelta = !isBaseline && Boolean(baseline);
+                        const p = variant.conversionRate;
+                        const n = variant.exposureUsers;
+                        const waldCi = waldProportion95ConfidenceInterval(p, n);
+                        const credible =
+                          baseline && !isBaseline
+                            ? isConversionDifferenceCredibleVsBaseline(baseline, variant)
+                            : null;
+
+                        return (
+                          <tr
+                            key={`${test.offerId}-${variant.key}`}
+                            className="border-b border-[#f1f3f5] align-top"
+                          >
+                            <td className="py-[10px] pr-[12px] text-[#1c1f23] whitespace-nowrap">
+                              {isBaseline ? "基准组" : "实验组"}
+                            </td>
+                            <td className="py-[10px] pr-[12px] text-[#1c1f23] font-medium whitespace-nowrap">
+                              {getAbVariantDisplayName(variant.key, settingsJson)}
+                            </td>
+                            <td className="py-[10px] pr-[12px]">
+                              {baseline ? (
+                                <CellWithDelta
+                                  baseline={baseline.gmv}
+                                  value={variant.gmv}
+                                  formatPrimary={fmtMoney}
+                                  showDelta={showDelta}
+                                />
+                              ) : (
+                                fmtMoney(variant.gmv)
+                              )}
+                            </td>
+                            <td className="py-[10px] pr-[12px]">
+                              {baseline ? (
+                                <CellWithDelta
+                                  baseline={baseline.exposureUsers}
+                                  value={variant.exposureUsers}
+                                  formatPrimary={fmtInt}
+                                  showDelta={showDelta}
+                                />
+                              ) : (
+                                fmtInt(variant.exposureUsers)
+                              )}
+                            </td>
+                            <td className="py-[10px] pr-[12px]">
+                              {baseline ? (
+                                <CellWithDelta
+                                  baseline={baseline.checkoutUsers}
+                                  value={variant.checkoutUsers}
+                                  formatPrimary={fmtInt}
+                                  showDelta={showDelta}
+                                />
+                              ) : (
+                                fmtInt(variant.checkoutUsers)
+                              )}
+                            </td>
+                            <td className="py-[10px] pr-[12px]">
+                              <div className="leading-snug">
+                                <div className="text-[#1c1f23]">
+                                  {(p * 100).toFixed(2)}%
+                                  {showDelta && baseline ? (
+                                    <span className="block">
+                                      {(() => {
+                                        const d = formatRelativeChangeVsBaseline(
+                                          baseline.conversionRate,
+                                          p,
+                                        );
+                                        return d ? (
+                                          <span className={d.className}>{d.text}</span>
+                                        ) : null;
+                                      })()}
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <div className="text-[11px] text-[#5c6166] mt-[2px]">
+                                  95% CI: {(waldCi.lower * 100).toFixed(2)}% ~{" "}
+                                  {(waldCi.upper * 100).toFixed(2)}%
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-[10px] text-[#1c1f23] whitespace-nowrap">
+                              {isBaseline ? (
+                                <span className="text-[#5c6166]">—</span>
+                              ) : credible ? (
+                                <span className="text-[#108043] font-medium">可信</span>
+                              ) : (
+                                <span className="text-[#d72c0d] font-medium">不可信</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  <p className="text-[11px] text-[#8c9196] mt-[10px] mb-0 leading-[16px]">
+                    转化率置信区间按 Wald 法（Z=1.96）由当前转化率与曝光人数估算；「置信度」表示相对基准组的两样本转化率差
+                    95% CI 是否不跨 0（不跨 0 为可信）。实验组相对基准的升降百分比：上升为红、下降为绿。
+                  </p>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
