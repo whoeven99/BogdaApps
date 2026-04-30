@@ -11,6 +11,7 @@ const LOG_PREFIX = "[ciwi-cart-lines-discount]";
 const DISCOUNT_PERCENTAGE = "10.0";
 const DEFAULT_DISCOUNT_PERCENTAGE = DISCOUNT_PERCENTAGE;
 const CIWI_PROP_AB_GROUP = "__ciwi_ab_group";
+const CIWI_PROP_AB_BUCKET = "__ciwi_ab_bucket";
 
 function log(step: string, detail?: unknown): void {
   try {
@@ -139,35 +140,69 @@ function getCartLineAttributeValue(
   return "";
 }
 
-/** 根据行属性 __ciwi_ab_group 解析该用户所在变体的 discountRules JSON（供阶梯匹配） */
+/** 根据行属性 __ciwi_ab_group / __ciwi_ab_bucket 解析该用户所在变体的 discountRules JSON（供阶梯匹配） */
 function resolveAbTestVariantDiscountRulesJson(
   offerSettingsJson: string | null | undefined,
   abGroupRaw: string,
+  abBucketRaw: string,
 ): string | null {
   const g = String(abGroupRaw || "").trim();
-  if (!g) return null;
+  const bucket = Number(abBucketRaw);
+  const hasBucket = Number.isFinite(bucket);
+  if (!g && !hasBucket) return null;
   try {
     const parsed = JSON.parse(String(offerSettingsJson || "{}")) as Record<string, unknown>;
     const ab = (parsed?.abTest || {}) as Record<string, unknown>;
-    const variants = Array.isArray(ab.variants) ? ab.variants : [];
+    const variants = Array.isArray(ab.variants)
+      ? (ab.variants as Array<Record<string, unknown>>)
+      : [];
     if (variants.length >= 2) {
       let idx = -1;
       if (g === "abtest1") idx = 0;
       else if (g === "abtest2") idx = 1;
       else {
         idx = variants.findIndex(
-          (row) => row && typeof row === "object" && String((row as { id?: unknown }).id) === g,
+          (row) =>
+            row &&
+            typeof row === "object" &&
+            (String((row as { id?: unknown }).id || "") === g ||
+              String((row as { key?: unknown }).key || "") === g),
         );
       }
-      const row =
-        idx >= 0 ? (variants[idx] as { discountRules?: unknown }) : (variants[0] as { discountRules?: unknown });
+      if (idx < 0 && hasBucket) {
+        const b = Math.max(0, Math.min(99, Math.trunc(bucket)));
+        const weightsRaw = Array.isArray(ab.trafficWeights) ? ab.trafficWeights : [];
+        const weights = weightsRaw.map((w) => Math.max(0, Math.trunc(Number(w) || 0)));
+        if (weights.length === variants.length && weights.some((w) => w > 0)) {
+          let cum = 0;
+          for (let i = 0; i < weights.length; i += 1) {
+            cum += weights[i];
+            if (b < cum) {
+              idx = i;
+              break;
+            }
+          }
+          if (idx < 0) idx = weights.length - 1;
+        } else {
+          const split = Math.max(1, Math.min(99, Math.trunc(Number(ab.bucketSplitPercent) || 50)));
+          idx = b < split ? 0 : 1;
+        }
+      }
+      if (idx < 0) {
+        return null;
+      }
+      const row = variants[idx] as { discountRules?: unknown };
       const rules = row?.discountRules;
       if (Array.isArray(rules) && rules.length) {
         return JSON.stringify(rules);
       }
+      return null;
     }
     const ga = Math.max(0, Math.min(100, Number(ab.groupADiscountPercent) || 10));
     const gb = Math.max(0, Math.min(100, Number(ab.groupBDiscountPercent) || 90));
+    if (g !== "abtest1" && g !== "abtest2") {
+      return null;
+    }
     const pct = g === "abtest1" ? ga : gb;
     return JSON.stringify([{ count: 1, discountPercent: pct, isDefault: true }]);
   } catch {
@@ -759,15 +794,27 @@ export function bundleCartDiscountGenerateRun(
       );
       if (suitOffer.offerType === "abTest") {
         const abGroup = getCartLineAttributeValue(line, CIWI_PROP_AB_GROUP);
+        const abBucket = getCartLineAttributeValue(line, CIWI_PROP_AB_BUCKET);
         const variantRulesJson = resolveAbTestVariantDiscountRulesJson(
           suitOffer.offerSettingsJson,
           abGroup,
+          abBucket,
         );
+        if (!variantRulesJson) {
+          log("abtest_line_skip_missing_or_unmatched_group", {
+            cartLineId: lineId,
+            offerId: suitOffer.id,
+            abGroup,
+            abBucket,
+          });
+          continue;
+        }
         discountPercentValue = getDiscountPercentValue(variantRulesJson, quantity);
         log("abtest_line_discount_resolved", {
           cartLineId: lineId,
           offerId: suitOffer.id,
           abGroup,
+          abBucket,
           discountPercentValue,
         });
       }
