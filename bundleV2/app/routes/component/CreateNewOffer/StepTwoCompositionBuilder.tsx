@@ -133,7 +133,7 @@ function BuilderBarCard({
   return (
     <div className="rounded-[12px] border border-[#dfe3e8] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
       <div className="border-b border-[#e3e8ed] px-5 py-4">
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="m-0 text-[15px] font-semibold text-[#1c1f23]">{bar.title}</h3>
@@ -915,7 +915,7 @@ export default function StepTwoCompositionBuilder({
   );
 
   const renderBarActions = (bar: CampaignBarItem, index: number) => (
-    <div className="flex flex-wrap justify-end gap-2">
+    <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
       <Button
         size="small"
         disabled={index === 0}
@@ -1240,14 +1240,14 @@ export default function StepTwoCompositionBuilder({
   };
 
   return (
-    <div className="create-offer-products-grid">
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="space-y-4">
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="min-w-0 space-y-4">
           <DetailSection
             title="Product pool"
             description="Start by defining the global trigger product pools that decide where this offer appears. Reward products stay inside each bar."
           >
-            <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 2xl:grid-cols-2">
               {showSharedProductPool
                 ? renderPoolCard({
                     title: "Eligible products",
@@ -1398,7 +1398,7 @@ export default function StepTwoCompositionBuilder({
           </DetailSection>
         </div>
 
-        <div className="create-offer-sticky-preview">{preview}</div>
+        <div className="create-offer-sticky-preview 2xl:w-[360px]">{preview}</div>
       </div>
     </div>
   );
