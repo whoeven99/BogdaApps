@@ -1709,6 +1709,21 @@ function getCurrentOffer(offersConfig) {
         console.log("[ciwi] different-products offer skipped: current product not in pool", offer.id);
         continue;
       }
+    } else if (offer.offerType === "abTest") {
+      // 中文注释：A/B 的展示档位来自 offerSettingsJson.abTest（运行期 ensureAbTestAssignmentForOffer → discountRulesJson 覆盖）。
+      // 若仍走下面的 quantity-break 分支，会在 discountRulesJson 为空或过短时 continue，整块不渲染，
+      // sessionStorage 不写 abGroup、ensureAbTest 内发往 webpixerToAli 的 assign 也会被跳过——表现为产品页「没有 Ali 相关日志」。
+      const selectedIds = parseSelectedProductIds(offer.selectedProductsJson);
+      if (selectedIds.length > 0) {
+        if (!currentProductGid) {
+          console.log("[ciwi] abTest offer skipped: requires specific products but current product GID is null", offer.id);
+          continue;
+        }
+        if (!selectedIds.includes(currentProductGid)) {
+          console.log("[ciwi] abTest offer skipped: current product not in selected list", offer.id, currentProductGid);
+          continue;
+        }
+      }
     } else {
       // quantity-breaks-same / subscription
       const discountRules = parseDiscountRulesJson(offer.discountRulesJson);
