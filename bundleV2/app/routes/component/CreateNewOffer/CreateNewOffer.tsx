@@ -32,7 +32,6 @@ import {
   validateFinalSubmitScopeAndLogic,
   validateScopeAndLogicStep,
 } from "./campaignBuilderRegistry";
-import DisplayBlocksEditor from "./DisplayBlocksEditor";
 import OfferComponentsDisplayCustomizer from "./OfferComponentsDisplayCustomizer";
 import { ProgressiveGiftsSection } from "./ProgressiveGiftsSection";
 import ScheduleTargetingEditor from "./ScheduleTargetingEditor";
@@ -3564,13 +3563,6 @@ export function CreateNewOffer({
                 <BuilderStepIntro
                   title="Display"
                   meta={displayStepMeta}
-                />
-
-                <DisplayBlocksEditor
-                  showCountdownBlock={showCountdownBlock}
-                  setShowCountdownBlock={setShowCountdownBlock}
-                  countdownLabel={countdownLabel}
-                  setCountdownLabel={setCountdownLabel}
                 />
 
                 {renderDisplayCustomizer()}
