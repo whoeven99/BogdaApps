@@ -64,7 +64,7 @@ function DetailSection({
   children,
 }: {
   title: string;
-  description: string;
+  description?: string;
   actions?: ReactNode;
   children: ReactNode;
 }) {
@@ -73,7 +73,9 @@ function DetailSection({
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <h3 className="m-0 text-[16px] font-semibold text-[#1c1f23]">{title}</h3>
-          <p className="m-0 mt-2 text-[13px] text-[#5c6166]">{description}</p>
+          {description ? (
+            <p className="m-0 mt-2 text-[13px] text-[#5c6166]">{description}</p>
+          ) : null}
         </div>
         {actions ? <div className="shrink-0">{actions}</div> : null}
       </div>
@@ -119,6 +121,30 @@ function BuilderSection({
       {children}
     </div>
   );
+}
+
+function getModuleStatusTone(module: CampaignModuleItem, isActive: boolean) {
+  if (module.enabled && isActive) {
+    return {
+      container: "border-[#008060] bg-[#f5fff9]",
+      badge: "bg-[#f0faf6] text-[#006e52]",
+      label: "Configuring",
+    };
+  }
+  if (module.enabled) {
+    return {
+      container: "border-[#b7e1d3] bg-white",
+      badge: "bg-[#f0faf6] text-[#006e52]",
+      label: "Enabled",
+    };
+  }
+  return {
+    container: isActive
+      ? "border-[#c9ccd0] bg-[#f6f6f7]"
+      : "border-[#e3e8ed] bg-white hover:border-[#c9ccd0]",
+    badge: "bg-[#f4f6f8] text-[#5c6166]",
+    label: "Optional",
+  };
 }
 
 function BuilderBarCard({
@@ -243,7 +269,6 @@ function DiscountRuleBarDetail({
     <BuilderBarCard bar={bar} actions={actions}>
       <BuilderSection
         title="Trigger"
-        description="This bar uses the global trigger pool configured above in Product pool."
       >
         <div className="rounded-[8px] border border-dashed border-[#dfe3e8] bg-white px-3 py-3 text-[13px] text-[#5c6166]">
           {draft.selectedProductsData.length} products in the global trigger pool
@@ -263,7 +288,7 @@ function DiscountRuleBarDetail({
         </FieldGrid>
       </BuilderSection>
 
-      <BuilderSection title="Reward" description="Configure what this bar gives the customer.">
+      <BuilderSection title="Reward">
         <FieldGrid>
           {bar.type === "quantity_break" ? (
             <label className="block text-[13px] font-medium text-[#1c1f23]">
@@ -371,7 +396,6 @@ function DiscountRuleBarDetail({
 
       <BuilderSection
         title="Presentation"
-        description="Edit how this bar is named and highlighted in the widget."
       >
         <CommonPresentationFields
           title={rule.title}
@@ -404,10 +428,9 @@ function BxgyRuleBarDetail({
     <BuilderBarCard bar={bar} actions={headerActions}>
       <BuilderSection
         title="Trigger"
-        description="This bar uses the global Buy trigger pool configured above in Product pool."
       >
         <div className="rounded-[8px] border border-dashed border-[#dfe3e8] bg-white px-3 py-3 text-[13px] text-[#5c6166]">
-          {draft.buyProducts.length} products in the global Buy pool
+          {draft.buyProducts.length} products in the global trigger pool
         </div>
         <FieldGrid>
           <label className="block text-[13px] font-medium text-[#1c1f23]">
@@ -439,7 +462,6 @@ function BxgyRuleBarDetail({
 
       <BuilderSection
         title="Reward"
-        description="Configure the reward side for this BXGY bar only."
       >
         <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-4 py-3">
           <div className="text-[13px] font-medium text-[#1c1f23]">
@@ -505,7 +527,6 @@ function BxgyRuleBarDetail({
 
       <BuilderSection
         title="Presentation"
-        description="Edit how this BXGY bar appears in the widget."
       >
         <CommonPresentationFields
           title={rule.title}
@@ -538,7 +559,6 @@ function FreeGiftRuleBarDetail({
     <BuilderBarCard bar={bar} actions={headerActions}>
       <BuilderSection
         title="Trigger"
-        description="This bar uses the global trigger pool configured above in Product pool."
       >
         <div className="rounded-[8px] border border-dashed border-[#dfe3e8] bg-white px-3 py-3 text-[13px] text-[#5c6166]">
           {draft.freeGiftTriggerProducts.length} products in the global trigger pool
@@ -560,7 +580,6 @@ function FreeGiftRuleBarDetail({
 
       <BuilderSection
         title="Reward"
-        description="Configure the reward side for this free-gift bar only."
       >
         <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-4 py-3">
           <div className="text-[13px] font-medium text-[#1c1f23]">Gift products</div>
@@ -593,7 +612,6 @@ function FreeGiftRuleBarDetail({
 
       <BuilderSection
         title="Presentation"
-        description="Edit how this free-gift bar appears in the widget."
       >
         <CommonPresentationFields
           title={rule.title}
@@ -609,16 +627,13 @@ function FreeGiftRuleBarDetail({
 
 function PlaceholderModuleDetail({
   title,
-  description,
 }: {
   title: string;
-  description: string;
 }) {
   return (
-    <DetailSection title={title} description={description}>
+    <DetailSection title={title}>
       <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-4 py-4 text-[13px] text-[#5c6166]">
-        This module shell is now available in Step 2. The next pass can wire its
-        full conditional configuration into the new builder detail panel.
+        This component is available in Step 2.
       </div>
     </DetailSection>
   );
@@ -632,10 +647,7 @@ function ProductBundleModuleDetail({
   actions: CampaignDraftActions;
 }) {
   return (
-    <DetailSection
-      title="Product bundle"
-      description="Configure a bundle-specific module with its own product pool and threshold logic."
-    >
+    <DetailSection title="Product bundle">
       <div className="mb-5 rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-4 py-3">
         <div className="text-[13px] font-medium text-[#1c1f23]">Bundle products</div>
         <div className="mt-1 text-[12px] text-[#5c6166]">
@@ -686,9 +698,6 @@ function ProductBundleModuleDetail({
         </label>
       </div>
 
-      <div className="mt-5 rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-4 py-3 text-[12px] text-[#5c6166]">
-        This module now persists through `campaignConfig.logicBlocks` and can coexist with mixed bars.
-      </div>
     </DetailSection>
   );
 }
@@ -703,24 +712,11 @@ function CompleteBundleModuleDetail({
   renderCompleteBundleProductPricingCard: Props["renderCompleteBundleProductPricingCard"];
 }) {
   const isPrimaryTemplate = draft.offerType === "complete-bundle";
-  const activeBar =
-    draft.completeBundleBars.find((bar) => bar.id === draft.activeBundleBarId) ||
-    draft.completeBundleBars[0];
-  const totalBundleProducts = draft.completeBundleBars.reduce(
-    (sum, bar) => sum + bar.products.length,
-    0,
-  );
 
   if (!draft.completeBundleBars.length && !isPrimaryTemplate) {
     return (
-      <DetailSection
-        title="Complete bundle"
-        description="Enable this module when the campaign needs dedicated bundle bars, default products, and bundle pricing."
-      >
+      <DetailSection title="Complete bundle">
         <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-4 py-4">
-          <div className="text-[13px] text-[#5c6166]">
-            The module is currently off. Enabling it creates the first bundle bar so you can configure bundle paths separately from the main bar list.
-          </div>
           <Button className="mt-4" onClick={() => actions.addCompleteBundleBar("quantity-break-same")}>
             Enable complete bundle module
           </Button>
@@ -730,87 +726,19 @@ function CompleteBundleModuleDetail({
   }
 
   return (
-    <DetailSection
-      title="Complete bundle"
-      description="Manage bundle-specific paths as a dedicated module. Bars and bundle products are separated here so the Step 2 builder stays easier to scan."
-    >
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-        <div className="rounded-[10px] border border-[#e3e8ed] bg-[#fafbfb] px-4 py-3">
-          <div className="text-[12px] uppercase tracking-[0.04em] text-[#5c6166]">Bundle bars</div>
-          <div className="mt-1 text-[18px] font-semibold text-[#1c1f23]">
-            {draft.completeBundleBars.length}
-          </div>
-          <div className="mt-1 text-[12px] text-[#5c6166]">
-            Separate bundle paths configured inside this module.
-          </div>
-        </div>
-        <div className="rounded-[10px] border border-[#e3e8ed] bg-[#fafbfb] px-4 py-3">
-          <div className="text-[12px] uppercase tracking-[0.04em] text-[#5c6166]">Bundle products</div>
-          <div className="mt-1 text-[18px] font-semibold text-[#1c1f23]">
-            {totalBundleProducts}
-          </div>
-          <div className="mt-1 text-[12px] text-[#5c6166]">
-            Product cards and pricing entries attached across bundle bars.
-          </div>
-        </div>
-        <div className="rounded-[10px] border border-[#e3e8ed] bg-[#fafbfb] px-4 py-3">
-          <div className="text-[12px] uppercase tracking-[0.04em] text-[#5c6166]">Active bar</div>
-          <div className="mt-1 text-[14px] font-semibold text-[#1c1f23]">
-            {activeBar?.title || "None selected"}
-          </div>
-          <div className="mt-1 text-[12px] text-[#5c6166]">
-            {activeBar
-              ? `${activeBar.products.length} product${activeBar.products.length > 1 ? "s" : ""} attached`
-              : "Select or create a bundle bar to continue."}
-          </div>
-        </div>
-      </div>
-
+    <DetailSection title="Complete bundle">
       {!isPrimaryTemplate ? (
-        <div className="mt-4 flex justify-end">
+        <div className="mt-1 flex justify-end">
           <Button
             danger
-            onClick={() => {
-              draft.completeBundleBars.forEach((bar) => {
-                actions.removeCompleteBundleBar(bar.id);
-              });
-            }}
+            onClick={actions.clearCompleteBundleBars}
           >
             Disable module
           </Button>
         </div>
       ) : null}
 
-      <div className="mt-6">
-        <div className="mb-3">
-          <div className="text-[14px] font-semibold text-[#1c1f23]">Bundle bars</div>
-          <div className="mt-1 text-[12px] text-[#5c6166]">
-            Define each bundle path and its unlock quantity before attaching products.
-          </div>
-        </div>
-        <CompleteBundleEditor
-          completeBundleBars={draft.completeBundleBars}
-          activeBundleBarId={draft.activeBundleBarId}
-          setActiveBundleBarId={actions.setActiveBundleBarId}
-          addCompleteBundleBar={actions.addCompleteBundleBar}
-          removeCompleteBundleBar={actions.removeCompleteBundleBar}
-          updateCompleteBundleBar={actions.updateCompleteBundleBar}
-          handleSelectProductsForBundleBar={actions.handleSelectProductsForBundleBar}
-          appendProductsToBundleBar={actions.appendProductsToBundleBar}
-          renderCompleteBundleProductPricingCard={renderCompleteBundleProductPricingCard}
-          updateRuleValues={actions.updateUnifiedRuleValues}
-          updateRulePresentation={actions.updateUnifiedRulePresentation}
-          section="bars"
-        />
-      </div>
-
-      <div className="mt-6">
-        <div className="mb-3">
-          <div className="text-[14px] font-semibold text-[#1c1f23]">Products & pricing</div>
-          <div className="mt-1 text-[12px] text-[#5c6166]">
-            Manage the product set and pricing for the currently active bundle bar.
-          </div>
-        </div>
+      <div className="mt-4">
         <CompleteBundleEditor
           completeBundleBars={draft.completeBundleBars}
           activeBundleBarId={draft.activeBundleBarId}
@@ -824,6 +752,7 @@ function CompleteBundleModuleDetail({
           updateRuleValues={actions.updateUnifiedRuleValues}
           updateRulePresentation={actions.updateUnifiedRulePresentation}
           section="products"
+          simpleMode={!isPrimaryTemplate}
         />
       </div>
     </DetailSection>
@@ -878,33 +807,34 @@ export default function StepTwoCompositionBuilder({
     [activeModuleId, modules],
   );
 
-  const showSharedProductPool =
-    bars.some((bar) => bar.type === "quantity_break") ||
-    draft.selectedProductsData.length > 0;
-  const showBxgyPools =
-    bars.some((bar) => bar.type === "bxgy") ||
-    draft.buyProducts.length > 0;
-  const showFreeGiftPools =
-    bars.some((bar) => bar.type === "free_gift") ||
-    draft.freeGiftRules.length > 0 ||
+  const showGlobalProductPool =
+    bars.some(
+      (bar) =>
+        bar.type === "quantity_break" ||
+        bar.type === "bxgy" ||
+        bar.type === "free_gift",
+    ) ||
+    draft.selectedProductsData.length > 0 ||
+    draft.buyProducts.length > 0 ||
     draft.freeGiftTriggerProducts.length > 0;
+  const globalTriggerCount =
+    draft.selectedProductsData.length ||
+    draft.buyProducts.length ||
+    draft.freeGiftTriggerProducts.length;
 
   const renderPoolCard = ({
     title,
-    description,
     count,
     buttonLabel,
     onClick,
   }: {
     title: string;
-    description: string;
     count: number;
     buttonLabel: string;
     onClick: () => void;
   }) => (
     <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-4 py-3">
       <div className="text-[13px] font-medium text-[#1c1f23]">{title}</div>
-      <div className="mt-1 text-[12px] text-[#5c6166]">{description}</div>
       <div className="mt-2 text-[12px] text-[#1c1f23]">
         {count} selected
       </div>
@@ -1036,10 +966,7 @@ export default function StepTwoCompositionBuilder({
     switch (activeModule.id) {
       case "subscription":
         return (
-          <DetailSection
-            title="Subscriptions"
-            description="Manage the conditional subscription option inside Step 2. Pure visual styling remains in Step 3."
-          >
+          <DetailSection title="Subscriptions">
             <SubscriptionSettingsEditor
               subscriptionEnabled={draft.subscriptionEnabled}
               setSubscriptionEnabled={actions.setSubscriptionEnabled}
@@ -1065,10 +992,7 @@ export default function StepTwoCompositionBuilder({
         );
       case "progressive_gifts":
         return (
-          <DetailSection
-            title="Progressive gifts"
-            description="Configure progressive unlock behavior as a supporting Step 2 module."
-          >
+          <DetailSection title="Progressive gifts">
             <ProgressiveGiftsSection
               offerType={draft.offerType}
               normalizedDiscountRules={draft.normalizedDiscountRules}
@@ -1082,10 +1006,7 @@ export default function StepTwoCompositionBuilder({
         );
       case "countdown":
         return (
-          <DetailSection
-            title="Countdown timer"
-            description="Keep countdown condition setup in Step 2 while leaving visual countdown styling in Step 3."
-          >
+          <DetailSection title="Countdown timer">
             <div className="flex items-center justify-between rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-4 py-3">
               <div>
                 <div className="text-[14px] font-medium text-[#1c1f23]">
@@ -1122,10 +1043,7 @@ export default function StepTwoCompositionBuilder({
         return <ProductBundleModuleDetail draft={draft} actions={actions} />;
       case "checkbox_upsells":
         return (
-          <DetailSection
-            title="Checkbox upsells"
-            description="Configure the opt-in checkbox copy and default selection behavior for this supporting module."
-          >
+          <DetailSection title="Checkbox upsells">
             <div className="flex items-center justify-between rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-4 py-3">
               <div>
                 <div className="text-[14px] font-medium text-[#1c1f23]">
@@ -1176,10 +1094,7 @@ export default function StepTwoCompositionBuilder({
         );
       case "sticky_add_to_cart":
         return (
-          <DetailSection
-            title="Sticky add to cart"
-            description="Configure the companion sticky CTA that remains visible while customers scroll or compare bars."
-          >
+          <DetailSection title="Sticky add to cart">
             <div className="flex items-center justify-between rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-4 py-3">
               <div>
                 <div className="text-[14px] font-medium text-[#1c1f23]">
@@ -1233,7 +1148,6 @@ export default function StepTwoCompositionBuilder({
         return (
           <PlaceholderModuleDetail
             title={activeModule.label}
-            description={activeModule.description}
           />
         );
     }
@@ -1243,45 +1157,19 @@ export default function StepTwoCompositionBuilder({
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="min-w-0 space-y-4">
-          <DetailSection
-            title="Product pool"
-            description="Start by defining the global trigger product pools that decide where this offer appears. Reward products stay inside each bar."
-          >
+          <DetailSection title="Product pool">
             <div className="grid grid-cols-1 gap-3 2xl:grid-cols-2">
-              {showSharedProductPool
-                ? renderPoolCard({
-                    title: "Eligible products",
-                    description: "Shared product scope used by quantity-break style bars.",
-                    count: draft.selectedProductsData.length,
-                    buttonLabel: draft.selectedProductsData.length
-                      ? "Edit eligible products"
-                      : "Select eligible products",
-                    onClick: () => void actions.handleSelectProducts("normal"),
-                  })
-                : null}
-              {showBxgyPools
-                ? renderPoolCard({
-                    title: "Buy products",
-                    description: "Global trigger pool used to decide where BXGY bars can appear.",
-                    count: draft.buyProducts.length,
-                    buttonLabel: draft.buyProducts.length
-                      ? "Edit buy products"
-                      : "Select buy products",
-                    onClick: () => void actions.handleSelectProducts("buy"),
-                  })
-                : null}
-              {showFreeGiftPools
+              {showGlobalProductPool
                 ? renderPoolCard({
                     title: "Trigger products",
-                    description: "Global trigger pool used to decide where free-gift bars can appear.",
-                    count: draft.freeGiftTriggerProducts.length,
-                    buttonLabel: draft.freeGiftTriggerProducts.length
+                    count: globalTriggerCount,
+                    buttonLabel: globalTriggerCount
                       ? "Edit trigger products"
                       : "Select trigger products",
                     onClick: () => void actions.handleSelectProducts("normal"),
                   })
                 : null}
-              {!showSharedProductPool && !showBxgyPools && !showFreeGiftPools ? (
+              {!showGlobalProductPool ? (
                 <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-4 py-4 text-[13px] text-[#5c6166] xl:col-span-2">
                   Product pool controls will appear here as soon as the template includes
                   bars that need shared product selection.
@@ -1292,7 +1180,6 @@ export default function StepTwoCompositionBuilder({
 
           <DetailSection
             title="Bars"
-            description="Manage bar order, trigger conditions, rewards, and presentation in one place. Add new bars directly inside this section."
             actions={
               <Dropdown
                 trigger={["click"]}
@@ -1321,77 +1208,87 @@ export default function StepTwoCompositionBuilder({
             </div>
           </DetailSection>
 
-          <DetailSection
-            title="Components"
-            description="Use supporting modules for bundle-specific logic, subscriptions, countdowns, and companion conversion elements."
-          >
+          <DetailSection title="Components">
             <div className="flex flex-col gap-2">
               {modules.map((module) => (
-                <button
-                  key={module.id}
-                  type="button"
-                  onClick={() => setActiveModuleId(module.id)}
-                  className={`w-full rounded-[10px] border px-3 py-3 text-left transition ${
-                    activeModule?.id === module.id
-                      ? "border-[#008060] bg-[#f5fff9]"
-                      : "border-[#e3e8ed] bg-white hover:border-[#c9ccd0]"
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="text-[13px] font-medium text-[#1c1f23]">
-                        {module.label}
+                (() => {
+                  const isActive = activeModule?.id === module.id;
+                  const tone = getModuleStatusTone(module, isActive);
+                  return (
+                    <button
+                      key={module.id}
+                      type="button"
+                      onClick={() => setActiveModuleId(module.id)}
+                      className={`w-full rounded-[10px] border px-3 py-3 text-left transition ${tone.container}`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="text-[13px] font-medium text-[#1c1f23]">
+                              {module.label}
+                            </div>
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${tone.badge}`}
+                            >
+                              {tone.label}
+                            </span>
+                            {!module.toggleable ? (
+                              <span className="rounded-full bg-[#f4f6f8] px-2 py-0.5 text-[11px] font-medium text-[#5c6166]">
+                                Required
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                        {module.toggleable ? (
+                          <Switch
+                            checked={module.enabled}
+                            onClick={(checked, event) => {
+                              event?.stopPropagation();
+                              if (module.id === "subscription") {
+                                actions.setSubscriptionEnabled(Boolean(checked));
+                              }
+                              if (module.id === "progressive_gifts") {
+                                actions.setProgressiveGifts({
+                                  ...draft.progressiveGifts,
+                                  enabled: Boolean(checked),
+                                });
+                              }
+                              if (module.id === "countdown") {
+                                setShowCountdownBlock(Boolean(checked));
+                              }
+                              if (module.id === "product_bundle") {
+                                actions.setProductBundleEnabled(Boolean(checked));
+                                if (
+                                  checked &&
+                                  draft.productBundleProductIds.length === 0 &&
+                                  draft.selectedProductsData.length > 0
+                                ) {
+                                  void actions.handleSelectProducts("product_bundle");
+                                }
+                              }
+                              if (module.id === "complete_bundle" && !checked) {
+                                actions.clearCompleteBundleBars();
+                              }
+                              if (
+                                module.id === "complete_bundle" &&
+                                checked &&
+                                draft.completeBundleBars.length === 0
+                              ) {
+                                actions.addCompleteBundleBar("quantity-break-same");
+                              }
+                              if (module.id === "checkbox_upsells") {
+                                actions.setCheckboxUpsellsEnabled(Boolean(checked));
+                              }
+                              if (module.id === "sticky_add_to_cart") {
+                                actions.setStickyAddToCartEnabled(Boolean(checked));
+                              }
+                            }}
+                          />
+                        ) : null}
                       </div>
-                      <div className="mt-1 text-[12px] text-[#5c6166]">
-                        {module.description}
-                      </div>
-                    </div>
-                    {module.toggleable ? (
-                      <Switch
-                        checked={module.enabled}
-                        onClick={(checked, event) => {
-                          event?.stopPropagation();
-                          if (module.id === "subscription") {
-                            actions.setSubscriptionEnabled(Boolean(checked));
-                          }
-                          if (module.id === "progressive_gifts") {
-                            actions.setProgressiveGifts({
-                              ...draft.progressiveGifts,
-                              enabled: Boolean(checked),
-                            });
-                          }
-                          if (module.id === "countdown") {
-                            setShowCountdownBlock(Boolean(checked));
-                          }
-                          if (module.id === "product_bundle") {
-                            actions.setProductBundleEnabled(Boolean(checked));
-                            if (
-                              checked &&
-                              draft.productBundleProductIds.length === 0 &&
-                              draft.selectedProductsData.length > 0
-                            ) {
-                              void actions.handleSelectProducts("product_bundle");
-                            }
-                          }
-                          if (module.id === "complete_bundle" && !checked) {
-                            draft.completeBundleBars.forEach((bar) => {
-                              actions.removeCompleteBundleBar(bar.id);
-                            });
-                          }
-                          if (module.id === "complete_bundle" && checked) {
-                            actions.addCompleteBundleBar("quantity-break-same");
-                          }
-                          if (module.id === "checkbox_upsells") {
-                            actions.setCheckboxUpsellsEnabled(Boolean(checked));
-                          }
-                          if (module.id === "sticky_add_to_cart") {
-                            actions.setStickyAddToCartEnabled(Boolean(checked));
-                          }
-                        }}
-                      />
-                    ) : null}
-                  </div>
-                </button>
+                    </button>
+                  );
+                })()
               ))}
             </div>
             <div className="mt-4">{renderModuleDetail()}</div>

@@ -187,7 +187,7 @@ export function adaptCompleteBundleBars(
       pricingValue: Number(bar.pricing.value) || 0,
     },
     presentation: buildBasePresentation(bar),
-    publishSupport: "specialized_editor_only",
+    publishSupport: "supported",
   }));
 }
 
@@ -217,7 +217,7 @@ export function adaptSubscriptionRule(
         badge: "",
         isDefault: enabled,
       },
-      publishSupport: "specialized_editor_only",
+      publishSupport: "supported",
     },
   ];
 }

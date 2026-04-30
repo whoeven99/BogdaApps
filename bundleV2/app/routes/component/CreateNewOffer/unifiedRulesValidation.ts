@@ -32,20 +32,6 @@ export function getUnifiedRuleAuditIssuesForRules(
     });
   }
 
-  const hasSpecializedRuleOutsideNativeOffer =
-    draft.offerType !== "complete-bundle" &&
-    draft.offerType !== "subscription" &&
-    rules.some(
-      (rule) => rule.publishSupport === "specialized_editor_only",
-    );
-  if (hasSpecializedRuleOutsideNativeOffer) {
-    issues.push({
-      severity: "error",
-      message:
-        "Some rules require a specialized editor flow and cannot be published from this offer type.",
-    });
-  }
-
   if (draft.offerType === "quantity-breaks-same") {
     const legacyBlockingMessage = getLegacyUnifiedRuleBlockingMessage(draft.discountRules);
     if (legacyBlockingMessage) {

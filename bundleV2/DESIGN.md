@@ -70,6 +70,13 @@ UI should reduce context switching rather than announce a separate brand world.
 7. Preserve compatibility with Shopify admin expectations.
 8. Keep brand expression subtle and secondary to usability.
 
+Title rule:
+
+- Titles should carry meaning on their own
+- Do not place descriptive sentences directly under titles by default
+- If context is necessary, prefer inline metadata, concise helper text near the relevant control, or a compact status row
+- Repeating a title with a second explanatory sentence is considered visual noise unless the user explicitly needs instructional onboarding
+
 ## Visual Tokens
 
 These values define the default visual language.
@@ -122,6 +129,9 @@ Color usage rules:
 - Body copy should stay clean and neutral
 - Helper text should be optional, not default
 - Prefer one clear label over a label plus explanatory sentence
+- Prefer standalone headings over heading-plus-description stacks
+- Page, section, and card titles should usually appear without a subtitle or descriptive paragraph underneath
+- If a title needs support text, question whether the title should be renamed more clearly first
 - Avoid using color alone to imply heading hierarchy
 - The current page title should be the strongest text element on the page
 
@@ -147,6 +157,8 @@ Recommended hierarchy:
 - Keep width practical for admin workflows
 - Avoid oversized hero sections or landing-page composition
 - Keep page headers short; title plus actions is preferred
+- Do not add descriptive marketing-style copy under page titles
+- If page-level context is required, use compact status chips, inline counts, or contextual notices instead of a paragraph under the title
 - Avoid eyebrow labels unless they add real navigation value
 - Favor consistent merchant-facing spacing over dramatic whitespace
 - Page structure should feel like an admin tool, not a branded microsite
@@ -170,6 +182,8 @@ Card states should be visually consistent:
 - Selected: stronger border, minimal emphasis
 - Featured: green border or green-tinted background
 - Read-only: same structure, lower interactivity cues
+- Card titles should stay short and should not be followed by descriptive body copy unless the card is an empty state or warning
+- Prefer content, controls, or compact metadata directly under the title instead of explanatory paragraphs
 
 Avoid inventing different card languages on each page.
 
@@ -286,6 +300,9 @@ The preview does not need to be pixel-identical, but it should not feel like a d
 - Prefer operational language over marketing language
 - Make actions explicit
 - Keep helper text useful, compact, and sparse
+- Remove descriptive filler under headings, section titles, and card titles
+- Do not use title-following sentences just to restate what the section is about
+- When extra guidance is needed, place it next to the exact field, toggle, or state that needs explanation
 - Avoid vague slogans inside product UI
 - Avoid repeating the same explanation in page header, section header, and preview panel
 - Prefer merchant-facing clarity over internal jargon
@@ -332,6 +349,7 @@ Do not:
 - Create oversized empty space without functional purpose
 - Use large decorative icons where simple hierarchy works better
 - Make pricing or analytics feel disconnected from the rest of the app
+- Add heading-description stacks by default across admin pages, builder sections, or settings cards
 
 ## Decision Rule
 

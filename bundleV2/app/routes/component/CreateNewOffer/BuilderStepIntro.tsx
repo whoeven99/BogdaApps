@@ -1,12 +1,10 @@
 type Props = {
   title: string;
-  description?: string;
   meta?: string;
 };
 
 export default function BuilderStepIntro({
   title,
-  description,
   meta,
 }: Props) {
   return (
@@ -18,11 +16,6 @@ export default function BuilderStepIntro({
       ) : null}
       <div>
         <h2 className="m-0 text-[20px] font-semibold text-[#1c1f23]">{title}</h2>
-        {description ? (
-          <p className="mt-1 mb-0 text-[13px] leading-[1.5] text-[#5c6166]">
-            {description}
-          </p>
-        ) : null}
       </div>
     </div>
   );

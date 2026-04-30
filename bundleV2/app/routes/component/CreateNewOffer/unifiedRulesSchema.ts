@@ -100,8 +100,7 @@ export type UnifiedRulePresentation = {
 
 export type UnifiedRulePublishSupport =
   | "supported"
-  | "draft_only"
-  | "specialized_editor_only";
+  | "draft_only";
 
 export type UnifiedRuleNode = {
   id: string;
@@ -155,7 +154,7 @@ export const OFFER_TYPE_RULE_CAPABILITIES: OfferTypeRuleCapability[] = [
     primaryRuleTypes: ["bxgy"],
     scopeModel: "buy_get_products",
     publishSupport: "supported",
-    notes: "Uses dedicated buy/get product scopes and a specialized editor.",
+    notes: "Uses dedicated buy/get product scopes and bar-level reward products.",
   },
   {
     offerType: "free-gift",
@@ -168,15 +167,15 @@ export const OFFER_TYPE_RULE_CAPABILITIES: OfferTypeRuleCapability[] = [
     offerType: "complete-bundle",
     primaryRuleTypes: ["complete_bundle", "bxgy"],
     scopeModel: "bundle_bar_products",
-    publishSupport: "specialized_editor_only",
-    notes: "Bar-based structure with product pricing is not a flat rule list.",
+    publishSupport: "supported",
+    notes: "Complete-bundle components follow the current Step 2 component flow.",
   },
   {
     offerType: "subscription",
     primaryRuleTypes: ["subscription"],
     scopeModel: "subscription_products",
-    publishSupport: "specialized_editor_only",
-    notes: "Purchase mode messaging, not a normal discount rule.",
+    publishSupport: "supported",
+    notes: "Subscription messaging is configured as a Step 2 component.",
   },
 ];
 
@@ -328,8 +327,6 @@ export function getPublishSupportLabel(support: UnifiedRulePublishSupport): stri
       return "Publish-ready";
     case "draft_only":
       return "Draft only";
-    case "specialized_editor_only":
-      return "Specialized editor";
     default:
       return "Support";
   }

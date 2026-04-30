@@ -115,6 +115,7 @@ export type CampaignDraftActions = {
   setActiveBundleBarId: (barId: string) => void;
   addCompleteBundleBar: (type: "quantity-break-same" | "bxgy") => void;
   removeCompleteBundleBar: (barId: string) => void;
+  clearCompleteBundleBars: () => void;
   updateCompleteBundleBar: (
     barId: string,
     patch: Partial<CompleteBundleBar>,

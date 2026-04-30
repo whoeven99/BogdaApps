@@ -28,9 +28,7 @@ import {
 import {
   buildDiscountRulesPayload,
   buildSelectedProductsPayload,
-  getCampaignLogicSummary,
   getCampaignPublishSupportSummary,
-  getCampaignScopeSummary,
   validateFinalSubmitScopeAndLogic,
   validateScopeAndLogicStep,
 } from "./campaignBuilderRegistry";
@@ -716,6 +714,19 @@ export function CreateNewOffer({
         hasSubscription: found?.hasSubscription === true,
       };
     });
+  const areStringArraysEqual = (left: string[], right: string[]) =>
+    left.length === right.length && left.every((value, index) => value === right[index]);
+  const createDefaultCompleteBundleBar = (
+    type: "quantity-break-same" | "bxgy" = "quantity-break-same",
+  ): CompleteBundleBar => ({
+    id: `bar-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    type,
+    title: type === "bxgy" ? "Buy X, Get Y" : "Complete the bundle",
+    subtitle: "",
+    quantity: 2,
+    products: [],
+    pricing: { mode: "full_price", value: 0 },
+  });
 
   const handleSelectProducts = async (
     type: "buy" | "get" | "gift" | "normal" | "product_bundle" = "normal",
@@ -753,7 +764,12 @@ export function CreateNewOffer({
       }));
       
       if (type === "buy") {
-        setBuyProducts(newData.map((item: any) => item.id));
+        const nextIds = newData.map((item: any) => String(item.id));
+        setBuyProducts(nextIds);
+        setSelectedProductsData(newData);
+        if (freeGiftRules.length > 0) {
+          setFreeGiftTriggerProducts(nextIds);
+        }
       } else if (type === "get") {
         const nextIds = newData.map((item: any) => String(item.id));
         setGetProducts(nextIds);
@@ -773,13 +789,17 @@ export function CreateNewOffer({
         );
       } else if (type === "product_bundle") {
         setProductBundleProductIds(newData.map((item: any) => String(item.id)));
-      } else if (offerType === "free-gift") {
-        setFreeGiftTriggerProducts(newData.map((item: any) => String(item.id)));
-        setSelectedProductsData(newData);
       } else {
         const nextProducts =
           offerType === "subscription" ? newData.slice(0, 1) : newData;
+        const nextIds = nextProducts.map((item: any) => String(item.id));
         setSelectedProductsData(nextProducts);
+        if (bxgyDiscountRules.length > 0 || offerType === "bxgy") {
+          setBuyProducts(nextIds);
+        }
+        if (freeGiftRules.length > 0 || offerType === "free-gift") {
+          setFreeGiftTriggerProducts(nextIds);
+        }
 
         // 中文注释：订阅型 offer 选完商品后，使用用户指定的 GraphQL 单独校验该商品是否有 selling plan
         if (offerType === "subscription" && nextProducts[0]?.id) {
@@ -831,7 +851,7 @@ export function CreateNewOffer({
     );
   };
   const addCompleteBundleBar = (type: "quantity-break-same" | "bxgy") => {
-    const id = `bar-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const nextBar = createDefaultCompleteBundleBar(type);
     const seededProducts =
       mainBundleProduct && mainBundleProduct.productId
         ? [
@@ -847,17 +867,12 @@ export function CreateNewOffer({
           ]
         : [];
     const newBar: CompleteBundleBar = {
-      id,
-      type,
-      title: type === "bxgy" ? "Buy X, Get Y" : "Complete the bundle",
-      subtitle: "",
-      quantity: 2,
+      ...nextBar,
       // 新增 bar 默认继承主产品，后续可在预览里继续编辑
       products: seededProducts,
-      pricing: { mode: "full_price", value: 0 },
     };
     setCompleteBundleBars((prev) => [...prev, newBar]);
-    setActiveBundleBarId(id);
+    setActiveBundleBarId(newBar.id);
   };
 
   const removeCompleteBundleBar = (barId: string) => {
@@ -878,6 +893,16 @@ export function CreateNewOffer({
     setCompleteBundleBars((prev) =>
       prev.map((bar) => (bar.id === barId ? { ...bar, ...patch } : bar)),
     );
+  };
+  const clearCompleteBundleBars = () => {
+    if (offerType === "complete-bundle") {
+      const fallbackBar = createDefaultCompleteBundleBar();
+      setCompleteBundleBars([fallbackBar]);
+      setActiveBundleBarId(fallbackBar.id);
+      return;
+    }
+    setCompleteBundleBars([]);
+    setActiveBundleBarId("");
   };
 
   const handleSelectProductsForBundleBar = async (barId: string) => {
@@ -1043,29 +1068,27 @@ export function CreateNewOffer({
     return parseFreeGiftSelectedProducts(selectedProductsJson).triggerProducts;
   });
   const [completeBundleBars, setCompleteBundleBars] = useState<CompleteBundleBar[]>(
-    () =>
-      ((initialCampaignLegacy?.offerType as OfferTypeId | undefined) === "complete-bundle" ||
-        initialOffer?.offerType === "complete-bundle") &&
-      initialCompleteBundleConfig.bars.length > 0
-        ? initialCompleteBundleConfig.bars
-        : starterTemplateDefaults?.completeBundleBars?.length
+    () => {
+      if (initialCompleteBundleConfig.bars.length > 0) {
+        return initialCompleteBundleConfig.bars;
+      }
+      if (
+        (initialCampaignLegacy?.offerType as OfferTypeId | undefined) === "complete-bundle" ||
+        initialOffer?.offerType === "complete-bundle"
+      ) {
+        return starterTemplateDefaults?.completeBundleBars?.length
           ? starterTemplateDefaults.completeBundleBars
-        : [
-            {
-              id: `bar-${Date.now()}`,
-              type: "quantity-break-same",
-              title: "Complete the bundle",
-              subtitle: "",
-              quantity: 2,
-              products: [],
-              pricing: { mode: "full_price", value: 0 },
-            },
-          ],
+          : [createDefaultCompleteBundleBar()];
+      }
+      return [];
+    },
   );
   const [activeBundleBarId, setActiveBundleBarId] = useState<string>(
     () =>
       initialCompleteBundleConfig.bars[0]?.id ||
-      starterTemplateDefaults?.completeBundleBars?.[0]?.id ||
+      (((initialCampaignLegacy?.offerType as OfferTypeId | undefined) === "complete-bundle" ||
+        initialOffer?.offerType === "complete-bundle") &&
+      starterTemplateDefaults?.completeBundleBars?.[0]?.id) ||
       "",
   );
   const [status, setStatus] = useState<boolean>(
@@ -1138,6 +1161,42 @@ export function CreateNewOffer({
       }),
     [productBundleProductIds, storeProducts],
   );
+  useEffect(() => {
+    if (selectedProductsData.length > 0) return;
+    const fallbackIds =
+      buyProducts.length > 0
+        ? buyProducts
+        : freeGiftTriggerProducts.length > 0
+          ? freeGiftTriggerProducts
+          : [];
+    if (!fallbackIds.length) return;
+    setSelectedProductsData(mapProductIdsToDraftProducts(fallbackIds));
+  }, [
+    selectedProductsData.length,
+    buyProducts,
+    freeGiftTriggerProducts,
+    storeProducts,
+  ]);
+
+  useEffect(() => {
+    const globalTriggerIds = selectedProductsData.map((product) => String(product.id));
+    if (globalTriggerIds.length === 0) return;
+    if (bxgyDiscountRules.length > 0 && !areStringArraysEqual(buyProducts, globalTriggerIds)) {
+      setBuyProducts(globalTriggerIds);
+    }
+    if (
+      freeGiftRules.length > 0 &&
+      !areStringArraysEqual(freeGiftTriggerProducts, globalTriggerIds)
+    ) {
+      setFreeGiftTriggerProducts(globalTriggerIds);
+    }
+  }, [
+    selectedProductsData,
+    bxgyDiscountRules.length,
+    freeGiftRules.length,
+    buyProducts,
+    freeGiftTriggerProducts,
+  ]);
   useEffect(() => {
     const persistedOrder = initialCampaignConfig?.settings.compositionBarOrder;
     if (Array.isArray(persistedOrder) && persistedOrder.length > 0) {
@@ -2187,8 +2246,6 @@ export function CreateNewOffer({
       unifiedRulesSnapshot,
     ],
   );
-  const stepTwoScopeSummary = getCampaignScopeSummary(campaignDraft);
-  const stepTwoLogicSummary = getCampaignLogicSummary(campaignDraft);
   const stepTwoPublishSummary = getCampaignPublishSupportSummary(campaignDraft);
   const compositionBars = getCampaignCompositionBars(campaignDraft);
   const compositionModules = getCampaignCompositionModules(campaignDraft, {
@@ -2431,6 +2488,7 @@ export function CreateNewOffer({
     setActiveBundleBarId,
     addCompleteBundleBar,
     removeCompleteBundleBar,
+    clearCompleteBundleBars,
     updateCompleteBundleBar,
     handleSelectProductsForBundleBar,
     appendProductsToBundleBar,
@@ -3124,8 +3182,7 @@ export function CreateNewOffer({
             <>
               <BuilderStepIntro
                 title="Scope & Logic"
-                meta={`${compositionBars.length} bars • ${enabledCompositionModuleCount} components enabled`}
-                description={`Customize the template composition by adding bars and enabling components. Scope: ${stepTwoScopeSummary}. Logic: ${stepTwoLogicSummary}. Publish: ${stepTwoPublishSummary}.`}
+                meta={`${compositionBars.length} bars • ${enabledCompositionModuleCount} components enabled • ${stepTwoPublishSummary}`}
               />
 
               <StepTwoCompositionBuilder
@@ -3482,7 +3539,6 @@ export function CreateNewOffer({
               <div>
                 <BuilderStepIntro
                   title="Display"
-                  description="Customize copy, defaults, layout, and visual styling for the configured rules and any special template modules."
                 />
 
                 <DisplayBlocksEditor

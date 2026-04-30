@@ -37,6 +37,7 @@ type Props = {
     isFirstBar: boolean,
   ) => ReactNode;
   section?: "bars" | "products" | "all";
+  simpleMode?: boolean;
   updateRuleValues?: (id: string, patch: UnifiedRuleValuePatch) => void;
   updateRulePresentation?: (id: string, patch: RulePresentationPatch) => void;
 };
@@ -56,18 +57,20 @@ export default function CompleteBundleEditor({
   appendProductsToBundleBar,
   renderCompleteBundleProductPricingCard,
   section = "all",
+  simpleMode = false,
   updateRuleValues,
   updateRulePresentation,
 }: Props) {
   const { barTypeOptions, addMenuItems } = getCompleteBundleRuleCapability();
   const showBars = section === "all" || section === "bars";
   const showProducts = section === "all" || section === "products";
-  const activeBar =
-    completeBundleBars.find((bar) => bar.id === activeBundleBarId) ||
-    completeBundleBars[0];
-  const activeBarIndex = completeBundleBars.findIndex(
-    (bar) => bar.id === activeBar?.id,
-  );
+  const activeBar = simpleMode
+    ? completeBundleBars[0]
+    : completeBundleBars.find((bar) => bar.id === activeBundleBarId) ||
+      completeBundleBars[0];
+  const activeBarIndex = simpleMode
+    ? 0
+    : completeBundleBars.findIndex((bar) => bar.id === activeBar?.id);
 
   return (
     <div className="mb-8">
@@ -203,7 +206,7 @@ export default function CompleteBundleEditor({
               </OfferRuleCard>
             ))}
           </div>
-          <OfferRuleAddPanel description="Add another bundle bar when this offer needs more bundle paths or a BXGY alternative.">
+          <OfferRuleAddPanel description="Add another complete-bundle bar when this offer needs more bundle options or a BXGY alternative.">
             <Dropdown
               trigger={["click"]}
               menu={{
@@ -227,36 +230,43 @@ export default function CompleteBundleEditor({
             <div className="create-offer-panel__header">
               <div>
                 <div className="create-offer-panel__eyebrow">Scope</div>
-                <h3 className="create-offer-panel__title">Products & pricing</h3>
+                <h3 className="create-offer-panel__title">Bundle products</h3>
               </div>
             </div>
             <div className="create-offer-panel__meta">
-              Configure products for the active bar, then review pricing and variant previews.
+              Add or edit the bundled products for the selected complete-bundle group.
             </div>
           </div>
 
-          <div className="mt-3 flex flex-wrap gap-2">
-            {completeBundleBars.map((bar, index) => (
-              <Button
-                key={bar.id}
-                size="small"
-                type={bar.id === activeBar.id ? "primary" : "default"}
-                onClick={(e) => {
-                  setActiveBundleBarId(bar.id);
-                  e.preventDefault();
-                }}
-              >
-                Bar #{index + 1}
-              </Button>
-            ))}
-          </div>
+          {!simpleMode && completeBundleBars.length > 1 ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {completeBundleBars.map((bar, index) => (
+                <Button
+                  key={bar.id}
+                  size="small"
+                  type={bar.id === activeBar.id ? "primary" : "default"}
+                  onClick={(e) => {
+                    setActiveBundleBarId(bar.id);
+                    e.preventDefault();
+                  }}
+                >
+                  Group #{index + 1}
+                </Button>
+              ))}
+            </div>
+          ) : null}
 
           <div className="create-offer-bundle-bar mt-3 create-offer-bundle-bar--active">
             <div className="flex items-center justify-between gap-3 mb-2">
               <div className="text-[14px] font-semibold text-[#1c1f23]">
-                Bar #{activeBarIndex + 1} -{" "}
-                {activeBar.title ||
-                  (activeBar.type === "bxgy" ? "Buy X, Get Y" : "Complete the bundle")}
+                {simpleMode
+                  ? "Bundled products"
+                  : `Group #${activeBarIndex + 1} - ${
+                      activeBar.title ||
+                      (activeBar.type === "bxgy"
+                        ? "Buy X, Get Y"
+                        : "Complete the bundle")
+                    }`}
               </div>
               <div className="text-[12px] text-[#5c6166]">
                 {activeBar.products.length} product
@@ -265,7 +275,7 @@ export default function CompleteBundleEditor({
             </div>
             <div className="mt-3 pt-3 border-t border-[#ebedef]">
               <div className="text-[13px] font-medium text-[#1c1f23] mb-2">
-                Bar Pricing & Variant Preview
+                Bundled products
               </div>
               {activeBarIndex === 0 ? (
                 <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -278,12 +288,14 @@ export default function CompleteBundleEditor({
                     }}
                   >
                     {activeBar.products.length
-                      ? "Change default product"
-                      : "Select default product"}
+                      ? "Change bundled product"
+                      : "Select bundled product"}
                   </Button>
-                  <span className="text-[11px] text-[#5c6166]">
-                    Bar #1 only allows one default product
-                  </span>
+                  {!simpleMode ? (
+                    <span className="text-[11px] text-[#5c6166]">
+                      Group #1 uses the lead bundled product
+                    </span>
+                  ) : null}
                 </div>
               ) : (
                 <div className="mb-2">
@@ -296,15 +308,15 @@ export default function CompleteBundleEditor({
                       e.preventDefault();
                     }}
                   >
-                    + Add product
+                    + Add bundled product
                   </Button>
                 </div>
               )}
               {activeBar.products.length === 0 ? (
                 <div className="text-[12px] text-[#5c6166]">
                   {activeBarIndex === 0
-                    ? "Select the default product first."
-                    : 'This bar has no products yet. Click "+ Add product" to continue.'}
+                    ? "Select the first bundled product to continue."
+                    : 'This group has no products yet. Click "+ Add bundled product" to continue.'}
                 </div>
               ) : (
                 <div className="flex flex-col gap-4">
@@ -313,7 +325,7 @@ export default function CompleteBundleEditor({
                       activeBar,
                       product,
                       productIdx,
-                      activeBarIndex === 0,
+                      true,
                     ),
                   )}
                 </div>

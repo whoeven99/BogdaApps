@@ -149,7 +149,7 @@ export function getCampaignCompositionModules(
     {
       id: "complete_bundle",
       label: "Complete bundle",
-      description: "Bar-driven bundle module with product and pricing setup.",
+      description: "Optional component for adding and editing bundled products.",
       enabled:
         draft.offerType === "complete-bundle" || draft.completeBundleBars.length > 0,
       toggleable: draft.offerType !== "complete-bundle",

@@ -7,7 +7,6 @@ import {
 import type { CampaignDraft, DraftDiscountRule } from "./campaignDraft";
 import type { OfferTypeId } from "./offerTypeOptions";
 import {
-  getRuleCapability,
   getUnifiedRuleTypeLabel,
 } from "./unifiedRulesSchema";
 
@@ -190,28 +189,19 @@ export function getCampaignRuleTypeSummary(
 export function getCampaignPublishSupportSummary(
   ctx: CampaignBuilderRegistryContext,
 ): string {
-  const capability = getRuleCapability(ctx.offerType);
   const publishStates = Array.from(
     new Set(ctx.unifiedRulesSnapshot.map((rule) => rule.publishSupport)),
   );
 
   if (publishStates.length === 0) {
-    return capability.publishSupport === "supported"
-      ? "Publish-ready path"
-      : capability.publishSupport === "draft_only"
-        ? "Draft-only path"
-        : "Specialized editor path";
-  }
-
-  if (publishStates.includes("specialized_editor_only")) {
-    return "Specialized editor publish path";
+    return "Add bars to continue";
   }
 
   if (publishStates.includes("draft_only")) {
-    return "Mixed publish support";
+    return "Contains draft-only bars";
   }
 
-  return "Publish-ready path";
+  return "Ready in current flow";
 }
 
 export function buildSelectedProductsPayload(
