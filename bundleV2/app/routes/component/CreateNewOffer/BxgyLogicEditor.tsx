@@ -6,7 +6,6 @@ import {
   OfferRuleFooterRow,
   OfferRuleFormGrid,
   OfferRuleNotice,
-  OfferRuleSummaryBox,
   OfferRulesSection,
 } from "./OfferRulesShared";
 import type { RulePresentationPatch } from "./unifiedRulePresentation";
@@ -169,7 +168,7 @@ export default function BxgyLogicEditor({
                   const ruleId = getBxgyUnifiedRuleId(index);
                   return (
                     <>
-                <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+                <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
                   <label className="block text-[14px] font-medium text-[#1c1f23]">
                     Discount Type
                     <Select
@@ -191,12 +190,6 @@ export default function BxgyLogicEditor({
                       disabled
                     />
                   </label>
-
-                  <OfferRuleSummaryBox
-                    label="Reward Summary"
-                    value="Percentage discount on Y products"
-                    description="Set the reward percentage below. `100%` means the reward products are free."
-                  />
                 </div>
 
                 <div className="create-offer-discount-form-row create-offer-discount-form-row--inline">

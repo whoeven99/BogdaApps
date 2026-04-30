@@ -16,7 +16,6 @@ import {
 import {
   OfferRuleAddPanel,
   OfferRuleCard,
-  OfferRuleSummaryBox,
 } from "./OfferRulesShared";
 import {
   getUnifiedRuleCapability,
@@ -104,7 +103,7 @@ export default function UnifiedRulesEditor({
                 setRules((prev) => prev.filter((_, ruleIndex) => ruleIndex !== index))
               }
             >
-              <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
                 <label className="block text-[14px] font-medium text-[#1c1f23]">
                   Discount Type
                   <Select
@@ -136,32 +135,6 @@ export default function UnifiedRulesEditor({
                     }}
                   />
                 </label>
-
-                <OfferRuleSummaryBox
-                  label="Reward Summary"
-                  value={
-                    usesGiftReward
-                      ? "Gift product reward"
-                      : usesShippingReward
-                        ? "Free shipping reward"
-                        : usesOrderDiscount
-                          ? "Order percentage discount"
-                          : usesBxgy
-                            ? "BXGY percentage discount"
-                            : "Product percentage discount"
-                  }
-                  description={
-                    usesGiftReward
-                      ? "Reward products are configured below."
-                      : usesShippingReward
-                        ? "This rule maps to the shipping discount function automatically."
-                        : usesOrderDiscount
-                          ? "Applies a subtotal-level order discount when the rule is satisfied."
-                          : usesBxgy
-                            ? "Configure buy/get quantities below. This shared BXGY rule shape is currently draft-only."
-                            : "Applies a percentage discount to the matched products."
-                  }
-                />
               </div>
 
               <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">

@@ -5,7 +5,6 @@ import {
   OfferRuleCard,
   OfferRuleFooterRow,
   OfferRuleFormGrid,
-  OfferRuleSummaryBox,
   OfferRulesSection,
 } from "./OfferRulesShared";
 import type { RulePresentationPatch } from "./unifiedRulePresentation";
@@ -155,7 +154,7 @@ export default function FreeGiftLogicEditor({
                 const ruleId = getFreeGiftUnifiedRuleId(index);
                 return (
                   <>
-              <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
                 <label className="block text-[14px] font-medium text-[#1c1f23]">
                   Discount Type
                   <Select
@@ -177,12 +176,6 @@ export default function FreeGiftLogicEditor({
                     disabled
                   />
                 </label>
-
-                <OfferRuleSummaryBox
-                  label="Reward Summary"
-                  value="Gift quantity from reward scope"
-                  description="Gift products are selected in the module above."
-                />
               </div>
 
               <div className="create-offer-discount-form-row create-offer-discount-form-row--inline">

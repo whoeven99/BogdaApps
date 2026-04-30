@@ -192,11 +192,6 @@ export default function CompleteBundleEditor({
                           : "Customers unlock this bar by completing the configured bundle group."
                       }
                     />
-                    <OfferRuleSummaryBox
-                      label="Reward Summary"
-                      value={`${bar.products.length} configured product${bar.products.length === 1 ? "" : "s"}`}
-                      description="Product selection and pricing stay aligned in the Products & pricing section."
-                    />
                   </div>
                   <div className="text-[12px] text-[#5c6166] mt-3">
                     {bar.products.length} products selected

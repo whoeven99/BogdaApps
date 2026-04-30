@@ -149,20 +149,6 @@ export default function DifferentProductsLogicEditor({
                       : "Unlocks a shared discount when customers reach the threshold."
                   }
                 />
-
-                <OfferRuleSummaryBox
-                  label="Reward Summary"
-                  value={
-                    rule.tierType === "bxgy"
-                      ? "Percentage discount on reward products"
-                      : "Percentage discount on eligible products"
-                  }
-                  description={
-                    rule.tierType === "bxgy"
-                      ? "Reward products can be narrower than the buy scope."
-                      : "The selected product pool shares the same discount rule."
-                  }
-                />
               </div>
 
               <div className="create-offer-discount-form-row create-offer-discount-form-row--inline">
