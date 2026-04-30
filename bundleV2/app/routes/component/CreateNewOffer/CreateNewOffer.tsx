@@ -19,21 +19,26 @@ import { PreviewItem } from "../BundlePreview/bundlePreviewShared";
 import BuilderStepIntro from "./BuilderStepIntro";
 import type { CampaignDraft, CampaignDraftActions } from "./campaignDraft";
 import {
+  getCampaignCompositionBars,
+  getCampaignCompositionModules,
+  getCampaignCompositionRulesSnapshot,
+  orderCampaignCompositionBars,
+  orderCampaignCompositionRules,
+} from "./campaignCompositionAdapter";
+import {
   buildDiscountRulesPayload,
   buildSelectedProductsPayload,
-  getCampaignBuilderMeta,
   getCampaignLogicSummary,
   getCampaignPublishSupportSummary,
-  getCampaignRuleTypeSummary,
   getCampaignScopeSummary,
   validateFinalSubmitScopeAndLogic,
   validateScopeAndLogicStep,
 } from "./campaignBuilderRegistry";
 import DisplayBlocksEditor from "./DisplayBlocksEditor";
-import LogicEditorsRenderer from "./LogicEditorsRenderer";
 import OfferComponentsDisplayCustomizer from "./OfferComponentsDisplayCustomizer";
 import { ProgressiveGiftsSection } from "./ProgressiveGiftsSection";
 import ScheduleTargetingEditor from "./ScheduleTargetingEditor";
+import StepTwoCompositionBuilder from "./StepTwoCompositionBuilder";
 import { getStarterTemplateDefaults } from "./starterTemplateDefaults";
 import {
   OFFER_TEXT_LIMITS,
@@ -76,7 +81,10 @@ import {
   updateDiscountRulePresentation,
   updateFreeGiftRulePresentation,
 } from "./unifiedRulePresentation";
-import { buildUnifiedPreviewItems } from "./unifiedRulesPreview";
+import {
+  buildCompositionPreviewItems,
+  buildUnifiedPreviewItems,
+} from "./unifiedRulesPreview";
 import {
   type UnifiedRuleValuePatch,
   updateBxgyRuleValues,
@@ -86,7 +94,7 @@ import {
   updateUnifiedDiscountRuleValues,
 } from "./unifiedRuleValues";
 import {
-  getUnifiedRuleAuditIssues,
+  getUnifiedRuleBlockingMessageForRules,
   getUnifiedRuleBlockingMessage,
 } from "./unifiedRulesValidation";
 
@@ -717,7 +725,7 @@ export function CreateNewOffer({
   });
 
   const handleSelectProducts = async (
-    type: "buy" | "get" | "gift" | "normal" = "normal",
+    type: "buy" | "get" | "gift" | "normal" | "product_bundle" = "normal",
   ) => {
     const selected = await (window as any).shopify.resourcePicker({
       type: "product",
@@ -729,6 +737,8 @@ export function CreateNewOffer({
         ? getProducts.map((id) => ({ id }))
         : type === "gift"
         ? giftProductsData.map((p) => ({ id: p.id }))
+        : type === "product_bundle"
+        ? productBundleProductIds.map((id) => ({ id }))
         : selectedProductsData.map((p) => ({ id: p.id })),
     });
 
@@ -755,6 +765,8 @@ export function CreateNewOffer({
         setGetProducts(newData.map((item: any) => item.id));
       } else if (type === "gift") {
         setGiftProductsData(newData);
+      } else if (type === "product_bundle") {
+        setProductBundleProductIds(newData.map((item: any) => String(item.id)));
       } else if (offerType === "free-gift") {
         setFreeGiftTriggerProducts(newData.map((item: any) => String(item.id)));
         setSelectedProductsData(newData);
@@ -997,6 +1009,51 @@ export function CreateNewOffer({
       ? initialCountdownBlock.config.label
       : starterTemplateDefaults?.countdownLabel || "Limited time offer",
   );
+  const [productBundleEnabled, setProductBundleEnabled] = useState(
+    offerSettings.productBundleEnabled,
+  );
+  const [productBundleTitle, setProductBundleTitle] = useState(
+    offerSettings.productBundleTitle,
+  );
+  const [productBundleSubtitle, setProductBundleSubtitle] = useState(
+    offerSettings.productBundleSubtitle,
+  );
+  const [productBundleMinQuantity, setProductBundleMinQuantity] = useState(
+    offerSettings.productBundleMinQuantity,
+  );
+  const [productBundleProductIds, setProductBundleProductIds] = useState<string[]>(
+    offerSettings.productBundleProductIds,
+  );
+  const [checkboxUpsellsEnabled, setCheckboxUpsellsEnabled] = useState(
+    offerSettings.checkboxUpsellsEnabled,
+  );
+  const [stickyAddToCartEnabled, setStickyAddToCartEnabled] = useState(
+    offerSettings.stickyAddToCartEnabled,
+  );
+  const [compositionBarOrder, setCompositionBarOrder] = useState<string[]>([]);
+  const productBundleProductsData = useMemo(
+    () =>
+      productBundleProductIds.map((id) => {
+        const product = storeProducts.find((entry) => String(entry.id) === String(id));
+        return {
+          id: String(id),
+          title: product?.name || "Selected product",
+          image: product?.image || "https://via.placeholder.com/60",
+          price: product?.price || "€0.00",
+          variantsCount: Array.isArray(product?.variants) ? product.variants.length : 1,
+          hasSubscription: product?.hasSubscription === true,
+        };
+      }),
+    [productBundleProductIds, storeProducts],
+  );
+  useEffect(() => {
+    const persistedOrder = initialCampaignConfig?.settings.compositionBarOrder;
+    if (Array.isArray(persistedOrder) && persistedOrder.length > 0) {
+      setCompositionBarOrder(
+        persistedOrder.map((id) => String(id || "").trim()).filter(Boolean),
+      );
+    }
+  }, [initialCampaignConfig]);
   const activeBundleBar =
     completeBundleBars.find((bar) => bar.id === activeBundleBarId) ||
     completeBundleBars[0] ||
@@ -1474,6 +1531,11 @@ export function CreateNewOffer({
     let logicBlockId = "logic-campaign";
     let scopeProductIds: string[] = [];
     let logicBlocks: CampaignConfig["logicBlocks"] = [];
+    const addScopeProducts = (ids: string[]) => {
+      scopeProductIds = Array.from(
+        new Set([...scopeProductIds, ...ids.map((id) => String(id)).filter(Boolean)]),
+      );
+    };
 
     if (offerType === "quantity-breaks-same") {
       logicBlockId = "logic-quantity-breaks";
@@ -1592,6 +1654,124 @@ export function CreateNewOffer({
       return null;
     }
 
+    if (offerType !== "quantity-breaks-same" && normalizedDiscountRules.length > 0) {
+      logicBlocks.push({
+        id: "logic-quantity-breaks",
+        type: "quantity-breaks",
+        config: {
+          tiers: normalizedDiscountRules.map((rule) => ({
+            qty: rule.count,
+            discountPercent: rule.discountPercent,
+            title: rule.title || "",
+            subtitle: rule.subtitle || "",
+            badge: rule.badge || "",
+            isDefault: !!rule.isDefault,
+            discountClass: rule.discountClass || "product",
+            offerKind: rule.offerKind || "percentage_discount",
+            conditionType: rule.conditionType || "item_quantity",
+            amountThreshold: rule.amountThreshold,
+            rewardType: rule.rewardType || "percentage_off",
+            rewardProductIds: Array.isArray(rule.rewardProductIds)
+              ? rule.rewardProductIds
+              : [],
+            giftQuantity: rule.giftQuantity,
+            logicType: rule.logicType === "bxgy" ? "bxgy" : "standard",
+            buyQuantity: rule.buyQuantity,
+            getQuantity: rule.getQuantity,
+            maxUsesPerOrder: rule.maxUsesPerOrder,
+          })),
+        },
+      });
+      addScopeProducts(selectedProductsData.map((product) => String(product.id)));
+    }
+
+    if (offerType !== "quantity-breaks-different" && differentProductsDiscountRules.length > 0) {
+      logicBlocks.push({
+        id: "logic-quantity-breaks-different",
+        type: "quantity-breaks-different",
+        config: {
+          tiers: buildDifferentProductsDiscountRulesJson(differentProductsDiscountRules),
+        },
+      });
+      addScopeProducts(selectedProductsData.map((product) => String(product.id)));
+    }
+
+    if (offerType !== "bxgy" && bxgyDiscountRules.length > 0) {
+      logicBlocks.push({
+        id: "logic-bxgy",
+        type: "bxgy",
+        config: {
+          tiers: buildBxgyDiscountRulesJson(bxgyDiscountRules),
+        },
+      });
+      addScopeProducts([...buyProducts, ...getProducts]);
+    }
+
+    if (offerType !== "free-gift" && freeGiftRules.length > 0) {
+      logicBlocks.push({
+        id: "logic-free-gift",
+        type: "free-gift",
+        config: {
+          triggerProductIds: freeGiftTriggerProducts,
+          giftProductIds: giftProductsData.map((product) => String(product.id)),
+          tiers: buildFreeGiftRulesJson(freeGiftRules),
+        },
+      });
+      addScopeProducts([
+        ...freeGiftTriggerProducts,
+        ...giftProductsData.map((product) => String(product.id)),
+      ]);
+    }
+
+    if (offerType !== "complete-bundle" && completeBundleBars.length > 0) {
+      const completeBundleConfig = buildCompleteBundleConfig({ bars: completeBundleBars });
+      logicBlocks.push({
+        id: "logic-complete-bundle",
+        type: "complete-bundle",
+        config: completeBundleConfig,
+      });
+      addScopeProducts(
+        completeBundleConfig.bars.flatMap((bar) =>
+          bar.products.map((product) => String(product.productId)),
+        ),
+      );
+    }
+
+    if (subscriptionEnabled && offerType !== "subscription") {
+      const subscriptionProductIds = selectedProductsData.map((product) => String(product.id));
+      logicBlocks.push({
+        id: "logic-subscription",
+        type: "subscription",
+        config: {
+          enabled: true,
+          position: subscriptionPosition,
+          title: subscriptionTitle,
+          subtitle: subscriptionSubtitle,
+          oneTimeTitle,
+          oneTimeSubtitle,
+          defaultSelected: subscriptionDefaultSelected,
+          productIds: subscriptionProductIds,
+        },
+      });
+      addScopeProducts(subscriptionProductIds);
+    }
+
+    if (productBundleEnabled && productBundleProductIds.length > 0) {
+      logicBlocks.push({
+        id: "logic-product-bundle",
+        type: "product-bundle",
+        config: {
+          enabled: true,
+          title: productBundleTitle.trim() || "Build your bundle",
+          subtitle:
+            productBundleSubtitle.trim() || "Choose products to unlock the bundle offer",
+          minQuantity: Math.max(1, productBundleMinQuantity),
+          productIds: productBundleProductIds,
+        },
+      });
+      addScopeProducts(productBundleProductIds);
+    }
+
     return {
       version: 1,
       scope: {
@@ -1628,6 +1808,9 @@ export function CreateNewOffer({
         totalBudget: totalBudget.trim() ? Number(totalBudget) : null,
         dailyBudget: dailyBudget.trim() ? Number(dailyBudget) : null,
         usageLimitPerCustomer,
+        compositionBarOrder,
+        checkboxUpsellsEnabled,
+        stickyAddToCartEnabled,
       },
     };
   }, [
@@ -1638,6 +1821,7 @@ export function CreateNewOffer({
     buttonPrimaryColor,
     buttonText,
     cardBackgroundColor,
+    checkboxUpsellsEnabled,
     completeBundleBars,
     countdownLabel,
     customerSegments,
@@ -1647,12 +1831,18 @@ export function CreateNewOffer({
     freeGiftRules,
     freeGiftTriggerProducts,
     giftProductsData,
+    compositionBarOrder,
     labelColor,
     layoutFormat,
     markets,
     normalizedDiscountRules,
     oneTimeSubtitle,
     oneTimeTitle,
+    productBundleEnabled,
+    productBundleMinQuantity,
+    productBundleProductIds,
+    productBundleSubtitle,
+    productBundleTitle,
     scheduleTimezone,
     selectedProductsData,
     getProducts,
@@ -1698,6 +1888,26 @@ export function CreateNewOffer({
     selectedProductsData.length > 0
       ? "Subscription bar will only be shown in products that are eligible for subscription. You can select those products in your subscription app."
       : "After selecting products, the app checks whether they have selling plans and decides whether to show a solid or dashed subscription bar.";
+  const productBundlePreview = useMemo(
+    () => ({
+      enabled: productBundleEnabled,
+      title: productBundleTitle.trim() || "Build your bundle",
+      subtitle:
+        productBundleSubtitle.trim() || "Choose products to unlock the bundle offer",
+      minQuantity: Math.max(1, productBundleMinQuantity),
+      products: productBundleProductsData.map((product) => ({
+        image: product.image,
+        name: product.title,
+      })),
+    }),
+    [
+      productBundleEnabled,
+      productBundleTitle,
+      productBundleSubtitle,
+      productBundleMinQuantity,
+      productBundleProductsData,
+    ],
+  );
   const unifiedRulesSnapshot = useMemo(
     () =>
       buildUnifiedRulesSnapshot({
@@ -1738,6 +1948,12 @@ export function CreateNewOffer({
       getProducts,
       activeBundleBarId,
       completeBundleBars,
+      productBundleEnabled,
+      productBundleTitle,
+      productBundleSubtitle,
+      productBundleMinQuantity,
+      productBundleProductIds,
+      productBundleProductsData,
       subscriptionTitle,
       subscriptionSubtitle,
       oneTimeTitle,
@@ -1752,6 +1968,8 @@ export function CreateNewOffer({
       freeGiftTriggerProducts,
       giftProductsData,
       progressiveGifts,
+      checkboxUpsellsEnabled,
+      stickyAddToCartEnabled,
       normalizedDiscountRules,
       bxgyDiscountRules,
       differentProductsDiscountRules,
@@ -1767,6 +1985,12 @@ export function CreateNewOffer({
       getProducts,
       activeBundleBarId,
       completeBundleBars,
+      productBundleEnabled,
+      productBundleTitle,
+      productBundleSubtitle,
+      productBundleMinQuantity,
+      productBundleProductIds,
+      productBundleProductsData,
       subscriptionTitle,
       subscriptionSubtitle,
       oneTimeTitle,
@@ -1781,6 +2005,8 @@ export function CreateNewOffer({
       freeGiftTriggerProducts,
       giftProductsData,
       progressiveGifts,
+      checkboxUpsellsEnabled,
+      stickyAddToCartEnabled,
       normalizedDiscountRules,
       bxgyDiscountRules,
       differentProductsDiscountRules,
@@ -1789,12 +2015,70 @@ export function CreateNewOffer({
       unifiedRulesSnapshot,
     ],
   );
-  const stepTwoMeta = getCampaignBuilderMeta(offerType);
   const stepTwoScopeSummary = getCampaignScopeSummary(campaignDraft);
   const stepTwoLogicSummary = getCampaignLogicSummary(campaignDraft);
-  const stepTwoRuleTypeSummary = getCampaignRuleTypeSummary(campaignDraft);
   const stepTwoPublishSummary = getCampaignPublishSupportSummary(campaignDraft);
-  const unifiedRuleAuditIssues = getUnifiedRuleAuditIssues(campaignDraft);
+  const compositionBars = getCampaignCompositionBars(campaignDraft);
+  const compositionModules = getCampaignCompositionModules(campaignDraft, {
+    showCountdownBlock,
+  });
+  const compositionRulesSnapshot = useMemo(
+    () => getCampaignCompositionRulesSnapshot(campaignDraft),
+    [campaignDraft],
+  );
+  useEffect(() => {
+    const currentIds = compositionBars.map((bar) => bar.id);
+    setCompositionBarOrder((prev) => {
+      const filtered = prev.filter((id) => currentIds.includes(id));
+      const missing = currentIds.filter((id) => !filtered.includes(id));
+      const next = [...filtered, ...missing];
+      if (
+        next.length === prev.length &&
+        next.every((id, index) => id === prev[index])
+      ) {
+        return prev;
+      }
+      return next;
+    });
+  }, [compositionBars]);
+  const orderedCompositionBars = useMemo(
+    () => orderCampaignCompositionBars(compositionBars, compositionBarOrder),
+    [compositionBars, compositionBarOrder],
+  );
+  const orderedCompositionRulesSnapshot = useMemo(
+    () => orderCampaignCompositionRules(compositionRulesSnapshot, compositionBarOrder),
+    [compositionRulesSnapshot, compositionBarOrder],
+  );
+  const hasMixedCompositionSources = useMemo(
+    () =>
+      new Set(orderedCompositionRulesSnapshot.map((rule) => rule.sourceOfferType))
+        .size > 1,
+    [orderedCompositionRulesSnapshot],
+  );
+  const activeDisplayRules = orderedCompositionRulesSnapshot;
+  const enabledCompositionModuleCount = compositionModules.filter(
+    (module) => module.enabled,
+  ).length;
+  const getModuleBlockingMessage = () => {
+    if (productBundleEnabled && productBundleProductIds.length === 0) {
+      return "Product bundle module requires at least one selected product.";
+    }
+    if (
+      completeBundleBars.length > 0 &&
+      completeBundleBars.every((bar) => bar.products.length === 0)
+    ) {
+      return "Complete bundle module requires at least one configured bundle product.";
+    }
+    return null;
+  };
+  const clearAllCompositionBarDefaults = () => {
+    setDiscountRules((prev) => prev.map((rule) => ({ ...rule, isDefault: false })));
+    setBxgyDiscountRules((prev) => prev.map((rule) => ({ ...rule, isDefault: false })));
+    setFreeGiftRules((prev) => prev.map((rule) => ({ ...rule, isDefault: false })));
+    setDifferentProductsDiscountRules((prev) =>
+      prev.map((rule) => ({ ...rule, isDefault: false })),
+    );
+  };
   const updateUnifiedRulePresentation = (
     id: string,
     patch: RulePresentationPatch,
@@ -1813,6 +2097,68 @@ export function CreateNewOffer({
         if (typeof patch.subtitle === "string") setOneTimeSubtitle(patch.subtitle);
       }
       return;
+    }
+
+    const compositionRule = orderedCompositionRulesSnapshot.find((rule) => rule.id === id);
+    if (compositionRule) {
+      if (patch.isDefault === true) {
+        clearAllCompositionBarDefaults();
+      }
+      switch (compositionRule.sourceOfferType) {
+        case "quantity-breaks-same": {
+          const index = compositionRule.id
+            ? orderedCompositionRulesSnapshot
+                .filter((rule) => rule.sourceOfferType === "quantity-breaks-same")
+                .findIndex((rule) => rule.id === id)
+            : -1;
+          if (index >= 0) {
+            setDiscountRules((prev) =>
+              updateDiscountRulePresentation(prev, index, patch),
+            );
+          }
+          return;
+        }
+        case "bxgy": {
+          const index = orderedCompositionRulesSnapshot
+            .filter((rule) => rule.sourceOfferType === "bxgy")
+            .findIndex((rule) => rule.id === id);
+          if (index >= 0) {
+            setBxgyDiscountRules((prev) =>
+              updateBxgyRulePresentation(prev, index, patch),
+            );
+          }
+          return;
+        }
+        case "free-gift": {
+          const index = orderedCompositionRulesSnapshot
+            .filter((rule) => rule.sourceOfferType === "free-gift")
+            .findIndex((rule) => rule.id === id);
+          if (index >= 0) {
+            setFreeGiftRules((prev) =>
+              updateFreeGiftRulePresentation(prev, index, patch),
+            );
+          }
+          return;
+        }
+        case "quantity-breaks-different": {
+          const index = orderedCompositionRulesSnapshot
+            .filter((rule) => rule.sourceOfferType === "quantity-breaks-different")
+            .findIndex((rule) => rule.id === id);
+          if (index >= 0) {
+            setDifferentProductsDiscountRules((prev) =>
+              updateDifferentProductsRulePresentation(prev, index, patch),
+            );
+          }
+          return;
+        }
+        case "complete-bundle":
+          setCompleteBundleBars((prev) =>
+            updateCompleteBundleBarPresentation(prev, id, patch),
+          );
+          return;
+        default:
+          break;
+      }
     }
 
     const index = campaignDraft.unifiedRulesSnapshot.findIndex((rule) => rule.id === id);
@@ -1852,6 +2198,33 @@ export function CreateNewOffer({
     id: string,
     patch: UnifiedRuleValuePatch,
   ) => {
+    const compositionRule = compositionRulesSnapshot.find((rule) => rule.id === id);
+    if (compositionRule) {
+      switch (compositionRule.sourceOfferType) {
+        case "quantity-breaks-same":
+          setDiscountRules((prev) => updateUnifiedDiscountRuleValues(prev, id, patch));
+          return;
+        case "bxgy":
+          setBxgyDiscountRules((prev) => updateBxgyRuleValues(prev, id, patch));
+          return;
+        case "free-gift":
+          setFreeGiftRules((prev) => updateFreeGiftRuleValues(prev, id, patch));
+          return;
+        case "quantity-breaks-different":
+          setDifferentProductsDiscountRules((prev) =>
+            updateDifferentProductsRuleValues(prev, id, patch),
+          );
+          return;
+        case "complete-bundle":
+          setCompleteBundleBars((prev) =>
+            updateCompleteBundleRuleValues(prev, id, patch),
+          );
+          return;
+        default:
+          break;
+      }
+    }
+
     switch (offerType) {
       case "quantity-breaks-same":
         setDiscountRules((prev) => updateUnifiedDiscountRuleValues(prev, id, patch));
@@ -1889,6 +2262,12 @@ export function CreateNewOffer({
     updateCompleteBundleBar,
     handleSelectProductsForBundleBar,
     appendProductsToBundleBar,
+    setProductBundleEnabled,
+    setProductBundleTitle,
+    setProductBundleSubtitle,
+    setProductBundleMinQuantity,
+    setCheckboxUpsellsEnabled,
+    setStickyAddToCartEnabled,
     setSubscriptionEnabled,
     setSubscriptionTitle,
     setSubscriptionSubtitle,
@@ -1945,21 +2324,35 @@ export function CreateNewOffer({
       }
     }
 
-    return buildUnifiedPreviewItems({
-      offerType,
-      rules: campaignDraft.unifiedRulesSnapshot,
-      selectedProducts: selectedProductsData.map((product) => ({
-        id: product.id,
-        title: product.title,
-        image: product.image,
-      })),
-      completeBundleBars,
-      baseUnitPrice,
-      formatPrice: formatPreviewPrice,
-    });
+    const previewSelectedProducts = selectedProductsData.map((product) => ({
+      id: product.id,
+      title: product.title,
+      image: product.image,
+    }));
+
+    const hasMixedCompositionSources = new Set(
+      orderedCompositionRulesSnapshot.map((rule) => rule.sourceOfferType),
+    ).size > 1;
+
+    return hasMixedCompositionSources
+      ? buildCompositionPreviewItems({
+          rules: orderedCompositionRulesSnapshot,
+          selectedProducts: previewSelectedProducts,
+          completeBundleBars,
+          baseUnitPrice,
+          formatPrice: formatPreviewPrice,
+        })
+      : buildUnifiedPreviewItems({
+          offerType,
+          rules: orderedCompositionRulesSnapshot,
+          selectedProducts: previewSelectedProducts,
+          completeBundleBars,
+          baseUnitPrice,
+          formatPrice: formatPreviewPrice,
+        });
   }, [
     offerType,
-    campaignDraft.unifiedRulesSnapshot,
+    orderedCompositionRulesSnapshot,
     completeBundleBars,
     selectedProductsData,
     baseUnitPrice,
@@ -2008,8 +2401,8 @@ export function CreateNewOffer({
     setButtonPrimaryColor,
   };
   const unifiedDisplayItems = useMemo(
-    () => buildUnifiedDisplayCustomizerItems(campaignDraft.unifiedRulesSnapshot),
-    [campaignDraft.unifiedRulesSnapshot],
+    () => buildUnifiedDisplayCustomizerItems(activeDisplayRules),
+    [activeDisplayRules],
   );
   const subscriptionDisplayItems = useMemo(
     () =>
@@ -2184,7 +2577,22 @@ export function CreateNewOffer({
           setStep(2);
           return;
         }
-        const unifiedRuleBlockingMessage = getUnifiedRuleBlockingMessage(campaignDraft);
+        const moduleBlockingMessage = getModuleBlockingMessage();
+        if (moduleBlockingMessage) {
+          e.preventDefault();
+          Modal.error({
+            title: "Validation Error",
+            content: moduleBlockingMessage,
+          });
+          setStep(2);
+          return;
+        }
+        const unifiedRuleBlockingMessage = hasMixedCompositionSources
+          ? getUnifiedRuleBlockingMessageForRules(
+              campaignDraft,
+              compositionRulesSnapshot,
+            )
+          : getUnifiedRuleBlockingMessage(campaignDraft);
         if (unifiedRuleBlockingMessage) {
           e.preventDefault();
           Modal.error({
@@ -2523,6 +2931,7 @@ export function CreateNewOffer({
                     showSubscriptionExplanation={shouldShowSubscriptionExplanation}
                     subscriptionExplanationTitle={subscriptionExplanationTitle}
                     subscriptionExplanationBody={subscriptionExplanationBody}
+                    productBundlePreview={productBundlePreview}
                   />
                 </div>
               </div>
@@ -2531,224 +2940,251 @@ export function CreateNewOffer({
 
           {step === 2 && (
             <>
-              <div className="create-offer-products-grid">
-                <div>
-                  <BuilderStepIntro
-                    title="Scope & Logic"
-                    meta={`${stepTwoMeta.logicBlockLabel} • ${stepTwoRuleTypeSummary}`}
-                    description={`Work through the scope, rules, and optional modules for this template. Scope: ${stepTwoScopeSummary}. Logic: ${stepTwoLogicSummary}. Publish: ${stepTwoPublishSummary}.`}
-                  />
+              <BuilderStepIntro
+                title="Scope & Logic"
+                meta={`${compositionBars.length} bars • ${enabledCompositionModuleCount} components enabled`}
+                description={`Customize the template composition by adding bars and enabling components. Scope: ${stepTwoScopeSummary}. Logic: ${stepTwoLogicSummary}. Publish: ${stepTwoPublishSummary}.`}
+              />
 
-                  <LogicEditorsRenderer
-                    draft={campaignDraft}
-                    actions={campaignDraftActions}
-                    unifiedRulesCount={campaignDraft.unifiedRulesSnapshot.length}
-                    unifiedRuleAuditIssues={unifiedRuleAuditIssues}
-                    renderCompleteBundleProductPricingCard={
-                      renderCompleteBundleProductPricingCard
-                    }
-                  />
-                </div>
-
-                <div className="create-offer-sticky-preview">
+              <StepTwoCompositionBuilder
+                draft={campaignDraft}
+                actions={campaignDraftActions}
+                bars={orderedCompositionBars}
+                modules={compositionModules}
+                showCountdownBlock={showCountdownBlock}
+                setShowCountdownBlock={setShowCountdownBlock}
+                countdownLabel={countdownLabel}
+                setCountdownLabel={setCountdownLabel}
+                onMoveBarUp={(barId) =>
+                  setCompositionBarOrder((prev) => {
+                    const index = prev.indexOf(barId);
+                    if (index <= 0) return prev;
+                    const next = [...prev];
+                    [next[index - 1], next[index]] = [next[index], next[index - 1]];
+                    return next;
+                  })
+                }
+                onMoveBarDown={(barId) =>
+                  setCompositionBarOrder((prev) => {
+                    const index = prev.indexOf(barId);
+                    if (index < 0 || index >= prev.length - 1) return prev;
+                    const next = [...prev];
+                    [next[index], next[index + 1]] = [next[index + 1], next[index]];
+                    return next;
+                  })
+                }
+                renderCompleteBundleProductPricingCard={
+                  renderCompleteBundleProductPricingCard
+                }
+                preview={
                   <div className="create-offer-preview-shell">
                     <h3 className="create-offer-preview-shell__title">Preview</h3>
-                  {progressiveGifts.enabled && offerType !== "complete-bundle" ? (
-                    <div className="mb-4 space-y-2">
-                      <div className="text-[13px] font-medium text-[#1c1f23]">
-                        Progressive gifts preview
+                    {progressiveGifts.enabled && offerType !== "complete-bundle" ? (
+                      <div className="mb-4 space-y-2">
+                        <div className="text-[13px] font-medium text-[#1c1f23]">
+                          Progressive gifts preview
+                        </div>
+                        <div className="grid grid-cols-1 gap-2">
+                          <label className="block text-[12px] text-[#5c6166]">
+                            Simulated bar # (free shipping unlock preview)
+                            <Select
+                              size="small"
+                              className="mt-1 w-full"
+                              value={previewGiftBar}
+                              options={previewBarOptions}
+                              onChange={(v) => setPreviewGiftBar(Number(v))}
+                            />
+                          </label>
+                          <label className="block text-[12px] text-[#5c6166]">
+                            Simulated line qty (at_count mode)
+                            <Input
+                              size="small"
+                              type="number"
+                              min={1}
+                              className="mt-1"
+                              value={previewGiftQty}
+                              onChange={(e) => {
+                                const n = Math.max(1, Math.trunc(Number(e.target.value) || 1));
+                                setPreviewGiftQty(n);
+                              }}
+                            />
+                          </label>
+                        </div>
                       </div>
-                      <div className="grid grid-cols-1 gap-2">
-                        <label className="block text-[12px] text-[#5c6166]">
-                          Simulated bar # (free shipping unlock preview)
-                          <Select
-                            size="small"
-                            className="mt-1 w-full"
-                            value={previewGiftBar}
-                            options={previewBarOptions}
-                            onChange={(v) => setPreviewGiftBar(Number(v))}
-                          />
-                        </label>
-                        <label className="block text-[12px] text-[#5c6166]">
-                          Simulated line qty (at_count mode)
-                          <Input
-                            size="small"
-                            type="number"
-                            min={1}
-                            className="mt-1"
-                            value={previewGiftQty}
-                            onChange={(e) => {
-                              const n = Math.max(1, Math.trunc(Number(e.target.value) || 1));
-                              setPreviewGiftQty(n);
-                            }}
-                          />
-                        </label>
-                      </div>
-                    </div>
-                  ) : null}
-                  {offerType === "complete-bundle" ? (
-                    <div className="create-offer-preview-card">
-                      <div className="create-offer-style-preview-header">
-                        {widgetTitle || "Bundle & Save"}
-                      </div>
-                      <div className="create-offer-style-preview-list create-offer-style-preview-list--vertical">
-                        {completeBundleBars.map((bar, barIndex) => (
-                          <div
-                            key={bar.id}
-                            className="create-offer-style-preview-item"
-                            style={{
-                              borderColor:
-                                activeBundleBar?.id === bar.id ? accentColor : borderColor,
-                              background: cardBackgroundColor,
-                            }}
-                          >
-                            {/* Live Preview：单选表示「当前生效 / 顾客将选购」的 bundle 栏，与左侧配置 active 同步 */}
-                            <div className="flex items-start gap-2 mb-1">
-                              <input
-                                type="radio"
-                                name="complete-bundle-live-preview-bar"
-                                className="mt-1 shrink-0"
-                                checked={activeBundleBarId === bar.id}
-                                onChange={() => setActiveBundleBarId(bar.id)}
-                                aria-label={`Select bundle bar ${barIndex + 1}`}
-                              />
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center justify-between gap-2">
-                                  <div className="create-offer-style-preview-item-title">
-                                    {bar.title || `Bar #${barIndex + 1}`}
+                    ) : null}
+                    {offerType === "complete-bundle" ? (
+                      <div className="create-offer-preview-card">
+                        <div className="create-offer-style-preview-header">
+                          {widgetTitle || "Bundle & Save"}
+                        </div>
+                        <div className="create-offer-style-preview-list create-offer-style-preview-list--vertical">
+                          {completeBundleBars.map((bar, barIndex) => (
+                            <div
+                              key={bar.id}
+                              className="create-offer-style-preview-item"
+                              style={{
+                                borderColor:
+                                  activeBundleBar?.id === bar.id ? accentColor : borderColor,
+                                background: cardBackgroundColor,
+                              }}
+                            >
+                              <div className="flex items-start gap-2 mb-1">
+                                <input
+                                  type="radio"
+                                  name="complete-bundle-live-preview-bar"
+                                  className="mt-1 shrink-0"
+                                  checked={activeBundleBarId === bar.id}
+                                  onChange={() => setActiveBundleBarId(bar.id)}
+                                  aria-label={`Select bundle bar ${barIndex + 1}`}
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="create-offer-style-preview-item-title">
+                                      {bar.title || `Bar #${barIndex + 1}`}
+                                    </div>
+                                    <Button
+                                      type="link"
+                                      className="px-0 h-auto shrink-0"
+                                      onClick={(e) => {
+                                        setActiveBundleBarId(bar.id);
+                                        handleSelectProductsForBundleBar(bar.id);
+                                        e.preventDefault();
+                                      }}
+                                    >
+                                      {bar.products.length
+                                        ? "Edit bar products"
+                                        : "Select bar products"}
+                                    </Button>
                                   </div>
-                                  <Button
-                                    type="link"
-                                    className="px-0 h-auto shrink-0"
-                                    onClick={(e) => {
-                                      setActiveBundleBarId(bar.id);
-                                      handleSelectProductsForBundleBar(bar.id);
-                                      e.preventDefault();
-                                    }}
-                                  >
-                                    {bar.products.length ? "Edit bar products" : "Select bar products"}
-                                  </Button>
-                                </div>
-                                <div className="create-offer-style-preview-item-subtitle">
-                                  {bar.subtitle ||
-                                    `${bar.type === "bxgy" ? "Buy X Get Y" : "Quantity break"} · Qty ${bar.quantity}`}
+                                  <div className="create-offer-style-preview-item-subtitle">
+                                    {bar.subtitle ||
+                                      `${bar.type === "bxgy" ? "Buy X Get Y" : "Quantity break"} · Qty ${bar.quantity}`}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                            {bar.products.length >= 1 ? (() => {
-                              let sumOriginal = 0;
-                              let sumFinal = 0;
-                              for (const p of bar.products) {
-                                const v =
-                                  p.variants?.find((x) => x.id === p.selectedVariantId) ||
-                                  p.variants?.[0];
-                                const base = parseMoneyStringToNumber(v?.price || p.price);
-                                const { final, original } = applyCompleteBundleProductPricing(
-                                  p.pricing?.mode ?? "full_price",
-                                  p.pricing?.value ?? 0,
-                                  base,
-                                );
-                                sumOriginal += original;
-                                sumFinal += final;
-                              }
-                              const saved = Math.max(0, sumOriginal - sumFinal);
-                              return (
-                                <>
-                                  <div className="mt-2 text-[13px] font-semibold text-[#1c1f23] flex flex-wrap items-baseline gap-2">
-                                    <span>{formatEuroFromNumber(sumFinal)}</span>
-                                    {sumOriginal > sumFinal ? (
-                                      <span className="text-[12px] text-[#9aa0a6] line-through font-normal">
-                                        {formatEuroFromNumber(sumOriginal)}
-                                      </span>
-                                    ) : null}
-                                  </div>
-                                  {saved > 0 ? (
-                                    <div className="mt-1 text-[12px] text-[#008060] font-medium">
-                                      Save {formatEuroFromNumber(saved)}!
-                                    </div>
-                                  ) : null}
-                                </>
-                              );
-                            })() : null}
-                            <div
-                              className={
-                                bar.products.length >= 2
-                                  ? "mt-2 flex flex-wrap items-stretch gap-2"
-                                  : "mt-2 flex flex-col gap-2"
-                              }
-                            >
-                              {bar.products.length === 0 ? (
-                                <div className="text-[12px] text-[#5c6166]">
-                                  No products selected.
-                                </div>
-                              ) : (
-                                bar.products.map((product, pIdx) => {
-                                  const selectedVariant =
-                                    product.variants?.find((v) => v.id === product.selectedVariantId) ||
-                                    product.variants?.[0];
-                                  const optionNames = Array.from(
-                                    new Set(
-                                      (product.variants || [])
-                                        .flatMap((variant) => variant.selectedOptions || [])
-                                        .map((opt) => opt.name)
-                                        .filter(Boolean),
-                                    ),
-                                  );
-                                  const selectedOptionsMap = Object.fromEntries(
-                                    (selectedVariant?.selectedOptions || []).map((opt) => [
-                                      opt.name,
-                                      opt.value,
-                                    ]),
-                                  );
-                                  const base = parseMoneyStringToNumber(
-                                    selectedVariant?.price || product.price,
-                                  );
-                                  const { final, original } = applyCompleteBundleProductPricing(
-                                    product.pricing?.mode ?? "full_price",
-                                    product.pricing?.value ?? 0,
-                                    base,
-                                  );
-                                  return (
-                                    <div key={product.productId} className="contents">
-                                      {bar.products.length >= 2 && pIdx > 0 ? (
-                                        <div className="flex items-center justify-center px-1 text-[16px] font-bold text-[#9aa0a6] self-center">
-                                          +
-                                        </div>
-                                      ) : null}
-                                      <div
-                                        className={
-                                          bar.products.length >= 2
-                                            ? "rounded border border-[#e5e7eb] p-2 flex-1 min-w-[140px] bg-white"
-                                            : "rounded border border-[#e5e7eb] p-2 bg-white"
-                                        }
-                                      >
-                                        {product.image ? (
-                                          <img
-                                            src={product.image}
-                                            alt={product.title || "product"}
-                                            className="w-12 h-12 rounded object-cover mb-2"
-                                          />
-                                        ) : null}
-                                        <div className="text-[11px] font-medium text-[#1c1f23] line-clamp-2">
-                                          {product.title || product.productId}
-                                        </div>
-                                        <div className="text-[12px] mt-1 flex flex-wrap items-baseline gap-1">
-                                          <span className="font-semibold text-[#1c1f23]">
-                                            {formatEuroFromNumber(final)}
-                                          </span>
-                                          {original > final ? (
-                                            <span className="text-[11px] text-[#9aa0a6] line-through">
-                                              {formatEuroFromNumber(original)}
+                              {bar.products.length >= 1
+                                ? (() => {
+                                    let sumOriginal = 0;
+                                    let sumFinal = 0;
+                                    for (const p of bar.products) {
+                                      const v =
+                                        p.variants?.find(
+                                          (x) => x.id === p.selectedVariantId,
+                                        ) || p.variants?.[0];
+                                      const base = parseMoneyStringToNumber(v?.price || p.price);
+                                      const { final, original } =
+                                        applyCompleteBundleProductPricing(
+                                          p.pricing?.mode ?? "full_price",
+                                          p.pricing?.value ?? 0,
+                                          base,
+                                        );
+                                      sumOriginal += original;
+                                      sumFinal += final;
+                                    }
+                                    const saved = Math.max(0, sumOriginal - sumFinal);
+                                    return (
+                                      <>
+                                        <div className="mt-2 text-[13px] font-semibold text-[#1c1f23] flex flex-wrap items-baseline gap-2">
+                                          <span>{formatEuroFromNumber(sumFinal)}</span>
+                                          {sumOriginal > sumFinal ? (
+                                            <span className="text-[12px] text-[#9aa0a6] line-through font-normal">
+                                              {formatEuroFromNumber(sumOriginal)}
                                             </span>
                                           ) : null}
                                         </div>
-                                        {Array.isArray(product.variants) &&
+                                        {saved > 0 ? (
+                                          <div className="mt-1 text-[12px] text-[#008060] font-medium">
+                                            Save {formatEuroFromNumber(saved)}!
+                                          </div>
+                                        ) : null}
+                                      </>
+                                    );
+                                  })()
+                                : null}
+                              <div
+                                className={
+                                  bar.products.length >= 2
+                                    ? "mt-2 flex flex-wrap items-stretch gap-2"
+                                    : "mt-2 flex flex-col gap-2"
+                                }
+                              >
+                                {bar.products.length === 0 ? (
+                                  <div className="text-[12px] text-[#5c6166]">
+                                    No products selected.
+                                  </div>
+                                ) : (
+                                  bar.products.map((product, pIdx) => {
+                                    const selectedVariant =
+                                      product.variants?.find(
+                                        (v) => v.id === product.selectedVariantId,
+                                      ) || product.variants?.[0];
+                                    const optionNames = Array.from(
+                                      new Set(
+                                        (product.variants || [])
+                                          .flatMap((variant) => variant.selectedOptions || [])
+                                          .map((opt) => opt.name)
+                                          .filter(Boolean),
+                                      ),
+                                    );
+                                    const selectedOptionsMap = Object.fromEntries(
+                                      (selectedVariant?.selectedOptions || []).map((opt) => [
+                                        opt.name,
+                                        opt.value,
+                                      ]),
+                                    );
+                                    const base = parseMoneyStringToNumber(
+                                      selectedVariant?.price || product.price,
+                                    );
+                                    const { final, original } =
+                                      applyCompleteBundleProductPricing(
+                                        product.pricing?.mode ?? "full_price",
+                                        product.pricing?.value ?? 0,
+                                        base,
+                                      );
+                                    return (
+                                      <div key={product.productId} className="contents">
+                                        {bar.products.length >= 2 && pIdx > 0 ? (
+                                          <div className="flex items-center justify-center px-1 text-[16px] font-bold text-[#9aa0a6] self-center">
+                                            +
+                                          </div>
+                                        ) : null}
+                                        <div
+                                          className={
+                                            bar.products.length >= 2
+                                              ? "rounded border border-[#e5e7eb] p-2 flex-1 min-w-[140px] bg-white"
+                                              : "rounded border border-[#e5e7eb] p-2 bg-white"
+                                          }
+                                        >
+                                          {product.image ? (
+                                            <img
+                                              src={product.image}
+                                              alt={product.title || "product"}
+                                              className="w-12 h-12 rounded object-cover mb-2"
+                                            />
+                                          ) : null}
+                                          <div className="text-[11px] font-medium text-[#1c1f23] line-clamp-2">
+                                            {product.title || product.productId}
+                                          </div>
+                                          <div className="text-[12px] mt-1 flex flex-wrap items-baseline gap-1">
+                                            <span className="font-semibold text-[#1c1f23]">
+                                              {formatEuroFromNumber(final)}
+                                            </span>
+                                            {original > final ? (
+                                              <span className="text-[11px] text-[#9aa0a6] line-through">
+                                                {formatEuroFromNumber(original)}
+                                              </span>
+                                            ) : null}
+                                          </div>
+                                          {Array.isArray(product.variants) &&
                                           product.variants.length > 0 &&
-                                          optionNames.length === 0 && (
+                                          optionNames.length === 0 ? (
                                             <Select
                                               size="small"
                                               className="w-full mt-2"
-                                              value={product.selectedVariantId || product.variants[0].id}
+                                              value={
+                                                product.selectedVariantId ||
+                                                product.variants[0].id
+                                              }
                                               onChange={(variantId) =>
                                                 updateBundleBarProductVariant(
                                                   bar.id,
@@ -2761,92 +3197,99 @@ export function CreateNewOffer({
                                                 value: variant.id,
                                               }))}
                                             />
-                                          )}
-                                        {optionNames.length > 0 ? (
-                                          <div className="grid grid-cols-1 gap-2 mt-2">
-                                            {optionNames.map((optionName) => {
-                                              const optionValues = Array.from(
-                                                new Set(
-                                                  (product.variants || [])
-                                                    .flatMap((variant) => variant.selectedOptions || [])
-                                                    .filter((opt) => opt.name === optionName)
-                                                    .map((opt) => opt.value)
-                                                    .filter(Boolean),
-                                                ),
-                                              );
-                                              return (
-                                                <Select
-                                                  key={`${product.productId}-${optionName}-live`}
-                                                  size="small"
-                                                  className="w-full"
-                                                  value={
-                                                    selectedOptionsMap[optionName] || optionValues[0]
-                                                  }
-                                                  onChange={(value) =>
-                                                    updateBundleBarProductOption(
-                                                      bar.id,
-                                                      product.productId,
-                                                      optionName,
-                                                      String(value),
-                                                    )
-                                                  }
-                                                  options={optionValues.map((value) => ({
-                                                    label: value,
-                                                    value,
-                                                  }))}
-                                                />
-                                              );
-                                            })}
-                                          </div>
-                                        ) : null}
+                                          ) : null}
+                                          {optionNames.length > 0 ? (
+                                            <div className="grid grid-cols-1 gap-2 mt-2">
+                                              {optionNames.map((optionName) => {
+                                                const optionValues = Array.from(
+                                                  new Set(
+                                                    (product.variants || [])
+                                                      .flatMap(
+                                                        (variant) =>
+                                                          variant.selectedOptions || [],
+                                                      )
+                                                      .filter(
+                                                        (opt) => opt.name === optionName,
+                                                      )
+                                                      .map((opt) => opt.value)
+                                                      .filter(Boolean),
+                                                  ),
+                                                );
+                                                return (
+                                                  <Select
+                                                    key={`${product.productId}-${optionName}-live`}
+                                                    size="small"
+                                                    className="w-full"
+                                                    value={
+                                                      selectedOptionsMap[optionName] ||
+                                                      optionValues[0]
+                                                    }
+                                                    onChange={(value) =>
+                                                      updateBundleBarProductOption(
+                                                        bar.id,
+                                                        product.productId,
+                                                        optionName,
+                                                        String(value),
+                                                      )
+                                                    }
+                                                    options={optionValues.map((value) => ({
+                                                      label: value,
+                                                      value,
+                                                    }))}
+                                                  />
+                                                );
+                                              })}
+                                            </div>
+                                          ) : null}
+                                        </div>
                                       </div>
-                                    </div>
-                                  );
-                                })
-                              )}
+                                    );
+                                  })
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
+                        {showCustomButton ? (
+                          <button
+                            className="create-offer-preview-button"
+                            style={{ background: buttonPrimaryColor, marginTop: 12 }}
+                          >
+                            {buttonText}
+                          </button>
+                        ) : null}
                       </div>
-                      {showCustomButton ? (
-                        <button
-                          className="create-offer-preview-button"
-                          style={{ background: buttonPrimaryColor, marginTop: 12 }}
-                        >
-                          {buttonText}
-                        </button>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <BundlePreview
-                      layoutFormat={layoutFormat}
-                      cardBackgroundColor={cardBackgroundColor}
-                      accentColor={accentColor}
-                      borderColor={borderColor}
-                      labelColor={labelColor}
-                      titleFontSize={titleFontSize}
-                      titleFontWeight={titleFontWeight}
-                      titleColor={titleColor}
-                      buttonText={buttonText}
-                      buttonPrimaryColor={buttonPrimaryColor}
-                      showCustomButton={showCustomButton}
-                      title={widgetTitle}
-                      items={previewItems}
-                      progressiveGifts={progressiveGifts}
-                      progressivePreviewBarIndex={previewGiftBar}
-                      progressivePreviewLineQty={previewGiftQty}
-                      showSubscriptionPreview={shouldShowSubscriptionPreview}
-                      subscriptionPreviewStyle={subscriptionPreviewStyle}
-                      subscriptionTitle={subscriptionTitle}
-                      subscriptionSubtitle={subscriptionSubtitle}
-                      showSubscriptionExplanation={shouldShowSubscriptionExplanation}
-                      subscriptionExplanationTitle={subscriptionExplanationTitle}
-                      subscriptionExplanationBody={subscriptionExplanationBody}
-                    />
-                  )}
+                    ) : (
+                      <BundlePreview
+                        layoutFormat={layoutFormat}
+                        cardBackgroundColor={cardBackgroundColor}
+                        accentColor={accentColor}
+                        borderColor={borderColor}
+                        labelColor={labelColor}
+                        titleFontSize={titleFontSize}
+                        titleFontWeight={titleFontWeight}
+                        titleColor={titleColor}
+                        buttonText={buttonText}
+                        buttonPrimaryColor={buttonPrimaryColor}
+                        showCustomButton={showCustomButton}
+                        title={widgetTitle}
+                        items={previewItems}
+                        progressiveGifts={progressiveGifts}
+                        progressivePreviewBarIndex={previewGiftBar}
+                        progressivePreviewLineQty={previewGiftQty}
+                        showSubscriptionPreview={shouldShowSubscriptionPreview}
+                        subscriptionPreviewStyle={subscriptionPreviewStyle}
+                        subscriptionTitle={subscriptionTitle}
+                        subscriptionSubtitle={subscriptionSubtitle}
+                        showSubscriptionExplanation={shouldShowSubscriptionExplanation}
+                        productBundlePreview={productBundlePreview}
+                        subscriptionExplanationTitle={subscriptionExplanationTitle}
+                        subscriptionExplanationBody={subscriptionExplanationBody}
+                      />
+                    )}
                   </div>
-                </div>
-              </div>
+                }
+              />
             </>
           )}
 
@@ -2930,6 +3373,7 @@ export function CreateNewOffer({
                   subscriptionPreviewStyle={subscriptionPreviewStyle}
                   subscriptionTitle={subscriptionTitle}
                   subscriptionSubtitle={subscriptionSubtitle}
+                  productBundlePreview={productBundlePreview}
                   showSubscriptionExplanation={shouldShowSubscriptionExplanation}
                   subscriptionExplanationTitle={subscriptionExplanationTitle}
                   subscriptionExplanationBody={subscriptionExplanationBody}
@@ -3105,9 +3549,18 @@ export function CreateNewOffer({
                 e.preventDefault();
                 return;
               }
-              const unifiedRuleBlockingMessage = getUnifiedRuleBlockingMessage(
-                campaignDraft,
-              );
+              const moduleBlockingMessage = getModuleBlockingMessage();
+              if (moduleBlockingMessage) {
+                message.error(moduleBlockingMessage);
+                e.preventDefault();
+                return;
+              }
+              const unifiedRuleBlockingMessage = hasMixedCompositionSources
+                ? getUnifiedRuleBlockingMessageForRules(
+                    campaignDraft,
+                    compositionRulesSnapshot,
+                  )
+                : getUnifiedRuleBlockingMessage(campaignDraft);
               if (unifiedRuleBlockingMessage) {
                 message.error(unifiedRuleBlockingMessage);
                 e.preventDefault();

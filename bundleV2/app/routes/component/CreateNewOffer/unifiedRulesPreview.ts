@@ -370,3 +370,24 @@ export function buildUnifiedPreviewItems(params: BuildPreviewParams): PreviewIte
     buildStandardRuleItem(rule, index, params),
   );
 }
+
+export function buildCompositionPreviewItems(
+  params: Omit<BuildPreviewParams, "offerType">,
+): PreviewItem[] {
+  const mixedParams: BuildPreviewParams = {
+    ...params,
+    offerType: "quantity-breaks-same",
+  };
+
+  return params.rules.map((rule, index) => {
+    if (rule.type === "complete_bundle") {
+      return buildCompleteBundleItem(rule, index, mixedParams);
+    }
+
+    if (rule.sourceOfferType === "quantity-breaks-different") {
+      return buildDifferentProductsItem(rule, index, mixedParams);
+    }
+
+    return buildStandardRuleItem(rule, index, mixedParams);
+  });
+}

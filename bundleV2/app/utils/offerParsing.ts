@@ -234,6 +234,11 @@ export type OfferSettings = {
   buttonText: string;
   buttonPrimaryColor: string;
   showCustomButton: boolean;
+  productBundleEnabled: boolean;
+  productBundleTitle: string;
+  productBundleSubtitle: string;
+  productBundleMinQuantity: number;
+  productBundleProductIds: string[];
   subscriptionEnabled: boolean;
   subscriptionPosition: "below-bundle-bars";
   subscriptionTitle: string;
@@ -241,7 +246,10 @@ export type OfferSettings = {
   oneTimeTitle: string;
   oneTimeSubtitle: string;
   subscriptionDefaultSelected: boolean;
+  compositionBarOrder?: string[];
   scheduleTimezone?: string;
+  checkboxUpsellsEnabled: boolean;
+  stickyAddToCartEnabled: boolean;
   progressiveGifts: ProgressiveGiftsConfig;
 };
 
@@ -265,6 +273,11 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
       buttonText: "Add to Cart",
       buttonPrimaryColor: "#008060",
       showCustomButton: true,
+      productBundleEnabled: false,
+      productBundleTitle: "Build your bundle",
+      productBundleSubtitle: "Choose products to unlock the bundle offer",
+      productBundleMinQuantity: 2,
+      productBundleProductIds: [],
       subscriptionEnabled: false,
       subscriptionPosition: "below-bundle-bars",
       subscriptionTitle: "Subscribe & Save 20%",
@@ -273,6 +286,8 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
       oneTimeSubtitle: "",
       subscriptionDefaultSelected: true,
       scheduleTimezone: undefined,
+      checkboxUpsellsEnabled: false,
+      stickyAddToCartEnabled: false,
       progressiveGifts: { ...DEFAULT_PROGRESSIVE_GIFTS },
     };
   }
@@ -324,7 +339,29 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
       oneTimeTitle: parsed.oneTimeTitle || "One-time purchase",
       oneTimeSubtitle: parsed.oneTimeSubtitle || "",
       subscriptionDefaultSelected: parsed.subscriptionDefaultSelected !== false,
+      compositionBarOrder: Array.isArray(parsed.compositionBarOrder)
+        ? parsed.compositionBarOrder
+            .map((id) => String(id || "").trim())
+            .filter(Boolean)
+        : undefined,
       scheduleTimezone: parsed.scheduleTimezone,
+      productBundleEnabled: parsed.productBundleEnabled === true,
+      productBundleTitle:
+        typeof parsed.productBundleTitle === "string" && parsed.productBundleTitle
+          ? parsed.productBundleTitle
+          : "Build your bundle",
+      productBundleSubtitle:
+        typeof parsed.productBundleSubtitle === "string"
+          ? parsed.productBundleSubtitle
+          : "Choose products to unlock the bundle offer",
+      productBundleMinQuantity: clampNumber(parsed.productBundleMinQuantity, 1, 20, 2),
+      productBundleProductIds: Array.isArray(parsed.productBundleProductIds)
+        ? parsed.productBundleProductIds
+            .map((id) => String(id || "").trim())
+            .filter(Boolean)
+        : [],
+      checkboxUpsellsEnabled: parsed.checkboxUpsellsEnabled === true,
+      stickyAddToCartEnabled: parsed.stickyAddToCartEnabled === true,
       progressiveGifts: parseProgressiveGiftsConfig(parsed.progressiveGifts),
     };
   } catch {
@@ -458,6 +495,9 @@ export type CampaignSettings = {
   totalBudget: number | null;
   dailyBudget: number | null;
   usageLimitPerCustomer: string;
+  compositionBarOrder?: string[];
+  checkboxUpsellsEnabled: boolean;
+  stickyAddToCartEnabled: boolean;
 };
 
 export type CampaignConfig = {
@@ -577,13 +617,26 @@ export type SubscriptionLogicBlock = {
   };
 };
 
+export type ProductBundleLogicBlock = {
+  id: string;
+  type: "product-bundle";
+  config: {
+    enabled: boolean;
+    title: string;
+    subtitle: string;
+    minQuantity: number;
+    productIds: string[];
+  };
+};
+
 export type LogicBlock =
   | QuantityBreaksLogicBlock
   | QuantityBreaksDifferentLogicBlock
   | BxgyLogicBlock
   | FreeGiftLogicBlock
   | CompleteBundleLogicBlock
-  | SubscriptionLogicBlock;
+  | SubscriptionLogicBlock
+  | ProductBundleLogicBlock;
 export type DisplayBlock = OfferCardDisplayBlock | CountdownDisplayBlock;
 
 export function parseDiscountRules(discountRulesJson?: string | null): DiscountRule[] {
@@ -876,6 +929,27 @@ function sanitizeSubscriptionLogicConfig(raw: unknown): SubscriptionLogicBlock["
   };
 }
 
+function sanitizeProductBundleLogicConfig(
+  raw: unknown,
+): ProductBundleLogicBlock["config"] | null {
+  if (!raw || typeof raw !== "object") return null;
+  const item = raw as Record<string, unknown>;
+  const productIds = Array.isArray(item.productIds)
+    ? item.productIds.map((id) => String(id || "").trim()).filter(Boolean)
+    : [];
+  return {
+    enabled: item.enabled !== false,
+    title: sanitizeSingleLineText(item.title, 60, "Build your bundle"),
+    subtitle: sanitizeSingleLineText(
+      item.subtitle,
+      80,
+      "Choose products to unlock the bundle offer",
+    ),
+    minQuantity: clampNumber(item.minQuantity, 1, 20, 2),
+    productIds,
+  };
+}
+
 function sanitizeLogicBlock(raw: unknown): LogicBlock | null {
   if (!raw || typeof raw !== "object") return null;
   const item = raw as Record<string, unknown>;
@@ -993,6 +1067,17 @@ function sanitizeLogicBlock(raw: unknown): LogicBlock | null {
       id:
         typeof item.id === "string" && item.id ? item.id : "logic-subscription",
       type: "subscription",
+      config,
+    };
+  }
+
+  if (item.type === "product-bundle") {
+    const config = sanitizeProductBundleLogicConfig(configRecord);
+    if (!config) return null;
+    return {
+      id:
+        typeof item.id === "string" && item.id ? item.id : "logic-product-bundle",
+      type: "product-bundle",
       config,
     };
   }
@@ -1157,6 +1242,13 @@ export function parseCampaignConfig(
           settingsRaw.usageLimitPerCustomer
             ? settingsRaw.usageLimitPerCustomer
             : "unlimited",
+        compositionBarOrder: Array.isArray(settingsRaw.compositionBarOrder)
+          ? settingsRaw.compositionBarOrder
+              .map((id) => String(id || "").trim())
+              .filter(Boolean)
+          : undefined,
+        checkboxUpsellsEnabled: settingsRaw.checkboxUpsellsEnabled === true,
+        stickyAddToCartEnabled: settingsRaw.stickyAddToCartEnabled === true,
       },
     };
   } catch {
@@ -1198,6 +1290,9 @@ export function migrateLegacyOfferToCampaignConfig(params: {
     totalBudget: offerSettings.totalBudget,
     dailyBudget: offerSettings.dailyBudget,
     usageLimitPerCustomer: offerSettings.usageLimitPerCustomer,
+    compositionBarOrder: offerSettings.compositionBarOrder,
+    checkboxUpsellsEnabled: offerSettings.checkboxUpsellsEnabled,
+    stickyAddToCartEnabled: offerSettings.stickyAddToCartEnabled,
   };
   const offerType = String(params.offerType || "").trim();
 
@@ -1447,6 +1542,23 @@ export function migrateLegacyOfferToCampaignConfig(params: {
     };
   }
 
+  const productBundleLogicBlock =
+    offerSettings.productBundleEnabled && offerSettings.productBundleProductIds.length > 0
+      ? [
+          {
+            id: "logic-product-bundle",
+            type: "product-bundle" as const,
+            config: {
+              enabled: true,
+              title: offerSettings.productBundleTitle,
+              subtitle: offerSettings.productBundleSubtitle,
+              minQuantity: offerSettings.productBundleMinQuantity,
+              productIds: offerSettings.productBundleProductIds,
+            },
+          },
+        ]
+      : [];
+
   return {
     version: 1,
     scope: {
@@ -1476,6 +1588,7 @@ export function migrateLegacyOfferToCampaignConfig(params: {
                 ],
         },
       },
+      ...productBundleLogicBlock,
     ],
     displayBlocks: [
       {
@@ -1513,6 +1626,9 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
   );
   const subscription = config.logicBlocks.find(
     (block): block is SubscriptionLogicBlock => block.type === "subscription",
+  );
+  const productBundle = config.logicBlocks.find(
+    (block): block is ProductBundleLogicBlock => block.type === "product-bundle",
   );
   const offerCard = config.displayBlocks.find(
     (block): block is OfferCardDisplayBlock => block.type === "offer-card",
@@ -1573,6 +1689,7 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
       : null,
     markets: config.scope.markets.length ? config.scope.markets.join(",") : null,
     usageLimitPerCustomer: config.settings.usageLimitPerCustomer || "unlimited",
+    compositionBarOrder: config.settings.compositionBarOrder,
     accentColor: offerCard?.config.accentColor || "#008060",
     cardBackgroundColor: offerCard?.config.cardBackgroundColor || "#ffffff",
     borderColor: offerCard?.config.borderColor || "#dfe3e8",
@@ -1583,6 +1700,12 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
     titleFontWeight: offerCard?.config.titleFontWeight || "600",
     buttonText: offerCard?.config.buttonText || "Add to Cart",
     showCustomButton: offerCard?.config.showCustomButton !== false,
+    productBundleEnabled: productBundle?.config.enabled ?? false,
+    productBundleTitle: productBundle?.config.title ?? "Build your bundle",
+    productBundleSubtitle:
+      productBundle?.config.subtitle ?? "Choose products to unlock the bundle offer",
+    productBundleMinQuantity: productBundle?.config.minQuantity ?? 2,
+    productBundleProductIds: productBundle?.config.productIds ?? [],
     subscriptionEnabled: subscription?.config.enabled ?? false,
     subscriptionPosition: subscription?.config.position ?? "below-bundle-bars",
     subscriptionTitle: subscription?.config.title ?? "Subscribe & Save 20%",
@@ -1592,6 +1715,8 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
     subscriptionDefaultSelected: subscription?.config.defaultSelected ?? true,
     progressiveGifts: { ...DEFAULT_PROGRESSIVE_GIFTS },
     scheduleTimezone: config.settings.scheduleTimezone,
+    checkboxUpsellsEnabled: config.settings.checkboxUpsellsEnabled,
+    stickyAddToCartEnabled: config.settings.stickyAddToCartEnabled,
   } satisfies OfferSettings;
 
   return {
@@ -1746,6 +1871,12 @@ export function getOfferRulesText(params: {
       return subscription.config.enabled
         ? `Subscription enabled for ${subscription.config.productIds.length || config.scope.productIds.length} product${(subscription.config.productIds.length || config.scope.productIds.length) > 1 ? "s" : ""}`
         : "Subscription block configured";
+    }
+    const productBundle = config.logicBlocks.find(
+      (block): block is ProductBundleLogicBlock => block.type === "product-bundle",
+    );
+    if (productBundle?.config.enabled) {
+      return `Product bundle module for ${productBundle.config.productIds.length} product${productBundle.config.productIds.length > 1 ? "s" : ""}`;
     }
   }
 

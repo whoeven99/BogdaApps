@@ -2,6 +2,7 @@ import type { ProgressiveGiftsConfig } from "../../../utils/offerParsing";
 import {
   renderBundlePreviewHtml,
   renderProgressiveGiftsPreviewHtml,
+  type ProductBundlePreview,
   PreviewItem,
 } from "./bundlePreviewShared";
 
@@ -33,6 +34,7 @@ type Props = {
   showSubscriptionExplanation?: boolean;
   subscriptionExplanationTitle?: string;
   subscriptionExplanationBody?: string;
+  productBundlePreview?: ProductBundlePreview | null;
 };
 
 export default function BundlePreview({
@@ -60,6 +62,7 @@ export default function BundlePreview({
   showSubscriptionExplanation,
   subscriptionExplanationTitle,
   subscriptionExplanationBody,
+  productBundlePreview,
 }: Props) {
   const html = renderBundlePreviewHtml({
     title,
@@ -83,6 +86,7 @@ export default function BundlePreview({
     showSubscriptionExplanation,
     subscriptionExplanationTitle,
     subscriptionExplanationBody,
+    productBundlePreview,
   });
 
   const prog =

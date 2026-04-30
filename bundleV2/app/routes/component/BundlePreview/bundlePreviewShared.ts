@@ -21,6 +21,14 @@ export type PreviewProduct = {
   variant?: string;
 };
 
+export type ProductBundlePreview = {
+  enabled: boolean;
+  title: string;
+  subtitle: string;
+  minQuantity: number;
+  products: PreviewProduct[];
+};
+
 export const PREVIEW_ITEMS: PreviewItem[] = [
   { id: "single", title: "Single", subtitle: "Standard price", price: "€65,00" },
   {
@@ -141,6 +149,7 @@ export function renderBundlePreviewHtml({
   showSubscriptionExplanation = false,
   subscriptionExplanationTitle = "Some products aren't eligible for subscriptions",
   subscriptionExplanationBody = "Subscription bar will only be shown in products that are eligible for subscription. You can select those products in your subscription app.",
+  productBundlePreview = null,
 }: {
   title?: string;
   layoutFormat?: LayoutFormat;
@@ -163,6 +172,7 @@ export function renderBundlePreviewHtml({
   showSubscriptionExplanation?: boolean;
   subscriptionExplanationTitle?: string;
   subscriptionExplanationBody?: string;
+  productBundlePreview?: ProductBundlePreview | null;
 } = {}) {
   const safeLayout: LayoutFormat = ["vertical", "horizontal", "card", "compact"].includes(layoutFormat)
     ? layoutFormat
@@ -278,12 +288,48 @@ export function renderBundlePreviewHtml({
     `
     : "";
 
+  const productBundleHtml =
+    productBundlePreview && productBundlePreview.enabled
+      ? `
+        <div style="margin-top: 12px;">
+          <div
+            style="
+              border: 1px dashed ${esc(borderColor)};
+              border-radius: 12px;
+              padding: 14px 16px;
+              background: #ffffff;
+            "
+          >
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+              <div>
+                <div style="font-size:14px; font-weight:600; color:#1c1f23;">
+                  ${esc(productBundlePreview.title)}
+                </div>
+                <div style="font-size:12px; color:#8c9196; margin-top:2px;">
+                  ${esc(productBundlePreview.subtitle)}
+                </div>
+              </div>
+              <span style="border-radius:999px; background:${esc(accentColor)}; color:${esc(labelColor)}; font-size:10px; padding:4px 8px;">
+                Pick ${esc(productBundlePreview.minQuantity)}+
+              </span>
+            </div>
+            ${
+              productBundlePreview.products.length > 0
+                ? `<div style="margin-top:12px;">${renderProductsHtml(productBundlePreview.products)}</div>`
+                : `<div style="margin-top:12px; font-size:12px; color:#8c9196;">Add bundle products to preview this module.</div>`
+            }
+          </div>
+        </div>
+      `
+      : "";
+
   return `<div class="create-offer-preview-card">
     <div class="create-offer-style-preview-header" style="color:${esc(titleColor)} !important; font-size: ${esc(titleFontSize)}px !important; font-weight: ${esc(titleFontWeight)} !important;">${esc(title)}</div>
     <div class="create-offer-style-preview-list create-offer-style-preview-list--${safeLayout}">
       ${itemsHtml}
     </div>
     ${subscriptionHtml}
+    ${productBundleHtml}
     ${showCustomButton ? `<button class="create-offer-preview-button" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)} !important; color: white !important; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
       ${esc(buttonText)}
     </button>` : ''}
