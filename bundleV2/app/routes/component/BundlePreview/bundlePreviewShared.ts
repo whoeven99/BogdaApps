@@ -29,6 +29,20 @@ export type ProductBundlePreview = {
   products: PreviewProduct[];
 };
 
+export type CheckboxUpsellPreview = {
+  enabled: boolean;
+  title: string;
+  subtitle: string;
+  defaultChecked: boolean;
+};
+
+export type StickyAddToCartPreview = {
+  enabled: boolean;
+  title: string;
+  subtitle: string;
+  buttonText: string;
+};
+
 export const PREVIEW_ITEMS: PreviewItem[] = [
   { id: "single", title: "Single", subtitle: "Standard price", price: "€65,00" },
   {
@@ -150,6 +164,8 @@ export function renderBundlePreviewHtml({
   subscriptionExplanationTitle = "Some products aren't eligible for subscriptions",
   subscriptionExplanationBody = "Subscription bar will only be shown in products that are eligible for subscription. You can select those products in your subscription app.",
   productBundlePreview = null,
+  checkboxUpsellPreview = null,
+  stickyAddToCartPreview = null,
 }: {
   title?: string;
   layoutFormat?: LayoutFormat;
@@ -173,6 +189,8 @@ export function renderBundlePreviewHtml({
   subscriptionExplanationTitle?: string;
   subscriptionExplanationBody?: string;
   productBundlePreview?: ProductBundlePreview | null;
+  checkboxUpsellPreview?: CheckboxUpsellPreview | null;
+  stickyAddToCartPreview?: StickyAddToCartPreview | null;
 } = {}) {
   const safeLayout: LayoutFormat = ["vertical", "horizontal", "card", "compact"].includes(layoutFormat)
     ? layoutFormat
@@ -323,6 +341,34 @@ export function renderBundlePreviewHtml({
       `
       : "";
 
+  const checkboxUpsellHtml =
+    checkboxUpsellPreview && checkboxUpsellPreview.enabled
+      ? `
+        <div style="margin-top: 12px;">
+          <div style="border:1px solid ${esc(borderColor)}; border-radius:12px; padding:14px 16px; background:#ffffff; display:grid; grid-template-columns:20px 1fr; column-gap:12px; align-items:start;">
+            <span style="width:18px; height:18px; border:2px solid ${esc(accentColor)}; border-radius:4px; display:inline-flex; align-items:center; justify-content:center; margin-top:2px; background:${checkboxUpsellPreview.defaultChecked ? esc(accentColor) : "#ffffff"}; color:${esc(labelColor)}; font-size:12px;">${checkboxUpsellPreview.defaultChecked ? "✓" : ""}</span>
+            <span>
+              <span style="display:block; font-size:14px; font-weight:600; color:#1c1f23;">${esc(checkboxUpsellPreview.title)}</span>
+              <span style="display:block; font-size:12px; color:#8c9196; margin-top:2px;">${esc(checkboxUpsellPreview.subtitle)}</span>
+            </span>
+          </div>
+        </div>
+      `
+      : "";
+
+  const stickyAddToCartHtml =
+    stickyAddToCartPreview && stickyAddToCartPreview.enabled
+      ? `
+        <div style="margin-top: 12px;">
+          <div style="border:1px solid ${esc(borderColor)}; border-radius:12px; padding:14px 16px; background:#ffffff;">
+            <div style="font-size:14px; font-weight:600; color:#1c1f23;">${esc(stickyAddToCartPreview.title)}</div>
+            <div style="font-size:12px; color:#8c9196; margin-top:2px;">${esc(stickyAddToCartPreview.subtitle)}</div>
+            <button style="width:100%; margin-top:12px; padding:10px 12px; background:${esc(buttonPrimaryColor)}; color:#ffffff; border:none; border-radius:8px; font-weight:600;">${esc(stickyAddToCartPreview.buttonText)}</button>
+          </div>
+        </div>
+      `
+      : "";
+
   return `<div class="create-offer-preview-card">
     <div class="create-offer-style-preview-header" style="color:${esc(titleColor)} !important; font-size: ${esc(titleFontSize)}px !important; font-weight: ${esc(titleFontWeight)} !important;">${esc(title)}</div>
     <div class="create-offer-style-preview-list create-offer-style-preview-list--${safeLayout}">
@@ -330,6 +376,8 @@ export function renderBundlePreviewHtml({
     </div>
     ${subscriptionHtml}
     ${productBundleHtml}
+    ${checkboxUpsellHtml}
+    ${stickyAddToCartHtml}
     ${showCustomButton ? `<button class="create-offer-preview-button" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)} !important; color: white !important; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
       ${esc(buttonText)}
     </button>` : ''}

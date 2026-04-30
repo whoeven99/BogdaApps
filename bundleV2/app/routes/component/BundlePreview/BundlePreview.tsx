@@ -1,8 +1,10 @@
 import type { ProgressiveGiftsConfig } from "../../../utils/offerParsing";
 import {
+  type CheckboxUpsellPreview,
+  type ProductBundlePreview,
   renderBundlePreviewHtml,
   renderProgressiveGiftsPreviewHtml,
-  type ProductBundlePreview,
+  type StickyAddToCartPreview,
   PreviewItem,
 } from "./bundlePreviewShared";
 
@@ -35,6 +37,8 @@ type Props = {
   subscriptionExplanationTitle?: string;
   subscriptionExplanationBody?: string;
   productBundlePreview?: ProductBundlePreview | null;
+  checkboxUpsellPreview?: CheckboxUpsellPreview | null;
+  stickyAddToCartPreview?: StickyAddToCartPreview | null;
 };
 
 export default function BundlePreview({
@@ -63,6 +67,8 @@ export default function BundlePreview({
   subscriptionExplanationTitle,
   subscriptionExplanationBody,
   productBundlePreview,
+  checkboxUpsellPreview,
+  stickyAddToCartPreview,
 }: Props) {
   const html = renderBundlePreviewHtml({
     title,
@@ -87,6 +93,8 @@ export default function BundlePreview({
     subscriptionExplanationTitle,
     subscriptionExplanationBody,
     productBundlePreview,
+    checkboxUpsellPreview,
+    stickyAddToCartPreview,
   });
 
   const prog =

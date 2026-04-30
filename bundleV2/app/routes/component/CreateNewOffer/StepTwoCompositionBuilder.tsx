@@ -950,24 +950,109 @@ export default function StepTwoCompositionBuilder({
           return (
             <DetailSection
               title="Checkbox upsells"
-              description="Enable or disable checkbox-based upsell controls in the builder composition."
+              description="Configure the opt-in checkbox copy and default selection behavior for this supporting module."
             >
-              <Switch
-                checked={draft.checkboxUpsellsEnabled}
-                onChange={actions.setCheckboxUpsellsEnabled}
-              />
+              <div className="flex items-center justify-between rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-4 py-3">
+                <div>
+                  <div className="text-[14px] font-medium text-[#1c1f23]">
+                    Enable checkbox upsell
+                  </div>
+                  <div className="mt-1 text-[12px] text-[#5c6166]">
+                    Show a customer-facing opt-in control before the offer is added.
+                  </div>
+                </div>
+                <Switch
+                  checked={draft.checkboxUpsellsEnabled}
+                  onChange={actions.setCheckboxUpsellsEnabled}
+                />
+              </div>
+              <div className="mt-4">
+                <FieldGrid>
+                  <label className="block text-[13px] font-medium text-[#1c1f23]">
+                    Checkbox title
+                    <Input
+                      size="large"
+                      className="mt-1"
+                      value={draft.checkboxUpsellsTitle}
+                      onChange={(e) => actions.setCheckboxUpsellsTitle(e.target.value)}
+                    />
+                  </label>
+                  <label className="block text-[13px] font-medium text-[#1c1f23]">
+                    Checkbox subtitle
+                    <Input
+                      size="large"
+                      className="mt-1"
+                      value={draft.checkboxUpsellsSubtitle}
+                      onChange={(e) => actions.setCheckboxUpsellsSubtitle(e.target.value)}
+                    />
+                  </label>
+                </FieldGrid>
+                <div className="mt-4">
+                  <Checkbox
+                    checked={draft.checkboxUpsellsDefaultChecked}
+                    onChange={(e) =>
+                      actions.setCheckboxUpsellsDefaultChecked(e.target.checked)
+                    }
+                  >
+                    Start checked by default
+                  </Checkbox>
+                </div>
+              </div>
             </DetailSection>
           );
         case "sticky_add_to_cart":
           return (
             <DetailSection
               title="Sticky add to cart"
-              description="Control whether a sticky companion CTA should be enabled for this campaign."
+              description="Configure the companion sticky CTA that remains visible while customers scroll or compare bars."
             >
-              <Switch
-                checked={draft.stickyAddToCartEnabled}
-                onChange={actions.setStickyAddToCartEnabled}
-              />
+              <div className="flex items-center justify-between rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-4 py-3">
+                <div>
+                  <div className="text-[14px] font-medium text-[#1c1f23]">
+                    Enable sticky add to cart
+                  </div>
+                  <div className="mt-1 text-[12px] text-[#5c6166]">
+                    Keep a bundle CTA visible as a secondary conversion companion.
+                  </div>
+                </div>
+                <Switch
+                  checked={draft.stickyAddToCartEnabled}
+                  onChange={actions.setStickyAddToCartEnabled}
+                />
+              </div>
+              <div className="mt-4">
+                <FieldGrid>
+                  <label className="block text-[13px] font-medium text-[#1c1f23]">
+                    Sticky title
+                    <Input
+                      size="large"
+                      className="mt-1"
+                      value={draft.stickyAddToCartTitle}
+                      onChange={(e) => actions.setStickyAddToCartTitle(e.target.value)}
+                    />
+                  </label>
+                  <label className="block text-[13px] font-medium text-[#1c1f23]">
+                    Button text
+                    <Input
+                      size="large"
+                      className="mt-1"
+                      value={draft.stickyAddToCartButtonText}
+                      onChange={(e) => actions.setStickyAddToCartButtonText(e.target.value)}
+                    />
+                  </label>
+                </FieldGrid>
+                <div className="mt-4">
+                  <label className="block text-[13px] font-medium text-[#1c1f23]">
+                    Sticky subtitle
+                    <Input
+                      size="large"
+                      className="mt-1"
+                      value={draft.stickyAddToCartSubtitle}
+                      onChange={(e) => actions.setStickyAddToCartSubtitle(e.target.value)}
+                    />
+                  </label>
+                </div>
+              </div>
             </DetailSection>
           );
       }

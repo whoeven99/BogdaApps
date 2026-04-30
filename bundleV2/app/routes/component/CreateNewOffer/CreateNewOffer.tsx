@@ -53,6 +53,7 @@ import {
   parseFreeGiftRules,
   parseOfferSettings,
   parseSelectedProductIds,
+  sanitizeSingleLineText,
   buildBxgyDiscountRulesJson,
   buildFreeGiftRulesJson,
   progressiveGiftsConfigToStorableJson,
@@ -1027,8 +1028,26 @@ export function CreateNewOffer({
   const [checkboxUpsellsEnabled, setCheckboxUpsellsEnabled] = useState(
     offerSettings.checkboxUpsellsEnabled,
   );
+  const [checkboxUpsellsTitle, setCheckboxUpsellsTitle] = useState(
+    offerSettings.checkboxUpsellsTitle,
+  );
+  const [checkboxUpsellsSubtitle, setCheckboxUpsellsSubtitle] = useState(
+    offerSettings.checkboxUpsellsSubtitle,
+  );
+  const [checkboxUpsellsDefaultChecked, setCheckboxUpsellsDefaultChecked] = useState(
+    offerSettings.checkboxUpsellsDefaultChecked,
+  );
   const [stickyAddToCartEnabled, setStickyAddToCartEnabled] = useState(
     offerSettings.stickyAddToCartEnabled,
+  );
+  const [stickyAddToCartTitle, setStickyAddToCartTitle] = useState(
+    offerSettings.stickyAddToCartTitle,
+  );
+  const [stickyAddToCartSubtitle, setStickyAddToCartSubtitle] = useState(
+    offerSettings.stickyAddToCartSubtitle,
+  );
+  const [stickyAddToCartButtonText, setStickyAddToCartButtonText] = useState(
+    offerSettings.stickyAddToCartButtonText,
   );
   const [compositionBarOrder, setCompositionBarOrder] = useState<string[]>([]);
   const productBundleProductsData = useMemo(
@@ -1810,7 +1829,33 @@ export function CreateNewOffer({
         usageLimitPerCustomer,
         compositionBarOrder,
         checkboxUpsellsEnabled,
+        checkboxUpsellsTitle: sanitizeSingleLineText(
+          checkboxUpsellsTitle,
+          OFFER_TEXT_LIMITS.widgetTitle,
+          "Add this offer to my order",
+        ),
+        checkboxUpsellsSubtitle: sanitizeSingleLineText(
+          checkboxUpsellsSubtitle,
+          120,
+          "Customers can opt in before adding the bundle.",
+        ),
+        checkboxUpsellsDefaultChecked,
         stickyAddToCartEnabled,
+        stickyAddToCartTitle: sanitizeSingleLineText(
+          stickyAddToCartTitle,
+          OFFER_TEXT_LIMITS.widgetTitle,
+          "Ready to add this offer?",
+        ),
+        stickyAddToCartSubtitle: sanitizeSingleLineText(
+          stickyAddToCartSubtitle,
+          120,
+          "Keep the bundle CTA visible while customers compare options.",
+        ),
+        stickyAddToCartButtonText: sanitizeSingleLineText(
+          stickyAddToCartButtonText,
+          OFFER_TEXT_LIMITS.buttonText,
+          "Add bundle",
+        ),
       },
     };
   }, [
@@ -1822,6 +1867,9 @@ export function CreateNewOffer({
     buttonText,
     cardBackgroundColor,
     checkboxUpsellsEnabled,
+    checkboxUpsellsTitle,
+    checkboxUpsellsSubtitle,
+    checkboxUpsellsDefaultChecked,
     completeBundleBars,
     countdownLabel,
     customerSegments,
@@ -1855,6 +1903,10 @@ export function CreateNewOffer({
     subscriptionPosition,
     subscriptionSubtitle,
     subscriptionTitle,
+    stickyAddToCartEnabled,
+    stickyAddToCartTitle,
+    stickyAddToCartSubtitle,
+    stickyAddToCartButtonText,
     titleColor,
     titleFontSize,
     titleFontWeight,
@@ -1906,6 +1958,38 @@ export function CreateNewOffer({
       productBundleSubtitle,
       productBundleMinQuantity,
       productBundleProductsData,
+    ],
+  );
+  const checkboxUpsellPreview = useMemo(
+    () => ({
+      enabled: checkboxUpsellsEnabled,
+      title: checkboxUpsellsTitle.trim() || "Add this offer to my order",
+      subtitle:
+        checkboxUpsellsSubtitle.trim() ||
+        "Customers can opt in before adding the bundle.",
+      defaultChecked: checkboxUpsellsDefaultChecked,
+    }),
+    [
+      checkboxUpsellsEnabled,
+      checkboxUpsellsTitle,
+      checkboxUpsellsSubtitle,
+      checkboxUpsellsDefaultChecked,
+    ],
+  );
+  const stickyAddToCartPreview = useMemo(
+    () => ({
+      enabled: stickyAddToCartEnabled,
+      title: stickyAddToCartTitle.trim() || "Ready to add this offer?",
+      subtitle:
+        stickyAddToCartSubtitle.trim() ||
+        "Keep the bundle CTA visible while customers compare options.",
+      buttonText: stickyAddToCartButtonText.trim() || "Add bundle",
+    }),
+    [
+      stickyAddToCartEnabled,
+      stickyAddToCartTitle,
+      stickyAddToCartSubtitle,
+      stickyAddToCartButtonText,
     ],
   );
   const unifiedRulesSnapshot = useMemo(
@@ -1969,7 +2053,13 @@ export function CreateNewOffer({
       giftProductsData,
       progressiveGifts,
       checkboxUpsellsEnabled,
+      checkboxUpsellsTitle,
+      checkboxUpsellsSubtitle,
+      checkboxUpsellsDefaultChecked,
       stickyAddToCartEnabled,
+      stickyAddToCartTitle,
+      stickyAddToCartSubtitle,
+      stickyAddToCartButtonText,
       normalizedDiscountRules,
       bxgyDiscountRules,
       differentProductsDiscountRules,
@@ -2006,7 +2096,13 @@ export function CreateNewOffer({
       giftProductsData,
       progressiveGifts,
       checkboxUpsellsEnabled,
+      checkboxUpsellsTitle,
+      checkboxUpsellsSubtitle,
+      checkboxUpsellsDefaultChecked,
       stickyAddToCartEnabled,
+      stickyAddToCartTitle,
+      stickyAddToCartSubtitle,
+      stickyAddToCartButtonText,
       normalizedDiscountRules,
       bxgyDiscountRules,
       differentProductsDiscountRules,
@@ -2267,7 +2363,13 @@ export function CreateNewOffer({
     setProductBundleSubtitle,
     setProductBundleMinQuantity,
     setCheckboxUpsellsEnabled,
+    setCheckboxUpsellsTitle,
+    setCheckboxUpsellsSubtitle,
+    setCheckboxUpsellsDefaultChecked,
     setStickyAddToCartEnabled,
+    setStickyAddToCartTitle,
+    setStickyAddToCartSubtitle,
+    setStickyAddToCartButtonText,
     setSubscriptionEnabled,
     setSubscriptionTitle,
     setSubscriptionSubtitle,
@@ -2932,6 +3034,8 @@ export function CreateNewOffer({
                     subscriptionExplanationTitle={subscriptionExplanationTitle}
                     subscriptionExplanationBody={subscriptionExplanationBody}
                     productBundlePreview={productBundlePreview}
+                    checkboxUpsellPreview={checkboxUpsellPreview}
+                    stickyAddToCartPreview={stickyAddToCartPreview}
                   />
                 </div>
               </div>
@@ -3283,6 +3387,8 @@ export function CreateNewOffer({
                         subscriptionSubtitle={subscriptionSubtitle}
                         showSubscriptionExplanation={shouldShowSubscriptionExplanation}
                         productBundlePreview={productBundlePreview}
+                        checkboxUpsellPreview={checkboxUpsellPreview}
+                        stickyAddToCartPreview={stickyAddToCartPreview}
                         subscriptionExplanationTitle={subscriptionExplanationTitle}
                         subscriptionExplanationBody={subscriptionExplanationBody}
                       />
@@ -3374,6 +3480,8 @@ export function CreateNewOffer({
                   subscriptionTitle={subscriptionTitle}
                   subscriptionSubtitle={subscriptionSubtitle}
                   productBundlePreview={productBundlePreview}
+                  checkboxUpsellPreview={checkboxUpsellPreview}
+                  stickyAddToCartPreview={stickyAddToCartPreview}
                   showSubscriptionExplanation={shouldShowSubscriptionExplanation}
                   subscriptionExplanationTitle={subscriptionExplanationTitle}
                   subscriptionExplanationBody={subscriptionExplanationBody}

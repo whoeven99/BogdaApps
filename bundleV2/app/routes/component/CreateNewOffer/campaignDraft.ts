@@ -87,7 +87,13 @@ export type CampaignDraft = {
   freeGiftRules: FreeGiftRule[];
   progressiveGifts: ProgressiveGiftsConfig;
   checkboxUpsellsEnabled: boolean;
+  checkboxUpsellsTitle: string;
+  checkboxUpsellsSubtitle: string;
+  checkboxUpsellsDefaultChecked: boolean;
   stickyAddToCartEnabled: boolean;
+  stickyAddToCartTitle: string;
+  stickyAddToCartSubtitle: string;
+  stickyAddToCartButtonText: string;
   unifiedRulesSnapshot: UnifiedRuleNode[];
 };
 
@@ -120,7 +126,13 @@ export type CampaignDraftActions = {
   setProductBundleSubtitle: (value: string) => void;
   setProductBundleMinQuantity: (value: number) => void;
   setCheckboxUpsellsEnabled: (value: boolean) => void;
+  setCheckboxUpsellsTitle: (value: string) => void;
+  setCheckboxUpsellsSubtitle: (value: string) => void;
+  setCheckboxUpsellsDefaultChecked: (value: boolean) => void;
   setStickyAddToCartEnabled: (value: boolean) => void;
+  setStickyAddToCartTitle: (value: string) => void;
+  setStickyAddToCartSubtitle: (value: string) => void;
+  setStickyAddToCartButtonText: (value: string) => void;
   setSubscriptionEnabled: (value: boolean) => void;
   setSubscriptionTitle: (value: string) => void;
   setSubscriptionSubtitle: (value: string) => void;

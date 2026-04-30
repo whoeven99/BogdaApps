@@ -22,6 +22,17 @@ export const OFFER_TEXT_LIMITS = {
   buttonText: 30,
 } as const;
 
+const DEFAULT_PRODUCT_BUNDLE_TITLE = "Build your bundle";
+const DEFAULT_PRODUCT_BUNDLE_SUBTITLE =
+  "Choose products to unlock the bundle offer";
+const DEFAULT_CHECKBOX_UPSELLS_TITLE = "Add this offer to my order";
+const DEFAULT_CHECKBOX_UPSELLS_SUBTITLE =
+  "Customers can opt in before adding the bundle.";
+const DEFAULT_STICKY_ADD_TO_CART_TITLE = "Ready to add this offer?";
+const DEFAULT_STICKY_ADD_TO_CART_SUBTITLE =
+  "Keep the bundle CTA visible while customers compare options.";
+const DEFAULT_STICKY_ADD_TO_CART_BUTTON_TEXT = "Add bundle";
+
 export function sanitizeSingleLineText(
   raw: unknown,
   maxLen: number,
@@ -64,6 +75,50 @@ export function parseNonNegativeNumberOrNull(raw: unknown): number | null {
   else n = Number.NaN;
   if (!Number.isFinite(n)) return null;
   return n < 0 ? 0 : n;
+}
+
+function sanitizeProductBundleTitle(raw: unknown): string {
+  return sanitizeSingleLineText(
+    raw,
+    OFFER_TEXT_LIMITS.widgetTitle,
+    DEFAULT_PRODUCT_BUNDLE_TITLE,
+  );
+}
+
+function sanitizeProductBundleSubtitle(raw: unknown): string {
+  return sanitizeSingleLineText(raw, 120, DEFAULT_PRODUCT_BUNDLE_SUBTITLE);
+}
+
+function sanitizeCheckboxUpsellsTitle(raw: unknown): string {
+  return sanitizeSingleLineText(
+    raw,
+    OFFER_TEXT_LIMITS.widgetTitle,
+    DEFAULT_CHECKBOX_UPSELLS_TITLE,
+  );
+}
+
+function sanitizeCheckboxUpsellsSubtitle(raw: unknown): string {
+  return sanitizeSingleLineText(raw, 120, DEFAULT_CHECKBOX_UPSELLS_SUBTITLE);
+}
+
+function sanitizeStickyAddToCartTitle(raw: unknown): string {
+  return sanitizeSingleLineText(
+    raw,
+    OFFER_TEXT_LIMITS.widgetTitle,
+    DEFAULT_STICKY_ADD_TO_CART_TITLE,
+  );
+}
+
+function sanitizeStickyAddToCartSubtitle(raw: unknown): string {
+  return sanitizeSingleLineText(raw, 120, DEFAULT_STICKY_ADD_TO_CART_SUBTITLE);
+}
+
+function sanitizeStickyAddToCartButtonText(raw: unknown): string {
+  return sanitizeSingleLineText(
+    raw,
+    OFFER_TEXT_LIMITS.buttonText,
+    DEFAULT_STICKY_ADD_TO_CART_BUTTON_TEXT,
+  );
 }
 
 /** 阶梯赠品（Progressive gifts）— 嵌套在 offerSettingsJson.progressiveGifts */
@@ -249,7 +304,13 @@ export type OfferSettings = {
   compositionBarOrder?: string[];
   scheduleTimezone?: string;
   checkboxUpsellsEnabled: boolean;
+  checkboxUpsellsTitle: string;
+  checkboxUpsellsSubtitle: string;
+  checkboxUpsellsDefaultChecked: boolean;
   stickyAddToCartEnabled: boolean;
+  stickyAddToCartTitle: string;
+  stickyAddToCartSubtitle: string;
+  stickyAddToCartButtonText: string;
   progressiveGifts: ProgressiveGiftsConfig;
 };
 
@@ -274,8 +335,8 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
       buttonPrimaryColor: "#008060",
       showCustomButton: true,
       productBundleEnabled: false,
-      productBundleTitle: "Build your bundle",
-      productBundleSubtitle: "Choose products to unlock the bundle offer",
+      productBundleTitle: DEFAULT_PRODUCT_BUNDLE_TITLE,
+      productBundleSubtitle: DEFAULT_PRODUCT_BUNDLE_SUBTITLE,
       productBundleMinQuantity: 2,
       productBundleProductIds: [],
       subscriptionEnabled: false,
@@ -287,7 +348,13 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
       subscriptionDefaultSelected: true,
       scheduleTimezone: undefined,
       checkboxUpsellsEnabled: false,
+      checkboxUpsellsTitle: DEFAULT_CHECKBOX_UPSELLS_TITLE,
+      checkboxUpsellsSubtitle: DEFAULT_CHECKBOX_UPSELLS_SUBTITLE,
+      checkboxUpsellsDefaultChecked: false,
       stickyAddToCartEnabled: false,
+      stickyAddToCartTitle: DEFAULT_STICKY_ADD_TO_CART_TITLE,
+      stickyAddToCartSubtitle: DEFAULT_STICKY_ADD_TO_CART_SUBTITLE,
+      stickyAddToCartButtonText: DEFAULT_STICKY_ADD_TO_CART_BUTTON_TEXT,
       progressiveGifts: { ...DEFAULT_PROGRESSIVE_GIFTS },
     };
   }
@@ -346,14 +413,10 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
         : undefined,
       scheduleTimezone: parsed.scheduleTimezone,
       productBundleEnabled: parsed.productBundleEnabled === true,
-      productBundleTitle:
-        typeof parsed.productBundleTitle === "string" && parsed.productBundleTitle
-          ? parsed.productBundleTitle
-          : "Build your bundle",
-      productBundleSubtitle:
-        typeof parsed.productBundleSubtitle === "string"
-          ? parsed.productBundleSubtitle
-          : "Choose products to unlock the bundle offer",
+      productBundleTitle: sanitizeProductBundleTitle(parsed.productBundleTitle),
+      productBundleSubtitle: sanitizeProductBundleSubtitle(
+        parsed.productBundleSubtitle,
+      ),
       productBundleMinQuantity: clampNumber(parsed.productBundleMinQuantity, 1, 20, 2),
       productBundleProductIds: Array.isArray(parsed.productBundleProductIds)
         ? parsed.productBundleProductIds
@@ -361,7 +424,23 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
             .filter(Boolean)
         : [],
       checkboxUpsellsEnabled: parsed.checkboxUpsellsEnabled === true,
+      checkboxUpsellsTitle: sanitizeCheckboxUpsellsTitle(
+        parsed.checkboxUpsellsTitle,
+      ),
+      checkboxUpsellsSubtitle: sanitizeCheckboxUpsellsSubtitle(
+        parsed.checkboxUpsellsSubtitle,
+      ),
+      checkboxUpsellsDefaultChecked: parsed.checkboxUpsellsDefaultChecked === true,
       stickyAddToCartEnabled: parsed.stickyAddToCartEnabled === true,
+      stickyAddToCartTitle: sanitizeStickyAddToCartTitle(
+        parsed.stickyAddToCartTitle,
+      ),
+      stickyAddToCartSubtitle: sanitizeStickyAddToCartSubtitle(
+        parsed.stickyAddToCartSubtitle,
+      ),
+      stickyAddToCartButtonText: sanitizeStickyAddToCartButtonText(
+        parsed.stickyAddToCartButtonText,
+      ),
       progressiveGifts: parseProgressiveGiftsConfig(parsed.progressiveGifts),
     };
   } catch {
@@ -497,7 +576,13 @@ export type CampaignSettings = {
   usageLimitPerCustomer: string;
   compositionBarOrder?: string[];
   checkboxUpsellsEnabled: boolean;
+  checkboxUpsellsTitle: string;
+  checkboxUpsellsSubtitle: string;
+  checkboxUpsellsDefaultChecked: boolean;
   stickyAddToCartEnabled: boolean;
+  stickyAddToCartTitle: string;
+  stickyAddToCartSubtitle: string;
+  stickyAddToCartButtonText: string;
 };
 
 export type CampaignConfig = {
@@ -939,12 +1024,8 @@ function sanitizeProductBundleLogicConfig(
     : [];
   return {
     enabled: item.enabled !== false,
-    title: sanitizeSingleLineText(item.title, 60, "Build your bundle"),
-    subtitle: sanitizeSingleLineText(
-      item.subtitle,
-      80,
-      "Choose products to unlock the bundle offer",
-    ),
+    title: sanitizeProductBundleTitle(item.title),
+    subtitle: sanitizeProductBundleSubtitle(item.subtitle),
     minQuantity: clampNumber(item.minQuantity, 1, 20, 2),
     productIds,
   };
@@ -1248,7 +1329,23 @@ export function parseCampaignConfig(
               .filter(Boolean)
           : undefined,
         checkboxUpsellsEnabled: settingsRaw.checkboxUpsellsEnabled === true,
+        checkboxUpsellsTitle: sanitizeCheckboxUpsellsTitle(
+          settingsRaw.checkboxUpsellsTitle,
+        ),
+        checkboxUpsellsSubtitle: sanitizeCheckboxUpsellsSubtitle(
+          settingsRaw.checkboxUpsellsSubtitle,
+        ),
+        checkboxUpsellsDefaultChecked: settingsRaw.checkboxUpsellsDefaultChecked === true,
         stickyAddToCartEnabled: settingsRaw.stickyAddToCartEnabled === true,
+        stickyAddToCartTitle: sanitizeStickyAddToCartTitle(
+          settingsRaw.stickyAddToCartTitle,
+        ),
+        stickyAddToCartSubtitle: sanitizeStickyAddToCartSubtitle(
+          settingsRaw.stickyAddToCartSubtitle,
+        ),
+        stickyAddToCartButtonText: sanitizeStickyAddToCartButtonText(
+          settingsRaw.stickyAddToCartButtonText,
+        ),
       },
     };
   } catch {
@@ -1292,7 +1389,13 @@ export function migrateLegacyOfferToCampaignConfig(params: {
     usageLimitPerCustomer: offerSettings.usageLimitPerCustomer,
     compositionBarOrder: offerSettings.compositionBarOrder,
     checkboxUpsellsEnabled: offerSettings.checkboxUpsellsEnabled,
+    checkboxUpsellsTitle: offerSettings.checkboxUpsellsTitle,
+    checkboxUpsellsSubtitle: offerSettings.checkboxUpsellsSubtitle,
+    checkboxUpsellsDefaultChecked: offerSettings.checkboxUpsellsDefaultChecked,
     stickyAddToCartEnabled: offerSettings.stickyAddToCartEnabled,
+    stickyAddToCartTitle: offerSettings.stickyAddToCartTitle,
+    stickyAddToCartSubtitle: offerSettings.stickyAddToCartSubtitle,
+    stickyAddToCartButtonText: offerSettings.stickyAddToCartButtonText,
   };
   const offerType = String(params.offerType || "").trim();
 
@@ -1701,9 +1804,10 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
     buttonText: offerCard?.config.buttonText || "Add to Cart",
     showCustomButton: offerCard?.config.showCustomButton !== false,
     productBundleEnabled: productBundle?.config.enabled ?? false,
-    productBundleTitle: productBundle?.config.title ?? "Build your bundle",
-    productBundleSubtitle:
-      productBundle?.config.subtitle ?? "Choose products to unlock the bundle offer",
+    productBundleTitle: sanitizeProductBundleTitle(productBundle?.config.title),
+    productBundleSubtitle: sanitizeProductBundleSubtitle(
+      productBundle?.config.subtitle,
+    ),
     productBundleMinQuantity: productBundle?.config.minQuantity ?? 2,
     productBundleProductIds: productBundle?.config.productIds ?? [],
     subscriptionEnabled: subscription?.config.enabled ?? false,
@@ -1716,7 +1820,23 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
     progressiveGifts: { ...DEFAULT_PROGRESSIVE_GIFTS },
     scheduleTimezone: config.settings.scheduleTimezone,
     checkboxUpsellsEnabled: config.settings.checkboxUpsellsEnabled,
+    checkboxUpsellsTitle: sanitizeCheckboxUpsellsTitle(
+      config.settings.checkboxUpsellsTitle,
+    ),
+    checkboxUpsellsSubtitle: sanitizeCheckboxUpsellsSubtitle(
+      config.settings.checkboxUpsellsSubtitle,
+    ),
+    checkboxUpsellsDefaultChecked: config.settings.checkboxUpsellsDefaultChecked,
     stickyAddToCartEnabled: config.settings.stickyAddToCartEnabled,
+    stickyAddToCartTitle: sanitizeStickyAddToCartTitle(
+      config.settings.stickyAddToCartTitle,
+    ),
+    stickyAddToCartSubtitle: sanitizeStickyAddToCartSubtitle(
+      config.settings.stickyAddToCartSubtitle,
+    ),
+    stickyAddToCartButtonText: sanitizeStickyAddToCartButtonText(
+      config.settings.stickyAddToCartButtonText,
+    ),
   } satisfies OfferSettings;
 
   return {
