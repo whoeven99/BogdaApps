@@ -12,7 +12,6 @@ const DISCOUNT_PERCENTAGE = "10.0";
 const DEFAULT_DISCOUNT_PERCENTAGE = DISCOUNT_PERCENTAGE;
 const CIWI_PROP_AB_GROUP = "__ciwi_ab_group";
 const CIWI_PROP_AB_BUCKET = "__ciwi_ab_bucket";
-const CIWI_PROP_AB_DISCOUNT_PERCENT = "__ciwi_ab_discount_percent";
 const CIWI_PROP_OFFER_ID = "__ciwi_bundle_offer_id";
 const CIWI_PROP_OFFER_ID_LEGACY = "_ciwi_bundle_offer_id";
 
@@ -809,46 +808,28 @@ export function bundleCartDiscountGenerateRun(
       if (suitOffer.offerType === "abTest") {
         const abGroup = getCartLineAttributeValue(line, CIWI_PROP_AB_GROUP);
         const abBucket = getCartLineAttributeValue(line, CIWI_PROP_AB_BUCKET);
-        const abDiscountPercentRaw = Number(
-          getCartLineAttributeValue(line, CIWI_PROP_AB_DISCOUNT_PERCENT),
+        const variantRulesJson = resolveAbTestVariantDiscountRulesJson(
+          suitOffer.offerSettingsJson,
+          abGroup,
+          abBucket,
         );
-        const hasTrustedLineAbPercent =
-          Number.isFinite(abDiscountPercentRaw) &&
-          abDiscountPercentRaw >= 0 &&
-          abDiscountPercentRaw <= 100;
-        if (hasTrustedLineAbPercent) {
-          discountPercentValue = String(abDiscountPercentRaw);
-          log("abtest_line_discount_resolved_from_line_attr", {
+        if (!variantRulesJson) {
+          log("abtest_line_skip_missing_or_unmatched_group", {
             cartLineId: lineId,
             offerId: suitOffer.id,
             abGroup,
             abBucket,
-            discountPercentValue,
           });
-        } else {
-          const variantRulesJson = resolveAbTestVariantDiscountRulesJson(
-            suitOffer.offerSettingsJson,
-            abGroup,
-            abBucket,
-          );
-          if (!variantRulesJson) {
-            log("abtest_line_skip_missing_or_unmatched_group", {
-              cartLineId: lineId,
-              offerId: suitOffer.id,
-              abGroup,
-              abBucket,
-            });
-            continue;
-          }
-          discountPercentValue = getDiscountPercentValue(variantRulesJson, quantity);
-          log("abtest_line_discount_resolved", {
-            cartLineId: lineId,
-            offerId: suitOffer.id,
-            abGroup,
-            abBucket,
-            discountPercentValue,
-          });
+          continue;
         }
+        discountPercentValue = getDiscountPercentValue(variantRulesJson, quantity);
+        log("abtest_line_discount_resolved", {
+          cartLineId: lineId,
+          offerId: suitOffer.id,
+          abGroup,
+          abBucket,
+          discountPercentValue,
+        });
       }
       log("line_discount_percent", {
         cartLineId: lineId,

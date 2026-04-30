@@ -19,7 +19,6 @@ let currentMainForm = null;
 const CIWI_SUBSCRIPTION_MODE_NAME = "ciwi-subscription-mode";
 const CIWI_PROP_AB_GROUP = "__ciwi_ab_group";
 const CIWI_PROP_AB_BUCKET = "__ciwi_ab_bucket";
-const CIWI_PROP_AB_DISCOUNT_PERCENT = "__ciwi_ab_discount_percent";
 const BUNDLE_OFFERS_FETCH_TIMEOUT_MS = 1500;
 const ABTEST_ASSIGN_FETCH_TIMEOUT_MS = 1200;
 let __ciwiIdentityInitDone = false;
@@ -1420,10 +1419,6 @@ function ensureBundleLineProperties(offer) {
     }
     if (offer.__ciwiAbBucket != null) {
       mk(CIWI_PROP_AB_BUCKET, String(offer.__ciwiAbBucket));
-    }
-    const abDiscountPercent = Number(offer.__ciwiAbDiscountPercent);
-    if (Number.isFinite(abDiscountPercent)) {
-      mk(CIWI_PROP_AB_DISCOUNT_PERCENT, String(abDiscountPercent));
     }
   }
 }

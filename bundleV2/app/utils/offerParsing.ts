@@ -524,20 +524,40 @@ export function parseAbTestOfferSettingsBlock(
   const variantsIn = Array.isArray(ab.variants) ? ab.variants : null;
   if (variantsIn && variantsIn.length >= 2) {
     const variants: AbTestVariantStored[] = [];
-    for (const row of variantsIn) {
+    const usedIds = new Set<string>();
+    const usedKeys = new Set<string>();
+    for (let sourceIndex = 0; sourceIndex < variantsIn.length; sourceIndex += 1) {
+      const row = variantsIn[sourceIndex];
       // A/B 测试每组最多 4 个 variant（前端/写入处也会校验，这里做兜底）。
       if (variants.length >= 4) break;
       if (!row || typeof row !== "object") continue;
       const o = row as Record<string, unknown>;
-      const id = sanitizeSingleLineText(o.id, 80, "");
-      const key = sanitizeSingleLineText(o.key, 8, "");
+      const fallbackKeyBase =
+        sourceIndex >= 0 && sourceIndex < 26
+          ? String.fromCharCode(65 + sourceIndex)
+          : `V${sourceIndex + 1}`;
+      let id = sanitizeSingleLineText(o.id, 80, `abv_variant_${sourceIndex + 1}`);
+      let key = sanitizeSingleLineText(o.key, 8, fallbackKeyBase);
       let rules: DiscountRule[] = [];
       if (Array.isArray(o.discountRules)) {
         rules = parseDiscountRules(JSON.stringify(o.discountRules));
       } else if (typeof o.discountRules === "string") {
         rules = parseDiscountRules(o.discountRules);
       }
-      if (!id || !key || !rules.length) continue;
+      if (!rules.length) {
+        rules = cloneDefaultAbRules().map((r, i) =>
+          i === 0 ? { ...r, isDefault: variants.length === 0 } : r,
+        );
+      }
+      if (!id || !key) continue;
+      if (usedIds.has(id)) {
+        id = `${id}_${sourceIndex + 1}`;
+      }
+      if (usedKeys.has(key)) {
+        key = `${key}${sourceIndex + 1}`;
+      }
+      usedIds.add(id);
+      usedKeys.add(key);
       variants.push({ id, key, discountRules: rules });
     }
     if (variants.length < 2) {
