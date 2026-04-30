@@ -1277,7 +1277,7 @@ export function DashboardPage({
                         const waldCi = waldProportion95ConfidenceInterval(p, n);
                         const credible =
                           baseline && !isBaseline
-                            ? isConversionDifferenceCredibleVsBaseline(baseline, variant)
+                            ? isConversionDifferenceCredibleVsBaseline(variant)
                             : null;
 
                         return (

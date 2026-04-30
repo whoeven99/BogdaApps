@@ -72,21 +72,19 @@ export function waldTwoProportionDifference95Ci(
 }
 
 /**
- * 实验组相对基准组转化率：若 (p_exp - p_base) 的 95% CI 完全落在 0 一侧（不含跨 0），
- * 认为与基准的差异方向在给定置信水平下「可信」，否则「不可信」。
+ * 单个分组转化率可信度：
+ * 仅基于该分组自身样本计算 95% CI，若当前转化率落在该区间内则视为「可信」。
  */
-export function isConversionDifferenceCredibleVsBaseline(
-  baseline: { conversionRate: number; exposureUsers: number },
-  variant: { conversionRate: number; exposureUsers: number },
-): boolean {
-  const ci = waldTwoProportionDifference95Ci(
-    baseline.conversionRate,
-    baseline.exposureUsers,
-    variant.conversionRate,
-    variant.exposureUsers,
-  );
-  if (!ci) return false;
-  return ci.lower > 0 || ci.upper < 0;
+export function isConversionDifferenceCredibleVsBaseline(sample: {
+  conversionRate: number;
+  exposureUsers: number;
+}): boolean {
+  const n = Math.max(0, Math.floor(Number(sample.exposureUsers) || 0));
+  if (n <= 0) return false;
+
+  const pHat = clamp01(sample.conversionRate);
+  const ci = waldProportion95ConfidenceInterval(pHat, n);
+  return pHat >= ci.lower && pHat <= ci.upper;
 }
 
 function clamp01(x: number): number {
