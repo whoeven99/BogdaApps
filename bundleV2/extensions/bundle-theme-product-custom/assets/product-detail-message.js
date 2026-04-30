@@ -10,6 +10,8 @@ const DEFAULT_SELECTORS = [
 const RETRY_MS = 12_000;
 const SESSION_STORAGE_BUNDLE_RULE_KEY = "current-ciwi-bundle-rule";
 const ABTEST_LOCAL_STORAGE_KEY = "ciwi-abtest-assignments";
+const SHOPIFY_IDENTITY_STORAGE_KEY = "shopify_identity_key";
+const SHOPIFY_GUEST_MOCK_ID_KEY = "shopify_identity_guest_customer_id";
 let offersConfigCache = null;
 let priceSyncController = null;
 let bundlePriceDebounceT = null;
@@ -17,6 +19,8 @@ let currentMainForm = null;
 const CIWI_SUBSCRIPTION_MODE_NAME = "ciwi-subscription-mode";
 const CIWI_PROP_AB_GROUP = "__ciwi_ab_group";
 const CIWI_PROP_AB_BUCKET = "__ciwi_ab_bucket";
+let __ciwiIdentityInitDone = false;
+let __ciwiCheckoutSyncStarted = false;
 
 // 中文注释：程序化写入 quantity / selling_plan 时会 synthetic dispatch change，否则会冒泡到
 // document 上 attachBundlePriceSync 的 capture 监听器 → scheduleBundlePriceRefresh →
@@ -33,24 +37,170 @@ function getBundlesConfigRaw() {
   }
 }
 
-/** 应用根 URL（无尾斜杠），来自店铺 metafield ciwi-bundle-api-origin，由后台同步 offers 时写入 */
-function resolveBundleApiOrigin() {
-  const raw = getBundlesConfigRaw();
-  const s = raw && raw.bundleApiOrigin != null ? String(raw.bundleApiOrigin).trim() : "";
-  return s.replace(/\/+$/, "");
-}
-
-function buildWebpixerAliAbsoluteUrl(queryString) {
-  const origin = resolveBundleApiOrigin();
-  if (!origin) return "";
-  return `${origin}/webpixerToAli?${queryString}`;
-}
-
 function getCurrentCustomerId() {
   const config = getBundlesConfigRaw();
   const customerId = config?.customerId != null ? String(config.customerId).trim() : "";
   console.log("[abtest] customerId from liquid config", { customerId: customerId || null });
   return customerId;
+}
+
+function getShopNameForIdentitySalt() {
+  const config = getBundlesConfigRaw();
+  const byName = config?.shopName != null ? String(config.shopName).trim() : "";
+  if (byName) return byName;
+  return config?.shopifyDomain != null ? String(config.shopifyDomain).trim() : "";
+}
+
+function safeLocalStorageGetItem(key) {
+  try {
+    return window.localStorage.getItem(key);
+  } catch (e) {
+    return null;
+  }
+}
+
+function safeLocalStorageSetItem(key, value) {
+  try {
+    window.localStorage.setItem(key, value);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function readIdentityStorage() {
+  const raw = safeLocalStorageGetItem(SHOPIFY_IDENTITY_STORAGE_KEY);
+  if (!raw) return { version: 1, identities: {} };
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return { version: 1, identities: {} };
+    return {
+      version: 1,
+      identities:
+        parsed.identities && typeof parsed.identities === "object" ? parsed.identities : {},
+      guestCustomerId:
+        parsed.guestCustomerId != null ? String(parsed.guestCustomerId).trim() : undefined,
+    };
+  } catch (e) {
+    return { version: 1, identities: {} };
+  }
+}
+
+function writeIdentityStorage(next) {
+  return safeLocalStorageSetItem(
+    SHOPIFY_IDENTITY_STORAGE_KEY,
+    JSON.stringify(next && typeof next === "object" ? next : { version: 1, identities: {} }),
+  );
+}
+
+function getOrCreateGuestMockCustomerId() {
+  const fromStorage = safeLocalStorageGetItem(SHOPIFY_GUEST_MOCK_ID_KEY);
+  if (fromStorage && /^\d{13}$/.test(fromStorage.trim())) {
+    return fromStorage.trim();
+  }
+  // 中文注释：生成固定 13 位“类 customer.id”的游客模拟 ID，并持久化，保证同浏览器稳定。
+  const prefix = "9";
+  const randomDigits = `${Math.floor(Math.random() * 1_000_000_000_000)}`
+    .padStart(12, "0")
+    .slice(0, 12);
+  const mockId = `${prefix}${randomDigits}`;
+  safeLocalStorageSetItem(SHOPIFY_GUEST_MOCK_ID_KEY, mockId);
+  return mockId;
+}
+
+async function sha256Hex(input) {
+  const text = String(input || "");
+  if (window.crypto && window.crypto.subtle && window.TextEncoder) {
+    const encoded = new TextEncoder().encode(text);
+    const digest = await window.crypto.subtle.digest("SHA-256", encoded);
+    const bytes = Array.from(new Uint8Array(digest));
+    return bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+  // 中文注释：极端环境（缺少 Web Crypto）时降级，避免流程中断；优先可用性。
+  let hash = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    hash = (hash * 31 + text.charCodeAt(i)) >>> 0;
+  }
+  return String(hash);
+}
+
+function extractCheckoutCustomerId() {
+  try {
+    const checkout = window.Shopify && window.Shopify.checkout ? window.Shopify.checkout : null;
+    if (!checkout) return "";
+    const idCandidates = [
+      checkout.customer_id,
+      checkout.customerId,
+      checkout?.customer?.id,
+      checkout?.order?.customer_id,
+    ];
+    for (let i = 0; i < idCandidates.length; i += 1) {
+      const id = idCandidates[i] != null ? String(idCandidates[i]).trim() : "";
+      if (id) return id;
+    }
+    return "";
+  } catch (e) {
+    return "";
+  }
+}
+
+async function upsertIdentityKeyForOffer(offerId, customerId, reason) {
+  const normalizedOfferId = String(offerId || "").trim();
+  if (!normalizedOfferId) return "";
+  const shopName = getShopNameForIdentitySalt();
+  const salt = `${shopName}${normalizedOfferId}`;
+  const resolvedCustomerId = String(customerId || "").trim();
+  const isGuest = !resolvedCustomerId;
+  const identityCustomerId = isGuest ? getOrCreateGuestMockCustomerId() : resolvedCustomerId;
+  const hashValue = await sha256Hex(`${identityCustomerId}${salt}`);
+  const store = readIdentityStorage();
+  const prev = store.identities[normalizedOfferId];
+  // 中文注释：检测游客 -> 登录态切换，先清除旧游客哈希，再写入真实 customer.id 哈希。
+  if (prev && prev.isGuest && !isGuest) {
+    delete store.identities[normalizedOfferId];
+  }
+  store.identities[normalizedOfferId] = {
+    hash: hashValue,
+    customerId: identityCustomerId,
+    isGuest,
+    salt,
+    updatedAt: Date.now(),
+    reason: String(reason || "runtime"),
+  };
+  store.guestCustomerId = getOrCreateGuestMockCustomerId();
+  writeIdentityStorage(store);
+  return hashValue;
+}
+
+function startCheckoutIdentitySync(offerId) {
+  if (__ciwiCheckoutSyncStarted) return;
+  __ciwiCheckoutSyncStarted = true;
+  let attempts = 0;
+  const maxAttempts = 40;
+  const timer = window.setInterval(async () => {
+    attempts += 1;
+    const checkoutCustomerId = extractCheckoutCustomerId();
+    if (checkoutCustomerId) {
+      await upsertIdentityKeyForOffer(offerId, checkoutCustomerId, "checkout_sync");
+      window.clearInterval(timer);
+      return;
+    }
+    if (attempts >= maxAttempts) {
+      window.clearInterval(timer);
+    }
+  }, 500);
+}
+
+function ensureIdentityKeyInitializedForOffer(offer) {
+  if (!offer || !offer.id || __ciwiIdentityInitDone) return;
+  __ciwiIdentityInitDone = true;
+  const offerId = String(offer.id);
+  const customerId = getCurrentCustomerId();
+  upsertIdentityKeyForOffer(offerId, customerId, customerId ? "logged_in_init" : "guest_init").catch(
+    () => {},
+  );
+  // 中文注释：异步监听 Checkout 对象，确保下单后拿到 customerId 时同步更新 identity hash。
+  startCheckoutIdentitySync(offerId);
 }
 
 function getOrCreateAnonId() {
@@ -1430,6 +1580,7 @@ function pickAbDiscountRulesForGroup(offer, group) {
 
 function ensureAbTestAssignmentForOffer(offer) {
   if (!offer || offer.offerType !== "abTest") return offer;
+  ensureIdentityKeyInitializedForOffer(offer);
   const cfg = getAbTestConfigFromOfferSettings(offer);
   const customerId = getCurrentCustomerId();
   const anonId = getOrCreateAnonId();
@@ -1477,90 +1628,6 @@ function ensureAbTestAssignmentForOffer(offer) {
       source: customerId ? "hash_local" : "random_first_touch_local",
     };
     writeAbAssignments(localAssignments);
-  }
-
-  // 异步写入后端 Redis（30 天 TTL），首次随机结果通过 identityKey 固定，不会被覆盖
-  try {
-    const bundlesConfig = getBundlesConfigRaw();
-    const shopName = String(bundlesConfig.shopifyDomain || "").trim();
-    const params = new URLSearchParams({
-      mode: "abtest-assign",
-      shopName,
-      offerId: String(offer.id || ""),
-      customerId: customerId || "",
-      anonId: anonId || "",
-      splitPercent: String(cfg.bucketSplitPercent),
-      salt: cfg.salt || "",
-    });
-    if (cfg.mode === "nway" && cfg.variantIds.length >= 2) {
-      params.set("variantIds", JSON.stringify(cfg.variantIds));
-      params.set("trafficWeights", JSON.stringify(cfg.trafficWeights));
-    }
-    const qs = params.toString();
-    const assignUrl = buildWebpixerAliAbsoluteUrl(qs);
-    const bundleApiOrigin = resolveBundleApiOrigin();
-    console.log("[abtest] assign api — before fetch", {
-      bundleApiOrigin: bundleApiOrigin || "(empty)",
-      assignUrl: assignUrl || "(not built — will skip fetch)",
-      shopName,
-      offerId: String(offer.id || ""),
-      identityKey,
-      cfgMode: cfg.mode,
-      variantIdsLen: Array.isArray(cfg.variantIds) ? cfg.variantIds.length : 0,
-      trafficWeightsLen: Array.isArray(cfg.trafficWeights) ? cfg.trafficWeights.length : 0,
-      splitPercent: cfg.bucketSplitPercent,
-      saltLen: cfg.salt ? String(cfg.salt).length : 0,
-      queryStringSample: qs.slice(0, 280),
-    });
-    if (!assignUrl) {
-      console.warn(
-        "[abtest] assign api skipped: bundleApiOrigin missing in theme JSON. " +
-          "Cause: storefront fetch(/webpixerToAli) hits the shop domain and returns HTML, not JSON. " +
-          "Fix: set SHOPIFY_APP_URL on the app host and re-sync offers (admin) so metafield ciwi-bundle-api-origin is written.",
-      );
-    } else {
-      fetch(assignUrl, { method: "GET" })
-        .then(async (res) => {
-          const contentType = res.headers.get("content-type") || "";
-          const text = await res.text();
-          const preview = text.slice(0, 320).replace(/\s+/g, " ");
-          console.log("[abtest] assign api — response received", {
-            ok: res.ok,
-            status: res.status,
-            contentType,
-            bodyByteLength: text.length,
-            bodyPreview: preview,
-          });
-          let json;
-          try {
-            json = JSON.parse(text);
-          } catch (parseErr) {
-            console.error("[abtest] assign api — JSON.parse failed (likely HTML or non-JSON)", {
-              message: parseErr && parseErr.message ? parseErr.message : String(parseErr),
-              requestUrl: assignUrl,
-              status: res.status,
-              contentType,
-              bodyPreview: preview,
-            });
-            throw parseErr;
-          }
-          if (!json || !json.success) {
-            console.warn("[abtest] assign api — success false or empty body", { json });
-            return;
-          }
-          console.log("[abtest] assign api — success", json);
-        })
-        .catch((error) => {
-          console.error("[abtest] assign api — fetch chain failed", {
-            message: error && error.message ? error.message : String(error),
-            assignUrl,
-          });
-        });
-    }
-  } catch (e) {
-    console.error("[abtest] assign api — outer try failed", {
-      message: e && e.message ? e.message : String(e),
-    });
   }
 
   const rules = pickAbDiscountRulesForGroup(offer, group);
