@@ -226,15 +226,18 @@ export default function CompleteBundleEditor({
 
       {showProducts && activeBar ? (
         <div className={showBars ? "mt-6" : ""}>
-          <div className="create-offer-panel create-offer-panel--muted">
-            <div className="create-offer-panel__header">
+          <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <div>
-                <div className="create-offer-panel__eyebrow">Scope</div>
-                <h3 className="create-offer-panel__title">Bundle products</h3>
+                <div className="text-[14px] font-medium text-[#1c1f23]">Bundle products</div>
+                <div className="mt-1 text-[12px] text-[#5c6166]">
+                  Add or edit the products in the active bundle group.
+                </div>
               </div>
-            </div>
-            <div className="create-offer-panel__meta">
-              Add or edit the bundled products for the selected complete-bundle group.
+              <div className="text-[12px] text-[#5c6166]">
+                {activeBar.products.length} product
+                {activeBar.products.length > 1 ? "s" : ""} selected
+              </div>
             </div>
           </div>
 

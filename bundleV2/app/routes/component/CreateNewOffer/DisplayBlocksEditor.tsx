@@ -14,16 +14,22 @@ export default function DisplayBlocksEditor({
   setCountdownLabel,
 }: Props) {
   return (
-    <div className="mb-6">
-      <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-        Display Blocks
-      </h3>
+    <div className="mb-6 flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="m-0 text-[14px] font-medium text-[#1c1f23]">
+          Display Blocks
+        </h3>
+        <div className="text-[12px] text-[#5c6166]">1 available</div>
+      </div>
       <div className="flex flex-col gap-3">
-        <div className="p-4 border border-gray-200 rounded-lg">
-          <div className="flex items-center justify-between">
+        <div className="rounded-[12px] border border-[#e3e8ed] bg-white px-4 py-4">
+          <div className="flex items-center justify-between gap-3">
             <div>
               <div className="text-[14px] font-medium text-[#1c1f23]">
                 Countdown
+              </div>
+              <div className="text-[12px] text-[#5c6166]">
+                Add a lightweight urgency message above the offer.
               </div>
             </div>
             <Switch
@@ -32,7 +38,7 @@ export default function DisplayBlocksEditor({
             />
           </div>
           {showCountdownBlock && (
-            <div className="mt-4">
+            <div className="mt-4 border-t border-[#eef1f3] pt-4">
               <label className="block text-[14px] font-medium text-[#1c1f23]">
                 Countdown Label
                 <Input

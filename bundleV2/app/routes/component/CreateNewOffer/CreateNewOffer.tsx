@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from "react";
+import { useEffect, useRef, useState, useMemo, type ReactNode } from "react";
 import { useFetcher, useNavigate, useSearchParams } from "react-router";
 import { Button, Input, Select, Switch, Modal, message } from "antd";
 import dayjs from "dayjs";
@@ -96,6 +96,24 @@ import {
   getUnifiedRuleBlockingMessageForRules,
   getUnifiedRuleBlockingMessage,
 } from "./unifiedRulesValidation";
+
+function PreviewShell({
+  meta,
+  children,
+}: {
+  meta?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="create-offer-preview-shell">
+      <div className="create-offer-preview-shell__header">
+        <h3 className="create-offer-preview-shell__title">Preview</h3>
+        {meta ? <div className="create-offer-preview-shell__meta">{meta}</div> : null}
+      </div>
+      {children}
+    </div>
+  );
+}
 
 type DiscountRule = {
   // 数量阈值：例如 count=2 表示"买 2 件及以上"生效
@@ -2667,8 +2685,6 @@ export function CreateNewOffer({
           {
             id: "progressive-gifts",
             title: "Progressive Gifts",
-            description:
-              "Customize the progressive free-shipping component, unlock points, and gift slot copy.",
             content: (
               <ProgressiveGiftsSection
                 offerType={offerType}
@@ -2689,10 +2705,7 @@ export function CreateNewOffer({
     if (offerType === "quantity-breaks-same") {
       return (
         <OfferComponentsDisplayCustomizer
-          heading="Offer Components"
-          intro="Customize the quantity break components from here. Open a tier to edit its copy or default selection behavior."
           itemGroupTitle="Tier Components"
-          itemGroupDescription="Each rule controls how the quantity break offer is presented in the widget."
           extraSections={progressiveGiftDisplaySections}
           items={unifiedDisplayItems}
           onUpdateItem={campaignDraftActions.updateUnifiedRulePresentation}
@@ -2704,10 +2717,7 @@ export function CreateNewOffer({
     if (offerType === "bxgy") {
       return (
         <OfferComponentsDisplayCustomizer
-          heading="Offer Components"
-          intro="Customize the BXGY components from here. Open a component to edit its copy or default selection behavior."
           itemGroupTitle="BXGY Components"
-          itemGroupDescription="Each rule controls how the BXGY offer is presented in the widget."
           extraSections={progressiveGiftDisplaySections}
           items={unifiedDisplayItems}
           onUpdateItem={campaignDraftActions.updateUnifiedRulePresentation}
@@ -2719,10 +2729,7 @@ export function CreateNewOffer({
     if (offerType === "free-gift") {
       return (
         <OfferComponentsDisplayCustomizer
-          heading="Offer Components"
-          intro="Customize the free gift components from here. Open a component to edit its copy or default selection behavior."
           itemGroupTitle="Free Gift Components"
-          itemGroupDescription="Each rule controls how the gift unlock state is described in the widget."
           extraSections={progressiveGiftDisplaySections}
           items={unifiedDisplayItems}
           onUpdateItem={campaignDraftActions.updateUnifiedRulePresentation}
@@ -2734,10 +2741,7 @@ export function CreateNewOffer({
     if (offerType === "quantity-breaks-different") {
       return (
         <OfferComponentsDisplayCustomizer
-          heading="Offer Components"
-          intro="Customize the cross-product offer components from here. Open a component to edit its copy or default selection behavior."
           itemGroupTitle="Cross-product Components"
-          itemGroupDescription="Each rule controls how quantity-break or BXGY logic is presented across the shared product pool."
           extraSections={progressiveGiftDisplaySections}
           items={unifiedDisplayItems}
           onUpdateItem={campaignDraftActions.updateUnifiedRulePresentation}
@@ -2749,10 +2753,7 @@ export function CreateNewOffer({
     if (offerType === "complete-bundle") {
       return (
         <OfferComponentsDisplayCustomizer
-          heading="Offer Components"
-          intro="Customize the bundle structure components from here. Open a bar to edit its visible title."
           itemGroupTitle="Bundle Components"
-          itemGroupDescription="Each bundle bar is shown as a separate display component."
           items={unifiedDisplayItems}
           onUpdateItem={campaignDraftActions.updateUnifiedRulePresentation}
           {...displayCustomizerCommonProps}
@@ -2763,10 +2764,7 @@ export function CreateNewOffer({
     if (offerType === "subscription") {
       return (
         <OfferComponentsDisplayCustomizer
-          heading="Offer Components"
-          intro="Customize the subscription decision components from here. Open a component to edit its copy and selection behavior."
           itemGroupTitle="Subscription Components"
-          itemGroupDescription="The subscription option and one-time option are edited as separate storefront components."
           extraSections={progressiveGiftDisplaySections}
           items={subscriptionDisplayItems}
           onUpdateItem={campaignDraftActions.updateUnifiedRulePresentation}
@@ -2777,6 +2775,67 @@ export function CreateNewOffer({
 
     return null;
   };
+
+  const displayComponentCount =
+    offerType === "subscription"
+      ? subscriptionDisplayItems.length
+      : unifiedDisplayItems.length;
+  const displayStepMeta = [
+    `${displayComponentCount} components`,
+    showCountdownBlock ? "Countdown enabled" : null,
+    progressiveGifts.enabled && offerType !== "complete-bundle"
+      ? "Progressive gifts"
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" • ");
+  const targetingStepMeta = [
+    markets.includes("all")
+      ? "All markets"
+      : markets.length > 0
+        ? `${markets.length} markets`
+        : "No markets",
+    startTime || endTime ? "Scheduled" : "No schedule",
+  ].join(" • ");
+  const previewPanelMeta =
+    offerType === "complete-bundle" ? "Bundle preview" : "Storefront preview";
+  const progressiveGiftPreviewControls =
+    progressiveGifts.enabled && offerType !== "complete-bundle" ? (
+      <div className="mb-4 rounded-[10px] bg-[#f6f8f9] px-4 py-3">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="text-[13px] font-medium text-[#1c1f23]">
+            Progressive gifts preview
+          </div>
+          <div className="text-[12px] text-[#5c6166]">Simulation</div>
+        </div>
+        <div className="grid grid-cols-1 gap-3">
+          <label className="block text-[12px] text-[#5c6166]">
+            Simulated bar #
+            <Select
+              size="small"
+              className="mt-1 w-full"
+              value={previewGiftBar}
+              options={previewBarOptions}
+              onChange={(v) => setPreviewGiftBar(Number(v))}
+            />
+          </label>
+          <label className="block text-[12px] text-[#5c6166]">
+            Simulated line qty
+            <Input
+              size="small"
+              type="number"
+              min={1}
+              className="mt-1"
+              value={previewGiftQty}
+              onChange={(e) => {
+                const n = Math.max(1, Math.trunc(Number(e.target.value) || 1));
+                setPreviewGiftQty(n);
+              }}
+            />
+          </label>
+        </div>
+      </div>
+    ) : null;
 
   return (
     <fetcher.Form
@@ -3142,9 +3201,7 @@ export function CreateNewOffer({
               </div>
 
               <div className="create-offer-sticky-preview">
-                <div className="create-offer-preview-shell">
-                  <h3 className="create-offer-preview-shell__title">Preview</h3>
-
+                <PreviewShell meta={previewPanelMeta}>
                   <BundlePreview
                     layoutFormat={layoutFormat}
                     cardBackgroundColor={cardBackgroundColor}
@@ -3173,7 +3230,7 @@ export function CreateNewOffer({
                     checkboxUpsellPreview={checkboxUpsellPreview}
                     stickyAddToCartPreview={stickyAddToCartPreview}
                   />
-                </div>
+                </PreviewShell>
               </div>
             </div>
           )}
@@ -3216,41 +3273,8 @@ export function CreateNewOffer({
                   renderCompleteBundleProductPricingCard
                 }
                 preview={
-                  <div className="create-offer-preview-shell">
-                    <h3 className="create-offer-preview-shell__title">Preview</h3>
-                    {progressiveGifts.enabled && offerType !== "complete-bundle" ? (
-                      <div className="mb-4 space-y-2">
-                        <div className="text-[13px] font-medium text-[#1c1f23]">
-                          Progressive gifts preview
-                        </div>
-                        <div className="grid grid-cols-1 gap-2">
-                          <label className="block text-[12px] text-[#5c6166]">
-                            Simulated bar # (free shipping unlock preview)
-                            <Select
-                              size="small"
-                              className="mt-1 w-full"
-                              value={previewGiftBar}
-                              options={previewBarOptions}
-                              onChange={(v) => setPreviewGiftBar(Number(v))}
-                            />
-                          </label>
-                          <label className="block text-[12px] text-[#5c6166]">
-                            Simulated line qty (at_count mode)
-                            <Input
-                              size="small"
-                              type="number"
-                              min={1}
-                              className="mt-1"
-                              value={previewGiftQty}
-                              onChange={(e) => {
-                                const n = Math.max(1, Math.trunc(Number(e.target.value) || 1));
-                                setPreviewGiftQty(n);
-                              }}
-                            />
-                          </label>
-                        </div>
-                      </div>
-                    ) : null}
+                  <PreviewShell meta={previewPanelMeta}>
+                    {progressiveGiftPreviewControls}
                     {offerType === "complete-bundle" ? (
                       <div className="create-offer-preview-card">
                         <div className="create-offer-style-preview-header">
@@ -3528,7 +3552,7 @@ export function CreateNewOffer({
                         subscriptionExplanationBody={subscriptionExplanationBody}
                       />
                     )}
-                  </div>
+                  </PreviewShell>
                 }
               />
             </>
@@ -3539,6 +3563,7 @@ export function CreateNewOffer({
               <div>
                 <BuilderStepIntro
                   title="Display"
+                  meta={displayStepMeta}
                 />
 
                 <DisplayBlocksEditor
@@ -3552,75 +3577,42 @@ export function CreateNewOffer({
               </div>
 
               <div className="create-offer-sticky-preview">
-                <div className="create-offer-preview-shell">
-                  <h3 className="create-offer-preview-shell__title">Preview</h3>
-                {showCountdownBlock && countdownPreviewText ? (
-                  <div className="mb-4 rounded-lg border border-[#ffe58f] bg-[#fffbe6] px-3 py-2 text-[12px] text-[#ad6800]">
-                    {countdownPreviewText}
-                  </div>
-                ) : null}
-                {progressiveGifts.enabled ? (
-                  <div className="mb-4 space-y-2">
-                    <div className="text-[13px] font-medium text-[#1c1f23]">
-                      Progressive gifts preview
+                <PreviewShell meta={previewPanelMeta}>
+                  {showCountdownBlock && countdownPreviewText ? (
+                    <div className="mb-4 rounded-[10px] bg-[#fff7e6] px-3 py-2 text-[12px] text-[#ad6800]">
+                      {countdownPreviewText}
                     </div>
-                    <div className="grid grid-cols-1 gap-2">
-                      <label className="block text-[12px] text-[#5c6166]">
-                        Simulated bar #
-                        <Select
-                          size="small"
-                          className="mt-1 w-full"
-                          value={previewGiftBar}
-                          options={previewBarOptions}
-                          onChange={(v) => setPreviewGiftBar(Number(v))}
-                        />
-                      </label>
-                      <label className="block text-[12px] text-[#5c6166]">
-                        Simulated line qty
-                        <Input
-                          size="small"
-                          type="number"
-                          min={1}
-                          className="mt-1"
-                          value={previewGiftQty}
-                          onChange={(e) => {
-                            const n = Math.max(1, Math.trunc(Number(e.target.value) || 1));
-                            setPreviewGiftQty(n);
-                          }}
-                        />
-                      </label>
-                    </div>
-                  </div>
-                ) : null}
-                <BundlePreview
-                  layoutFormat={layoutFormat}
-                  cardBackgroundColor={cardBackgroundColor}
-                  accentColor={accentColor}
-                  borderColor={borderColor}
-                  labelColor={labelColor}
-                  titleFontSize={titleFontSize}
-                  titleFontWeight={titleFontWeight}
-                  titleColor={titleColor}
-                  buttonText={buttonText}
-                  buttonPrimaryColor={buttonPrimaryColor}
-                  showCustomButton={showCustomButton}
-                  title={widgetTitle}
-                  items={previewItems}
-                  progressiveGifts={progressiveGifts}
-                  progressivePreviewBarIndex={previewGiftBar}
-                  progressivePreviewLineQty={previewGiftQty}
-                  showSubscriptionPreview={shouldShowSubscriptionPreview}
-                  subscriptionPreviewStyle={subscriptionPreviewStyle}
-                  subscriptionTitle={subscriptionTitle}
-                  subscriptionSubtitle={subscriptionSubtitle}
-                  productBundlePreview={productBundlePreview}
-                  checkboxUpsellPreview={checkboxUpsellPreview}
-                  stickyAddToCartPreview={stickyAddToCartPreview}
-                  showSubscriptionExplanation={shouldShowSubscriptionExplanation}
-                  subscriptionExplanationTitle={subscriptionExplanationTitle}
-                  subscriptionExplanationBody={subscriptionExplanationBody}
-                />
-                </div>
+                  ) : null}
+                  {progressiveGiftPreviewControls}
+                  <BundlePreview
+                    layoutFormat={layoutFormat}
+                    cardBackgroundColor={cardBackgroundColor}
+                    accentColor={accentColor}
+                    borderColor={borderColor}
+                    labelColor={labelColor}
+                    titleFontSize={titleFontSize}
+                    titleFontWeight={titleFontWeight}
+                    titleColor={titleColor}
+                    buttonText={buttonText}
+                    buttonPrimaryColor={buttonPrimaryColor}
+                    showCustomButton={showCustomButton}
+                    title={widgetTitle}
+                    items={previewItems}
+                    progressiveGifts={progressiveGifts}
+                    progressivePreviewBarIndex={previewGiftBar}
+                    progressivePreviewLineQty={previewGiftQty}
+                    showSubscriptionPreview={shouldShowSubscriptionPreview}
+                    subscriptionPreviewStyle={subscriptionPreviewStyle}
+                    subscriptionTitle={subscriptionTitle}
+                    subscriptionSubtitle={subscriptionSubtitle}
+                    productBundlePreview={productBundlePreview}
+                    checkboxUpsellPreview={checkboxUpsellPreview}
+                    stickyAddToCartPreview={stickyAddToCartPreview}
+                    showSubscriptionExplanation={shouldShowSubscriptionExplanation}
+                    subscriptionExplanationTitle={subscriptionExplanationTitle}
+                    subscriptionExplanationBody={subscriptionExplanationBody}
+                  />
+                </PreviewShell>
               </div>
             </div>
           )}
@@ -3629,6 +3621,7 @@ export function CreateNewOffer({
             <div>
               <BuilderStepIntro
                 title="Targeting"
+                meta={targetingStepMeta}
               />
               <ScheduleTargetingEditor
                 markets={markets}
@@ -3646,18 +3639,22 @@ export function CreateNewOffer({
                 endTimeError={endTimeError}
                 setEndTimeError={setEndTimeError}
               />
-
-              <div className="mb-8">
-                <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-                  Campaign Status
-                </h3>
-                <div className="flex items-center justify-between rounded-lg border border-[#dfe3e8] bg-white p-4">
-                  <div>
+              <div className="mb-8 flex flex-col gap-3">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="m-0 text-[14px] font-medium text-[#1c1f23]">
+                    Campaign Status
+                  </h3>
+                  <div className="text-[12px] text-[#5c6166]">
+                    {status ? "Active after save" : "Draft after save"}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between rounded-[12px] border border-[#e3e8ed] bg-white p-4">
+                  <div className="min-w-0">
                     <div className="text-[14px] font-medium text-[#1c1f23]">
                       Activate after save
                     </div>
-                    <div className="text-[13px] text-[#5c6166]">
-                      Turn this off if you want to finish setup before showing the offer.
+                    <div className="mt-1 text-[12px] text-[#5c6166]">
+                      Disable this if you want to finish setup before showing the offer.
                     </div>
                   </div>
                   <Switch checked={status} onChange={setStatus} />

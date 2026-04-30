@@ -46,16 +46,15 @@ export default function UnifiedRulesAuditPanel({ rulesCount, issues }: Props) {
   const status = getStatusTone(issues);
 
   return (
-    <div className="rounded-[12px] border border-[#e3e8ed] bg-[#fcfcfd] p-4">
+    <div className="rounded-[12px] border border-[#e3e8ed] bg-white p-4">
       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
         <div>
           <h3 className="m-0 text-[16px] font-semibold text-[#1c1f23]">
             Rule Status
           </h3>
-          <p className="m-0 mt-2 text-[13px] text-[#5c6166]">
-            Checks whether the current rules setup can continue through this builder
-            and whether any draft-only or unsupported combinations still need attention.
-          </p>
+          <div className="mt-2 text-[12px] text-[#5c6166]">
+            {rulesCount} rule{rulesCount === 1 ? "" : "s"} in this setup
+          </div>
         </div>
         <div className="flex flex-wrap gap-2">
           <div
@@ -69,9 +68,9 @@ export default function UnifiedRulesAuditPanel({ rulesCount, issues }: Props) {
         </div>
       </div>
 
-      <div className="mt-4 rounded-[10px] border border-dashed border-[#dfe3e8] bg-white px-4 py-3">
+      <div className="mt-4 rounded-[10px] bg-[#f6f8f9] px-4 py-3">
         <div className="text-[14px] font-medium text-[#1c1f23]">{status.title}</div>
-        <div className="mt-1 text-[13px] text-[#5c6166]">{status.description}</div>
+        <div className="mt-1 text-[12px] text-[#5c6166]">{status.description}</div>
         {issues.length > 0 ? (
           <div className="mt-3 flex flex-wrap gap-2 text-[12px] font-medium">
             {errorCount > 0 ? (

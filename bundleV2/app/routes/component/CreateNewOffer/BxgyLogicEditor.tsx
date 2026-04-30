@@ -72,80 +72,48 @@ export default function BxgyLogicEditor({
     <>
       {showBuyProducts ? (
         <div className="mb-6">
-          <div className="create-offer-panel create-offer-panel--muted">
-            <div className="create-offer-panel__header">
+          <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
-                <div className="create-offer-panel__eyebrow">Scope</div>
-                <h3 className="create-offer-panel__title">Buy Products (X)</h3>
+                <div className="text-[14px] font-medium text-[#1c1f23]">Buy Products (X)</div>
+                <div className="mt-1 text-[12px] text-[#5c6166]">
+                  {buyProductsCount} selected
+                </div>
               </div>
-              {buyProductsCount > 0 ? (
-                <div className="create-offer-kpi-badge">{buyProductsCount} selected</div>
-              ) : null}
-            </div>
-            {buyProductsCount === 0 ? (
               <Button
-                size="large"
-                className="text-[#008060] border-[#008060] hover:text-[#006e52] hover:border-[#006e52] hover:bg-[#f0f9f6]"
+                size="middle"
                 onClick={(e) => {
                   void onSelectBuyProducts();
                   e.preventDefault();
                 }}
               >
-                Select buy products
+                {buyProductsCount === 0 ? "Select buy products" : "Edit buy products"}
               </Button>
-            ) : (
-              <div className="create-offer-panel__footer">
-                <Button
-                  size="small"
-                  onClick={(e) => {
-                    void onSelectBuyProducts();
-                    e.preventDefault();
-                  }}
-                >
-                  Edit buy products
-                </Button>
-              </div>
-            )}
+            </div>
           </div>
         </div>
       ) : null}
 
       {showGetProducts ? (
         <div className="mb-8">
-          <div className="create-offer-panel create-offer-panel--muted">
-            <div className="create-offer-panel__header">
+          <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
-                <div className="create-offer-panel__eyebrow">Scope</div>
-                <h3 className="create-offer-panel__title">Get Products (Y)</h3>
+                <div className="text-[14px] font-medium text-[#1c1f23]">Get Products (Y)</div>
+                <div className="mt-1 text-[12px] text-[#5c6166]">
+                  {getProductsCount} selected
+                </div>
               </div>
-              {getProductsCount > 0 ? (
-                <div className="create-offer-kpi-badge">{getProductsCount} selected</div>
-              ) : null}
-            </div>
-            {getProductsCount === 0 ? (
               <Button
-                size="large"
-                className="text-[#008060] border-[#008060] hover:text-[#006e52] hover:border-[#006e52] hover:bg-[#f0f9f6]"
+                size="middle"
                 onClick={(e) => {
                   void onSelectGetProducts();
                   e.preventDefault();
                 }}
               >
-                Select get products
+                {getProductsCount === 0 ? "Select get products" : "Edit get products"}
               </Button>
-            ) : (
-              <div className="create-offer-panel__footer">
-                <Button
-                  size="small"
-                  onClick={(e) => {
-                    void onSelectGetProducts();
-                    e.preventDefault();
-                  }}
-                >
-                  Edit get products
-                </Button>
-              </div>
-            )}
+            </div>
           </div>
         </div>
       ) : null}

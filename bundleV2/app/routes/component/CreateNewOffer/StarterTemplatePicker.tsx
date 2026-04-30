@@ -176,7 +176,7 @@ function SubscriptionPreview() {
         />
         <PreviewRow title="Buy 2, get 3 free" price="EUR104.00" badge="Save 68%" />
         <PreviewRow title="Buy 3, get 6 free" price="EUR156.00" badge="Save 73%" />
-        <div className="rounded-[10px] border border-dashed border-[#008060] bg-white px-[12px] py-[9px]">
+        <div className="rounded-[10px] bg-white px-[12px] py-[9px] shadow-[inset_0_0_0_1px_rgba(0,128,96,0.12)]">
           <div className="text-[13px] font-semibold text-[#1c1f23]">
             Subscribe & Save 20%
           </div>
@@ -203,7 +203,7 @@ function FreeGiftPreview() {
           subtitle="Unlock 2 free gifts"
           price="2 FREE"
         />
-        <div className="rounded-[10px] border border-dashed border-[#d1d5db] bg-white px-[12px] py-[9px] text-[12px] text-[#5c6166]">
+        <div className="rounded-[10px] bg-white px-[12px] py-[9px] text-[12px] text-[#5c6166] shadow-[inset_0_0_0_1px_rgba(17,24,39,0.08)]">
           Gift products are chosen separately from the trigger products.
         </div>
       </div>
@@ -273,7 +273,7 @@ export default function StarterTemplatePicker({
               <h2 className="m-0 text-[16px] font-semibold leading-[24px] text-[#1c1f23]">
                 {option.name}
               </h2>
-              <p className="mt-[6px] mb-0 text-[13px] leading-[20px] text-[#5c6166]">
+              <p className="mb-0 mt-[6px] text-[12px] leading-[18px] text-[#5c6166]">
                 {option.description}
               </p>
               <div className="mt-auto pt-[14px]">

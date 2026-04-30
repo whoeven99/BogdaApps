@@ -1,4 +1,5 @@
 import { Button, Checkbox, Dropdown, Input, Switch } from "antd";
+import { ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { CompleteBundleProduct } from "../../../utils/offerParsing";
 import type {
@@ -59,23 +60,27 @@ function parsePercent(value: string, fallback = 0) {
 
 function DetailSection({
   title,
-  description,
+  meta,
   actions,
   children,
 }: {
   title: string;
-  description?: string;
+  meta?: string;
   actions?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <div className="rounded-[12px] border border-[#e3e8ed] bg-white p-5">
-      <div className="flex items-start justify-between gap-4">
+    <div className="rounded-[12px] border border-[#e3e8ed] bg-white px-5 py-4">
+      <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <h3 className="m-0 text-[16px] font-semibold text-[#1c1f23]">{title}</h3>
-          {description ? (
-            <p className="m-0 mt-2 text-[13px] text-[#5c6166]">{description}</p>
-          ) : null}
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="m-0 text-[16px] font-semibold text-[#1c1f23]">{title}</h3>
+            {meta ? (
+              <span className="rounded-full bg-[#f4f6f8] px-2 py-[2px] text-[11px] font-medium text-[#5c6166]">
+                {meta}
+              </span>
+            ) : null}
+          </div>
         </div>
         {actions ? <div className="shrink-0">{actions}</div> : null}
       </div>
@@ -88,19 +93,6 @@ function FieldGrid({ children }: { children: ReactNode }) {
   return <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">{children}</div>;
 }
 
-function getBarTypeLabel(type: CampaignBarItem["type"]) {
-  switch (type) {
-    case "quantity_break":
-      return "Quantity break";
-    case "bxgy":
-      return "Buy X, get Y";
-    case "free_gift":
-      return "Free gift";
-    default:
-      return type;
-  }
-}
-
 function BuilderSection({
   title,
   description,
@@ -111,13 +103,43 @@ function BuilderSection({
   children: ReactNode;
 }) {
   return (
-    <div className="rounded-[10px] border border-[#e3e8ed] bg-[#fafbfb] px-4 py-4">
-      <div className="mb-4">
+    <div className="space-y-3 border-t border-[#eef1f3] pt-4 first:border-t-0 first:pt-0">
+      <div>
         <div className="text-[13px] font-semibold text-[#1c1f23]">{title}</div>
         {description ? (
           <div className="mt-1 text-[12px] text-[#5c6166]">{description}</div>
         ) : null}
       </div>
+      {children}
+    </div>
+  );
+}
+
+function CompactActionRow({
+  title,
+  meta,
+  actionLabel,
+  onAction,
+}: {
+  title: string;
+  meta: string;
+  actionLabel: string;
+  onAction: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-3 rounded-[10px] bg-[#f6f8f9] px-4 py-3 md:flex-row md:items-center md:justify-between">
+      <div className="min-w-0">
+        <div className="text-[13px] font-medium text-[#1c1f23]">{title}</div>
+        <div className="mt-1 text-[12px] text-[#5c6166]">{meta}</div>
+      </div>
+      <Button onClick={onAction}>{actionLabel}</Button>
+    </div>
+  );
+}
+
+function QuietEmptyState({ children }: { children: ReactNode }) {
+  return (
+    <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-4 text-[13px] text-[#5c6166]">
       {children}
     </div>
   );
@@ -157,15 +179,12 @@ function BuilderBarCard({
   children: ReactNode;
 }) {
   return (
-    <div className="rounded-[12px] border border-[#dfe3e8] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-      <div className="border-b border-[#e3e8ed] px-5 py-4">
+    <div className="rounded-[10px] border border-[#e6eaee] bg-white">
+      <div className="border-b border-[#eef1f3] px-4 py-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="m-0 text-[15px] font-semibold text-[#1c1f23]">{bar.title}</h3>
-              <span className="rounded-full bg-[#f4f6f8] px-2 py-0.5 text-[11px] font-medium text-[#5c6166]">
-                {getBarTypeLabel(bar.type)}
-              </span>
               {bar.isDefault ? (
                 <span className="rounded-full bg-[#f0faf6] px-2 py-0.5 text-[11px] font-medium text-[#006e52]">
                   Default
@@ -177,102 +196,30 @@ function BuilderBarCard({
                 </span>
               ) : null}
             </div>
-            <p className="m-0 mt-2 text-[13px] text-[#5c6166]">{bar.summary}</p>
+            <div className="mt-2 text-[12px] text-[#5c6166]">{bar.summary}</div>
           </div>
           {actions ? <div className="shrink-0">{actions}</div> : null}
         </div>
       </div>
-      <div className="space-y-4 px-5 py-5">{children}</div>
+      <div className="space-y-5 px-4 py-4">{children}</div>
     </div>
-  );
-}
-
-function CommonPresentationFields({
-  title,
-  subtitle,
-  badge,
-  isDefault,
-  onPatch,
-}: {
-  title?: string;
-  subtitle?: string;
-  badge?: string;
-  isDefault?: boolean;
-  onPatch: (patch: {
-    title?: string;
-    subtitle?: string;
-    badge?: string;
-    isDefault?: boolean;
-  }) => void;
-}) {
-  return (
-    <>
-      <FieldGrid>
-        <label className="block text-[13px] font-medium text-[#1c1f23]">
-          Title
-          <Input
-            size="large"
-            className="mt-1"
-            value={title || ""}
-            onChange={(e) => onPatch({ title: e.target.value })}
-          />
-        </label>
-        <label className="block text-[13px] font-medium text-[#1c1f23]">
-          Subtitle
-          <Input
-            size="large"
-            className="mt-1"
-            value={subtitle || ""}
-            onChange={(e) => onPatch({ subtitle: e.target.value })}
-          />
-        </label>
-      </FieldGrid>
-
-      <div className="mt-4">
-        <label className="block text-[13px] font-medium text-[#1c1f23]">
-          Badge
-          <Input
-            size="large"
-            className="mt-1"
-            value={badge || ""}
-            onChange={(e) => onPatch({ badge: e.target.value })}
-          />
-        </label>
-      </div>
-
-      <div className="mt-4">
-        <Checkbox
-          checked={!!isDefault}
-          onChange={(e) => onPatch({ isDefault: e.target.checked })}
-        >
-          Set as default selected
-        </Checkbox>
-      </div>
-    </>
   );
 }
 
 function DiscountRuleBarDetail({
   bar,
-  draft,
   rule,
   actions,
   onChange,
 }: {
   bar: CampaignBarItem;
-  draft: CampaignDraft;
   rule: DraftDiscountRule;
   actions?: ReactNode;
   onChange: (patch: Partial<DraftDiscountRule>) => void;
 }) {
   return (
     <BuilderBarCard bar={bar} actions={actions}>
-      <BuilderSection
-        title="Trigger"
-      >
-        <div className="rounded-[8px] border border-dashed border-[#dfe3e8] bg-white px-3 py-3 text-[13px] text-[#5c6166]">
-          {draft.selectedProductsData.length} products in the global trigger pool
-        </div>
+      <BuilderSection title="Trigger">
         <FieldGrid>
           <label className="block text-[13px] font-medium text-[#1c1f23]">
             Trigger quantity
@@ -393,18 +340,6 @@ function DiscountRuleBarDetail({
           ) : null}
         </FieldGrid>
       </BuilderSection>
-
-      <BuilderSection
-        title="Presentation"
-      >
-        <CommonPresentationFields
-          title={rule.title}
-          subtitle={rule.subtitle}
-          badge={rule.badge}
-          isDefault={rule.isDefault}
-          onPatch={onChange}
-        />
-      </BuilderSection>
     </BuilderBarCard>
   );
 }
@@ -412,26 +347,19 @@ function DiscountRuleBarDetail({
 function BxgyRuleBarDetail({
   bar,
   rule,
-  draft,
   actions,
   headerActions,
   onChange,
 }: {
   bar: CampaignBarItem;
   rule: DraftBxgyDiscountRule;
-  draft: CampaignDraft;
   actions: CampaignDraftActions;
   headerActions?: ReactNode;
   onChange: (patch: Partial<DraftBxgyDiscountRule>) => void;
 }) {
   return (
     <BuilderBarCard bar={bar} actions={headerActions}>
-      <BuilderSection
-        title="Trigger"
-      >
-        <div className="rounded-[8px] border border-dashed border-[#dfe3e8] bg-white px-3 py-3 text-[13px] text-[#5c6166]">
-          {draft.buyProducts.length} products in the global trigger pool
-        </div>
+      <BuilderSection title="Trigger">
         <FieldGrid>
           <label className="block text-[13px] font-medium text-[#1c1f23]">
             Trigger quantity
@@ -463,22 +391,12 @@ function BxgyRuleBarDetail({
       <BuilderSection
         title="Reward"
       >
-        <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-4 py-3">
-          <div className="text-[13px] font-medium text-[#1c1f23]">
-            Reward products (Y)
-          </div>
-          <div className="mt-1 text-[12px] text-[#5c6166]">
-            {rule.getProductIds.length} selected for this bar
-          </div>
-          <Button
-            className="mt-3"
-            onClick={() =>
-              void actions.selectBxgyRewardProducts(bar.sourceRef.index)
-            }
-          >
-            Edit reward products
-          </Button>
-        </div>
+        <CompactActionRow
+          title="Reward products (Y)"
+          meta={`${rule.getProductIds.length} selected for this bar`}
+          actionLabel="Edit reward products"
+          onAction={() => void actions.selectBxgyRewardProducts(bar.sourceRef.index)}
+        />
         <label className="block text-[13px] font-medium text-[#1c1f23]">
           Reward discount (%)
           <Input
@@ -524,18 +442,6 @@ function BxgyRuleBarDetail({
           </label>
         </FieldGrid>
       </BuilderSection>
-
-      <BuilderSection
-        title="Presentation"
-      >
-        <CommonPresentationFields
-          title={rule.title}
-          subtitle={rule.subtitle}
-          badge={rule.badge}
-          isDefault={rule.isDefault}
-          onPatch={onChange}
-        />
-      </BuilderSection>
     </BuilderBarCard>
   );
 }
@@ -543,26 +449,19 @@ function BxgyRuleBarDetail({
 function FreeGiftRuleBarDetail({
   bar,
   rule,
-  draft,
   actions,
   headerActions,
   onChange,
 }: {
   bar: CampaignBarItem;
   rule: CampaignDraft["freeGiftRules"][number];
-  draft: CampaignDraft;
   actions: CampaignDraftActions;
   headerActions?: ReactNode;
   onChange: (patch: Partial<CampaignDraft["freeGiftRules"][number]>) => void;
 }) {
   return (
     <BuilderBarCard bar={bar} actions={headerActions}>
-      <BuilderSection
-        title="Trigger"
-      >
-        <div className="rounded-[8px] border border-dashed border-[#dfe3e8] bg-white px-3 py-3 text-[13px] text-[#5c6166]">
-          {draft.freeGiftTriggerProducts.length} products in the global trigger pool
-        </div>
+      <BuilderSection title="Trigger">
         <FieldGrid>
           <label className="block text-[13px] font-medium text-[#1c1f23]">
             Trigger quantity
@@ -581,20 +480,12 @@ function FreeGiftRuleBarDetail({
       <BuilderSection
         title="Reward"
       >
-        <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-4 py-3">
-          <div className="text-[13px] font-medium text-[#1c1f23]">Gift products</div>
-          <div className="mt-1 text-[12px] text-[#5c6166]">
-            {(rule.giftProductIds || []).length} selected for this bar
-          </div>
-          <Button
-            className="mt-3"
-            onClick={() =>
-              void actions.selectFreeGiftRewardProducts(bar.sourceRef.index)
-            }
-          >
-            Edit gift products
-          </Button>
-        </div>
+        <CompactActionRow
+          title="Gift products"
+          meta={`${(rule.giftProductIds || []).length} selected for this bar`}
+          actionLabel="Edit gift products"
+          onAction={() => void actions.selectFreeGiftRewardProducts(bar.sourceRef.index)}
+        />
         <label className="block text-[13px] font-medium text-[#1c1f23]">
           Gift quantity
           <Input
@@ -609,18 +500,6 @@ function FreeGiftRuleBarDetail({
           />
         </label>
       </BuilderSection>
-
-      <BuilderSection
-        title="Presentation"
-      >
-        <CommonPresentationFields
-          title={rule.title}
-          subtitle={rule.subtitle}
-          badge={rule.badge}
-          isDefault={rule.isDefault}
-          onPatch={onChange}
-        />
-      </BuilderSection>
     </BuilderBarCard>
   );
 }
@@ -632,9 +511,9 @@ function PlaceholderModuleDetail({
 }) {
   return (
     <DetailSection title={title}>
-      <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-4 py-4 text-[13px] text-[#5c6166]">
+      <QuietEmptyState>
         This component is available in Step 2.
-      </div>
+      </QuietEmptyState>
     </DetailSection>
   );
 }
@@ -648,18 +527,14 @@ function ProductBundleModuleDetail({
 }) {
   return (
     <DetailSection title="Product bundle">
-      <div className="mb-5 rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-4 py-3">
-        <div className="text-[13px] font-medium text-[#1c1f23]">Bundle products</div>
-        <div className="mt-1 text-[12px] text-[#5c6166]">
-          {draft.productBundleProductsData.length} selected for this module
-        </div>
-        <Button
-          className="mt-3"
-          onClick={() => void actions.handleSelectProducts("product_bundle")}
-        >
-          {draft.productBundleProductsData.length ? "Edit bundle products" : "Select bundle products"}
-        </Button>
-      </div>
+      <CompactActionRow
+        title="Bundle products"
+        meta={`${draft.productBundleProductsData.length} selected for this module`}
+        actionLabel={
+          draft.productBundleProductsData.length ? "Edit bundle products" : "Select bundle products"
+        }
+        onAction={() => void actions.handleSelectProducts("product_bundle")}
+      />
 
       <FieldGrid>
         <label className="block text-[13px] font-medium text-[#1c1f23]">
@@ -716,11 +591,11 @@ function CompleteBundleModuleDetail({
   if (!draft.completeBundleBars.length && !isPrimaryTemplate) {
     return (
       <DetailSection title="Complete bundle">
-        <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-4 py-4">
+        <QuietEmptyState>
           <Button className="mt-4" onClick={() => actions.addCompleteBundleBar("quantity-break-same")}>
             Enable complete bundle module
           </Button>
-        </div>
+        </QuietEmptyState>
       </DetailSection>
     );
   }
@@ -821,6 +696,7 @@ export default function StepTwoCompositionBuilder({
     draft.selectedProductsData.length ||
     draft.buyProducts.length ||
     draft.freeGiftTriggerProducts.length;
+  const enabledModuleCount = modules.filter((module) => module.enabled).length;
 
   const renderPoolCard = ({
     title,
@@ -833,40 +709,46 @@ export default function StepTwoCompositionBuilder({
     buttonLabel: string;
     onClick: () => void;
   }) => (
-    <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-4 py-3">
-      <div className="text-[13px] font-medium text-[#1c1f23]">{title}</div>
-      <div className="mt-2 text-[12px] text-[#1c1f23]">
-        {count} selected
-      </div>
-      <Button className="mt-3" onClick={onClick}>
-        {buttonLabel}
-      </Button>
-    </div>
+    <CompactActionRow
+      title={title}
+      meta={`${count} selected`}
+      actionLabel={buttonLabel}
+      onAction={onClick}
+    />
   );
 
   const renderBarActions = (bar: CampaignBarItem, index: number) => (
     <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
       <Button
+        type="text"
         size="small"
+        className="flex items-center justify-center"
         disabled={index === 0}
+        icon={<ChevronUp size={14} aria-hidden />}
+        aria-label={`Move ${bar.title} up`}
+        title="Move up"
         onClick={() => onMoveBarUp(bar.id)}
-      >
-        Up
-      </Button>
+      />
       <Button
+        type="text"
         size="small"
+        className="flex items-center justify-center"
         disabled={index === bars.length - 1}
+        icon={<ChevronDown size={14} aria-hidden />}
+        aria-label={`Move ${bar.title} down`}
+        title="Move down"
         onClick={() => onMoveBarDown(bar.id)}
-      >
-        Down
-      </Button>
+      />
       <Button
+        type="text"
         danger
         size="small"
+        className="flex items-center justify-center"
+        icon={<Trash2 size={14} aria-hidden />}
+        aria-label={`Remove ${bar.title}`}
+        title="Remove"
         onClick={() => removeCampaignCompositionBar(bar, actions)}
-      >
-        Remove
-      </Button>
+      />
     </div>
   );
 
@@ -878,7 +760,6 @@ export default function StepTwoCompositionBuilder({
         <DiscountRuleBarDetail
           key={bar.id}
           bar={bar}
-          draft={draft}
           rule={rule}
           actions={renderBarActions(bar, index)}
           onChange={(patch) =>
@@ -905,7 +786,6 @@ export default function StepTwoCompositionBuilder({
           key={bar.id}
           bar={bar}
           rule={rule}
-          draft={draft}
           actions={actions}
           headerActions={renderBarActions(bar, index)}
           onChange={(patch) =>
@@ -932,7 +812,6 @@ export default function StepTwoCompositionBuilder({
           key={bar.id}
           bar={bar}
           rule={rule}
-          draft={draft}
           actions={actions}
           headerActions={renderBarActions(bar, index)}
           onChange={(patch) =>
@@ -957,9 +836,9 @@ export default function StepTwoCompositionBuilder({
   const renderModuleDetail = () => {
     if (!activeModule) {
       return (
-        <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-4 py-4 text-[13px] text-[#5c6166]">
+        <QuietEmptyState>
           No components available for this template yet.
-        </div>
+        </QuietEmptyState>
       );
     }
 
@@ -1007,7 +886,7 @@ export default function StepTwoCompositionBuilder({
       case "countdown":
         return (
           <DetailSection title="Countdown timer">
-            <div className="flex items-center justify-between rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-4 py-3">
+            <div className="flex items-center justify-between rounded-[10px] bg-[#f6f8f9] px-4 py-3">
               <div>
                 <div className="text-[14px] font-medium text-[#1c1f23]">
                   Enable countdown block
@@ -1044,7 +923,7 @@ export default function StepTwoCompositionBuilder({
       case "checkbox_upsells":
         return (
           <DetailSection title="Checkbox upsells">
-            <div className="flex items-center justify-between rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-4 py-3">
+            <div className="flex items-center justify-between rounded-[10px] bg-[#f6f8f9] px-4 py-3">
               <div>
                 <div className="text-[14px] font-medium text-[#1c1f23]">
                   Enable checkbox upsell
@@ -1095,7 +974,7 @@ export default function StepTwoCompositionBuilder({
       case "sticky_add_to_cart":
         return (
           <DetailSection title="Sticky add to cart">
-            <div className="flex items-center justify-between rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-4 py-3">
+            <div className="flex items-center justify-between rounded-[10px] bg-[#f6f8f9] px-4 py-3">
               <div>
                 <div className="text-[14px] font-medium text-[#1c1f23]">
                   Enable sticky add to cart
@@ -1157,8 +1036,11 @@ export default function StepTwoCompositionBuilder({
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="min-w-0 space-y-4">
-          <DetailSection title="Product pool">
-            <div className="grid grid-cols-1 gap-3 2xl:grid-cols-2">
+          <DetailSection
+            title="Product pool"
+            meta={showGlobalProductPool ? `${globalTriggerCount} selected` : "Optional"}
+          >
+            <div className="space-y-3">
               {showGlobalProductPool
                 ? renderPoolCard({
                     title: "Trigger products",
@@ -1170,16 +1052,16 @@ export default function StepTwoCompositionBuilder({
                   })
                 : null}
               {!showGlobalProductPool ? (
-                <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-4 py-4 text-[13px] text-[#5c6166] xl:col-span-2">
-                  Product pool controls will appear here as soon as the template includes
-                  bars that need shared product selection.
-                </div>
+                <QuietEmptyState>
+                  Shared trigger product selection appears here when the campaign needs it.
+                </QuietEmptyState>
               ) : null}
             </div>
           </DetailSection>
 
           <DetailSection
             title="Bars"
+            meta={`${bars.length} configured`}
             actions={
               <Dropdown
                 trigger={["click"]}
@@ -1199,16 +1081,19 @@ export default function StepTwoCompositionBuilder({
           >
             <div className="space-y-4">
               {bars.length === 0 ? (
-                <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-4 py-4 text-[13px] text-[#5c6166]">
-                  No bars yet. Add one here to start defining the campaign logic.
-                </div>
+                <QuietEmptyState>
+                  No bars yet. Add one to start defining the campaign logic.
+                </QuietEmptyState>
               ) : (
                 bars.map((bar, index) => renderBarDetail(bar, index))
               )}
             </div>
           </DetailSection>
 
-          <DetailSection title="Components">
+          <DetailSection
+            title="Components"
+            meta={`${enabledModuleCount} enabled`}
+          >
             <div className="flex flex-col gap-2">
               {modules.map((module) => (
                 (() => {

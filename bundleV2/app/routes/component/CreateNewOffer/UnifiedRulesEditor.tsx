@@ -281,7 +281,7 @@ export default function UnifiedRulesEditor({
                 ) : null}
 
                 {usesShippingReward || usesBxgy ? (
-                  <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-3 py-3 text-[13px] text-[#5c6166]">
+                  <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[13px] text-[#5c6166]">
                     {usesShippingReward
                       ? "Free shipping rules map to the delivery discount function target."
                       : "BXGY in this unified editor reuses the same product scope on both the buy and get sides for now."}

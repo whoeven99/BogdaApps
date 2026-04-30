@@ -108,21 +108,18 @@ export function ProgressiveGiftsSection({
     onChange({ ...value, gifts: value.gifts.filter((g) => g.id !== id) });
   };
 
+  const sectionMeta = [
+    value.gifts.length ? `${value.gifts.length} gift slots` : "No gifts yet",
+    value.enabled ? "Enabled" : "Disabled",
+  ].join(" • ");
+
   return (
-    <div className={embedded ? "" : "mt-8 rounded-lg border border-gray-200 bg-[#fafbfb] p-4"}>
+    <div className={embedded ? "space-y-4" : "mt-8 space-y-4 rounded-[12px] border border-[#e3e8ed] bg-white p-4"}>
       {!embedded ? (
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
             <h3 className="m-0 text-[16px] font-semibold text-[#1c1f23]">Progressive gifts</h3>
-            <p className="m-0 mt-1 text-[13px] text-[#5c6166]">
-              Progressive gifts currently support the "Free shipping" reward. It is
-              applied at checkout by the delivery Discount Function. Free shipping
-              depends on an active SHIPPING automatic app discount in the store. If
-              the theme does not pass line item properties to checkout, the
-              Function infers the unlocked tier by product plus line quantity. If
-              multiple offers for the same product use progressive gifts at the
-              same time, each line should include the offer id.
-            </p>
+            <div className="mt-1 text-[12px] text-[#5c6166]">{sectionMeta}</div>
           </div>
           {showToggle ? (
             <Switch
@@ -134,9 +131,9 @@ export function ProgressiveGiftsSection({
       ) : null}
 
       {!value.enabled ? (
-        <p className="text-[13px] text-[#5c6166]">
-          When disabled, the storefront block is hidden and free shipping checks do not apply.
-        </p>
+        <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-4 text-[13px] text-[#5c6166]">
+          Progressive gifts stay hidden until this component is enabled.
+        </div>
       ) : (
         <Tabs
           items={[
@@ -166,14 +163,14 @@ export function ProgressiveGiftsSection({
                     </label>
                   </div>
                   <div className="flex flex-col gap-2">
-                    <div className="flex items-center justify-between p-3 border border-gray-100 rounded-md bg-white">
+                    <div className="flex items-center justify-between rounded-[10px] bg-[#f6f8f9] px-4 py-3">
                       <span className="text-[14px] text-[#1c1f23]">Hide gift cards until unlocked</span>
                       <Switch
                         checked={value.hideGiftsUntilUnlocked}
                         onChange={(c) => patch({ hideGiftsUntilUnlocked: c })}
                       />
                     </div>
-                    <div className="flex items-center justify-between p-3 border border-gray-100 rounded-md bg-white">
+                    <div className="flex items-center justify-between rounded-[10px] bg-[#f6f8f9] px-4 py-3">
                       <span className="text-[14px] text-[#1c1f23]">Show labels while locked</span>
                       <Switch
                         checked={value.showLabelsForLockedGifts}
@@ -190,13 +187,15 @@ export function ProgressiveGiftsSection({
                       </Button>
                     </div>
                     {value.gifts.length === 0 ? (
-                      <p className="text-[13px] text-[#5c6166]">No gifts yet. Click "Add gift" to create one.</p>
+                      <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-4 text-[13px] text-[#5c6166]">
+                        No gifts yet. Add one to configure a progressive reward.
+                      </div>
                     ) : (
                       <div className="flex flex-col gap-3">
                         {value.gifts.map((gift) => (
                           <div
                             key={gift.id}
-                            className="border border-gray-200 rounded-md p-3 bg-white grid grid-cols-1 md:grid-cols-2 gap-3"
+                            className="grid grid-cols-1 gap-3 rounded-[12px] border border-[#e3e8ed] bg-white p-4 md:grid-cols-2"
                           >
                             <label className="block text-[13px] font-medium text-[#1c1f23]">
                               Type
@@ -316,7 +315,7 @@ export function ProgressiveGiftsSection({
               key: "style",
               label: "Style",
               children: (
-                <div className="flex flex-col gap-3 pt-2 max-w-md">
+                <div className="flex max-w-md flex-col gap-3 pt-2">
                   <label className="block text-[14px] font-medium text-[#1c1f23]">
                     Gift area layout
                     <Select
@@ -333,9 +332,9 @@ export function ProgressiveGiftsSection({
                       }
                     />
                   </label>
-                  <p className="text-[12px] text-[#5c6166]">
-                    Uses the same CSS class set as the main bundle card for consistent storefront styling.
-                  </p>
+                  <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
+                    Uses the same storefront styling system as the main bundle card.
+                  </div>
                 </div>
               ),
             },

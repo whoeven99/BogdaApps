@@ -62,78 +62,48 @@ export default function FreeGiftLogicEditor({
   return (
     <>
       <div className="mb-6">
-        <div className="create-offer-panel create-offer-panel--muted">
-          <div className="create-offer-panel__header">
+        <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <div className="create-offer-panel__eyebrow">Scope</div>
-              <h3 className="create-offer-panel__title">Trigger Products</h3>
+              <div className="text-[14px] font-medium text-[#1c1f23]">Trigger Products</div>
+              <div className="mt-1 text-[12px] text-[#5c6166]">
+                {triggerProductsCount} selected
+              </div>
             </div>
-            {triggerProductsCount > 0 ? (
-              <div className="create-offer-kpi-badge">{triggerProductsCount} selected</div>
-            ) : null}
-          </div>
-          {triggerProductsCount === 0 ? (
             <Button
-              size="large"
-              className="text-[#008060] border-[#008060] hover:text-[#006e52] hover:border-[#006e52] hover:bg-[#f0f9f6]"
+              size="middle"
               onClick={(e) => {
                 void onSelectTriggerProducts();
                 e.preventDefault();
               }}
             >
-              Select trigger products
+              {triggerProductsCount === 0
+                ? "Select trigger products"
+                : "Edit trigger products"}
             </Button>
-          ) : (
-            <div className="create-offer-panel__footer">
-              <Button
-                size="small"
-                onClick={(e) => {
-                  void onSelectTriggerProducts();
-                  e.preventDefault();
-                }}
-              >
-                Edit trigger products
-              </Button>
-            </div>
-          )}
+          </div>
         </div>
       </div>
 
       <div className="mb-8">
-        <div className="create-offer-panel create-offer-panel--muted">
-          <div className="create-offer-panel__header">
+        <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <div className="create-offer-panel__eyebrow">Scope</div>
-              <h3 className="create-offer-panel__title">Gift Products</h3>
+              <div className="text-[14px] font-medium text-[#1c1f23]">Gift Products</div>
+              <div className="mt-1 text-[12px] text-[#5c6166]">
+                {giftProductsCount} selected
+              </div>
             </div>
-            {giftProductsCount > 0 ? (
-              <div className="create-offer-kpi-badge">{giftProductsCount} selected</div>
-            ) : null}
-          </div>
-          {giftProductsCount === 0 ? (
             <Button
-              size="large"
-              className="text-[#008060] border-[#008060] hover:text-[#006e52] hover:border-[#006e52] hover:bg-[#f0f9f6]"
+              size="middle"
               onClick={(e) => {
                 void onSelectGiftProducts();
                 e.preventDefault();
               }}
             >
-              Select gift products
+              {giftProductsCount === 0 ? "Select gift products" : "Edit gift products"}
             </Button>
-          ) : (
-            <div className="create-offer-panel__footer">
-              <Button
-                size="small"
-                onClick={(e) => {
-                  void onSelectGiftProducts();
-                  e.preventDefault();
-                }}
-              >
-                Edit gift products
-              </Button>
-            </div>
-          )}
+          </div>
         </div>
       </div>
 

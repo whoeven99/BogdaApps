@@ -75,115 +75,30 @@
 }
 
 .create-offer-preview-shell {
-  border: 1px solid #dfe3e8;
+  border: 1px solid #e3e8ed;
   border-radius: 12px;
-  background: #fcfcfd;
-  padding: 16px;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  background: #ffffff;
+  padding: 18px;
+}
+
+.create-offer-preview-shell__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
 }
 
 .create-offer-preview-shell__title {
   margin: 0;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
   color: #1c1f23;
 }
 
-.create-offer-preview-shell__description {
-  margin: 6px 0 0;
-  font-size: 13px;
-  line-height: 20px;
-  color: #6d7175;
-}
-
-.create-offer-preview-shell__note {
-  margin-top: 12px;
-  border-radius: 8px;
-  background: #ffffff;
-  padding: 8px 10px;
+.create-offer-preview-shell__meta {
   font-size: 12px;
-  line-height: 18px;
   color: #5c6166;
-}
-
-.create-offer-panel {
-  border: 1px solid #dfe3e8;
-  border-radius: 12px;
-  background: #ffffff;
-  padding: 16px;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.03);
-}
-
-.create-offer-panel--muted {
-  background: #fcfcfd;
-}
-
-.create-offer-panel--active {
-  border-color: #008060;
-  box-shadow: inset 0 0 0 1px rgba(0, 128, 96, 0.08);
-}
-
-.create-offer-panel__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.create-offer-panel__eyebrow {
-  margin-bottom: 4px;
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #6d7175;
-}
-
-.create-offer-panel__title {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 24px;
-  color: #1c1f23;
-}
-
-.create-offer-panel__description {
-  margin: 4px 0 0;
-  font-size: 13px;
-  line-height: 20px;
-  color: #5c6166;
-}
-
-.create-offer-panel__meta {
-  margin-top: 10px;
-  font-size: 12px;
-  line-height: 18px;
-  color: #6d7175;
-}
-
-.create-offer-panel__actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.create-offer-panel__footer {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid #eef1f4;
-}
-
-.create-offer-kpi-badge {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  background: #f0f9f6;
-  padding: 4px 10px;
-  font-size: 12px;
-  font-weight: 500;
-  color: #108043;
 }
 
 /* Typography & form controls */
@@ -244,10 +159,10 @@
 
 /* Preview card */
 .create-offer-preview-card {
-  border: 1px solid #dfe3e8;
+  border: 1px solid #e3e8ed;
   border-radius: 12px;
   padding: 12px;
-  background: #fcfcfd;
+  background: #ffffff;
 }
 
 /* Pricing preview cards */

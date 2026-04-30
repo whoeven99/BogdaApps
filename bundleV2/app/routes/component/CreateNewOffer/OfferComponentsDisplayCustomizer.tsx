@@ -25,14 +25,11 @@ export type DisplayCustomizerItem = {
 };
 
 type Props = {
-  heading?: string;
-  intro?: string;
   itemGroupTitle?: string;
-  itemGroupDescription?: string;
   extraSections?: Array<{
     id: string;
     title: string;
-    description: string;
+    description?: string;
     content: React.ReactNode;
   }>;
   items: DisplayCustomizerItem[];
@@ -73,7 +70,7 @@ type Props = {
 
 type SectionCardProps = {
   title: string;
-  description: string;
+  meta?: string;
   open: boolean;
   onToggle: () => void;
   children: React.ReactNode;
@@ -81,20 +78,26 @@ type SectionCardProps = {
 
 function SectionCard({
   title,
-  description,
+  meta,
   open,
   onToggle,
   children,
 }: SectionCardProps) {
   return (
-    <div className="rounded-[12px] border border-[#dfe3e8] bg-white p-4">
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+    <div className="rounded-[12px] border border-[#e3e8ed] bg-white px-4 py-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0 flex-1">
-          <div className="text-[14px] font-semibold text-[#1c1f23]">{title}</div>
-          <p className="m-0 mt-1 text-[13px] text-[#5c6166]">{description}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="text-[14px] font-semibold text-[#1c1f23]">{title}</div>
+            {meta ? (
+              <span className="rounded-full bg-[#f4f6f8] px-2 py-[2px] text-[11px] font-medium text-[#5c6166]">
+                {meta}
+              </span>
+            ) : null}
+          </div>
         </div>
         <Button size="small" onClick={onToggle}>
-          {open ? "Hide" : "Customize"}
+          {open ? "Collapse" : "Edit"}
         </Button>
       </div>
       {open ? <div className="mt-4">{children}</div> : null}
@@ -103,10 +106,7 @@ function SectionCard({
 }
 
 export default function OfferComponentsDisplayCustomizer({
-  heading = "Offer Components",
-  intro = "Customize each visible component from here. Open a component to edit its copy or shared style settings.",
-  itemGroupTitle = "Offer Components",
-  itemGroupDescription = "Open a component to edit its copy and presentation settings.",
+  itemGroupTitle = "Components",
   extraSections = [],
   items,
   onUpdateItem,
@@ -148,14 +148,9 @@ export default function OfferComponentsDisplayCustomizer({
 
   return (
     <div className="mb-6 flex flex-col gap-4">
-      <div>
-        <h3 className="mb-1 text-[14px] font-medium text-[#1c1f23]">{heading}</h3>
-        <p className="m-0 text-[13px] text-[#5c6166]">{intro}</p>
-      </div>
-
       <SectionCard
         title="Widget Header"
-        description="Control the bundle title and the overall layout format used by the component."
+        meta="Shared"
         open={openSectionIds.includes("widget-header")}
         onToggle={() => toggleSection("widget-header")}
       >
@@ -194,7 +189,7 @@ export default function OfferComponentsDisplayCustomizer({
 
       <SectionCard
         title="Offer Cards"
-        description="Shared card colors and title typography for the visible offer components."
+        meta="Shared"
         open={openSectionIds.includes("offer-cards")}
         onToggle={() => toggleSection("offer-cards")}
       >
@@ -276,11 +271,11 @@ export default function OfferComponentsDisplayCustomizer({
 
       <SectionCard
         title="Primary Button"
-        description="Adjust the optional app button shown under the bundle component."
+        meta={showCustomButton ? "Enabled" : "Optional"}
         open={openSectionIds.includes("primary-button")}
         onToggle={() => toggleSection("primary-button")}
       >
-        <div className="mb-4 flex items-center justify-between rounded-[10px] border border-[#e5e7eb] bg-[#fafbfb] px-4 py-3">
+        <div className="mb-4 flex items-center justify-between rounded-[10px] bg-[#f6f8f9] px-4 py-3">
           <div>
             <div className="text-[14px] font-medium text-[#1c1f23]">
               Show App&apos;s Add to Cart Button
@@ -324,7 +319,7 @@ export default function OfferComponentsDisplayCustomizer({
         <SectionCard
           key={section.id}
           title={section.title}
-          description={section.description}
+          meta={section.description}
           open={openSectionIds.includes(section.id)}
           onToggle={() => toggleSection(section.id)}
         >
@@ -333,8 +328,10 @@ export default function OfferComponentsDisplayCustomizer({
       ))}
 
       <div className="flex flex-col gap-3">
-        <div className="text-[14px] font-medium text-[#1c1f23]">{itemGroupTitle}</div>
-        <div className="text-[13px] text-[#5c6166]">{itemGroupDescription}</div>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="text-[14px] font-medium text-[#1c1f23]">{itemGroupTitle}</div>
+          <div className="text-[12px] text-[#5c6166]">{items.length} items</div>
+        </div>
         {items.map((item) => {
           const sectionId = item.id;
           const open = openSectionIds.includes(sectionId);
@@ -349,7 +346,7 @@ export default function OfferComponentsDisplayCustomizer({
             <SectionCard
               key={sectionId}
               title={item.displayTitle || item.title}
-              description={item.description}
+              meta={item.isDefault ? "Default" : undefined}
               open={open}
               onToggle={() => toggleSection(sectionId)}
             >
@@ -403,7 +400,7 @@ export default function OfferComponentsDisplayCustomizer({
               </div>
 
               {fields.isDefault ? (
-                <div className="mt-4 rounded-[10px] border border-[#e5e7eb] bg-[#fafbfb] px-4 py-3">
+                <div className="mt-4 rounded-[10px] bg-[#f6f8f9] px-4 py-3">
                   <Switch
                     checked={!!item.isDefault}
                     onChange={(checked) =>

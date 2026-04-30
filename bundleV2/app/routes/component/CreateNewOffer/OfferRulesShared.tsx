@@ -1,4 +1,5 @@
 import { Button } from "antd";
+import { Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 
 type OfferRulesSectionProps = {
@@ -11,10 +12,10 @@ export function OfferRulesSection({
   children,
 }: OfferRulesSectionProps) {
   return (
-    <div>
-      <p className="mb-4 text-[13px] font-normal text-[#5c6166]">
+    <div className="space-y-4">
+      <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
         {description}
-      </p>
+      </div>
       {children}
     </div>
   );
@@ -42,13 +43,16 @@ export function OfferRuleCard({
           </div>
           {onRemove ? (
             <Button
+              type="text"
               danger
               size="small"
+              className="flex items-center justify-center"
+              icon={<Trash2 size={14} aria-hidden />}
+              aria-label={`Remove rule ${index + 1}`}
+              title="Remove"
               onClick={onRemove}
               disabled={disableRemove}
-            >
-              Remove
-            </Button>
+            />
           ) : null}
         </div>
         {children}
@@ -69,8 +73,8 @@ export function OfferRuleSummaryBox({
   description,
 }: OfferRuleSummaryBoxProps) {
   return (
-    <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-3 py-3">
-      <div className="text-[12px] font-medium uppercase tracking-[0.05em] text-[#5c6166]">
+    <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3">
+      <div className="text-[12px] font-medium text-[#5c6166]">
         {label}
       </div>
       <div className="mt-1 text-[14px] font-medium text-[#1c1f23]">
@@ -124,7 +128,7 @@ type OfferRuleNoticeProps = {
 
 export function OfferRuleNotice({ children }: OfferRuleNoticeProps) {
   return (
-    <div className="rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-3 py-3 text-[13px] text-[#5c6166]">
+    <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[13px] text-[#5c6166]">
       {children}
     </div>
   );
@@ -142,7 +146,7 @@ export function OfferRuleAddPanel({
   children,
 }: OfferRuleAddPanelProps) {
   return (
-    <div className="mt-4 rounded-[12px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] p-4">
+    <div className="mt-4 rounded-[12px] bg-[#f6f8f9] p-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <div className="text-[14px] font-medium text-[#1c1f23]">{title}</div>

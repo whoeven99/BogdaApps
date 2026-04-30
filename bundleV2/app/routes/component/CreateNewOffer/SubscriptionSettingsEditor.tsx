@@ -57,13 +57,13 @@ export default function SubscriptionSettingsEditor({
     <div className="flex flex-col gap-4">
       {showSubscriptionOffer ? (
         <>
-          <div className="flex items-center justify-between rounded-[10px] border border-dashed border-[#dfe3e8] bg-[#fafbfb] px-4 py-3">
+          <div className="flex items-center justify-between rounded-[10px] bg-[#f6f8f9] px-4 py-3">
             <div>
               <div className="text-[14px] font-medium text-[#1c1f23]">
                 Enable subscription option
               </div>
               <div className="mt-1 text-[12px] text-[#5c6166]">
-                Turn this on to show a subscription choice next to one-time purchase.
+                {subscriptionEnabled ? "Enabled" : "Optional"}
               </div>
             </div>
             <Switch
@@ -73,7 +73,7 @@ export default function SubscriptionSettingsEditor({
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <label className="block text-[13px] text-[#5c6166] mb-1">
+              <label className="block text-[13px] font-medium text-[#1c1f23] mb-1">
                 Subscribe title
               </label>
               <Input
@@ -90,7 +90,7 @@ export default function SubscriptionSettingsEditor({
               />
             </div>
             <div>
-              <label className="block text-[13px] text-[#5c6166] mb-1">
+              <label className="block text-[13px] font-medium text-[#1c1f23] mb-1">
                 Subscribe subtitle
               </label>
               <Input
@@ -111,10 +111,10 @@ export default function SubscriptionSettingsEditor({
           {shouldShowSubscriptionPreview && (
             <div className="mt-4">
               <div
-                className={`rounded-[10px] p-3 ${
+                className={`rounded-[10px] bg-white p-3 ${
                   allSelectedProductsHaveSubscription
                     ? "border border-[#c9ccd0]"
-                    : "border border-dashed border-[#b7b7b7]"
+                    : "border border-[#e3e8ed]"
                 }`}
               >
                 <div className="text-[14px] font-semibold text-[#1c1f23]">
@@ -125,7 +125,7 @@ export default function SubscriptionSettingsEditor({
                 </div>
               </div>
               {shouldShowSubscriptionExplanation && (
-                <div className="mt-3 rounded-[10px] bg-[#eaf4ff] p-3">
+                <div className="mt-3 rounded-[10px] bg-[#f6f8f9] p-3">
                   <div className="text-[13px] font-semibold text-[#1c1f23]">
                     {subscriptionExplanationTitle}
                   </div>
@@ -143,7 +143,7 @@ export default function SubscriptionSettingsEditor({
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <label className="block text-[13px] text-[#5c6166] mb-1">
+              <label className="block text-[13px] font-medium text-[#1c1f23] mb-1">
                 One-time title
               </label>
               <Input
@@ -160,7 +160,7 @@ export default function SubscriptionSettingsEditor({
               />
             </div>
             <div>
-              <label className="block text-[13px] text-[#5c6166] mb-1">
+              <label className="block text-[13px] font-medium text-[#1c1f23] mb-1">
                 One-time subtitle
               </label>
               <Input
@@ -177,22 +177,25 @@ export default function SubscriptionSettingsEditor({
               />
             </div>
           </div>
-          <div className="mt-3">
-            <Select
-              value={subscriptionPosition}
-              onChange={(value) =>
-                setSubscriptionPosition(value as "below-bundle-bars")
-              }
-              options={[
-                {
-                  value: "below-bundle-bars",
-                  label: "Below bundle deal bars",
-                },
-              ]}
-              style={{ width: "100%" }}
-            />
+          <div className="mt-3 rounded-[10px] bg-[#f6f8f9] px-4 py-3">
+            <label className="block text-[13px] font-medium text-[#1c1f23]">
+              Placement
+              <Select
+                className="mt-1 w-full"
+                value={subscriptionPosition}
+                onChange={(value) =>
+                  setSubscriptionPosition(value as "below-bundle-bars")
+                }
+                options={[
+                  {
+                    value: "below-bundle-bars",
+                    label: "Below bundle deal bars",
+                  },
+                ]}
+              />
+            </label>
           </div>
-          <div className="mt-3">
+          <div className="mt-3 rounded-[10px] bg-[#f6f8f9] px-4 py-3">
             <Checkbox
               checked={subscriptionDefaultSelected}
               onChange={(e) =>
