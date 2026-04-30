@@ -19,6 +19,9 @@ let currentMainForm = null;
 const CIWI_SUBSCRIPTION_MODE_NAME = "ciwi-subscription-mode";
 const CIWI_PROP_AB_GROUP = "__ciwi_ab_group";
 const CIWI_PROP_AB_BUCKET = "__ciwi_ab_bucket";
+const CIWI_PROP_AB_DISCOUNT_PERCENT = "__ciwi_ab_discount_percent";
+const BUNDLE_OFFERS_FETCH_TIMEOUT_MS = 1500;
+const ABTEST_ASSIGN_FETCH_TIMEOUT_MS = 1200;
 let __ciwiIdentityInitDone = false;
 let __ciwiCheckoutSyncStarted = false;
 
@@ -1417,6 +1420,10 @@ function ensureBundleLineProperties(offer) {
     }
     if (offer.__ciwiAbBucket != null) {
       mk(CIWI_PROP_AB_BUCKET, String(offer.__ciwiAbBucket));
+    }
+    const abDiscountPercent = Number(offer.__ciwiAbDiscountPercent);
+    if (Number.isFinite(abDiscountPercent)) {
+      mk(CIWI_PROP_AB_DISCOUNT_PERCENT, String(abDiscountPercent));
     }
   }
 }
@@ -3144,6 +3151,141 @@ function readOffersConfigFromMetafield() {
   }
 }
 
+async function fetchOffersConfigFromBundleApi() {
+  try {
+    const cfg = getBundlesConfigRaw();
+    const shopName = String(cfg?.shopName || "").trim();
+    const origin = String(cfg?.bundleApiOrigin || "")
+      .trim()
+      .replace(/\/+$/, "");
+    if (!shopName || !origin) return null;
+
+    const ac = new AbortController();
+    const timer = window.setTimeout(() => ac.abort(), BUNDLE_OFFERS_FETCH_TIMEOUT_MS);
+    try {
+      const url = `${origin}/webpixerToAli?mode=bundle-offers&shopName=${encodeURIComponent(
+        shopName,
+      )}`;
+      const resp = await fetch(url, {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        signal: ac.signal,
+      });
+      if (!resp.ok) return null;
+      const json = await resp.json();
+      const payload = json?.payload;
+      if (!payload || typeof payload !== "object" || !Array.isArray(payload.offers)) {
+        return null;
+      }
+      console.log("[ciwi] offers loaded from bundleApiOrigin", {
+        source: String(json?.source || "unknown"),
+        offerCount: payload.offers.length,
+      });
+      return payload;
+    } finally {
+      window.clearTimeout(timer);
+    }
+  } catch (error) {
+    console.warn("[ciwi] failed to fetch offers from bundleApiOrigin", error);
+    return null;
+  }
+}
+
+function getBundleApiBaseAndShopName() {
+  const cfg = getBundlesConfigRaw();
+  const shopName = String(cfg?.shopName || "").trim();
+  const origin = String(cfg?.bundleApiOrigin || "")
+    .trim()
+    .replace(/\/+$/, "");
+  return {
+    shopName,
+    origin,
+  };
+}
+
+async function fetchAbAssignmentFromServer(offer, cfg, customerId, anonId) {
+  try {
+    const offerId = String(offer?.id || "").trim();
+    const { shopName, origin } = getBundleApiBaseAndShopName();
+    if (!offerId || !shopName || !origin) return null;
+    if (!customerId && !anonId) return null;
+    const qs = new URLSearchParams();
+    qs.set("mode", "abtest-assign");
+    qs.set("shopName", shopName);
+    qs.set("offerId", offerId);
+    if (customerId) qs.set("customerId", customerId);
+    else qs.set("anonId", anonId);
+    qs.set("splitPercent", String(cfg.bucketSplitPercent));
+    qs.set("variantIds", JSON.stringify(Array.isArray(cfg.variantIds) ? cfg.variantIds : []));
+    qs.set(
+      "trafficWeights",
+      JSON.stringify(Array.isArray(cfg.trafficWeights) ? cfg.trafficWeights : []),
+    );
+    if (cfg.salt) qs.set("salt", String(cfg.salt));
+    const ac = new AbortController();
+    const timer = window.setTimeout(() => ac.abort(), ABTEST_ASSIGN_FETCH_TIMEOUT_MS);
+    try {
+      const resp = await fetch(`${origin}/webpixerToAli?${qs.toString()}`, {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        signal: ac.signal,
+      });
+      if (!resp.ok) return null;
+      const json = await resp.json();
+      const group = String(json?.group || "").trim();
+      const bucket = Number(json?.bucket);
+      if (!group || !Number.isFinite(bucket)) return null;
+      return {
+        group,
+        bucket,
+        source: String(json?.source || "server"),
+      };
+    } finally {
+      window.clearTimeout(timer);
+    }
+  } catch {
+    return null;
+  }
+}
+
+async function hydrateAbAssignmentsFromServer(offersConfig) {
+  try {
+    const offers = Array.isArray(offersConfig?.offers) ? offersConfig.offers : [];
+    if (!offers.length) return;
+    const abOffers = offers.filter((o) => o && o.offerType === "abTest" && o.id);
+    if (!abOffers.length) return;
+    const customerId = getCurrentCustomerId();
+    const anonId = getOrCreateAnonId();
+    const identityKey = customerId ? `customer:${customerId}` : `anon:${anonId}`;
+    const localAssignments = readAbAssignments();
+    let changed = false;
+    for (const offer of abOffers) {
+      const cfg = getAbTestConfigFromOfferSettings(offer);
+      const localKey = `${offer.id}:${identityKey}`;
+      const remote = await fetchAbAssignmentFromServer(offer, cfg, customerId, anonId);
+      if (!remote) continue;
+      localAssignments[localKey] = {
+        group: remote.group,
+        bucket: remote.bucket,
+        assignedAt: Date.now(),
+        source: `server_${remote.source}`,
+      };
+      changed = true;
+      console.log("[abtest] assignment hydrated from server", {
+        offerId: String(offer?.id || ""),
+        group: remote.group,
+        bucket: remote.bucket,
+        source: remote.source,
+      });
+    }
+    if (changed) {
+      writeAbAssignments(localAssignments);
+    }
+  } catch (error) {
+    console.warn("[abtest] failed to hydrate assignments from server", error);
+  }
+}
+
 function parseSelectors(data) {
   const raw = (data || "").trim();
   if (!raw || raw === "-") return DEFAULT_SELECTORS;
@@ -3414,14 +3556,18 @@ function hideThemeQuantitySelectors() {
   }
 }
 
-function run() {
+async function run() {
   try {
     if (!offersConfigCache) {
       offersConfigCache = readOffersConfigFromMetafield();
-      if (offersConfigCache) {
-        console.log("[ciwi] metafield offers loaded", offersConfigCache);
-      }
     }
+    const remoteOffersConfig = await fetchOffersConfigFromBundleApi();
+    if (remoteOffersConfig) {
+      offersConfigCache = remoteOffersConfig;
+    } else if (offersConfigCache) {
+      console.log("[ciwi] metafield offers loaded", offersConfigCache);
+    }
+    await hydrateAbAssignmentsFromServer(offersConfigCache);
 
     const currentOffer = getCurrentOffer(offersConfigCache);
     if (!currentOffer) {

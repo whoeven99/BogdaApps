@@ -54,6 +54,13 @@ type DailyGmvPoint = {
 
 const NO_BUNDLE_TITLE = "NO_BUNDLE_TITLE";
 const AB_TEST_REDIS_TTL_SECONDS = 30 * 24 * 60 * 60;
+const CART_LINES_DISCOUNT_FUNCTION_TITLE = "Bundle Cart Discount Function";
+const CART_LINES_DISCOUNT_AUTO_TITLE = "Ciwi Bundle Auto Discount";
+
+type OffersPayload = {
+  updatedAt?: string;
+  offers?: unknown[];
+};
 
 type AbTestGroup = "abtest1" | "abtest2";
 
@@ -129,6 +136,121 @@ function resolveAbGroupOrVariantId(params: {
 
 function buildAbRedisKey(shopName: string, offerId: string, identityKey: string): string {
   return `ciwi:abtest:${shopName}:${offerId}:${identityKey}`;
+}
+
+async function resolveBundleOffersPayloadFromDiscountOwner(shopName: string): Promise<{
+  payload: OffersPayload | null;
+  source: string | null;
+  reason?: string;
+}> {
+  try {
+    const { admin } = await unauthenticated.admin(shopName);
+    const functionsResp = await admin.graphql(
+      `#graphql
+        query AppDiscountFunctions {
+          shopifyFunctions(first: 100) {
+            nodes {
+              id
+              title
+              apiType
+            }
+          }
+        }
+      `,
+    );
+    const functionsJson = await functionsResp.json();
+    const functionNodes = functionsJson?.data?.shopifyFunctions?.nodes ?? [];
+    const targetFn = functionNodes.find(
+      (fn: any) =>
+        fn?.title === CART_LINES_DISCOUNT_FUNCTION_TITLE &&
+        String(fn?.apiType || "").toLowerCase() === "discount",
+    );
+    const functionId = targetFn?.id ? String(targetFn.id) : "";
+    if (!functionId) {
+      return { payload: null, source: null, reason: "function_not_found" };
+    }
+
+    const discountsResp = await admin.graphql(
+      `#graphql
+        query ExistingAutomaticAppDiscounts {
+          discountNodes(first: 100, query: "method:automatic") {
+            nodes {
+              id
+              discount {
+                __typename
+                ... on DiscountAutomaticApp {
+                  title
+                  status
+                  appDiscountType {
+                    functionId
+                  }
+                  appOwnedOffers: metafield(namespace: "$app:ciwi_bundle", key: "offers") {
+                    value
+                  }
+                  defaultAppOffers: metafield(namespace: "$app", key: "offers") {
+                    value
+                  }
+                  legacyOffers: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-offers") {
+                    value
+                  }
+                }
+              }
+            }
+          }
+        }
+      `,
+    );
+    const discountsJson = await discountsResp.json();
+    const nodes = discountsJson?.data?.discountNodes?.nodes ?? [];
+    const normalized = nodes
+      .map((node: any) => {
+        const d = node?.discount;
+        if (!d || d.__typename !== "DiscountAutomaticApp") return null;
+        return {
+          title: String(d?.title || ""),
+          status: String(d?.status || ""),
+          functionId: String(d?.appDiscountType?.functionId || ""),
+          appOwned: String(d?.appOwnedOffers?.value || ""),
+          defaultApp: String(d?.defaultAppOffers?.value || ""),
+          legacy: String(d?.legacyOffers?.value || ""),
+        };
+      })
+      .filter(Boolean);
+    const strictMatches = normalized.filter((row: any) => row.functionId === functionId);
+    const fallbackMatches =
+      strictMatches.length > 0
+        ? []
+        : normalized.filter((row: any) => row.title.includes(CART_LINES_DISCOUNT_AUTO_TITLE));
+    const targets = strictMatches.length > 0 ? strictMatches : fallbackMatches;
+    if (!targets.length) {
+      return { payload: null, source: null, reason: "discount_owner_not_found" };
+    }
+    const active =
+      targets.find((row: any) => String(row.status).toUpperCase() === "ACTIVE") || targets[0];
+    const raw =
+      String(active.appOwned || "").trim() ||
+      String(active.defaultApp || "").trim() ||
+      String(active.legacy || "").trim();
+    if (!raw) {
+      return { payload: null, source: null, reason: "empty_owner_metafield" };
+    }
+    const parsed = JSON.parse(raw) as OffersPayload;
+    if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.offers)) {
+      return { payload: null, source: null, reason: "invalid_payload_shape" };
+    }
+    const source = String(active.appOwned || "").trim()
+      ? "discount_app_owned"
+      : String(active.defaultApp || "").trim()
+        ? "discount_default_app"
+        : "discount_legacy";
+    return { payload: parsed, source };
+  } catch (error) {
+    return {
+      payload: null,
+      source: null,
+      reason: `resolve_error:${String(error)}`,
+    };
+  }
 }
 
 function parseTime(input: unknown): number | null {
@@ -751,6 +873,34 @@ query GetOrderCustomerId($id: ID!) {
         { status: 500, headers: corsHeaders },
       );
     }
+  }
+
+  if (request.method === "GET" && mode === "bundle-offers") {
+    const shopName = String(url.searchParams.get("shopName") || "").trim();
+    if (!shopName) {
+      return new Response(
+        JSON.stringify({ success: false, message: "shopName is required" }),
+        { status: 400, headers: corsHeaders },
+      );
+    }
+    const resolved = await resolveBundleOffersPayloadFromDiscountOwner(shopName);
+    if (!resolved.payload) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: resolved.reason || "bundle offers not found",
+        }),
+        { status: 404, headers: corsHeaders },
+      );
+    }
+    return new Response(
+      JSON.stringify({
+        success: true,
+        source: resolved.source || "discount_owner",
+        payload: resolved.payload,
+      }),
+      { status: 200, headers: corsHeaders },
+    );
   }
 
   if (request.method === "GET" && url.searchParams.get("mode") === "overview") {
