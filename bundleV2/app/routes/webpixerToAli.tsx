@@ -1,7 +1,7 @@
 import Client from "@alicloud/log";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { createHash } from "crypto";
-import { getBogdaRate, redis } from "../redis.server";
+import { getBogdaRate } from "../redis.server";
 import { unauthenticated } from "../shopify.server";
 
 /** 勿在模块顶层 new Client：无凭证时 @alicloud/log 会抛错，导致整条路由 SSR 加载失败。 */
@@ -53,7 +53,6 @@ type DailyGmvPoint = {
 };
 
 const NO_BUNDLE_TITLE = "NO_BUNDLE_TITLE";
-const AB_TEST_REDIS_TTL_SECONDS = 30 * 24 * 60 * 60;
 const CART_LINES_DISCOUNT_FUNCTION_TITLE = "Bundle Cart Discount Function";
 const CART_LINES_DISCOUNT_AUTO_TITLE = "Ciwi Bundle Auto Discount";
 
@@ -132,10 +131,6 @@ function resolveAbGroupOrVariantId(params: {
     return variantIds[idx] || variantIds[0] || "abtest1";
   }
   return resolveAbGroupByBucket(bucket, splitPercent);
-}
-
-function buildAbRedisKey(shopName: string, offerId: string, identityKey: string): string {
-  return `ciwi:abtest:${shopName}:${offerId}:${identityKey}`;
 }
 
 async function resolveBundleOffersPayloadFromDiscountOwner(shopName: string): Promise<{
@@ -590,30 +585,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       return new Response(JSON.stringify(errBody), { status: 400, headers: corsHeaders });
     }
 
-    const redisKey = buildAbRedisKey(shopName, offerId, identityKey);
-    try {
-      const existing = await redis.get(redisKey);
-      if (existing) {
-        const parsed = JSON.parse(existing) as Record<string, unknown>;
-        console.log("[abtest] assign cache hit", { redisKey, parsed });
-        return new Response(
-          JSON.stringify({
-            success: true,
-            source: "redis",
-            group: parsed.group,
-            bucket: parsed.bucket,
-            salt: parsed.salt || salt,
-            splitPercent: parsed.splitPercent ?? splitPercent,
-            variantIds: parsed.variantIds,
-            trafficWeights: parsed.trafficWeights,
-          }),
-          { status: 200, headers: corsHeaders },
-        );
-      }
-    } catch (error) {
-      console.error("[abtest] read redis failed", { redisKey, error: String(error) });
-    }
-
     const isCustomer = Boolean(customerId);
     const bucket = isCustomer
       ? computeAbBucketByHash(customerId, salt)
@@ -639,14 +610,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       source: isCustomer ? "hash" : "random_first_touch",
     };
 
-    try {
-      await redis.set(redisKey, JSON.stringify(payload), "EX", AB_TEST_REDIS_TTL_SECONDS);
-    } catch (error) {
-      console.error("[abtest] write redis failed", { redisKey, error: String(error) });
-    }
-
     console.log("[abtest] assign — computed new assignment", {
-      redisKey,
+      identityKey,
       group: payload.group,
       bucket: payload.bucket,
       source: payload.source,
@@ -708,27 +673,9 @@ query GetOrderCustomerId($id: ID!) {
         variantIds,
         trafficWeights,
       });
-      const anonKey = buildAbRedisKey(shopName, offerId, `anon:${anonId}`);
-      const customerKey = buildAbRedisKey(shopName, offerId, `customer:${customerId}`);
-
-      let finalGroup = customerGroup;
-      let finalBucket = customerBucket;
-      try {
-        const existingAnon = await redis.get(anonKey);
-        if (existingAnon) {
-          const parsedAnon = JSON.parse(existingAnon) as Record<string, unknown>;
-          if (typeof parsedAnon.group === "string" && typeof parsedAnon.bucket === "number") {
-            finalGroup = String(parsedAnon.group);
-            finalBucket = Number(parsedAnon.bucket);
-          }
-        }
-      } catch (error) {
-        console.error("[abtest] read anon redis failed", { anonKey, error: String(error) });
-      }
-
       const payload = {
-        group: finalGroup,
-        bucket: finalBucket,
+        group: customerGroup,
+        bucket: customerBucket,
         splitPercent: Math.max(1, Math.min(99, Math.trunc(splitPercent || 50))),
         variantIds: variantIds.length >= 2 ? variantIds : undefined,
         trafficWeights:
@@ -737,10 +684,9 @@ query GetOrderCustomerId($id: ID!) {
             : undefined,
         salt,
         customerId,
-        source: "bind_order_keep_first_random",
+        source: "bind_order_hash",
         assignedAt: Date.now(),
       };
-      await redis.set(customerKey, JSON.stringify(payload), "EX", AB_TEST_REDIS_TTL_SECONDS);
       return new Response(JSON.stringify({ success: true, ...payload }), {
         status: 200,
         headers: corsHeaders,

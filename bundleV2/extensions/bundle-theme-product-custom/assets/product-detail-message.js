@@ -3567,8 +3567,6 @@ async function run() {
     } else if (offersConfigCache) {
       console.log("[ciwi] metafield offers loaded", offersConfigCache);
     }
-    await hydrateAbAssignmentsFromServer(offersConfigCache);
-
     const currentOffer = getCurrentOffer(offersConfigCache);
     if (!currentOffer) {
       console.log("[ciwi] no active env offers after enabled checks, skip bundle UI");
