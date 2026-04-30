@@ -12,6 +12,8 @@ const DISCOUNT_PERCENTAGE = "10.0";
 const DEFAULT_DISCOUNT_PERCENTAGE = DISCOUNT_PERCENTAGE;
 const CIWI_PROP_AB_GROUP = "__ciwi_ab_group";
 const CIWI_PROP_AB_BUCKET = "__ciwi_ab_bucket";
+const CIWI_PROP_OFFER_ID = "__ciwi_bundle_offer_id";
+const CIWI_PROP_OFFER_ID_LEGACY = "_ciwi_bundle_offer_id";
 
 function log(step: string, detail?: unknown): void {
   try {
@@ -772,12 +774,22 @@ export function bundleCartDiscountGenerateRun(
         continue;
       }
 
-      const suitOffer = findOffer(productId, variantId, marketId, regularOffers);
+      const lineOfferId =
+        getCartLineAttributeValue(line, CIWI_PROP_OFFER_ID) ||
+        getCartLineAttributeValue(line, CIWI_PROP_OFFER_ID_LEGACY);
+      const suitOffer = findOffer(
+        productId,
+        variantId,
+        marketId,
+        regularOffers,
+        lineOfferId,
+      );
       if (!suitOffer) {
         log("line_no_matching_offer", {
           cartLineId: lineId,
           productId,
           variantId,
+          lineOfferId,
         });
         continue;
       }
@@ -786,6 +798,7 @@ export function bundleCartDiscountGenerateRun(
         cartLineId: lineId,
         offerId: suitOffer.id,
         offerName: suitOffer.name,
+        lineOfferId,
       });
 
       let discountPercentValue = getDiscountPercentValue(
@@ -1313,11 +1326,21 @@ const findOffer = (
   variantId: string | undefined,
   marketId: string | undefined,
   offers: Offer[],
+  preferredOfferId?: string,
 ): Offer | null => {
   const nowMs = resolveNowMs();
   const nowIso = nowMs ? new Date(nowMs).toISOString() : null;
 
-  for (const offer of offers) {
+  const preferredId = String(preferredOfferId || "").trim();
+  const sortedOffers =
+    preferredId.length > 0
+      ? [
+          ...offers.filter((o) => String(o.id || "") === preferredId),
+          ...offers.filter((o) => String(o.id || "") !== preferredId),
+        ]
+      : offers;
+
+  for (const offer of sortedOffers) {
     if (offer.offerType === 'bxgy' || offer.offerType === "quantity-breaks-different") continue;
 
     if (!isOfferEligibleForCart(offer, marketId)) continue;
