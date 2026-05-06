@@ -530,6 +530,16 @@ export type StoreProductItem = {
   hasSubscription: boolean;
 };
 
+type AdminProductVariantPayload = {
+  id?: string | null;
+  title?: string | null;
+  price?: string | null;
+  selectedOptions?: Array<{
+    name?: string | null;
+    value?: string | null;
+  } | null> | null;
+};
+
 type AdminProductNode = {
   id?: string;
   title?: string;
@@ -537,19 +547,13 @@ type AdminProductNode = {
   featuredImage?: { url?: string | null } | null;
   variants?: {
     edges?: Array<{
-      node?: {
-        id?: string | null;
-        title?: string | null;
-        price?: string | null;
-        selectedOptions?: Array<{
-          name?: string | null;
-          value?: string | null;
-        } | null> | null;
-      } | null;
+      node?: AdminProductVariantPayload | null;
     }>;
+    nodes?: Array<AdminProductVariantPayload | null> | null;
   } | null;
   sellingPlanGroups?: {
     edges?: Array<{ node?: { id?: string | null } | null }>;
+    nodes?: Array<{ id?: string | null } | null> | null;
   } | null;
 } | null;
 
@@ -584,36 +588,46 @@ async function fetchShopOffers(shop: string): Promise<OfferListItem[]> {
 function mapAdminProductNodeToStoreProductItem(
   node: AdminProductNode | undefined,
 ): StoreProductItem | null {
-  const priceRaw = node?.variants?.edges?.[0]?.node?.price;
+  const variantNodes = node?.variants?.nodes;
+  const variantSources = Array.isArray(variantNodes)
+    ? variantNodes
+    : node?.variants?.edges?.map((e) => e?.node);
+  const variantsPayload =
+    variantSources?.filter((v): v is AdminProductVariantPayload =>
+      Boolean(v && v.id),
+    ) ?? [];
+  const priceRaw = variantsPayload[0]?.price;
   const image = node?.featuredImage?.url;
   if (!node?.id || !node.title) {
     return null;
   }
+  const sellingNodes = node?.sellingPlanGroups?.nodes;
+  const hasSellingPlanGroupsFromNodes =
+    Array.isArray(sellingNodes) && sellingNodes.some(Boolean);
+  const hasSellingPlanGroupsFromEdges =
+    ((node?.sellingPlanGroups?.edges as Array<unknown> | undefined) ?? [])
+      .length > 0;
   return {
     id: node.id,
     name: node.title,
     handle: String(node.handle || ""),
     price: priceRaw ? `$${priceRaw}` : "$0.00",
     image: image || "https://via.placeholder.com/60",
-    variants:
-      node.variants?.edges
-        ?.map((edgeV) => edgeV?.node)
-        .filter((v): v is NonNullable<typeof v> => Boolean(v?.id))
-        .map((v) => ({
-          id: String(v.id || ""),
-          title: String(v.title || ""),
-          price: String(v.price || ""),
-          selectedOptions: Array.isArray(v.selectedOptions)
-            ? v.selectedOptions
-                .filter((opt): opt is NonNullable<typeof opt> => Boolean(opt))
-                .map((opt) => ({
-                  name: String(opt.name || ""),
-                  value: String(opt.value || ""),
-                }))
-            : [],
-        })) || [],
+    variants: variantsPayload.map((v) => ({
+      id: String(v.id || ""),
+      title: String(v.title || ""),
+      price: String(v.price || ""),
+      selectedOptions: Array.isArray(v.selectedOptions)
+        ? v.selectedOptions
+            .filter((opt): opt is NonNullable<typeof opt> => Boolean(opt))
+            .map((opt) => ({
+              name: String(opt.name || ""),
+              value: String(opt.value || ""),
+            }))
+        : [],
+    })),
     hasSubscription:
-      ((node?.sellingPlanGroups?.edges as Array<unknown> | undefined) ?? []).length > 0,
+      hasSellingPlanGroupsFromNodes || hasSellingPlanGroupsFromEdges,
   };
 }
 
@@ -759,23 +773,19 @@ async function fetchStoreProducts(
                   url
                 }
                 variants(first: 50) {
-                  edges {
-                    node {
-                      id
-                      title
-                      price
-                      selectedOptions {
-                        name
-                        value
-                      }
+                  nodes {
+                    id
+                    title
+                    price
+                    selectedOptions {
+                      name
+                      value
                     }
                   }
                 }
                 sellingPlanGroups(first: 1) {
-                  edges {
-                    node {
-                      id
-                    }
+                  nodes {
+                    id
                   }
                 }
               }
