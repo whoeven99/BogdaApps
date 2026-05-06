@@ -32,6 +32,14 @@ function log(step: string, detail?: unknown): void {
   }
 }
 
+function safeJsonPreview(raw: string | null | undefined, maxLen = 360): string {
+  const s = String(raw || "");
+  if (!s) return "";
+  const trimmed = s.trim();
+  if (trimmed.length <= maxLen) return trimmed;
+  return `${trimmed.slice(0, maxLen)}…(len=${trimmed.length})`;
+}
+
 function summarizeMetafield(
   mf: { jsonValue?: unknown; value?: unknown; type?: string } | null | undefined,
 ): {
@@ -797,6 +805,9 @@ export function bundleCartDiscountGenerateRun(
       const lineOfferId =
         getCartLineAttributeValue(line, CIWI_PROP_OFFER_ID) ||
         getCartLineAttributeValue(line, CIWI_PROP_OFFER_ID_LEGACY);
+      const tierFromLine =
+        getCartLineAttributeValue(line, "__ciwi_bundle_tier") ||
+        getCartLineAttributeValue(line, "_ciwi_bundle_tier");
       const suitOffer = findOffer(
         productId,
         variantId,
@@ -810,6 +821,7 @@ export function bundleCartDiscountGenerateRun(
           productId,
           variantId,
           lineOfferId,
+          tierFromLine,
         });
         continue;
       }
@@ -818,10 +830,26 @@ export function bundleCartDiscountGenerateRun(
         cartLineId: lineId,
         offerId: suitOffer.id,
         offerName: suitOffer.name,
+        offerType: suitOffer.offerType,
         lineOfferId,
+        tierFromLine,
+        selectedProductsJson: safeJsonPreview(suitOffer.selectedProductsJson, 220),
       });
 
       let tier = pickBestDiscountTier(suitOffer.discountRulesJson, quantity);
+      log("line_discount_tier_initial", {
+        cartLineId: lineId,
+        offerId: suitOffer.id,
+        qty: quantity,
+        tier: tier
+          ? {
+              count: tier.count,
+              priceMode: tier.priceMode,
+              discountValue: tier.discountValue,
+              discountPercent: tier.discountPercent,
+            }
+          : null,
+      });
       if (suitOffer.offerType === "abTest") {
         const abGroup =
           getCartLineAttributeValue(line, CIWI_PROP_AB_GROUP) ||
@@ -829,6 +857,12 @@ export function bundleCartDiscountGenerateRun(
         const abBucket =
           getCartLineAttributeValue(line, CIWI_PROP_AB_BUCKET) ||
           getCartLineAttributeValue(line, CIWI_PROP_AB_BUCKET_LEGACY);
+        log("abtest_line_props", {
+          cartLineId: lineId,
+          offerId: suitOffer.id,
+          abGroup,
+          abBucket,
+        });
         const variantRulesJson = resolveAbTestVariantDiscountRulesJson(
           suitOffer.offerSettingsJson,
           abGroup,
@@ -840,6 +874,7 @@ export function bundleCartDiscountGenerateRun(
             offerId: suitOffer.id,
             abGroup,
             abBucket,
+            offerSettingsJson: safeJsonPreview(suitOffer.offerSettingsJson, 260),
           });
           continue;
         }
@@ -849,6 +884,7 @@ export function bundleCartDiscountGenerateRun(
           offerId: suitOffer.id,
           abGroup,
           abBucket,
+          variantRulesJson: safeJsonPreview(variantRulesJson, 260),
           tier: tier
             ? {
                 count: tier.count,
@@ -880,6 +916,18 @@ export function bundleCartDiscountGenerateRun(
           : compareAt > 0
             ? compareAt
             : amountPerQty;
+      log("line_pricing_base_resolved", {
+        cartLineId: lineId,
+        offerId: suitOffer.id,
+        qty: safeQty,
+        cost: {
+          subtotalAmount: subtotal,
+          compareAtAmountPerQuantity: compareAt,
+          amountPerQuantity: amountPerQty,
+          unitFromSubtotal: unitFromSubtotal > 0 ? Math.round(unitFromSubtotal * 100) / 100 : 0,
+          unitBase,
+        },
+      });
       const candidateBase = {
         message: suitOffer.cartTitle || "Bundle Discount",
         targets: [
@@ -916,6 +964,15 @@ export function bundleCartDiscountGenerateRun(
         const fixed = Math.max(0, tier.discountValue);
         const unitDiscount = Math.max(0, unitBase - fixed);
         totalDiscount = unitDiscount * safeQty;
+        log("fixed_price_calc", {
+          cartLineId: lineId,
+          offerId: suitOffer.id,
+          unitBase,
+          fixed,
+          unitDiscount,
+          qty: safeQty,
+          totalDiscount,
+        });
       }
 
       if (!(totalDiscount > 0)) {
