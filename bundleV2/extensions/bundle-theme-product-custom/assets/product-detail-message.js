@@ -1479,6 +1479,73 @@ function readSessionStorageJson(key, fallback) {
   }
 }
 
+const CIWI_ALI_PV_SENT_KEY = "ciwi-ali-product-viewed-sent";
+
+function readAliPvSentMap() {
+  return readSessionStorageJson(CIWI_ALI_PV_SENT_KEY, {});
+}
+
+function writeAliPvSentMap(next) {
+  try {
+    window.sessionStorage.setItem(CIWI_ALI_PV_SENT_KEY, JSON.stringify(next || {}));
+  } catch {}
+}
+
+/**
+ * 中文注释：为什么需要主题侧兜底发送 product_viewed：
+ * - Web Pixel 的 browser.sessionStorage 与店铺页面 window.sessionStorage 在多数场景下并不互通，
+ *   导致 pixel 侧读不到 current-ciwi-bundle-rule → title 变成 NO_BUNDLE_TITLE。
+ * - 主题侧已经拿到了 offer / abGroup / productId / variantId，直接 POST 到 /webpixerToAli 最可靠。
+ */
+function postProductViewedToAliIfNeeded(payload) {
+  try {
+    const cfg = getBundlesConfigRaw();
+    const shopName = String(cfg?.shopName || "").trim();
+    const origin = String(cfg?.bundleApiOrigin || "").trim().replace(/\/+$/, "");
+    if (!shopName || !origin) return;
+
+    const offerId = String(payload?.offerId || "").trim();
+    const variantId = String(payload?.variantId || "").trim();
+    const title = String(payload?.title || "").trim();
+    if (!offerId || !variantId || !title || title === "NO_BUNDLE_TITLE") return;
+
+    const sent = readAliPvSentMap();
+    const signature = `${offerId}:${variantId}:${String(payload?.abGroup || "")}`;
+    if (sent[signature]) return;
+    sent[signature] = Date.now();
+    writeAliPvSentMap(sent);
+
+    const clientId = String(payload?.clientId || "").trim() || getOrCreateAnonId();
+    const extra = JSON.stringify({
+      bundle: [
+        {
+          id: variantId,
+          title,
+          offerId,
+          productId: String(payload?.productId || ""),
+          variantId,
+          source: "bundle-theme-product-custom",
+          abGroup: String(payload?.abGroup || ""),
+          abBucket: payload?.abBucket,
+          abDiscountPercent: payload?.abDiscountPercent,
+        },
+      ],
+    });
+
+    fetch(`${origin}/webpixerToAli`, {
+      method: "POST",
+      // 中文注释：保持 simple request，避免触发 CORS 预检（OPTIONS）
+      body: JSON.stringify({
+        event: "product_viewed",
+        shopName,
+        productId: String(payload?.productId || ""),
+        clientId,
+        extra,
+      }),
+    }).catch(() => {});
+  } catch {}
+}
+
 function syncCurrentBundleToSessionStorage(offer) {
   const variantId = getSelectedVariantId();
   if (!variantId) return;
@@ -1518,6 +1585,15 @@ function syncCurrentBundleToSessionStorage(offer) {
       bundleTitle,
       productId: currentProductGid,
       abGroup: abGroup || "(empty)",
+      abBucket,
+      abDiscountPercent,
+    });
+    postProductViewedToAliIfNeeded({
+      offerId,
+      variantId,
+      title: bundleTitle,
+      productId: currentProductGid,
+      abGroup,
       abBucket,
       abDiscountPercent,
     });
