@@ -13,13 +13,31 @@ export const WebpixerToAli = async ({
   productId?: string;
   extra: string;
 }) => {
+  const normalizedServer = String(server || "").trim().replace(/\/+$/, "");
   console.log("[web-pixel] WebpixerToAli", {
     shopName,
     event,
+    server: normalizedServer || "(empty)",
   });
 
   try {
-    const response = await fetch(`${server}/webpixerToAli`, {
+    if (!normalizedServer) {
+      console.warn("[web-pixel] WebpixerToAli skipped: empty server", {
+        event,
+        shopName,
+      });
+      return;
+    }
+    const endpoint = `${normalizedServer}/webpixerToAli`;
+    console.log("[web-pixel] WebpixerToAli request", {
+      endpoint,
+      event,
+      shopName,
+      productId: productId || "",
+      clientId: clientId || "",
+      extraLength: extra.length,
+    });
+    const response = await fetch(endpoint, {
       method: "POST",
       // Keep this a "simple request" to avoid browser preflight (OPTIONS)
       // in storefront contexts where upstream proxies may not pass CORS headers.
@@ -32,10 +50,18 @@ export const WebpixerToAli = async ({
       }),
     });
 
+    const responseText = await response.text().catch(() => "");
+    const responsePreview = responseText.slice(0, 320).replace(/\s+/g, " ");
+    console.log("[web-pixel] WebpixerToAli response", {
+      endpoint,
+      ok: response.ok,
+      status: response.status,
+      statusText: response.statusText,
+      bodyPreview: responsePreview,
+    });
     if (!response.ok) {
-      const errorText = await response.text().catch(() => "");
       throw new Error(
-        `webpixerToAli request failed: ${response.status} ${response.statusText} ${errorText}`
+        `webpixerToAli request failed: ${response.status} ${response.statusText} ${responsePreview}`
       );
     }
   } catch (error) {

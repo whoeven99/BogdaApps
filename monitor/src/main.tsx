@@ -5,7 +5,6 @@ import App from './App';
 import DebugPrompt from "./DebugPrompt/DebugPrompt";
 import Config from "./Config/config";
 import Shop from "./Shop/shop";
-import Login from "./Login/Login";
 
 const router = createBrowserRouter([
   {
@@ -23,10 +22,6 @@ const router = createBrowserRouter([
   {
     path: '/Shop',
     element: <Shop />
-  },
-  {
-    path: '/login',
-    element: <Login />
   }
 ]);
 

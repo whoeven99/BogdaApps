@@ -12,6 +12,8 @@ import {
 import {
   authenticate,
   ensureCartLinesAutomaticDiscount,
+  ensureBundleDeliveryAutomaticDiscount,
+  syncCartLinesAutomaticDiscountMetafield,
 } from "../../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { DashboardPage } from "../page/DashboardPage";
@@ -19,8 +21,8 @@ import { AllOffersPage } from "../page/AllOffersPage";
 import { AnalyticsPage } from "../page/AnalyticsPage";
 import { PricingPage } from "../page/PricingPage";
 import { CreateNewOffer } from "../component/CreateNewOffer/CreateNewOffer";
-import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
 import prisma from "../../db.server";
+import { randomBytes } from "crypto";
 import {
   getCachedShopOffers,
   invalidateShopOffersCache,
@@ -39,10 +41,20 @@ import {
 } from "../../billing.server";
 import {
   OFFER_TEXT_LIMITS,
+  buildLegacyFieldsFromCampaignConfig,
   clampNumber,
+  parseProgressiveGiftsConfig,
+  progressiveGiftsConfigToStorableJson,
+  parseCompleteBundleConfig,
+  parseFreeGiftSelectedProducts,
+  parseSelectedProductIds,
+  migrateLegacyOfferToCampaignConfig,
+  parseCampaignConfig,
   sanitizeHexColor,
   sanitizeSingleLineText,
+  parseAbTestOfferSettingsBlock,
 } from "../../utils/offerParsing";
+import { sanitizeEnvLikeValue, sanitizeUrlLikeEnvValue } from "../../utils/env";
 
 type OfferListItem = {
   id: string;
@@ -55,6 +67,7 @@ type OfferListItem = {
   selectedProductsJson: string | null;
   discountRulesJson: string | null;
   offerSettingsJson: string | null;
+  campaignConfigJson?: string | null;
   exposurePV?: number | null;
   addToCartPV?: number | null;
   gmv?: number | null;
@@ -78,11 +91,37 @@ function offerActionErrorResponse(message: string, status: number) {
   );
 }
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
+function isMissingOfferCampaignConfigColumnError(error: unknown): boolean {
+  const message = getErrorMessage(error).toLowerCase();
+  return (
+    message.includes("campaignconfigjson") &&
+    (
+      message.includes("no such column") ||
+      message.includes("has no column named") ||
+      message.includes("column does not exist")
+    )
+  );
+}
+
 function sanitizeHexColorParam(
   raw: string | null | undefined,
   fallback: string,
 ): string {
   return sanitizeHexColor(raw, fallback);
+}
+
+function generateAbTestSalt(): string {
+  return randomBytes(16).toString("hex");
 }
 
 type ShopOffersMetafieldSyncResult =
@@ -91,9 +130,11 @@ type ShopOffersMetafieldSyncResult =
 
 const BUNDLE_METAFIELD_NAMESPACE = "ciwi_bundle";
 const BUNDLE_METAFIELD_BASE_KEY = "ciwi-bundle-offers";
-const BUNDLE_METAFIELD_ACTIVE_ENV_KEY = "ciwi-bundle-offers-active-env";
+/** 主题端 A/B assign 等请求使用的应用根 URL（与 SHOPIFY_APP_URL 一致，无尾斜杠） */
+const BUNDLE_METAFIELD_API_ORIGIN_KEY = "ciwi-bundle-api-origin";
 const BUNDLE_METAFIELD_ENABLED_PROD_KEY = "ciwi-bundle-enabled-prod";
 const BUNDLE_METAFIELD_ENABLED_TEST_KEY = "ciwi-bundle-enabled-test";
+const BUNDLE_METAFIELD_ACTIVE_ENV_KEY = "ciwi-bundle-offers-active-env";
 const PROD_SHOPIFY_API_KEY = "bfc13ad696f2a8d2a77ba6eee1e26966";
 const TEST_SHOPIFY_API_KEY = "ab25ea895c6df574ae9ff70e9c7731c5";
 
@@ -107,7 +148,7 @@ function resolveBundleEnvironment(): BundleEnvironment {
   if (explicit === "prod" || explicit === "production") return "prod";
   if (explicit === "test" || explicit === "staging") return "test";
 
-  const apiKey = String(process.env.SHOPIFY_API_KEY || "").trim();
+  const apiKey = sanitizeEnvLikeValue(process.env.SHOPIFY_API_KEY);
   if (apiKey === PROD_SHOPIFY_API_KEY) return "prod";
   if (apiKey === TEST_SHOPIFY_API_KEY) return "test";
 
@@ -118,8 +159,15 @@ function buildOfferMetafieldsInput(
   ownerId: string,
   offersPayload: string,
   _themeExtensionEnabled: boolean,
+  bundleApiOrigin: string | null,
 ) {
-  return [
+  const rows: Array<{
+    ownerId: string;
+    namespace: string;
+    key: string;
+    type: string;
+    value: string;
+  }> = [
     {
       ownerId,
       namespace: BUNDLE_METAFIELD_NAMESPACE,
@@ -128,6 +176,137 @@ function buildOfferMetafieldsInput(
       value: offersPayload,
     },
   ];
+  const origin = String(bundleApiOrigin || "")
+    .trim()
+    .replace(/\/+$/, "");
+  if (origin) {
+    rows.push({
+      ownerId,
+      namespace: BUNDLE_METAFIELD_NAMESPACE,
+      key: BUNDLE_METAFIELD_API_ORIGIN_KEY,
+      type: "single_line_text_field",
+      value: origin,
+    });
+  }
+  return rows;
+}
+
+function buildHydratedCompleteBundleSelectedProductsJson(
+  selectedProductsJson: string | null | undefined,
+  storeProductMap: Map<string, StoreProductItem>,
+): string | null {
+  if (!selectedProductsJson) return null;
+  const config = parseCompleteBundleConfig(selectedProductsJson);
+  if (!config.bars.length) return selectedProductsJson;
+
+  const bars = config.bars.map((bar) => ({
+    ...bar,
+    products: (bar.products || []).map((product) => {
+      const hit = storeProductMap.get(String(product.productId || ""));
+      if (!hit) return product;
+      const variants = Array.isArray(hit.variants) ? hit.variants : [];
+      const preferredVariantId = String(product.selectedVariantId || "");
+      const selectedVariant =
+        variants.find((variant) => String(variant.id) === preferredVariantId) || variants[0];
+
+      return {
+        ...product,
+        handle: hit.handle || product.handle || "",
+        title: hit.name || product.title || "",
+        image: hit.image || product.image || "",
+        price: selectedVariant?.price || product.price || hit.price || "",
+        defaultVariantId: String(variants[0]?.id || product.defaultVariantId || ""),
+        selectedVariantId:
+          String(selectedVariant?.id || product.selectedVariantId || variants[0]?.id || ""),
+        selectedOptions:
+          product.selectedOptions && Object.keys(product.selectedOptions).length > 0
+            ? product.selectedOptions
+            : Object.fromEntries(
+                (selectedVariant?.selectedOptions || []).map((opt) => [opt.name, opt.value]),
+              ),
+        variants,
+      };
+    }),
+  }));
+
+  return JSON.stringify({ bars });
+}
+
+async function buildCompactOffersPayload(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  _admin: any,
+  shopOffers: OfferListItem[],
+): Promise<string> {
+  // 仅同步 status=true 的活动，避免无效活动占用 payload 体积并干扰函数计算
+  const activeOffers = shopOffers.filter((offer) => offer.status === true);
+  // 先生成 Function 可安全消费的瘦 payload，避免 complete-bundle 展示字段把 metafield 撑爆。
+  const compactOffers = activeOffers.map((offer) => ({
+    id: offer.id,
+    name: offer.name,
+    cartTitle: offer.cartTitle,
+    status: offer.status,
+    startTime: offer.startTime,
+    endTime: offer.endTime,
+    selectedProductsJson: offer.selectedProductsJson ?? null,
+    discountRulesJson: offer.discountRulesJson ?? null,
+    offerSettingsJson: offer.offerSettingsJson ?? null,
+    offerType: offer.offerType,
+  }));
+  return JSON.stringify({
+    updatedAt: new Date().toISOString(),
+    offers: compactOffers,
+  });
+}
+
+async function buildStorefrontOffersPayload(
+  admin: any,
+  shopOffers: OfferListItem[],
+): Promise<string> {
+  const activeOffers = shopOffers.filter((offer) => offer.status === true);
+  const compactPayload = await buildCompactOffersPayload(admin, shopOffers);
+  const compactPayloadParsed = JSON.parse(compactPayload) as {
+    updatedAt?: string;
+    offers?: Array<{
+      id?: string;
+      name?: string;
+      cartTitle?: string;
+      status?: boolean;
+      startTime?: string;
+      endTime?: string;
+      selectedProductsJson?: string | null;
+      discountRulesJson?: string | null;
+      offerSettingsJson?: string | null;
+      offerType?: string;
+    }>;
+  };
+
+  // storefront 需要补齐 complete-bundle 展示字段，方便主题脚本直接渲染与加车。
+  const completeBundleProductIds = collectReferencedProductIds(
+    activeOffers.filter((offer) => offer.offerType === "complete-bundle"),
+  );
+  const storeProducts =
+    completeBundleProductIds.length > 0
+      ? await fetchStoreProducts(admin, completeBundleProductIds)
+      : [];
+  const storeProductMap = new Map(
+    storeProducts.map((product) => [String(product.id || ""), product]),
+  );
+
+  const storefrontOffers = (compactPayloadParsed.offers || []).map((offer) => ({
+    ...offer,
+    selectedProductsJson:
+      offer.offerType === "complete-bundle"
+        ? buildHydratedCompleteBundleSelectedProductsJson(
+            offer.selectedProductsJson,
+            storeProductMap,
+          )
+        : offer.selectedProductsJson ?? null,
+  }));
+
+  return JSON.stringify({
+    updatedAt: compactPayloadParsed.updatedAt || new Date().toISOString(),
+    offers: storefrontOffers,
+  });
 }
 
 async function syncShopOffersMetafield(
@@ -138,14 +317,69 @@ async function syncShopOffersMetafield(
 ): Promise<ShopOffersMetafieldSyncResult> {
   const prismaAny: any = prisma;
   try {
-    const shopOffers = (await prismaAny.offer.findMany({
-      where: { shopName: shopNameToSync },
-      orderBy: { createdAt: "desc" },
-    })) as OfferListItem[];
+    console.log("[offers-sync] start syncShopOffersMetafield", {
+      shopName: shopNameToSync,
+      themeExtensionEnabled,
+    });
+    let shopOffers: OfferListItem[];
+    try {
+      shopOffers = (await prismaAny.offer.findMany({
+        where: { shopName: shopNameToSync },
+        orderBy: { createdAt: "desc" },
+      })) as OfferListItem[];
+    } catch (error) {
+      if (!isMissingOfferCampaignConfigColumnError(error)) {
+        throw error;
+      }
+      console.warn(
+        "[offers-sync] campaignConfigJson column missing, falling back to legacy offer read",
+      );
+      const legacyRows = await prismaAny.offer.findMany({
+        where: { shopName: shopNameToSync },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          name: true,
+          cartTitle: true,
+          offerType: true,
+          startTime: true,
+          endTime: true,
+          status: true,
+          selectedProductsJson: true,
+          discountRulesJson: true,
+          offerSettingsJson: true,
+          exposurePV: true,
+          addToCartPV: true,
+          gmv: true,
+          conversion: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+      shopOffers = legacyRows.map((offer: any) => ({
+        ...offer,
+        campaignConfigJson: null,
+      })) as OfferListItem[];
+    }
+    console.log("[offers-sync] loaded offers from db", {
+      shopName: shopNameToSync,
+      offerCount: shopOffers.length,
+      offerIds: shopOffers.map((o) => o.id),
+    });
 
-    const metafieldValue = JSON.stringify({
+    const fullPayload = JSON.stringify({
       updatedAt: new Date().toISOString(),
       offers: shopOffers,
+    });
+    const functionMetafieldValue = await buildCompactOffersPayload(admin, shopOffers);
+    const storefrontMetafieldValue = await buildStorefrontOffersPayload(admin, shopOffers);
+    console.log("[offers-sync] payload size snapshot", {
+      totalOffers: shopOffers.length,
+      activeOffers: shopOffers.filter((offer) => offer.status === true).length,
+      fullPayloadLength: fullPayload.length,
+      functionPayloadLength: functionMetafieldValue.length,
+      storefrontPayloadLength: storefrontMetafieldValue.length,
+      functionReducedBy: fullPayload.length - functionMetafieldValue.length,
     });
 
     const shopIdResponse = await admin.graphql(
@@ -164,6 +398,7 @@ async function syncShopOffersMetafield(
     };
 
     if (shopIdJson.errors?.length) {
+      console.error("[offers-sync] shop id query graphql errors", shopIdJson.errors);
       return {
         ok: false,
         message: shopIdJson.errors
@@ -174,12 +409,25 @@ async function syncShopOffersMetafield(
 
     const shopId = shopIdJson?.data?.shop?.id;
     if (!shopId) {
+      console.error("[offers-sync] shop id missing in response", { shopIdJson });
       return {
         ok: false,
         message: "Failed to get shop ID, Metafield update failed",
       };
     }
 
+    const bundleApiOrigin =
+      String(process.env.SHOPIFY_APP_URL || "")
+        .trim()
+        .replace(/\/+$/, "") || null;
+    console.log("[offers-sync] writing shop metafield", {
+      shopId,
+      namespace: BUNDLE_METAFIELD_NAMESPACE,
+      key: BUNDLE_METAFIELD_BASE_KEY,
+      payloadLength: storefrontMetafieldValue.length,
+      bundleApiOrigin:
+        bundleApiOrigin || "(empty — theme A/B assign will skip until SHOPIFY_APP_URL is set)",
+    });
     const metafieldsSetResponse = await admin.graphql(
       `#graphql
       mutation MetafieldsSet($metafields: [MetafieldsSetInput!]!) {
@@ -200,8 +448,9 @@ async function syncShopOffersMetafield(
         variables: {
           metafields: buildOfferMetafieldsInput(
             shopId,
-            metafieldValue,
+            storefrontMetafieldValue,
             themeExtensionEnabled,
+            bundleApiOrigin,
           ),
         },
       },
@@ -217,6 +466,7 @@ async function syncShopOffersMetafield(
     };
 
     if (metafieldsSetJson.errors?.length) {
+      console.error("[offers-sync] metafieldsSet graphql errors", metafieldsSetJson.errors);
       return {
         ok: false,
         message: metafieldsSetJson.errors
@@ -227,14 +477,37 @@ async function syncShopOffersMetafield(
 
     const userErrors = metafieldsSetJson?.data?.metafieldsSet?.userErrors ?? [];
     if (userErrors.length > 0) {
+      console.error("[offers-sync] metafieldsSet userErrors", userErrors);
       return {
         ok: false,
         message: userErrors.map((e) => e.message || "unknown").join("; "),
       };
     }
 
+    // 关键：Discount Function 运行时优先从 discount owner 读取配置。
+    // 这里把同一份 offers JSON 同步到自动折扣本身，避免 shop.metafield 在 Function 侧不可见。
+    console.log("[offers-sync] ensure automatic discount before owner metafield sync");
+    await ensureCartLinesAutomaticDiscount(admin);
+    console.log("[offers-sync] syncing offers into automatic discount owner metafields");
+    const discountSyncResult = await syncCartLinesAutomaticDiscountMetafield(
+      admin,
+      functionMetafieldValue,
+    );
+    if (!discountSyncResult.ok) {
+      console.error("[offers-sync] sync discount owner metafield failed", {
+        message: discountSyncResult.message,
+      });
+      return discountSyncResult;
+    }
+
+    console.log("[offers-sync] success", {
+      shopName: shopNameToSync,
+      shopId,
+      offerCount: shopOffers.length,
+    });
     return { ok: true };
   } catch (error) {
+    console.error("[offers-sync] unexpected exception", error);
     const msg = error instanceof Error ? error.message : JSON.stringify(error);
     return { ok: false, message: msg || "Metafield sync failed" };
   }
@@ -243,9 +516,44 @@ async function syncShopOffersMetafield(
 export type StoreProductItem = {
   id: string;
   name: string;
+  handle: string;
   price: string;
   image: string;
+  variants: Array<{
+    id: string;
+    title: string;
+    price: string;
+    selectedOptions: Array<{ name: string; value: string }>;
+  }>;
+  hasSubscription: boolean;
 };
+
+type AdminProductVariantPayload = {
+  id?: string | null;
+  title?: string | null;
+  price?: string | null;
+  selectedOptions?: Array<{
+    name?: string | null;
+    value?: string | null;
+  } | null> | null;
+};
+
+type AdminProductNode = {
+  id?: string;
+  title?: string;
+  handle?: string;
+  featuredImage?: { url?: string | null } | null;
+  variants?: {
+    edges?: Array<{
+      node?: AdminProductVariantPayload | null;
+    }>;
+    nodes?: Array<AdminProductVariantPayload | null> | null;
+  } | null;
+  sellingPlanGroups?: {
+    edges?: Array<{ node?: { id?: string | null } | null }>;
+    nodes?: Array<{ id?: string | null } | null> | null;
+  } | null;
+} | null;
 
 export type MarketItem = {
   id: string;
@@ -268,14 +576,139 @@ export type IndexLoaderData = {
 async function fetchShopOffers(shop: string): Promise<OfferListItem[]> {
   try {
     const prismaOffers = await getCachedShopOffers(shop);
-    return prismaOffers as unknown as OfferListItem[];
+    const offers = prismaOffers as unknown as OfferListItem[];
+
+    const activeAbTests = offers.filter((o) => o.offerType === "abTest" && o.status === true);
+    if (activeAbTests.length > 1) {
+      const keep = activeAbTests[0];
+      try {
+        const prismaAny: any = prisma;
+        await prismaAny.offer.updateMany({
+          where: {
+            shopName: shop,
+            offerType: "abTest",
+            status: true,
+            id: { not: keep.id },
+          },
+          data: { status: false },
+        });
+        invalidateShopOffersCache(shop);
+        const refreshed = (await getCachedShopOffers(shop)) as unknown as OfferListItem[];
+        return refreshed;
+      } catch (e) {
+        console.error("Failed to enforce single active abTest offer on load", e);
+        return offers;
+      }
+    }
+
+    return offers;
   } catch (error) {
     console.error("Failed to get cached shop offers", error);
     return [];
   }
 }
 
-async function fetchStoreProducts(admin: any): Promise<StoreProductItem[]> {
+function mapAdminProductNodeToStoreProductItem(
+  node: AdminProductNode | undefined,
+): StoreProductItem | null {
+  const variantNodes = node?.variants?.nodes;
+  const variantSources = Array.isArray(variantNodes)
+    ? variantNodes
+    : node?.variants?.edges?.map((e) => e?.node);
+  const variantsPayload =
+    variantSources?.filter((v): v is AdminProductVariantPayload =>
+      Boolean(v && v.id),
+    ) ?? [];
+  const priceRaw = variantsPayload[0]?.price;
+  const image = node?.featuredImage?.url;
+  if (!node?.id || !node.title) {
+    return null;
+  }
+  const sellingNodes = node?.sellingPlanGroups?.nodes;
+  const hasSellingPlanGroupsFromNodes =
+    Array.isArray(sellingNodes) && sellingNodes.some(Boolean);
+  const hasSellingPlanGroupsFromEdges =
+    ((node?.sellingPlanGroups?.edges as Array<unknown> | undefined) ?? [])
+      .length > 0;
+  return {
+    id: node.id,
+    name: node.title,
+    handle: String(node.handle || ""),
+    price: priceRaw ? `$${priceRaw}` : "$0.00",
+    image: image || "https://via.placeholder.com/60",
+    variants: variantsPayload.map((v) => ({
+      id: String(v.id || ""),
+      title: String(v.title || ""),
+      price: String(v.price || ""),
+      selectedOptions: Array.isArray(v.selectedOptions)
+        ? v.selectedOptions
+            .filter((opt): opt is NonNullable<typeof opt> => Boolean(opt))
+            .map((opt) => ({
+              name: String(opt.name || ""),
+              value: String(opt.value || ""),
+            }))
+        : [],
+    })),
+    hasSubscription:
+      hasSellingPlanGroupsFromNodes || hasSellingPlanGroupsFromEdges,
+  };
+}
+
+function parseBxgySelectedProductIds(selectedProductsJson?: string | null): string[] {
+  if (!selectedProductsJson) return [];
+  try {
+    const parsed = JSON.parse(selectedProductsJson) as {
+      buyProducts?: unknown;
+      getProducts?: unknown;
+    };
+    return [
+      ...(Array.isArray(parsed.buyProducts) ? parsed.buyProducts : []),
+      ...(Array.isArray(parsed.getProducts) ? parsed.getProducts : []),
+    ]
+      .map((id) => String(id || "").trim())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function collectReferencedProductIds(offers: OfferListItem[]): string[] {
+  const ids = new Set<string>();
+  for (const offer of offers) {
+    if (offer.offerType === "complete-bundle") {
+      const config = parseCompleteBundleConfig(offer.selectedProductsJson);
+      for (const bar of config.bars) {
+        for (const product of bar.products || []) {
+          const productId = String(product.productId || "").trim();
+          if (productId) ids.add(productId);
+        }
+      }
+      continue;
+    }
+
+    const selectedIds =
+      offer.offerType === "bxgy"
+        ? parseBxgySelectedProductIds(offer.selectedProductsJson)
+        : offer.offerType === "quantity-breaks-different"
+          ? parseSelectedProductIds(offer.selectedProductsJson)
+        : offer.offerType === "free-gift"
+          ? [
+              ...parseFreeGiftSelectedProducts(offer.selectedProductsJson).triggerProducts,
+              ...parseFreeGiftSelectedProducts(offer.selectedProductsJson).giftProducts,
+            ]
+        : parseSelectedProductIds(offer.selectedProductsJson);
+    for (const productId of selectedIds) {
+      const normalized = String(productId || "").trim();
+      if (normalized) ids.add(normalized);
+    }
+  }
+  return Array.from(ids);
+}
+
+async function fetchStoreProducts(
+  admin: any,
+  includeProductIds: string[] = [],
+): Promise<StoreProductItem[]> {
   let productsResponse;
   let productsJson;
   try {
@@ -287,13 +720,30 @@ async function fetchStoreProducts(admin: any): Promise<StoreProductItem[]> {
               node {
                 id
                 title
+                handle
+                options {
+                  name
+                }
                 featuredImage {
                   url
                 }
-                variants(first: 1) {
+                variants(first: 50) {
                   edges {
                     node {
+                      id
+                      title
                       price
+                      selectedOptions {
+                        name
+                        value
+                      }
+                    }
+                  }
+                }
+                sellingPlanGroups(first: 1) {
+                  edges {
+                    node {
+                      id
                     }
                   }
                 }
@@ -312,33 +762,78 @@ async function fetchStoreProducts(admin: any): Promise<StoreProductItem[]> {
   const productEdges =
     (productsJson?.data?.products?.edges as
       | Array<{
-          node?: {
-            id?: string;
-            title?: string;
-            featuredImage?: { url?: string | null } | null;
-            variants?: {
-              edges?: Array<{ node?: { price?: string | null } | null }>;
-            } | null;
-          } | null;
+          node?: AdminProductNode;
         }>
       | undefined) ?? [];
 
-  return productEdges
-    .map((edge) => {
-      const node = edge?.node;
-      const priceRaw = node?.variants?.edges?.[0]?.node?.price;
-      const image = node?.featuredImage?.url;
-      if (!node?.id || !node.title) {
-        return null;
+  const productMap = new Map<string, StoreProductItem>();
+  for (const edge of productEdges) {
+    const mapped = mapAdminProductNodeToStoreProductItem(edge?.node);
+    if (mapped) productMap.set(mapped.id, mapped);
+  }
+
+  const missingIds = Array.from(
+    new Set(
+      includeProductIds
+        .map((id) => String(id || "").trim())
+        .filter((id) => id && !productMap.has(id)),
+    ),
+  );
+
+  // 中文注释：编辑历史 offer 时，把已引用但不在前 100 个里的商品也补进来，避免预览只显示 productId。
+  for (let i = 0; i < missingIds.length; i += 50) {
+    const batchIds = missingIds.slice(i, i + 50);
+    try {
+      const byIdsResponse = await admin.graphql(
+        `#graphql
+          query ProductsByIds($ids: [ID!]!) {
+            nodes(ids: $ids) {
+              ... on Product {
+                id
+                title
+                handle
+                featuredImage {
+                  url
+                }
+                variants(first: 50) {
+                  nodes {
+                    id
+                    title
+                    price
+                    selectedOptions {
+                      name
+                      value
+                    }
+                  }
+                }
+                sellingPlanGroups(first: 1) {
+                  nodes {
+                    id
+                  }
+                }
+              }
+            }
+          }
+        `,
+        { variables: { ids: batchIds } },
+      );
+      const byIdsJson = await byIdsResponse.json();
+      const nodes = Array.isArray(byIdsJson?.data?.nodes)
+        ? (byIdsJson.data.nodes as AdminProductNode[])
+        : [];
+      for (const node of nodes) {
+        const mapped = mapAdminProductNodeToStoreProductItem(node);
+        if (mapped) productMap.set(mapped.id, mapped);
       }
-      return {
-        id: node.id,
-        name: node.title,
-        price: priceRaw ? `$${priceRaw}` : "$0.00",
-        image: image || "https://via.placeholder.com/60",
-      };
-    })
-    .filter((item): item is StoreProductItem => item !== null);
+    } catch (error) {
+      console.error("Failed to fetch referenced products by ids", {
+        batchIds,
+        error,
+      });
+    }
+  }
+
+  return Array.from(productMap.values());
 }
 
 const ensureWebPixel = async (admin: any, shop: string) => {
@@ -393,7 +888,7 @@ const ensureWebPixel = async (admin: any, shop: string) => {
         webPixel: {
           settings: {
             shopName: shop,
-            server: process.env.SHOPIFY_APP_URL || "",
+            server: sanitizeUrlLikeEnvValue(process.env.SHOPIFY_APP_URL),
           },
         },
       },
@@ -578,8 +1073,10 @@ const getThemeExtensionEnabled = async (
 };
 
 async function getCurrentThemeExtensionEnabled(admin: any): Promise<boolean> {
-  const apiKey = process.env.SHOPIFY_API_KEY || "";
-  const appDisplayName = process.env.SHOPIFY_APP_NAME || process.env.APP_NAME;
+  const apiKey = sanitizeEnvLikeValue(process.env.SHOPIFY_API_KEY);
+  const appDisplayName =
+    sanitizeEnvLikeValue(process.env.SHOPIFY_APP_NAME) ||
+    sanitizeEnvLikeValue(process.env.APP_NAME);
   try {
     return await getThemeExtensionEnabled(
       admin,
@@ -670,9 +1167,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   void ensureCartLinesAutomaticDiscount(admin).catch((error) => {
     console.error("Failed to ensure automatic app discount exists", error);
   });
+  // 中文说明：历史安装店可能只有商品折扣自动规则，需在每次进入 App 时补偿创建 SHIPPING 自动折扣
+  void ensureBundleDeliveryAutomaticDiscount(admin).catch((error) => {
+    console.error("Failed to ensure shipping automatic app discount exists", error);
+  });
 
   // eslint-disable-next-line no-undef
-  const apiKey = process.env.SHOPIFY_API_KEY || "";
+  const apiKey = sanitizeEnvLikeValue(process.env.SHOPIFY_API_KEY);
 
   // 获取商店时区
   let ianaTimezone = "UTC";
@@ -757,8 +1258,101 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   let intent = formData.get("intent");
 
   if (intent === "load-store-products") {
-    const storeProducts = await fetchStoreProducts(admin);
+    const offers = await fetchShopOffers(session.shop);
+    const storeProducts = await fetchStoreProducts(
+      admin,
+      collectReferencedProductIds(offers),
+    );
     return Response.json({ storeProducts });
+  }
+  if (intent === "get-product-subscription-status") {
+    const productId = String(formData.get("productId") || "").trim();
+    if (!productId) {
+      return Response.json(
+        { ok: false as const, error: "Missing product ID" },
+        { status: 400 },
+      );
+    }
+
+    try {
+      const response = await admin.graphql(
+        `#graphql
+          query GetProductSubscriptionStatus($id: ID!) {
+            product(id: $id) {
+              id
+              title
+              sellingPlanGroups(first: 10) {
+                edges {
+                  node {
+                    id
+                    name
+                  }
+                }
+              }
+              requiresSellingPlan
+            }
+          }
+        `,
+        {
+          variables: {
+            id: productId,
+          },
+        },
+      );
+      const json = (await response.json()) as {
+        data?: {
+          product?: {
+            id?: string;
+            title?: string;
+            requiresSellingPlan?: boolean;
+            sellingPlanGroups?: {
+              edges?: Array<{
+                node?: {
+                  id?: string;
+                  name?: string;
+                } | null;
+              }>;
+            };
+          } | null;
+        };
+        errors?: unknown;
+      };
+
+      if (json.errors) {
+        console.error("GraphQL errors fetching product subscription status:", json.errors);
+      }
+
+      const product = json.data?.product;
+      const sellingPlanGroups =
+        product?.sellingPlanGroups?.edges
+          ?.map((edge) => edge?.node)
+          .filter(
+            (
+              node,
+            ): node is {
+              id?: string;
+              name?: string;
+            } => !!node,
+          ) ?? [];
+
+      return Response.json({
+        ok: true as const,
+        product: {
+          id: product?.id ?? productId,
+          title: product?.title ?? "",
+          requiresSellingPlan: product?.requiresSellingPlan === true,
+          sellingPlanGroups,
+          hasSubscription:
+            product?.requiresSellingPlan === true || sellingPlanGroups.length > 0,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to fetch product subscription status", error);
+      return Response.json(
+        { ok: false as const, error: "Failed to fetch product subscription status" },
+        { status: 500 },
+      );
+    }
   }
   if (intent === "load-offers") {
     const offers = await fetchShopOffers(session.shop);
@@ -866,23 +1460,26 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       OFFER_TEXT_LIMITS.cartTitle,
       "Bundle Discount",
     );
-    const offerType = String(formData.get("offerType") || "").trim();
+    let offerType = String(formData.get("offerType") || "").trim();
     const layoutFormatRaw = String(formData.get("layoutFormat") || "").trim();
     const layoutFormat = ["vertical", "horizontal", "card", "compact"].includes(
       layoutFormatRaw,
     )
       ? layoutFormatRaw
       : "vertical";
-    const startTimeRaw = String(formData.get("startTime") || "").trim();
-    const endTimeRaw = String(formData.get("endTime") || "").trim();
-    const selectedProductsJson = String(
+    let startTimeRaw = String(formData.get("startTime") || "").trim();
+    let endTimeRaw = String(formData.get("endTime") || "").trim();
+    let selectedProductsJson = String(
       formData.get("selectedProductsJson") || "",
     );
-    const discountRulesJson = String(formData.get("discountRulesJson") || "");
+    let discountRulesJson = String(formData.get("discountRulesJson") || "");
+    const campaignConfigJsonRaw = String(
+      formData.get("campaignConfigJson") || "",
+    ).trim();
 
     // Status is checked, defaults to false if not provided or explicitly 'false'
     const statusRaw = String(formData.get("status") || "");
-    const status = statusRaw === "true";
+    let status = statusRaw === "true";
 
     const totalBudgetRaw = formData.get("totalBudget");
     const dailyBudgetRaw = formData.get("dailyBudget");
@@ -931,6 +1528,91 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
     const showCustomButtonRaw = String(formData.get("showCustomButton") || "");
     const showCustomButton = showCustomButtonRaw !== "false";
+    const subscriptionEnabledRaw = String(
+      formData.get("subscriptionEnabled") || "",
+    );
+    const subscriptionEnabled = subscriptionEnabledRaw === "true";
+    const subscriptionPositionRaw = String(
+      formData.get("subscriptionPosition") || "below-bundle-bars",
+    ).trim();
+    const subscriptionPosition = ["below-bundle-bars"].includes(
+      subscriptionPositionRaw,
+    )
+      ? subscriptionPositionRaw
+      : "below-bundle-bars";
+    const subscriptionTitle = sanitizeSingleLineText(
+      formData.get("subscriptionTitle"),
+      60,
+      "Subscribe & Save 20%",
+    );
+    const subscriptionSubtitle = sanitizeSingleLineText(
+      formData.get("subscriptionSubtitle"),
+      60,
+      "Delivered weekly",
+    );
+    const oneTimeTitle = sanitizeSingleLineText(
+      formData.get("oneTimeTitle"),
+      60,
+      "One-time purchase",
+    );
+    const oneTimeSubtitle = sanitizeSingleLineText(
+      formData.get("oneTimeSubtitle"),
+      60,
+      "",
+    );
+    const subscriptionDefaultSelectedRaw = String(
+      formData.get("subscriptionDefaultSelected") || "",
+    );
+    const subscriptionDefaultSelected =
+      subscriptionDefaultSelectedRaw === "true";
+
+    const enableMultiProductBundle =
+      String(formData.get("enableMultiProductBundle") || "") === "true";
+    const chooseButtonText = sanitizeSingleLineText(
+      formData.get("chooseButtonText"),
+      OFFER_TEXT_LIMITS.buttonText,
+      "Choose",
+    );
+    const chooseButtonColor = sanitizeHexColorParam(
+      String(formData.get("chooseButtonColor") || ""),
+      "#111111",
+    );
+    const chooseButtonSize = clampNumber(
+      formData.get("chooseButtonSize"),
+      24,
+      44,
+      28,
+    );
+    const chooseImageSize = clampNumber(
+      formData.get("chooseImageSize"),
+      24,
+      64,
+      40,
+    );
+    const abTestPayloadRaw = String(formData.get("abTestPayloadJson") || "").trim();
+    const abGroupADiscountPercent = clampNumber(
+      formData.get("abGroupADiscountPercent"),
+      0,
+      100,
+      10,
+    );
+    const abGroupBDiscountPercent = clampNumber(
+      formData.get("abGroupBDiscountPercent"),
+      0,
+      100,
+      90,
+    );
+    const abBucketSplitPercent = clampNumber(
+      formData.get("abBucketSplitPercent"),
+      1,
+      99,
+      50,
+    );
+    const abSaltRaw = sanitizeSingleLineText(formData.get("abSalt"), 120, "");
+    const abSaltFallback =
+      abSaltRaw ||
+      sanitizeSingleLineText(process.env.AB_TEST_SALT, 120, "") ||
+      generateAbTestSalt();
 
     const title = sanitizeSingleLineText(
       formData.get("title"),
@@ -946,17 +1628,107 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (discountRulesJson.length > 50_000) {
       return offerActionErrorResponse("Discount rules data is too large. Please reduce the number of rules.", 400);
     }
+    if (offerType === "complete-bundle") {
+      const completeBundle = parseCompleteBundleConfig(selectedProductsJson);
+      if (!completeBundle.bars.length) {
+        return offerActionErrorResponse(
+          "Complete bundle requires at least one bar.",
+          400,
+        );
+      }
+      const hasInvalidBar = completeBundle.bars.some(
+        (bar) => !bar.products.length || !Number.isFinite(Number(bar.quantity)) || Number(bar.quantity) < 1,
+      );
+      if (hasInvalidBar) {
+        return offerActionErrorResponse(
+          "Each complete bundle bar must have products and a valid quantity.",
+          400,
+        );
+      }
+    }
 
-    const offerSettingsJson = JSON.stringify({
+    let abTestStored = parseAbTestOfferSettingsBlock(
+      {
+        groupADiscountPercent: abGroupADiscountPercent,
+        groupBDiscountPercent: abGroupBDiscountPercent,
+        bucketSplitPercent: abBucketSplitPercent,
+        salt: abSaltFallback,
+      },
+      abSaltFallback,
+    );
+    if (offerType === "abTest") {
+      if (!abTestPayloadRaw) {
+        return offerActionErrorResponse(
+          "Missing A/B test configuration (abTestPayloadJson).",
+          400,
+        );
+      }
+      try {
+        const raw = JSON.parse(abTestPayloadRaw) as Record<string, unknown>;
+        const saltFromPayload = sanitizeSingleLineText(
+          raw?.salt,
+          120,
+          abSaltFallback,
+        );
+        abTestStored = parseAbTestOfferSettingsBlock(
+          raw,
+          saltFromPayload || abSaltFallback,
+        );
+      } catch {
+        return offerActionErrorResponse("Invalid A/B test configuration JSON.", 400);
+      }
+      if (!abTestStored.variants || abTestStored.variants.length < 2) {
+        return offerActionErrorResponse(
+          "A/B test requires at least two variants.",
+          400,
+        );
+      }
+      if (abTestStored.variants.length > 4) {
+        return offerActionErrorResponse(
+          "A/B test supports at most 4 variants.",
+          400,
+        );
+      }
+    }
+
+    const progressiveGiftsJsonRaw = String(
+      formData.get("progressiveGiftsJson") || "",
+    ).trim();
+    if (progressiveGiftsJsonRaw.length > 100_000) {
+      return offerActionErrorResponse("Progressive gifts data is too large.", 400);
+    }
+    let progressiveGiftsSanitized = parseProgressiveGiftsConfig(null);
+    if (progressiveGiftsJsonRaw) {
+      try {
+        progressiveGiftsSanitized = parseProgressiveGiftsConfig(
+          JSON.parse(progressiveGiftsJsonRaw) as unknown,
+        );
+      } catch {
+        return offerActionErrorResponse("Invalid progressive gifts JSON.", 400);
+      }
+    }
+
+    const abSaltFinal =
+      offerType === "abTest"
+        ? abTestStored.salt || abSaltFallback
+        : abSaltFallback;
+
+    let offerSettingsJson = JSON.stringify({
       title,
       layoutFormat,
       totalBudget:
         typeof totalBudgetRaw === "string" && totalBudgetRaw.trim()
-          ? Math.max(0, clampNumber(totalBudgetRaw, 0, Number.MAX_SAFE_INTEGER, 0))
+          ? Math.max(
+              0,
+              clampNumber(totalBudgetRaw, 0, Number.MAX_SAFE_INTEGER, 0),
+            )
           : null,
       dailyBudget:
         typeof dailyBudgetRaw === "string" && dailyBudgetRaw.trim()
-          ? Math.max(0, clampNumber(dailyBudgetRaw, 0, Number.MAX_SAFE_INTEGER, 0))
+          ? Math.max(
+              0,
+              clampNumber(dailyBudgetRaw, 0, Number.MAX_SAFE_INTEGER, 0),
+            )
           : null,
       customerSegments: customerSegments.length
         ? customerSegments.join(",")
@@ -973,8 +1745,88 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       titleFontWeight,
       buttonText,
       showCustomButton,
+      subscriptionEnabled,
+      subscriptionPosition,
+      subscriptionTitle,
+      subscriptionSubtitle,
+      oneTimeTitle,
+      oneTimeSubtitle,
+      subscriptionDefaultSelected,
+      enableMultiProductBundle,
+      chooseButtonText,
+      chooseButtonColor,
+      chooseButtonSize,
+      chooseImageSize,
+      abTest:
+        offerType === "abTest"
+          ? {
+              salt: abSaltFinal,
+              allocationMode: abTestStored.allocationMode,
+              trafficWeights: abTestStored.trafficWeights,
+              variants: abTestStored.variants,
+            }
+          : {
+              groupADiscountPercent: abGroupADiscountPercent,
+              groupBDiscountPercent: abGroupBDiscountPercent,
+              bucketSplitPercent: abBucketSplitPercent,
+              salt: abSaltFinal,
+            },
       scheduleTimezone: scheduleTimezoneRaw || undefined,
+      progressiveGifts: progressiveGiftsConfigToStorableJson(
+        progressiveGiftsSanitized,
+      ),
     });
+
+    let campaignConfigJson: string | null = null;
+
+    if (offerType !== "abTest") {
+      if (campaignConfigJsonRaw.length > 100_000) {
+        return offerActionErrorResponse(
+          "Campaign configuration is too large. Please simplify the campaign.",
+          400,
+        );
+      }
+
+      if (campaignConfigJsonRaw) {
+        const parsedCampaignConfig = parseCampaignConfig(campaignConfigJsonRaw);
+        if (!parsedCampaignConfig) {
+          return offerActionErrorResponse("Invalid campaign configuration.", 400);
+        }
+        if (parsedCampaignConfig.scope.productIds.length === 0) {
+          return offerActionErrorResponse("Please select at least one product.", 400);
+        }
+        if (parsedCampaignConfig.logicBlocks.length === 0) {
+          return offerActionErrorResponse(
+            "Please add at least one promotion rule.",
+            400,
+          );
+        }
+        const derivedLegacyFields =
+          buildLegacyFieldsFromCampaignConfig(parsedCampaignConfig);
+        campaignConfigJson = JSON.stringify(parsedCampaignConfig);
+        offerType = derivedLegacyFields.offerType;
+        if (!selectedProductsJson) {
+          selectedProductsJson = derivedLegacyFields.selectedProductsJson || "";
+        }
+        discountRulesJson =
+          derivedLegacyFields.discountRulesJson || discountRulesJson;
+        offerSettingsJson = derivedLegacyFields.offerSettingsJson;
+        status = parsedCampaignConfig.settings.status;
+        startTimeRaw = parsedCampaignConfig.settings.startTime || startTimeRaw;
+        endTimeRaw = parsedCampaignConfig.settings.endTime || endTimeRaw;
+      } else {
+        const derivedCampaignConfig = migrateLegacyOfferToCampaignConfig({
+          offerType,
+          selectedProductsJson,
+          discountRulesJson,
+          offerSettingsJson,
+          startTime: startTimeRaw,
+          endTime: endTimeRaw,
+          status,
+        });
+        campaignConfigJson = JSON.stringify(derivedCampaignConfig);
+      }
+    }
 
     // Store which Shopify shop this offer belongs to.
     // `session.shop` is typically the shop's domain. As a fallback, use GraphQL `shop.name`.
@@ -1038,19 +1890,76 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       startTime,
       endTime,
       status,
+      campaignConfigJson,
       offerSettingsJson,
       selectedProductsJson: selectedProductsJson || null,
       discountRulesJson: discountRulesJson || null,
+    };
+    const legacyData = {
+      ...data,
+      campaignConfigJson: undefined,
     };
 
     const url = new URL(request.url);
 
     if (intent === "create-offer") {
       try {
-        await writeOfferWithRetry(() => prismaAny.offer.create({ data }));
+        const createdOffer = (await writeOfferWithRetry(() =>
+          prismaAny.offer.create({ data }),
+        )) as { id: string };
+        if (offerType === "abTest" && status === true && createdOffer?.id) {
+          await prismaAny.offer.updateMany({
+            where: {
+              shopName,
+              offerType: "abTest",
+              id: { not: createdOffer.id },
+            },
+            data: { status: false },
+          });
+        }
         url.searchParams.set("toast", `create-success-${Date.now()}`);
       } catch (error: any) {
-        if (
+        if (isMissingOfferCampaignConfigColumnError(error)) {
+          console.warn(
+            "[offer-create] campaignConfigJson column missing, retrying with legacy payload only",
+          );
+          try {
+            const createdOffer = (await writeOfferWithRetry(() =>
+              prismaAny.offer.create({ data: legacyData }),
+            )) as { id: string };
+            if (offerType === "abTest" && status === true && createdOffer?.id) {
+              await prismaAny.offer.updateMany({
+                where: {
+                  shopName,
+                  offerType: "abTest",
+                  id: { not: createdOffer.id },
+                },
+                data: { status: false },
+              });
+            }
+            url.searchParams.set("toast", `create-success-${Date.now()}`);
+          } catch (legacyError: any) {
+            if (legacyError.code === "P2002") {
+              return offerActionErrorResponse(
+                "An offer with this name already exists. Please choose a different name.",
+                409,
+              );
+            }
+            console.error("offer create failed after legacy fallback", {
+              error: legacyError,
+              form: {
+                nameRaw,
+                offerType,
+                startTimeRaw,
+                endTimeRaw,
+                selectedProductsJson,
+                discountRulesJson,
+                offerSettingsJson,
+              },
+            });
+            return offerActionErrorResponse("Failed to create offer. Please try again later.", 500);
+          }
+        } else if (
           error.code === "P2002"
         ) {
           return offerActionErrorResponse(
@@ -1077,15 +1986,77 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return offerActionErrorResponse("Missing offer ID, cannot update.", 400);
       }
       try {
-        await writeOfferWithRetry(() =>
+        const updatedOfferRecord = (await writeOfferWithRetry(() =>
           prismaAny.offer.update({
             where: { id: idRaw },
             data,
           }),
-        );
+        )) as { id: string };
+        if (
+          offerType === "abTest" &&
+          status === true &&
+          updatedOfferRecord?.id
+        ) {
+          await prismaAny.offer.updateMany({
+            where: {
+              shopName,
+              offerType: "abTest",
+              id: { not: updatedOfferRecord.id },
+            },
+            data: { status: false },
+          });
+        }
         url.searchParams.set("toast", `update-success-${Date.now()}`);
       } catch (error: any) {
-        if (
+        if (isMissingOfferCampaignConfigColumnError(error)) {
+          console.warn(
+            "[offer-update] campaignConfigJson column missing, retrying with legacy payload only",
+          );
+          try {
+            const updatedOfferRecord = (await writeOfferWithRetry(() =>
+              prismaAny.offer.update({
+                where: { id: idRaw },
+                data: legacyData,
+              }),
+            )) as { id: string };
+            if (
+              offerType === "abTest" &&
+              status === true &&
+              updatedOfferRecord?.id
+            ) {
+              await prismaAny.offer.updateMany({
+                where: {
+                  shopName,
+                  offerType: "abTest",
+                  id: { not: updatedOfferRecord.id },
+                },
+                data: { status: false },
+              });
+            }
+            url.searchParams.set("toast", `update-success-${Date.now()}`);
+          } catch (legacyError: any) {
+            if (legacyError.code === "P2002") {
+              return offerActionErrorResponse(
+                "An offer with this name already exists. Please choose a different name.",
+                409,
+              );
+            }
+            console.error("offer update failed after legacy fallback", {
+              error: legacyError,
+              form: {
+                idRaw,
+                nameRaw,
+                offerType,
+                startTimeRaw,
+                endTimeRaw,
+                selectedProductsJson,
+                discountRulesJson,
+                offerSettingsJson,
+              },
+            });
+            return offerActionErrorResponse("Failed to update offer. Please try again later.", 500);
+          }
+        } else if (
           error.code === "P2002"
         ) {
           return offerActionErrorResponse(
@@ -1156,6 +2127,28 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return offerActionErrorResponse("Toggle status failed.", 500);
     }
 
+    try {
+      if (
+        updatedOffer?.offerType === "abTest" &&
+        nextStatus === true &&
+        updatedOffer?.shopName
+      ) {
+        await prismaAny.offer.updateMany({
+          where: {
+            shopName: String(updatedOffer.shopName),
+            offerType: "abTest",
+            id: { not: idRaw },
+          },
+          data: { status: false },
+        });
+      }
+    } catch (e) {
+      console.error(
+        "toggle-offer-status abTest single-enable enforcement failed",
+        e,
+      );
+    }
+
     // Sync metafield
     try {
       const shopNameToSync = updatedOffer?.shopName as string | undefined;
@@ -1182,6 +2175,149 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     return Response.json({ success: true, toast: `toggle-success-${Date.now()}` });
+  }
+
+  if (intent === "abtest-force-split") {
+    const offerIdRaw = String(formData.get("offerId") || "").trim();
+    const splitModeRaw = String(formData.get("splitMode") || "").trim();
+    const targetVariantKeyRaw = String(
+      formData.get("targetVariantKey") || "",
+    ).trim();
+
+    if (!offerIdRaw) {
+      return offerActionErrorResponse("Missing offerId.", 400);
+    }
+    if (!splitModeRaw || !["full", "disable"].includes(splitModeRaw)) {
+      return offerActionErrorResponse("Invalid splitMode.", 400);
+    }
+
+    const offer = await prismaAny.offer.findUnique({
+      where: { id: offerIdRaw },
+    });
+
+    if (!offer) {
+      return offerActionErrorResponse("Offer not found.", 404);
+    }
+    if (offer.offerType !== "abTest") {
+      return offerActionErrorResponse("Offer is not abTest.", 400);
+    }
+    if (!offer.shopName) {
+      return offerActionErrorResponse("Missing shopName for offer.", 400);
+    }
+
+    const shopNameToSync = String(offer.shopName);
+
+    if (splitModeRaw === "disable") {
+      await prismaAny.offer.updateMany({
+        where: { shopName: shopNameToSync, offerType: "abTest" },
+        data: { status: false },
+      });
+    } else {
+      await prismaAny.offer.updateMany({
+        where: {
+          shopName: shopNameToSync,
+          offerType: "abTest",
+          id: { not: offerIdRaw },
+        },
+        data: { status: false },
+      });
+    }
+
+    let nextOfferSettingsJson: string | null = null;
+    if (splitModeRaw === "full") {
+      if (!targetVariantKeyRaw) {
+        return offerActionErrorResponse(
+          "Missing targetVariantKey for full split.",
+          400,
+        );
+      }
+      if (!offer.offerSettingsJson) {
+        return offerActionErrorResponse("Missing offerSettingsJson.", 400);
+      }
+
+      let parsedSettings: Record<string, unknown>;
+      try {
+        parsedSettings = JSON.parse(
+          String(offer.offerSettingsJson),
+        ) as Record<string, unknown>;
+      } catch {
+        return offerActionErrorResponse("Invalid offerSettingsJson.", 400);
+      }
+
+      const abRaw = parsedSettings?.abTest;
+      const saltHint =
+        abRaw && typeof abRaw === "object" && (abRaw as { salt?: unknown }).salt
+          ? String((abRaw as { salt?: unknown }).salt)
+          : "";
+      const parsedAb = parseAbTestOfferSettingsBlock(abRaw, saltHint);
+
+      const variants = parsedAb.variants || [];
+      if (variants.length < 2) {
+        return offerActionErrorResponse("abTest variants insufficient.", 400);
+      }
+
+      const targetIdx = variants.findIndex(
+        (v) => String(v.key) === targetVariantKeyRaw,
+      );
+      if (targetIdx < 0) {
+        return offerActionErrorResponse(
+          `targetVariantKey not found in this offer: ${targetVariantKeyRaw}`,
+          400,
+        );
+      }
+
+      const nextTrafficWeights = variants.map((_, idx) =>
+        idx === targetIdx ? 100 : 0,
+      );
+
+      const nextAbTest = {
+        ...(typeof abRaw === "object" && abRaw ? abRaw : {}),
+        salt: parsedAb.salt,
+        allocationMode: "custom",
+        trafficWeights: nextTrafficWeights,
+        variants: parsedAb.variants,
+      };
+
+      parsedSettings.abTest = nextAbTest as unknown as Record<string, unknown>;
+      nextOfferSettingsJson = JSON.stringify(parsedSettings);
+    }
+
+    if (splitModeRaw === "full") {
+      await prismaAny.offer.update({
+        where: { id: offerIdRaw },
+        data: {
+          status: true,
+          offerSettingsJson: nextOfferSettingsJson,
+        },
+      });
+    }
+
+    try {
+      const themeExtensionEnabled = await getCurrentThemeExtensionEnabled(admin);
+      const syncResult = await syncShopOffersMetafield(
+        admin,
+        shopNameToSync,
+        themeExtensionEnabled,
+      );
+      if (!syncResult.ok) {
+        console.error("Failed to sync offers metafield after abtest-force-split", {
+          shopNameToSync,
+          message: syncResult.message,
+        });
+      }
+    } catch (error) {
+      console.error(
+        "Failed to sync offers metafield after abtest-force-split",
+        error,
+      );
+    }
+
+    invalidateShopOffersCache(shopNameToSync);
+
+    return Response.json({
+      success: true,
+      toast: `update-success-${Date.now()}`,
+    });
   }
 
   if (intent === "delete-offer") {
@@ -1366,7 +2502,7 @@ export default function Index() {
   return (
     <AppProvider embedded apiKey={apiKey}>
       <div className="flex flex-col min-h-screen">
-        <div className="flex-1 max-w-[1280px] w-full mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px] relative">
+        <div className="flex-1 max-w-[1280px] w-full mx-auto px-[16px] sm:px-[24px] pt-[12px] sm:pt-[16px] relative">
           {toastMessage && (
           <div className="fixed z-50 top-4 left-1/2 -translate-x-1/2 bg-[rgba(0,0,0,0.75)] backdrop-blur-sm !text-white px-4 py-2 rounded shadow-lg text-sm font-sans">
             {toastMessage}
@@ -1374,17 +2510,22 @@ export default function Index() {
         )}
         {/* Tabs */}
         {!showCreateOffer && !editingOfferId && (
-          <nav className="flex flex-col sm:flex-row gap-[8px] sm:gap-[16px] items-stretch sm:items-start pb-0 mb-[16px] sm:mb-[24px] border-b border-[#e3e8ed]">
+          <nav className="mb-[12px] sm:mb-[16px] overflow-x-auto">
+            <div className="inline-flex min-w-max gap-[6px] rounded-[10px] border border-[#e5e7eb] bg-white p-[4px]">
             <button
               type="button"
               onClick={() => {
                 setShowCreateOffer(false);
                 setActiveTab("dashboard");
               }}
-              className={`px-[16px] py-[12px] text-center sm:text-left cursor-pointer transition-all border-b-2 ${activeTab === "dashboard" ? "border-[#008060] text-[#1c1f23]" : "border-transparent hover:border-[#8c9196] text-[#5c6166]"}`}
+              className={`rounded-[8px] px-[12px] py-[8px] text-center cursor-pointer transition-all ${
+                activeTab === "dashboard"
+                  ? "bg-[#f6f6f7] text-[#1c1f23]"
+                  : "text-[#5c6166] hover:bg-[#f6f6f7] hover:text-[#1c1f23]"
+              }`}
             >
               <span
-                className={`font-sans leading-[24px] text-[14px] font-medium tracking-normal ${activeTab === "dashboard" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
+                className={`font-sans leading-[20px] text-[13px] font-medium tracking-normal ${activeTab === "dashboard" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
               >
                 Dashboard
               </span>
@@ -1396,10 +2537,14 @@ export default function Index() {
                 setShowCreateOffer(false);
                 setActiveTab("offers");
               }}
-              className={`px-[16px] py-[12px] text-center sm:text-left cursor-pointer transition-all border-b-2 ${activeTab === "offers" ? "border-[#008060] text-[#1c1f23]" : "border-transparent hover:border-[#8c9196] text-[#5c6166]"}`}
+              className={`rounded-[8px] px-[12px] py-[8px] text-center cursor-pointer transition-all ${
+                activeTab === "offers"
+                  ? "bg-[#f6f6f7] text-[#1c1f23]"
+                  : "text-[#5c6166] hover:bg-[#f6f6f7] hover:text-[#1c1f23]"
+              }`}
             >
               <span
-                className={`font-sans leading-[24px] text-[14px] font-medium tracking-normal ${activeTab === "offers" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
+                className={`font-sans leading-[20px] text-[13px] font-medium tracking-normal ${activeTab === "offers" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
               >
                 All Offers
               </span>
@@ -1411,15 +2556,37 @@ export default function Index() {
                 setShowCreateOffer(false);
                 setActiveTab("analytics");
               }}
-              className={`px-[16px] py-[12px] text-center sm:text-left cursor-pointer transition-all border-b-2 ${activeTab === "analytics" ? "border-[#008060] text-[#1c1f23]" : "border-transparent hover:border-[#8c9196] text-[#5c6166]"}`}
+              className={`rounded-[8px] px-[12px] py-[8px] text-center cursor-pointer transition-all ${
+                activeTab === "analytics"
+                  ? "bg-[#f6f6f7] text-[#1c1f23]"
+                  : "text-[#5c6166] hover:bg-[#f6f6f7] hover:text-[#1c1f23]"
+              }`}
             >
               <span
-                className={`font-sans leading-[24px] text-[14px] font-medium tracking-normal ${activeTab === "analytics" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
+                className={`font-sans leading-[20px] text-[13px] font-medium tracking-normal ${activeTab === "analytics" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
               >
                 Analytics
               </span>
             </button>
-
+            <button
+              type="button"
+              onClick={() => {
+                setShowCreateOffer(false);
+                setActiveTab("pricing");
+              }}
+              className={`rounded-[8px] px-[12px] py-[8px] text-center cursor-pointer transition-all ${
+                activeTab === "pricing"
+                  ? "bg-[#f6f6f7] text-[#1c1f23]"
+                  : "text-[#5c6166] hover:bg-[#f6f6f7] hover:text-[#1c1f23]"
+              }`}
+            >
+              <span
+                className={`font-sans leading-[20px] text-[13px] font-medium tracking-normal ${activeTab === "pricing" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
+              >
+                Pricing
+              </span>
+            </button>
+            </div>
           </nav>
         )}
 
@@ -1487,7 +2654,11 @@ export default function Index() {
                 setShowCreateOffer(false);
                 setEditingOfferId(null);
               }}
-              initialOffer={editingOfferId ? offers.find(o => o.id === editingOfferId) as any : undefined}
+              initialOffer={
+                editingOfferId
+                  ? (offers.find((o) => o.id === editingOfferId) as any)
+                  : undefined
+              }
               storeProducts={storeProducts}
               markets={markets}
               existingOffers={offers.map((o) => ({
@@ -1512,8 +2683,8 @@ export default function Index() {
           />
         )}
         </div>
-        <div className="py-8 text-center text-sm text-[#666] w-full">
-          <a 
+        <div className="mt-[8px] mb-[24px] flex w-full flex-wrap items-center justify-center gap-[10px] rounded-[12px] border border-[#e9edf1] bg-[#fcfcfd] px-[16px] py-[14px] text-[13px] text-[#666]">
+          <a
             href="mailto:support@ciwi.ai" 
             target="_blank" 
             rel="noopener noreferrer" 
@@ -1521,8 +2692,8 @@ export default function Index() {
           >
             Contact Us
           </a>
-          |
-          <a 
+          <span className="text-[#c4cdd5]">|</span>
+          <a
             href="https://iw73s3ld6wy.feishu.cn/wiki/UEumwgOLJi90rEknevWcZp7HnQg?from=from_copylink" 
             target="_blank" 
             rel="noopener noreferrer" 
