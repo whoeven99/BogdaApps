@@ -19,6 +19,10 @@ let currentMainForm = null;
 const CIWI_SUBSCRIPTION_MODE_NAME = "ciwi-subscription-mode";
 const CIWI_PROP_AB_GROUP = "__ciwi_ab_group";
 const CIWI_PROP_AB_BUCKET = "__ciwi_ab_bucket";
+// 中文注释：部分主题/脚本可能会过滤以 "__" 开头的 line item properties，
+// 为保证购物车侧 Shopify Function 能拿到 A/B 信息，额外写入单下划线兼容键。
+const CIWI_PROP_AB_GROUP_LEGACY = "_ciwi_ab_group";
+const CIWI_PROP_AB_BUCKET_LEGACY = "_ciwi_ab_bucket";
 const BUNDLE_OFFERS_FETCH_TIMEOUT_MS = 1500;
 const ABTEST_ASSIGN_FETCH_TIMEOUT_MS = 1200;
 let __ciwiIdentityInitDone = false;
@@ -1440,9 +1444,12 @@ function ensureBundleLineProperties(offer) {
   if (offer.offerType === "abTest") {
     if (offer.__ciwiAbGroup) {
       mk(CIWI_PROP_AB_GROUP, String(offer.__ciwiAbGroup));
+      // 兼容键：防止 "__" 前缀被主题过滤
+      mk(CIWI_PROP_AB_GROUP_LEGACY, String(offer.__ciwiAbGroup));
     }
     if (offer.__ciwiAbBucket != null) {
       mk(CIWI_PROP_AB_BUCKET, String(offer.__ciwiAbBucket));
+      mk(CIWI_PROP_AB_BUCKET_LEGACY, String(offer.__ciwiAbBucket));
     }
   }
 }

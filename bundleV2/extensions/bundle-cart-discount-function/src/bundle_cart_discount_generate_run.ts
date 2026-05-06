@@ -12,6 +12,9 @@ const DISCOUNT_PERCENTAGE = "10.0";
 const DEFAULT_DISCOUNT_PERCENTAGE = DISCOUNT_PERCENTAGE;
 const CIWI_PROP_AB_GROUP = "__ciwi_ab_group";
 const CIWI_PROP_AB_BUCKET = "__ciwi_ab_bucket";
+// 中文注释：主题侧可能过滤 "__" 前缀的 line item properties，因此提供单下划线兼容键。
+const CIWI_PROP_AB_GROUP_LEGACY = "_ciwi_ab_group";
+const CIWI_PROP_AB_BUCKET_LEGACY = "_ciwi_ab_bucket";
 const CIWI_PROP_OFFER_ID = "__ciwi_bundle_offer_id";
 const CIWI_PROP_OFFER_ID_LEGACY = "_ciwi_bundle_offer_id";
 
@@ -804,8 +807,12 @@ export function bundleCartDiscountGenerateRun(
 
       let tier = pickBestDiscountTier(suitOffer.discountRulesJson, quantity);
       if (suitOffer.offerType === "abTest") {
-        const abGroup = getCartLineAttributeValue(line, CIWI_PROP_AB_GROUP);
-        const abBucket = getCartLineAttributeValue(line, CIWI_PROP_AB_BUCKET);
+        const abGroup =
+          getCartLineAttributeValue(line, CIWI_PROP_AB_GROUP) ||
+          getCartLineAttributeValue(line, CIWI_PROP_AB_GROUP_LEGACY);
+        const abBucket =
+          getCartLineAttributeValue(line, CIWI_PROP_AB_BUCKET) ||
+          getCartLineAttributeValue(line, CIWI_PROP_AB_BUCKET_LEGACY);
         const variantRulesJson = resolveAbTestVariantDiscountRulesJson(
           suitOffer.offerSettingsJson,
           abGroup,
