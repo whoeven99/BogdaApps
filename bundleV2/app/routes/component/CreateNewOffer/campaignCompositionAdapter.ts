@@ -340,6 +340,7 @@ export function appendCampaignCompositionBar(
       ...prev,
       {
         count: 2,
+        discountPercent: 0,
         giftQuantity: 1,
         title: "",
         subtitle: "",

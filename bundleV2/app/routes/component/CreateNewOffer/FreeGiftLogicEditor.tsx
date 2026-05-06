@@ -49,6 +49,7 @@ export default function FreeGiftLogicEditor({
         ...prev,
         {
           count: maxCount + 1,
+          discountPercent: 0,
           giftQuantity: 1,
           title: "",
           subtitle: "",

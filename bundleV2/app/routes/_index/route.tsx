@@ -128,6 +128,7 @@ const BUNDLE_METAFIELD_NAMESPACE = "ciwi_bundle";
 const BUNDLE_METAFIELD_BASE_KEY = "ciwi-bundle-offers";
 const BUNDLE_METAFIELD_ENABLED_PROD_KEY = "ciwi-bundle-enabled-prod";
 const BUNDLE_METAFIELD_ENABLED_TEST_KEY = "ciwi-bundle-enabled-test";
+const BUNDLE_METAFIELD_ACTIVE_ENV_KEY = "ciwi-bundle-active-env";
 const PROD_SHOPIFY_API_KEY = "bfc13ad696f2a8d2a77ba6eee1e26966";
 const TEST_SHOPIFY_API_KEY = "ab25ea895c6df574ae9ff70e9c7731c5";
 
@@ -2298,14 +2299,11 @@ export default function Index() {
                 setCreateOfferType(null);
               }}
               initialOffer={editingOfferId ? offers.find(o => o.id === editingOfferId) as any : undefined}
-              initialOfferType={createOfferType ?? undefined}
               storeProducts={storeProducts}
               markets={markets}
               existingOffers={offers.map((o) => ({
                 id: o.id,
                 name: o.name,
-                cartTitle: o.cartTitle,
-                offerType: o.offerType,
               }))}
             />
           ))}

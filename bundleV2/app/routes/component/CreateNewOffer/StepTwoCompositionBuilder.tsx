@@ -483,7 +483,9 @@ function FreeGiftRuleBarDetail({
       >
         <CompactActionRow
           title="Gift products"
-          meta={`${(rule.giftProductIds || []).length} selected for this bar`}
+          meta={`${
+            Array.isArray((rule as any).giftProductIds) ? (rule as any).giftProductIds.length : 0
+          } selected for this bar`}
           actionLabel="Edit gift products"
           onAction={() => void actions.selectFreeGiftRewardProducts(bar.sourceRef.index)}
         />

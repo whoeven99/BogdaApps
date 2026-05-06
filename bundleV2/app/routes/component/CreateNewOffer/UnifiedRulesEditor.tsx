@@ -47,7 +47,7 @@ export default function UnifiedRulesEditor({
   const updateRule = (index: number, patch: Partial<DiscountRule>) => {
     const ruleId = getUnifiedDiscountRuleId(rules[index], index);
     if (updateRuleValues) {
-      updateRuleValues(ruleId, patch);
+      updateRuleValues(ruleId, patch as any);
       return;
     }
     setRules((prev) =>

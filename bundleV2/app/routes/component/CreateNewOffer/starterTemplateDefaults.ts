@@ -212,6 +212,7 @@ export function getStarterTemplateDefaults(
         freeGiftRules: [
           {
             count: 2,
+            discountPercent: 0,
             giftQuantity: 1,
             title: "Buy 2 items",
             subtitle: "Unlock 1 free mini gift",
@@ -220,6 +221,7 @@ export function getStarterTemplateDefaults(
           },
           {
             count: 3,
+            discountPercent: 0,
             giftQuantity: 2,
             title: "Buy 3 items",
             subtitle: "Unlock 2 free gifts",

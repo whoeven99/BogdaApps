@@ -308,12 +308,16 @@ function buildCompleteBundleItem(
   let sumFinal = 0;
 
   for (const product of bar?.products || []) {
+    const variants = Array.isArray((product as any).variants) ? ((product as any).variants as any[]) : [];
     const selectedVariant =
-      product.variants?.find((variant) => variant.id === product.selectedVariantId) ||
-      product.variants?.[0];
-    const base = parseMoneyStringToNumber(selectedVariant?.price || product.price);
-    const mode = product.pricing?.mode ?? "full_price";
-    const value = product.pricing?.value ?? 0;
+      variants.find((variant) => String(variant?.id) === String((product as any).selectedVariantId)) ||
+      variants[0];
+    const base = parseMoneyStringToNumber((selectedVariant as any)?.price || (product as any).price);
+    const pricing = ((product as any).pricing && typeof (product as any).pricing === "object"
+      ? (product as any).pricing
+      : {}) as any;
+    const mode = (pricing.mode as any) ?? "full_price";
+    const value = Number.isFinite(Number(pricing.value)) ? Number(pricing.value) : 0;
     const { final, original } = applyCompleteBundleProductPricing(mode, value, base);
     sumOriginal += original;
     sumFinal += final;
@@ -321,15 +325,16 @@ function buildCompleteBundleItem(
 
   const saved = Math.max(0, sumOriginal - sumFinal);
   const products = (bar?.products || []).slice(0, 4).map((product) => {
+    const variants = Array.isArray((product as any).variants) ? ((product as any).variants as any[]) : [];
     const selectedVariant =
-      product.variants?.find((variant) => variant.id === product.selectedVariantId) ||
-      product.variants?.[0];
+      variants.find((variant) => String(variant?.id) === String((product as any).selectedVariantId)) ||
+      variants[0];
     return {
-      image: product.image || "https://via.placeholder.com/48",
-      name: product.title || "Bundle product",
+      image: (product as any).image || "https://via.placeholder.com/48",
+      name: (product as any).title || "Bundle product",
       variant:
-        selectedVariant?.title && selectedVariant.title !== "Default Title"
-          ? selectedVariant.title
+        (selectedVariant as any)?.title && (selectedVariant as any).title !== "Default Title"
+          ? (selectedVariant as any).title
           : undefined,
     };
   });
