@@ -124,6 +124,7 @@ type CompleteBundleBarRow = {
 };
 
 type CartLineForBundle = CartInput["cart"]["lines"][number];
+type CartLineAttributeSnapshot = { value?: string | null } | null | undefined;
 
 function parseMoneyAmount(raw: unknown): number {
   if (raw == null) return 0;
@@ -132,17 +133,32 @@ function parseMoneyAmount(raw: unknown): number {
 }
 
 function getCartLineAttributeValue(
-  line: CartInput["cart"]["lines"][number],
+  line: CartLineForBundle,
   key: string,
 ): string {
-  const attrs = ((line as unknown as { attributes?: Array<{ key?: string; value?: string }> })
-    .attributes || []) as Array<{ key?: string; value?: string }>;
-  for (const attr of attrs) {
-    if (String(attr?.key || "") === key) {
-      return String(attr?.value || "");
-    }
-  }
-  return "";
+  const keyedLine = line as CartLineForBundle & {
+    offerIdAttr?: CartLineAttributeSnapshot;
+    offerIdLegacyAttr?: CartLineAttributeSnapshot;
+    abGroupAttr?: CartLineAttributeSnapshot;
+    abGroupLegacyAttr?: CartLineAttributeSnapshot;
+    abBucketAttr?: CartLineAttributeSnapshot;
+    abBucketLegacyAttr?: CartLineAttributeSnapshot;
+  };
+  const raw =
+    key === CIWI_PROP_OFFER_ID
+      ? keyedLine.offerIdAttr?.value
+      : key === CIWI_PROP_OFFER_ID_LEGACY
+        ? keyedLine.offerIdLegacyAttr?.value
+        : key === CIWI_PROP_AB_GROUP
+          ? keyedLine.abGroupAttr?.value
+          : key === CIWI_PROP_AB_GROUP_LEGACY
+            ? keyedLine.abGroupLegacyAttr?.value
+            : key === CIWI_PROP_AB_BUCKET
+              ? keyedLine.abBucketAttr?.value
+              : key === CIWI_PROP_AB_BUCKET_LEGACY
+                ? keyedLine.abBucketLegacyAttr?.value
+                : "";
+  return String(raw || "").trim();
 }
 
 /** 根据行属性 __ciwi_ab_group / __ciwi_ab_bucket 解析该用户所在变体的 discountRules JSON（供阶梯匹配） */

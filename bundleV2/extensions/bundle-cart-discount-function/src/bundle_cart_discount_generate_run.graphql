@@ -3,6 +3,24 @@ query CartInput {
     lines {
       id
       quantity
+      offerIdAttr: attribute(key: "__ciwi_bundle_offer_id") {
+        value
+      }
+      offerIdLegacyAttr: attribute(key: "_ciwi_bundle_offer_id") {
+        value
+      }
+      abGroupAttr: attribute(key: "__ciwi_ab_group") {
+        value
+      }
+      abGroupLegacyAttr: attribute(key: "_ciwi_ab_group") {
+        value
+      }
+      abBucketAttr: attribute(key: "__ciwi_ab_bucket") {
+        value
+      }
+      abBucketLegacyAttr: attribute(key: "_ciwi_ab_bucket") {
+        value
+      }
       cost {
         amountPerQuantity {
           amount
