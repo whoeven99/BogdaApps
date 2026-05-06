@@ -1578,15 +1578,6 @@ function syncCurrentBundleToSessionStorage(offer) {
       SESSION_STORAGE_BUNDLE_RULE_KEY,
       JSON.stringify(data),
     );
-    console.log("[abtest] session storage synced", {
-      variantId,
-      offerId,
-      bundleTitle,
-      productId: currentProductGid,
-      abGroup: abGroup || "(empty)",
-      abBucket,
-      abDiscountPercent,
-    });
     postProductViewedToAliIfNeeded({
       offerId,
       variantId,
@@ -1751,16 +1742,6 @@ function ensureAbTestAssignmentForOffer(offer) {
   offer.__ciwiAbBucket = bucket;
   offer.__ciwiAbDiscountPercent = chosenPercent;
   offer.discountRulesJson = JSON.stringify(rules);
-  console.log("[abtest] assignment applied to offer", {
-    offerId: String(offer?.id || ""),
-    offerName: String(offer?.name || ""),
-    group,
-    bucket,
-    chosenPercent,
-    rulesCount: Array.isArray(rules) ? rules.length : 0,
-    customerId: customerId || null,
-    localAssignmentSource: cached?.source || localAssignments?.[localKey]?.source || "new",
-  });
   return offer;
 }
 
@@ -1931,15 +1912,6 @@ function getCurrentOffer(offersConfig) {
 
     if (offer.offerType === "abTest") {
       const assignedOffer = ensureAbTestAssignmentForOffer(offer);
-      console.log("[abtest] offer selected for render", {
-        offerId: String(assignedOffer?.id || ""),
-        offerName: String(assignedOffer?.name || ""),
-        currentProductGid,
-        currentMarketId: currentMarketId || null,
-        abGroup: String(assignedOffer?.__ciwiAbGroup || ""),
-        abBucket: assignedOffer?.__ciwiAbBucket ?? null,
-        abDiscountPercent: assignedOffer?.__ciwiAbDiscountPercent ?? null,
-      });
       return assignedOffer;
     }
     return offer;
@@ -2500,6 +2472,12 @@ window.ciwiHandleBundleAddToCart = async function(event) {
   const count = window.__ciwiBundleState?.selectedCount || 1;
   updateThemeQuantityInput(count);
   currentOffer = getCurrentOffer(offersConfigCache);
+  if (currentOffer) {
+    // 中文注释：确保所有主题/抽屉加购路径都带上与产品页一致的 line item properties，
+    // 供 Shopify Function 在购物车侧按同一分组/同一套规则计算折扣。
+    syncCurrentBundleToSessionStorage(currentOffer);
+    ensureBundleLineProperties(currentOffer);
+  }
   syncSubscriptionSelectionToTheme(currentOffer);
   const form = getAddToCartForm();
   
@@ -3392,12 +3370,6 @@ async function hydrateAbAssignmentsFromServer(offersConfig) {
         source: `server_${remote.source}`,
       };
       changed = true;
-      console.log("[abtest] assignment hydrated from server", {
-        offerId: String(offer?.id || ""),
-        group: remote.group,
-        bucket: remote.bucket,
-        source: remote.source,
-      });
     }
     if (changed) {
       writeAbAssignments(localAssignments);
