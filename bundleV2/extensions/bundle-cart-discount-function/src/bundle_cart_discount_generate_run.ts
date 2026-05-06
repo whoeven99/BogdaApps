@@ -271,7 +271,8 @@ function applyCompleteBundleUnitPricing(
   }
   if (mode === "fixed_price") {
     const fixed = Math.max(0, value);
-    const final = Math.min(original, Math.round(fixed * 100) / 100);
+    // 与主题端 applyCompleteBundleProductPricing 对齐：fixed_price 表示「指定售价」
+    const final = Math.round(fixed * 100) / 100;
     return { final, original };
   }
   return { final: original, original };
@@ -801,10 +802,7 @@ export function bundleCartDiscountGenerateRun(
         lineOfferId,
       });
 
-      let discountPercentValue = getDiscountPercentValue(
-        suitOffer.discountRulesJson,
-        quantity,
-      );
+      let tier = pickBestDiscountTier(suitOffer.discountRulesJson, quantity);
       if (suitOffer.offerType === "abTest") {
         const abGroup = getCartLineAttributeValue(line, CIWI_PROP_AB_GROUP);
         const abBucket = getCartLineAttributeValue(line, CIWI_PROP_AB_BUCKET);
@@ -822,50 +820,101 @@ export function bundleCartDiscountGenerateRun(
           });
           continue;
         }
-        discountPercentValue = getDiscountPercentValue(variantRulesJson, quantity);
+        tier = pickBestDiscountTier(variantRulesJson, quantity);
         log("abtest_line_discount_resolved", {
           cartLineId: lineId,
           offerId: suitOffer.id,
           abGroup,
           abBucket,
-          discountPercentValue,
+          tier: tier
+            ? {
+                count: tier.count,
+                priceMode: tier.priceMode,
+                discountValue: tier.discountValue,
+                discountPercent: tier.discountPercent,
+              }
+            : null,
         });
       }
-      log("line_discount_percent", {
-        cartLineId: lineId,
-        discountPercentValue,
-        quantity,
-      });
-
-      if (!discountPercentValue) {
-        log("line_skip", {
-          cartLineId: lineId,
-          reason: "no_discount_percent_after_rules",
-        });
+      if (!tier) {
+        log("line_skip", { cartLineId: lineId, reason: "no_matching_tier" });
+        continue;
+      }
+      if (tier.priceMode === "full_price") {
+        log("line_skip", { cartLineId: lineId, reason: "tier_full_price_no_discount" });
         continue;
       }
 
-      const candidate: ProductDiscountCandidate = {
+      const unitBase = parseMoneyAmount(line.cost?.amountPerQuantity?.amount);
+      const safeQty = Math.max(1, Math.trunc(quantity));
+      const candidateBase = {
         message: suitOffer.cartTitle || "Bundle Discount",
         targets: [
           {
             cartLine: {
               id: lineId,
-              quantity,
+              quantity: safeQty,
             },
           },
         ],
+      } satisfies Omit<ProductDiscountCandidate, "value">;
+
+      if (tier.priceMode === "percentage_off") {
+        const percentValue = formatDiscountPercentValue(tier.discountPercent);
+        const candidate: ProductDiscountCandidate = {
+          ...candidateBase,
+          value: { percentage: { value: percentValue } },
+        };
+        productCandidates.push(candidate);
+        log("line_candidate_added", {
+          cartLineId: lineId,
+          mode: tier.priceMode,
+          percent: percentValue,
+          tierCount: tier.count,
+        });
+        continue;
+      }
+
+      // amount_off / fixed_price：转为 fixedAmount（按每件计算总减免）
+      let totalDiscount = 0;
+      if (tier.priceMode === "amount_off") {
+        totalDiscount = Math.max(0, tier.discountValue) * safeQty;
+      } else if (tier.priceMode === "fixed_price") {
+        const fixed = Math.max(0, tier.discountValue);
+        const unitDiscount = Math.max(0, unitBase - fixed);
+        totalDiscount = unitDiscount * safeQty;
+      }
+
+      if (!(totalDiscount > 0)) {
+        log("line_skip", {
+          cartLineId: lineId,
+          reason: "computed_total_discount_is_zero",
+          mode: tier.priceMode,
+          unitBase,
+          tierCount: tier.count,
+          tierDiscountValue: tier.discountValue,
+        });
+        continue;
+      }
+
+      const candidate: ProductDiscountCandidate = {
+        ...candidateBase,
         value: {
-          percentage: {
-            value: discountPercentValue,
+          fixedAmount: {
+            amount: totalDiscount.toFixed(2),
+            appliesToEachItem: false,
           },
         },
       };
-
       productCandidates.push(candidate);
       log("line_candidate_added", {
         cartLineId: lineId,
-        percent: discountPercentValue,
+        mode: tier.priceMode,
+        unitBase,
+        qty: safeQty,
+        totalDiscount,
+        tierCount: tier.count,
+        tierDiscountValue: tier.discountValue,
       });
     }
   }
@@ -898,6 +947,8 @@ export function bundleCartDiscountGenerateRun(
 type DiscountTier = {
   count: number;
   discountPercent: number;
+  priceMode: CompleteBundlePricingMode;
+  discountValue: number;
 };
 
 function parseDiscountRulesJson(
@@ -913,12 +964,30 @@ function parseDiscountRulesJson(
     for (const item of parsed) {
       if (!item || typeof item !== "object") continue;
       const count = Number((item as { count?: unknown }).count);
-      const discountPercent = Number(
-        (item as { discountPercent?: unknown }).discountPercent,
-      );
       if (!Number.isFinite(count) || count < 1) continue;
-      if (!Number.isFinite(discountPercent) || discountPercent < 0) continue;
-      tiers.push({ count: Math.trunc(count), discountPercent });
+      const mode = normalizePricingMode((item as { priceMode?: unknown }).priceMode);
+      const pctRaw = Number((item as { discountPercent?: unknown }).discountPercent);
+      const discountPercent = Number.isFinite(pctRaw)
+        ? Math.max(0, Math.min(100, pctRaw))
+        : 0;
+      const dvRaw = Number((item as { discountValue?: unknown }).discountValue);
+      const discountValue = Number.isFinite(dvRaw)
+        ? Math.max(0, dvRaw)
+        : mode === "percentage_off"
+          ? discountPercent
+          : discountPercent;
+      const syncedPercent =
+        mode === "percentage_off"
+          ? Math.max(0, Math.min(100, discountValue))
+          : mode === "full_price"
+            ? 0
+            : discountPercent;
+      tiers.push({
+        count: Math.trunc(count),
+        discountPercent: syncedPercent,
+        priceMode: mode,
+        discountValue: mode === "full_price" ? 0 : discountValue,
+      });
     }
 
     tiers.sort((a, b) => a.count - b.count);
@@ -1202,6 +1271,19 @@ function calculateBxgyDiscount(
 function formatDiscountPercentValue(percent: number): string {
   if (!Number.isFinite(percent)) return DEFAULT_DISCOUNT_PERCENTAGE;
   return percent.toFixed(1);
+}
+
+function pickBestDiscountTier(
+  discountRulesJson: string | null | undefined,
+  quantity: number,
+): DiscountTier | null {
+  const tiers = parseDiscountRulesJson(discountRulesJson);
+  if (tiers.length === 0) return null;
+  let best: DiscountTier | null = null;
+  for (const tier of tiers) {
+    if (quantity >= tier.count) best = tier;
+  }
+  return best;
 }
 
 function getDiscountPercentValue(
