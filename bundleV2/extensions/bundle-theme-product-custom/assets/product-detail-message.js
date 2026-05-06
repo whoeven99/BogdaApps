@@ -402,12 +402,6 @@ function applyCompleteBundleProductPricing(mode, value, basePrice) {
   return { final: Math.round(fixed * 100) / 100, original };
 }
 
-function toCents(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return 0;
-  return Math.round(n * 100);
-}
-
 function toAjaxVariantId(value) {
   const raw = String(value || "").trim();
   if (!raw) return "";
@@ -416,45 +410,53 @@ function toAjaxVariantId(value) {
   return hit ? hit[1] : "";
 }
 
-function toScaledInteger(value, scale) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return 0;
-  return Math.round(n * scale);
-}
-
-function fromCents(cents) {
-  const n = Number(cents);
-  if (!Number.isFinite(n)) return 0;
-  return n / 100;
-}
-
 /**
- * Use higher precision during intermediate calculations and only round to cents
- * at the final step so the storefront card stays closer to Shopify cart totals.
+ * 同品多件阶梯计价；与 CreateNewOffer.computeSameProductPackTotals 对齐（含 amount_off / fixed_price）。
  */
-function calculateBundleAmounts(unitPrice, quantity, discountPercent) {
-  const MONEY_SCALE = 10000;
-  const safeQty = Math.max(1, Math.trunc(Number(quantity) || 1));
-  const safeDiscountPercent = Math.max(0, Math.min(100, Number(discountPercent) || 0));
-  const unitPriceScaled = toScaledInteger(unitPrice, MONEY_SCALE);
-  const originalTotalScaled = unitPriceScaled * safeQty;
-  const discountedTotalScaled = Math.round(
-    originalTotalScaled * (1 - safeDiscountPercent / 100),
-  );
-  const originalTotalCents = Math.round(originalTotalScaled / (MONEY_SCALE / 100));
-  const discountedTotalCents = Math.round(
-    discountedTotalScaled / (MONEY_SCALE / 100),
-  );
-  const savedCents = originalTotalCents - discountedTotalCents;
+function computeSameProductPackTotalsQtyBreak(unitPrice, rule) {
+  const qty = Math.max(1, Math.trunc(Number(rule.count) || 1));
+  const unit = Math.max(0, Number(unitPrice) || 0);
+  const originalTotal = Math.round(unit * qty * 100) / 100;
+  const mode = rule.priceMode ?? "percentage_off";
+  const discountValueRaw = Number(rule.discountValue);
+  const discountValue = Number.isFinite(discountValueRaw)
+    ? discountValueRaw
+    : Number(rule.discountPercent) || 0;
+
+  let discountedTotal = originalTotal;
+  if (mode === "full_price") {
+    discountedTotal = originalTotal;
+  } else if (mode === "percentage_off") {
+    const pct = Math.max(0, Math.min(100, discountValue));
+    discountedTotal = Math.round(originalTotal * (1 - pct / 100) * 100) / 100;
+  } else if (mode === "amount_off") {
+    discountedTotal = Math.max(
+      0,
+      Math.round((originalTotal - Math.max(0, discountValue) * qty) * 100) / 100,
+    );
+  } else if (mode === "fixed_price") {
+    discountedTotal = Math.round(Math.max(0, discountValue) * qty * 100) / 100;
+  }
 
   return {
-    originalTotalCents,
-    discountedTotalCents,
-    savedCents,
-    originalTotal: fromCents(originalTotalCents),
-    discountedTotal: fromCents(discountedTotalCents),
-    saved: fromCents(savedCents),
+    originalTotal,
+    discountedTotal,
+    saved: Math.max(0, originalTotal - discountedTotal),
   };
+}
+
+/** 与 CreateNewOffer.autoQuantityBreakPreviewSubtitle 一致 */
+function autoQuantityBreakSubtitleQtyBreak(rule) {
+  const sub = rule.subtitle != null ? String(rule.subtitle).trim() : "";
+  if (sub) return sub;
+  const mode = rule.priceMode ?? "percentage_off";
+  const dv = Number.isFinite(Number(rule.discountValue))
+    ? Number(rule.discountValue)
+    : Number(rule.discountPercent) || 0;
+  if (mode === "full_price") return "Standard price";
+  if (mode === "percentage_off") return `You save ${Math.max(0, Math.min(100, dv))}%`;
+  if (mode === "amount_off") return "Amount off per item";
+  return "Fixed price per item";
 }
 
 function normalizePriceNumber(value) {
@@ -705,17 +707,40 @@ function parseDiscountRulesJson(discountRulesJson) {
       .map((item) => {
         if (!item || typeof item !== "object") return null;
         const count = Number(item.count);
-        const discountPercent = Number(item.discountPercent);
         if (!Number.isFinite(count) || count < 1) return null;
-        if (!Number.isFinite(discountPercent)) return null;
+        const modeRaw = item.priceMode;
+        const priceMode =
+          modeRaw === "full_price" ||
+          modeRaw === "percentage_off" ||
+          modeRaw === "amount_off" ||
+          modeRaw === "fixed_price"
+            ? modeRaw
+            : "percentage_off";
+        const pctRaw = Number(item.discountPercent);
+        const discountPercentRaw = Number.isFinite(pctRaw) ? pctRaw : 0;
+        const pct = Math.max(0, Math.min(100, discountPercentRaw));
+        const dvRaw = Number(item.discountValue);
+        const discountValue = Number.isFinite(dvRaw)
+          ? Math.max(0, dvRaw)
+          : priceMode === "percentage_off"
+            ? pct
+            : pct;
+        const syncedPercent =
+          priceMode === "percentage_off"
+            ? Math.max(0, Math.min(100, discountValue))
+            : priceMode === "full_price"
+              ? 0
+              : Math.max(0, Math.min(100, pct));
         return {
-        count: Math.trunc(count),
-        discountPercent: Math.max(0, Math.min(100, discountPercent)),
-        title: item.title || "",
-        subtitle: item.subtitle || "",
-        badge: item.badge || "",
-        isDefault: !!item.isDefault,
-      };
+          count: Math.trunc(count),
+          discountPercent: syncedPercent,
+          priceMode,
+          discountValue: priceMode === "full_price" ? 0 : Math.max(0, discountValue),
+          title: item.title || "",
+          subtitle: item.subtitle || "",
+          badge: item.badge || "",
+          isDefault: !!item.isDefault,
+        };
       })
       .filter(Boolean)
       .sort((a, b) => a.count - b.count);
@@ -1578,6 +1603,31 @@ function pickAbDiscountRulesForGroup(offer, group) {
       isDefault: true,
     },
   ];
+}
+
+/** A/B 运行时：将 __ciwiAbGroup 映射为后台 variant.key（标题「· Variant A」与 Live Preview 一致） */
+function resolveAbVariantDisplayLabel(offer) {
+  const group = String(offer?.__ciwiAbGroup || "");
+  if (!group || offer?.offerType !== "abTest") return "";
+  try {
+    const settings = JSON.parse(String(offer?.offerSettingsJson || "{}"));
+    const ab = settings?.abTest || {};
+    const variants = Array.isArray(ab.variants) ? ab.variants : [];
+    if (!variants.length) {
+      if (group === "abtest1") return "A";
+      if (group === "abtest2") return "B";
+      return group;
+    }
+    let idx = -1;
+    if (group === "abtest1") idx = 0;
+    else if (group === "abtest2") idx = 1;
+    else idx = variants.findIndex((row) => row && typeof row === "object" && String(row.id) === group);
+    const row = idx >= 0 ? variants[idx] : null;
+    if (row && row.key != null && String(row.key).trim()) return String(row.key).trim();
+  } catch (e) {}
+  if (group === "abtest1") return "A";
+  if (group === "abtest2") return "B";
+  return group;
 }
 
 function ensureAbTestAssignmentForOffer(offer) {
@@ -2969,6 +3019,11 @@ function renderBundlePreviewHtml(offer) {
   const buttonPrimaryColor = offerSettings.buttonPrimaryColor || "#008060";
   const showCustomButton = offerSettings.showCustomButton !== false;
   const widgetTitle = offerSettings.title || "Bundle & Save";
+  const abVariantLabel = resolveAbVariantDisplayLabel(offer);
+  const displayWidgetTitle =
+    offer.offerType === "abTest" && abVariantLabel
+      ? `${widgetTitle} · Variant ${abVariantLabel}`
+      : widgetTitle;
 
   const unitPrice = getCurrentUnitPrice();
   const hasDefault = discountRules.some((r) => r.isDefault);
@@ -2980,20 +3035,27 @@ function renderBundlePreviewHtml(offer) {
       price: formatPrice(unitPrice),
     },
     ...discountRules.map((rule, index) => {
-      const { originalTotal, discountedTotal, saved } = calculateBundleAmounts(
+      const { originalTotal, discountedTotal, saved } = computeSameProductPackTotalsQtyBreak(
         unitPrice,
-        rule.count,
-        rule.discountPercent,
+        rule,
       );
+      const mode = rule.priceMode ?? "percentage_off";
       const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
+      const priceStr =
+        mode === "full_price" ? formatPrice(originalTotal) : formatPrice(discountedTotal);
+      const originalStr =
+        mode === "full_price" || discountedTotal >= originalTotal
+          ? undefined
+          : formatPrice(originalTotal);
       return {
         count: rule.count,
         title: rule.title || `${rule.count} items`,
-        subtitle: rule.subtitle || `You save ${rule.discountPercent}%`,
-        price: formatPrice(discountedTotal),
-        original: formatPrice(originalTotal),
+        subtitle: autoQuantityBreakSubtitleQtyBreak(rule),
+        price: priceStr,
+        original: originalStr,
         badge: rule.badge || (isFeatured ? "Most Popular" : ""),
-        saveLabel: `SAVE ${formatPrice(saved)}`,
+        saveLabel:
+          saved > 0 ? `SAVE ${formatPrice(saved)}` : `Qty ${Math.max(1, rule.count)}`,
       };
     }),
   ];
@@ -3111,7 +3173,7 @@ function renderBundlePreviewHtml(offer) {
   }
 
   return `<div class="create-offer-preview-card">
-    <div class="create-offer-style-preview-header" style="color:${esc(titleColor)} !important; font-size: ${esc(titleFontSize)}px !important; font-weight: ${esc(titleFontWeight)} !important;">${esc(widgetTitle)}</div>
+    <div class="create-offer-style-preview-header" style="color:${esc(titleColor)} !important; font-size: ${esc(titleFontSize)}px !important; font-weight: ${esc(titleFontWeight)} !important;">${esc(displayWidgetTitle)}</div>
     <div class="create-offer-style-preview-list create-offer-style-preview-list--${layoutFormat}">
       ${itemsHtml}
     </div>
