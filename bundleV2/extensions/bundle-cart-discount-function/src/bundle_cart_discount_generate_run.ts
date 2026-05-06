@@ -868,8 +868,18 @@ export function bundleCartDiscountGenerateRun(
         continue;
       }
 
-      const unitBase = parseMoneyAmount(line.cost?.amountPerQuantity?.amount);
       const safeQty = Math.max(1, Math.trunc(quantity));
+      // 购物车侧必须用“折扣前基价”计算 amount_off / fixed_price，否则会在已有折扣或 price adjustment 时偏差。
+      const subtotal = parseMoneyAmount(line.cost?.subtotalAmount?.amount);
+      const unitFromSubtotal = subtotal > 0 ? subtotal / safeQty : 0;
+      const compareAt = parseMoneyAmount(line.cost?.compareAtAmountPerQuantity?.amount);
+      const amountPerQty = parseMoneyAmount(line.cost?.amountPerQuantity?.amount);
+      const unitBase =
+        unitFromSubtotal > 0
+          ? Math.round(unitFromSubtotal * 100) / 100
+          : compareAt > 0
+            ? compareAt
+            : amountPerQty;
       const candidateBase = {
         message: suitOffer.cartTitle || "Bundle Discount",
         targets: [

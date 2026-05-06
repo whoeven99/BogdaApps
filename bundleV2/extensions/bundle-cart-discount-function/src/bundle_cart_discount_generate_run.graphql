@@ -25,6 +25,12 @@ query CartInput {
         amountPerQuantity {
           amount
         }
+        compareAtAmountPerQuantity {
+          amount
+        }
+        subtotalAmount {
+          amount
+        }
       }
       merchandise {
         __typename
