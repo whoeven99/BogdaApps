@@ -14,6 +14,8 @@ import { sanitizeEnvLikeValue, sanitizeUrlLikeEnvValue } from "../utils/env";
 
 const ensureWebPixel = async (admin: any, shop: string) => {
   let currentWebPixelId: string | undefined;
+  let currentWebPixelSettingsRaw = "";
+  const expectedServer = String(process.env.SHOPIFY_APP_URL || "").trim().replace(/\/+$/, "");
 
   try {
     const queryResponse = await admin.graphql(
@@ -21,12 +23,14 @@ const ensureWebPixel = async (admin: any, shop: string) => {
         query CurrentWebPixel {
           webPixel {
             id
+            settings
           }
         }
       `,
     );
     const queryJson = await queryResponse.json();
     currentWebPixelId = queryJson?.data?.webPixel?.id as string | undefined;
+    currentWebPixelSettingsRaw = String(queryJson?.data?.webPixel?.settings || "");
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : JSON.stringify(error);
@@ -39,9 +43,77 @@ const ensureWebPixel = async (admin: any, shop: string) => {
   console.log("[web-pixel] query result", {
     shop,
     currentWebPixelId,
+    expectedServer,
   });
 
-  if (currentWebPixelId) return;
+  if (currentWebPixelId) {
+    let currentServer = "";
+    try {
+      const parsed = currentWebPixelSettingsRaw
+        ? (JSON.parse(currentWebPixelSettingsRaw) as Record<string, unknown>)
+        : {};
+      currentServer = String(parsed?.server || "").trim().replace(/\/+$/, "");
+    } catch (error) {
+      console.warn("[web-pixel] current settings parse failed", {
+        shop,
+        currentWebPixelId,
+        message: error instanceof Error ? error.message : String(error),
+        currentWebPixelSettingsRawPreview: currentWebPixelSettingsRaw.slice(0, 180),
+      });
+    }
+    if (currentServer === expectedServer) return;
+
+    console.warn("[web-pixel] existing pixel server mismatch, updating", {
+      shop,
+      currentWebPixelId,
+      currentServer: currentServer || "(empty)",
+      expectedServer: expectedServer || "(empty)",
+    });
+    const updateResponse = await admin.graphql(
+      `#graphql
+        mutation WebPixelUpdate($id: ID!, $webPixel: WebPixelInput!) {
+          webPixelUpdate(id: $id, webPixel: $webPixel) {
+            userErrors {
+              field
+              message
+              code
+            }
+            webPixel {
+              id
+              settings
+            }
+          }
+        }
+      `,
+      {
+        variables: {
+          id: currentWebPixelId,
+          webPixel: {
+            settings: {
+              shopName: shop,
+              server: expectedServer,
+            },
+          },
+        },
+      },
+    );
+    const updateJson = await updateResponse.json();
+    const updateErrors = updateJson?.data?.webPixelUpdate?.userErrors || [];
+    if (updateErrors.length > 0) {
+      console.error("[web-pixel] update userErrors", {
+        shop,
+        currentWebPixelId,
+        updateErrors,
+      });
+    } else {
+      console.log("[web-pixel] updated existing pixel settings", {
+        shop,
+        currentWebPixelId,
+        expectedServer,
+      });
+    }
+    return;
+  }
 
   const createResponse = await admin.graphql(
     `#graphql
@@ -64,7 +136,7 @@ const ensureWebPixel = async (admin: any, shop: string) => {
         webPixel: {
           settings: {
             shopName: shop,
-            server: sanitizeUrlLikeEnvValue(process.env.SHOPIFY_APP_URL),
+            server: expectedServer,
           },
         },
       },
