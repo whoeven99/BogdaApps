@@ -431,7 +431,7 @@
 
 "@emnapi/wasi-threads@1.2.1", "@emnapi/wasi-threads@^1.1.0":
   version "1.2.1"
-  resolved "https://mirrors.cloud.tencent.com/npm/@emnapi/wasi-threads/-/wasi-threads-1.2.1.tgz#28fed21a1ba1ce797c44a070abc94d42f3ae8548"
+  resolved "https://registry.npmjs.org/@emnapi/wasi-threads/-/wasi-threads-1.2.1.tgz"
   integrity sha512-uTII7OYF+/Mes/MrcIOYp5yOtSMLBWSIoLPpcgwipoiKbli6k322tcoFsxoIIxPDqW01SQGAgko4EzZi2BNv2w==
   dependencies:
     tslib "^2.4.0"
@@ -2809,10 +2809,17 @@
     "@tailwindcss/oxide" "4.2.2"
     tailwindcss "4.2.2"
 
-"@tybys/wasm-util@^0.10.0", "@tybys/wasm-util@^0.10.1":
+"@tybys/wasm-util@^0.10.0":
   version "0.10.1"
-  resolved "https://mirrors.cloud.tencent.com/npm/@tybys/wasm-util/-/wasm-util-0.10.1.tgz#ecddd3205cf1e2d5274649ff0eedd2991ed7f414"
+  resolved "https://registry.npmjs.org/@tybys/wasm-util/-/wasm-util-0.10.1.tgz"
   integrity sha512-9tTaPJLSiejZKx+Bmog4uSubteqTvFrVrURwkmHixBo0G4seD0zUxp98E1DzUBJxLQ3NPwXrGKDiVjwx/DpPsg==
+  dependencies:
+    tslib "^2.4.0"
+
+"@tybys/wasm-util@^0.10.1":
+  version "0.10.2"
+  resolved "https://mirrors.cloud.tencent.com/npm/@tybys/wasm-util/-/wasm-util-0.10.2.tgz#12b3a1b33db1f9cad4ddff1f604ab7dd00bf464e"
+  integrity sha512-RoBvJ2X0wuKlWFIjrwffGw1IqZHKQqzIchKaadZZfnNpsAYp2mM0h36JtPCjNDAHGgYez/15uMBpfGwchhiMgg==
   dependencies:
     tslib "^2.4.0"
 

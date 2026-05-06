@@ -1,6 +1,8 @@
 import Client from "@alicloud/log";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import { createHash } from "crypto";
 import { getBogdaRate } from "../redis.server";
+import { unauthenticated } from "../shopify.server";
 
 /** 勿在模块顶层 new Client：无凭证时 @alicloud/log 会抛错，导致整条路由 SSR 加载失败。 */
 function createSlsClient(): Client | null {
@@ -51,6 +53,200 @@ type DailyGmvPoint = {
 };
 
 const NO_BUNDLE_TITLE = "NO_BUNDLE_TITLE";
+const CART_LINES_DISCOUNT_FUNCTION_TITLE = "Bundle Cart Discount Function";
+const CART_LINES_DISCOUNT_AUTO_TITLE = "Ciwi Bundle Auto Discount";
+
+type OffersPayload = {
+  updatedAt?: string;
+  offers?: unknown[];
+};
+
+type AbTestGroup = "abtest1" | "abtest2";
+
+function parseJsonArrayOfStrings(raw: string): string[] {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((x) => String(x ?? "").trim()).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function parseJsonArrayOfNumbers(raw: string): number[] {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((x) => Number(x)).filter((n) => Number.isFinite(n));
+  } catch {
+    return [];
+  }
+}
+
+/** 按 cumulative 权重将 0–99 的 bucket 映射到 variant 下标 */
+function resolveVariantIndexByWeights(bucket: number, weights: number[]): number {
+  const w = weights.length ? weights : [50, 50];
+  let cum = 0;
+  const b = Math.max(0, Math.min(99, Math.trunc(bucket)));
+  for (let i = 0; i < w.length; i += 1) {
+    cum += Math.max(0, Math.trunc(w[i]));
+    if (b < cum) return i;
+  }
+  return Math.max(0, w.length - 1);
+}
+
+function getAbSaltFromEnvOrRandom(): string {
+  const envSalt = String(process.env.AB_TEST_SALT || "").trim();
+  if (envSalt) return envSalt;
+  return createHash("sha256")
+    .update(`${Date.now()}-${Math.random()}`)
+    .digest("hex")
+    .slice(0, 32);
+}
+
+function computeAbBucketByHash(customerId: string, salt: string): number {
+  const digest = createHash("sha256")
+    .update(`${customerId}:${salt}`)
+    .digest("hex");
+  const lastTwoHex = digest.slice(-2);
+  const n = Number.parseInt(lastTwoHex, 16);
+  if (!Number.isFinite(n)) return 0;
+  return n % 100;
+}
+
+function resolveAbGroupByBucket(bucket: number, splitPercent: number): AbTestGroup {
+  const split = Math.max(1, Math.min(99, Math.trunc(splitPercent || 50)));
+  return bucket < split ? "abtest1" : "abtest2";
+}
+
+function resolveAbGroupOrVariantId(params: {
+  bucket: number;
+  splitPercent: number;
+  variantIds: string[];
+  trafficWeights: number[];
+}): string {
+  const { bucket, splitPercent, variantIds, trafficWeights } = params;
+  if (variantIds.length >= 2 && trafficWeights.length === variantIds.length) {
+    const idx = resolveVariantIndexByWeights(bucket, trafficWeights);
+    return variantIds[idx] || variantIds[0] || "abtest1";
+  }
+  return resolveAbGroupByBucket(bucket, splitPercent);
+}
+
+async function resolveBundleOffersPayloadFromDiscountOwner(shopName: string): Promise<{
+  payload: OffersPayload | null;
+  source: string | null;
+  reason?: string;
+}> {
+  try {
+    const { admin } = await unauthenticated.admin(shopName);
+    const functionsResp = await admin.graphql(
+      `#graphql
+        query AppDiscountFunctions {
+          shopifyFunctions(first: 100) {
+            nodes {
+              id
+              title
+              apiType
+            }
+          }
+        }
+      `,
+    );
+    const functionsJson = await functionsResp.json();
+    const functionNodes = functionsJson?.data?.shopifyFunctions?.nodes ?? [];
+    const targetFn = functionNodes.find(
+      (fn: any) =>
+        fn?.title === CART_LINES_DISCOUNT_FUNCTION_TITLE &&
+        String(fn?.apiType || "").toLowerCase() === "discount",
+    );
+    const functionId = targetFn?.id ? String(targetFn.id) : "";
+    if (!functionId) {
+      return { payload: null, source: null, reason: "function_not_found" };
+    }
+
+    const discountsResp = await admin.graphql(
+      `#graphql
+        query ExistingAutomaticAppDiscounts {
+          discountNodes(first: 100, query: "method:automatic") {
+            nodes {
+              id
+              discount {
+                __typename
+                ... on DiscountAutomaticApp {
+                  title
+                  status
+                  appDiscountType {
+                    functionId
+                  }
+                  appOwnedOffers: metafield(namespace: "$app:ciwi_bundle", key: "offers") {
+                    value
+                  }
+                  defaultAppOffers: metafield(namespace: "$app", key: "offers") {
+                    value
+                  }
+                  legacyOffers: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-offers") {
+                    value
+                  }
+                }
+              }
+            }
+          }
+        }
+      `,
+    );
+    const discountsJson = await discountsResp.json();
+    const nodes = discountsJson?.data?.discountNodes?.nodes ?? [];
+    const normalized = nodes
+      .map((node: any) => {
+        const d = node?.discount;
+        if (!d || d.__typename !== "DiscountAutomaticApp") return null;
+        return {
+          title: String(d?.title || ""),
+          status: String(d?.status || ""),
+          functionId: String(d?.appDiscountType?.functionId || ""),
+          appOwned: String(d?.appOwnedOffers?.value || ""),
+          defaultApp: String(d?.defaultAppOffers?.value || ""),
+          legacy: String(d?.legacyOffers?.value || ""),
+        };
+      })
+      .filter(Boolean);
+    const strictMatches = normalized.filter((row: any) => row.functionId === functionId);
+    const fallbackMatches =
+      strictMatches.length > 0
+        ? []
+        : normalized.filter((row: any) => row.title.includes(CART_LINES_DISCOUNT_AUTO_TITLE));
+    const targets = strictMatches.length > 0 ? strictMatches : fallbackMatches;
+    if (!targets.length) {
+      return { payload: null, source: null, reason: "discount_owner_not_found" };
+    }
+    const active =
+      targets.find((row: any) => String(row.status).toUpperCase() === "ACTIVE") || targets[0];
+    const raw =
+      String(active.appOwned || "").trim() ||
+      String(active.defaultApp || "").trim() ||
+      String(active.legacy || "").trim();
+    if (!raw) {
+      return { payload: null, source: null, reason: "empty_owner_metafield" };
+    }
+    const parsed = JSON.parse(raw) as OffersPayload;
+    if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.offers)) {
+      return { payload: null, source: null, reason: "invalid_payload_shape" };
+    }
+    const source = String(active.appOwned || "").trim()
+      ? "discount_app_owned"
+      : String(active.defaultApp || "").trim()
+        ? "discount_default_app"
+        : "discount_legacy";
+    return { payload: parsed, source };
+  } catch (error) {
+    return {
+      payload: null,
+      source: null,
+      reason: `resolve_error:${String(error)}`,
+    };
+  }
+}
 
 function parseTime(input: unknown): number | null {
   if (typeof input === "number" && Number.isFinite(input)) {
@@ -75,6 +271,20 @@ function toNumber(input: unknown): number {
     if (Number.isFinite(n)) return n;
   }
   return 0;
+}
+
+function computeNormalApprox95Ci(successes: number, total: number): {
+  low: number;
+  high: number;
+} {
+  const n = Math.max(1, Math.trunc(total));
+  const p = Math.max(0, Math.min(1, successes / n));
+  const se = Math.sqrt((p * (1 - p)) / n);
+  const z = 1.96;
+  return {
+    low: Math.max(0, p - z * se),
+    high: Math.min(1, p + z * se),
+  };
 }
 
 function parseExtra(extraRaw: unknown): Record<string, unknown> {
@@ -294,13 +504,349 @@ async function runSlsSql(
   return firstRow;
 }
 
+async function runSlsSqlRows(
+  sls: Client,
+  fromDate: Date,
+  toDate: Date,
+  sql: string,
+  label: string,
+): Promise<Record<string, unknown>[]> {
+  console.log("[web-pixel][overview-query][abTest] SLS SQL rows", { label, sql });
+  const resp = (await sls.getLogs(projectName(), logstoreName(), fromDate, toDate, {
+    query: sql,
+    line: 1000,
+    reverse: false,
+  })) as unknown;
+  const rows = Array.isArray(resp)
+    ? (resp as Record<string, unknown>[])
+    : Array.isArray((resp as { logs?: unknown })?.logs)
+      ? (((resp as { logs?: unknown[] }).logs ?? []) as Record<string, unknown>[])
+      : [];
+  console.log("[web-pixel][overview-query][abTest] SLS SQL rows result", {
+    label,
+    rows: rows.length,
+    firstRow: rows[0] ?? {},
+  });
+  return rows;
+}
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
+  const mode = String(url.searchParams.get("mode") || "").trim();
   if (request.method === "OPTIONS") {
     return new Response(null, {
       status: 200,
       headers: corsHeaders,
     });
+  }
+
+  if (request.method === "GET" && mode === "abtest-assign") {
+    console.log("[abtest] assign — loader entry", {
+      method: request.method,
+      mode,
+      fullUrl: request.url,
+      origin: url.origin,
+      pathname: url.pathname,
+      queryKeys: [...url.searchParams.keys()],
+    });
+    const shopName = String(url.searchParams.get("shopName") || "").trim();
+    const offerId = String(url.searchParams.get("offerId") || "").trim();
+    const customerId = String(url.searchParams.get("customerId") || "").trim();
+    const anonId = String(url.searchParams.get("anonId") || "").trim();
+    const splitPercent = Number(url.searchParams.get("splitPercent") || "50");
+    const variantIds = parseJsonArrayOfStrings(
+      String(url.searchParams.get("variantIds") || "[]"),
+    );
+    const trafficWeights = parseJsonArrayOfNumbers(
+      String(url.searchParams.get("trafficWeights") || "[]"),
+    );
+    const salt = String(url.searchParams.get("salt") || "").trim() || getAbSaltFromEnvOrRandom();
+    const identityKey = customerId ? `customer:${customerId}` : `anon:${anonId}`;
+
+    console.log("[abtest] assign request", {
+      shopName,
+      offerId,
+      customerId,
+      anonId,
+      splitPercent,
+      variantIdsCount: variantIds.length,
+      trafficWeightsCount: trafficWeights.length,
+      identityKey,
+    });
+    console.log("[abtest] customerId resolved", { customerId: customerId || null });
+
+    if (!shopName || !offerId || (!customerId && !anonId)) {
+      const errBody = {
+        success: false,
+        message: "shopName/offerId/customerId|anonId is required",
+        received: { shopName, offerId, hasCustomerId: Boolean(customerId), hasAnonId: Boolean(anonId) },
+      };
+      console.warn("[abtest] assign — validation failed", errBody);
+      return new Response(JSON.stringify(errBody), { status: 400, headers: corsHeaders });
+    }
+
+    const isCustomer = Boolean(customerId);
+    const bucket = isCustomer
+      ? computeAbBucketByHash(customerId, salt)
+      : Math.floor(Math.random() * 100);
+    const group = resolveAbGroupOrVariantId({
+      bucket,
+      splitPercent,
+      variantIds,
+      trafficWeights,
+    });
+    const payload = {
+      group,
+      bucket,
+      salt,
+      splitPercent: Math.max(1, Math.min(99, Math.trunc(splitPercent || 50))),
+      variantIds: variantIds.length >= 2 ? variantIds : undefined,
+      trafficWeights:
+        variantIds.length >= 2 && trafficWeights.length === variantIds.length
+          ? trafficWeights
+          : undefined,
+      identityKey,
+      assignedAt: Date.now(),
+      source: isCustomer ? "hash" : "random_first_touch",
+    };
+
+    console.log("[abtest] assign — computed new assignment", {
+      identityKey,
+      group: payload.group,
+      bucket: payload.bucket,
+      source: payload.source,
+    });
+    return new Response(
+      JSON.stringify({ success: true, ...payload }),
+      { status: 200, headers: corsHeaders },
+    );
+  }
+
+  if (request.method === "GET" && mode === "abtest-bind-order") {
+    const shopName = String(url.searchParams.get("shopName") || "").trim();
+    const offerId = String(url.searchParams.get("offerId") || "").trim();
+    const orderId = String(url.searchParams.get("orderId") || "").trim();
+    const anonId = String(url.searchParams.get("anonId") || "").trim();
+    const splitPercent = Number(url.searchParams.get("splitPercent") || "50");
+    const variantIds = parseJsonArrayOfStrings(
+      String(url.searchParams.get("variantIds") || "[]"),
+    );
+    const trafficWeights = parseJsonArrayOfNumbers(
+      String(url.searchParams.get("trafficWeights") || "[]"),
+    );
+    const salt = String(url.searchParams.get("salt") || "").trim() || getAbSaltFromEnvOrRandom();
+    if (!shopName || !offerId || !orderId || !anonId) {
+      return new Response(
+        JSON.stringify({ success: false, message: "shopName/offerId/orderId/anonId is required" }),
+        { status: 400, headers: corsHeaders },
+      );
+    }
+
+    try {
+      const { admin } = await unauthenticated.admin(shopName);
+      const query = `#graphql
+query GetOrderCustomerId($id: ID!) {
+  order(id: $id) {
+    id
+    name
+    customer {
+      id
+    }
+  }
+}`;
+      console.log("[abtest] GetOrderCustomerId query", { query, orderId, shopName });
+      const response = await admin.graphql(query, { variables: { id: orderId } });
+      const json = await response.json();
+      console.log("[abtest] GetOrderCustomerId result", json);
+      const customerId = String(json?.data?.order?.customer?.id || "").trim();
+      if (!customerId) {
+        return new Response(
+          JSON.stringify({ success: false, message: "order has no customer id" }),
+          { status: 404, headers: corsHeaders },
+        );
+      }
+
+      const customerBucket = computeAbBucketByHash(customerId, salt);
+      const customerGroup = resolveAbGroupOrVariantId({
+        bucket: customerBucket,
+        splitPercent,
+        variantIds,
+        trafficWeights,
+      });
+      const payload = {
+        group: customerGroup,
+        bucket: customerBucket,
+        splitPercent: Math.max(1, Math.min(99, Math.trunc(splitPercent || 50))),
+        variantIds: variantIds.length >= 2 ? variantIds : undefined,
+        trafficWeights:
+          variantIds.length >= 2 && trafficWeights.length === variantIds.length
+            ? trafficWeights
+            : undefined,
+        salt,
+        customerId,
+        source: "bind_order_hash",
+        assignedAt: Date.now(),
+      };
+      return new Response(JSON.stringify({ success: true, ...payload }), {
+        status: 200,
+        headers: corsHeaders,
+      });
+    } catch (error) {
+      console.error("[abtest] bind order failed", {
+        shopName,
+        offerId,
+        orderId,
+        anonId,
+        error: String(error),
+      });
+      return new Response(
+        JSON.stringify({ success: false, message: String(error) }),
+        { status: 500, headers: corsHeaders },
+      );
+    }
+  }
+
+  if (request.method === "GET" && mode === "abtest-offer-summary") {
+    const shopName = String(url.searchParams.get("shopName") || "").trim();
+    const offerId = String(url.searchParams.get("offerId") || "").trim();
+    const fromRaw = url.searchParams.get("from");
+    const toRaw = url.searchParams.get("to");
+    const now = new Date();
+    const defaultFrom = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const fromDate = fromRaw ? new Date(fromRaw) : defaultFrom;
+    const toDate = toRaw ? new Date(toRaw) : now;
+
+    if (!shopName || !offerId) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: "shopName and offerId are required",
+        }),
+        { status: 400, headers: corsHeaders },
+      );
+    }
+    if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+      return new Response(
+        JSON.stringify({ success: false, message: "invalid from/to date" }),
+        { status: 400, headers: corsHeaders },
+      );
+    }
+
+    const sls = createSlsClient();
+    if (!sls) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message:
+            "Missing Alibaba Log credentials (ALIBABA_CLOUD_ACCESS_KEY_ID, ALIBABA_CLOUD_ACCESS_KEY_SECRET, ALIBABA_CLOUD_ENDPOINT)",
+        }),
+        { status: 503, headers: corsHeaders },
+      );
+    }
+
+    try {
+      const safeShopName = escapeSlsString(shopName);
+      const safeOfferId = escapeSlsString(offerId);
+
+      const exposureSql = `__topic__: "product_viewed" and shopName: "${safeShopName}" and extra: "${safeOfferId}" | set session mode=scan; SELECT JSON_EXTRACT_SCALAR(bundle_item, '$.abGroup') AS ab_group, COUNT(DISTINCT clientId) AS exposure_users FROM log CROSS JOIN UNNEST(CAST(JSON_EXTRACT(extra, '$.bundle') AS ARRAY(JSON))) AS t(bundle_item) WHERE JSON_EXTRACT_SCALAR(bundle_item, '$.offerId') = '${safeOfferId}' AND JSON_EXTRACT_SCALAR(bundle_item, '$.title') != '${NO_BUNDLE_TITLE}' AND JSON_EXTRACT_SCALAR(bundle_item, '$.abGroup') IS NOT NULL GROUP BY JSON_EXTRACT_SCALAR(bundle_item, '$.abGroup')`;
+
+      const checkoutSql = `__topic__: "checkout_completed" and shopName: "${safeShopName}" and extra: "${safeOfferId}" | set session mode=scan; SELECT JSON_EXTRACT_SCALAR(bundle_item, '$.abGroup') AS ab_group, COUNT(DISTINCT COALESCE(JSON_EXTRACT_SCALAR(extra, '$.orderId'), clientId)) AS checkout_users, ROUND(SUM(CAST(JSON_EXTRACT_SCALAR(bundle_item, '$.price.amount') AS DOUBLE)), 2) AS gmv FROM log CROSS JOIN UNNEST(CAST(JSON_EXTRACT(extra, '$.bundle') AS ARRAY(JSON))) AS t(bundle_item) WHERE JSON_EXTRACT_SCALAR(bundle_item, '$.offerId') = '${safeOfferId}' AND JSON_EXTRACT_SCALAR(bundle_item, '$.title') != '${NO_BUNDLE_TITLE}' AND JSON_EXTRACT_SCALAR(bundle_item, '$.abGroup') IS NOT NULL GROUP BY JSON_EXTRACT_SCALAR(bundle_item, '$.abGroup')`;
+
+      const [exposureRows, checkoutRows] = await Promise.all([
+        runSlsSqlRows(sls, fromDate, toDate, exposureSql, "abtest-exposure-by-group"),
+        runSlsSqlRows(sls, fromDate, toDate, checkoutSql, "abtest-checkout-by-group"),
+      ]);
+
+      const byGroup = new Map<
+        string,
+        { key: string; exposureUsers: number; checkoutUsers: number; gmv: number }
+      >();
+      const ensure = (key: string) => {
+        const hit = byGroup.get(key);
+        if (hit) return hit;
+        const seed = { key, exposureUsers: 0, checkoutUsers: 0, gmv: 0 };
+        byGroup.set(key, seed);
+        return seed;
+      };
+
+      for (const row of exposureRows) {
+        const key = String(row.ab_group || "").trim();
+        if (!key) continue;
+        const acc = ensure(key);
+        acc.exposureUsers = toNumber(row.exposure_users);
+      }
+      for (const row of checkoutRows) {
+        const key = String(row.ab_group || "").trim();
+        if (!key) continue;
+        const acc = ensure(key);
+        acc.checkoutUsers = toNumber(row.checkout_users);
+        acc.gmv = toNumber(row.gmv);
+      }
+
+      const rows = Array.from(byGroup.values()).map((row) => {
+        const conversionRate =
+          row.exposureUsers > 0 ? row.checkoutUsers / row.exposureUsers : 0;
+        const ci = computeNormalApprox95Ci(row.checkoutUsers, row.exposureUsers);
+        return {
+          key: row.key,
+          exposureUsers: row.exposureUsers,
+          checkoutUsers: row.checkoutUsers,
+          gmv: Number(row.gmv.toFixed(2)),
+          conversionRate,
+          ciLow: ci.low,
+          ciHigh: ci.high,
+        };
+      });
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          offerId,
+          rows,
+          range: {
+            from: fromDate.toISOString(),
+            to: toDate.toISOString(),
+          },
+        }),
+        { status: 200, headers: corsHeaders },
+      );
+    } catch (error) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: String(error),
+        }),
+        { status: 500, headers: corsHeaders },
+      );
+    }
+  }
+
+  if (request.method === "GET" && mode === "bundle-offers") {
+    const shopName = String(url.searchParams.get("shopName") || "").trim();
+    if (!shopName) {
+      return new Response(
+        JSON.stringify({ success: false, message: "shopName is required" }),
+        { status: 400, headers: corsHeaders },
+      );
+    }
+    const resolved = await resolveBundleOffersPayloadFromDiscountOwner(shopName);
+    if (!resolved.payload) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: resolved.reason || "bundle offers not found",
+        }),
+        { status: 404, headers: corsHeaders },
+      );
+    }
+    return new Response(
+      JSON.stringify({
+        success: true,
+        source: resolved.source || "discount_owner",
+        payload: resolved.payload,
+      }),
+      { status: 200, headers: corsHeaders },
+    );
   }
 
   if (request.method === "GET" && url.searchParams.get("mode") === "overview") {
@@ -796,6 +1342,33 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const productId = String(data?.productId ?? "");
   const clientId = String(data?.clientId ?? "");
   const extra = String(data?.extra ?? "{}");
+  let parsedExtra: Record<string, unknown> = {};
+  try {
+    parsedExtra = extra ? (JSON.parse(extra) as Record<string, unknown>) : {};
+  } catch (error) {
+    console.warn("[web-pixel] extra json parse failed", {
+      event,
+      shopName,
+      clientId,
+      message: error instanceof Error ? error.message : String(error),
+      extraPreview: extra.slice(0, 320),
+    });
+    parsedExtra = {};
+  }
+  const bundle = Array.isArray(parsedExtra?.bundle)
+    ? (parsedExtra.bundle as Array<Record<string, unknown>>)
+    : [];
+  const abBundleItems = bundle
+    .filter((row) => row && typeof row === "object")
+    .map((row) => ({
+      offerId: String(row.offerId || ""),
+      variantId: String(row.variantId || row.id || ""),
+      title: String(row.title || ""),
+      abGroup: String(row.abGroup || ""),
+      abBucket: Number(row.abBucket),
+      abDiscountPercent: Number(row.abDiscountPercent),
+    }))
+    .filter((row) => row.abGroup);
 
   console.log("[web-pixel] webpixerToAli request received", {
     event,
@@ -803,6 +1376,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     productId,
     clientId,
     extraLength: extra.length,
+    bundleItems: bundle.length,
+    abBundleItemsCount: abBundleItems.length,
+    abBundleItems,
   });
 
   const slsProjectName = projectName();
