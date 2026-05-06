@@ -3,6 +3,28 @@ import prisma from "./db.server";
 
 const cache = new Map<string, Offer[]>();
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
+function isMissingOfferCampaignConfigColumnError(error: unknown): boolean {
+  const message = getErrorMessage(error).toLowerCase();
+  return (
+    message.includes("campaignconfigjson") &&
+    (
+      message.includes("no such column") ||
+      message.includes("has no column named") ||
+      message.includes("column does not exist")
+    )
+  );
+}
+
 export function normalizeShopOffersCacheKey(shopName: string): string {
   return shopName.trim();
 }
@@ -26,10 +48,43 @@ export async function getCachedShopOffers(shopName: string): Promise<Offer[]> {
   const hit = cache.get(key);
   if (hit) return hit;
 
-  const rows = await prisma.offer.findMany({
-    where: { shopName: key },
-    orderBy: { createdAt: "desc" },
-  });
+  let rows: Offer[];
+  try {
+    rows = await prisma.offer.findMany({
+      where: { shopName: key },
+      orderBy: { createdAt: "desc" },
+    });
+  } catch (error) {
+    if (!isMissingOfferCampaignConfigColumnError(error)) {
+      throw error;
+    }
+    console.warn(
+      "[shop-offers-cache] campaignConfigJson column missing, using legacy select",
+    );
+    const legacyRows = await prisma.offer.findMany({
+      where: { shopName: key },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        shopName: true,
+        status: true,
+        name: true,
+        cartTitle: true,
+        offerType: true,
+        discountRulesJson: true,
+        selectedProductsJson: true,
+        offerSettingsJson: true,
+        startTime: true,
+        endTime: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    rows = legacyRows.map((row) => ({
+      ...row,
+      campaignConfigJson: null,
+    })) as Offer[];
+  }
 
   cache.set(key, rows);
   return rows;
