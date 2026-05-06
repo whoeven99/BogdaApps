@@ -178,7 +178,12 @@ function resolveAbTestVariantDiscountRulesJson(
   const g = String(abGroupRaw || "").trim();
   const bucket = Number(abBucketRaw);
   const hasBucket = Number.isFinite(bucket);
-  if (!g && !hasBucket) return null;
+  // 约定：A/B 未找到变体或缺失分桶信息时，回退到原价（full_price），而不是跳过整条折扣逻辑。
+  // 这样可避免主题侧缓存 / 属性丢失导致 Functions “直接不生效”的断层行为。
+  const fullPriceFallback = JSON.stringify([
+    { count: 1, discountPercent: 0, priceMode: "full_price", discountValue: 0, isDefault: true },
+  ]);
+  if (!g && !hasBucket) return fullPriceFallback;
   try {
     const parsed = JSON.parse(String(offerSettingsJson || "{}")) as Record<string, unknown>;
     const ab = (parsed?.abTest || {}) as Record<string, unknown>;
@@ -218,24 +223,24 @@ function resolveAbTestVariantDiscountRulesJson(
         }
       }
       if (idx < 0) {
-        return null;
+        return fullPriceFallback;
       }
       const row = variants[idx] as { discountRules?: unknown };
       const rules = row?.discountRules;
       if (Array.isArray(rules) && rules.length) {
         return JSON.stringify(rules);
       }
-      return null;
+      return fullPriceFallback;
     }
     const ga = Math.max(0, Math.min(100, Number(ab.groupADiscountPercent) || 10));
     const gb = Math.max(0, Math.min(100, Number(ab.groupBDiscountPercent) || 90));
     if (g !== "abtest1" && g !== "abtest2") {
-      return null;
+      return fullPriceFallback;
     }
     const pct = g === "abtest1" ? ga : gb;
     return JSON.stringify([{ count: 1, discountPercent: pct, isDefault: true }]);
   } catch {
-    return null;
+    return fullPriceFallback;
   }
 }
 
@@ -868,16 +873,7 @@ export function bundleCartDiscountGenerateRun(
           abGroup,
           abBucket,
         );
-        if (!variantRulesJson) {
-          log("abtest_line_skip_missing_or_unmatched_group", {
-            cartLineId: lineId,
-            offerId: suitOffer.id,
-            abGroup,
-            abBucket,
-            offerSettingsJson: safeJsonPreview(suitOffer.offerSettingsJson, 260),
-          });
-          continue;
-        }
+        // 约定：variantRulesJson 永不为 null（内部已回退 full_price）。
         tier = pickBestDiscountTier(variantRulesJson, quantity);
         log("abtest_line_discount_resolved", {
           cartLineId: lineId,
