@@ -159,10 +159,6 @@ const logAliSendBoundary = async (params: {
 
 register(({ analytics, browser, settings }) => {
   const { shopName, server } = settings;
-  console.log("[ciwi][web-pixel] init", {
-    shopName: shopName || "(empty)",
-    server: server || "(empty)",
-  });
 
   analytics.subscribe("product_viewed", async (event) => {
     await sleep(500);

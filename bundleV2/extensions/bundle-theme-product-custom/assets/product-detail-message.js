@@ -42,7 +42,6 @@ function getBundlesConfigRaw() {
 function getCurrentCustomerId() {
   const config = getBundlesConfigRaw();
   const customerId = config?.customerId != null ? String(config.customerId).trim() : "";
-  console.log("[abtest] customerId from liquid config", { customerId: customerId || null });
   return customerId;
 }
 
@@ -1718,19 +1717,6 @@ function ensureAbTestAssignmentForOffer(offer) {
   const cached = localAssignments[localKey];
   let bucket = Number(cached?.bucket);
   let group = String(cached?.group || "");
-  console.log("[abtest] assignment evaluate (before local resolve)", {
-    offerId: String(offer?.id || ""),
-    customerId: customerId || null,
-    anonId: anonId || null,
-    identityKey,
-    localKey,
-    cached: cached || null,
-    cfgMode: cfg.mode,
-    cfgSplitPercent: cfg.bucketSplitPercent,
-    cfgVariantIds: cfg.variantIds,
-    cfgTrafficWeights: cfg.trafficWeights,
-    cfgSaltLength: cfg.salt ? String(cfg.salt).length : 0,
-  });
   if (!Number.isFinite(bucket) || !group) {
     if (customerId) {
       bucket = simpleHashBucket(`${customerId}:${cfg.salt}`);
@@ -1783,8 +1769,6 @@ function getCurrentOffer(offersConfig) {
   const currentProductGid = getCurrentProductGid();
   const currentMarketId = getCurrentMarketId();
   const now = Date.now();
-
-  console.log("[ciwi] offers total:", offers.length, "currentProductGid:", currentProductGid, "currentMarketId:", currentMarketId);
 
   if (!offers.length) {
     console.log("[ciwi] no offers in metafield — skip bundle UI");
@@ -2614,6 +2598,10 @@ async function performCompleteBundleCartAdd() {
   try {
     const currentOffer = getCurrentOffer(offersConfigCache);
     if (!currentOffer || currentOffer.offerType !== "complete-bundle") return false;
+    const lineProps = {
+      [CIWI_PROP_OFFER_ID]: String(currentOffer?.id || ""),
+      [CIWI_PROP_TIER]: String(computeSelectedBarIndexForOffer(currentOffer)),
+    };
     const config = parseCompleteBundleConfig(currentOffer?.selectedProductsJson);
     const items = [];
     const selId = window.__ciwiBundleState?.selectedCompleteBundleBarId;
@@ -2631,7 +2619,7 @@ async function performCompleteBundleCartAdd() {
           "",
       );
       if (!variantId) continue;
-      items.push({ id: Number(variantId), quantity: 1 });
+      items.push({ id: Number(variantId), quantity: 1, properties: lineProps });
     }
     if (!items.length) return false;
     const res = await fetch("/cart/add.js", {
