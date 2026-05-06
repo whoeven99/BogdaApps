@@ -29,6 +29,23 @@ function clampNumber(raw: unknown, min: number, max: number, fallback: number): 
   return Math.min(max, Math.max(min, n));
 }
 
+function fnv1a32Base36(input: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < input.length; i += 1) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(36);
+}
+
+function normalizeAbVariantId(rawId: string, salt: string, index: number, key: string): string {
+  const rid = sanitizeSingleLineText(rawId, 120, "");
+  const k = sanitizeSingleLineText(key, 16, "");
+  const seed = `${salt}::${rid || `idx:${index}`}::${k || "nokey"}::v1`;
+  // 强制使用 abv_*；保持稳定且避免与历史 legacy id 冲突
+  return `abv_${fnv1a32Base36(seed)}`;
+}
+
 /** 与 quantity-breaks-same / A/B 变体阶梯 JSON 一致（含可选定价模式，兼容仅 discountPercent 的旧数据） */
 export type AbTestQuantityDiscountRule = {
   count: number;
@@ -235,8 +252,9 @@ export function parseAbTestOfferSettingsBlock(
         sourceIndex >= 0 && sourceIndex < 26
           ? String.fromCharCode(65 + sourceIndex)
           : `V${sourceIndex + 1}`;
-      let id = sanitizeSingleLineText(o.id, 80, `abv_variant_${sourceIndex + 1}`);
+      const idRaw = sanitizeSingleLineText(o.id, 120, "");
       let key = sanitizeSingleLineText(o.key, 8, fallbackKeyBase);
+      let id = normalizeAbVariantId(idRaw, salt, sourceIndex, key);
       let rules: AbTestQuantityDiscountRule[] = [];
       if (Array.isArray(o.discountRules)) {
         rules = parseAbTestQuantityDiscountRules(JSON.stringify(o.discountRules));
@@ -284,7 +302,7 @@ export function parseAbTestOfferSettingsBlock(
   const gb = clampNumber(ab.groupBDiscountPercent, 0, 100, 90);
   const sp = clampNumber(ab.bucketSplitPercent, 1, 99, 50);
   const v0: AbTestVariantStored = {
-    id: "ab_legacy_a",
+    id: normalizeAbVariantId("ab_legacy_a", salt, 0, "A"),
     key: "A",
     discountRules: [
       {
@@ -298,7 +316,7 @@ export function parseAbTestOfferSettingsBlock(
     ],
   };
   const v1: AbTestVariantStored = {
-    id: "ab_legacy_b",
+    id: normalizeAbVariantId("ab_legacy_b", salt, 1, "B"),
     key: "B",
     discountRules: [
       {

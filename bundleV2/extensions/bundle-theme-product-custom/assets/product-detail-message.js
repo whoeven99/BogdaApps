@@ -1607,8 +1607,26 @@ function getAbTestConfigFromOfferSettings(offer) {
     let trafficWeights = Array.isArray(ab.trafficWeights)
       ? ab.trafficWeights.map((x) => Number(x))
       : [];
+    // 强制统一使用 abv_*：兼容历史配置（ab_legacy_*）与手动填入的旧 id
+    const normalizeAbvId = (raw, index) => {
+      const rid = String(raw || "").trim();
+      if (!rid) return "";
+      if (rid.startsWith("abv_")) return rid;
+      const salt = String(ab.salt || "");
+      const offerId = String(offer?.id || "");
+      // 简单稳定 hash（非加密）：把 legacy/旧 id 映射到 abv_*
+      let h = 2166136261;
+      const seed = `${offerId}::${salt}::${rid}::idx:${index}::v1`;
+      for (let i = 0; i < seed.length; i += 1) {
+        h ^= seed.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+      }
+      return `abv_${(h >>> 0).toString(36)}`;
+    };
     const variantIds = variants
-      .map((row) => (row && typeof row === "object" ? String(row.id || "").trim() : ""))
+      .map((row, i) =>
+        row && typeof row === "object" ? normalizeAbvId(row.id, i) : "",
+      )
       .filter(Boolean);
     if (variantIds.length >= 2) {
       if (trafficWeights.length !== variantIds.length) {
@@ -1715,7 +1733,21 @@ function ensureAbTestAssignmentForOffer(offer) {
   const cached = localAssignments[localKey];
   let bucket = Number(cached?.bucket);
   let group = String(cached?.group || "");
-  if (!Number.isFinite(bucket) || !group) {
+  // 修复：当活动配置变更（variants 增减/重置）后，本地缓存可能残留不存在的 group（如 abv_default_d）。
+  // 若 group 不在当前配置内，则视为无效并重新分配，避免购物车侧按错误变体计算。
+  const validGroups = Array.isArray(cfg?.variantIds) ? cfg.variantIds.map((x) => String(x)) : [];
+  const groupIsValid =
+    !!group &&
+    (group === "abtest1" ||
+      group === "abtest2" ||
+      validGroups.includes(group));
+  if (!Number.isFinite(bucket) || !group || !groupIsValid) {
+    if (group && !groupIsValid) {
+      try {
+        delete localAssignments[localKey];
+        writeAbAssignments(localAssignments);
+      } catch (e) {}
+    }
     if (customerId) {
       bucket = simpleHashBucket(`${customerId}:${cfg.salt}`);
       group = resolveAbGroupOrVariantId(
