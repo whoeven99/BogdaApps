@@ -13,14 +13,22 @@ export const WebpixerToAli = async ({
   productId?: string;
   extra: string;
 }) => {
+  const normalizedServer = String(server || "").trim().replace(/\/+$/, "");
   console.log("[web-pixel] WebpixerToAli", {
     shopName,
     event,
-    server: server || "(empty)",
+    server: normalizedServer || "(empty)",
   });
 
   try {
-    const endpoint = `${server}/webpixerToAli`;
+    if (!normalizedServer) {
+      console.warn("[web-pixel] WebpixerToAli skipped: empty server", {
+        event,
+        shopName,
+      });
+      return;
+    }
+    const endpoint = `${normalizedServer}/webpixerToAli`;
     console.log("[web-pixel] WebpixerToAli request", {
       endpoint,
       event,
