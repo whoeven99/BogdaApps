@@ -40,6 +40,11 @@ function fnv1a32Base36(input: string): string {
 
 function normalizeAbVariantId(rawId: string, salt: string, index: number, key: string): string {
   const rid = sanitizeSingleLineText(rawId, 120, "");
+  // 已持久化的 abv_* 必须保持幂等（避免二次解析时再次 hash，导致 id 漂移，进而统计/映射失败）。
+  // 允许历史内置默认值（abv_default_*）与哈希值（abv_[0-9a-z]+）。
+  if (/^abv_[0-9a-z_]+$/i.test(rid)) {
+    return rid;
+  }
   const k = sanitizeSingleLineText(key, 16, "");
   const seed = `${salt}::${rid || `idx:${index}`}::${k || "nokey"}::v1`;
   // 强制使用 abv_*；保持稳定且避免与历史 legacy id 冲突
