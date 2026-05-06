@@ -1607,25 +1607,14 @@ function getAbTestConfigFromOfferSettings(offer) {
     let trafficWeights = Array.isArray(ab.trafficWeights)
       ? ab.trafficWeights.map((x) => Number(x))
       : [];
-    // 强制统一使用 abv_*：兼容历史配置（ab_legacy_*）与手动填入的旧 id
-    const normalizeAbvId = (raw, index) => {
-      const rid = String(raw || "").trim();
-      if (!rid) return "";
-      if (rid.startsWith("abv_")) return rid;
-      const salt = String(ab.salt || "");
-      const offerId = String(offer?.id || "");
-      // 简单稳定 hash（非加密）：把 legacy/旧 id 映射到 abv_*
-      let h = 2166136261;
-      const seed = `${offerId}::${salt}::${rid}::idx:${index}::v1`;
-      for (let i = 0; i < seed.length; i += 1) {
-        h ^= seed.charCodeAt(i);
-        h = Math.imul(h, 16777619);
-      }
-      return `abv_${(h >>> 0).toString(36)}`;
-    };
+    // 重要：主题侧必须使用 offerSettingsJson.abTest.variants[*].id 的“原始值”作为 group。
+    // 原因：
+    // - 主题侧会把 group 写入 line item properties，Functions 侧按该 id（或 key）找变体；
+    // - 若主题侧自行 hash/重写 id，会导致「产品页展示的变体」与「Functions 命中的变体」出现偏差，
+    //   或在配置变更后残留出不存在的 group（如 abv_default_d）。
     const variantIds = variants
-      .map((row, i) =>
-        row && typeof row === "object" ? normalizeAbvId(row.id, i) : "",
+      .map((row) =>
+        row && typeof row === "object" && row.id != null ? String(row.id).trim() : "",
       )
       .filter(Boolean);
     if (variantIds.length >= 2) {
