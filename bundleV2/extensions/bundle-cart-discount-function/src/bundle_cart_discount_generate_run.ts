@@ -589,14 +589,9 @@ export function bundleCartDiscountGenerateRun(
   input: CartInput,
 ): CartLinesDiscountsGenerateRunResult {
   const shopMetafield = input.shop.metafield as MetafieldSnapshot;
-  const discountExt = input.discount as typeof input.discount & {
-    appOwnedOffers?: MetafieldSnapshot;
-    defaultAppOffers?: MetafieldSnapshot;
-    legacyOffers?: MetafieldSnapshot;
-  };
-  const discountAppOwnedMetafield = discountExt.appOwnedOffers as MetafieldSnapshot;
-  const discountDefaultAppMetafield = discountExt.defaultAppOffers as MetafieldSnapshot;
-  const discountLegacyMetafield = discountExt.legacyOffers as MetafieldSnapshot;
+  const discountAppOwnedMetafield = input.discount.appOwnedOffers as MetafieldSnapshot;
+  const discountDefaultAppMetafield = input.discount.defaultAppOffers as MetafieldSnapshot;
+  const discountLegacyMetafield = input.discount.legacyOffers as MetafieldSnapshot;
   // 运行时优先读 discount owner 的 app-owned 配置，再尝试 legacy namespace，最后回退到 shop.metafield。
   const activeOffersMetafield =
     discountAppOwnedMetafield ??

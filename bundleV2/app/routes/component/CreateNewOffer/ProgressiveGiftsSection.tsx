@@ -7,7 +7,10 @@ import type {
 
 type DiscountRuleLite = { count: number };
 type BxgyRuleLite = { count: number };
-type DifferentProductsRuleLite = { count: number; tierType: "bxgy" | "simple" };
+type DifferentProductsRuleLite = {
+  count: number;
+  tierType?: "bxgy" | "simple";
+};
 
 type Props = {
   offerType: string;
@@ -34,13 +37,16 @@ function buildBarOptions(
     }));
   }
   if (offerType === "quantity-breaks-different") {
-    return differentProductsDiscountRules.map((r, i) => ({
-      value: i + 1,
-      label:
-        r.tierType === "bxgy"
-          ? `Tier #${i + 1} (BXGY, count >= ${r.count})`
-          : `Tier #${i + 1} (simple, count >= ${r.count})`,
-    }));
+    return differentProductsDiscountRules.map((r, i) => {
+      const tier = r.tierType ?? "simple";
+      return {
+        value: i + 1,
+        label:
+          tier === "bxgy"
+            ? `Tier #${i + 1} (BXGY, count >= ${r.count})`
+            : `Tier #${i + 1} (simple, count >= ${r.count})`,
+      };
+    });
   }
   return [
     { value: 1, label: "Bar #1 (Single, qty 1)" },

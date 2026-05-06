@@ -39,6 +39,19 @@ type Props = {
   productBundlePreview?: ProductBundlePreview | null;
   checkboxUpsellPreview?: CheckboxUpsellPreview | null;
   stickyAddToCartPreview?: StickyAddToCartPreview | null;
+  /** 多品 bundle 预览样式（CreateNewOffer 传入；HTML 生成可逐步对接） */
+  multiProductSettings?: {
+    enabled: boolean;
+    chooseButtonText: string;
+    chooseButtonColor: string;
+    chooseButtonSize: number;
+    chooseImageSize: number;
+  } | null;
+  onPreviewAction?: (
+    action: "add" | "choose",
+    itemId: string,
+    slotIndex?: number,
+  ) => void;
 };
 
 export default function BundlePreview({
@@ -69,6 +82,8 @@ export default function BundlePreview({
   productBundlePreview,
   checkboxUpsellPreview,
   stickyAddToCartPreview,
+  multiProductSettings: _multiProductSettings,
+  onPreviewAction: _onPreviewAction,
 }: Props) {
   const html = renderBundlePreviewHtml({
     title,

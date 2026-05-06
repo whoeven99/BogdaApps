@@ -95,6 +95,13 @@ export type OfferSettings = {
   oneTimeTitle?: string;
   oneTimeSubtitle?: string;
   subscriptionDefaultSelected?: boolean;
+  enableMultiProductBundle?: boolean;
+  chooseButtonText?: string;
+  chooseButtonColor?: string;
+  chooseButtonSize?: number;
+  chooseImageSize?: number;
+  /** A/B 与旧版两组折扣比例等配置（仅存 JSON，结构与 parseAbTestOfferSettingsBlock 对齐） */
+  abTest?: Record<string, unknown>;
 };
 
 export function parseOfferSettings(offerSettingsJson?: string | null): OfferSettings {
@@ -126,6 +133,12 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
       oneTimeTitle: undefined,
       oneTimeSubtitle: undefined,
       subscriptionDefaultSelected: undefined,
+      enableMultiProductBundle: false,
+      chooseButtonText: "Choose",
+      chooseButtonColor: "#111111",
+      chooseButtonSize: 28,
+      chooseImageSize: 40,
+      abTest: undefined,
     };
   }
 
@@ -183,6 +196,24 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
         typeof parsed.subscriptionDefaultSelected === "boolean"
           ? parsed.subscriptionDefaultSelected
           : undefined,
+      enableMultiProductBundle:
+        typeof parsed.enableMultiProductBundle === "boolean"
+          ? parsed.enableMultiProductBundle
+          : false,
+      chooseButtonText:
+        typeof parsed.chooseButtonText === "string"
+          ? parsed.chooseButtonText
+          : "Choose",
+      chooseButtonColor: sanitizeHexColor(
+        parsed.chooseButtonColor,
+        "#111111",
+      ),
+      chooseButtonSize: clampNumber(parsed.chooseButtonSize, 24, 44, 28),
+      chooseImageSize: clampNumber(parsed.chooseImageSize, 24, 64, 40),
+      abTest:
+        parsed.abTest && typeof parsed.abTest === "object"
+          ? (parsed.abTest as Record<string, unknown>)
+          : undefined,
     };
   } catch {
     return parseOfferSettings(null);
@@ -197,6 +228,9 @@ export type DiscountRule = {
   id?: string;
   count: number;
   discountPercent: number;
+  /** 阶梯计价模式（编辑器与预览） */
+  priceMode?: "percentage_off" | "full_price" | "amount_off" | "fixed_price";
+  discountValue?: number;
   title?: string;
   subtitle?: string;
   badge?: string;
@@ -399,7 +433,23 @@ export function isProgressiveGiftUnlocked(
 // Complete bundle（组合包）配置
 // -----------------------------
 
-export type CompleteBundlePricingMode = "full_price" | "percentage_off" | "amount_off";
+export type CompleteBundlePricingMode =
+  | "full_price"
+  | "percentage_off"
+  | "amount_off"
+  | "fixed_price";
+
+export type CompleteBundleVariantOption = {
+  name: string;
+  value: string;
+};
+
+export type CompleteBundleVariant = {
+  id: string;
+  title?: string;
+  price?: string;
+  selectedOptions?: CompleteBundleVariantOption[];
+};
 
 export type CompleteBundleProduct = {
   productId: string;
@@ -410,8 +460,9 @@ export type CompleteBundleProduct = {
   defaultVariantId?: string;
   selectedVariantId?: string;
   selectedOptions?: Record<string, string>;
-  variants?: unknown[];
-  [k: string]: unknown;
+  variants?: CompleteBundleVariant[];
+  /** 部分 JSON 在 bar 内联存 per-product 定价（编辑器使用） */
+  pricing?: { mode: CompleteBundlePricingMode; value: number };
 };
 
 export type CompleteBundleBar = {
@@ -453,7 +504,9 @@ export function parseCompleteBundleConfig(selectedProductsJson?: string | null):
             ? "percentage_off"
             : pricingRaw.mode === "amount_off"
               ? "amount_off"
-              : ("full_price" as const);
+              : pricingRaw.mode === "fixed_price"
+                ? "fixed_price"
+                : ("full_price" as const);
         const value = Number.isFinite(Number(pricingRaw.value)) ? Number(pricingRaw.value) : 0;
 
         const productsRaw = Array.isArray(b.products) ? b.products : [];
@@ -636,6 +689,128 @@ export function buildCompleteBundleConfig(config: unknown): string {
   return JSON.stringify(config ?? {});
 }
 
+export function parseBxgyDiscountRules(
+  discountRulesJson?: string | null,
+): BxgyDiscountRule[] {
+  if (!discountRulesJson) return [];
+  try {
+    const parsed = JSON.parse(discountRulesJson) as unknown;
+    if (!Array.isArray(parsed)) return [];
+
+    const out: BxgyDiscountRule[] = [];
+    for (const item of parsed) {
+      if (!item || typeof item !== "object") continue;
+      const r = item as Record<string, unknown>;
+      const count = Number(r.count);
+      const buyQuantity = Number(r.buyQuantity);
+      const getQuantity = Number(r.getQuantity);
+      const discountPercent = Number(r.discountPercent);
+      const maxUsesPerOrderRaw = Number(r.maxUsesPerOrder);
+      const maxUsesPerOrder = Number.isFinite(maxUsesPerOrderRaw)
+        ? maxUsesPerOrderRaw
+        : 1;
+      const buyProductIds = Array.isArray(r.buyProductIds)
+        ? r.buyProductIds.filter((id): id is string => typeof id === "string")
+        : [];
+      const getProductIds = Array.isArray(r.getProductIds)
+        ? r.getProductIds.filter((id): id is string => typeof id === "string")
+        : [];
+
+      if (!Number.isFinite(count) || count < 1) continue;
+      if (!Number.isFinite(buyQuantity) || buyQuantity < 1) continue;
+      if (!Number.isFinite(getQuantity) || getQuantity < 1) continue;
+      if (!Number.isFinite(discountPercent)) continue;
+      if (!buyProductIds.length || !getProductIds.length) continue;
+
+      out.push({
+        count: Math.trunc(count),
+        discountPercent: Math.max(0, Math.min(100, discountPercent)),
+        buyQuantity: Math.trunc(buyQuantity),
+        getQuantity: Math.trunc(getQuantity),
+        buyProductIds,
+        getProductIds,
+        maxUsesPerOrder: Math.max(1, Math.trunc(maxUsesPerOrder)),
+      });
+    }
+
+    out.sort((a, b) => a.count - b.count);
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+export function parseDifferentProductDiscountRules(
+  discountRulesJson?: string | null,
+): DifferentProductDiscountRule[] {
+  if (!discountRulesJson) return [];
+  try {
+    const parsed = JSON.parse(discountRulesJson) as unknown;
+    if (!Array.isArray(parsed)) return [];
+
+    const out: DifferentProductDiscountRule[] = [];
+    for (const item of parsed) {
+      if (!item || typeof item !== "object") continue;
+      const r = item as Record<string, unknown>;
+      const count = Number(r.count);
+      const discountPercent = Number(r.discountPercent);
+      if (!Number.isFinite(count) || count < 1) continue;
+      if (!Number.isFinite(discountPercent)) continue;
+
+      const tierRaw = String(r.tierType || "simple");
+      const tierType: "bxgy" | "simple" = tierRaw === "bxgy" ? "bxgy" : "simple";
+      const buyProductIds = Array.isArray(r.buyProductIds)
+        ? r.buyProductIds.filter((id): id is string => typeof id === "string")
+        : [];
+      const getProductIds = Array.isArray(r.getProductIds)
+        ? r.getProductIds.filter((id): id is string => typeof id === "string")
+        : [];
+      const buyQuantity = Number(r.buyQuantity);
+      const getQuantity = Number(r.getQuantity);
+      const maxUsesPerOrder = Number(r.maxUsesPerOrder);
+
+      out.push({
+        count: Math.trunc(count),
+        discountPercent: Math.max(0, Math.min(100, discountPercent)),
+        tierType,
+        buyProductIds,
+        getProductIds,
+        buyQuantity: Number.isFinite(buyQuantity)
+          ? Math.trunc(buyQuantity)
+          : undefined,
+        getQuantity: Number.isFinite(getQuantity)
+          ? Math.trunc(getQuantity)
+          : undefined,
+        maxUsesPerOrder: Number.isFinite(maxUsesPerOrder)
+          ? Math.max(1, Math.trunc(maxUsesPerOrder))
+          : undefined,
+      });
+    }
+
+    out.sort((a, b) => a.count - b.count);
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+/** 与历史上 singular 命名的 builder 对齐 */
+export const buildDifferentProductDiscountRulesJson =
+  buildDifferentProductsDiscountRulesJson;
+
+/**
+ * 编辑器态「不同商品」档位（允许缺 tierType / buyProductIds，保存前由表单补齐）。
+ * 持久化对齐见 DifferentProductsDiscountRule。
+ */
+export type DifferentProductDiscountRule = DiscountRule & {
+  tierType?: "bxgy" | "simple";
+  buyProductIds?: string[];
+  getProductIds?: string[];
+  buyQuantity?: number;
+  getQuantity?: number;
+  maxUsesPerOrder?: number;
+};
+
 export function getOfferScheduleTimezone(input: {
   campaignConfigJson?: string | null | undefined;
   offerSettingsJson?: string | null | undefined;
@@ -668,3 +843,13 @@ export function getOfferRulesText(input: { campaignConfigJson?: string | null | 
   const tiers = parseDiscountRules(input.discountRulesJson || null);
   return tiers.length ? `${tiers.length} tiers` : "";
 }
+
+// --- A/B（与 zz/feature/20260427/abTest 对齐，实现见独立模块） ---
+export {
+  computeEvenTrafficWeights,
+  normalizeTrafficWeights,
+  parseAbTestOfferSettingsBlock,
+  type AbTestVariantStored,
+  type AbTestOfferSettingsStored,
+  type AbTestQuantityDiscountRule,
+} from "./offerParsingAbTest";

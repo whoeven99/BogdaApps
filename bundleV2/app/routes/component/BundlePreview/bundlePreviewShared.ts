@@ -13,6 +13,16 @@ export type PreviewItem = {
   badge?: string;
   saveLabel?: string;
   products?: PreviewProduct[];
+  /** quantity-breaks-different 多品预览：可选槽位数 */
+  chooseControlCount?: number;
+  /** 用户为某 tier 在预览中挑选的商品 */
+  selectedProducts?: Array<{
+    id: string;
+    title: string;
+    image: string;
+    price: string;
+    variantsCount?: number;
+  }>;
 };
 
 export type PreviewProduct = {

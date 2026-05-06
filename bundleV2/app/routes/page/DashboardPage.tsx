@@ -1,24 +1,23 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Form,
   useNavigation,
   useSearchParams,
   useActionData,
 } from "react-router";
-import {
-  ArrowDown,
-  ArrowUp,
-  ChartBar,
-  Pencil,
-  Trash2,
-  Info,
-  X,
-  AlertCircle,
-} from "lucide-react";
+import { Pencil, Trash2, Info, X, AlertCircle } from "lucide-react";
 import "../../styles/tailwind.css";
 import { CreateNewOffer } from "../component/CreateNewOffer/CreateNewOffer";
 import type { IndexLoaderData } from "../_index/route";
-import { parseDiscountRules } from "../../utils/offerParsing";
+import {
+  parseAbTestOfferSettingsBlock,
+  parseDiscountRules,
+  parseOfferSettings,
+} from "../../utils/offerParsing";
+import {
+  isConversionDifferenceCredibleVsBaseline,
+  waldProportion95ConfidenceInterval,
+} from "../../utils/abTestStatistics";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -65,30 +64,163 @@ type GmvOverviewMetrics = {
   orderPv: number;
 };
 
-const mockAbTests = [
-  {
-    id: 1,
-    name: "Summer Bundle Test",
-    status: "Running" as const,
-    variant: "A vs B",
-    pv: "45,230",
-    extraGMV: "$1,240",
-    improvement: 15.3,
-    daysRunning: 14,
-    confidence: 95,
-  },
-  {
-    id: 2,
-    name: "Winter Promotion Test",
-    status: "Paused" as const,
-    variant: "A vs B vs C",
-    pv: "38,150",
-    extraGMV: "$890",
-    improvement: -8.2,
-    daysRunning: 21,
-    confidence: 78,
-  },
-];
+type AbVariantSummary = {
+  key: string;
+  exposureUsers: number;
+  checkoutUsers: number;
+  gmv: number;
+  conversionRate: number;
+  ciLow: number;
+  ciHigh: number;
+};
+
+type AbTestSummaryRow = {
+  offerId: string;
+  offerName: string;
+  isActive: boolean;
+  variants: AbVariantSummary[];
+  winnerKey: string;
+  winnerLiftPct: number;
+};
+
+function extractAbVariantKeysFromOfferSettings(offerSettingsJson: string | null) {
+  if (!offerSettingsJson) return [];
+  try {
+    const parsed = JSON.parse(String(offerSettingsJson)) as Record<string, unknown>;
+    const abRaw = parsed?.abTest as Record<string, unknown> | undefined;
+    if (!abRaw || typeof abRaw !== "object") return [];
+    const variantsRaw = (abRaw as any)?.variants;
+    if (!Array.isArray(variantsRaw) || variantsRaw.length < 2) return [];
+    const saltHint = String((abRaw as any)?.salt || "");
+    const stored = parseAbTestOfferSettingsBlock(abRaw, saltHint);
+    return stored.variants.map((v) => v.key).slice(0, 4);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 解决图 1 “A/B 数据像是查不到”的关键：
+ * web 侧打点（nway 模式）里 `abGroup` 可能是 variant.id，
+ * 但本页面合并逻辑按 variant.key（A/B）去匹配，导致 GMV 等回退为 0。
+ * 这里构建一个映射：把 API 返回的 rawKey 转成页面期望的 variant.key。
+ */
+function buildAbVariantKeyMapperFromOfferSettings(offerSettingsJson: string | null) {
+  const fallback = {
+    mapRawKeyToVariantKey: (rawKey: string) => String(rawKey ?? "").trim(),
+  };
+
+  if (!offerSettingsJson) return fallback;
+  try {
+    const settingsParsed = JSON.parse(String(offerSettingsJson)) as Record<string, unknown>;
+    const abRaw = settingsParsed?.abTest as Record<string, unknown> | undefined;
+    if (!abRaw || typeof abRaw !== "object") return fallback;
+
+    const saltHint = String((abRaw as any)?.salt || "");
+    const stored = parseAbTestOfferSettingsBlock(abRaw, saltHint);
+
+    const idToKey = new Map<string, string>();
+    for (const v of stored.variants) {
+      if (!v?.id || !v?.key) continue;
+      idToKey.set(String(v.id), String(v.key));
+    }
+
+    // legacy 模式：abGroup 使用 "abtest1"/"abtest2"（由 bucket<split 决定）
+    const keyA = stored.variants?.[0]?.key ? String(stored.variants[0].key) : "A";
+    const keyB = stored.variants?.[1]?.key ? String(stored.variants[1].key) : "B";
+
+    return {
+      mapRawKeyToVariantKey: (rawKey: string) => {
+        const k = String(rawKey ?? "").trim();
+        if (!k) return "";
+        if (idToKey.has(k)) return idToKey.get(k) || "";
+        if (k === "abtest1") return keyA;
+        if (k === "abtest2") return keyB;
+        return k;
+      },
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+/** 表格行顺序：优先 key「A」为第一行（基准），其余按配置 keys 顺序补齐。 */
+function orderAbTestVariantsForDisplay(
+  variants: AbVariantSummary[],
+  configKeys: string[],
+): AbVariantSummary[] {
+  const map = new Map(variants.map((v) => [v.key, v]));
+  const fromConfig = configKeys.filter((k) => map.has(k));
+  const tail = variants.map((v) => v.key).filter((k) => !fromConfig.includes(k));
+  let keys = [...new Set([...fromConfig, ...tail])];
+  if (keys.includes("A")) {
+    keys = ["A", ...keys.filter((k) => k !== "A")];
+  }
+  return keys.map((k) => map.get(k)).filter((v): v is AbVariantSummary => Boolean(v));
+}
+
+function getAbVariantDisplayName(key: string, offerSettingsJson: string | null) {
+  const base = `Variant ${key}`;
+  if (!offerSettingsJson) return base;
+  try {
+    const parsed = JSON.parse(String(offerSettingsJson)) as Record<string, unknown>;
+    const abRaw = parsed?.abTest as Record<string, unknown> | undefined;
+    const list = abRaw && Array.isArray((abRaw as { variants?: unknown }).variants)
+      ? ((abRaw as { variants: unknown[] }).variants as Record<string, unknown>[])
+      : [];
+    const row = list.find((v) => String(v?.key || "") === key);
+    const rules = row?.discountRules;
+    const title =
+      Array.isArray(rules) && rules[0] && typeof rules[0] === "object"
+        ? String((rules[0] as { title?: string }).title || "").trim()
+        : "";
+    return title ? `${base}（${title}）` : base;
+  } catch {
+    return base;
+  }
+}
+
+/** 较基准变化百分比：上升红 #d72c0d，下降绿 #108043（业务指定配色）。 */
+function formatRelativeChangeVsBaseline(
+  baseline: number,
+  value: number,
+): { text: string; className: string } | null {
+  if (!Number.isFinite(baseline) || !Number.isFinite(value)) return null;
+  if (Math.abs(baseline) < 1e-12) {
+    if (Math.abs(value) < 1e-12) return null;
+    return { text: "较基准 n/a（基准为 0）", className: "text-[#5c6166] text-[11px]" };
+  }
+  const pct = ((value - baseline) / baseline) * 100;
+  if (Math.abs(pct) < 1e-6) {
+    return { text: "较基准 0.00%", className: "text-[#5c6166] text-[11px]" };
+  }
+  const sign = pct > 0 ? "+" : "";
+  const text = `较基准 ${sign}${pct.toFixed(2)}%`;
+  const className =
+    pct > 0 ? "text-[#d72c0d] text-[11px]" : "text-[#108043] text-[11px]";
+  return { text, className };
+}
+
+function CellWithDelta({
+  baseline,
+  value,
+  formatPrimary,
+  showDelta,
+}: {
+  baseline: number;
+  value: number;
+  formatPrimary: (n: number) => string;
+  showDelta: boolean;
+}) {
+  const delta =
+    showDelta ? formatRelativeChangeVsBaseline(baseline, value) : null;
+  return (
+    <div className="leading-snug">
+      <div className="text-[#1c1f23]">{formatPrimary(value)}</div>
+      {delta ? <div className={delta.className}>{delta.text}</div> : null}
+    </div>
+  );
+}
 
 function ChevronRightIcon() {
   return (
@@ -135,8 +267,21 @@ export function DashboardPage({
   const [overviewMetrics, setOverviewMetrics] = useState<GmvOverviewMetrics | null>(
     null,
   );
+  const [totalGmv, setTotalGmv] = useState(0);
+  const [gmvGrowthRate, setGmvGrowthRate] = useState(0);
+  const [bundleOrders, setBundleOrders] = useState(0);
+  const [productViewed, setProductViewed] = useState(0);
+
+  const mockOverviewData = {
+    bundleOrders: 320,
+    bundleOrdersGrowthRate: 8.5,
+    avgConversionRate: 3.2,
+    conversionTrend: 4.1,
+  };
 
   const [showThemeExtensionModal, setShowThemeExtensionModal] = useState(false);
+  const [abTestSummaries, setAbTestSummaries] = useState<AbTestSummaryRow[]>([]);
+  const [abTestLoading, setAbTestLoading] = useState(false);
   const [hideBanner, setHideBanner] = useState(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("hideThemeExtensionBanner") === "true";
@@ -148,6 +293,24 @@ export function DashboardPage({
     setHideBanner(true);
     localStorage.setItem("hideThemeExtensionBanner", "true");
   };
+
+  const [showAbSplitModal, setShowAbSplitModal] = useState(false);
+  const [abSplitOffer, setAbSplitOffer] = useState<DashboardOfferRow | null>(null);
+
+  const openAbSplitModal = (offer: DashboardOfferRow) => {
+    // 若 Theme Extension 未启用，前台折扣也不会生效，因此引导用户先激活。
+    if (!themeExtensionEnabled) {
+      setShowThemeExtensionModal(true);
+      return;
+    }
+    setAbSplitOffer(offer);
+    setShowAbSplitModal(true);
+  };
+
+  const abSplitVariantKeys = useMemo(
+    () => extractAbVariantKeysFromOfferSettings(abSplitOffer?.offerSettingsJson ?? null),
+    [abSplitOffer],
+  );
 
   const offerRows: DashboardOfferRow[] = (offers ?? []).map((offer) => {
     const isActive = !!offer.status;
@@ -176,6 +339,10 @@ export function DashboardPage({
   });
 
   const visibleOffers = offerRows.slice(0, 4);
+  const abTestRawOffers = useMemo(
+    () => (offers ?? []).filter((offer) => offer.offerType === "abTest"),
+    [offers],
+  );
 
   // 计算真实 Overview 数据
   const fallbackOverview = (() => {
@@ -221,6 +388,10 @@ export function DashboardPage({
     };
   })();
 
+    const gmvGrowthRateColor =
+    gmvGrowthRate === 0 ? "#916a00" : gmvGrowthRate > 0 ? "#108043" : "#D93025";
+  const gmvGrowthRateArrow = gmvGrowthRate >= 0 ? "↑" : "↓";
+
   useEffect(() => {
     if (navigation.state === "submitting" && navigation.formData) {
       const intent = navigation.formData.get("intent");
@@ -249,13 +420,17 @@ export function DashboardPage({
       setShowCreateOffer(true);
     }
   };
-  const handleCreateAbTest = () => {}; // mock
+  const handleCreateAbTest = () => {
+    handleCreateOfferClick();
+  };
   const handleViewAllOffers = () => {
     if (onViewAllOffers) {
       onViewAllOffers();
     }
   };
-  const handleViewAllAbTests = () => {}; // mock
+  const handleViewAllAbTests = () => {
+    onViewAllOffers?.();
+  };
   const handleThemeExtensionToggle = () => {
     const storeHandle = shop.replace(".myshopify.com", "");
     const appEmbed = `${apiKey}/product_detail_message`;
@@ -285,48 +460,18 @@ export function DashboardPage({
 
     const run = async () => {
       try {
-        const response = await fetch(`/webpixerToAli?${query.toString()}`, {
-          method: "GET",
-          signal: controller.signal,
-        });
-        const data = (await response.json().catch(() => ({}))) as {
-          success?: boolean;
-          message?: string;
-          metrics?: GmvOverviewMetrics;
-          range?: { from?: string; to?: string };
-          logsFetched?: number;
-        };
-
-        if (!response.ok || !data.success) {
-          console.error("[dashboard][gmv-overview] query failed", {
-            status: response.status,
-            message: data?.message || "unknown error",
-            shop,
-            range: data?.range,
-          });
-          return;
+        const overviewUrl = `/webpixerToAli?mode=dashboard-overview-gmv&shopName=${shop}`;
+        const response = await fetch(overviewUrl);
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success) {
+            setTotalGmv(data.totalGmv || 0);
+            setGmvGrowthRate(data.gmvGrowthRate || 0);
+          }
         }
-
-        console.log("[dashboard][gmv-overview] metrics", {
-          shop,
-          range: data.range,
-          logsFetched: data.logsFetched ?? 0,
-          totalGmv: data.metrics?.totalGmv ?? 0,
-          conversion: data.metrics?.conversion ?? 0,
-          visitor: data.metrics?.visitor ?? 0,
-          bundleOrders: data.metrics?.bundleOrders ?? 0,
-          exposurePv: data.metrics?.exposurePv ?? 0,
-          orderPv: data.metrics?.orderPv ?? 0,
-        });
-
-        setOverviewMetrics(data.metrics ?? null);
       } catch (error) {
-        if (controller.signal.aborted) return;
-        setOverviewMetrics(null);
-        console.error("[dashboard][gmv-overview] query exception", {
-          shop,
-          error: String(error),
-        });
+        console.error("Failed to fetch dashboard overview data", error);
       }
     };
 
@@ -336,13 +481,181 @@ export function DashboardPage({
   }, [shop]);
 
   useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const bundleOrdersUrl = `/webpixerToAli?mode=dashboard-overview-bundle-orders&shopName=${shop}`;
+        const productViewedUrl = `/webpixerToAli?mode=dashboard-overview-product-viewed&shopName=${shop}`;
+
+        const [bundleOrdersResponse, productViewedResponse] = await Promise.all([
+          fetch(bundleOrdersUrl),
+          fetch(productViewedUrl),
+        ]);
+
+        if (bundleOrdersResponse.ok) {
+          const data = await bundleOrdersResponse.json();
+          if (data.success) {
+            setBundleOrders(data.totalCount || 0);
+          }
+        }
+
+        if (productViewedResponse.ok) {
+          const data = await productViewedResponse.json();
+          if (data.success) {
+            setProductViewed(data.totalCount || 0);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch dashboard data:", error);
+      }
+    };
+
+    fetchData();
+  }, [shop]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const now = new Date();
+    const from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    const fetchAbSummary = async () => {
+      if (!abTestRawOffers.length) {
+        setAbTestSummaries([]);
+        return;
+      }
+      setAbTestLoading(true);
+      try {
+        const rows = await Promise.all(
+          abTestRawOffers.map(async (offer) => {
+            const query = new URLSearchParams({
+              mode: "abtest-offer-summary",
+              shopName: shop,
+              offerId: offer.id,
+              from: from.toISOString(),
+              to: now.toISOString(),
+            });
+            const response = await fetch(`/webpixerToAli?${query.toString()}`, {
+              signal: controller.signal,
+            });
+            if (!response.ok) {
+              throw new Error(`abtest-offer-summary failed: ${response.status}`);
+            }
+            const data = (await response.json()) as {
+              success?: boolean;
+              rows?: Array<{
+                key?: string;
+                exposureUsers?: number;
+                checkoutUsers?: number;
+                gmv?: number;
+                conversionRate?: number;
+                ciLow?: number;
+                ciHigh?: number;
+              }>;
+            };
+            const variantKeyMapper = buildAbVariantKeyMapperFromOfferSettings(
+              offer.offerSettingsJson,
+            );
+            const apiVariants: AbVariantSummary[] = Array.isArray(data?.rows)
+              ? data.rows
+                  .map((row) => ({
+                    key: variantKeyMapper.mapRawKeyToVariantKey(
+                      String(row.key || "").trim(),
+                    ),
+                    exposureUsers: Math.max(0, Number(row.exposureUsers) || 0),
+                    checkoutUsers: Math.max(0, Number(row.checkoutUsers) || 0),
+                    gmv: Math.max(0, Number(row.gmv) || 0),
+                    conversionRate: Math.max(0, Number(row.conversionRate) || 0),
+                    ciLow: Math.max(0, Number(row.ciLow) || 0),
+                    ciHigh: Math.max(0, Number(row.ciHigh) || 0),
+                  }))
+                  .filter((v) => Boolean(v.key))
+              : [];
+
+            // 中文注释：若 SLS 暂无该活动数据，则按配置的 variant key 兜底显示空值行，避免卡片消失。
+            const fallbackVariants: AbVariantSummary[] = (() => {
+              if (!offer.offerSettingsJson) return [];
+              try {
+                const settingsParsed = JSON.parse(String(offer.offerSettingsJson)) as Record<
+                  string,
+                  unknown
+                >;
+                const abTest = settingsParsed?.abTest as Record<string, unknown> | undefined;
+                const variants = Array.isArray((abTest as any)?.variants)
+                  ? ((abTest as any).variants as any[])
+                  : [];
+                const keys = variants
+                  .map((v) => (v && typeof v === "object" ? String((v as any).key || "").trim() : ""))
+                  .filter(Boolean)
+                  .slice(0, 4);
+
+                return keys.map((key) => ({
+                  key,
+                  exposureUsers: 0,
+                  checkoutUsers: 0,
+                  gmv: 0,
+                  conversionRate: 0,
+                  ciLow: 0,
+                  ciHigh: 0,
+                }));
+              } catch {
+                return [];
+              }
+            })();
+            const apiVariantMap = new Map(apiVariants.map((v) => [v.key, v] as const));
+            // 以配置中的 variants 作为必有集合：缺失或为 0 的 key 也要展示出来。
+            const mergedVariants = fallbackVariants.length
+              ? fallbackVariants.map((v) => apiVariantMap.get(v.key) ?? v)
+              : apiVariants;
+
+            const sortedByGmv = [...mergedVariants].sort((a, b) => b.gmv - a.gmv);
+            const winner = sortedByGmv[0] || {
+              key: "-",
+              exposureUsers: 0,
+              checkoutUsers: 0,
+              gmv: 0,
+              conversionRate: 0,
+              ciLow: 0,
+              ciHigh: 0,
+            };
+            const baseline = sortedByGmv[1] || winner;
+            const winnerLiftPct =
+              baseline.gmv > 0 ? ((winner.gmv - baseline.gmv) / baseline.gmv) * 100 : 0;
+            return {
+              offerId: offer.id,
+              offerName: offer.name,
+              isActive: !!offer.status,
+              variants: mergedVariants,
+              winnerKey: winner.key,
+              winnerLiftPct,
+            } satisfies AbTestSummaryRow;
+          }),
+        );
+        setAbTestSummaries(rows);
+      } catch (error) {
+        if ((error as Error)?.name !== "AbortError") {
+          console.error("Failed to fetch A/B summary", error);
+          setAbTestSummaries([]);
+        }
+      } finally {
+        setAbTestLoading(false);
+      }
+    };
+
+    fetchAbSummary();
+
+    return () => controller.abort();
+  }, [shop, abTestRawOffers]);
+
+  useEffect(() => {
     if (
       toast?.startsWith("create-success") ||
       toast?.startsWith("update-success") ||
-      toast?.startsWith("delete-success")
+      toast?.startsWith("delete-success") ||
+      toast?.startsWith("toggle-success")
     ) {
       setShowCreateOffer(false);
       setDeletingOffer(null);
+      setShowAbSplitModal(false);
+      setAbSplitOffer(null);
     }
   }, [toast]);
 
@@ -437,34 +750,43 @@ export function DashboardPage({
                 Total GMV
               </span>
               <h3 className="font-sans font-semibold text-[28px] leading-[42px] text-[#1c1f23] tracking-wide m-0">
-                {cardOverview.totalGmv}
+                ${totalGmv.toFixed(2)}
               </h3>
-              <span className="font-sans font-normal text-[14px] leading-[22.4px] text-[#108043] tracking-normal">
-                {cardOverview.gmvTrend} {cardOverview.gmvTrendLabel}
+              <span
+                className="font-sans font-normal text-[14px] leading-[22.4px] text-[#108043] tracking-normal"
+                style={{
+                  color: gmvGrowthRateColor,
+                }}
+              >
+                {gmvGrowthRate !== 0 && `${gmvGrowthRateArrow} `}
+                {gmvGrowthRate >= 0 ? "+" : ""}{Math.abs(gmvGrowthRate).toFixed(2)}% from last month
               </span>
             </div>
-            <div className="flex flex-col gap-[16px]">
+
+            {/* Bundle Orders */}
+           <div className="flex flex-col gap-[16px]">
               <span className="font-sans font-normal text-[14px] leading-[22.4px] text-[#5c6166] tracking-normal">
                 Bundle Orders
               </span>
               <h3 className="font-sans font-semibold text-[28px] leading-[42px] text-[#1c1f23] tracking-wide m-0">
-                {cardOverview.activeOffers}
+                {bundleOrders}
               </h3>
-              <span className="font-sans font-normal text-[14px] leading-[22.4px] text-[#108043] tracking-normal">
-                {cardOverview.activeOffersTrend}
-              </span>
             </div>
+
+            {/* Avg. Conversion */}
             <div className="flex flex-col gap-[16px]">
               <span className="font-sans font-normal text-[14px] leading-[22.4px] text-[#5c6166] tracking-normal">
                 Avg. Conversion
               </span>
               <h3 className="font-sans font-semibold text-[28px] leading-[42px] text-[#1c1f23] tracking-wide m-0">
-                {cardOverview.avgConversion}
+                {productViewed > 0
+                  ? `${((bundleOrders / productViewed) * 100).toFixed(2)}%`
+                  : "0.00%"}
               </h3>
               <span
-                className={`font-sans font-normal text-[14px] leading-[22.4px] tracking-normal ${cardOverview.conversionTrendColor}`}
+                className="font-sans font-normal text-[14px] leading-[22.4px] tracking-normal"
               >
-                {cardOverview.conversionTrendLabel}
+                Orders {bundleOrders} / Exposure {productViewed}
               </span>
             </div>
           </div>
@@ -866,273 +1188,203 @@ export function DashboardPage({
         </div>
       </div>
 
-      {/* A/B Tests Card - Temporarily hidden */}
-      {false && (
-        <div className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[20px] sm:p-[24px]">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-[12px] sm:gap-0 mb-[16px]">
-            <h2 className="font-sans font-semibold text-[16px] leading-[24px] text-[#1c1f23] tracking-tight m-0">
-              A/B Tests
-            </h2>
-            <button
-              type="button"
-              className="w-full sm:w-auto bg-[#008060] !text-white px-[16px] py-[8px] rounded-[8px] font-medium text-[14px] shadow-sm hover:bg-[#006e52] transition-all border-0 cursor-pointer"
-              onClick={handleCreateAbTest}
-            >
-              Create A/B Test
-            </button>
-          </div>
-
-          <table className="hidden md:table w-full border-collapse">
-            <thead>
-              <tr>
-                <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
-                  Test Name
-                </th>
-                <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
-                  Status
-                </th>
-                <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
-                  Variants
-                </th>
-                <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
-                  PV
-                </th>
-                <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
-                  Extra GMV
-                </th>
-                <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
-                  GMV Improvement
-                </th>
-                <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
-                  Days Running
-                </th>
-                <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
-                  Confidence
-                </th>
-                <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {mockAbTests.map((test) => (
-                <tr key={test.id}>
-                  <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
-                    {test.name}
-                  </td>
-                  <td className="p-[12px] border-b border-[#f0f2f4]">
-                    <div className="flex items-center gap-[8px]">
-                      <span
-                        className="relative inline-block w-[44px] h-[24px] rounded-[12px] cursor-pointer"
-                        style={{
-                          backgroundColor:
-                            test.status === "Running" ? "#008060" : "#c4cdd5",
-                        }}
-                      >
-                        <span
-                          className="absolute top-[2px] w-[20px] h-[20px] bg-white rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.2)]"
-                          style={{
-                            left: test.status === "Running" ? "22px" : "2px",
-                          }}
-                        />
-                      </span>
-                      <span
-                        className="text-[14px] font-medium"
-                        style={{
-                          color:
-                            test.status === "Running" ? "#108043" : "#6d7175",
-                        }}
-                      >
-                        {test.status}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
-                    {test.variant}
-                  </td>
-                  <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
-                    {test.pv}
-                  </td>
-                  <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
-                    {test.extraGMV}
-                  </td>
-                  <td className="p-[12px] border-b border-[#f0f2f4]">
-                    <span
-                      className="font-sans font-semibold text-[14px] leading-[22.4px] tracking-normal flex items-center gap-[4px]"
-                      style={{
-                        color: test.improvement >= 0 ? "#108043" : "#d72c0d",
-                      }}
-                    >
-                      {test.improvement >= 0 ? (
-                        <ArrowUp size={14} />
-                      ) : (
-                        <ArrowDown size={14} />
-                      )}
-                      {Math.abs(test.improvement)}%
-                    </span>
-                  </td>
-                  <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#5c6166] tracking-normal">
-                    {test.daysRunning} days
-                  </td>
-                  <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
-                    <span
-                      style={{
-                        color:
-                          test.confidence >= 95
-                            ? "#108043"
-                            : test.confidence >= 80
-                              ? "#6d7175"
-                              : "#d72c0d",
-                        fontWeight: test.confidence >= 95 ? 600 : 400,
-                      }}
-                    >
-                      {test.confidence}%
-                    </span>
-                  </td>
-                  <td className="p-[12px] border-b border-[#f0f2f4]">
-                    <div className="flex items-center gap-[8px]">
-                      {/*
-                      <button
-                        type="button"
-                        className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[6px] rounded-[6px] hover:bg-[#f0f9f6] transition-all"
-                        title="View Details"
-                      >
-                        <ChartBar size={16} />
-                      </button>
-                      */}
-                      <button
-                        type="button"
-                        className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[6px] rounded-[6px] hover:bg-[#f0f9f6] transition-all"
-                        title="Edit"
-                      >
-                        <Pencil size={16} />
-                      </button>
-                      <button
-                        type="button"
-                        className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#d72c0d] p-[6px] rounded-[6px] hover:bg-[#fef3f2] transition-all"
-                        title="Delete"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <div className="md:hidden space-y-[12px]">
-            {mockAbTests.map((test) => (
-              <div
-                key={test.id}
-                className="border border-[#dfe3e8] rounded-[8px] p-[16px]"
-              >
-                <div className="mb-[12px]">
-                  <span className="font-sans font-medium text-[16px] text-[#1c1f23]">
-                    {test.name}
-                  </span>
-                </div>
-                <div className="flex items-center gap-[8px] mb-[12px]">
-                  <span
-                    className="relative inline-block w-[44px] h-[24px] rounded-[12px]"
-                    style={{
-                      backgroundColor:
-                        test.status === "Running" ? "#008060" : "#c4cdd5",
-                    }}
-                  >
-                    <span
-                      className="absolute top-[2px] w-[20px] h-[20px] bg-white rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.2)]"
-                      style={{
-                        left: test.status === "Running" ? "22px" : "2px",
-                      }}
-                    />
-                  </span>
-                  <span
-                    className="text-[14px] font-medium"
-                    style={{
-                      color: test.status === "Running" ? "#108043" : "#6d7175",
-                    }}
-                  >
-                    {test.status}
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-[12px] mb-[12px]">
-                  <div>
-                    <div className="text-[12px] text-[#5c6166] mb-[4px]">
-                      PV
-                    </div>
-                    <div className="text-[14px] font-medium text-[#1c1f23]">
-                      {test.pv}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-[12px] text-[#5c6166] mb-[4px]">
-                      Extra GMV
-                    </div>
-                    <div className="text-[14px] font-medium text-[#1c1f23]">
-                      {test.extraGMV}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-[12px] text-[#5c6166] mb-[4px]">
-                      GMV Improvement
-                    </div>
-                    <div
-                      className={`text-[14px] font-medium ${test.improvement > 0 ? "text-[#108043]" : "text-[#d72c0d]"}`}
-                    >
-                      {test.improvement > 0 ? "↑" : "↓"}{" "}
-                      {Math.abs(test.improvement)}%
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-[12px] text-[#5c6166] mb-[4px]">
-                      Confidence
-                    </div>
-                    <div className="text-[14px] font-medium text-[#1c1f23]">
-                      {test.confidence}%
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-[8px] pt-[12px] border-t border-[#dfe3e8]">
-                  {/*
-                  <button
-                    type="button"
-                    className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[8px] rounded-[8px] hover:bg-[#f0f9f6] transition-all"
-                    title="View Details"
-                  >
-                    <ChartBar size={18} />
-                  </button>
-                  */}
-                  <button
-                    type="button"
-                    className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[8px] rounded-[8px] hover:bg-[#f0f9f6] transition-all"
-                    title="Edit"
-                  >
-                    <Pencil size={18} />
-                  </button>
-                  <button
-                    type="button"
-                    className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#d72c0d] p-[8px] rounded-[8px] hover:bg-[#fef3f2] transition-all"
-                    title="Delete"
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="flex justify-center mt-[16px] sm:mt-[20px] pt-[16px] border-t border-[#dfe3e8]">
-            <button
-              type="button"
-              className="text-[#008060] font-medium text-[14px] bg-transparent hover:bg-[#f0f9f6] px-[16px] py-[8px] rounded-[8px] transition-all border-0 cursor-pointer"
-              onClick={handleViewAllAbTests}
-            >
-              View All A/B Tests
-            </button>
-          </div>
+      {/* A/B Tests Card */}
+      <div className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[20px] sm:p-[24px]">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-[12px] sm:gap-0 mb-[16px]">
+          <h2 className="font-sans font-semibold text-[16px] leading-[24px] text-[#1c1f23] tracking-tight m-0">
+            A/B Tests
+          </h2>
+          <button
+            type="button"
+            className="w-full sm:w-auto bg-[#008060] !text-white px-[16px] py-[8px] rounded-[8px] font-medium text-[14px] shadow-sm hover:bg-[#006e52] transition-all border-0 cursor-pointer"
+            onClick={handleCreateAbTest}
+          >
+            Create A/B Test
+          </button>
         </div>
-      )}
+
+        {abTestLoading ? (
+          <div className="text-[14px] text-[#5c6166] border border-[#dfe3e8] rounded-[8px] p-[14px]">
+            正在加载 A/B Test 统计数据...
+          </div>
+        ) : abTestSummaries.length === 0 ? (
+          <div className="text-[14px] text-[#5c6166] border border-[#dfe3e8] rounded-[8px] p-[14px]">
+            暂无 A/B Test 数据。创建 `abTest` 类型活动后会在这里展示 GMV、曝光用户和 95% 置信区间。
+          </div>
+        ) : (
+          <div className="space-y-[14px]">
+            {abTestSummaries.map((test) => {
+              const abOffer = offerRows.find((o) => o.id === test.offerId);
+              const settingsJson = abOffer?.offerSettingsJson ?? null;
+              const ordered = orderAbTestVariantsForDisplay(
+                test.variants,
+                extractAbVariantKeysFromOfferSettings(settingsJson),
+              );
+              const baseline = ordered[0];
+              const fmtMoney = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+              const fmtInt = (n: number) => n.toLocaleString();
+
+              return (
+                <div
+                  key={test.offerId}
+                  className="border border-[#e5e7eb] rounded-[10px] p-[14px] overflow-x-auto"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-[8px] mb-[12px]">
+                    <div className="font-medium text-[15px] text-[#1c1f23]">{test.offerName}</div>
+                    <div className="flex items-center gap-[10px]">
+                      <div className="text-[12px] text-[#5c6166]">
+                        Winner:{" "}
+                        <span className="font-semibold text-[#108043]">
+                          {test.winnerKey}
+                        </span>
+                        （GMV{" "}
+                        {test.winnerLiftPct >= 0 ? "+" : ""}
+                        {test.winnerLiftPct.toFixed(2)}%）
+                      </div>
+                      {abOffer &&
+                      abOffer.offerType === "abTest" &&
+                      abOffer.name?.startsWith("#offer") ? (
+                        <button
+                          type="button"
+                          className="text-[#8c9196] bg-transparent border-0 cursor-pointer hover:text-[#008060] p-[6px] rounded-[6px] hover:bg-[#f0f9f6] transition-all"
+                          title="配置修改"
+                          onClick={() => openAbSplitModal(abOffer)}
+                        >
+                          <Info size={16} />
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <table className="w-full min-w-[720px] text-[13px] border-collapse">
+                    <thead>
+                      <tr className="text-left text-[#5c6166] border-b border-[#e3e8ed]">
+                        <th className="py-[8px] pr-[12px] font-medium whitespace-nowrap">分组角色</th>
+                        <th className="py-[8px] pr-[12px] font-medium whitespace-nowrap">Variant Name</th>
+                        <th className="py-[8px] pr-[12px] font-medium whitespace-nowrap">GMV</th>
+                        <th className="py-[8px] pr-[12px] font-medium whitespace-nowrap">曝光用户数</th>
+                        <th className="py-[8px] pr-[12px] font-medium whitespace-nowrap">下单用户数</th>
+                        <th className="py-[8px] pr-[12px] font-medium whitespace-nowrap">转化率（含 95% CI）</th>
+                        <th className="py-[8px] font-medium whitespace-nowrap">置信度</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ordered.map((variant, idx) => {
+                        const isBaseline = idx === 0;
+                        const showDelta = !isBaseline && Boolean(baseline);
+                        const p = variant.conversionRate;
+                        const n = variant.exposureUsers;
+                        const waldCi = waldProportion95ConfidenceInterval(p, n);
+                        const credible =
+                          baseline && !isBaseline
+                            ? isConversionDifferenceCredibleVsBaseline(variant)
+                            : null;
+
+                        return (
+                          <tr
+                            key={`${test.offerId}-${variant.key}`}
+                            className="border-b border-[#f1f3f5] align-top"
+                          >
+                            <td className="py-[10px] pr-[12px] text-[#1c1f23] whitespace-nowrap">
+                              {isBaseline ? "基准组" : "实验组"}
+                            </td>
+                            <td className="py-[10px] pr-[12px] text-[#1c1f23] font-medium whitespace-nowrap">
+                              {getAbVariantDisplayName(variant.key, settingsJson)}
+                            </td>
+                            <td className="py-[10px] pr-[12px]">
+                              {baseline ? (
+                                <CellWithDelta
+                                  baseline={baseline.gmv}
+                                  value={variant.gmv}
+                                  formatPrimary={fmtMoney}
+                                  showDelta={showDelta}
+                                />
+                              ) : (
+                                fmtMoney(variant.gmv)
+                              )}
+                            </td>
+                            <td className="py-[10px] pr-[12px]">
+                              {baseline ? (
+                                <CellWithDelta
+                                  baseline={baseline.exposureUsers}
+                                  value={variant.exposureUsers}
+                                  formatPrimary={fmtInt}
+                                  showDelta={showDelta}
+                                />
+                              ) : (
+                                fmtInt(variant.exposureUsers)
+                              )}
+                            </td>
+                            <td className="py-[10px] pr-[12px]">
+                              {baseline ? (
+                                <CellWithDelta
+                                  baseline={baseline.checkoutUsers}
+                                  value={variant.checkoutUsers}
+                                  formatPrimary={fmtInt}
+                                  showDelta={showDelta}
+                                />
+                              ) : (
+                                fmtInt(variant.checkoutUsers)
+                              )}
+                            </td>
+                            <td className="py-[10px] pr-[12px]">
+                              <div className="leading-snug">
+                                <div className="text-[#1c1f23]">
+                                  {(p * 100).toFixed(2)}%
+                                  {showDelta && baseline ? (
+                                    <span className="block">
+                                      {(() => {
+                                        const d = formatRelativeChangeVsBaseline(
+                                          baseline.conversionRate,
+                                          p,
+                                        );
+                                        return d ? (
+                                          <span className={d.className}>{d.text}</span>
+                                        ) : null;
+                                      })()}
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <div className="text-[11px] text-[#5c6166] mt-[2px]">
+                                  95% CI: {(waldCi.lower * 100).toFixed(2)}% ~{" "}
+                                  {(waldCi.upper * 100).toFixed(2)}%
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-[10px] text-[#1c1f23] whitespace-nowrap">
+                              {isBaseline ? (
+                                <span className="text-[#5c6166]">—</span>
+                              ) : credible ? (
+                                <span className="text-[#108043] font-medium">可信</span>
+                              ) : (
+                                <span className="text-[#d72c0d] font-medium">不可信</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  <p className="text-[11px] text-[#8c9196] mt-[10px] mb-0 leading-[16px]">
+                    转化率置信区间按 Wald 法（Z=1.96）由当前转化率与曝光人数估算；「置信度」表示相对基准组的两样本转化率差
+                    95% CI 是否不跨 0（不跨 0 为可信）。实验组相对基准的升降百分比：上升为红、下降为绿。
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="flex justify-center mt-[16px] sm:mt-[20px] pt-[16px] border-t border-[#dfe3e8]">
+          <button
+            type="button"
+            className="text-[#008060] font-medium text-[14px] bg-transparent hover:bg-[#f0f9f6] px-[16px] py-[8px] rounded-[8px] transition-all border-0 cursor-pointer"
+            onClick={handleViewAllAbTests}
+          >
+            View All A/B Tests
+          </button>
+        </div>
+      </div>
 
       {deletingOffer && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.4)]">
@@ -1165,6 +1417,70 @@ export function DashboardPage({
                   Delete
                 </button>
               </Form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAbSplitModal && abSplitOffer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.4)]">
+          <div className="bg-white rounded-[16px] shadow-[0_8px_24px_rgba(0,0,0,0.12)] max-w-[520px] w-[90%] p-[24px]">
+            <h2 className="font-sans font-semibold text-[18px] leading-[27px] text-[#1c1f23] mb-[8px]">
+              配置修改（A/B 分流）
+            </h2>
+            <p className="font-sans text-[14px] leading-[21px] text-[#5c6166] mb-[16px]">
+              当前 offer：
+              <span className="font-semibold text-[#1c1f23]">{abSplitOffer.name}</span>
+              <br />
+              你可以将流量全量分到某个 variant，或关闭该 A/B 实验。
+            </p>
+
+            {abSplitVariantKeys.length === 0 ? (
+              <div className="border border-[#dfe3e8] rounded-[8px] p-[12px] text-[14px] text-[#5c6166]">
+                未检测到当前 offer 的 A/B variants（至少需要 2 个）。请先在编辑器中补齐配置。
+              </div>
+            ) : (
+              <div className="space-y-[10px]">
+                {abSplitVariantKeys.map((key) => (
+                  <Form method="post" key={key}>
+                    <input type="hidden" name="intent" value="abtest-force-split" />
+                    <input type="hidden" name="offerId" value={abSplitOffer.id} />
+                    <input type="hidden" name="splitMode" value="full" />
+                    <input type="hidden" name="targetVariantKey" value={key} />
+                    <button
+                      type="submit"
+                      className="w-full bg-[#008060] !text-white px-[16px] py-[10px] rounded-[8px] font-medium text-[14px] shadow-sm hover:bg-[#006e52] transition-all border-0 cursor-pointer"
+                    >
+                      全量给 {key}
+                    </button>
+                  </Form>
+                ))}
+
+                <Form method="post">
+                  <input type="hidden" name="intent" value="abtest-force-split" />
+                  <input type="hidden" name="offerId" value={abSplitOffer.id} />
+                  <input type="hidden" name="splitMode" value="disable" />
+                  <button
+                    type="submit"
+                    className="w-full bg-transparent border border-[#dfe3e8] !text-[#1c1f23] px-[16px] py-[10px] rounded-[8px] font-medium text-[14px] hover:bg-[#f4f6f8] transition-all cursor-pointer"
+                  >
+                    关闭 A/B 实验
+                  </button>
+                </Form>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-[8px] mt-[16px]">
+              <button
+                type="button"
+                className="px-[12px] py-[6px] rounded-[6px] border border-[#dfe3e8] bg-white text-[#1c1f23] text-[14px] font-sans hover:bg-[#f4f6f8]"
+                onClick={() => {
+                  setShowAbSplitModal(false);
+                  setAbSplitOffer(null);
+                }}
+              >
+                取消
+              </button>
             </div>
           </div>
         </div>

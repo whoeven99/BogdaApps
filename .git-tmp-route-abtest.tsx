@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import {
   useActionData,
   useFetcher,
@@ -21,8 +21,9 @@ import { AllOffersPage } from "../page/AllOffersPage";
 import { AnalyticsPage } from "../page/AnalyticsPage";
 import { PricingPage } from "../page/PricingPage";
 import { CreateNewOffer } from "../component/CreateNewOffer/CreateNewOffer";
-import prisma from "../../db.server";
+import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
 import { randomBytes } from "crypto";
+import prisma from "../../db.server";
 import {
   getCachedShopOffers,
   invalidateShopOffersCache,
@@ -41,20 +42,15 @@ import {
 } from "../../billing.server";
 import {
   OFFER_TEXT_LIMITS,
-  buildLegacyFieldsFromCampaignConfig,
   clampNumber,
   parseProgressiveGiftsConfig,
   progressiveGiftsConfigToStorableJson,
   parseCompleteBundleConfig,
-  parseFreeGiftSelectedProducts,
   parseSelectedProductIds,
-  migrateLegacyOfferToCampaignConfig,
-  parseCampaignConfig,
   sanitizeHexColor,
   sanitizeSingleLineText,
   parseAbTestOfferSettingsBlock,
 } from "../../utils/offerParsing";
-import { sanitizeEnvLikeValue, sanitizeUrlLikeEnvValue } from "../../utils/env";
 
 type OfferListItem = {
   id: string;
@@ -67,7 +63,6 @@ type OfferListItem = {
   selectedProductsJson: string | null;
   discountRulesJson: string | null;
   offerSettingsJson: string | null;
-  campaignConfigJson?: string | null;
   exposurePV?: number | null;
   addToCartPV?: number | null;
   gmv?: number | null;
@@ -91,28 +86,6 @@ function offerActionErrorResponse(message: string, status: number) {
   );
 }
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "string") return error;
-  try {
-    return JSON.stringify(error);
-  } catch {
-    return String(error);
-  }
-}
-
-function isMissingOfferCampaignConfigColumnError(error: unknown): boolean {
-  const message = getErrorMessage(error).toLowerCase();
-  return (
-    message.includes("campaignconfigjson") &&
-    (
-      message.includes("no such column") ||
-      message.includes("has no column named") ||
-      message.includes("column does not exist")
-    )
-  );
-}
-
 function sanitizeHexColorParam(
   raw: string | null | undefined,
   fallback: string,
@@ -130,11 +103,11 @@ type ShopOffersMetafieldSyncResult =
 
 const BUNDLE_METAFIELD_NAMESPACE = "ciwi_bundle";
 const BUNDLE_METAFIELD_BASE_KEY = "ciwi-bundle-offers";
-/** 主题端 A/B assign 等请求使用的应用根 URL（与 SHOPIFY_APP_URL 一致，无尾斜杠） */
+/** 涓婚绔?A/B assign 绛夎姹備娇鐢ㄧ殑搴旂敤鏍?URL锛堜笌 SHOPIFY_APP_URL 涓€鑷达紝鏃犲熬鏂滄潬锛?*/
 const BUNDLE_METAFIELD_API_ORIGIN_KEY = "ciwi-bundle-api-origin";
+const BUNDLE_METAFIELD_ACTIVE_ENV_KEY = "ciwi-bundle-offers-active-env";
 const BUNDLE_METAFIELD_ENABLED_PROD_KEY = "ciwi-bundle-enabled-prod";
 const BUNDLE_METAFIELD_ENABLED_TEST_KEY = "ciwi-bundle-enabled-test";
-const BUNDLE_METAFIELD_ACTIVE_ENV_KEY = "ciwi-bundle-offers-active-env";
 const PROD_SHOPIFY_API_KEY = "bfc13ad696f2a8d2a77ba6eee1e26966";
 const TEST_SHOPIFY_API_KEY = "ab25ea895c6df574ae9ff70e9c7731c5";
 
@@ -148,7 +121,7 @@ function resolveBundleEnvironment(): BundleEnvironment {
   if (explicit === "prod" || explicit === "production") return "prod";
   if (explicit === "test" || explicit === "staging") return "test";
 
-  const apiKey = sanitizeEnvLikeValue(process.env.SHOPIFY_API_KEY);
+  const apiKey = String(process.env.SHOPIFY_API_KEY || "").trim();
   if (apiKey === PROD_SHOPIFY_API_KEY) return "prod";
   if (apiKey === TEST_SHOPIFY_API_KEY) return "test";
 
@@ -233,14 +206,11 @@ function buildHydratedCompleteBundleSelectedProductsJson(
 }
 
 async function buildCompactOffersPayload(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  _admin: any,
+  admin: any,
   shopOffers: OfferListItem[],
 ): Promise<string> {
-  // 仅同步 status=true 的活动，避免无效活动占用 payload 体积并干扰函数计算
-  const activeOffers = shopOffers.filter((offer) => offer.status === true);
-  // 先生成 Function 可安全消费的瘦 payload，避免 complete-bundle 展示字段把 metafield 撑爆。
-  const compactOffers = activeOffers.map((offer) => ({
+  // 浠呭悓姝?status=true 鐨勬椿鍔紝閬垮厤鏃犳晥娲诲姩鍗犵敤 payload 浣撶Н骞跺共鎵板嚱鏁拌绠?  const activeOffers = shopOffers.filter((offer) => offer.status === true);
+  // 鍏堢敓鎴?Function 鍙畨鍏ㄦ秷璐圭殑鐦?payload锛岄伩鍏?complete-bundle 灞曠ず瀛楁鎶?metafield 鎾戠垎銆?  const compactOffers = activeOffers.map((offer) => ({
     id: offer.id,
     name: offer.name,
     cartTitle: offer.cartTitle,
@@ -280,8 +250,7 @@ async function buildStorefrontOffersPayload(
     }>;
   };
 
-  // storefront 需要补齐 complete-bundle 展示字段，方便主题脚本直接渲染与加车。
-  const completeBundleProductIds = collectReferencedProductIds(
+  // storefront 闇€瑕佽ˉ榻?complete-bundle 灞曠ず瀛楁锛屾柟渚夸富棰樿剼鏈洿鎺ユ覆鏌撲笌鍔犺溅銆?  const completeBundleProductIds = collectReferencedProductIds(
     activeOffers.filter((offer) => offer.offerType === "complete-bundle"),
   );
   const storeProducts =
@@ -321,46 +290,10 @@ async function syncShopOffersMetafield(
       shopName: shopNameToSync,
       themeExtensionEnabled,
     });
-    let shopOffers: OfferListItem[];
-    try {
-      shopOffers = (await prismaAny.offer.findMany({
-        where: { shopName: shopNameToSync },
-        orderBy: { createdAt: "desc" },
-      })) as OfferListItem[];
-    } catch (error) {
-      if (!isMissingOfferCampaignConfigColumnError(error)) {
-        throw error;
-      }
-      console.warn(
-        "[offers-sync] campaignConfigJson column missing, falling back to legacy offer read",
-      );
-      const legacyRows = await prismaAny.offer.findMany({
-        where: { shopName: shopNameToSync },
-        orderBy: { createdAt: "desc" },
-        select: {
-          id: true,
-          name: true,
-          cartTitle: true,
-          offerType: true,
-          startTime: true,
-          endTime: true,
-          status: true,
-          selectedProductsJson: true,
-          discountRulesJson: true,
-          offerSettingsJson: true,
-          exposurePV: true,
-          addToCartPV: true,
-          gmv: true,
-          conversion: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      });
-      shopOffers = legacyRows.map((offer: any) => ({
-        ...offer,
-        campaignConfigJson: null,
-      })) as OfferListItem[];
-    }
+    const shopOffers = (await prismaAny.offer.findMany({
+      where: { shopName: shopNameToSync },
+      orderBy: { createdAt: "desc" },
+    })) as OfferListItem[];
     console.log("[offers-sync] loaded offers from db", {
       shopName: shopNameToSync,
       offerCount: shopOffers.length,
@@ -425,8 +358,7 @@ async function syncShopOffersMetafield(
       namespace: BUNDLE_METAFIELD_NAMESPACE,
       key: BUNDLE_METAFIELD_BASE_KEY,
       payloadLength: storefrontMetafieldValue.length,
-      bundleApiOrigin:
-        bundleApiOrigin || "(empty — theme A/B assign will skip until SHOPIFY_APP_URL is set)",
+      bundleApiOrigin: bundleApiOrigin || "(empty 鈥?theme A/B assign will skip until SHOPIFY_APP_URL is set)",
     });
     const metafieldsSetResponse = await admin.graphql(
       `#graphql
@@ -484,9 +416,7 @@ async function syncShopOffersMetafield(
       };
     }
 
-    // 关键：Discount Function 运行时优先从 discount owner 读取配置。
-    // 这里把同一份 offers JSON 同步到自动折扣本身，避免 shop.metafield 在 Function 侧不可见。
-    console.log("[offers-sync] ensure automatic discount before owner metafield sync");
+    // 鍏抽敭锛欴iscount Function 杩愯鏃朵紭鍏堜粠 discount owner 璇诲彇閰嶇疆銆?    // 杩欓噷鎶婂悓涓€浠?offers JSON 鍚屾鍒拌嚜鍔ㄦ姌鎵ｆ湰韬紝閬垮厤 shop.metafield 鍦?Function 渚т笉鍙銆?    console.log("[offers-sync] ensure automatic discount before owner metafield sync");
     await ensureCartLinesAutomaticDiscount(admin);
     console.log("[offers-sync] syncing offers into automatic discount owner metafields");
     const discountSyncResult = await syncCartLinesAutomaticDiscountMetafield(
@@ -528,16 +458,6 @@ export type StoreProductItem = {
   hasSubscription: boolean;
 };
 
-type AdminProductVariantPayload = {
-  id?: string | null;
-  title?: string | null;
-  price?: string | null;
-  selectedOptions?: Array<{
-    name?: string | null;
-    value?: string | null;
-  } | null> | null;
-};
-
 type AdminProductNode = {
   id?: string;
   title?: string;
@@ -545,13 +465,19 @@ type AdminProductNode = {
   featuredImage?: { url?: string | null } | null;
   variants?: {
     edges?: Array<{
-      node?: AdminProductVariantPayload | null;
+      node?: {
+        id?: string | null;
+        title?: string | null;
+        price?: string | null;
+        selectedOptions?: Array<{
+          name?: string | null;
+          value?: string | null;
+        } | null> | null;
+      } | null;
     }>;
-    nodes?: Array<AdminProductVariantPayload | null> | null;
   } | null;
   sellingPlanGroups?: {
     edges?: Array<{ node?: { id?: string | null } | null }>;
-    nodes?: Array<{ id?: string | null } | null> | null;
   } | null;
 } | null;
 
@@ -578,7 +504,8 @@ async function fetchShopOffers(shop: string): Promise<OfferListItem[]> {
     const prismaOffers = await getCachedShopOffers(shop);
     const offers = prismaOffers as unknown as OfferListItem[];
 
-    const activeAbTests = offers.filter((o) => o.offerType === "abTest" && o.status === true);
+    // 寮哄埗锛氬悓涓€搴楅摵鍐呮渶澶氬彧鏈変竴涓惎鐢ㄤ腑鐨?abTest offer
+    // 鑻ュ巻鍙叉暟鎹笉涓€鑷达紙鍚屾椂瀛樺湪澶氫釜 status=true 鐨?abTest offer锛夛紝鍒欒嚜鍔ㄥ厹搴曞叧闂叾瀹冦€?    const activeAbTests = offers.filter((o) => o.offerType === "abTest" && o.status === true);
     if (activeAbTests.length > 1) {
       const keep = activeAbTests[0];
       try {
@@ -611,46 +538,36 @@ async function fetchShopOffers(shop: string): Promise<OfferListItem[]> {
 function mapAdminProductNodeToStoreProductItem(
   node: AdminProductNode | undefined,
 ): StoreProductItem | null {
-  const variantNodes = node?.variants?.nodes;
-  const variantSources = Array.isArray(variantNodes)
-    ? variantNodes
-    : node?.variants?.edges?.map((e) => e?.node);
-  const variantsPayload =
-    variantSources?.filter((v): v is AdminProductVariantPayload =>
-      Boolean(v && v.id),
-    ) ?? [];
-  const priceRaw = variantsPayload[0]?.price;
+  const priceRaw = node?.variants?.edges?.[0]?.node?.price;
   const image = node?.featuredImage?.url;
   if (!node?.id || !node.title) {
     return null;
   }
-  const sellingNodes = node?.sellingPlanGroups?.nodes;
-  const hasSellingPlanGroupsFromNodes =
-    Array.isArray(sellingNodes) && sellingNodes.some(Boolean);
-  const hasSellingPlanGroupsFromEdges =
-    ((node?.sellingPlanGroups?.edges as Array<unknown> | undefined) ?? [])
-      .length > 0;
   return {
     id: node.id,
     name: node.title,
     handle: String(node.handle || ""),
     price: priceRaw ? `$${priceRaw}` : "$0.00",
     image: image || "https://via.placeholder.com/60",
-    variants: variantsPayload.map((v) => ({
-      id: String(v.id || ""),
-      title: String(v.title || ""),
-      price: String(v.price || ""),
-      selectedOptions: Array.isArray(v.selectedOptions)
-        ? v.selectedOptions
-            .filter((opt): opt is NonNullable<typeof opt> => Boolean(opt))
-            .map((opt) => ({
-              name: String(opt.name || ""),
-              value: String(opt.value || ""),
-            }))
-        : [],
-    })),
+    variants:
+      node.variants?.edges
+        ?.map((edgeV) => edgeV?.node)
+        .filter((v): v is NonNullable<typeof v> => Boolean(v?.id))
+        .map((v) => ({
+          id: String(v.id || ""),
+          title: String(v.title || ""),
+          price: String(v.price || ""),
+          selectedOptions: Array.isArray(v.selectedOptions)
+            ? v.selectedOptions
+                .filter((opt): opt is NonNullable<typeof opt> => Boolean(opt))
+                .map((opt) => ({
+                  name: String(opt.name || ""),
+                  value: String(opt.value || ""),
+                }))
+            : [],
+        })) || [],
     hasSubscription:
-      hasSellingPlanGroupsFromNodes || hasSellingPlanGroupsFromEdges,
+      ((node?.sellingPlanGroups?.edges as Array<unknown> | undefined) ?? []).length > 0,
   };
 }
 
@@ -689,13 +606,6 @@ function collectReferencedProductIds(offers: OfferListItem[]): string[] {
     const selectedIds =
       offer.offerType === "bxgy"
         ? parseBxgySelectedProductIds(offer.selectedProductsJson)
-        : offer.offerType === "quantity-breaks-different"
-          ? parseSelectedProductIds(offer.selectedProductsJson)
-        : offer.offerType === "free-gift"
-          ? [
-              ...parseFreeGiftSelectedProducts(offer.selectedProductsJson).triggerProducts,
-              ...parseFreeGiftSelectedProducts(offer.selectedProductsJson).giftProducts,
-            ]
         : parseSelectedProductIds(offer.selectedProductsJson);
     for (const productId of selectedIds) {
       const normalized = String(productId || "").trim();
@@ -780,8 +690,7 @@ async function fetchStoreProducts(
     ),
   );
 
-  // 中文注释：编辑历史 offer 时，把已引用但不在前 100 个里的商品也补进来，避免预览只显示 productId。
-  for (let i = 0; i < missingIds.length; i += 50) {
+  // 涓枃娉ㄩ噴锛氱紪杈戝巻鍙?offer 鏃讹紝鎶婂凡寮曠敤浣嗕笉鍦ㄥ墠 100 涓噷鐨勫晢鍝佷篃琛ヨ繘鏉ワ紝閬垮厤棰勮鍙樉绀?productId銆?  for (let i = 0; i < missingIds.length; i += 50) {
     const batchIds = missingIds.slice(i, i + 50);
     try {
       const byIdsResponse = await admin.graphql(
@@ -796,19 +705,23 @@ async function fetchStoreProducts(
                   url
                 }
                 variants(first: 50) {
-                  nodes {
-                    id
-                    title
-                    price
-                    selectedOptions {
-                      name
-                      value
+                  edges {
+                    node {
+                      id
+                      title
+                      price
+                      selectedOptions {
+                        name
+                        value
+                      }
                     }
                   }
                 }
                 sellingPlanGroups(first: 1) {
-                  nodes {
-                    id
+                  edges {
+                    node {
+                      id
+                    }
                   }
                 }
               }
@@ -838,6 +751,8 @@ async function fetchStoreProducts(
 
 const ensureWebPixel = async (admin: any, shop: string) => {
   let currentWebPixelId: string | undefined;
+  let currentWebPixelSettingsRaw = "";
+  const expectedServer = String(process.env.SHOPIFY_APP_URL || "").trim().replace(/\/+$/, "");
 
   try {
     const queryResponse = await admin.graphql(
@@ -845,12 +760,14 @@ const ensureWebPixel = async (admin: any, shop: string) => {
         query CurrentWebPixel {
           webPixel {
             id
+            settings
           }
         }
       `,
     );
     const queryJson = await queryResponse.json();
     currentWebPixelId = queryJson?.data?.webPixel?.id as string | undefined;
+    currentWebPixelSettingsRaw = String(queryJson?.data?.webPixel?.settings || "");
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : JSON.stringify(error);
@@ -863,9 +780,77 @@ const ensureWebPixel = async (admin: any, shop: string) => {
   console.log("[web-pixel] query result", {
     shop,
     currentWebPixelId,
+    expectedServer,
   });
 
-  if (currentWebPixelId) return;
+  if (currentWebPixelId) {
+    let currentServer = "";
+    try {
+      const parsed = currentWebPixelSettingsRaw
+        ? (JSON.parse(currentWebPixelSettingsRaw) as Record<string, unknown>)
+        : {};
+      currentServer = String(parsed?.server || "").trim().replace(/\/+$/, "");
+    } catch (error) {
+      console.warn("[web-pixel] current settings parse failed", {
+        shop,
+        currentWebPixelId,
+        message: error instanceof Error ? error.message : String(error),
+        currentWebPixelSettingsRawPreview: currentWebPixelSettingsRaw.slice(0, 180),
+      });
+    }
+    if (currentServer === expectedServer) return;
+
+    console.warn("[web-pixel] existing pixel server mismatch, updating", {
+      shop,
+      currentWebPixelId,
+      currentServer: currentServer || "(empty)",
+      expectedServer: expectedServer || "(empty)",
+    });
+    const updateResponse = await admin.graphql(
+      `#graphql
+        mutation WebPixelUpdate($id: ID!, $webPixel: WebPixelInput!) {
+          webPixelUpdate(id: $id, webPixel: $webPixel) {
+            userErrors {
+              field
+              message
+              code
+            }
+            webPixel {
+              id
+              settings
+            }
+          }
+        }
+      `,
+      {
+        variables: {
+          id: currentWebPixelId,
+          webPixel: {
+            settings: {
+              shopName: shop,
+              server: expectedServer,
+            },
+          },
+        },
+      },
+    );
+    const updateJson = await updateResponse.json();
+    const updateErrors = updateJson?.data?.webPixelUpdate?.userErrors || [];
+    if (updateErrors.length > 0) {
+      console.error("[web-pixel] update userErrors", {
+        shop,
+        currentWebPixelId,
+        updateErrors,
+      });
+    } else {
+      console.log("[web-pixel] updated existing pixel settings", {
+        shop,
+        currentWebPixelId,
+        expectedServer,
+      });
+    }
+    return;
+  }
 
   const createResponse = await admin.graphql(
     `#graphql
@@ -888,7 +873,7 @@ const ensureWebPixel = async (admin: any, shop: string) => {
         webPixel: {
           settings: {
             shopName: shop,
-            server: sanitizeUrlLikeEnvValue(process.env.SHOPIFY_APP_URL),
+            server: expectedServer,
           },
         },
       },
@@ -1073,10 +1058,8 @@ const getThemeExtensionEnabled = async (
 };
 
 async function getCurrentThemeExtensionEnabled(admin: any): Promise<boolean> {
-  const apiKey = sanitizeEnvLikeValue(process.env.SHOPIFY_API_KEY);
-  const appDisplayName =
-    sanitizeEnvLikeValue(process.env.SHOPIFY_APP_NAME) ||
-    sanitizeEnvLikeValue(process.env.APP_NAME);
+  const apiKey = process.env.SHOPIFY_API_KEY || "";
+  const appDisplayName = process.env.SHOPIFY_APP_NAME || process.env.APP_NAME;
   try {
     return await getThemeExtensionEnabled(
       admin,
@@ -1167,15 +1150,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   void ensureCartLinesAutomaticDiscount(admin).catch((error) => {
     console.error("Failed to ensure automatic app discount exists", error);
   });
-  // 中文说明：历史安装店可能只有商品折扣自动规则，需在每次进入 App 时补偿创建 SHIPPING 自动折扣
+  // 涓枃璇存槑锛氬巻鍙插畨瑁呭簵鍙兘鍙湁鍟嗗搧鎶樻墸鑷姩瑙勫垯锛岄渶鍦ㄦ瘡娆¤繘鍏?App 鏃惰ˉ鍋垮垱寤?SHIPPING 鑷姩鎶樻墸
   void ensureBundleDeliveryAutomaticDiscount(admin).catch((error) => {
     console.error("Failed to ensure shipping automatic app discount exists", error);
   });
 
   // eslint-disable-next-line no-undef
-  const apiKey = sanitizeEnvLikeValue(process.env.SHOPIFY_API_KEY);
+  const apiKey = process.env.SHOPIFY_API_KEY || "";
 
-  // 获取商店时区
+  // 鑾峰彇鍟嗗簵鏃跺尯
   let ianaTimezone = "UTC";
   try {
     const tzResponse = await admin.graphql(
@@ -1460,26 +1443,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       OFFER_TEXT_LIMITS.cartTitle,
       "Bundle Discount",
     );
-    let offerType = String(formData.get("offerType") || "").trim();
+    const offerType = String(formData.get("offerType") || "").trim();
     const layoutFormatRaw = String(formData.get("layoutFormat") || "").trim();
     const layoutFormat = ["vertical", "horizontal", "card", "compact"].includes(
       layoutFormatRaw,
     )
       ? layoutFormatRaw
       : "vertical";
-    let startTimeRaw = String(formData.get("startTime") || "").trim();
-    let endTimeRaw = String(formData.get("endTime") || "").trim();
-    let selectedProductsJson = String(
+    const startTimeRaw = String(formData.get("startTime") || "").trim();
+    const endTimeRaw = String(formData.get("endTime") || "").trim();
+    const selectedProductsJson = String(
       formData.get("selectedProductsJson") || "",
     );
-    let discountRulesJson = String(formData.get("discountRulesJson") || "");
-    const campaignConfigJsonRaw = String(
-      formData.get("campaignConfigJson") || "",
-    ).trim();
+    const discountRulesJson = String(formData.get("discountRulesJson") || "");
 
     // Status is checked, defaults to false if not provided or explicitly 'false'
     const statusRaw = String(formData.get("status") || "");
-    let status = statusRaw === "true";
+    const status = statusRaw === "true";
 
     const totalBudgetRaw = formData.get("totalBudget");
     const dailyBudgetRaw = formData.get("dailyBudget");
@@ -1565,7 +1545,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
     const subscriptionDefaultSelected =
       subscriptionDefaultSelectedRaw === "true";
-
     const enableMultiProductBundle =
       String(formData.get("enableMultiProductBundle") || "") === "true";
     const chooseButtonText = sanitizeSingleLineText(
@@ -1610,9 +1589,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
     const abSaltRaw = sanitizeSingleLineText(formData.get("abSalt"), 120, "");
     const abSaltFallback =
-      abSaltRaw ||
-      sanitizeSingleLineText(process.env.AB_TEST_SALT, 120, "") ||
-      generateAbTestSalt();
+      abSaltRaw || sanitizeSingleLineText(process.env.AB_TEST_SALT, 120, "") || generateAbTestSalt();
 
     const title = sanitizeSingleLineText(
       formData.get("title"),
@@ -1646,7 +1623,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         );
       }
     }
-
     let abTestStored = parseAbTestOfferSettingsBlock(
       {
         groupADiscountPercent: abGroupADiscountPercent,
@@ -1658,42 +1634,24 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
     if (offerType === "abTest") {
       if (!abTestPayloadRaw) {
-        return offerActionErrorResponse(
-          "Missing A/B test configuration (abTestPayloadJson).",
-          400,
-        );
+        return offerActionErrorResponse("Missing A/B test configuration (abTestPayloadJson).", 400);
       }
       try {
         const raw = JSON.parse(abTestPayloadRaw) as Record<string, unknown>;
-        const saltFromPayload = sanitizeSingleLineText(
-          raw?.salt,
-          120,
-          abSaltFallback,
-        );
-        abTestStored = parseAbTestOfferSettingsBlock(
-          raw,
-          saltFromPayload || abSaltFallback,
-        );
+        const saltFromPayload = sanitizeSingleLineText(raw?.salt, 120, abSaltFallback);
+        abTestStored = parseAbTestOfferSettingsBlock(raw, saltFromPayload || abSaltFallback);
       } catch {
         return offerActionErrorResponse("Invalid A/B test configuration JSON.", 400);
       }
       if (!abTestStored.variants || abTestStored.variants.length < 2) {
-        return offerActionErrorResponse(
-          "A/B test requires at least two variants.",
-          400,
-        );
+        return offerActionErrorResponse("A/B test requires at least two variants.", 400);
       }
       if (abTestStored.variants.length > 4) {
-        return offerActionErrorResponse(
-          "A/B test supports at most 4 variants.",
-          400,
-        );
+        return offerActionErrorResponse("A/B test supports at most 4 variants.", 400);
       }
     }
 
-    const progressiveGiftsJsonRaw = String(
-      formData.get("progressiveGiftsJson") || "",
-    ).trim();
+    const progressiveGiftsJsonRaw = String(formData.get("progressiveGiftsJson") || "").trim();
     if (progressiveGiftsJsonRaw.length > 100_000) {
       return offerActionErrorResponse("Progressive gifts data is too large.", 400);
     }
@@ -1713,22 +1671,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         ? abTestStored.salt || abSaltFallback
         : abSaltFallback;
 
-    let offerSettingsJson = JSON.stringify({
+    const offerSettingsJson = JSON.stringify({
       title,
       layoutFormat,
       totalBudget:
         typeof totalBudgetRaw === "string" && totalBudgetRaw.trim()
-          ? Math.max(
-              0,
-              clampNumber(totalBudgetRaw, 0, Number.MAX_SAFE_INTEGER, 0),
-            )
+          ? Math.max(0, clampNumber(totalBudgetRaw, 0, Number.MAX_SAFE_INTEGER, 0))
           : null,
       dailyBudget:
         typeof dailyBudgetRaw === "string" && dailyBudgetRaw.trim()
-          ? Math.max(
-              0,
-              clampNumber(dailyBudgetRaw, 0, Number.MAX_SAFE_INTEGER, 0),
-            )
+          ? Math.max(0, clampNumber(dailyBudgetRaw, 0, Number.MAX_SAFE_INTEGER, 0))
           : null,
       customerSegments: customerSegments.length
         ? customerSegments.join(",")
@@ -1772,61 +1724,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
               salt: abSaltFinal,
             },
       scheduleTimezone: scheduleTimezoneRaw || undefined,
-      progressiveGifts: progressiveGiftsConfigToStorableJson(
-        progressiveGiftsSanitized,
-      ),
+      progressiveGifts: progressiveGiftsConfigToStorableJson(progressiveGiftsSanitized),
     });
-
-    let campaignConfigJson: string | null = null;
-
-    if (offerType !== "abTest") {
-      if (campaignConfigJsonRaw.length > 100_000) {
-        return offerActionErrorResponse(
-          "Campaign configuration is too large. Please simplify the campaign.",
-          400,
-        );
-      }
-
-      if (campaignConfigJsonRaw) {
-        const parsedCampaignConfig = parseCampaignConfig(campaignConfigJsonRaw);
-        if (!parsedCampaignConfig) {
-          return offerActionErrorResponse("Invalid campaign configuration.", 400);
-        }
-        if (parsedCampaignConfig.scope.productIds.length === 0) {
-          return offerActionErrorResponse("Please select at least one product.", 400);
-        }
-        if (parsedCampaignConfig.logicBlocks.length === 0) {
-          return offerActionErrorResponse(
-            "Please add at least one promotion rule.",
-            400,
-          );
-        }
-        const derivedLegacyFields =
-          buildLegacyFieldsFromCampaignConfig(parsedCampaignConfig);
-        campaignConfigJson = JSON.stringify(parsedCampaignConfig);
-        offerType = derivedLegacyFields.offerType;
-        if (!selectedProductsJson) {
-          selectedProductsJson = derivedLegacyFields.selectedProductsJson || "";
-        }
-        discountRulesJson =
-          derivedLegacyFields.discountRulesJson || discountRulesJson;
-        offerSettingsJson = derivedLegacyFields.offerSettingsJson;
-        status = parsedCampaignConfig.settings.status;
-        startTimeRaw = parsedCampaignConfig.settings.startTime || startTimeRaw;
-        endTimeRaw = parsedCampaignConfig.settings.endTime || endTimeRaw;
-      } else {
-        const derivedCampaignConfig = migrateLegacyOfferToCampaignConfig({
-          offerType,
-          selectedProductsJson,
-          discountRulesJson,
-          offerSettingsJson,
-          startTime: startTimeRaw,
-          endTime: endTimeRaw,
-          status,
-        });
-        campaignConfigJson = JSON.stringify(derivedCampaignConfig);
-      }
-    }
 
     // Store which Shopify shop this offer belongs to.
     // `session.shop` is typically the shop's domain. As a fallback, use GraphQL `shop.name`.
@@ -1883,30 +1782,26 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     const data = {
       shopName,
-      // name 被作为唯一标识
+      // name 琚綔涓哄敮涓€鏍囪瘑
       name,
       cartTitle,
       offerType,
       startTime,
       endTime,
       status,
-      campaignConfigJson,
       offerSettingsJson,
       selectedProductsJson: selectedProductsJson || null,
       discountRulesJson: discountRulesJson || null,
-    };
-    const legacyData = {
-      ...data,
-      campaignConfigJson: undefined,
     };
 
     const url = new URL(request.url);
 
     if (intent === "create-offer") {
       try {
-        const createdOffer = (await writeOfferWithRetry(() =>
+        const createdOffer: any = await writeOfferWithRetry(() =>
           prismaAny.offer.create({ data }),
-        )) as { id: string };
+        );
+        // 寮哄埗鍚屼竴搴楅摵鍐呭彧鍏佽涓€涓惎鐢ㄤ腑鐨?abTest offer
         if (offerType === "abTest" && status === true && createdOffer?.id) {
           await prismaAny.offer.updateMany({
             where: {
@@ -1919,47 +1814,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
         url.searchParams.set("toast", `create-success-${Date.now()}`);
       } catch (error: any) {
-        if (isMissingOfferCampaignConfigColumnError(error)) {
-          console.warn(
-            "[offer-create] campaignConfigJson column missing, retrying with legacy payload only",
-          );
-          try {
-            const createdOffer = (await writeOfferWithRetry(() =>
-              prismaAny.offer.create({ data: legacyData }),
-            )) as { id: string };
-            if (offerType === "abTest" && status === true && createdOffer?.id) {
-              await prismaAny.offer.updateMany({
-                where: {
-                  shopName,
-                  offerType: "abTest",
-                  id: { not: createdOffer.id },
-                },
-                data: { status: false },
-              });
-            }
-            url.searchParams.set("toast", `create-success-${Date.now()}`);
-          } catch (legacyError: any) {
-            if (legacyError.code === "P2002") {
-              return offerActionErrorResponse(
-                "An offer with this name already exists. Please choose a different name.",
-                409,
-              );
-            }
-            console.error("offer create failed after legacy fallback", {
-              error: legacyError,
-              form: {
-                nameRaw,
-                offerType,
-                startTimeRaw,
-                endTimeRaw,
-                selectedProductsJson,
-                discountRulesJson,
-                offerSettingsJson,
-              },
-            });
-            return offerActionErrorResponse("Failed to create offer. Please try again later.", 500);
-          }
-        } else if (
+        if (
           error.code === "P2002"
         ) {
           return offerActionErrorResponse(
@@ -1986,17 +1841,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return offerActionErrorResponse("Missing offer ID, cannot update.", 400);
       }
       try {
-        const updatedOfferRecord = (await writeOfferWithRetry(() =>
+        const updatedOfferRecord: any = await writeOfferWithRetry(() =>
           prismaAny.offer.update({
             where: { id: idRaw },
             data,
           }),
-        )) as { id: string };
-        if (
-          offerType === "abTest" &&
-          status === true &&
-          updatedOfferRecord?.id
-        ) {
+        );
+        // 寮哄埗鍚屼竴搴楅摵鍐呭彧鍏佽涓€涓惎鐢ㄤ腑鐨?abTest offer
+        if (offerType === "abTest" && status === true && updatedOfferRecord?.id) {
           await prismaAny.offer.updateMany({
             where: {
               shopName,
@@ -2008,55 +1860,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
         url.searchParams.set("toast", `update-success-${Date.now()}`);
       } catch (error: any) {
-        if (isMissingOfferCampaignConfigColumnError(error)) {
-          console.warn(
-            "[offer-update] campaignConfigJson column missing, retrying with legacy payload only",
-          );
-          try {
-            const updatedOfferRecord = (await writeOfferWithRetry(() =>
-              prismaAny.offer.update({
-                where: { id: idRaw },
-                data: legacyData,
-              }),
-            )) as { id: string };
-            if (
-              offerType === "abTest" &&
-              status === true &&
-              updatedOfferRecord?.id
-            ) {
-              await prismaAny.offer.updateMany({
-                where: {
-                  shopName,
-                  offerType: "abTest",
-                  id: { not: updatedOfferRecord.id },
-                },
-                data: { status: false },
-              });
-            }
-            url.searchParams.set("toast", `update-success-${Date.now()}`);
-          } catch (legacyError: any) {
-            if (legacyError.code === "P2002") {
-              return offerActionErrorResponse(
-                "An offer with this name already exists. Please choose a different name.",
-                409,
-              );
-            }
-            console.error("offer update failed after legacy fallback", {
-              error: legacyError,
-              form: {
-                idRaw,
-                nameRaw,
-                offerType,
-                startTimeRaw,
-                endTimeRaw,
-                selectedProductsJson,
-                discountRulesJson,
-                offerSettingsJson,
-              },
-            });
-            return offerActionErrorResponse("Failed to update offer. Please try again later.", 500);
-          }
-        } else if (
+        if (
           error.code === "P2002"
         ) {
           return offerActionErrorResponse(
@@ -2127,12 +1931,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return offerActionErrorResponse("Toggle status failed.", 500);
     }
 
+    // 寮哄埗锛氬鏋滃皢鏌愪釜 abTest offer 鍒囦负鍚敤锛屽垯鍚屼竴搴楅摵鍏跺畠 abTest offer 鍏ㄩ儴鍏抽棴
     try {
-      if (
-        updatedOffer?.offerType === "abTest" &&
-        nextStatus === true &&
-        updatedOffer?.shopName
-      ) {
+      if (updatedOffer?.offerType === "abTest" && nextStatus === true && updatedOffer?.shopName) {
         await prismaAny.offer.updateMany({
           where: {
             shopName: String(updatedOffer.shopName),
@@ -2143,10 +1944,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         });
       }
     } catch (e) {
-      console.error(
-        "toggle-offer-status abTest single-enable enforcement failed",
-        e,
-      );
+      console.error("toggle-offer-status abTest single-enable enforcement failed", e);
     }
 
     // Sync metafield
@@ -2180,9 +1978,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (intent === "abtest-force-split") {
     const offerIdRaw = String(formData.get("offerId") || "").trim();
     const splitModeRaw = String(formData.get("splitMode") || "").trim();
-    const targetVariantKeyRaw = String(
-      formData.get("targetVariantKey") || "",
-    ).trim();
+    const targetVariantKeyRaw = String(formData.get("targetVariantKey") || "").trim();
 
     if (!offerIdRaw) {
       return offerActionErrorResponse("Missing offerId.", 400);
@@ -2207,13 +2003,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     const shopNameToSync = String(offer.shopName);
 
+    // 1) 鍏堝鐞嗗惎鐢?鍏抽棴鍏崇郴锛氬悓涓€搴楅摵鍙湁涓€涓惎鐢ㄤ腑鐨?abTest offer
     if (splitModeRaw === "disable") {
       await prismaAny.offer.updateMany({
         where: { shopName: shopNameToSync, offerType: "abTest" },
         data: { status: false },
       });
     } else {
-      await prismaAny.offer.updateMany({
+      // full锛氬叾瀹?abTest 閮藉厛鍏虫帀锛屽啀鎶婂綋鍓?offer 寮€鍚?      await prismaAny.offer.updateMany({
         where: {
           shopName: shopNameToSync,
           offerType: "abTest",
@@ -2223,13 +2020,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       });
     }
 
-    let nextOfferSettingsJson: string | null = null;
+    // 2) 浠呭綋 full 鏃舵墠鍐?trafficWeights锛堝叾瀹?variant=0锛?    let nextOfferSettingsJson: string | null = null;
     if (splitModeRaw === "full") {
       if (!targetVariantKeyRaw) {
-        return offerActionErrorResponse(
-          "Missing targetVariantKey for full split.",
-          400,
-        );
+        return offerActionErrorResponse("Missing targetVariantKey for full split.", 400);
       }
       if (!offer.offerSettingsJson) {
         return offerActionErrorResponse("Missing offerSettingsJson.", 400);
@@ -2237,18 +2031,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
       let parsedSettings: Record<string, unknown>;
       try {
-        parsedSettings = JSON.parse(
-          String(offer.offerSettingsJson),
-        ) as Record<string, unknown>;
+        parsedSettings = JSON.parse(String(offer.offerSettingsJson)) as Record<string, unknown>;
       } catch {
         return offerActionErrorResponse("Invalid offerSettingsJson.", 400);
       }
 
       const abRaw = parsedSettings?.abTest;
-      const saltHint =
-        abRaw && typeof abRaw === "object" && (abRaw as { salt?: unknown }).salt
-          ? String((abRaw as { salt?: unknown }).salt)
-          : "";
+      const saltHint = abRaw && typeof abRaw === "object" && (abRaw as any).salt ? String((abRaw as any).salt) : "";
       const parsedAb = parseAbTestOfferSettingsBlock(abRaw, saltHint);
 
       const variants = parsedAb.variants || [];
@@ -2256,9 +2045,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return offerActionErrorResponse("abTest variants insufficient.", 400);
       }
 
-      const targetIdx = variants.findIndex(
-        (v) => String(v.key) === targetVariantKeyRaw,
-      );
+      const targetIdx = variants.findIndex((v) => String(v.key) === targetVariantKeyRaw);
       if (targetIdx < 0) {
         return offerActionErrorResponse(
           `targetVariantKey not found in this offer: ${targetVariantKeyRaw}`,
@@ -2266,10 +2053,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         );
       }
 
-      const nextTrafficWeights = variants.map((_, idx) =>
-        idx === targetIdx ? 100 : 0,
-      );
+      const nextTrafficWeights = variants.map((_, idx) => (idx === targetIdx ? 100 : 0));
 
+      // 鍐欏洖锛氬彧璋冩暣 trafficWeights锛堝苟鏄惧紡 allocationMode=custom锛夛紝variants 淇濇寔鏉ヨ嚜瑙ｆ瀽鍚庣殑绋冲畾缁撴瀯
       const nextAbTest = {
         ...(typeof abRaw === "object" && abRaw ? abRaw : {}),
         salt: parsedAb.salt,
@@ -2282,7 +2068,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       nextOfferSettingsJson = JSON.stringify(parsedSettings);
     }
 
-    if (splitModeRaw === "full") {
+    // 3) 鏇存柊褰撳墠 offer锛歠ull 鏃剁疆涓哄惎鐢紝disable 鏃舵棤闇€鍐嶄慨鏀硅缃紝鍙渶 status=false 宸插畬鎴?    if (splitModeRaw === "full") {
       await prismaAny.offer.update({
         where: { id: offerIdRaw },
         data: {
@@ -2292,6 +2078,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       });
     }
 
+    // 4) Sync metafield + 缂撳瓨澶辨晥
     try {
       const themeExtensionEnabled = await getCurrentThemeExtensionEnabled(admin);
       const syncResult = await syncShopOffersMetafield(
@@ -2301,23 +2088,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       );
       if (!syncResult.ok) {
         console.error("Failed to sync offers metafield after abtest-force-split", {
-          shopNameToSync,
+          shopName: shopNameToSync,
           message: syncResult.message,
         });
       }
     } catch (error) {
-      console.error(
-        "Failed to sync offers metafield after abtest-force-split",
-        error,
-      );
+      console.error("Failed to sync offers metafield after abtest-force-split", error);
     }
 
     invalidateShopOffersCache(shopNameToSync);
 
-    return Response.json({
-      success: true,
-      toast: `update-success-${Date.now()}`,
-    });
+    return Response.json({ success: true, toast: `update-success-${Date.now()}` });
   }
 
   if (intent === "delete-offer") {
@@ -2502,7 +2283,7 @@ export default function Index() {
   return (
     <AppProvider embedded apiKey={apiKey}>
       <div className="flex flex-col min-h-screen">
-        <div className="flex-1 max-w-[1280px] w-full mx-auto px-[16px] sm:px-[24px] pt-[12px] sm:pt-[16px] relative">
+        <div className="flex-1 max-w-[1280px] w-full mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px] relative">
           {toastMessage && (
           <div className="fixed z-50 top-4 left-1/2 -translate-x-1/2 bg-[rgba(0,0,0,0.75)] backdrop-blur-sm !text-white px-4 py-2 rounded shadow-lg text-sm font-sans">
             {toastMessage}
@@ -2510,22 +2291,17 @@ export default function Index() {
         )}
         {/* Tabs */}
         {!showCreateOffer && !editingOfferId && (
-          <nav className="mb-[12px] sm:mb-[16px] overflow-x-auto">
-            <div className="inline-flex min-w-max gap-[6px] rounded-[10px] border border-[#e5e7eb] bg-white p-[4px]">
+          <nav className="flex flex-col sm:flex-row gap-[8px] sm:gap-[16px] items-stretch sm:items-start pb-0 mb-[16px] sm:mb-[24px] border-b border-[#e3e8ed]">
             <button
               type="button"
               onClick={() => {
                 setShowCreateOffer(false);
                 setActiveTab("dashboard");
               }}
-              className={`rounded-[8px] px-[12px] py-[8px] text-center cursor-pointer transition-all ${
-                activeTab === "dashboard"
-                  ? "bg-[#f6f6f7] text-[#1c1f23]"
-                  : "text-[#5c6166] hover:bg-[#f6f6f7] hover:text-[#1c1f23]"
-              }`}
+              className={`px-[16px] py-[12px] text-center sm:text-left cursor-pointer transition-all border-b-2 ${activeTab === "dashboard" ? "border-[#008060] text-[#1c1f23]" : "border-transparent hover:border-[#8c9196] text-[#5c6166]"}`}
             >
               <span
-                className={`font-sans leading-[20px] text-[13px] font-medium tracking-normal ${activeTab === "dashboard" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
+                className={`font-sans leading-[24px] text-[14px] font-medium tracking-normal ${activeTab === "dashboard" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
               >
                 Dashboard
               </span>
@@ -2537,14 +2313,10 @@ export default function Index() {
                 setShowCreateOffer(false);
                 setActiveTab("offers");
               }}
-              className={`rounded-[8px] px-[12px] py-[8px] text-center cursor-pointer transition-all ${
-                activeTab === "offers"
-                  ? "bg-[#f6f6f7] text-[#1c1f23]"
-                  : "text-[#5c6166] hover:bg-[#f6f6f7] hover:text-[#1c1f23]"
-              }`}
+              className={`px-[16px] py-[12px] text-center sm:text-left cursor-pointer transition-all border-b-2 ${activeTab === "offers" ? "border-[#008060] text-[#1c1f23]" : "border-transparent hover:border-[#8c9196] text-[#5c6166]"}`}
             >
               <span
-                className={`font-sans leading-[20px] text-[13px] font-medium tracking-normal ${activeTab === "offers" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
+                className={`font-sans leading-[24px] text-[14px] font-medium tracking-normal ${activeTab === "offers" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
               >
                 All Offers
               </span>
@@ -2556,37 +2328,15 @@ export default function Index() {
                 setShowCreateOffer(false);
                 setActiveTab("analytics");
               }}
-              className={`rounded-[8px] px-[12px] py-[8px] text-center cursor-pointer transition-all ${
-                activeTab === "analytics"
-                  ? "bg-[#f6f6f7] text-[#1c1f23]"
-                  : "text-[#5c6166] hover:bg-[#f6f6f7] hover:text-[#1c1f23]"
-              }`}
+              className={`px-[16px] py-[12px] text-center sm:text-left cursor-pointer transition-all border-b-2 ${activeTab === "analytics" ? "border-[#008060] text-[#1c1f23]" : "border-transparent hover:border-[#8c9196] text-[#5c6166]"}`}
             >
               <span
-                className={`font-sans leading-[20px] text-[13px] font-medium tracking-normal ${activeTab === "analytics" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
+                className={`font-sans leading-[24px] text-[14px] font-medium tracking-normal ${activeTab === "analytics" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
               >
                 Analytics
               </span>
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                setShowCreateOffer(false);
-                setActiveTab("pricing");
-              }}
-              className={`rounded-[8px] px-[12px] py-[8px] text-center cursor-pointer transition-all ${
-                activeTab === "pricing"
-                  ? "bg-[#f6f6f7] text-[#1c1f23]"
-                  : "text-[#5c6166] hover:bg-[#f6f6f7] hover:text-[#1c1f23]"
-              }`}
-            >
-              <span
-                className={`font-sans leading-[20px] text-[13px] font-medium tracking-normal ${activeTab === "pricing" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
-              >
-                Pricing
-              </span>
-            </button>
-            </div>
+
           </nav>
         )}
 
@@ -2654,11 +2404,7 @@ export default function Index() {
                 setShowCreateOffer(false);
                 setEditingOfferId(null);
               }}
-              initialOffer={
-                editingOfferId
-                  ? (offers.find((o) => o.id === editingOfferId) as any)
-                  : undefined
-              }
+              initialOffer={editingOfferId ? offers.find(o => o.id === editingOfferId) as any : undefined}
               storeProducts={storeProducts}
               markets={markets}
               existingOffers={offers.map((o) => ({
@@ -2683,8 +2429,8 @@ export default function Index() {
           />
         )}
         </div>
-        <div className="mt-[8px] mb-[24px] flex w-full flex-wrap items-center justify-center gap-[10px] rounded-[12px] border border-[#e9edf1] bg-[#fcfcfd] px-[16px] py-[14px] text-[13px] text-[#666]">
-          <a
+        <div className="py-8 text-center text-sm text-[#666] w-full">
+          <a 
             href="mailto:support@ciwi.ai" 
             target="_blank" 
             rel="noopener noreferrer" 
@@ -2692,8 +2438,8 @@ export default function Index() {
           >
             Contact Us
           </a>
-          <span className="text-[#c4cdd5]">|</span>
-          <a
+          |
+          <a 
             href="https://iw73s3ld6wy.feishu.cn/wiki/UEumwgOLJi90rEknevWcZp7HnQg?from=from_copylink" 
             target="_blank" 
             rel="noopener noreferrer" 
