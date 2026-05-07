@@ -52,7 +52,7 @@ const META_BY_OFFER_TYPE: Record<OfferTypeId, CampaignBuilderMeta> = {
     logicBlockDescription:
       "Reward larger quantities of the same product with progressively better pricing.",
     stepTwoDescription:
-      "Select the products in scope and define the quantity tiers that drive the promotion.",
+      "Select the products in scope and define the pricing, order, shipping, or gift rules that drive the promotion.",
   },
   "quantity-breaks-different": {
     logicBlockLabel: "Cross-product Quantity Breaks",
@@ -87,7 +87,7 @@ const META_BY_OFFER_TYPE: Record<OfferTypeId, CampaignBuilderMeta> = {
     logicBlockDescription:
       "Reward shoppers with a global trigger pool and bar-specific gift rewards.",
     stepTwoDescription:
-      "Choose the global trigger pool, then configure gift products and quantities inside each free-gift bar.",
+      "Choose the global trigger pool, then configure gift products and quantities inside each free-gift bar. The current publish-ready path adds the gift line on storefront and discounts it in cart.",
   },
 };
 
@@ -160,14 +160,23 @@ export function getCampaignLogicSummary(
       const bxgyTierCount = ctx.normalizedDiscountRules.filter(
         (rule) => rule.logicType === "bxgy",
       ).length;
-      const standardTierCount = ctx.normalizedDiscountRules.length - bxgyTierCount;
+      const standardRuleCount = ctx.normalizedDiscountRules.length - bxgyTierCount;
+      const amountRuleCount = ctx.normalizedDiscountRules.filter(
+        (rule) =>
+          rule.logicType !== "bxgy" && rule.conditionType === "cart_amount",
+      ).length;
+      const quantityRuleCount = standardRuleCount - amountRuleCount;
       const bestDiscount = ctx.normalizedDiscountRules.reduce(
         (max, rule) => Math.max(max, rule.discountPercent),
         0,
       );
+      const standardSummary =
+        amountRuleCount > 0
+          ? `${quantityRuleCount} quantity rules, ${amountRuleCount} amount rules`
+          : `${standardRuleCount} standard rules`;
       return bxgyTierCount > 0
-        ? `${standardTierCount} standard tiers, ${bxgyTierCount} BXGY tiers, up to ${bestDiscount}% off`
-        : `${ctx.normalizedDiscountRules.length} quantity tiers, up to ${bestDiscount}% off`;
+        ? `${standardSummary}, ${bxgyTierCount} BXGY tiers, up to ${bestDiscount}% off`
+        : `${standardSummary}, up to ${bestDiscount}% off`;
     }
   }
 }

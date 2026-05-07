@@ -542,6 +542,58 @@ function parseSelectedProductIds(selectedProductsJson) {
   }
 }
 
+function parseFreeGiftConfig(selectedProductsJson, discountRulesJson) {
+  const empty = { triggerProducts: [], giftProducts: [], tiers: [] };
+  if (
+    (typeof selectedProductsJson !== "string" || !selectedProductsJson.trim()) &&
+    (typeof discountRulesJson !== "string" || !discountRulesJson.trim())
+  ) {
+    return empty;
+  }
+
+  let triggerProducts = [];
+  let giftProducts = [];
+  try {
+    const parsed = JSON.parse(selectedProductsJson || "{}");
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      triggerProducts = Array.isArray(parsed.triggerProducts)
+        ? parsed.triggerProducts.map((id) => String(id || "").trim()).filter(Boolean)
+        : [];
+      giftProducts = Array.isArray(parsed.giftProducts)
+        ? parsed.giftProducts.map((id) => String(id || "").trim()).filter(Boolean)
+        : [];
+    }
+  } catch {}
+
+  let tiers = [];
+  try {
+    const parsedRules = JSON.parse(discountRulesJson || "[]");
+    if (Array.isArray(parsedRules)) {
+      tiers = parsedRules
+        .filter((item) => item && typeof item === "object")
+        .map((item) => {
+          const count = Math.max(1, Math.trunc(Number(item.count) || 1));
+          const giftQuantity = Math.max(1, Math.trunc(Number(item.giftQuantity) || 1));
+          const perRuleGiftProducts = Array.isArray(item.giftProductIds)
+            ? item.giftProductIds.map((id) => String(id || "").trim()).filter(Boolean)
+            : [];
+          return {
+            count,
+            giftQuantity,
+            giftProductIds: perRuleGiftProducts,
+            title: String(item.title || ""),
+            subtitle: String(item.subtitle || ""),
+            badge: String(item.badge || ""),
+            isDefault: !!item.isDefault,
+          };
+        })
+        .sort((a, b) => a.count - b.count);
+    }
+  } catch {}
+
+  return { triggerProducts, giftProducts, tiers };
+}
+
 function parseCompleteBundleConfig(selectedProductsJson) {
   if (typeof selectedProductsJson !== "string" || !selectedProductsJson.trim()) {
     return { bars: [] };
@@ -844,6 +896,52 @@ async function hydrateCompleteBundleOfferInPlace(offer) {
     offer.selectedProductsJson = JSON.stringify({ bars: config.bars });
   }
   return changed;
+}
+
+async function hydrateFreeGiftOfferInPlace(offer) {
+  if (!offer || offer.offerType !== "free-gift") return false;
+  const config = parseFreeGiftConfig(offer.selectedProductsJson, offer.discountRulesJson);
+  if (!config.giftProducts.length) return false;
+  let changed = false;
+
+  const hydratedGiftProducts = config.giftProducts.map((productId) => ({
+    productId: String(productId || ""),
+    handle: "",
+    title: "",
+    image: "",
+    price: "",
+    selectedVariantId: "",
+    variants: [],
+  }));
+
+  const missingProductIds = [];
+  for (const product of hydratedGiftProducts) {
+    const cached = readCachedStorefrontProduct(product.productId);
+    if (cached) {
+      Object.assign(product, hydrateProductFromStorefrontJson(cached, product));
+      changed = true;
+      continue;
+    }
+    const numericId = toProductNumericId(product.productId);
+    if (numericId) missingProductIds.push(numericId);
+  }
+
+  if (missingProductIds.length) {
+    await fetchProductsByProductIds(missingProductIds);
+  }
+
+  for (let i = 0; i < hydratedGiftProducts.length; i++) {
+    const product = hydratedGiftProducts[i];
+    if (Array.isArray(product.variants) && product.variants.length > 0) continue;
+    let sfProduct = readCachedStorefrontProduct(product.productId);
+    if (!sfProduct) continue;
+    hydratedGiftProducts[i] = hydrateProductFromStorefrontJson(sfProduct, product);
+    changed = true;
+  }
+
+  if (!changed) return false;
+  offer.__ciwiFreeGiftHydratedProducts = hydratedGiftProducts;
+  return true;
 }
 
 /** 当前栏内某商品在 widget 中选中的变体（与 __ciwiBundleState.selectedBundleVariants 同步） */
@@ -1244,13 +1342,43 @@ function getCurrentOffer(offersConfig) {
         continue;
       }
     } else {
-      // quantity-breaks-same / subscription
+      // quantity-breaks-same / subscription / free-gift
+      if (offer.offerType === "free-gift") {
+        const freeGiftConfig = parseFreeGiftConfig(
+          offer.selectedProductsJson,
+          offer.discountRulesJson,
+        );
+        if (!freeGiftConfig.tiers.length) {
+          console.log("[ciwi] free-gift offer skipped: no valid free gift tiers", offer.id);
+          continue;
+        }
+        if (freeGiftConfig.triggerProducts.length > 0) {
+          if (!currentProductGid) {
+            console.log("[ciwi] free-gift offer skipped: current product GID is null", offer.id);
+            continue;
+          }
+          if (!freeGiftConfig.triggerProducts.includes(currentProductGid)) {
+            console.log(
+              "[ciwi] free-gift offer skipped: current product not in trigger list",
+              offer.id,
+              currentProductGid,
+              freeGiftConfig.triggerProducts,
+            );
+            continue;
+          }
+        }
+      }
+
       const discountRules = parseDiscountRulesJson(offer.discountRulesJson);
-      if (!discountRules.length) {
+      if (offer.offerType !== "free-gift" && !discountRules.length) {
         console.log("[ciwi] offer skipped: no valid quantity discount rules", offer.id);
         continue;
       }
-      const selectedIds = parseSelectedProductIds(offer.selectedProductsJson);
+      const selectedIds =
+        offer.offerType === "free-gift"
+          ? parseFreeGiftConfig(offer.selectedProductsJson, offer.discountRulesJson)
+              .triggerProducts
+          : parseSelectedProductIds(offer.selectedProductsJson);
       if (selectedIds.length > 0) {
         if (!currentProductGid) {
           console.log("[ciwi] offer skipped: requires specific products but current product GID is null", offer.id);
@@ -1434,6 +1562,8 @@ window.ciwiSelectBundleOption = function(count) {
       const htmlNext = renderBundlePreviewHtml(currentOffer);
       if (htmlNext) wrapNext.innerHTML = htmlNext;
     });
+  } else if (currentOffer?.offerType === "free-gift") {
+    void hydrateFreeGiftOfferInPlace(currentOffer);
   }
 };
 
@@ -1550,6 +1680,14 @@ window.ciwiHandleBundleAddToCart = function(event) {
   updateThemeQuantityInput(count);
   const currentOffer = getCurrentOffer(offersConfigCache);
   syncSubscriptionSelectionToTheme(currentOffer);
+  if (currentOffer?.offerType === "free-gift") {
+    performFreeGiftCartAdd()
+      .then((ok) => (ok ? notifyThemeAfterCartAdd() : false))
+      .catch((error) => {
+        console.error("[ciwi] performFreeGiftCartAdd failed", error);
+      });
+    return;
+  }
   const form = getAddToCartForm();
   
   if (form) {
@@ -1611,6 +1749,94 @@ window.ciwiSelectCompleteBundleBar = function (barId) {
 
 /** 防止同一次点击触发 click + submit 时重复请求 */
 let completeBundleCartAddBusy = false;
+
+function getCurrentQuantityFromThemeForm() {
+  const form = getAddToCartForm();
+  const input = form?.querySelector('[name="quantity"]');
+  const quantity = Number(input?.value || window.__ciwiBundleState?.selectedCount || 1);
+  return Number.isFinite(quantity) && quantity > 0 ? Math.max(1, Math.trunc(quantity)) : 1;
+}
+
+function resolveFreeGiftVariantId(offer, rule) {
+  const configuredGiftIds =
+    Array.isArray(rule?.giftProductIds) && rule.giftProductIds.length > 0
+      ? rule.giftProductIds
+      : parseFreeGiftConfig(offer?.selectedProductsJson, offer?.discountRulesJson).giftProducts;
+  const hydratedProducts = Array.isArray(offer?.__ciwiFreeGiftHydratedProducts)
+    ? offer.__ciwiFreeGiftHydratedProducts
+    : [];
+
+  for (const productId of configuredGiftIds) {
+    const hydrated = hydratedProducts.find(
+      (item) => String(item.productId || "") === String(productId || ""),
+    );
+    const variantId = toAjaxVariantId(
+      hydrated?.selectedVariantId || hydrated?.variants?.[0]?.id || "",
+    );
+    if (variantId) return variantId;
+  }
+
+  return "";
+}
+
+async function performFreeGiftCartAdd() {
+  const currentOffer = getCurrentOffer(offersConfigCache);
+  if (!currentOffer || currentOffer.offerType !== "free-gift") return false;
+
+  await hydrateFreeGiftOfferInPlace(currentOffer);
+
+  const form = getAddToCartForm();
+  const mainVariantId = toAjaxVariantId(getSelectedVariantId());
+  if (!form || !mainVariantId) return false;
+
+  const quantity = getCurrentQuantityFromThemeForm();
+  const config = parseFreeGiftConfig(
+    currentOffer.selectedProductsJson,
+    currentOffer.discountRulesJson,
+  );
+  if (!config.tiers.length) return false;
+
+  let selectedRule = null;
+  for (const tier of config.tiers) {
+    if (quantity >= tier.count) {
+      selectedRule = tier;
+    }
+  }
+  if (!selectedRule) return false;
+
+  const giftVariantId = resolveFreeGiftVariantId(currentOffer, selectedRule);
+  if (!giftVariantId) {
+    console.warn("[ciwi] free gift add-to-cart skipped: no resolvable gift variant", {
+      offerId: currentOffer.id,
+    });
+    return false;
+  }
+
+  const items = [
+    { id: Number(mainVariantId), quantity },
+    {
+      id: Number(giftVariantId),
+      quantity: Math.max(1, Math.trunc(Number(selectedRule.giftQuantity) || 1)),
+    },
+  ];
+
+  const res = await fetch("/cart/add.js", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ items }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    console.error(
+      "[ciwi] free gift cart/add.js failed",
+      res.status,
+      body?.description || body?.message || body,
+    );
+    return false;
+  }
+  return true;
+}
 
 /**
  * AJAX 加购成功后通知主题刷新购物车/侧栏（不跳转 /cart）。
@@ -1823,6 +2049,98 @@ function renderBundlePreviewHtml(offer) {
             )}</button>`
           : ""
       }
+    </div>`;
+  }
+
+  if (offer.offerType === "free-gift") {
+    const freeGiftConfig = parseFreeGiftConfig(
+      offer?.selectedProductsJson,
+      offer?.discountRulesJson,
+    );
+    if (!freeGiftConfig.tiers.length) return "";
+
+    if (!window.__ciwiBundleState.selectedCount) {
+      const defaultRule = freeGiftConfig.tiers.find((r) => r.isDefault);
+      window.__ciwiBundleState.selectedCount = defaultRule
+        ? defaultRule.count
+        : (freeGiftConfig.tiers[0]?.count || 1);
+      setTimeout(() => updateThemeQuantityInput(window.__ciwiBundleState.selectedCount), 0);
+    }
+    const selectedCount = window.__ciwiBundleState.selectedCount;
+
+    let offerSettings = {};
+    try {
+      if (offer?.offerSettingsJson) {
+        offerSettings = JSON.parse(offer.offerSettingsJson);
+      }
+    } catch (e) {
+      console.error("[ciwi] failed to parse offerSettingsJson", e);
+    }
+
+    const layoutFormat = offerSettings.layoutFormat || "vertical";
+    const accentColor = offerSettings.accentColor || "#008060";
+    const cardBackgroundColor = offerSettings.cardBackgroundColor || "#ffffff";
+    const borderColor = offerSettings.borderColor || "#dfe3e8";
+    const labelColor = offerSettings.labelColor || "#ffffff";
+    const titleFontSize = offerSettings.titleFontSize || 14;
+    const titleFontWeight = offerSettings.titleFontWeight || "600";
+    const titleColor = offerSettings.titleColor || "#111111";
+    const buttonText = offerSettings.buttonText || "Add to Cart";
+    const buttonPrimaryColor = offerSettings.buttonPrimaryColor || "#008060";
+    const showCustomButton = offerSettings.showCustomButton !== false;
+    const widgetTitle = offerSettings.title || "Bundle & Save";
+    const hasDefault = freeGiftConfig.tiers.some((r) => r.isDefault);
+
+    const items = freeGiftConfig.tiers.map((rule, index) => {
+      const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
+      return {
+        count: rule.count || 1,
+        title: rule.title || `Buy ${rule.count} item${rule.count > 1 ? "s" : ""}`,
+        subtitle:
+          rule.subtitle ||
+          `Unlock ${rule.giftQuantity} free gift${rule.giftQuantity > 1 ? "s" : ""}`,
+        price: `${rule.giftQuantity} FREE`,
+        badge: rule.badge || (isFeatured ? "Gift included" : ""),
+        saveLabel: `TRIGGER AT ${rule.count}`,
+      };
+    });
+
+    const itemsHtml = items
+      .map((item) => {
+        const isSelected = item.count === selectedCount;
+        const featuredClass = isSelected
+          ? " create-offer-style-preview-item--featured"
+          : "";
+        const featuredStyle = isSelected
+          ? `border-color: ${esc(accentColor)} !important; background: ${esc(cardBackgroundColor)} !important; box-shadow: 0 8px 18px ${esc(accentColor)}25 !important; cursor: pointer;`
+          : `border-color: ${esc(borderColor)} !important; background: ${esc(cardBackgroundColor)} !important; cursor: pointer;`;
+
+        return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}" data-ciwi-bundle-count="${esc(item.count)}">
+        ${
+          item.badge
+            ? `<div class="create-offer-style-preview-badge" style="background:${esc(accentColor)} !important; color:${esc(labelColor)} !important;">${esc(item.badge)}</div>`
+            : ""
+        }
+        <div class="create-offer-style-preview-item-title">${esc(item.title)}</div>
+        <div class="create-offer-style-preview-item-subtitle">${esc(item.subtitle)}</div>
+        ${
+          item.saveLabel
+            ? `<div class="create-offer-style-preview-item-subtitle">${esc(item.saveLabel)}</div>`
+            : ""
+        }
+        <div class="create-offer-style-preview-item-price">${esc(item.price)}</div>
+      </div>`;
+      })
+      .join("");
+
+    return `<div class="create-offer-preview-card">
+      <div class="create-offer-style-preview-header" style="color:${esc(titleColor)} !important; font-size: ${esc(titleFontSize)}px !important; font-weight: ${esc(titleFontWeight)} !important;">${esc(widgetTitle)}</div>
+      <div class="create-offer-style-preview-list create-offer-style-preview-list--${layoutFormat}">
+        ${itemsHtml}
+      </div>
+      ${showCustomButton ? `<button type="button" class="create-offer-preview-button" onclick="window.ciwiHandleBundleAddToCart(event)" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
+        ${esc(buttonText)}
+      </button>` : ""}
     </div>`;
   }
 
@@ -2538,6 +2856,15 @@ function run() {
           if (html) wrap.innerHTML = html;
         } else if (tryMount(currentOffer) !== "done") {
           fallbackMount(currentOffer);
+        }
+      });
+    } else if (currentOffer.offerType === "free-gift") {
+      void hydrateFreeGiftOfferInPlace(currentOffer).then((changed) => {
+        if (!changed) return;
+        const wrap = document.querySelector(".ciwi-bundle-wrapper");
+        if (wrap) {
+          const html = renderBundlePreviewHtml(currentOffer);
+          if (html) wrap.innerHTML = html;
         }
       });
     }

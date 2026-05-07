@@ -251,6 +251,8 @@ export function syncRuleDependencies(rule: DiscountRule): DiscountRule {
       ...normalized,
       discountClass: "product",
       offerKind: "free_gift",
+      conditionType: "item_quantity",
+      amountThreshold: undefined,
       discountPercent: 0,
       giftQuantity: Math.max(1, Math.trunc(Number(normalized.giftQuantity) || 1)),
       logicType: "standard",
@@ -272,6 +274,20 @@ export function syncRuleDependencies(rule: DiscountRule): DiscountRule {
     };
   }
 
+  if (normalized.discountClass === "product") {
+    return {
+      ...normalized,
+      offerKind: "percentage_discount",
+      conditionType: "item_quantity",
+      amountThreshold: undefined,
+      rewardProductIds: [],
+      giftQuantity: undefined,
+      buyQuantity: undefined,
+      getQuantity: undefined,
+      maxUsesPerOrder: undefined,
+    };
+  }
+
   return {
     ...normalized,
     offerKind: "percentage_discount",
@@ -281,6 +297,30 @@ export function syncRuleDependencies(rule: DiscountRule): DiscountRule {
     getQuantity: undefined,
     maxUsesPerOrder: undefined,
   };
+}
+
+export function supportsCartAmountCondition(rule: DiscountRule): boolean {
+  const normalized = normalizeUnifiedRule(rule);
+  if (normalized.logicType === "bxgy") return false;
+  if (
+    normalized.discountClass === "order" &&
+    normalized.rewardType === "percentage_off"
+  ) {
+    return true;
+  }
+  if (
+    normalized.discountClass === "shipping" &&
+    normalized.rewardType === "free_shipping"
+  ) {
+    return true;
+  }
+  return false;
+}
+
+export function getConditionTypeOptionsForRule(rule: DiscountRule) {
+  return supportsCartAmountCondition(rule)
+    ? CONDITION_TYPE_OPTIONS
+    : CONDITION_TYPE_OPTIONS.filter((option) => option.value === "item_quantity");
 }
 
 export function isExecutableDiscountRule(rule: DiscountRule): boolean {
@@ -342,6 +382,15 @@ export function getUnifiedRuleIssues(rules: DiscountRule[]): UnifiedRuleIssue[] 
       rule.conditionType === "cart_amount"
         ? Number(rule.amountThreshold) || 0
         : rule.count;
+
+    if (rule.conditionType === "cart_amount" && !supportsCartAmountCondition(rule)) {
+      issues.push({
+        ruleIndex: index,
+        severity: "error",
+        message:
+          "Cart amount triggers are currently supported only for order discounts and free shipping rules.",
+      });
+    }
 
     if (rule.conditionType === "cart_amount" && threshold <= 0) {
       issues.push({
@@ -423,6 +472,9 @@ export function getUnifiedRuleBlockingMessage(rules: DiscountRule[]): string | n
     (rule) => !isExecutableDiscountRule(rule),
   );
   if (unsupportedRule) {
+    if (unsupportedRule.rewardType === "gift_product") {
+      return "Free gift is publish-ready in the dedicated Free Gift flow with a trigger pool and gift products. Unified gift-product rules inside the selected-products flow are still draft-only.";
+    }
     return "Some rule combinations are not supported yet. Supported combinations are: product percentage by item quantity (including BXGY with valid buy/get quantities), order percentage by item quantity or cart amount, and free shipping by item quantity or cart amount.";
   }
 

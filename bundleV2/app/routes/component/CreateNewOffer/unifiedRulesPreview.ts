@@ -102,6 +102,10 @@ function buildStandardRuleItem(
 ): PreviewItem {
   const featured = getFeaturedState(params.rules, index);
   const badge = rule.presentation.badge || (featured ? "Most Popular" : "");
+  const triggerLabel =
+    rule.condition.kind === "cart_amount"
+      ? params.formatPrice(rule.condition.amountThreshold)
+      : null;
 
   if (rule.type === "bxgy" && rule.condition.kind === "buy_x_get_y") {
     const percentOff =
@@ -138,6 +142,20 @@ function buildStandardRuleItem(
     };
   }
 
+  if (rule.reward.kind === "gift_product" && rule.condition.kind === "cart_amount") {
+    return {
+      id: rule.id,
+      title: rule.presentation.title || `Spend ${triggerLabel}`,
+      subtitle:
+        rule.presentation.subtitle ||
+        `Unlock ${rule.reward.giftQuantity} free gift${rule.reward.giftQuantity > 1 ? "s" : ""}`,
+      price: `${rule.reward.giftQuantity} FREE`,
+      featured,
+      badge: rule.presentation.badge || (featured ? "Gift included" : ""),
+      saveLabel: `UNLOCK AT ${triggerLabel}`,
+    };
+  }
+
   if (
     rule.reward.kind === "percentage_off" &&
     rule.condition.kind === "item_quantity"
@@ -157,6 +175,25 @@ function buildStandardRuleItem(
       featured,
       badge,
       saveLabel: `SAVE ${params.formatPrice(saved)}`,
+    };
+  }
+
+  if (
+    rule.reward.kind === "percentage_off" &&
+    rule.condition.kind === "cart_amount"
+  ) {
+    const rewardLabel =
+      rule.reward.discountClass === "order" ? "order" : "selected products";
+    return {
+      id: rule.id,
+      title: rule.presentation.title || `Spend ${triggerLabel}`,
+      subtitle:
+        rule.presentation.subtitle ||
+        `Unlock ${rule.reward.discountPercent}% off ${rewardLabel}`,
+      price: `${rule.reward.discountPercent}% OFF`,
+      featured,
+      badge,
+      saveLabel: `AT ${triggerLabel}`,
     };
   }
 
@@ -198,16 +235,21 @@ function buildStandardRuleItem(
   if (rule.reward.kind === "free_shipping") {
     return {
       id: rule.id,
-      title: rule.presentation.title || "Free Shipping",
+      title:
+        rule.presentation.title ||
+        (rule.condition.kind === "cart_amount" ? `Spend ${triggerLabel}` : "Free Shipping"),
       subtitle:
-        rule.presentation.subtitle || "Unlock free shipping with this rule",
+        rule.presentation.subtitle ||
+        (rule.condition.kind === "cart_amount"
+          ? "Unlock free shipping once the cart threshold is met"
+          : "Unlock free shipping with this rule"),
       price: "FREE SHIPPING",
       featured,
       badge,
       saveLabel:
         rule.condition.kind === "item_quantity"
           ? `TRIGGER AT ${rule.condition.count}`
-          : "SHIPPING PERK",
+          : `AT ${triggerLabel}`,
     };
   }
 
@@ -227,20 +269,51 @@ function buildDifferentProductsItem(
   params: BuildPreviewParams,
 ): PreviewItem {
   const featured = getFeaturedState(params.rules, index);
+  const buildScopedProducts = () => {
+    if (rule.scope.kind === "buy_get_products") {
+      const buyProducts = mapProducts(rule.scope.buyProductIds, params.selectedProducts).map(
+        (product) => ({
+          ...product,
+          variant: "BUY",
+        }),
+      );
+      const rewardSourceIds =
+        rule.scope.getProductIds.length > 0
+          ? rule.scope.getProductIds
+          : rule.scope.buyProductIds;
+      const rewardProducts = mapProducts(rewardSourceIds, params.selectedProducts).map(
+        (product) => ({
+          ...product,
+          variant: "REWARD",
+        }),
+      );
+      return [...buyProducts.slice(0, 2), ...rewardProducts.slice(0, 2)];
+    }
+
+    if (rule.scope.kind === "shared_product_pool") {
+      return mapProducts(rule.scope.productIds, params.selectedProducts).map((product) => ({
+        ...product,
+        variant: "MIX",
+      }));
+    }
+
+    return undefined;
+  };
+  const scopedProducts = buildScopedProducts();
 
   if (rule.type === "bxgy" && rule.condition.kind === "buy_x_get_y") {
+    const rewardCount =
+      rule.scope.kind === "buy_get_products"
+        ? rule.scope.getProductIds.length || rule.scope.buyProductIds.length
+        : 0;
     return {
       id: rule.id,
       title:
         rule.presentation.title ||
-        `Buy ${rule.condition.buyQuantity}, Get ${rule.condition.getQuantity}`,
+        `Mix & Match BXGY`,
       subtitle:
         rule.presentation.subtitle ||
-        `Across ${
-          rule.scope.kind === "buy_get_products"
-            ? rule.scope.buyProductIds.length
-            : 0
-        } buy products`,
+        `Buy ${rule.condition.buyQuantity} and unlock ${rule.condition.getQuantity} reward item${rule.condition.getQuantity > 1 ? "s" : ""} across ${rewardCount} eligible products`,
       price:
         rule.reward.kind === "percentage_off" && rule.reward.discountPercent === 100
           ? `${rule.condition.getQuantity} FREE`
@@ -252,29 +325,27 @@ function buildDifferentProductsItem(
       featured,
       badge: rule.presentation.badge || (featured ? "Best Reward" : ""),
       saveLabel: `BUY ${rule.condition.buyQuantity} + GET ${rule.condition.getQuantity}`,
-      products:
-        rule.scope.kind === "buy_get_products"
-          ? mapProducts(
-              rule.scope.getProductIds.length > 0
-                ? rule.scope.getProductIds
-                : rule.scope.buyProductIds,
-              params.selectedProducts,
-            )
-          : undefined,
+      products: scopedProducts,
     };
   }
 
+  const scopedCount =
+    rule.scope.kind === "shared_product_pool"
+      ? rule.scope.productIds.length
+      : rule.scope.kind === "buy_get_products"
+        ? rule.scope.buyProductIds.length
+        : 0;
   return {
     id: rule.id,
     title:
       rule.presentation.title ||
       (rule.condition.kind === "item_quantity"
-        ? `${rule.condition.count} mixed items`
+        ? `Mix & Match ${rule.condition.count}+`
         : `Rule ${index + 1}`),
     subtitle:
       rule.presentation.subtitle ||
       (rule.reward.kind === "percentage_off"
-        ? `Mix products and save ${rule.reward.discountPercent}%`
+        ? `Pick from ${scopedCount} products and save ${rule.reward.discountPercent}%`
         : "Mix products offer"),
     price:
       rule.reward.kind === "percentage_off"
@@ -284,12 +355,9 @@ function buildDifferentProductsItem(
     badge: rule.presentation.badge || (featured ? "Most Popular" : ""),
     saveLabel:
       rule.condition.kind === "item_quantity"
-        ? `COUNT ${rule.condition.count}+`
+        ? `ANY ${rule.condition.count}+ ITEMS`
         : undefined,
-    products:
-      rule.scope.kind === "shared_product_pool"
-        ? mapProducts(rule.scope.productIds, params.selectedProducts)
-        : undefined,
+    products: scopedProducts,
   };
 }
 

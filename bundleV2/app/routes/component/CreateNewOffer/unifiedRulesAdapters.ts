@@ -14,6 +14,7 @@ import {
   type ExistingRuleSets,
   type UnifiedRuleNode,
 } from "./unifiedRulesSchema";
+import { isExecutableDiscountRule } from "./unifiedRuleModel";
 
 function buildNodeId(prefix: string, index: number, fallback?: string) {
   return fallback || `${prefix}-${index + 1}`;
@@ -47,7 +48,7 @@ export function adaptDiscountRules(
     condition: buildDiscountRuleCondition(rule),
     reward: buildDiscountRuleReward(rule),
     presentation: buildDiscountRulePresentation(rule),
-    publishSupport: "supported",
+    publishSupport: isExecutableDiscountRule(rule) ? "supported" : "draft_only",
   }));
 }
 

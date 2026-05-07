@@ -1,11 +1,22 @@
 import type { CampaignDraft } from "./campaignDraft";
 import { getUnifiedRuleBlockingMessage as getLegacyUnifiedRuleBlockingMessage } from "./unifiedRuleModel";
-import type { UnifiedRuleNode } from "./unifiedRulesSchema";
+import {
+  describeUnifiedRuleCondition,
+  describeUnifiedRuleReward,
+  getUnifiedRuleTypeLabel,
+  type UnifiedRuleNode,
+} from "./unifiedRulesSchema";
 
 export type UnifiedRuleAuditIssue = {
   severity: "error" | "warning";
   message: string;
 };
+
+function describeDraftOnlyRule(rule: UnifiedRuleNode): string {
+  return `${getUnifiedRuleTypeLabel(rule.type)} using ${describeUnifiedRuleCondition(
+    rule.condition,
+  )} with ${describeUnifiedRuleReward(rule.reward)}`;
+}
 
 export function getUnifiedRuleAuditIssuesForRules(
   draft: CampaignDraft,
@@ -21,14 +32,18 @@ export function getUnifiedRuleAuditIssuesForRules(
     return issues;
   }
 
-  const hasDraftOnlyRule = rules.some(
-    (rule) => rule.publishSupport === "draft_only",
-  );
-  if (hasDraftOnlyRule) {
+  const draftOnlyRules = rules.filter((rule) => rule.publishSupport === "draft_only");
+  if (draftOnlyRules.length > 0) {
     issues.push({
       severity: "error",
       message:
-        "Some rules are draft-only in the unified model and cannot be published yet.",
+        "Some rules are still draft-only in the unified model and cannot be published yet.",
+    });
+    Array.from(new Set(draftOnlyRules.map(describeDraftOnlyRule))).forEach((description) => {
+      issues.push({
+        severity: "error",
+        message: `${description} is not publishable in the current flow yet.`,
+      });
     });
   }
 

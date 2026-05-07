@@ -1,10 +1,12 @@
 import { Button, Checkbox, Dropdown, Input, Select } from "antd";
 import type { FreeGiftRule } from "../../../utils/offerParsing";
+import type { DraftSelectedProduct } from "./campaignDraft";
 import {
   OfferRuleAddPanel,
   OfferRuleCard,
   OfferRuleFooterRow,
   OfferRuleFormGrid,
+  OfferRuleNotice,
   OfferRulesSection,
 } from "./OfferRulesShared";
 import type { RulePresentationPatch } from "./unifiedRulePresentation";
@@ -17,8 +19,10 @@ import { getFreeGiftRuleCapability } from "./ruleCapabilityRegistry";
 type Props = {
   triggerProductsCount: number;
   giftProductsCount: number;
+  giftProductsData: DraftSelectedProduct[];
   onSelectTriggerProducts: () => void | Promise<void>;
   onSelectGiftProducts: () => void | Promise<void>;
+  onSelectRuleGiftProducts?: (ruleIndex: number) => void | Promise<void>;
   freeGiftRules: FreeGiftRule[];
   setFreeGiftRules: React.Dispatch<React.SetStateAction<FreeGiftRule[]>>;
   updateRuleValues?: (id: string, patch: UnifiedRuleValuePatch) => void;
@@ -28,8 +32,10 @@ type Props = {
 export default function FreeGiftLogicEditor({
   triggerProductsCount,
   giftProductsCount,
+  giftProductsData,
   onSelectTriggerProducts,
   onSelectGiftProducts,
+  onSelectRuleGiftProducts,
   freeGiftRules,
   setFreeGiftRules,
   updateRuleValues,
@@ -58,6 +64,9 @@ export default function FreeGiftLogicEditor({
       ];
     });
   };
+  const giftProductMap = new Map(
+    giftProductsData.map((product) => [String(product.id), product]),
+  );
 
   return (
     <>
@@ -104,10 +113,16 @@ export default function FreeGiftLogicEditor({
               {giftProductsCount === 0 ? "Select gift products" : "Edit gift products"}
             </Button>
           </div>
+          <div className="mt-2 text-[12px] text-[#5c6166]">
+            This bulk picker updates the default reward pool for every free gift rule.
+          </div>
         </div>
       </div>
 
       <OfferRulesSection description="Free gift rules use a fixed discount type. Configure the trigger threshold and how many gift items unlock for each rule.">
+        <OfferRuleNotice title="Trigger vs reward scope" intent="info">
+          Trigger products decide when the offer unlocks. Reward products stay separate and can be overridden per rule when a tier needs a different gift selection.
+        </OfferRuleNotice>
         {freeGiftRules.map((rule, index) => (
           <OfferRuleCard
             key={index}
@@ -207,6 +222,62 @@ export default function FreeGiftLogicEditor({
                     }}
                   />
                 </label>
+              </div>
+
+              <div className="mt-3 rounded-[10px] bg-[#f6f8f9] px-4 py-3">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div className="min-w-0">
+                    <div className="text-[14px] font-medium text-[#1c1f23]">
+                      Reward Products
+                    </div>
+                    <div className="mt-1 text-[12px] text-[#5c6166]">
+                      {rule.giftProductIds?.length
+                        ? `${rule.giftProductIds.length} selected for this rule`
+                        : "Using the shared gift product pool"}
+                    </div>
+                  </div>
+                  {onSelectRuleGiftProducts ? (
+                    <Button
+                      size="middle"
+                      onClick={(e) => {
+                        void onSelectRuleGiftProducts(index);
+                        e.preventDefault();
+                      }}
+                    >
+                      {rule.giftProductIds?.length
+                        ? "Edit rule reward products"
+                        : "Override reward products"}
+                    </Button>
+                  ) : null}
+                </div>
+                {rule.giftProductIds?.length ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {rule.giftProductIds.slice(0, 4).map((productId) => {
+                      const product = giftProductMap.get(String(productId));
+                      return (
+                        <div
+                          key={`${ruleId}-gift-${productId}`}
+                          className="flex items-center gap-2 rounded-[8px] border border-[#dfe3e8] bg-white px-2 py-1"
+                        >
+                          {product?.image ? (
+                            <img
+                              src={product.image}
+                              alt={product.title}
+                              className="h-8 w-8 rounded object-cover"
+                            />
+                          ) : null}
+                          <span className="max-w-[160px] truncate text-[12px] text-[#1c1f23]">
+                            {product?.title || "Selected gift product"}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="mt-3 text-[12px] text-[#5c6166]">
+                    No rule-specific override yet. This tier will use the shared gift products selected above.
+                  </div>
+                )}
               </div>
 
               <OfferRuleFormGrid columns={3}>

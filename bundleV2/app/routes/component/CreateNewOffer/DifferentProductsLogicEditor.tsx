@@ -6,6 +6,7 @@ import {
   OfferRuleCard,
   OfferRuleFooterRow,
   OfferRuleFormGrid,
+  OfferRuleNotice,
   OfferRuleSummaryBox,
   OfferRulesSection,
 } from "./OfferRulesShared";
@@ -88,6 +89,9 @@ export default function DifferentProductsLogicEditor({
 
   return (
     <OfferRulesSection description="Configure cross-product rules across the shared pool. Each rule can be a quantity break or a BXGY reward flow.">
+      <OfferRuleNotice title="Cross-product bars" intent="info">
+        These bars are scoped across multiple products, not repeated tiers of a single product. Use buy and reward scopes to model mix-and-match offers more explicitly.
+      </OfferRuleNotice>
       {differentProductsDiscountRules.map((rule, index) => {
         const buyProductsData = selectedProductsData.filter((product) =>
           rule.buyProductIds.includes(String(product.id)),
@@ -118,7 +122,7 @@ export default function DifferentProductsLogicEditor({
               <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
                 <div>
                   <div className="mb-1 text-[14px] font-medium text-[#1c1f23]">
-                    Discount Type
+                    Bar Type
                   </div>
                   <Select
                     size="large"
@@ -141,7 +145,7 @@ export default function DifferentProductsLogicEditor({
                 </div>
 
                 <OfferRuleSummaryBox
-                  label="Condition Type"
+                  label="Rule Shape"
                   value={rule.tierType === "bxgy" ? "Buy X, Get Y" : "Quantity threshold"}
                   description={
                     rule.tierType === "bxgy"

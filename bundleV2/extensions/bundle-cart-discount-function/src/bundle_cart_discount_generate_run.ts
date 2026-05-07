@@ -94,6 +94,12 @@ type BxgyDiscountRule = {
   tierType?: "bxgy" | "simple";
 };
 
+type FreeGiftRule = {
+  count: number;
+  giftQuantity: number;
+  giftProductIds: string[];
+};
+
 type Offer = NonNullable<OfferMetafieldPayload["offers"]>[number];
 
 /** complete-bundle：单件商品的计价方式（与主题端 offerParsing 对齐） */
@@ -120,6 +126,39 @@ function parseMoneyAmount(raw: unknown): number {
   if (raw == null) return 0;
   const n = typeof raw === "number" ? raw : Number(String(raw));
   return Number.isFinite(n) ? n : 0;
+}
+
+function parseFreeGiftRulesJson(discountRulesJson?: string | null): FreeGiftRule[] {
+  if (!discountRulesJson) return [];
+
+  try {
+    const parsed = JSON.parse(discountRulesJson) as unknown;
+    if (!Array.isArray(parsed)) return [];
+
+    const rules: FreeGiftRule[] = [];
+    for (const item of parsed) {
+      if (!item || typeof item !== "object") continue;
+      const count = Number((item as { count?: unknown }).count);
+      const giftQuantity = Number((item as { giftQuantity?: unknown }).giftQuantity);
+      if (!Number.isFinite(count) || count < 1) continue;
+      if (!Number.isFinite(giftQuantity) || giftQuantity < 1) continue;
+
+      rules.push({
+        count: Math.max(1, Math.trunc(count)),
+        giftQuantity: Math.max(1, Math.trunc(giftQuantity)),
+        giftProductIds: Array.isArray((item as { giftProductIds?: unknown }).giftProductIds)
+          ? ((item as { giftProductIds: unknown[] }).giftProductIds)
+              .map((id) => String(id || "").trim())
+              .filter(Boolean)
+          : [],
+      });
+    }
+
+    rules.sort((a, b) => a.count - b.count);
+    return rules;
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -604,16 +643,21 @@ export function bundleCartDiscountGenerateRun(
           hasUnifiedBxgyTier(o.discountRulesJson))) &&
       offerPassesScheduleAndMarket(o, marketId, nowMs),
   );
+  const freeGiftOffers = offers.filter(
+    (o) => o.offerType === "free-gift" && offerPassesScheduleAndMarket(o, marketId, nowMs),
+  );
   /** 普通数量阶梯：不含 BXGY 与 complete-bundle（后两者有独立分支） */
   const regularOffers = offers.filter(
     (o) =>
       o.offerType !== "bxgy" &&
       o.offerType !== "quantity-breaks-different" &&
+      o.offerType !== "free-gift" &&
       !isCompleteBundleOfferType(o.offerType),
   );
   log("offer_groups_resolved", {
     totalOffers: offers.length,
     bxgyCount: bxgyOffers.length,
+    freeGiftCount: freeGiftOffers.length,
     completeBundleCount: offers.filter((o) => isCompleteBundleOfferType(o.offerType)).length,
     regularCount: regularOffers.length,
   });
@@ -623,6 +667,13 @@ export function bundleCartDiscountGenerateRun(
     const bxgyCandidates = calculateBxgyDiscount(input.cart.lines, bxgyOffers);
     if (bxgyCandidates.length > 0) {
       productCandidates.push(...bxgyCandidates);
+    }
+  }
+
+  if (hasProductDiscountClass && productCandidates.length === 0) {
+    const freeGiftCandidates = calculateFreeGiftDiscount(input.cart.lines, freeGiftOffers);
+    if (freeGiftCandidates.length > 0) {
+      productCandidates.push(...freeGiftCandidates);
     }
   }
 
@@ -1163,8 +1214,114 @@ function calculateBxgyDiscount(
 
   return allCandidates;
 }
-  
 
+function calculateFreeGiftDiscount(
+  cartLines: CartInput["cart"]["lines"],
+  offers: Offer[],
+): ProductDiscountCandidate[] {
+  const allCandidates: ProductDiscountCandidate[] = [];
+
+  for (const offer of offers) {
+    const selection = parseFreeGiftSelection(offer.selectedProductsJson);
+    const triggerProductIds = selection.triggerProductIds;
+    const fallbackGiftProductIds = selection.giftProductIds;
+    const freeGiftRules = parseFreeGiftRulesJson(offer.discountRulesJson);
+
+    if (!triggerProductIds.length || !freeGiftRules.length) {
+      log("free_gift_skip_missing_configuration", {
+        offerId: offer.id,
+        triggerProductIds: triggerProductIds.length,
+        freeGiftRuleCount: freeGiftRules.length,
+      });
+      continue;
+    }
+
+    let triggerQuantity = 0;
+    for (const line of cartLines) {
+      if (line.merchandise.__typename !== "ProductVariant") continue;
+      const productId = line.merchandise.product?.id;
+      const variantId = line.merchandise.id;
+      if (matchesAnyConfiguredId(triggerProductIds, productId, variantId)) {
+        triggerQuantity += Math.max(1, Math.trunc(Number(line.quantity) || 1));
+      }
+    }
+
+    if (triggerQuantity <= 0) {
+      log("free_gift_skip_no_trigger_quantity", {
+        offerId: offer.id,
+        triggerProductIds,
+      });
+      continue;
+    }
+
+    let bestRule: FreeGiftRule | null = null;
+    for (const rule of freeGiftRules) {
+      if (triggerQuantity >= rule.count) {
+        bestRule = rule;
+      }
+    }
+
+    if (!bestRule) {
+      log("free_gift_skip_threshold_not_met", {
+        offerId: offer.id,
+        triggerQuantity,
+        thresholds: freeGiftRules.map((rule) => rule.count),
+      });
+      continue;
+    }
+
+    const eligibleGiftProductIds =
+      bestRule.giftProductIds.length > 0
+        ? bestRule.giftProductIds
+        : fallbackGiftProductIds;
+    if (!eligibleGiftProductIds.length) {
+      log("free_gift_skip_no_reward_products", {
+        offerId: offer.id,
+        triggerQuantity,
+        selectedRuleCount: bestRule.count,
+      });
+      continue;
+    }
+
+    let remainingGiftQuantity = bestRule.giftQuantity;
+    for (const line of cartLines) {
+      if (remainingGiftQuantity <= 0) break;
+      if (line.merchandise.__typename !== "ProductVariant") continue;
+      const productId = line.merchandise.product?.id;
+      const variantId = line.merchandise.id;
+      if (!matchesAnyConfiguredId(eligibleGiftProductIds, productId, variantId)) {
+        continue;
+      }
+
+      const discountQuantity = Math.min(
+        Math.max(1, Math.trunc(Number(line.quantity) || 1)),
+        remainingGiftQuantity,
+      );
+      if (discountQuantity <= 0) continue;
+
+      allCandidates.push({
+        message: offer.cartTitle || "Free gift",
+        targets: [{ cartLine: { id: line.id, quantity: discountQuantity } }],
+        value: {
+          percentage: {
+            value: "100.0",
+          },
+        },
+      });
+
+      remainingGiftQuantity -= discountQuantity;
+      log("free_gift_candidate_added", {
+        offerId: offer.id,
+        cartLineId: line.id,
+        quantity: discountQuantity,
+        selectedRuleCount: bestRule.count,
+      });
+    }
+  }
+
+  return allCandidates;
+}
+  
 function formatDiscountPercentValue(percent: number): string {
   if (!Number.isFinite(percent)) return DEFAULT_DISCOUNT_PERCENTAGE;
   return percent.toFixed(1);
@@ -1336,6 +1493,8 @@ const parseSelectedIds = (selectedProductsJson?: string | null): string[] => {
 
       const buyProducts = (parsed as { buyProducts?: string[] }).buyProducts;
       const getProducts = (parsed as { getProducts?: string[] }).getProducts;
+      const triggerProducts = (parsed as { triggerProducts?: string[] }).triggerProducts;
+      const giftProducts = (parsed as { giftProducts?: string[] }).giftProducts;
       
       const allIds: string[] = [];
       if (Array.isArray(buyProducts)) {
@@ -1343,6 +1502,12 @@ const parseSelectedIds = (selectedProductsJson?: string | null): string[] => {
       }
       if (Array.isArray(getProducts)) {
         allIds.push(...getProducts.filter(id => typeof id === "string"));
+      }
+      if (Array.isArray(triggerProducts)) {
+        allIds.push(...triggerProducts.filter(id => typeof id === "string"));
+      }
+      if (Array.isArray(giftProducts)) {
+        allIds.push(...giftProducts.filter(id => typeof id === "string"));
       }
       return [...new Set(allIds)]; // Remove duplicates
     }
@@ -1368,6 +1533,40 @@ const parseSelectedIds = (selectedProductsJson?: string | null): string[] => {
     return [];
   }
 };
+
+function parseFreeGiftSelection(selectedProductsJson?: string | null): {
+  triggerProductIds: string[];
+  giftProductIds: string[];
+} {
+  if (!selectedProductsJson) {
+    return { triggerProductIds: [], giftProductIds: [] };
+  }
+
+  try {
+    const parsed = JSON.parse(selectedProductsJson) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { triggerProductIds: [], giftProductIds: [] };
+    }
+
+    const triggerProducts = (parsed as { triggerProducts?: unknown }).triggerProducts;
+    const giftProducts = (parsed as { giftProducts?: unknown }).giftProducts;
+
+    return {
+      triggerProductIds: Array.isArray(triggerProducts)
+        ? triggerProducts
+            .map((id) => String(id || "").trim())
+            .filter(Boolean)
+        : [],
+      giftProductIds: Array.isArray(giftProducts)
+        ? giftProducts
+            .map((id) => String(id || "").trim())
+            .filter(Boolean)
+        : [],
+    };
+  } catch {
+    return { triggerProductIds: [], giftProductIds: [] };
+  }
+}
 
 function resolveNowMs(): number | null {
   const candidates = [

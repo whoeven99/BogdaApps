@@ -43,6 +43,11 @@ import {
   OFFER_TEXT_LIMITS,
   buildLegacyFieldsFromCampaignConfig,
   clampNumber,
+  getInvalidIpCountryCodes,
+  normalizeCustomerProfileFilters,
+  normalizeCustomerSegments,
+  normalizeIpCountryCodes,
+  normalizeTargetMarkets,
   parseProgressiveGiftsConfig,
   progressiveGiftsConfigToStorableJson,
   parseCompleteBundleConfig,
@@ -128,6 +133,7 @@ const BUNDLE_METAFIELD_NAMESPACE = "ciwi_bundle";
 const BUNDLE_METAFIELD_BASE_KEY = "ciwi-bundle-offers";
 const BUNDLE_METAFIELD_ENABLED_PROD_KEY = "ciwi-bundle-enabled-prod";
 const BUNDLE_METAFIELD_ENABLED_TEST_KEY = "ciwi-bundle-enabled-test";
+const LONG_RUNNING_OFFER_END_TIME = new Date("2999-12-31T23:59:59.000Z");
 const PROD_SHOPIFY_API_KEY = "bfc13ad696f2a8d2a77ba6eee1e26966";
 const TEST_SHOPIFY_API_KEY = "ab25ea895c6df574ae9ff70e9c7731c5";
 
@@ -1413,8 +1419,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const totalBudgetRaw = formData.get("totalBudget");
     const dailyBudgetRaw = formData.get("dailyBudget");
 
-    const customerSegments = formData.getAll("customerSegments") as string[];
-    const markets = formData.getAll("markets") as string[];
+    const customerSegments = normalizeCustomerSegments(
+      formData.getAll("customerSegments").map((value) => String(value || "")),
+    );
+    const customerProfileFilters = normalizeCustomerProfileFilters(
+      formData.getAll("customerProfileFilters").map((value) => String(value || "")),
+    );
+    const rawIpCountryCodes = formData
+      .getAll("ipCountryCodes")
+      .map((value) => String(value || ""));
+    const invalidIpCountryCodes = getInvalidIpCountryCodes(rawIpCountryCodes);
+    const ipCountryCodes = normalizeIpCountryCodes(rawIpCountryCodes);
+    const markets = normalizeTargetMarkets(
+      formData.getAll("markets").map((value) => String(value || "")),
+    );
 
     const usageLimitPerCustomer = String(
       formData.get("usageLimitPerCustomer") || "unlimited",
@@ -1557,6 +1575,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       customerSegments: customerSegments.length
         ? customerSegments.join(",")
         : null,
+      customerProfileFilters: customerProfileFilters.length
+        ? customerProfileFilters.join(",")
+        : null,
+      ipCountryCodes: ipCountryCodes.length
+        ? ipCountryCodes.map((value) => String(value).trim().toUpperCase()).join(",")
+        : null,
       markets: markets.length ? markets.join(",") : null,
       usageLimitPerCustomer,
       accentColor,
@@ -1599,6 +1623,37 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
       if (parsedCampaignConfig.scope.productIds.length === 0) {
         return offerActionErrorResponse("Please select at least one product.", 400);
+      }
+      if (parsedCampaignConfig.scope.markets.length === 0) {
+        return offerActionErrorResponse(
+          "Select at least one market or keep All markets enabled.",
+          400,
+        );
+      }
+      if (!parsedCampaignConfig.settings.startTime) {
+        return offerActionErrorResponse("Start time is required.", 400);
+      }
+      const parsedStartTime = new Date(parsedCampaignConfig.settings.startTime);
+      const parsedEndTime = parsedCampaignConfig.settings.endTime
+        ? new Date(parsedCampaignConfig.settings.endTime)
+        : null;
+      if (
+        isNaN(parsedStartTime.getTime()) ||
+        (parsedEndTime && isNaN(parsedEndTime.getTime()))
+      ) {
+        return offerActionErrorResponse("Invalid start or end time format.", 400);
+      }
+      if (
+        parsedEndTime &&
+        parsedEndTime.getTime() <= parsedStartTime.getTime()
+      ) {
+        return offerActionErrorResponse("End time must be after start time.", 400);
+      }
+      const hasCountdownBlock = parsedCampaignConfig.displayBlocks.some(
+        (block) => block.type === "countdown",
+      );
+      if (hasCountdownBlock && !parsedCampaignConfig.settings.endTime) {
+        return offerActionErrorResponse("Countdown requires an end time.", 400);
       }
       if (parsedCampaignConfig.logicBlocks.length === 0) {
         return offerActionErrorResponse("Please add at least one promotion rule.", 400);
@@ -1650,17 +1705,31 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (!cartTitle) {
       return offerActionErrorResponse("Please enter a display title.", 400);
     }
-    if (!startTimeRaw || !endTimeRaw) {
-      return offerActionErrorResponse("Start time and end time are required.", 400);
+    if (markets.length === 0) {
+      return offerActionErrorResponse(
+        "Select at least one market or keep All markets enabled.",
+        400,
+      );
+    }
+    if (invalidIpCountryCodes.length > 0) {
+      return offerActionErrorResponse(
+        `Use 2-letter ISO country codes for IP targeting. Remove: ${invalidIpCountryCodes.join(", ")}.`,
+        400,
+      );
+    }
+    if (!startTimeRaw) {
+      return offerActionErrorResponse("Start time is required.", 400);
     }
 
     const startTime = new Date(startTimeRaw);
-    const endTime = new Date(endTimeRaw);
+    const endTime = endTimeRaw
+      ? new Date(endTimeRaw)
+      : new Date(LONG_RUNNING_OFFER_END_TIME);
 
-    if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
+    if (isNaN(startTime.getTime()) || (endTimeRaw && isNaN(endTime.getTime()))) {
       return offerActionErrorResponse("Invalid start or end time format.", 400);
     }
-    if (endTime.getTime() <= startTime.getTime()) {
+    if (endTimeRaw && endTime.getTime() <= startTime.getTime()) {
       return offerActionErrorResponse("End time must be after start time.", 400);
     }
 

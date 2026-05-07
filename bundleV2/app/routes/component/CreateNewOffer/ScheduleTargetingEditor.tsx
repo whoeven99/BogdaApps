@@ -1,6 +1,12 @@
 import { Checkbox, DatePicker, Select } from "antd";
 import dayjs from "dayjs";
 import timezone from "dayjs/plugin/timezone";
+import {
+  normalizeCustomerProfileFilters,
+  normalizeCustomerSegments,
+  normalizeDraftIpCountryCodes,
+  normalizeTargetMarkets,
+} from "../../../utils/offerParsing";
 
 dayjs.extend(timezone);
 
@@ -15,9 +21,32 @@ type TimezoneOption = {
   label: string;
 };
 
+const CUSTOMER_SEGMENT_OPTIONS = [
+  { value: "all", label: "All customers" },
+  { value: "new_customers", label: "New customers" },
+  { value: "returning_customers", label: "Returning customers" },
+  { value: "vip", label: "VIP customers" },
+  { value: "high_aov", label: "High AOV customers" },
+];
+
+const CUSTOMER_PROFILE_FILTER_OPTIONS = [
+  { value: "subscription_active", label: "Subscription active" },
+  { value: "bundle_buyer", label: "Bundle buyer" },
+  { value: "repeat_buyer", label: "Repeat buyer" },
+  { value: "high_intent", label: "High intent" },
+];
+
 type Props = {
   markets: string[];
   setMarkets: React.Dispatch<React.SetStateAction<string[]>>;
+  customerSegments: string[];
+  setCustomerSegments: React.Dispatch<React.SetStateAction<string[]>>;
+  customerProfileFilters: string[];
+  setCustomerProfileFilters: React.Dispatch<React.SetStateAction<string[]>>;
+  ipCountryCodes: string[];
+  setIpCountryCodes: React.Dispatch<React.SetStateAction<string[]>>;
+  marketsError: string;
+  ipCountryCodesError: string;
   shopMarkets: MarketItem[];
   scheduleTimezone: string;
   setScheduleTimezone: (value: string) => void;
@@ -35,6 +64,14 @@ type Props = {
 export default function ScheduleTargetingEditor({
   markets,
   setMarkets,
+  customerSegments,
+  setCustomerSegments,
+  customerProfileFilters,
+  setCustomerProfileFilters,
+  ipCountryCodes,
+  setIpCountryCodes,
+  marketsError,
+  ipCountryCodesError,
   shopMarkets,
   scheduleTimezone,
   setScheduleTimezone,
@@ -51,6 +88,9 @@ export default function ScheduleTargetingEditor({
   const visibilitySummary = markets.includes("all")
     ? "All markets"
     : `${markets.length} selected`;
+  const customerSummary = customerSegments.includes("all")
+    ? "All customers"
+    : `${customerSegments.length} segments`;
 
   return (
     <div className="flex flex-col gap-8">
@@ -81,10 +121,16 @@ export default function ScheduleTargetingEditor({
                 onChange={(e) => {
                   if (e.target.checked) {
                     setMarkets((prev) =>
-                      prev.includes("all") ? [market.id] : [...prev, market.id],
+                      normalizeTargetMarkets(
+                        prev.includes("all") ? [market.id] : [...prev, market.id],
+                      ),
                     );
                   } else {
-                    setMarkets((prev) => prev.filter((value) => value !== market.id));
+                    setMarkets((prev) =>
+                      normalizeTargetMarkets(
+                        prev.filter((value) => value !== market.id),
+                      ),
+                    );
                   }
                 }}
               >
@@ -92,9 +138,101 @@ export default function ScheduleTargetingEditor({
               </Checkbox>
             ))}
           </div>
-          <p className="mb-0 mt-2 text-[12px] text-[#5c6166]">
-            Choose where the offer can appear.
-          </p>
+          {marketsError ? (
+            <p className="mb-0 mt-2 text-[12px] text-[#d72c0d]">{marketsError}</p>
+          ) : (
+            <p className="mb-0 mt-2 text-[12px] text-[#5c6166]">
+              Choose where the offer can appear.
+            </p>
+          )}
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="m-0 text-[14px] font-medium text-[#1c1f23]">
+            Audience
+          </h3>
+          <div className="text-[12px] text-[#5c6166]">{customerSummary}</div>
+        </div>
+        <div className="rounded-[12px] border border-[#e3e8ed] bg-white px-4 py-4">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <label className="block text-[14px] font-medium text-[#1c1f23]">
+              Customer Segments
+              <Select
+                mode="tags"
+                size="large"
+                className="mt-1 w-full"
+                value={customerSegments}
+                options={CUSTOMER_SEGMENT_OPTIONS}
+                placeholder="Select or type segment handles"
+                onChange={(values) => {
+                  setCustomerSegments(
+                    normalizeCustomerSegments(
+                      values.map((value) => String(value || "").trim()),
+                    ),
+                  );
+                }}
+              />
+              <p className="mt-1 text-[12px] font-normal text-[#5c6166]">
+                Use Shopify customer segments or internal segment handles. Keep
+                `all` selected to avoid segment restrictions.
+              </p>
+            </label>
+
+            <label className="block text-[14px] font-medium text-[#1c1f23]">
+              Customer Profile Filters
+              <Select
+                mode="tags"
+                size="large"
+                className="mt-1 w-full"
+                value={customerProfileFilters}
+                options={CUSTOMER_PROFILE_FILTER_OPTIONS}
+                placeholder="VIP, subscription_active, repeat_buyer..."
+                onChange={(values) =>
+                  setCustomerProfileFilters(
+                    normalizeCustomerProfileFilters(
+                      values.map((value) => String(value || "").trim()),
+                    ),
+                  )
+                }
+              />
+              <p className="mt-1 text-[12px] font-normal text-[#5c6166]">
+                Optional profile traits you can evaluate in app logic later,
+                such as VIP, subscription, or repeat-buyer cohorts.
+              </p>
+            </label>
+          </div>
+
+          <label className="mt-4 block text-[14px] font-medium text-[#1c1f23]">
+            IP / Geo Country Filter
+            <Select
+              mode="tags"
+              size="large"
+              className="mt-1 w-full"
+              status={ipCountryCodesError ? "error" : ""}
+              value={ipCountryCodes}
+              placeholder="US, CA, DE..."
+              tokenSeparators={[",", " "]}
+              onChange={(values) =>
+                setIpCountryCodes(
+                  normalizeDraftIpCountryCodes(
+                    values.map((value) => String(value || "").trim()),
+                  ),
+                )
+              }
+            />
+            {ipCountryCodesError ? (
+              <p className="mt-1 text-[12px] font-normal text-[#d72c0d]">
+                {ipCountryCodesError}
+              </p>
+            ) : (
+              <p className="mt-1 text-[12px] font-normal text-[#5c6166]">
+                Optional ISO country codes for IP-based targeting. This is stored
+                now so storefront or app-side checks can use it later.
+              </p>
+            )}
+          </label>
         </div>
       </section>
 
@@ -136,7 +274,7 @@ export default function ScheduleTargetingEditor({
                         .toISOString()
                     : "";
                   setStartTime(value);
-                  if (value && endTime && dayjs(endTime).isBefore(dayjs(value))) {
+                  if (value && endTime && !dayjs(endTime).isAfter(dayjs(value))) {
                     setStartTimeError("Start time must be before end time.");
                   } else {
                     setStartTimeError("");
@@ -173,7 +311,11 @@ export default function ScheduleTargetingEditor({
                         .toISOString()
                     : "";
                   setEndTime(value);
-                  if (value && startTime && dayjs(value).isBefore(dayjs(startTime))) {
+                  if (!value) {
+                    setEndTimeError("");
+                    return;
+                  }
+                  if (startTime && !dayjs(value).isAfter(dayjs(startTime))) {
                     setEndTimeError("End time must be after start time.");
                   } else {
                     setEndTimeError("");
@@ -187,7 +329,7 @@ export default function ScheduleTargetingEditor({
                 <p className="text-red-500 text-xs mt-1">{endTimeError}</p>
               ) : (
                 <p className="mt-1 text-[12px] font-normal text-[#5c6166]">
-                  When the offer expires
+                  Optional. Leave blank to keep the offer active long-term. Countdown blocks still require an end time.
                 </p>
               )}
             </label>

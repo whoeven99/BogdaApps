@@ -123,12 +123,30 @@ export function OfferRuleFooterRow({ children }: OfferRuleFooterRowProps) {
 }
 
 type OfferRuleNoticeProps = {
+  title?: string;
+  intent?: "info" | "warning" | "critical" | "success";
   children: ReactNode;
 };
 
-export function OfferRuleNotice({ children }: OfferRuleNoticeProps) {
+export function OfferRuleNotice({
+  title,
+  intent = "info",
+  children,
+}: OfferRuleNoticeProps) {
+  const toneClasses =
+    intent === "critical"
+      ? "border-[#ffd6d2] bg-[#fff1f0] text-[#b42318]"
+      : intent === "warning"
+        ? "border-[#ffe7ba] bg-[#fff7e6] text-[#ad6800]"
+        : intent === "success"
+          ? "border-[#b7ebc6] bg-[#f6ffed] text-[#237804]"
+          : "border-[#dfe3e8] bg-[#f6f8f9] text-[#5c6166]";
+
   return (
-    <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[13px] text-[#5c6166]">
+    <div className={`rounded-[10px] border px-4 py-3 text-[13px] ${toneClasses}`}>
+      {title ? (
+        <div className="mb-1 text-[13px] font-medium text-[#1c1f23]">{title}</div>
+      ) : null}
       {children}
     </div>
   );

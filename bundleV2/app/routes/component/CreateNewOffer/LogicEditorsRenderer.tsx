@@ -227,8 +227,10 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
           <FreeGiftLogicEditor
             triggerProductsCount={props.draft.freeGiftTriggerProducts.length}
             giftProductsCount={props.draft.giftProductsData.length}
+            giftProductsData={props.draft.giftProductsData}
             onSelectTriggerProducts={() => props.actions.handleSelectProducts("normal")}
             onSelectGiftProducts={() => props.actions.handleSelectProducts("gift")}
+            onSelectRuleGiftProducts={props.actions.selectFreeGiftRewardProducts}
             freeGiftRules={props.draft.freeGiftRules}
             setFreeGiftRules={props.actions.setFreeGiftRules}
             updateRuleValues={props.actions.updateUnifiedRuleValues}

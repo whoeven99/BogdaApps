@@ -3,8 +3,8 @@ import type { DraftSelectedProduct } from "./campaignDraft";
 import type { DiscountRule } from "../../../utils/offerParsing";
 import {
   applyDiscountType,
-  CONDITION_TYPE_OPTIONS,
   createRuleFromTemplate,
+  getConditionTypeOptionsForRule,
   getDiscountTypeFromRule,
   getUnifiedRuleIssues,
   syncRuleDependencies,
@@ -87,6 +87,14 @@ export default function UnifiedRulesEditor({
         {rules.map((rule, index) => {
           const discountType = getDiscountTypeFromRule(rule);
           const usesBxgy = discountType === "bxgy";
+          const conditionTypeOptions = getConditionTypeOptionsForRule(rule);
+          const currentConditionType = usesBxgy
+            ? "buy_x_get_y"
+            : conditionTypeOptions.some(
+                  (option) => option.value === (rule.conditionType || "item_quantity"),
+                )
+              ? (rule.conditionType || "item_quantity")
+              : "item_quantity";
           const usesCartAmount = !usesBxgy && rule.conditionType === "cart_amount";
           const usesGiftReward = rule.rewardType === "gift_product";
           const usesShippingReward = rule.rewardType === "free_shipping";
@@ -117,25 +125,36 @@ export default function UnifiedRulesEditor({
 
                 <label className="block text-[14px] font-medium text-[#1c1f23]">
                   Condition Type
-                  <Select
-                    size="large"
-                    className="mt-1 w-full"
-                    value={usesBxgy ? "buy_x_get_y" : rule.conditionType || "item_quantity"}
-                    options={
-                      usesBxgy
-                        ? [{ label: "Buy X, Get Y", value: "buy_x_get_y" }]
-                        : CONDITION_TYPE_OPTIONS
-                    }
-                    disabled={usesBxgy}
-                    onChange={(value) => {
-                      if (usesBxgy) return;
-                      updateRule(index, {
-                        conditionType: value as "item_quantity" | "cart_amount",
-                      });
-                    }}
-                  />
+                  {usesBxgy ? (
+                    <Select
+                      size="large"
+                      className="mt-1 w-full"
+                      value="buy_x_get_y"
+                      options={[{ label: "Buy X, Get Y", value: "buy_x_get_y" }]}
+                      disabled
+                    />
+                  ) : (
+                    <Select
+                      size="large"
+                      className="mt-1 w-full"
+                      value={currentConditionType}
+                      options={conditionTypeOptions}
+                      disabled={conditionTypeOptions.length === 1}
+                      onChange={(value) => {
+                        updateRule(index, {
+                          conditionType: value as "item_quantity" | "cart_amount",
+                        });
+                      }}
+                    />
+                  )}
                 </label>
               </div>
+              {!usesBxgy && conditionTypeOptions.length === 1 ? (
+                <div className="mt-3 rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[13px] text-[#5c6166]">
+                  Cart amount is currently available only for order discount and free
+                  shipping rules.
+                </div>
+              ) : null}
 
               <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
                 <label className="block text-[14px] font-medium text-[#1c1f23]">

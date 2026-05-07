@@ -1,4 +1,5 @@
 import type { UnifiedRuleAuditIssue } from "./unifiedRulesValidation";
+import { OfferRuleNotice } from "./OfferRulesShared";
 
 type Props = {
   rulesCount: number;
@@ -68,7 +69,16 @@ export default function UnifiedRulesAuditPanel({ rulesCount, issues }: Props) {
         </div>
       </div>
 
-      <div className="mt-4 rounded-[10px] bg-[#f6f8f9] px-4 py-3">
+      <OfferRuleNotice
+        title="Rule readiness"
+        intent={
+          errorCount > 0
+            ? "critical"
+            : warningCount > 0
+              ? "warning"
+              : "success"
+        }
+      >
         <div className="text-[14px] font-medium text-[#1c1f23]">{status.title}</div>
         <div className="mt-1 text-[12px] text-[#5c6166]">{status.description}</div>
         {issues.length > 0 ? (
@@ -85,21 +95,17 @@ export default function UnifiedRulesAuditPanel({ rulesCount, issues }: Props) {
             ) : null}
           </div>
         ) : null}
-      </div>
+      </OfferRuleNotice>
 
       {issues.length > 0 ? (
         <div className="mt-4 space-y-2">
           {issues.map((issue, index) => (
-            <div
+            <OfferRuleNotice
               key={`${issue.severity}-${index}`}
-              className={`rounded-[10px] border px-3 py-2 text-[12px] ${
-                issue.severity === "error"
-                  ? "border-[#ffd6d2] bg-[#fff1f0] text-[#b42318]"
-                  : "border-[#ffe58f] bg-[#fffbe6] text-[#ad6800]"
-              }`}
+              intent={issue.severity === "error" ? "critical" : "warning"}
             >
               {issue.message}
-            </div>
+            </OfferRuleNotice>
           ))}
         </div>
       ) : null}

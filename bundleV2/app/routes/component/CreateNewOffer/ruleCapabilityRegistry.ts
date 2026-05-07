@@ -68,14 +68,8 @@ const UNIFIED_RULE_CAPABILITY_BY_OFFER_TYPE: Partial<
     addMenuItems: [{ key: "bxgy", label: "Add BXGY Rule" }],
   },
   "free-gift": {
-    discountTypeOptions: [
-      { label: "Free gift", value: "free_gift" },
-      { label: "Free shipping", value: "free_shipping" },
-    ],
-    addMenuItems: [
-      { key: "free_gift", label: "Add Free Gift Rule" },
-      { key: "shipping_discount", label: "Add Free Shipping Rule" },
-    ],
+    discountTypeOptions: [{ label: "Free gift", value: "free_gift" }],
+    addMenuItems: [{ key: "free_gift", label: "Add Free Gift Rule" }],
   },
 };
 

@@ -40,7 +40,13 @@ import {
   OFFER_TEXT_LIMITS,
   buildLegacyFieldsFromCampaignConfig,
   buildDifferentProductsDiscountRulesJson,
+  getInvalidIpCountryCodes,
   migrateLegacyOfferToCampaignConfig,
+  normalizeCustomerProfileFilters,
+  normalizeCustomerSegments,
+  normalizeDraftIpCountryCodes,
+  normalizeIpCountryCodes,
+  normalizeTargetMarkets,
   normalizeOfferNameKey,
   parseCampaignConfig,
   parseDiscountRules,
@@ -111,6 +117,43 @@ function PreviewShell({
       {children}
     </div>
   );
+}
+
+function FloatingFeedbackBanner({
+  title,
+  message,
+}: {
+  title: string;
+  message: string;
+}) {
+  return (
+    <div
+      className="fixed left-1/2 top-4 z-50 max-w-[min(560px,calc(100vw-32px))] -translate-x-1/2 rounded-[12px] border border-[#ffd6d2] bg-white px-4 py-3 shadow-lg"
+      role="alert"
+    >
+      <div className="text-[13px] font-semibold text-[#1c1f23]">{title}</div>
+      <div className="mt-1 text-[13px] text-[#5c6166]">{message}</div>
+    </div>
+  );
+}
+
+function openBuilderValidationModal(message: string) {
+  Modal.error({
+    title: "Fix these issues before saving",
+    content: message,
+    okText: "Back to builder",
+  });
+}
+
+function openHighDiscountWarning(onConfirm: () => void) {
+  Modal.confirm({
+    title: "Review high discount",
+    content:
+      "One or more rules discount 90% or more. Confirm that this campaign should still be saved.",
+    okText: "Save anyway",
+    cancelText: "Review rules",
+    onOk: onConfirm,
+  });
 }
 
 type DiscountRule = {
@@ -495,6 +538,8 @@ export function CreateNewOffer({
   );
   const [startTimeError, setStartTimeError] = useState("");
   const [endTimeError, setEndTimeError] = useState("");
+  const [marketsError, setMarketsError] = useState("");
+  const [ipCountryCodesError, setIpCountryCodesError] = useState("");
 
   const persistedOfferSettings = parseOfferSettings(
     initialCampaignLegacy?.offerSettingsJson ?? initialOffer?.offerSettingsJson,
@@ -592,15 +637,105 @@ export function CreateNewOffer({
     offerSettings.subscriptionDefaultSelected,
   );
   const [widgetTitle, setWidgetTitle] = useState(offerSettings.title);
-  const [customerSegments] = useState<string[]>(
-    offerSettings.customerSegments ? offerSettings.customerSegments.split(",") : ["all"]
+  const [customerSegments, setCustomerSegments] = useState<string[]>(
+    normalizeCustomerSegments(
+      offerSettings.customerSegments ? offerSettings.customerSegments.split(",") : ["all"],
+    ),
+  );
+  const [customerProfileFilters, setCustomerProfileFilters] = useState<string[]>(
+    normalizeCustomerProfileFilters(
+      offerSettings.customerProfileFilters
+        ? offerSettings.customerProfileFilters.split(",")
+        : [],
+    ),
+  );
+  const [ipCountryCodes, setIpCountryCodes] = useState<string[]>(
+    normalizeDraftIpCountryCodes(
+      offerSettings.ipCountryCodes ? offerSettings.ipCountryCodes.split(",") : [],
+    ),
   );
   const [markets, setMarkets] = useState<string[]>(
-    offerSettings.markets ? offerSettings.markets.split(",") : ["all"]
+    normalizeTargetMarkets(
+      offerSettings.markets ? offerSettings.markets.split(",") : ["all"],
+    ),
   );
   const [usageLimitPerCustomer, setUsageLimitPerCustomer] = useState(
     offerSettings.usageLimitPerCustomer
   );
+  const normalizedMarkets = useMemo(() => normalizeTargetMarkets(markets), [markets]);
+  const normalizedCustomerSegments = useMemo(
+    () => normalizeCustomerSegments(customerSegments),
+    [customerSegments],
+  );
+  const normalizedCustomerProfileFilters = useMemo(
+    () => normalizeCustomerProfileFilters(customerProfileFilters),
+    [customerProfileFilters],
+  );
+  const normalizedIpCountryCodes = useMemo(
+    () => normalizeIpCountryCodes(ipCountryCodes),
+    [ipCountryCodes],
+  );
+  const invalidIpCountryCodes = useMemo(
+    () => getInvalidIpCountryCodes(ipCountryCodes),
+    [ipCountryCodes],
+  );
+
+  useEffect(() => {
+    if (marketsError && normalizedMarkets.length > 0) {
+      setMarketsError("");
+    }
+  }, [marketsError, normalizedMarkets]);
+
+  useEffect(() => {
+    if (ipCountryCodesError && invalidIpCountryCodes.length === 0) {
+      setIpCountryCodesError("");
+    }
+  }, [invalidIpCountryCodes, ipCountryCodesError]);
+
+  const validateTargetingInputs = () => {
+    let hasError = false;
+
+    if (normalizedMarkets.length === 0) {
+      setMarketsError("Select at least one market or keep All markets enabled.");
+      hasError = true;
+    } else {
+      setMarketsError("");
+    }
+
+    if (invalidIpCountryCodes.length > 0) {
+      setIpCountryCodesError(
+        `Use 2-letter ISO country codes like US or CA. Remove: ${invalidIpCountryCodes.join(", ")}.`,
+      );
+      hasError = true;
+    } else {
+      setIpCountryCodesError("");
+    }
+
+    if (!startTime) {
+      setStartTimeError("Start Time is required.");
+      hasError = true;
+    } else if (!dayjs(startTime).isValid() || startTime === "") {
+      setStartTimeError("Invalid start time format.");
+      hasError = true;
+    } else {
+      setStartTimeError("");
+    }
+
+    if (endTime && (!dayjs(endTime).isValid() || endTime === "")) {
+      setEndTimeError("Invalid end time format.");
+      hasError = true;
+    } else if (startTime && endTime && !dayjs(endTime).isAfter(dayjs(startTime))) {
+      setEndTimeError("End time must be after start time.");
+      hasError = true;
+    } else if (showCountdownBlock && !endTime) {
+      setEndTimeError("Countdown requires an end time.");
+      hasError = true;
+    } else {
+      setEndTimeError("");
+    }
+
+    return !hasError;
+  };
   const [selectedProductsData, setSelectedProductsData] = useState<{
     id: string;
     title: string;
@@ -1129,6 +1264,18 @@ export function CreateNewOffer({
       }),
     [productBundleProductIds, storeProducts],
   );
+  const availableScopeProducts = useMemo(
+    () =>
+      storeProducts.map((product) => ({
+        id: String(product.id),
+        title: product.name,
+        image: product.image || "https://via.placeholder.com/60",
+        price: product.price || "€0.00",
+        variantsCount: Array.isArray(product.variants) ? product.variants.length : 1,
+        hasSubscription: product.hasSubscription === true,
+      })),
+    [storeProducts],
+  );
   useEffect(() => {
     if (selectedProductsData.length > 0) return;
     const fallbackIds =
@@ -1148,7 +1295,6 @@ export function CreateNewOffer({
 
   useEffect(() => {
     const globalTriggerIds = selectedProductsData.map((product) => String(product.id));
-    if (globalTriggerIds.length === 0) return;
     if (bxgyDiscountRules.length > 0 && !areStringArraysEqual(buyProducts, globalTriggerIds)) {
       setBuyProducts(globalTriggerIds);
     }
@@ -1894,8 +2040,10 @@ export function CreateNewOffer({
       version: 1,
       scope: {
         productIds: scopeProductIds,
-        markets,
-        customerSegments,
+        markets: normalizedMarkets,
+        customerSegments: normalizedCustomerSegments,
+        customerProfileFilters: normalizedCustomerProfileFilters,
+        ipCountryCodes: normalizedIpCountryCodes,
       },
       logicBlocks,
       displayBlocks: [
@@ -1971,7 +2119,8 @@ export function CreateNewOffer({
     checkboxUpsellsDefaultChecked,
     completeBundleBars,
     countdownLabel,
-    customerSegments,
+    normalizedCustomerSegments,
+    normalizedCustomerProfileFilters,
     dailyBudget,
     differentProductsDiscountRules,
     endTime,
@@ -1981,7 +2130,8 @@ export function CreateNewOffer({
     compositionBarOrder,
     labelColor,
     layoutFormat,
-    markets,
+    normalizedIpCountryCodes,
+    normalizedMarkets,
     normalizedDiscountRules,
     oneTimeSubtitle,
     oneTimeTitle,
@@ -2732,13 +2882,23 @@ export function CreateNewOffer({
     .filter(Boolean)
     .join(" • ");
   const targetingStepMeta = [
-    markets.includes("all")
+    normalizedMarkets.includes("all")
       ? "All markets"
-      : markets.length > 0
-        ? `${markets.length} markets`
+      : normalizedMarkets.length > 0
+        ? `${normalizedMarkets.length} markets`
         : "No markets",
-    startTime || endTime ? "Scheduled" : "No schedule",
-  ].join(" • ");
+    normalizedCustomerSegments.includes("all")
+      ? "All customers"
+      : normalizedCustomerSegments.length > 0
+        ? `${normalizedCustomerSegments.length} segments`
+        : "No segment filter",
+    normalizedCustomerProfileFilters.length > 0 || normalizedIpCountryCodes.length > 0
+      ? `${normalizedCustomerProfileFilters.length + normalizedIpCountryCodes.length} extra filters`
+      : null,
+    endTime ? "Scheduled end date" : startTime ? "Long-term" : "No schedule",
+  ]
+    .filter(Boolean)
+    .join(" • ");
   const previewPanelMeta =
     offerType === "complete-bundle" ? "Bundle preview" : "Storefront preview";
   const progressiveGiftPreviewControls =
@@ -2809,20 +2969,14 @@ export function CreateNewOffer({
           validateFinalSubmitScopeAndLogic(campaignDraft);
         if (finalScopeLogicError) {
           e.preventDefault();
-          Modal.error({
-            title: "Validation Error",
-            content: finalScopeLogicError,
-          });
+          openBuilderValidationModal(finalScopeLogicError);
           setStep(2);
           return;
         }
         const moduleBlockingMessage = getModuleBlockingMessage();
         if (moduleBlockingMessage) {
           e.preventDefault();
-          Modal.error({
-            title: "Validation Error",
-            content: moduleBlockingMessage,
-          });
+          openBuilderValidationModal(moduleBlockingMessage);
           setStep(2);
           return;
         }
@@ -2834,10 +2988,7 @@ export function CreateNewOffer({
           : getUnifiedRuleBlockingMessage(campaignDraft);
         if (unifiedRuleBlockingMessage) {
           e.preventDefault();
-          Modal.error({
-            title: "Validation Error",
-            content: unifiedRuleBlockingMessage,
-          });
+          openBuilderValidationModal(unifiedRuleBlockingMessage);
           setStep(2);
           return;
         }
@@ -2851,26 +3002,8 @@ export function CreateNewOffer({
           setCartTitleError("Display Title is required.");
           hasError = true;
         }
-        if (!startTime) {
-          setStartTimeError("Start Time is required.");
+        if (!validateTargetingInputs()) {
           hasError = true;
-        } else if (startTime && (!dayjs(startTime).isValid() || startTime === "")) {
-          setStartTimeError("Invalid start time format.");
-          hasError = true;
-        } else {
-          setStartTimeError("");
-        }
-        if (!endTime) {
-          setEndTimeError("End Time is required.");
-          hasError = true;
-        } else if (endTime && (!dayjs(endTime).isValid() || endTime === "")) {
-          setEndTimeError("Invalid end time format.");
-          hasError = true;
-        } else if (startTime && endTime && dayjs(endTime).isBefore(dayjs(startTime))) {
-          setEndTimeError("End time must be after start time.");
-          hasError = true;
-        } else {
-          setEndTimeError("");
         }
         if (hasError) {
           e.preventDefault();
@@ -2884,31 +3017,20 @@ export function CreateNewOffer({
           );
         if (hasHighDiscount && !confirmedHighDiscountRef.current) {
           e.preventDefault();
-          Modal.confirm({
-            title: "High Discount Warning",
-            content: "You have set a discount of 90% or more. This means the product is nearly free. Are you sure you want to proceed?",
-            okText: "Yes, proceed",
-            cancelText: "Cancel",
-            onOk: () => {
-              confirmedHighDiscountRef.current = true;
-              // form elements trigger re-submit
-              e.target.requestSubmit();
-            },
-            onCancel: () => {
-              confirmedHighDiscountRef.current = false;
-            }
+          openHighDiscountWarning(() => {
+            confirmedHighDiscountRef.current = true;
+            // form elements trigger re-submit
+            e.target.requestSubmit();
           });
           return;
         }
       }}
     >
       {submitErrorToast && (
-        <div
-          className="fixed z-50 top-4 left-1/2 -translate-x-1/2 bg-[rgba(0,0,0,0.75)] backdrop-blur-sm !text-white px-4 py-2 rounded shadow-lg text-sm font-sans max-w-[min(520px,calc(100vw-32px))] text-center"
-          role="alert"
-        >
-          {submitErrorToast}
-        </div>
+        <FloatingFeedbackBanner
+          title="Save failed"
+          message={submitErrorToast}
+        />
       )}
       <div className="mb-4">
         <div>
@@ -2987,10 +3109,16 @@ export function CreateNewOffer({
         name="usageLimitPerCustomer"
         value={usageLimitPerCustomer}
       />
-      {customerSegments.map((segment) => (
+      {normalizedCustomerSegments.map((segment) => (
         <input key={segment} type="hidden" name="customerSegments" value={segment} />
       ))}
-      {markets.map((market) => (
+      {normalizedCustomerProfileFilters.map((filter) => (
+        <input key={filter} type="hidden" name="customerProfileFilters" value={filter} />
+      ))}
+      {normalizedIpCountryCodes.map((countryCode) => (
+        <input key={countryCode} type="hidden" name="ipCountryCodes" value={countryCode} />
+      ))}
+      {normalizedMarkets.map((market) => (
         <input key={market} type="hidden" name="markets" value={market} />
       ))}
       <input
@@ -3184,6 +3312,7 @@ export function CreateNewOffer({
               <StepTwoCompositionBuilder
                 draft={campaignDraft}
                 actions={campaignDraftActions}
+                availableProducts={availableScopeProducts}
                 bars={orderedCompositionBars}
                 modules={compositionModules}
                 showCountdownBlock={showCountdownBlock}
@@ -3309,6 +3438,14 @@ export function CreateNewOffer({
               <ScheduleTargetingEditor
                 markets={markets}
                 setMarkets={setMarkets}
+                customerSegments={customerSegments}
+                setCustomerSegments={setCustomerSegments}
+                customerProfileFilters={customerProfileFilters}
+                setCustomerProfileFilters={setCustomerProfileFilters}
+                ipCountryCodes={ipCountryCodes}
+                setIpCountryCodes={setIpCountryCodes}
+                marketsError={marketsError}
+                ipCountryCodesError={ipCountryCodesError}
                 shopMarkets={shopMarkets}
                 scheduleTimezone={scheduleTimezone}
                 setScheduleTimezone={setScheduleTimezone}
@@ -3498,26 +3635,7 @@ export function CreateNewOffer({
               e.preventDefault();
             }
             if (step === 4) {
-              let hasError = false;
-              if (!startTime) {
-                setStartTimeError("Start Time is required.");
-                hasError = true;
-              } else if (startTime && (!dayjs(startTime).isValid() || startTime === "")) {
-                setStartTimeError("Invalid start time format.");
-                hasError = true;
-              } else {
-                setStartTimeError("");
-              }
-              if (!endTime) {
-                setEndTimeError("End Time is required.");
-                hasError = true;
-              } else if (endTime && (!dayjs(endTime).isValid() || endTime === "")) {
-                setEndTimeError("Invalid end time format.");
-                hasError = true;
-              } else {
-                setEndTimeError("");
-              }
-              if (hasError) {
+              if (!validateTargetingInputs()) {
                 e.preventDefault();
                 return;
               }

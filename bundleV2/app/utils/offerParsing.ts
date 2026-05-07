@@ -277,6 +277,8 @@ export type OfferSettings = {
   totalBudget: number | null;
   dailyBudget: number | null;
   customerSegments: string | null;
+  customerProfileFilters: string | null;
+  ipCountryCodes: string | null;
   markets: string | null;
   usageLimitPerCustomer: string;
   accentColor: string;
@@ -314,6 +316,64 @@ export type OfferSettings = {
   progressiveGifts: ProgressiveGiftsConfig;
 };
 
+const ISO_COUNTRY_CODE_REGEX = /^[A-Z]{2}$/;
+
+function normalizeUniqueStringList(values: string[]): string[] {
+  return Array.from(
+    new Set(
+      values
+        .map((value) => String(value || "").trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
+export function normalizeTargetMarkets(values: string[]): string[] {
+  const normalized = normalizeUniqueStringList(values);
+  return normalized.some((value) => value.toLowerCase() === "all")
+    ? ["all"]
+    : normalized;
+}
+
+export function normalizeCustomerSegments(values: string[]): string[] {
+  const normalized = normalizeUniqueStringList(values);
+  if (normalized.length === 0) return ["all"];
+  return normalized.some((value) => value.toLowerCase() === "all")
+    ? ["all"]
+    : normalized;
+}
+
+export function normalizeCustomerProfileFilters(values: string[]): string[] {
+  return normalizeUniqueStringList(values);
+}
+
+export function normalizeDraftIpCountryCodes(values: string[]): string[] {
+  return normalizeUniqueStringList(
+    values.map((value) => String(value || "").trim().toUpperCase()),
+  );
+}
+
+export function normalizeIpCountryCodes(values: string[]): string[] {
+  return normalizeDraftIpCountryCodes(values).filter((value) =>
+    ISO_COUNTRY_CODE_REGEX.test(value),
+  );
+}
+
+export function getInvalidIpCountryCodes(values: string[]): string[] {
+  return normalizeDraftIpCountryCodes(values).filter(
+    (value) => !ISO_COUNTRY_CODE_REGEX.test(value),
+  );
+}
+
+function normalizeCsvField(
+  rawValue: unknown,
+  normalize: (values: string[]) => string[],
+): string | null {
+  if (typeof rawValue !== "string") return null;
+  const normalized = normalize(rawValue.split(","));
+  return normalized.length > 0 ? normalized.join(",") : null;
+}
+
 export function parseOfferSettings(offerSettingsJson?: string | null): OfferSettings {
   if (!offerSettingsJson) {
     return {
@@ -322,6 +382,8 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
       totalBudget: null,
       dailyBudget: null,
       customerSegments: null,
+      customerProfileFilters: null,
+      ipCountryCodes: null,
       markets: null,
       usageLimitPerCustomer: "unlimited",
       accentColor: "#008060",
@@ -383,9 +445,19 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
         parsed.dailyBudget !== undefined
           ? parseNonNegativeNumberOrNull(parsed.dailyBudget)
           : null,
-      customerSegments:
-        parsed.customerSegments !== undefined ? parsed.customerSegments ?? null : null,
-      markets: parsed.markets !== undefined ? parsed.markets ?? null : null,
+      customerSegments: normalizeCsvField(
+        parsed.customerSegments,
+        normalizeCustomerSegments,
+      ),
+      customerProfileFilters: normalizeCsvField(
+        parsed.customerProfileFilters,
+        normalizeCustomerProfileFilters,
+      ),
+      ipCountryCodes: normalizeCsvField(
+        parsed.ipCountryCodes,
+        normalizeIpCountryCodes,
+      ),
+      markets: normalizeCsvField(parsed.markets, normalizeTargetMarkets),
       usageLimitPerCustomer: parsed.usageLimitPerCustomer ?? "unlimited",
       accentColor: sanitizeHexColor(parsed.accentColor, "#008060"),
       cardBackgroundColor: sanitizeHexColor(parsed.cardBackgroundColor, "#ffffff"),
@@ -499,6 +571,8 @@ export type CampaignScope = {
   productIds: string[];
   markets: string[];
   customerSegments: string[];
+  customerProfileFilters: string[];
+  ipCountryCodes: string[];
 };
 
 export type QuantityBreakTier = {
@@ -1285,20 +1359,30 @@ export function parseCampaignConfig(
       version: 1,
       scope: {
         productIds: Array.isArray(scopeRaw.productIds)
-          ? scopeRaw.productIds
-              .map((id) => String(id || "").trim())
-              .filter(Boolean)
+          ? normalizeUniqueStringList(
+              scopeRaw.productIds.map((id) => String(id || "").trim()),
+            )
           : [],
         markets: Array.isArray(scopeRaw.markets)
-          ? scopeRaw.markets
-              .map((market) => String(market || "").trim())
-              .filter(Boolean)
+          ? normalizeTargetMarkets(
+              scopeRaw.markets.map((market) => String(market || "").trim()),
+            )
           : ["all"],
         customerSegments: Array.isArray(scopeRaw.customerSegments)
-          ? scopeRaw.customerSegments
-              .map((segment) => String(segment || "").trim())
-              .filter(Boolean)
+          ? normalizeCustomerSegments(
+              scopeRaw.customerSegments.map((segment) => String(segment || "").trim()),
+            )
           : ["all"],
+        customerProfileFilters: Array.isArray(scopeRaw.customerProfileFilters)
+          ? normalizeCustomerProfileFilters(
+              scopeRaw.customerProfileFilters.map((value) => String(value || "").trim()),
+            )
+          : [],
+        ipCountryCodes: Array.isArray(scopeRaw.ipCountryCodes)
+          ? normalizeIpCountryCodes(
+              scopeRaw.ipCountryCodes.map((value) => String(value || "").trim()),
+            )
+          : [],
       },
       logicBlocks,
       displayBlocks,
@@ -1398,6 +1482,20 @@ export function migrateLegacyOfferToCampaignConfig(params: {
     stickyAddToCartSubtitle: offerSettings.stickyAddToCartSubtitle,
     stickyAddToCartButtonText: offerSettings.stickyAddToCartButtonText,
   };
+  const targetingMarkets = normalizeTargetMarkets(
+    offerSettings.markets ? offerSettings.markets.split(",") : ["all"],
+  );
+  const targetingSegments = normalizeCustomerSegments(
+    offerSettings.customerSegments ? offerSettings.customerSegments.split(",") : ["all"],
+  );
+  const targetingProfileFilters = normalizeCustomerProfileFilters(
+    offerSettings.customerProfileFilters
+      ? offerSettings.customerProfileFilters.split(",")
+      : [],
+  );
+  const targetingIpCountryCodes = normalizeIpCountryCodes(
+    offerSettings.ipCountryCodes ? offerSettings.ipCountryCodes.split(",") : [],
+  );
   const offerType = String(params.offerType || "").trim();
 
   if (offerType === "bxgy") {
@@ -1437,10 +1535,10 @@ export function migrateLegacyOfferToCampaignConfig(params: {
       version: 1,
       scope: {
         productIds: Array.from(new Set([...buyProducts, ...getProducts])),
-        markets: offerSettings.markets ? offerSettings.markets.split(",") : ["all"],
-        customerSegments: offerSettings.customerSegments
-          ? offerSettings.customerSegments.split(",")
-          : ["all"],
+        markets: targetingMarkets,
+        customerSegments: targetingSegments,
+        customerProfileFilters: targetingProfileFilters,
+        ipCountryCodes: targetingIpCountryCodes,
       },
       logicBlocks: [
         {
@@ -1491,10 +1589,10 @@ export function migrateLegacyOfferToCampaignConfig(params: {
       version: 1,
       scope: {
         productIds: differentScopeProductIds,
-        markets: offerSettings.markets ? offerSettings.markets.split(",") : ["all"],
-        customerSegments: offerSettings.customerSegments
-          ? offerSettings.customerSegments.split(",")
-          : ["all"],
+        markets: targetingMarkets,
+        customerSegments: targetingSegments,
+        customerProfileFilters: targetingProfileFilters,
+        ipCountryCodes: targetingIpCountryCodes,
       },
       logicBlocks: [
         {
@@ -1542,10 +1640,10 @@ export function migrateLegacyOfferToCampaignConfig(params: {
       version: 1,
       scope: {
         productIds: Array.from(new Set([...triggerProducts, ...giftProducts])),
-        markets: offerSettings.markets ? offerSettings.markets.split(",") : ["all"],
-        customerSegments: offerSettings.customerSegments
-          ? offerSettings.customerSegments.split(",")
-          : ["all"],
+        markets: targetingMarkets,
+        customerSegments: targetingSegments,
+        customerProfileFilters: targetingProfileFilters,
+        ipCountryCodes: targetingIpCountryCodes,
       },
       logicBlocks: [
         {
@@ -1584,10 +1682,10 @@ export function migrateLegacyOfferToCampaignConfig(params: {
             ),
           ),
         ),
-        markets: offerSettings.markets ? offerSettings.markets.split(",") : ["all"],
-        customerSegments: offerSettings.customerSegments
-          ? offerSettings.customerSegments.split(",")
-          : ["all"],
+        markets: targetingMarkets,
+        customerSegments: targetingSegments,
+        customerProfileFilters: targetingProfileFilters,
+        ipCountryCodes: targetingIpCountryCodes,
       },
       logicBlocks: [
         {
@@ -1613,10 +1711,10 @@ export function migrateLegacyOfferToCampaignConfig(params: {
       version: 1,
       scope: {
         productIds,
-        markets: offerSettings.markets ? offerSettings.markets.split(",") : ["all"],
-        customerSegments: offerSettings.customerSegments
-          ? offerSettings.customerSegments.split(",")
-          : ["all"],
+        markets: targetingMarkets,
+        customerSegments: targetingSegments,
+        customerProfileFilters: targetingProfileFilters,
+        ipCountryCodes: targetingIpCountryCodes,
       },
       logicBlocks: [
         {
@@ -1667,10 +1765,10 @@ export function migrateLegacyOfferToCampaignConfig(params: {
     version: 1,
     scope: {
       productIds,
-      markets: offerSettings.markets ? offerSettings.markets.split(",") : ["all"],
-      customerSegments: offerSettings.customerSegments
-        ? offerSettings.customerSegments.split(",")
-        : ["all"],
+      markets: targetingMarkets,
+      customerSegments: targetingSegments,
+      customerProfileFilters: targetingProfileFilters,
+      ipCountryCodes: targetingIpCountryCodes,
     },
     logicBlocks: [
       {
@@ -1788,10 +1886,20 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
     layoutFormat: offerCard?.config.layoutFormat || "vertical",
     totalBudget: config.settings.totalBudget,
     dailyBudget: config.settings.dailyBudget,
-    customerSegments: config.scope.customerSegments.length
-      ? config.scope.customerSegments.join(",")
+    customerSegments: normalizeCustomerSegments(config.scope.customerSegments).length
+      ? normalizeCustomerSegments(config.scope.customerSegments).join(",")
       : null,
-    markets: config.scope.markets.length ? config.scope.markets.join(",") : null,
+    customerProfileFilters: normalizeCustomerProfileFilters(
+      config.scope.customerProfileFilters,
+    ).length
+      ? normalizeCustomerProfileFilters(config.scope.customerProfileFilters).join(",")
+      : null,
+    ipCountryCodes: normalizeIpCountryCodes(config.scope.ipCountryCodes).length
+      ? normalizeIpCountryCodes(config.scope.ipCountryCodes).join(",")
+      : null,
+    markets: normalizeTargetMarkets(config.scope.markets).length
+      ? normalizeTargetMarkets(config.scope.markets).join(",")
+      : null,
     usageLimitPerCustomer: config.settings.usageLimitPerCustomer || "unlimited",
     compositionBarOrder: config.settings.compositionBarOrder,
     accentColor: offerCard?.config.accentColor || "#008060",

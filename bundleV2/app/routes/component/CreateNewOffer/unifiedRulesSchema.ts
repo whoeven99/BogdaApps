@@ -158,10 +158,11 @@ export const OFFER_TYPE_RULE_CAPABILITIES: OfferTypeRuleCapability[] = [
   },
   {
     offerType: "free-gift",
-    primaryRuleTypes: ["free_gift", "free_shipping"],
+    primaryRuleTypes: ["free_gift"],
     scopeModel: "trigger_gift_products",
     publishSupport: "supported",
-    notes: "Trigger scope and gift scope are configured separately.",
+    notes:
+      "Uses a dedicated trigger pool and gift pool. The current publish-ready path is item-quantity free gift with storefront gift-line add and cart discount execution.",
   },
   {
     offerType: "complete-bundle",

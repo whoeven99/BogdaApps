@@ -388,7 +388,7 @@ export default function BxgyLogicEditor({
                       }}
                     />
                   </label>
-                  <OfferRuleNotice>
+                  <OfferRuleNotice title="Scope source" intent="info">
                     Buy scope and reward scope are managed in the modules above,
                     so each BXGY rule here only controls the unlock math and
                     reward intensity.
