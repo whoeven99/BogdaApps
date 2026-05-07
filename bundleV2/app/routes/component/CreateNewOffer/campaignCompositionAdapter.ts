@@ -275,6 +275,7 @@ function buildDefaultDiscountRule(type: CampaignBarType): DraftDiscountRule {
       getQuantity: 1,
       maxUsesPerOrder: 1,
       rewardType: "percentage_off",
+      rewardProductIds: [],
       discountClass: "product",
     };
   }
@@ -288,6 +289,7 @@ function buildDefaultDiscountRule(type: CampaignBarType): DraftDiscountRule {
       badge: "",
       isDefault: false,
       rewardType: "gift_product",
+      rewardProductIds: [],
       giftQuantity: 1,
       discountClass: "product",
     };

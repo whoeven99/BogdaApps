@@ -1,4 +1,4 @@
-import { Button, Checkbox, Dropdown, Input, Switch } from "antd";
+import { Button, Checkbox, Dropdown, Input, Select, Switch } from "antd";
 import { ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { CompleteBundleProduct } from "../../../utils/offerParsing";
@@ -403,17 +403,26 @@ function BuilderBarCard({
 
 function DiscountRuleBarDetail({
   bar,
+  draft,
   rule,
-  actions,
+  headerActions,
   onChange,
 }: {
   bar: CampaignBarItem;
+  draft: CampaignDraft;
   rule: DraftDiscountRule;
-  actions?: ReactNode;
+  headerActions?: ReactNode;
   onChange: (patch: Partial<DraftDiscountRule>) => void;
 }) {
+  const rewardProductIds = Array.isArray(rule.rewardProductIds) ? rule.rewardProductIds : [];
+  const productOptions = draft.selectedProductsData.map((product) => ({
+    label: product.title,
+    value: String(product.id),
+  }));
+  const supportsRewardScope = bar.type === "bxgy" || bar.type === "free_gift";
+
   return (
-    <BuilderBarCard bar={bar} actions={actions}>
+    <BuilderBarCard bar={bar} actions={headerActions}>
       <BuilderSection title="Trigger">
         <FieldGrid>
           <label className="block text-[13px] font-medium text-[#1c1f23]">
@@ -450,21 +459,36 @@ function DiscountRuleBarDetail({
           ) : null}
 
           {bar.type === "free_gift" ? (
-            <label className="block text-[13px] font-medium text-[#1c1f23]">
-              Gift quantity
-              <Input
-                size="large"
-                type="number"
-                min={1}
-                className="mt-1"
-                value={rule.giftQuantity || 1}
-                onChange={(e) =>
-                  onChange({
-                    giftQuantity: parsePositiveInt(e.target.value, rule.giftQuantity || 1),
-                  })
-                }
-              />
-            </label>
+            <>
+              <label className="block text-[13px] font-medium text-[#1c1f23]">
+                Gift quantity
+                <Input
+                  size="large"
+                  type="number"
+                  min={1}
+                  className="mt-1"
+                  value={rule.giftQuantity || 1}
+                  onChange={(e) =>
+                    onChange({
+                      giftQuantity: parsePositiveInt(e.target.value, rule.giftQuantity || 1),
+                    })
+                  }
+                />
+              </label>
+              <label className="block text-[13px] font-medium text-[#1c1f23] xl:col-span-2">
+                Gift products
+                <Select
+                  mode="multiple"
+                  size="large"
+                  className="mt-1 w-full"
+                  value={rewardProductIds}
+                  options={productOptions}
+                  onChange={(values) => onChange({ rewardProductIds: values })}
+                  placeholder="Select gift products from the shared pool"
+                  allowClear
+                />
+              </label>
+            </>
           ) : null}
 
           {bar.type === "bxgy" ? (
@@ -531,9 +555,29 @@ function DiscountRuleBarDetail({
                   }
                 />
               </label>
+              <label className="block text-[13px] font-medium text-[#1c1f23] xl:col-span-2">
+                Reward products (Y)
+                <Select
+                  mode="multiple"
+                  size="large"
+                  className="mt-1 w-full"
+                  value={rewardProductIds}
+                  options={productOptions}
+                  onChange={(values) => onChange({ rewardProductIds: values })}
+                  placeholder="Leave empty to reuse the shared trigger pool"
+                  allowClear
+                />
+              </label>
             </>
           ) : null}
         </FieldGrid>
+        {supportsRewardScope ? (
+          <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
+            {draft.selectedProductsData.length > 0
+              ? "Reward selection is scoped to the shared product pool in this builder path."
+              : "Add products to the shared product pool first, then choose the reward products for this bar."}
+          </div>
+        ) : null}
       </BuilderSection>
     </BuilderBarCard>
   );
@@ -948,8 +992,9 @@ export default function StepTwoCompositionBuilder({
         <DiscountRuleBarDetail
           key={bar.id}
           bar={bar}
+          draft={draft}
           rule={rule}
-          actions={renderBarActions(bar, index)}
+          headerActions={renderBarActions(bar, index)}
           onChange={(patch) =>
             (() => {
               if (patch.isDefault === true) {
