@@ -65,8 +65,6 @@ function tryExtractTawkContext(payload: unknown): {
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const configuredToken = process.env.TAWK_WEBHOOK_TOKEN?.trim();
-  const body = await request.json();
-  console.log("body:", body);
   if (configuredToken) {
     const xToken = getHeader(request, "x-webhook-token");
     const auth = getHeader(request, "authorization");
