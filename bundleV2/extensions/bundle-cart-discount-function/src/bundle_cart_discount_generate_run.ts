@@ -537,58 +537,134 @@ function calculateCompleteBundleDiscounts(
 export function bundleCartDiscountGenerateRun(
   input: CartInput,
 ): CartLinesDiscountsGenerateRunResult {
-  const shopMetafield = input.shop.metafield as MetafieldSnapshot;
-  const discountAppOwnedMetafield = input.discount.appOwnedOffers as MetafieldSnapshot;
-  const discountDefaultAppMetafield = input.discount.defaultAppOffers as MetafieldSnapshot;
-  const discountLegacyMetafield = input.discount.legacyOffers as MetafieldSnapshot;
+  const shopAny = input.shop as unknown as {
+    metafield?: { jsonValue?: unknown; value?: unknown; type?: string } | null;
+    offersProd?: { jsonValue?: unknown; type?: string } | null;
+    offersTest?: { jsonValue?: unknown; type?: string } | null;
+    bundleEnabledProd?: { jsonValue?: unknown; type?: string } | null;
+    bundleEnabledTest?: { jsonValue?: unknown; type?: string } | null;
+  };
+  const discountAny = input.discount as unknown as {
+    appOwnedOffers?: { jsonValue?: unknown; value?: unknown; type?: string } | null;
+    defaultAppOffers?: { jsonValue?: unknown; value?: unknown; type?: string } | null;
+    legacyOffers?: { jsonValue?: unknown; value?: unknown; type?: string } | null;
+  };
+  const shopMetafield = shopAny.metafield as MetafieldSnapshot;
+  const discountAppOwnedMetafield = discountAny.appOwnedOffers as MetafieldSnapshot;
+  const discountDefaultAppMetafield = discountAny.defaultAppOffers as MetafieldSnapshot;
+  const discountLegacyMetafield = discountAny.legacyOffers as MetafieldSnapshot;
   // 运行时优先读 discount owner 的 app-owned 配置，再尝试 legacy namespace，最后回退到 shop.metafield。
   const activeOffersMetafield =
     discountAppOwnedMetafield ??
     discountDefaultAppMetafield ??
     discountLegacyMetafield ??
     shopMetafield;
+  const fallbackOffersSource = discountAppOwnedMetafield
+    ? "discount_app_owned"
+    : discountDefaultAppMetafield
+      ? "discount_default_app"
+      : discountLegacyMetafield
+        ? "discount_legacy"
+        : shopMetafield
+          ? "shop"
+          : null;
+  const fallbackOffersPayload = activeOffersMetafield?.jsonValue as
+    | OfferMetafieldPayload
+    | null
+    | undefined;
+  const bundleEnabledProdPayload = shopAny.bundleEnabledProd?.jsonValue as
+    | { enabled?: boolean }
+    | null
+    | undefined;
+  const bundleEnabledTestPayload = shopAny.bundleEnabledTest?.jsonValue as
+    | { enabled?: boolean }
+    | null
+    | undefined;
+  const prodEnabled = bundleEnabledProdPayload?.enabled === true;
+  const testEnabled = bundleEnabledTestPayload?.enabled === true;
+  const offersProdPayload = shopAny.offersProd?.jsonValue as
+    | OfferMetafieldPayload
+    | null
+    | undefined;
+  const offersTestPayload = shopAny.offersTest?.jsonValue as
+    | OfferMetafieldPayload
+    | null
+    | undefined;
+  const hasEnvConfig =
+    shopAny.bundleEnabledProd?.jsonValue != null ||
+    shopAny.bundleEnabledTest?.jsonValue != null ||
+    shopAny.offersProd?.jsonValue != null ||
+    shopAny.offersTest?.jsonValue != null;
+  const toUpdatedAtMs = (payload: OfferMetafieldPayload | null | undefined): number => {
+    const raw = payload?.updatedAt;
+    if (!raw || typeof raw !== "string") return 0;
+    const ts = Date.parse(raw);
+    return Number.isFinite(ts) ? ts : 0;
+  };
+  let selectedEnv: "prod" | "test" | null = null;
+  let offersPayload: OfferMetafieldPayload | null | undefined = fallbackOffersPayload;
+  let offersSource = fallbackOffersSource;
+  if (hasEnvConfig) {
+    if (!prodEnabled && !testEnabled) {
+      selectedEnv = null;
+      offersPayload = null;
+      offersSource = "env_disabled";
+    } else if (prodEnabled && !testEnabled) {
+      selectedEnv = "prod";
+      offersPayload = offersProdPayload;
+      offersSource = "shop_env_prod";
+    } else if (!prodEnabled && testEnabled) {
+      selectedEnv = "test";
+      offersPayload = offersTestPayload;
+      offersSource = "shop_env_test";
+    } else {
+      const prodTs = toUpdatedAtMs(offersProdPayload);
+      const testTs = toUpdatedAtMs(offersTestPayload);
+      if (prodTs >= testTs) {
+        selectedEnv = "prod";
+        offersPayload = offersProdPayload;
+        offersSource = "shop_env_prod";
+      } else {
+        selectedEnv = "test";
+        offersPayload = offersTestPayload;
+        offersSource = "shop_env_test";
+      }
+    }
+  }
 
   log("shop_metafields_snapshot", {
     discountAppOwnedOffers: summarizeMetafield(discountAppOwnedMetafield),
     discountDefaultAppOffers: summarizeMetafield(discountDefaultAppMetafield),
     discountLegacyOffers: summarizeMetafield(discountLegacyMetafield),
     shopOffers: summarizeMetafield(shopMetafield),
+    offersProd: summarizeMetafield(shopAny.offersProd as MetafieldSnapshot),
+    offersTest: summarizeMetafield(shopAny.offersTest as MetafieldSnapshot),
+    bundleEnabledProd: summarizeMetafield(shopAny.bundleEnabledProd as MetafieldSnapshot),
+    bundleEnabledTest: summarizeMetafield(shopAny.bundleEnabledTest as MetafieldSnapshot),
     rawValueLens: {
       discountAppOwned: String(discountAppOwnedMetafield?.value || "").length,
       discountDefaultApp: String(discountDefaultAppMetafield?.value || "").length,
       discountLegacy: String(discountLegacyMetafield?.value || "").length,
       shop: String(shopMetafield?.value || "").length,
     },
-    activeSource: discountAppOwnedMetafield
-      ? "discount_app_owned"
-      : discountDefaultAppMetafield
-        ? "discount_default_app"
-      : discountLegacyMetafield
-        ? "discount_legacy"
-        : shopMetafield
-          ? "shop"
-          : null,
+    hasEnvConfig,
+    prodEnabled,
+    testEnabled,
+    selectedEnv,
+    activeSource: offersSource,
   });
-  const offersPayload = activeOffersMetafield?.jsonValue as
-    | OfferMetafieldPayload
-    | null
-    | undefined;
 
   log("run_start", {
     cartLineCount: input.cart.lines.length,
     discountClasses: input.discount.discountClasses,
     metafieldPresent: Boolean(activeOffersMetafield),
     metafieldType: activeOffersMetafield?.type ?? null,
-    hasOffers: Boolean(activeOffersMetafield?.jsonValue),
-    offersSource: discountAppOwnedMetafield
-      ? "discount_app_owned"
-      : discountDefaultAppMetafield
-        ? "discount_default_app"
-      : discountLegacyMetafield
-        ? "discount_legacy"
-        : shopMetafield
-          ? "shop"
-          : null,
+    hasEnvConfig,
+    prodEnabled,
+    testEnabled,
+    selectedEnv,
+    hasOffers: Boolean(offersPayload),
+    offersSource,
   });
 
   if (!offersPayload) {

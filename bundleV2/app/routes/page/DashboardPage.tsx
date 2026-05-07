@@ -8,30 +8,20 @@ import {
 import {
   ArrowDown,
   ArrowUp,
+  ChartBar,
   Pencil,
   Trash2,
   Info,
+  X,
+  AlertCircle,
 } from "lucide-react";
 import "../../styles/tailwind.css";
 import { CreateNewOffer } from "../component/CreateNewOffer/CreateNewOffer";
 import type { IndexLoaderData } from "../_index/route";
-import {
-  getOfferDisplayType,
-  getOfferRulesText,
-  getOfferScheduleTimezone,
-} from "../../utils/offerParsing";
+import { parseDiscountRules } from "../../utils/offerParsing";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
-import {
-  AdminEmptyState,
-  AdminModal,
-  AdminPageHeader,
-  ThemeExtensionBanner,
-  adminPrimaryButtonClass,
-  adminQuietActionClass,
-  adminSurfaceCardClass,
-} from "../component/adminUi";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -57,7 +47,6 @@ type DashboardOfferRow = {
   offerType: string;
   discountRulesJson: string | null;
   offerSettingsJson: string | null;
-  campaignConfigJson?: string | null;
   isActive: boolean;
   createdAt: string | Date | undefined;
   updatedAt: string | Date | undefined;
@@ -65,6 +54,15 @@ type DashboardOfferRow = {
   addToCartPV: number;
   gmv: number;
   conversion: number;
+};
+
+type GmvOverviewMetrics = {
+  totalGmv: number;
+  conversion: number;
+  visitor: number;
+  bundleOrders: number;
+  exposurePv: number;
+  orderPv: number;
 };
 
 const mockAbTests = [
@@ -113,6 +111,7 @@ function ChevronRightIcon() {
 }
 
 export function DashboardPage({
+  onViewAllOffers,
   onViewAnalytics,
   onCreateOffer,
   offers,
@@ -133,10 +132,9 @@ export function DashboardPage({
     null,
   );
   const [togglingIds, setTogglingIds] = useState<string[]>([]);
-  const [totalGmv, setTotalGmv] = useState(0);
-  const [gmvGrowthRate, setGmvGrowthRate] = useState(0);
-  const [bundleOrders, setBundleOrders] = useState(0);
-  const [productViewed, setProductViewed] = useState(0);
+  const [overviewMetrics, setOverviewMetrics] = useState<GmvOverviewMetrics | null>(
+    null,
+  );
 
   const [showThemeExtensionModal, setShowThemeExtensionModal] = useState(false);
   const [hideBanner, setHideBanner] = useState(() => {
@@ -167,7 +165,6 @@ export function DashboardPage({
       offerType: offer.offerType,
       discountRulesJson: offer.discountRulesJson,
       offerSettingsJson: offer.offerSettingsJson,
-      campaignConfigJson: offer.campaignConfigJson,
       isActive,
       createdAt,
       updatedAt,
@@ -180,9 +177,49 @@ export function DashboardPage({
 
   const visibleOffers = offerRows.slice(0, 4);
 
-  const gmvGrowthRateColor =
-    gmvGrowthRate === 0 ? "#916a00" : gmvGrowthRate > 0 ? "#108043" : "#D93025";
-  const gmvGrowthRateArrow = gmvGrowthRate >= 0 ? "↑" : "↓";
+  // 计算真实 Overview 数据
+  const fallbackOverview = (() => {
+    let totalGmv = 0;
+    let totalExposure = 0;
+    let totalAddToCart = 0;
+    let activeOffers = 0;
+
+    offerRows.forEach((o) => {
+      totalGmv += o.gmv || 0;
+      totalExposure += o.exposurePV || 0;
+      totalAddToCart += o.addToCartPV || 0;
+      if (o.isActive) activeOffers += 1;
+    });
+
+    const avgConversion =
+      totalExposure > 0 ? (totalAddToCart / totalExposure) * 100 : 0;
+
+    return {
+      totalGmv: `$${totalGmv.toLocaleString()}`,
+      gmvTrend: "+0.0%",
+      gmvTrendLabel: "from last month",
+      activeOffers,
+      activeOffersTrend: "currently running",
+      avgConversion: `${avgConversion.toFixed(1)}%`,
+      conversionTrendLabel: "Overall avg",
+      conversionTrendColor: "text-[#916a00]" as const,
+    };
+  })();
+
+  const cardOverview = (() => {
+    if (!overviewMetrics) return fallbackOverview;
+
+    return {
+      totalGmv: `$${overviewMetrics.totalGmv.toLocaleString()}`,
+      gmvTrend: "+0.0%",
+      gmvTrendLabel: "from last month",
+      activeOffers: overviewMetrics.bundleOrders,
+      activeOffersTrend: "bundle orders",
+      avgConversion: `${(overviewMetrics.conversion * 100).toFixed(1)}%`,
+      conversionTrendLabel: `Exposure ${overviewMetrics.exposurePv.toLocaleString()} / Orders ${overviewMetrics.orderPv.toLocaleString()}`,
+      conversionTrendColor: "text-[#916a00]" as const,
+    };
+  })();
 
   useEffect(() => {
     if (navigation.state === "submitting" && navigation.formData) {
@@ -213,6 +250,11 @@ export function DashboardPage({
     }
   };
   const handleCreateAbTest = () => {}; // mock
+  const handleViewAllOffers = () => {
+    if (onViewAllOffers) {
+      onViewAllOffers();
+    }
+  };
   const handleViewAllAbTests = () => {}; // mock
   const handleThemeExtensionToggle = () => {
     const storeHandle = shop.replace(".myshopify.com", "");
@@ -231,58 +273,66 @@ export function DashboardPage({
 
   useEffect(() => {
     const controller = new AbortController();
+    const now = new Date();
+    const from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    const query = new URLSearchParams({
+      mode: "overview",
+      shopName: shop,
+      from: from.toISOString(),
+      to: now.toISOString(),
+    });
+
     const run = async () => {
       try {
-        const overviewUrl = `/webpixerToAli?mode=dashboard-overview-gmv&shopName=${shop}`;
-        const response = await fetch(overviewUrl);
-        
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success) {
-            setTotalGmv(data.totalGmv || 0);
-            setGmvGrowthRate(data.gmvGrowthRate || 0);
-          }
+        const response = await fetch(`/webpixerToAli?${query.toString()}`, {
+          method: "GET",
+          signal: controller.signal,
+        });
+        const data = (await response.json().catch(() => ({}))) as {
+          success?: boolean;
+          message?: string;
+          metrics?: GmvOverviewMetrics;
+          range?: { from?: string; to?: string };
+          logsFetched?: number;
+        };
+
+        if (!response.ok || !data.success) {
+          console.error("[dashboard][gmv-overview] query failed", {
+            status: response.status,
+            message: data?.message || "unknown error",
+            shop,
+            range: data?.range,
+          });
+          return;
         }
+
+        console.log("[dashboard][gmv-overview] metrics", {
+          shop,
+          range: data.range,
+          logsFetched: data.logsFetched ?? 0,
+          totalGmv: data.metrics?.totalGmv ?? 0,
+          conversion: data.metrics?.conversion ?? 0,
+          visitor: data.metrics?.visitor ?? 0,
+          bundleOrders: data.metrics?.bundleOrders ?? 0,
+          exposurePv: data.metrics?.exposurePv ?? 0,
+          orderPv: data.metrics?.orderPv ?? 0,
+        });
+
+        setOverviewMetrics(data.metrics ?? null);
       } catch (error) {
-        console.error("Failed to fetch dashboard overview data", error);
+        if (controller.signal.aborted) return;
+        setOverviewMetrics(null);
+        console.error("[dashboard][gmv-overview] query exception", {
+          shop,
+          error: String(error),
+        });
       }
     };
 
     run();
 
     return () => controller.abort();
-  }, [shop]);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const bundleOrdersUrl = `/webpixerToAli?mode=dashboard-overview-bundle-orders&shopName=${shop}`;
-        const productViewedUrl = `/webpixerToAli?mode=dashboard-overview-product-viewed&shopName=${shop}`;
-
-        const [bundleOrdersResponse, productViewedResponse] = await Promise.all([
-          fetch(bundleOrdersUrl),
-          fetch(productViewedUrl),
-        ]);
-
-        if (bundleOrdersResponse.ok) {
-          const data = await bundleOrdersResponse.json();
-          if (data.success) {
-            setBundleOrders(data.totalCount || 0);
-          }
-        }
-
-        if (productViewedResponse.ok) {
-          const data = await productViewedResponse.json();
-          if (data.success) {
-            setProductViewed(data.totalCount || 0);
-          }
-        }
-      } catch (error) {
-        console.error("Failed to fetch dashboard data:", error);
-      }
-    };
-
-    fetchData();
   }, [shop]);
 
   useEffect(() => {
@@ -321,127 +371,130 @@ export function DashboardPage({
 
   return (
     <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px]">
-      <AdminPageHeader
-        title="Dashboard"
-      />
-
       {!themeExtensionEnabled && !hideBanner && (
-        <ThemeExtensionBanner
-          onActivate={handleThemeExtensionToggle}
-          onDismiss={handleCloseBanner}
-        />
+        <div className="bg-[#fff4f4] border border-[#ffc9c9] rounded-[8px] p-[16px] mb-[24px] flex items-start justify-between">
+          <div className="flex gap-[12px]">
+            <div className="text-[#d72c0d] mt-[2px]">
+              <AlertCircle size={20} />
+            </div>
+            <div>
+              <h3 className="font-sans font-semibold text-[14px] leading-[20px] text-[#1c1f23] mb-[4px] m-0">
+                Action required: Activate Theme Extension
+              </h3>
+              <p className="font-sans text-[14px] leading-[20px] text-[#5c6166] m-0">
+                Your offer has been created, but it won't be visible on your store until you activate the theme extension.
+              </p>
+              <div className="mt-[12px]">
+                <button
+                  type="button"
+                  onClick={handleThemeExtensionToggle}
+                  className="bg-transparent text-[#1c1f23] px-[12px] py-[6px] rounded-[6px] font-normal text-[16px] border border-[#1c1f23] hover:bg-black/5 transition-all cursor-pointer"
+                >
+                  Activate Theme Extension
+                </button>
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleCloseBanner}
+            className="text-[#5c6166] hover:text-[#1c1f23] bg-transparent border-0 cursor-pointer p-[4px]"
+          >
+            <X size={20} />
+          </button>
+        </div>
       )}
 
       {/* GMV Overview + Theme Extension */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-[16px] sm:gap-[24px] mb-[24px] sm:mb-[36px]">
         {/* GMV Overview Card */}
-        <div className={`${adminSurfaceCardClass} p-[20px] sm:p-[24px]`}>
-          <div className="mb-[16px] flex items-start justify-between gap-[12px]">
-            <div>
-              <div className="mb-[6px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
-                Last 30 days
-              </div>
-              <div className="flex items-center gap-[8px]">
-                <h2 className="m-0 font-sans text-[20px] font-semibold leading-[30px] tracking-tight text-[#1c1f23]">
+        <div className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[24px]">
+          <div className="flex items-center justify-between mb-[16px]">
+            <div className="flex items-center gap-[8px]">
+              <h2 className="font-sans font-semibold text-[20px] leading-[30px] text-[#1c1f23] tracking-tight m-0">
                 GMV Overview
-                </h2>
-                <div className="group relative flex items-center">
-                  <Info className="h-[16px] w-[16px] cursor-help text-[#8a919e]" />
-                  <div className="absolute bottom-full left-1/2 z-10 mb-[8px] hidden w-max max-w-[250px] -translate-x-1/2 rounded-[8px] bg-[#1c1f23] px-[12px] py-[8px] text-center text-[12px] leading-[18px] text-white shadow-lg group-hover:block">
-                    Data accumulated over the last 30 days
-                    <div className="absolute left-1/2 top-full h-0 w-0 -translate-x-1/2 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent border-t-[#1c1f23]"></div>
-                  </div>
+              </h2>
+              <div className="group relative flex items-center">
+                <Info className="w-[16px] h-[16px] text-[#8a919e] cursor-help" />
+                <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-[8px] hidden group-hover:block w-max max-w-[250px] bg-[#1c1f23] text-white text-[12px] leading-[18px] px-[12px] py-[8px] rounded-[8px] shadow-lg z-10 text-center">
+                  Data accumulated over the last 30 days
+                  <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-[#1c1f23]"></div>
                 </div>
               </div>
             </div>
             <button
               type="button"
-              className={adminQuietActionClass}
+              className="text-[#008060] font-medium text-[14px] bg-transparent hover:bg-[#f0f9f6] px-[12px] py-[6px] rounded-[8px] flex items-center gap-[6px] transition-all border-0 cursor-pointer"
               onClick={handleViewDetails}
             >
               View Details
               <ChevronRightIcon />
             </button>
           </div>
-          <div className="grid grid-cols-1 gap-[12px] sm:grid-cols-3 sm:gap-[16px]">
-            <div className="rounded-[12px] border border-[#e9edf1] bg-[#fcfcfd] p-[16px]">
-              <span className="font-sans text-[13px] font-medium leading-[20px] text-[#5c6166]">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-[16px] sm:gap-[20px]">
+            <div className="flex flex-col gap-[12px] sm:gap-[16px]">
+              <span className="font-sans font-normal text-[14px] leading-[22.4px] text-[#5c6166] tracking-normal">
                 Total GMV
               </span>
-              <h3 className="m-0 mt-[8px] font-sans text-[28px] font-semibold leading-[38px] text-[#1c1f23]">
-                ${totalGmv.toFixed(2)}
+              <h3 className="font-sans font-semibold text-[28px] leading-[42px] text-[#1c1f23] tracking-wide m-0">
+                {cardOverview.totalGmv}
               </h3>
-              <span
-                className="mt-[8px] block font-sans text-[13px] leading-[20px]"
-                style={{
-                  color: gmvGrowthRateColor,
-                }}
-              >
-                {gmvGrowthRate !== 0 && `${gmvGrowthRateArrow} `}
-                {gmvGrowthRate >= 0 ? "+" : ""}
-                {Math.abs(gmvGrowthRate).toFixed(2)}% from last month
+              <span className="font-sans font-normal text-[14px] leading-[22.4px] text-[#108043] tracking-normal">
+                {cardOverview.gmvTrend} {cardOverview.gmvTrendLabel}
               </span>
             </div>
-            <div className="rounded-[12px] border border-[#e9edf1] bg-[#fcfcfd] p-[16px]">
-              <span className="font-sans text-[13px] font-medium leading-[20px] text-[#5c6166]">
+            <div className="flex flex-col gap-[16px]">
+              <span className="font-sans font-normal text-[14px] leading-[22.4px] text-[#5c6166] tracking-normal">
                 Bundle Orders
               </span>
-              <h3 className="m-0 mt-[8px] font-sans text-[28px] font-semibold leading-[38px] text-[#1c1f23]">
-                {bundleOrders}
+              <h3 className="font-sans font-semibold text-[28px] leading-[42px] text-[#1c1f23] tracking-wide m-0">
+                {cardOverview.activeOffers}
               </h3>
-              <span className="mt-[8px] block font-sans text-[13px] leading-[20px] text-[#5c6166]">
-                Orders attributed to bundle purchases.
+              <span className="font-sans font-normal text-[14px] leading-[22.4px] text-[#108043] tracking-normal">
+                {cardOverview.activeOffersTrend}
               </span>
             </div>
-            <div className="rounded-[12px] border border-[#e9edf1] bg-[#fcfcfd] p-[16px]">
-              <span className="font-sans text-[13px] font-medium leading-[20px] text-[#5c6166]">
+            <div className="flex flex-col gap-[16px]">
+              <span className="font-sans font-normal text-[14px] leading-[22.4px] text-[#5c6166] tracking-normal">
                 Avg. Conversion
               </span>
-              <h3 className="m-0 mt-[8px] font-sans text-[28px] font-semibold leading-[38px] text-[#1c1f23]">
-                {productViewed > 0
-                  ? `${((bundleOrders / productViewed) * 100).toFixed(2)}%`
-                  : "0.00%"}
+              <h3 className="font-sans font-semibold text-[28px] leading-[42px] text-[#1c1f23] tracking-wide m-0">
+                {cardOverview.avgConversion}
               </h3>
-              <span className="mt-[8px] block font-sans text-[13px] leading-[20px] text-[#5c6166]">
-                Orders {bundleOrders} / Exposure {productViewed}
+              <span
+                className={`font-sans font-normal text-[14px] leading-[22.4px] tracking-normal ${cardOverview.conversionTrendColor}`}
+              >
+                {cardOverview.conversionTrendLabel}
               </span>
             </div>
           </div>
         </div>
 
         {/* Theme Extension Widget */}
-        <div className={`${adminSurfaceCardClass} p-[20px] sm:p-[24px]`}>
-          <div className="mb-[16px] flex items-start justify-between gap-[12px]">
-            <div>
-              <div className="mb-[6px] text-[12px] font-medium uppercase tracking-[0.08em] text-[#6d7175]">
-                Storefront
-            </div>
-              <h2 className="m-0 font-sans text-[20px] font-semibold leading-[30px] tracking-tight text-[#1c1f23]">
-                Theme extension
-              </h2>
-            </div>
-            <button
-              type="button"
-              className={`inline-flex items-center gap-[6px] rounded-full px-[10px] py-[5px] text-[12px] font-semibold ${
-                themeExtensionEnabled
-                  ? "bg-[#e8f7ee] text-[#108043]"
-                  : "bg-[#f4f6f8] text-[#5c6166]"
-              }`}
+        <div className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[24px]">
+          <div className="flex items-center justify-between mb-[16px]">
+            <h2 className="font-sans font-semibold text-[20px] leading-[30px] text-[#1c1f23] tracking-tight m-0">
+              Theme extension
+            </h2>
+            <div
+              className={`flex items-center gap-[6px] px-[8px] py-[4px] rounded-[4px] ${themeExtensionEnabled ? "bg-[#d1f7c4]" : "bg-[#f4f6f8]"}`}
             >
-              <span
-                className={`h-[8px] w-[8px] rounded-full ${
-                  themeExtensionEnabled ? "bg-[#108043]" : "bg-[#6d7175]"
-                }`}
+              <div
+                className={`w-[8px] h-[8px] rounded-full ${themeExtensionEnabled ? "bg-[#108043]" : "bg-[#6d7175]"}`}
               />
-              {themeExtensionEnabled ? "Active" : "Inactive"}
-            </button>
+              <span
+                className={`font-sans font-medium text-[14px] leading-[21px] tracking-normal ${themeExtensionEnabled ? "text-[#108043]" : "text-[#5c6166]"}`}
+              >
+                {themeExtensionEnabled ? "Active" : "Inactive"}
+              </span>
+            </div>
           </div>
-          <p className="mb-[10px] font-sans text-[15px] leading-[24px] text-[#1c1f23]">
+          <p className="font-sans font-normal text-[16px] leading-[25.6px] text-[#1c1f23] tracking-normal mb-[20px]">
             {themeExtensionEnabled
               ? "Bundles widget is visible in product pages."
               : "Bundles widget is currently disabled."}
           </p>
-          <p className="mb-[16px] font-sans text-[13px] leading-[20px] text-[#5c6166]">
+          <p className="font-sans font-normal text-[13px] leading-[20px] text-[#5c6166] tracking-[-0.1px] mb-[12px]">
             This opens Theme Editor App Embeds. Toggle the extension there and
             click Save in Shopify.
           </p>
@@ -449,63 +502,58 @@ export function DashboardPage({
             <button
               type="button"
               onClick={handleThemeExtensionToggle}
-              className={`w-full rounded-[8px] border px-[16px] py-[9px] font-sans text-[14px] font-medium leading-[22px] cursor-pointer transition-colors ${
+              className={`px-[16px] py-[8px] rounded-[6px] font-sans font-normal text-[16px] leading-[24px] tracking-normal cursor-pointer transition-colors w-full border ${
                 themeExtensionEnabled
-                  ? "border-[#dfe3e8] bg-white text-[#1c1f23] hover:bg-[#f6f6f7]"
-                  : "border-[#1c1f23] bg-transparent text-[#1c1f23] hover:bg-black/5"
+                  ? "bg-white border-[#dfe3e8] text-[#d72c0d] hover:bg-[#fef3f2]"
+                  : "bg-transparent border-[#1c1f23] text-[#1c1f23] hover:bg-black/5"
               }`}
             >
-              {themeExtensionEnabled ? "Manage in Theme Editor" : "Enable in Theme Editor"}
+              {themeExtensionEnabled ? "Disable" : "Enable"}
             </button>
           </div>
         </div>
       </div>
 
       {/* My Offers Card */}
-      <div className={`${adminSurfaceCardClass} p-[20px] sm:p-[24px] mb-[24px] sm:mb-[36px]`}>
+      <div className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[20px] sm:p-[24px] mb-[24px] sm:mb-[36px]">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-[12px] sm:gap-0 mb-[16px]">
-          <div>
-            <h2 className="m-0 font-sans text-[18px] font-semibold leading-[28px] tracking-tight text-[#1c1f23]">
-              My Offers
-            </h2>
-            <p className="mt-[6px] mb-0 text-[13px] leading-[20px] text-[#5c6166]">
-              Review recent offers, update status, and jump into edits quickly.
-            </p>
-          </div>
+          <h2 className="font-sans font-semibold text-[16px] leading-[24px] text-[#1c1f23] tracking-tight m-0">
+            My Offers
+          </h2>
           <button
             type="button"
-            className={adminPrimaryButtonClass}
+            className="w-full sm:w-auto bg-[#008060] !text-white px-[16px] py-[8px] rounded-[8px] font-medium text-[14px] shadow-sm hover:bg-[#006e52] transition-all border-0 cursor-pointer"
             onClick={handleCreateOfferClick}
           >
-            Create Offer
+            Create New Offer
           </button>
         </div>
 
-        <table className="hidden md:table w-full border-collapse overflow-hidden rounded-[10px]">
+        <table className="hidden md:table w-full border-collapse">
           <thead>
-            <tr className="bg-[#f9fafb]">
-              <th className="text-left p-[12px] border-b border-[#eef1f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
+            <tr>
+              <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
                 Offer Name
               </th>
-              <th className="text-left p-[12px] border-b border-[#eef1f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
+              <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
                 Display name
               </th>
-              <th className="text-left p-[12px] border-b border-[#eef1f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
+              <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
                 Discount type
               </th>
-              <th className="text-left p-[12px] border-b border-[#eef1f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
+              <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
                 Discount rules
               </th>
-              <th className="text-left p-[12px] border-b border-[#eef1f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
+              <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
                 Status
               </th>
-              <th className="text-left p-[12px] border-b border-[#eef1f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
+              <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
                 Create time
               </th>
-              <th className="text-left p-[12px] border-b border-[#eef1f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
+              <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
                 Update time
               </th>
-              <th className="text-left p-[12px] border-b border-[#eef1f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
+              <th className="text-left p-[12px] border-b border-[#f0f2f4] font-sans font-semibold text-[13px] leading-[20.8px] text-[#5c6166] tracking-normal">
                 Actions
               </th>
             </tr>
@@ -513,14 +561,20 @@ export function DashboardPage({
           <tbody>
             {offersLoading ? (
               <tr>
-                <td colSpan={8} className="p-[12px] border-b border-[#eef1f4]">
-                  <AdminEmptyState message="Loading offers..." />
+                <td
+                  colSpan={8}
+                  className="p-[12px] border-b border-[#f0f2f4] text-[14px] text-[#5c6166] font-sans"
+                >
+                  Loading offers...
                 </td>
               </tr>
             ) : visibleOffers.length === 0 ? (
               <tr>
-                <td colSpan={8} className="p-[12px] border-b border-[#eef1f4]">
-                  <AdminEmptyState message="No offers yet. Create your first offer to see it here." />
+                <td
+                  colSpan={8}
+                  className="p-[12px] border-b border-[#f0f2f4] font-sans text-[14px] leading-[22.4px] text-[#5c6166] tracking-normal"
+                >
+                  No offers yet. Create your first offer to see it here.
                 </td>
               </tr>
             ) : (
@@ -528,45 +582,44 @@ export function DashboardPage({
                 const isToggling = getIsToggling(offer.id);
                 const displayIsActive = themeExtensionEnabled ? offer.isActive : false;
                 const statusLabel = displayIsActive ? "Active" : "Inactive";
-                const displayType = getOfferDisplayType(
-                  offer.offerType,
-                  offer.campaignConfigJson,
-                );
-
-                const rulesText = getOfferRulesText({
-                  campaignConfigJson: offer.campaignConfigJson,
-                  discountRulesJson: offer.discountRulesJson,
-                });
+                const displayType = offer.offerType === "quantity-breaks-same" ? "Quantity breaks" : offer.offerType;
+                
+                const rules = parseDiscountRules(offer.discountRulesJson);
+                const rulesText = rules.length > 0 
+                  ? rules.map(r => `Buy ${r.count} Get ${r.discountPercent}% Off`).join(", ")
+                  : "-";
                   
                 const formatTime = (timeStr: string | Date | undefined) => {
                   if (!timeStr) return "-";
                   const d = dayjs(timeStr);
                   if (!d.isValid()) return "-";
-                  const tz = getOfferScheduleTimezone({
-                    campaignConfigJson: offer.campaignConfigJson,
-                    offerSettingsJson: offer.offerSettingsJson,
-                    fallback: ianaTimezone,
-                  });
+                  let tz = ianaTimezone;
+                  try {
+                    if (offer.offerSettingsJson) {
+                      const parsed = JSON.parse(offer.offerSettingsJson);
+                      if (parsed.scheduleTimezone) tz = parsed.scheduleTimezone;
+                    }
+                  } catch (e) {}
                   return d.tz(tz).format("YYYY-MM-DD HH:mm:ss") + ` (UTC${d.tz(tz).format('Z')})`;
                 };
 
                 return (
-                  <tr key={offer.id} className="hover:bg-[#fafbfc]">
-                    <td className="p-[12px] border-b border-[#eef1f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
+                  <tr key={offer.id}>
+                    <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
                       <div className="flex items-center gap-[8px]">
                         {offer.name}
                       </div>
                     </td>
-                    <td className="p-[12px] border-b border-[#eef1f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
+                    <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
                       {offer.cartTitle}
                     </td>
-                    <td className="p-[12px] border-b border-[#eef1f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
+                    <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
                       {displayType}
                     </td>
-                    <td className="p-[12px] border-b border-[#eef1f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
+                    <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
                       {rulesText}
                     </td>
-                    <td className="p-[12px] border-b border-[#eef1f4]">
+                    <td className="p-[12px] border-b border-[#f0f2f4]">
                       <Form method="post">
                         <input
                           type="hidden"
@@ -620,13 +673,13 @@ export function DashboardPage({
                         </button>
                       </Form>
                     </td>
-                    <td className="p-[12px] border-b border-[#eef1f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
+                    <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
                       {formatTime(offer.createdAt)}
                     </td>
-                    <td className="p-[12px] border-b border-[#eef1f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
+                    <td className="p-[12px] border-b border-[#f0f2f4] font-sans font-normal text-[14px] leading-[22.4px] text-[#1c1f23] tracking-normal">
                       {formatTime(offer.updatedAt)}
                     </td>
-                    <td className="p-[12px] border-b border-[#eef1f4]">
+                    <td className="p-[12px] border-b border-[#f0f2f4]">
                       <div className="flex items-center gap-[8px]">
                         {/* 
                         <button
@@ -668,9 +721,13 @@ export function DashboardPage({
 
         <div className="md:hidden space-y-[12px]">
           {offersLoading ? (
-            <AdminEmptyState message="Loading offers..." />
+            <div className="border border-[#dfe3e8] rounded-[8px] p-[16px] text-[14px] text-[#5c6166] font-sans">
+              Loading offers...
+            </div>
           ) : visibleOffers.length === 0 ? (
-            <AdminEmptyState message="No offers yet. Create your first offer to see it here." />
+            <div className="border border-[#dfe3e8] rounded-[8px] p-[16px] text-[14px] text-[#5c6166] font-sans">
+              No offers yet. Create your first offer to see it here.
+            </div>
           ) : (
             visibleOffers.map((offer) => {
               const isToggling = getIsToggling(offer.id);
@@ -682,17 +739,12 @@ export function DashboardPage({
               return (
                 <div
                   key={offer.id}
-                  className="rounded-[12px] border border-[#dfe3e8] bg-[#fcfcfd] p-[16px]"
+                  className="border border-[#dfe3e8] rounded-[8px] p-[16px]"
                 >
                   <div className="flex items-start justify-between mb-[12px]">
                     <div className="flex items-center gap-[8px] flex-wrap">
                       <span className="font-sans font-medium text-[16px] text-[#1c1f23]">
                         {offer.name}
-                      </span>
-                      <span className="inline-flex items-center rounded-full bg-[#f0f9f6] px-[8px] py-[3px] text-[12px] font-medium text-[#108043]">
-                        {offer.offerType === "quantity-breaks-same"
-                          ? "Quantity breaks"
-                          : offer.offerType}
                       </span>
                     </div>
                   </div>
@@ -803,6 +855,15 @@ export function DashboardPage({
           )}
         </div>
 
+        <div className="flex justify-center mt-[16px] sm:mt-[20px] pt-[16px] border-t border-[#dfe3e8]">
+          <button
+            type="button"
+            className="text-[#008060] font-medium text-[14px] bg-transparent hover:bg-[#f0f9f6] px-[16px] py-[8px] rounded-[8px] transition-all border-0 cursor-pointer"
+            onClick={handleViewAllOffers}
+          >
+            View All Offers
+          </button>
+        </div>
       </div>
 
       {/* A/B Tests Card - Temporarily hidden */}
@@ -1074,20 +1135,22 @@ export function DashboardPage({
       )}
 
       {deletingOffer && (
-        <AdminModal
-          title="Delete offer"
-          description={
-            <>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.4)]">
+          <div className="bg-white rounded-[16px] shadow-[0_8px_24px_rgba(0,0,0,0.12)] max-w-[400px] w-[90%] p-[24px]">
+            <h2 className="font-sans font-semibold text-[18px] leading-[27px] text-[#1c1f23] mb-[8px]">
+              Delete offer
+            </h2>
+            <p className="font-sans text-[14px] leading-[21px] text-[#5c6166] mb-[16px]">
               Are you sure you want to delete offer{" "}
-              <span className="font-semibold text-[#1c1f23]">{deletingOffer.name}</span>
+              <span className="font-semibold text-[#1c1f23]">
+                {deletingOffer.name}
+              </span>
               ? This action cannot be undone.
-            </>
-          }
-          actions={
-            <>
+            </p>
+            <div className="flex justify-end gap-[8px]">
               <button
                 type="button"
-                className="rounded-[6px] border border-[#dfe3e8] bg-white px-[12px] py-[6px] text-[14px] text-[#1c1f23] hover:bg-[#f4f6f8]"
+                className="px-[12px] py-[6px] rounded-[6px] border border-[#dfe3e8] bg-white text-[#1c1f23] text-[14px] font-sans hover:bg-[#f4f6f8]"
                 onClick={() => setDeletingOffer(null)}
               >
                 Cancel
@@ -1097,25 +1160,29 @@ export function DashboardPage({
                 <input type="hidden" name="offerId" value={deletingOffer.id} />
                 <button
                   type="submit"
-                  className="rounded-[6px] bg-[#d72c0d] px-[12px] py-[6px] text-[14px] text-white hover:bg-[#bc2200]"
+                  className="px-[12px] py-[6px] rounded-[6px] bg-[#d72c0d] !text-white text-[14px] font-sans hover:bg-[#bc2200]"
                 >
                   Delete
                 </button>
               </Form>
-            </>
-          }
-        />
+            </div>
+          </div>
+        </div>
       )}
 
       {showThemeExtensionModal && (
-        <AdminModal
-          title="Activate Theme Extension"
-          description="You need to activate the theme extension first before you can turn on any offers."
-          actions={
-            <>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.4)]">
+          <div className="bg-white rounded-[16px] shadow-[0_8px_24px_rgba(0,0,0,0.12)] max-w-[400px] w-[90%] p-[24px]">
+            <h2 className="font-sans font-semibold text-[18px] leading-[27px] text-[#1c1f23] mb-[8px]">
+              Activate Theme Extension
+            </h2>
+            <p className="font-sans text-[14px] leading-[21px] text-[#5c6166] mb-[16px]">
+              You need to activate the theme extension first before you can turn on any offers.
+            </p>
+            <div className="flex justify-end gap-[8px]">
               <button
                 type="button"
-                className="rounded-[6px] border border-[#dfe3e8] bg-white px-[12px] py-[6px] text-[14px] text-[#1c1f23] hover:bg-[#f4f6f8]"
+                className="px-[12px] py-[6px] rounded-[6px] border border-[#dfe3e8] bg-white text-[#1c1f23] text-[14px] font-sans hover:bg-[#f4f6f8]"
                 onClick={() => setShowThemeExtensionModal(false)}
               >
                 Cancel
@@ -1126,13 +1193,13 @@ export function DashboardPage({
                   setShowThemeExtensionModal(false);
                   handleThemeExtensionToggle();
                 }}
-                className="rounded-[6px] bg-[#008060] px-[12px] py-[6px] text-[14px] text-white hover:bg-[#006e52]"
+                className="px-[12px] py-[6px] rounded-[6px] bg-[#008060] !text-white text-[14px] font-sans hover:bg-[#006e52]"
               >
                 Activate Now
               </button>
-            </>
-          }
-        />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

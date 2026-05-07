@@ -131,6 +131,7 @@ type ShopOffersMetafieldSyncResult =
 
 const BUNDLE_METAFIELD_NAMESPACE = "ciwi_bundle";
 const BUNDLE_METAFIELD_BASE_KEY = "ciwi-bundle-offers";
+const BUNDLE_METAFIELD_ACTIVE_ENV_KEY = "ciwi-bundle-active-env";
 const BUNDLE_METAFIELD_ENABLED_PROD_KEY = "ciwi-bundle-enabled-prod";
 const BUNDLE_METAFIELD_ENABLED_TEST_KEY = "ciwi-bundle-enabled-test";
 const LONG_RUNNING_OFFER_END_TIME = new Date("2999-12-31T23:59:59.000Z");
@@ -157,9 +158,46 @@ function resolveBundleEnvironment(): BundleEnvironment {
 function buildOfferMetafieldsInput(
   ownerId: string,
   offersPayload: string,
-  _themeExtensionEnabled: boolean,
+  themeExtensionEnabled: boolean,
 ) {
+  const env = resolveBundleEnvironment();
+  const envOfferKey = `${BUNDLE_METAFIELD_BASE_KEY}-${env}`;
+  const envEnabledKey =
+    env === "prod"
+      ? BUNDLE_METAFIELD_ENABLED_PROD_KEY
+      : BUNDLE_METAFIELD_ENABLED_TEST_KEY;
+  const activeEnvPayload = JSON.stringify({
+    env,
+    updatedAt: new Date().toISOString(),
+  });
+
   return [
+    {
+      ownerId,
+      namespace: BUNDLE_METAFIELD_NAMESPACE,
+      key: envOfferKey,
+      type: "json",
+      value: offersPayload,
+    },
+    {
+      ownerId,
+      namespace: BUNDLE_METAFIELD_NAMESPACE,
+      key: BUNDLE_METAFIELD_ACTIVE_ENV_KEY,
+      type: "json",
+      value: activeEnvPayload,
+    },
+    {
+      ownerId,
+      namespace: BUNDLE_METAFIELD_NAMESPACE,
+      key: envEnabledKey,
+      type: "json",
+      value: JSON.stringify({
+        enabled: themeExtensionEnabled,
+        env,
+        updatedAt: new Date().toISOString(),
+      }),
+    },
+    // 兼容历史读路径，避免函数/主题未更新时出现空数据。
     {
       ownerId,
       namespace: BUNDLE_METAFIELD_NAMESPACE,
