@@ -6,44 +6,64 @@ function getHeader(request: Request, headerName: string): string | null {
   return request.headers.get(headerName);
 }
 
-function tryExtractTawkUserMessage(payload: unknown): {
-  text: string;
-  from?: string;
+function formatIsoTime(input: unknown): string | undefined {
+  if (typeof input !== "string" || !input.trim()) return undefined;
+  const date = new Date(input);
+  if (Number.isNaN(date.getTime())) return input;
+  return `${date.toLocaleString("zh-CN", { hour12: false })}（UTC${String(
+    -date.getTimezoneOffset() / 60,
+  ).startsWith("-")
+    ? ""
+    : "+"}${-date.getTimezoneOffset() / 60}）`;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function tryExtractTawkContext(payload: unknown): {
   chatId?: string;
+  propertyId?: string;
+  propertyName?: string;
+  event?: string;
+  time?: string;
+  visitorName?: string;
+  visitorCity?: string;
+  visitorCountry?: string;
+  senderType?: string;
+  messageType?: string;
+  messageText?: string;
 } | null {
   if (!payload || typeof payload !== "object") return null;
   const p = payload as Record<string, unknown>;
 
-  const text =
-    (typeof p.message === "string" && p.message) ||
-    (typeof p.text === "string" && p.text) ||
-    (typeof p.body === "string" && p.body) ||
-    (typeof p.content === "string" && p.content) ||
-    "";
+  const message = asRecord(p.message);
+  const sender = message ? asRecord(message.sender) : null;
+  const visitor = asRecord(p.visitor);
+  const property = asRecord(p.property);
 
-  if (!text) return null;
+  const senderType = sender && typeof sender.type === "string" ? sender.type : undefined;
+  const messageType = message && typeof message.type === "string" ? message.type : undefined;
+  const messageText = message && typeof message.text === "string" ? message.text : undefined;
 
-  const from =
-    (typeof p.from === "string" && p.from) ||
-    (typeof p.sender === "string" && p.sender) ||
-    (typeof p.visitorName === "string" && p.visitorName) ||
-    undefined;
-
-  const chatId =
-    (typeof p.chatId === "string" && p.chatId) ||
-    (typeof p.conversationId === "string" && p.conversationId) ||
-    (typeof p.ticketId === "string" && p.ticketId) ||
-    undefined;
-
-  return { text, from, chatId };
+  return {
+    chatId: typeof p.chatId === "string" ? p.chatId : undefined,
+    propertyId: property && typeof property.id === "string" ? property.id : undefined,
+    propertyName: property && typeof property.name === "string" ? property.name : undefined,
+    event: typeof p.event === "string" ? p.event : undefined,
+    time: formatIsoTime(p.time),
+    visitorName: visitor && typeof visitor.name === "string" ? visitor.name : undefined,
+    visitorCity: visitor && typeof visitor.city === "string" ? visitor.city : undefined,
+    visitorCountry: visitor && typeof visitor.country === "string" ? visitor.country : undefined,
+    senderType,
+    messageType,
+    messageText,
+  };
 }
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  console.log("request: ", request);
-  const body = await request.json();
-  console.log("body:", body);
-  const text = await request.text();
-  console.log("text:", text);
   const configuredToken = process.env.TAWK_WEBHOOK_TOKEN?.trim();
   if (configuredToken) {
     const xToken = getHeader(request, "x-webhook-token");
@@ -61,10 +81,25 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return Response.json({ error: "请求体必须是合法 JSON" }, { status: 400 });
   }
 
-  const extracted = tryExtractTawkUserMessage(payload);
-  if (!extracted) {
+  const ctx = tryExtractTawkContext(payload);
+  if (!ctx) {
     return Response.json(
       { ok: true, ignored: true, reason: "未识别到用户消息字段（已忽略）" },
+      { status: 202 },
+    );
+  }
+
+  // 只转发访客消息（避免把系统事件/坐席消息刷屏到飞书）
+  if (ctx.senderType && ctx.senderType !== "visitor") {
+    return Response.json(
+      { ok: true, ignored: true, reason: `忽略非访客消息：sender.type=${ctx.senderType}` },
+      { status: 202 },
+    );
+  }
+
+  if (!ctx.messageText) {
+    return Response.json(
+      { ok: true, ignored: true, reason: "无 message.text（已忽略）" },
       { status: 202 },
     );
   }
@@ -72,9 +107,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const result = await sendFeishuBotText({
     title: "Tawk 新用户消息",
     lines: [
-      extracted.from ? `访客：${extracted.from}` : "",
-      extracted.chatId ? `会话：${extracted.chatId}` : "",
-      `消息：${extracted.text}`,
+      ctx.propertyName || ctx.propertyId
+        ? `站点：${[ctx.propertyName, ctx.propertyId ? `(${ctx.propertyId})` : ""].filter(Boolean).join("")}`
+        : "",
+      ctx.event ? `事件：${ctx.event}` : "",
+      ctx.time ? `时间：${ctx.time}` : "",
+      ctx.visitorName ? `访客：${ctx.visitorName}` : "",
+      ctx.visitorCity || ctx.visitorCountry
+        ? `地区：${[ctx.visitorCity, ctx.visitorCountry].filter(Boolean).join("，")}`
+        : "",
+      ctx.chatId ? `会话：${ctx.chatId}` : "",
+      ctx.messageType ? `消息类型：${ctx.messageType}` : "",
+      `消息：${ctx.messageText}`,
     ],
     rawPayload: payload,
   });
