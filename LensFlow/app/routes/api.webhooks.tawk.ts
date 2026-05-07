@@ -40,6 +40,10 @@ function tryExtractTawkUserMessage(payload: unknown): {
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   console.log("request: ", request);
+  const body = await request.json();
+  console.log("body:", body);
+  const text = await request.text();
+  console.log("text:", text);
   const configuredToken = process.env.TAWK_WEBHOOK_TOKEN?.trim();
   if (configuredToken) {
     const xToken = getHeader(request, "x-webhook-token");
