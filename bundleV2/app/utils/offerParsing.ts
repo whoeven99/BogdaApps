@@ -676,6 +676,7 @@ export type BxgyDiscountRule = {
   maxUsesPerOrder: number;
   /** Count threshold: promotion triggers when cart has this many items in buyProductIds */
   count: number;
+  tierType?: "bxgy" | "simple";
   title?: string;
   subtitle?: string;
   badge?: string;
@@ -2344,6 +2345,7 @@ export function parseBxgyDiscountRules(discountRulesJson?: string | null): BxgyD
       const getQuantity = Number((item as { getQuantity?: unknown }).getQuantity);
       const discountPercent = Number((item as { discountPercent?: unknown }).discountPercent);
       const maxUsesPerOrder = Number((item as { maxUsesPerOrder?: unknown }).maxUsesPerOrder) || 1;
+      const tierType = (item as { tierType?: unknown }).tierType;
       
       const buyProductIds = (item as { buyProductIds?: unknown }).buyProductIds;
       const getProductIds = (item as { getProductIds?: unknown }).getProductIds;
@@ -2364,6 +2366,8 @@ export function parseBxgyDiscountRules(discountRulesJson?: string | null): BxgyD
         getProductIds: getProductIds.filter(id => typeof id === "string") as string[],
         discountPercent: Math.max(0, Math.min(100, discountPercent)),
         maxUsesPerOrder: Math.max(1, Math.trunc(maxUsesPerOrder)),
+        // Legacy dedicated BXGY records may not persist tierType; treat them as BXGY by default.
+        tierType: tierType === "simple" ? "simple" : "bxgy",
         title: (item as { title?: string }).title || "",
         subtitle: (item as { subtitle?: string }).subtitle || "",
         badge: (item as { badge?: string }).badge || "",
@@ -2437,6 +2441,7 @@ export function buildBxgyDiscountRulesJson(tiers: BxgyDiscountRule[]): BxgyDisco
       getProductIds: Array.isArray(tier.getProductIds)
         ? tier.getProductIds.filter(id => typeof id === "string")
         : [],
+      tierType: tier.tierType === "simple" ? "simple" : "bxgy",
       title: tier.title || "",
       subtitle: tier.subtitle || "",
       badge: tier.badge || "",

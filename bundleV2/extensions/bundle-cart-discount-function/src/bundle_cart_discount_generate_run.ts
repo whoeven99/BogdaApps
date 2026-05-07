@@ -1045,7 +1045,8 @@ function parseBxgyDiscountRules(discountRulesJson?: string | null): BxgyDiscount
         getProductIds: getProductIds.filter(id => typeof id === "string") as string[],
         discountPercent: Math.max(0, Math.min(100, discountPercent)),
         maxUsesPerOrder: Math.max(1, Math.trunc(maxUsesPerOrder)),
-        tierType: tierType === "bxgy" ? "bxgy" : "simple",
+        // Legacy dedicated BXGY records may not persist tierType; default them to BXGY.
+        tierType: tierType === "simple" ? "simple" : "bxgy",
       });
     }
     

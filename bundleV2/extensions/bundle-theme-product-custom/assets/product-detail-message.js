@@ -498,7 +498,8 @@ function parseBxgyDiscountRulesJson(discountRulesJson) {
           discountPercent: discountPercent,
           buyProductIds: buyProductIds,
           getProductIds: getProductIds,
-          tierType: item.tierType === "bxgy" ? "bxgy" : "simple",
+          // Legacy dedicated BXGY records may not persist tierType; default them to BXGY.
+          tierType: item.tierType === "simple" ? "simple" : "bxgy",
           title: item.title || "",
           subtitle: item.subtitle || "",
           badge: item.badge || "",
@@ -2183,7 +2184,7 @@ function renderBundlePreviewHtml(offer) {
       const displayCount = rule.count || 1;
       return {
         count: displayCount,
-        title: rule.title || `${displayCount} items`,
+        title: rule.title || `Buy ${rule.buyQuantity}, Get ${rule.getQuantity}`,
         subtitle: rule.subtitle || `Buy ${rule.buyQuantity}, Get ${rule.getQuantity}`,
         price: rule.discountPercent === 100
           ? `${rule.getQuantity} FREE`
