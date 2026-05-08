@@ -15,7 +15,7 @@
     "countryIsoCode": {{ localization.country.iso_code | json }},
     "currencyCode": {{ localization.country.currency.iso_code | json }},
     "currencySymbol": {{ localization.country.currency.symbol | json }},
-    "settings": {% if ciwi_cart_settings != blank %}{{ ciwi_cart_settings.value }}{% else %}{}{% endif %}
+    "settings": {% if ciwi_cart_settings != blank %}{{ ciwi_cart_settings.value | json }}{% else %}{}{% endif %}
   }
 </script>
 
