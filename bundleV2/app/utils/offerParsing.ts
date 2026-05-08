@@ -1948,21 +1948,38 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
       config.settings.stickyAddToCartButtonText,
     ),
   } satisfies OfferSettings;
+  const primaryLogicBlockType = config.logicBlocks[0]?.type;
+  const inferredPrimaryOfferType =
+    primaryLogicBlockType === "quantity-breaks"
+      ? "quantity-breaks-same"
+      : primaryLogicBlockType === "quantity-breaks-different"
+        ? "quantity-breaks-different"
+        : primaryLogicBlockType === "bxgy"
+          ? "bxgy"
+          : primaryLogicBlockType === "free-gift"
+            ? "free-gift"
+            : primaryLogicBlockType === "complete-bundle"
+              ? "complete-bundle"
+              : primaryLogicBlockType === "subscription"
+                ? "subscription"
+                : null;
 
   return {
-    offerType: quantityBreaks
-      ? "quantity-breaks-same"
-      : quantityBreaksDifferent
-        ? "quantity-breaks-different"
-      : bxgy
-        ? "bxgy"
-        : freeGift
-          ? "free-gift"
-        : completeBundle
-          ? "complete-bundle"
-          : subscription
-            ? "subscription"
-        : "campaign-builder",
+    offerType:
+      inferredPrimaryOfferType ||
+      (quantityBreaks
+        ? "quantity-breaks-same"
+        : quantityBreaksDifferent
+          ? "quantity-breaks-different"
+        : bxgy
+          ? "bxgy"
+          : freeGift
+            ? "free-gift"
+          : completeBundle
+            ? "complete-bundle"
+            : subscription
+              ? "subscription"
+          : "campaign-builder"),
     selectedProductsJson:
       quantityBreaksDifferent
         ? JSON.stringify({
@@ -1979,7 +1996,10 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
               giftProducts: freeGift.config.giftProductIds,
             })
         : completeBundle
-          ? JSON.stringify(completeBundleConfig)
+          ? JSON.stringify({
+              productIds: quantityBreaks ? config.scope.productIds : [],
+              bars: completeBundleConfig.bars,
+            })
         : config.scope.productIds.length > 0
         ? JSON.stringify(config.scope.productIds.map((id) => ({ id })))
         : null,

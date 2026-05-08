@@ -162,6 +162,19 @@ function CompleteBundlePreview() {
           subtitle="Standard price"
           price="EUR65.00"
         />
+        <PreviewRow
+          title="Buy 2"
+          subtitle="Unlock the first bundle tier"
+          price="EUR58.50"
+          badge="Starter"
+          selected
+        />
+        <PreviewRow
+          title="Buy 3"
+          subtitle="Best entry point for the full bundle"
+          price="EUR55.25"
+          badge="Most popular"
+        />
         <div className="rounded-[10px] border border-[#d1d5db] bg-[#f1f2f4] p-[12px] opacity-70">
           <div className="flex items-start gap-[10px]">
             <span className="mt-[3px] h-[14px] w-[14px] rounded-full border border-[#c9ccd0]" />
@@ -172,7 +185,7 @@ function CompleteBundlePreview() {
                     Complete the bundle
                   </div>
                   <div className="mt-[2px] text-[12px] leading-[16px] text-[#8c9196]">
-                    Save EUR14.99
+                    Add the full set to unlock the bundle price
                   </div>
                 </div>
                 <div className="text-[14px] font-semibold leading-[18px] text-[#8c9196]">

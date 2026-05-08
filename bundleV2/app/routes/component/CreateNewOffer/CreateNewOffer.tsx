@@ -1864,9 +1864,12 @@ export function CreateNewOffer({
       const completeBundleConfig = buildCompleteBundleConfig({ bars: completeBundleBars });
       scopeProductIds = Array.from(
         new Set(
-          completeBundleConfig.bars.flatMap((bar) =>
-            bar.products.map((product) => String(product.productId)),
-          ),
+          [
+            ...selectedProductsData.map((product) => String(product.id)),
+            ...completeBundleConfig.bars.flatMap((bar) =>
+              bar.products.map((product) => String(product.productId)),
+            ),
+          ],
         ),
       );
       logicBlocks = [
@@ -2605,31 +2608,18 @@ export function CreateNewOffer({
       );
       if (!hasConfiguredProducts && starterTemplateDefaults?.previewFallbackItems?.length) {
         const starterBar = completeBundleBars[0];
-        const fallbackFirst = starterTemplateDefaults.previewFallbackItems[0];
-        const fallbackOffer = starterTemplateDefaults.previewFallbackItems[1];
-        return [
-          fallbackFirst,
-          {
-            ...(fallbackOffer || {
-              id: "starter-complete-bundle-offer",
-              title: "Complete the bundle",
-              subtitle: "Save EUR14.99",
-              price: "EUR50.00",
-              featured: true,
-              badge: "Most Popular",
-              saveLabel: "SAVE EUR14.99",
-            }),
-            id: starterBar?.id || fallbackOffer?.id || "starter-complete-bundle-offer",
-            title:
-              starterBar?.title ||
-              fallbackOffer?.title ||
-              "Complete the bundle",
-            subtitle:
-              starterBar?.subtitle ||
-              fallbackOffer?.subtitle ||
-              "Save EUR14.99",
-          },
-        ];
+        return starterTemplateDefaults.previewFallbackItems.map((item, index, items) => {
+          const shouldMirrorBundleCard =
+            item.id === "starter-complete-bundle-offer" ||
+            (index === items.length - 1 && item.featured);
+          if (!shouldMirrorBundleCard) return item;
+          return {
+            ...item,
+            id: starterBar?.id || item.id,
+            title: starterBar?.title || item.title,
+            subtitle: starterBar?.subtitle || item.subtitle,
+          };
+        });
       }
     }
 

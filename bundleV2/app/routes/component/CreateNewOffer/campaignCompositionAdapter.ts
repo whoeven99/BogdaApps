@@ -1,4 +1,5 @@
 import type {
+  DifferentProductsDiscountRule,
   FreeGiftRule,
 } from "../../../utils/offerParsing";
 import type {
@@ -29,7 +30,11 @@ export type CampaignBarItem = {
   enabled: boolean;
   isDefault: boolean;
   sourceRef: {
-    collection: "discountRules" | "bxgyDiscountRules" | "freeGiftRules";
+    collection:
+      | "discountRules"
+      | "differentProductsDiscountRules"
+      | "bxgyDiscountRules"
+      | "freeGiftRules";
     index: number;
   };
   supportState?: "supported" | "draft_only" | "unsupported";
@@ -40,8 +45,7 @@ export type StepTwoModuleId =
   | "subscription"
   | "countdown"
   | "checkbox_upsells"
-  | "progressive_gifts"
-  | "sticky_add_to_cart";
+  | "progressive_gifts";
 
 export type CampaignModuleItem = {
   id: StepTwoModuleId;
@@ -75,9 +79,27 @@ function buildFreeGiftSummary(rule: FreeGiftRule) {
   return `Trigger at ${Math.max(1, Number(rule.count) || 1)} • ${Math.max(1, Number(rule.giftQuantity) || 1)} free gift${(rule.giftQuantity || 1) > 1 ? "s" : ""}`;
 }
 
+function buildDifferentProductsSummary(rule: DifferentProductsDiscountRule) {
+  return `${Math.max(1, Number(rule.count) || 1)} items • ${Math.max(0, Number(rule.discountPercent) || 0)}% off • ${Array.isArray(rule.buyProductIds) ? rule.buyProductIds.length : 0} products`;
+}
+
 export function getCampaignCompositionBars(
   draft: CampaignDraft,
 ): CampaignBarItem[] {
+  const differentProductsBars = draft.differentProductsDiscountRules.map((rule, index) => ({
+    id: `different-products-rule-${index + 1}`,
+    type: "quantity_break" as const,
+    title: rule.title || `Bar #${index + 1} - Quantity break`,
+    summary: rule.subtitle || buildDifferentProductsSummary(rule),
+    enabled: true,
+    isDefault: !!rule.isDefault,
+    sourceRef: {
+      collection: "differentProductsDiscountRules" as const,
+      index,
+    },
+    supportState: "supported" as const,
+  }));
+
   const draftRuleBars = draft.discountRules.map((rule, index) => {
     const type = getDraftDiscountRuleType(rule);
     return {
@@ -129,7 +151,7 @@ export function getCampaignCompositionBars(
     supportState: "supported" as const,
   }));
 
-  return [...draftRuleBars, ...bxgyBars, ...freeGiftBars];
+  return [...differentProductsBars, ...draftRuleBars, ...bxgyBars, ...freeGiftBars];
 }
 
 export function getCampaignCompositionModules(
@@ -171,13 +193,6 @@ export function getCampaignCompositionModules(
       label: "Progressive gifts",
       description: "Reward unlocks that extend beyond the main bars.",
       enabled: draft.progressiveGifts.enabled,
-      toggleable: true,
-    },
-    {
-      id: "sticky_add_to_cart",
-      label: "Sticky add to cart",
-      description: "Persistent cart CTA companion module.",
-      enabled: draft.stickyAddToCartEnabled,
       toggleable: true,
     },
   ];
@@ -304,6 +319,27 @@ export function appendCampaignCompositionBar(
   draft: CampaignDraft,
   actions: CampaignDraftActions,
 ) {
+  if (draft.offerType === "quantity-breaks-different" && type === "quantity_break") {
+    actions.setDifferentProductsDiscountRules((prev) => [
+      ...prev,
+      {
+        count: 2,
+        discountPercent: 10,
+        buyQuantity: 2,
+        getQuantity: 0,
+        buyProductIds: draft.selectedProductsData.map((product) => String(product.id)),
+        getProductIds: [],
+        maxUsesPerOrder: 1,
+        tierType: "simple",
+        title: "",
+        subtitle: "",
+        badge: "",
+        isDefault: false,
+      },
+    ]);
+    return;
+  }
+
   if (draft.offerType === "quantity-breaks-same") {
     actions.setDiscountRules((prev) => [...prev, buildDefaultDiscountRule(type)]);
     return;
@@ -354,6 +390,11 @@ export function removeCampaignCompositionBar(
   switch (bar.sourceRef.collection) {
     case "discountRules":
       actions.setDiscountRules((prev) =>
+        prev.filter((_, index) => index !== bar.sourceRef.index),
+      );
+      return;
+    case "differentProductsDiscountRules":
+      actions.setDifferentProductsDiscountRules((prev) =>
         prev.filter((_, index) => index !== bar.sourceRef.index),
       );
       return;

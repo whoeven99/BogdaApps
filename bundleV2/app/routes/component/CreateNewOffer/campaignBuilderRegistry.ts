@@ -111,7 +111,7 @@ export function getCampaignScopeSummary(
           bar.products.map((product) => String(product.productId)),
         ),
       ).size;
-      return `${uniqueProductCount} products across ${ctx.completeBundleBars.length} bars`;
+      return `${ctx.selectedProductsData.length} trigger products, ${uniqueProductCount} bundled products`;
     }
     case "free-gift":
       return `${ctx.freeGiftTriggerProducts.length} products in the global trigger pool, ${getFreeGiftRewardBarCount(ctx)} bars with gift products`;
@@ -138,11 +138,7 @@ export function getCampaignLogicSummary(
       return `${ctx.bxgyDiscountRules.length} BXGY bars, ${getBxgyRewardProductCount(ctx)} reward products, up to ${bestDiscount}% off`;
     }
     case "complete-bundle": {
-      const bxgyBars = ctx.completeBundleBars.filter(
-        (bar) => bar.type === "bxgy",
-      ).length;
-      const quantityBars = ctx.completeBundleBars.length - bxgyBars;
-      return `${quantityBars} quantity bars, ${bxgyBars} BXGY bars`;
+      return `${ctx.normalizedDiscountRules.length} quantity bars + ${ctx.completeBundleBars.length} bundle group${ctx.completeBundleBars.length > 1 ? "s" : ""}`;
     }
     case "subscription":
       return ctx.subscriptionEnabled
@@ -232,7 +228,10 @@ export function buildSelectedProductsPayload(
         ),
       };
     case "complete-bundle":
-      return buildCompleteBundleConfig({ bars: ctx.completeBundleBars });
+      return {
+        productIds: ctx.selectedProductsData.map((product) => String(product.id)),
+        bars: buildCompleteBundleConfig({ bars: ctx.completeBundleBars }).bars,
+      };
     case "free-gift":
       return {
         triggerProducts: ctx.freeGiftTriggerProducts,
@@ -261,16 +260,7 @@ export function buildDiscountRulesPayload(
     case "bxgy":
       return buildBxgyDiscountRulesJson(ctx.bxgyDiscountRules);
     case "complete-bundle":
-      return ctx.completeBundleBars.map((bar) => ({
-        id: bar.id,
-        type: bar.type,
-        quantity: bar.quantity,
-        pricing: bar.pricing,
-        products: bar.products.map((product) => ({
-          productId: product.productId,
-          pricing: product.pricing ?? { mode: "full_price" as const, value: 0 },
-        })),
-      }));
+      return buildQuantityRulesJson(ctx.normalizedDiscountRules);
     case "free-gift":
       return buildFreeGiftRulesJson(ctx.freeGiftRules);
     default:
@@ -295,11 +285,13 @@ export function validateScopeAndLogicStep(
         ? "Please select the global Buy pool and configure reward products inside every BXGY bar."
         : null;
     case "complete-bundle": {
+      const hasNoTriggerProducts = ctx.selectedProductsData.length === 0;
+      const hasNoQuantityBars = ctx.normalizedDiscountRules.length === 0;
       const hasEmptyBar = ctx.completeBundleBars.some(
         (bar) => bar.products.length === 0,
       );
-      return hasEmptyBar
-        ? "Please select products for every bundle bar."
+      return hasNoTriggerProducts || hasNoQuantityBars || hasEmptyBar
+        ? "Please select trigger products, configure at least one quantity-break bar, and add products to every bundle group."
         : null;
     }
     case "free-gift":
@@ -334,14 +326,19 @@ export function validateFinalSubmitScopeAndLogic(
         ? "For BXGY offers, you must configure the global Buy pool and reward products inside every BXGY bar."
         : null;
     case "complete-bundle": {
+      const hasNoTriggerProducts = ctx.selectedProductsData.length === 0;
+      const hasNoQuantityBars = ctx.normalizedDiscountRules.length === 0;
       const hasInvalidBar = ctx.completeBundleBars.some(
         (bar) =>
           !bar.products?.length ||
           !Number.isFinite(Number(bar.quantity)) ||
           Number(bar.quantity) < 1,
       );
-      return hasInvalidBar
-        ? "Each bundle bar must contain at least one product and a valid quantity."
+      return hasNoTriggerProducts ||
+        hasNoQuantityBars ||
+        ctx.completeBundleBars.length === 0 ||
+        hasInvalidBar
+        ? "Complete bundle offers require trigger products, at least one quantity-break bar, and a valid bundle group with products."
         : null;
     }
     case "free-gift":

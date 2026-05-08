@@ -17,7 +17,6 @@ import {
   type StepTwoModuleId,
 } from "./campaignCompositionAdapter";
 import CompleteBundleEditor from "./CompleteBundleEditor";
-import DifferentProductsLogicEditor from "./DifferentProductsLogicEditor";
 import { ProgressiveGiftsSection } from "./ProgressiveGiftsSection";
 import SubscriptionSettingsEditor from "./SubscriptionSettingsEditor";
 
@@ -743,6 +742,90 @@ function FreeGiftRuleBarDetail({
   );
 }
 
+function DifferentProductsRuleBarDetail({
+  bar,
+  draft,
+  rule,
+  headerActions,
+  onChange,
+}: {
+  bar: CampaignBarItem;
+  draft: CampaignDraft;
+  rule: CampaignDraft["differentProductsDiscountRules"][number];
+  headerActions?: ReactNode;
+  onChange: (patch: Partial<CampaignDraft["differentProductsDiscountRules"][number]>) => void;
+}) {
+  const productOptions = draft.selectedProductsData.map((product) => ({
+    label: product.title,
+    value: String(product.id),
+  }));
+  const scopedCount = Array.isArray(rule.buyProductIds) ? rule.buyProductIds.length : 0;
+
+  return (
+    <BuilderBarCard bar={bar} actions={headerActions}>
+      <BuilderSection title="Trigger">
+        <FieldGrid>
+          <label className="block text-[13px] font-medium text-[#1c1f23]">
+            Trigger quantity
+            <Input
+              size="large"
+              type="number"
+              min={1}
+              className="mt-1"
+              value={rule.count}
+              onChange={(e) => {
+                const count = parsePositiveInt(e.target.value, rule.count);
+                onChange({
+                  count,
+                  buyQuantity: count,
+                });
+              }}
+            />
+          </label>
+          <label className="block text-[13px] font-medium text-[#1c1f23]">
+            Discount (%)
+            <Input
+              size="large"
+              type="number"
+              min={0}
+              max={100}
+              className="mt-1"
+              value={rule.discountPercent}
+              onChange={(e) =>
+                onChange({ discountPercent: parsePercent(e.target.value, rule.discountPercent) })
+              }
+            />
+          </label>
+        </FieldGrid>
+      </BuilderSection>
+
+      <BuilderSection title="Eligible product pool">
+        <label className="block text-[13px] font-medium text-[#1c1f23]">
+          Products included in this bar
+          <Select
+            mode="multiple"
+            size="large"
+            className="mt-1 w-full"
+            value={rule.buyProductIds}
+            options={productOptions}
+            onChange={(values) =>
+              onChange({
+                buyProductIds: values,
+              })
+            }
+            placeholder="Select the products eligible for this quantity break"
+          />
+        </label>
+        <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
+          {draft.selectedProductsData.length > 0
+            ? `${scopedCount} products are scoped to this bar. Different bars can target different product combinations.`
+            : "Add campaign products to the shared pool first, then choose which products belong to this bar."}
+        </div>
+      </BuilderSection>
+    </BuilderBarCard>
+  );
+}
+
 function PlaceholderModuleDetail({
   title,
 }: {
@@ -806,7 +889,7 @@ function CompleteBundleModuleDetail({
           renderCompleteBundleProductPricingCard={renderCompleteBundleProductPricingCard}
           updateRuleValues={actions.updateUnifiedRuleValues}
           updateRulePresentation={actions.updateUnifiedRulePresentation}
-          section="products"
+          section="all"
           simpleMode={!isPrimaryTemplate}
         />
       </div>
@@ -830,17 +913,13 @@ export default function StepTwoCompositionBuilder({
   preview,
 }: Props) {
   const [activeModuleId, setActiveModuleId] = useState<ActiveModuleId>(null);
-  const visibleModules = useMemo(
-    () =>
-      modules.filter(
-        (module) =>
-          !(draft.offerType === "complete-bundle" && module.id === "complete_bundle"),
-      ),
-    [draft.offerType, modules],
-  );
+  const visibleModules = useMemo(() => modules, [modules]);
 
   const clearBarDefaults = () => {
     actions.setDiscountRules((prev) =>
+      prev.map((rule) => ({ ...rule, isDefault: false })),
+    );
+    actions.setDifferentProductsDiscountRules((prev) =>
       prev.map((rule) => ({ ...rule, isDefault: false })),
     );
     actions.setBxgyDiscountRules((prev) =>
@@ -926,6 +1005,49 @@ export default function StepTwoCompositionBuilder({
   );
 
   const renderBarDetail = (bar: CampaignBarItem, index: number) => {
+    if (bar.sourceRef.collection === "differentProductsDiscountRules") {
+      const rule = draft.differentProductsDiscountRules[bar.sourceRef.index];
+      if (!rule) return null;
+      return (
+        <DifferentProductsRuleBarDetail
+          key={bar.id}
+          bar={bar}
+          draft={draft}
+          rule={rule}
+          headerActions={renderBarActions(bar, index)}
+          onChange={(patch) =>
+            (() => {
+              if (patch.isDefault === true) {
+                clearBarDefaults();
+              }
+              actions.setDifferentProductsDiscountRules((prev) =>
+                prev.map((entry, ruleIndex) =>
+                  ruleIndex === bar.sourceRef.index
+                    ? {
+                        ...entry,
+                        ...patch,
+                        count:
+                          typeof patch.count === "number" ? patch.count : entry.count,
+                        buyQuantity:
+                          typeof patch.buyQuantity === "number"
+                            ? patch.buyQuantity
+                            : typeof patch.count === "number"
+                              ? patch.count
+                              : entry.buyQuantity,
+                        getQuantity: 0,
+                        getProductIds: [],
+                        maxUsesPerOrder: 1,
+                        tierType: "simple",
+                      }
+                    : entry,
+                ),
+              );
+            })()
+          }
+        />
+      );
+    }
+
     if (bar.sourceRef.collection === "discountRules") {
       const rule = draft.discountRules[bar.sourceRef.index];
       if (!rule) return null;
@@ -1143,58 +1265,6 @@ export default function StepTwoCompositionBuilder({
             </div>
           </DetailSection>
         );
-      case "sticky_add_to_cart":
-        return (
-          <DetailSection title="Sticky add to cart">
-            <div className="flex items-center justify-between rounded-[10px] bg-[#f6f8f9] px-4 py-3">
-              <div>
-                <div className="text-[14px] font-medium text-[#1c1f23]">
-                  Enable sticky add to cart
-                </div>
-                <div className="mt-1 text-[12px] text-[#5c6166]">
-                  Keep a bundle CTA visible as a secondary conversion companion.
-                </div>
-              </div>
-              <Switch
-                checked={draft.stickyAddToCartEnabled}
-                onChange={actions.setStickyAddToCartEnabled}
-              />
-            </div>
-            <div className="mt-4">
-              <FieldGrid>
-                <label className="block text-[13px] font-medium text-[#1c1f23]">
-                  Sticky title
-                  <Input
-                    size="large"
-                    className="mt-1"
-                    value={draft.stickyAddToCartTitle}
-                    onChange={(e) => actions.setStickyAddToCartTitle(e.target.value)}
-                  />
-                </label>
-                <label className="block text-[13px] font-medium text-[#1c1f23]">
-                  Button text
-                  <Input
-                    size="large"
-                    className="mt-1"
-                    value={draft.stickyAddToCartButtonText}
-                    onChange={(e) => actions.setStickyAddToCartButtonText(e.target.value)}
-                  />
-                </label>
-              </FieldGrid>
-              <div className="mt-4">
-                <label className="block text-[13px] font-medium text-[#1c1f23]">
-                  Sticky subtitle
-                  <Input
-                    size="large"
-                    className="mt-1"
-                    value={draft.stickyAddToCartSubtitle}
-                    onChange={(e) => actions.setStickyAddToCartSubtitle(e.target.value)}
-                  />
-                </label>
-              </div>
-            </div>
-          </DetailSection>
-        );
       default:
         return (
           <PlaceholderModuleDetail
@@ -1204,57 +1274,19 @@ export default function StepTwoCompositionBuilder({
     }
   };
 
-  const primaryBarsCount =
-    draft.offerType === "complete-bundle"
-      ? draft.completeBundleBars.length
-      : draft.offerType === "quantity-breaks-different"
-        ? draft.differentProductsDiscountRules.length
-        : bars.length;
+  const primaryBarsCount = bars.length;
 
-  const renderBarsSection = () => {
-    if (draft.offerType === "quantity-breaks-different") {
-      return (
-        <DifferentProductsLogicEditor
-          selectedProductsData={draft.selectedProductsData}
-          differentProductsDiscountRules={draft.differentProductsDiscountRules}
-          setDifferentProductsDiscountRules={actions.setDifferentProductsDiscountRules}
-          updateRuleValues={actions.updateUnifiedRuleValues}
-          updateRulePresentation={actions.updateUnifiedRulePresentation}
-        />
-      );
-    }
-
-    if (draft.offerType === "complete-bundle") {
-      return (
-        <CompleteBundleEditor
-          completeBundleBars={draft.completeBundleBars}
-          activeBundleBarId={draft.activeBundleBarId}
-          setActiveBundleBarId={actions.setActiveBundleBarId}
-          addCompleteBundleBar={actions.addCompleteBundleBar}
-          removeCompleteBundleBar={actions.removeCompleteBundleBar}
-          updateCompleteBundleBar={actions.updateCompleteBundleBar}
-          handleSelectProductsForBundleBar={actions.handleSelectProductsForBundleBar}
-          appendProductsToBundleBar={actions.appendProductsToBundleBar}
-          renderCompleteBundleProductPricingCard={renderCompleteBundleProductPricingCard}
-          updateRuleValues={actions.updateUnifiedRuleValues}
-          updateRulePresentation={actions.updateUnifiedRulePresentation}
-          section="all"
-        />
-      );
-    }
-
-    return (
-      <div className="space-y-4">
-        {bars.length === 0 ? (
-          <QuietEmptyState>
-            No bars yet. Add one to start defining the campaign logic.
-          </QuietEmptyState>
-        ) : (
-          bars.map((bar, index) => renderBarDetail(bar, index))
-        )}
-      </div>
-    );
-  };
+  const renderBarsSection = () => (
+    <div className="space-y-4">
+      {bars.length === 0 ? (
+        <QuietEmptyState>
+          No bars yet. Add one to start defining the campaign logic.
+        </QuietEmptyState>
+      ) : (
+        bars.map((bar, index) => renderBarDetail(bar, index))
+      )}
+    </div>
+  );
 
   return (
     <div className="space-y-4">
@@ -1287,10 +1319,6 @@ export default function StepTwoCompositionBuilder({
             title="Bars"
             meta={`${primaryBarsCount} configured`}
             actions={
-              draft.offerType === "quantity-breaks-different" ||
-              draft.offerType === "complete-bundle"
-                ? undefined
-                : (
               <Dropdown
                 trigger={["click"]}
                 menu={{
@@ -1305,7 +1333,6 @@ export default function StepTwoCompositionBuilder({
               >
                 <Button type="dashed">+ Add bar</Button>
               </Dropdown>
-                )
             }
           >
             {renderBarsSection()}
@@ -1374,9 +1401,6 @@ export default function StepTwoCompositionBuilder({
                               }
                               if (module.id === "checkbox_upsells") {
                                 actions.setCheckboxUpsellsEnabled(Boolean(checked));
-                              }
-                              if (module.id === "sticky_add_to_cart") {
-                                actions.setStickyAddToCartEnabled(Boolean(checked));
                               }
                             }}
                           />
