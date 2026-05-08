@@ -55,11 +55,11 @@ const META_BY_OFFER_TYPE: Record<OfferTypeId, CampaignBuilderMeta> = {
       "Select the products in scope and define the pricing, order, shipping, or gift rules that drive the promotion.",
   },
   "quantity-breaks-different": {
-    logicBlockLabel: "Cross-product Quantity Breaks",
+    logicBlockLabel: "Quantity Breaks",
     logicBlockDescription:
-      "Mix simple quantity discounts and BXGY-style tiers across a shared pool of different products.",
+      "Configure quantity-break tiers for different product combinations while keeping the standard offer-card style.",
     stepTwoDescription:
-      "Select the shared product pool, then configure the cross-product tiers customers can unlock.",
+      "Select the campaign products, then define each tier and the eligible product pool tied to that tier.",
   },
   bxgy: {
     logicBlockLabel: "Buy X Get Y",
@@ -102,7 +102,7 @@ export function getCampaignScopeSummary(
 ): string {
   switch (ctx.offerType) {
     case "quantity-breaks-different":
-      return `${ctx.selectedProductsData.length} products in the shared pool`;
+      return `${ctx.selectedProductsData.length} products available for tier product pools`;
     case "bxgy":
       return `${ctx.buyProducts.length} products in the global Buy pool, ${getBxgyRewardBarCount(ctx)} bars with reward products`;
     case "complete-bundle": {
@@ -125,11 +125,10 @@ export function getCampaignLogicSummary(
 ): string {
   switch (ctx.offerType) {
     case "quantity-breaks-different": {
-      const bxgyTierCount = ctx.differentProductsDiscountRules.filter(
-        (rule) => rule.tierType === "bxgy",
-      ).length;
-      const simpleTierCount = ctx.differentProductsDiscountRules.length - bxgyTierCount;
-      return `${simpleTierCount} simple tiers, ${bxgyTierCount} BXGY tiers`;
+      const uniqueScopedProducts = new Set(
+        ctx.differentProductsDiscountRules.flatMap((rule) => rule.buyProductIds),
+      ).size;
+      return `${ctx.differentProductsDiscountRules.length} quantity-break tiers across ${uniqueScopedProducts} scoped products`;
     }
     case "bxgy": {
       const bestDiscount = ctx.bxgyDiscountRules.reduce(
@@ -286,7 +285,7 @@ export function validateScopeAndLogicStep(
     case "quantity-breaks-different":
       return ctx.selectedProductsData.length === 0 ||
         ctx.differentProductsDiscountRules.length === 0
-        ? "Please select the shared product pool and configure at least one cross-product tier."
+        ? "Please select campaign products and configure at least one quantity-break tier."
         : null;
     case "bxgy":
       return ctx.buyProducts.length === 0 ||
@@ -325,7 +324,7 @@ export function validateFinalSubmitScopeAndLogic(
     case "quantity-breaks-different":
       return ctx.selectedProductsData.length === 0 ||
         ctx.differentProductsDiscountRules.length === 0
-        ? "Cross-product quantity breaks require a shared product pool and at least one tier."
+        ? "Quantity breaks for different products require campaign products and at least one configured tier."
         : null;
     case "bxgy":
       return ctx.buyProducts.length === 0 ||

@@ -27,9 +27,9 @@ export const OFFER_TYPE_OPTIONS: OfferTypeOption[] = [
     id: "quantity-breaks-different",
     name: "Quantity breaks for different products",
     description:
-      "Offer simple or BXGY-style quantity breaks across a shared pool of different products",
+      "Offer quantity breaks across different products while assigning eligible product pools per tier",
     primaryDiscountScope: "Product discounts",
-    primaryRuleType: "Mixed quantity break",
+    primaryRuleType: "Quantity break",
   },
   {
     id: "bxgy",

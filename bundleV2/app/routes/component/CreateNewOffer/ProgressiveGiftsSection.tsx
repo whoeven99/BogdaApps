@@ -36,10 +36,7 @@ function buildBarOptions(
   if (offerType === "quantity-breaks-different") {
     return differentProductsDiscountRules.map((r, i) => ({
       value: i + 1,
-      label:
-        r.tierType === "bxgy"
-          ? `Tier #${i + 1} (BXGY, count >= ${r.count})`
-          : `Tier #${i + 1} (simple, count >= ${r.count})`,
+      label: `Tier #${i + 1} (qty ${r.count})`,
     }));
   }
   return [

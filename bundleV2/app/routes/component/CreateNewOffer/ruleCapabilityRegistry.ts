@@ -11,7 +11,7 @@ export type UnifiedRuleTemplateId =
   | "free_gift"
   | "bxgy";
 
-export type DifferentProductsRuleTemplateId = "simple" | "bxgy";
+export type DifferentProductsRuleTemplateId = "simple";
 
 export type CompleteBundleRuleTemplateId = "quantity-break-same" | "bxgy";
 
@@ -85,11 +85,9 @@ export function getUnifiedRuleCapability(
 const DIFFERENT_PRODUCTS_RULE_CAPABILITY = {
   discountTypeOptions: [
     { label: "Quantity Break", value: "simple" },
-    { label: "BXGY", value: "bxgy" },
   ] as RuleOption<DifferentProductsRuleTemplateId>[],
   addMenuItems: [
     { key: "simple", label: "Add Quantity Break Rule" },
-    { key: "bxgy", label: "Add BXGY Rule" },
   ] as AddMenuItem<DifferentProductsRuleTemplateId>[],
 };
 

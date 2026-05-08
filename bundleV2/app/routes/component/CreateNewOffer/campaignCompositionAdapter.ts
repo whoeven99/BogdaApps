@@ -36,7 +36,6 @@ export type CampaignBarItem = {
 };
 
 export type StepTwoModuleId =
-  | "product_bundle"
   | "complete_bundle"
   | "subscription"
   | "countdown"
@@ -138,13 +137,6 @@ export function getCampaignCompositionModules(
   options: { showCountdownBlock: boolean },
 ): CampaignModuleItem[] {
   return [
-    {
-      id: "product_bundle",
-      label: "Product bundle",
-      description: "Bundle-specific conditions and grouped product selection.",
-      enabled: draft.productBundleEnabled,
-      toggleable: true,
-    },
     {
       id: "complete_bundle",
       label: "Complete bundle",

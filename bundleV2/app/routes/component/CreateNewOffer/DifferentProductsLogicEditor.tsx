@@ -1,13 +1,11 @@
-import { Button, Checkbox, Dropdown, Input, Select } from "antd";
+import { Button, Checkbox, Input, Select } from "antd";
 import type { DifferentProductsDiscountRule } from "../../../utils/offerParsing";
 import type { DraftSelectedProduct } from "./campaignDraft";
 import {
-  OfferRuleAddPanel,
   OfferRuleCard,
   OfferRuleFooterRow,
   OfferRuleFormGrid,
-  OfferRuleNotice,
-  OfferRuleSummaryBox,
+  OfferRuleAddPanel,
   OfferRulesSection,
 } from "./OfferRulesShared";
 import type { RulePresentationPatch } from "./unifiedRulePresentation";
@@ -32,22 +30,37 @@ type Props = {
 
 function buildDefaultTier(
   selectedProductsData: DraftSelectedProduct[],
-  tierType: DifferentProductsDiscountRule["tierType"],
 ): DifferentProductsDiscountRule {
   const sharedProductIds = selectedProductsData.map((product) => String(product.id));
   return {
     count: 2,
-    discountPercent: tierType === "bxgy" ? 100 : 15,
+    discountPercent: 15,
     buyQuantity: 2,
-    getQuantity: tierType === "bxgy" ? 1 : 0,
+    getQuantity: 0,
     buyProductIds: sharedProductIds,
     getProductIds: [],
     maxUsesPerOrder: 1,
-    tierType,
+    tierType: "simple",
     title: "",
     subtitle: "",
     badge: "",
     isDefault: false,
+  };
+}
+
+function normalizeRule(
+  rule: DifferentProductsDiscountRule,
+): DifferentProductsDiscountRule {
+  const count = Math.max(1, Math.trunc(Number(rule.count) || 1));
+  return {
+    ...rule,
+    count,
+    discountPercent: Math.max(0, Math.min(100, Number(rule.discountPercent) || 0)),
+    buyQuantity: count,
+    getQuantity: 0,
+    getProductIds: [],
+    maxUsesPerOrder: 1,
+    tierType: "simple",
   };
 }
 
@@ -58,8 +71,7 @@ export default function DifferentProductsLogicEditor({
   updateRuleValues,
   updateRulePresentation,
 }: Props) {
-  const { discountTypeOptions, addMenuItems } =
-    getDifferentProductsRuleCapability();
+  getDifferentProductsRuleCapability();
   const productOptions = selectedProductsData.map((product) => ({
     label: product.title,
     value: String(product.id),
@@ -70,42 +82,39 @@ export default function DifferentProductsLogicEditor({
     patch: Partial<DifferentProductsDiscountRule>,
   ) => {
     const ruleId = getDifferentProductsUnifiedRuleId(index);
+    const currentRule = differentProductsDiscountRules[index];
+    const normalizedPatch = normalizeRule({
+      ...(currentRule || buildDefaultTier(selectedProductsData)),
+      ...patch,
+    });
     if (updateRuleValues) {
-      updateRuleValues(ruleId, patch);
+      updateRuleValues(ruleId, normalizedPatch);
       return;
     }
     setDifferentProductsDiscountRules((prev) =>
       prev.map((rule, ruleIndex) =>
-        ruleIndex === index ? { ...rule, ...patch } : rule,
+        ruleIndex === index ? normalizedPatch : rule,
       ),
     );
   };
-  const appendTier = (tierType: DifferentProductsRuleTemplateId) => {
+  const appendTier = (_tierType: DifferentProductsRuleTemplateId) => {
     setDifferentProductsDiscountRules((prev) => [
       ...prev,
-      buildDefaultTier(selectedProductsData, tierType),
+      buildDefaultTier(selectedProductsData),
     ]);
   };
 
   return (
-    <OfferRulesSection description="Configure cross-product rules across the shared pool. Each rule can be a quantity break or a BXGY reward flow.">
-      <OfferRuleNotice title="Cross-product bars" intent="info">
-        These bars are scoped across multiple products, not repeated tiers of a single product. Use buy and reward scopes to model mix-and-match offers more explicitly.
-      </OfferRuleNotice>
+    <OfferRulesSection description="Configure quantity-break tiers across different products. Each rule keeps the same card structure as standard quantity breaks, while letting you assign a dedicated eligible product pool.">
       {differentProductsDiscountRules.map((rule, index) => {
-        const buyProductsData = selectedProductsData.filter((product) =>
-          rule.buyProductIds.includes(String(product.id)),
+        const normalizedRule = normalizeRule(rule);
+        const eligibleProductsData = selectedProductsData.filter((product) =>
+          normalizedRule.buyProductIds.includes(String(product.id)),
         );
-        const getProductsData =
-          rule.getProductIds.length > 0
-            ? selectedProductsData.filter((product) =>
-                rule.getProductIds.includes(String(product.id)),
-              )
-            : buyProductsData;
 
         return (
           <OfferRuleCard
-            key={`${rule.tierType}-${index}`}
+            key={`${normalizedRule.tierType}-${index}`}
             index={index}
             disableRemove={differentProductsDiscountRules.length <= 1}
             onRemove={() => {
@@ -119,52 +128,16 @@ export default function DifferentProductsLogicEditor({
                 const ruleId = getDifferentProductsUnifiedRuleId(index);
                 return (
                   <>
-              <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-                <div>
-                  <div className="mb-1 text-[14px] font-medium text-[#1c1f23]">
-                    Bar Type
-                  </div>
-                  <Select
-                    size="large"
-                    className="w-full"
-                    value={rule.tierType}
-                    options={discountTypeOptions}
-                    onChange={(value) => {
-                      const tierType = value as DifferentProductsDiscountRule["tierType"];
-                      updateRule(index, {
-                        tierType,
-                        getQuantity: tierType === "bxgy" ? Math.max(1, rule.getQuantity || 1) : 0,
-                        getProductIds: tierType === "bxgy" ? rule.getProductIds : [],
-                        discountPercent:
-                          tierType === "bxgy" && rule.discountPercent === 0
-                            ? 100
-                            : rule.discountPercent,
-                      });
-                    }}
-                  />
-                </div>
-
-                <OfferRuleSummaryBox
-                  label="Rule Shape"
-                  value={rule.tierType === "bxgy" ? "Buy X, Get Y" : "Quantity threshold"}
-                  description={
-                    rule.tierType === "bxgy"
-                      ? "Uses dedicated buy and get quantities across the selected product pool."
-                      : "Unlocks a shared discount when customers reach the threshold."
-                  }
-                />
-              </div>
-
-              <div className="create-offer-discount-form-row create-offer-discount-form-row--inline">
-                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                  Trigger Quantity
+              <OfferRuleFormGrid columns={3}>
+                <label className="block text-[14px] font-medium text-[#1c1f23]">
+                  Item Quantity
                   <Input
                     size="large"
                     type="number"
                     min={1}
                     step={1}
                     className="mt-1"
-                    value={rule.count}
+                    value={normalizedRule.count}
                     onChange={(e) => {
                       const value = Math.max(
                         1,
@@ -174,8 +147,8 @@ export default function DifferentProductsLogicEditor({
                     }}
                   />
                 </label>
-                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                  {rule.tierType === "bxgy" ? "Reward Discount (%)" : "Discount (%)"}
+                <label className="block text-[14px] font-medium text-[#1c1f23]">
+                  Discount (%)
                   <Input
                     size="large"
                     type="number"
@@ -183,7 +156,7 @@ export default function DifferentProductsLogicEditor({
                     max={100}
                     step={1}
                     className="mt-1"
-                    value={rule.discountPercent}
+                    value={normalizedRule.discountPercent}
                     onChange={(e) => {
                       const value = Math.max(
                         0,
@@ -193,107 +166,18 @@ export default function DifferentProductsLogicEditor({
                     }}
                   />
                 </label>
-                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                  Max Uses Per Order
-                  <Input
+                <label className="block text-[14px] font-medium text-[#1c1f23]">
+                  Eligible Products
+                  <Select
+                    mode="multiple"
                     size="large"
-                    type="number"
-                    min={1}
-                    step={1}
                     className="mt-1"
-                    value={rule.maxUsesPerOrder}
-                    onChange={(e) => {
-                      const value = Math.max(
-                        1,
-                        Math.trunc(Number(e.target.value) || 1),
-                      );
-                      updateRule(index, { maxUsesPerOrder: value });
-                    }}
+                    value={normalizedRule.buyProductIds}
+                    options={productOptions}
+                    onChange={(values) => updateRule(index, { buyProductIds: values })}
+                    placeholder="Select the products included in this tier"
                   />
                 </label>
-              </div>
-
-              <OfferRuleFormGrid columns={rule.tierType === "bxgy" ? 4 : 2}>
-                <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                  Buy Quantity
-                  <Input
-                    size="large"
-                    type="number"
-                    min={1}
-                    step={1}
-                    className="mt-1"
-                    value={rule.buyQuantity}
-                    onChange={(e) => {
-                      const value = Math.max(
-                        1,
-                        Math.trunc(Number(e.target.value) || 1),
-                      );
-                      updateRule(index, { buyQuantity: value });
-                    }}
-                  />
-                </label>
-                {rule.tierType === "bxgy" ? (
-                  <>
-                    <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                      Get Quantity
-                      <Input
-                        size="large"
-                        type="number"
-                        min={1}
-                        step={1}
-                        className="mt-1"
-                        value={rule.getQuantity}
-                        onChange={(e) => {
-                          const value = Math.max(
-                            1,
-                            Math.trunc(Number(e.target.value) || 1),
-                          );
-                          updateRule(index, { getQuantity: value });
-                        }}
-                      />
-                    </label>
-                    <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                      Buy Products
-                      <Select
-                        mode="multiple"
-                        size="large"
-                        className="mt-1 w-full"
-                        value={rule.buyProductIds}
-                        options={productOptions}
-                        onChange={(values) =>
-                          updateRule(index, { buyProductIds: values })
-                        }
-                      />
-                    </label>
-                    <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                      Get Products
-                      <Select
-                        mode="multiple"
-                        size="large"
-                        className="mt-1 w-full"
-                        value={rule.getProductIds}
-                        options={productOptions}
-                        onChange={(values) =>
-                          updateRule(index, { getProductIds: values })
-                        }
-                        placeholder="Leave empty to reuse buy products"
-                        allowClear
-                      />
-                    </label>
-                  </>
-                ) : (
-                  <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                    Eligible Products
-                    <Select
-                      mode="multiple"
-                      size="large"
-                      className="mt-1 w-full"
-                      value={rule.buyProductIds}
-                      options={productOptions}
-                      onChange={(values) => updateRule(index, { buyProductIds: values })}
-                    />
-                  </label>
-                )}
               </OfferRuleFormGrid>
 
               <OfferRuleFormGrid columns={3}>
@@ -302,7 +186,7 @@ export default function DifferentProductsLogicEditor({
                   <Input
                     size="large"
                     className="mt-1"
-                    value={rule.title || ""}
+                    value={normalizedRule.title || ""}
                     placeholder="e.g. Mix & Match Trio"
                     onChange={(e) => {
                       if (updateRulePresentation) {
@@ -318,8 +202,8 @@ export default function DifferentProductsLogicEditor({
                   <Input
                     size="large"
                     className="mt-1"
-                    value={rule.subtitle || ""}
-                    placeholder="e.g. Buy any 3 and save 15%"
+                    value={normalizedRule.subtitle || ""}
+                    placeholder="e.g. Pick any 3 from this product group and save 15%"
                     onChange={(e) => {
                       if (updateRulePresentation) {
                         updateRulePresentation(ruleId, { subtitle: e.target.value });
@@ -334,8 +218,8 @@ export default function DifferentProductsLogicEditor({
                   <Input
                     size="large"
                     className="mt-1"
-                    value={rule.badge || ""}
-                    placeholder="e.g. Best seller mix"
+                    value={normalizedRule.badge || ""}
+                    placeholder="e.g. Recommended"
                     onChange={(e) => {
                       if (updateRulePresentation) {
                         updateRulePresentation(ruleId, { badge: e.target.value });
@@ -347,60 +231,49 @@ export default function DifferentProductsLogicEditor({
                 </label>
               </OfferRuleFormGrid>
 
-              {(buyProductsData.length > 0 || getProductsData.length > 0) && (
-                <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <div>
-                    <div className="mb-1 text-[12px] font-medium text-[#5c6166]">
-                      Buy Scope Preview
+              {eligibleProductsData.length > 0 ? (
+                <div className="mt-3 rounded-[10px] border border-[#e3e8ed] bg-[#fafbfb] p-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <div className="text-[12px] font-medium text-[#5c6166]">
+                      Eligible product pool
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      {buyProductsData.slice(0, 4).map((product) => (
-                        <div
-                          key={`buy-${product.id}`}
-                          className="flex items-center gap-2 rounded-[8px] border border-[#e5e7eb] bg-white px-2 py-1"
-                        >
-                          <img
-                            src={product.image}
-                            alt={product.title}
-                            className="h-8 w-8 rounded object-cover"
-                          />
-                          <span className="max-w-[120px] truncate text-[12px] text-[#1c1f23]">
-                            {product.title}
-                          </span>
-                        </div>
-                      ))}
+                    <div className="text-[12px] text-[#5c6166]">
+                      {eligibleProductsData.length} product
+                      {eligibleProductsData.length === 1 ? "" : "s"}
                     </div>
                   </div>
-                  {rule.tierType === "bxgy" ? (
-                    <div>
-                      <div className="mb-1 text-[12px] font-medium text-[#5c6166]">
-                        Reward Scope Preview
+                  <div className="flex flex-wrap gap-2">
+                    {eligibleProductsData.slice(0, 4).map((product) => (
+                      <div
+                        key={`pool-${product.id}`}
+                        className="flex items-center gap-2 rounded-[8px] border border-[#e5e7eb] bg-white px-2 py-1"
+                      >
+                        <img
+                          src={product.image}
+                          alt={product.title}
+                          className="h-8 w-8 rounded object-cover"
+                        />
+                        <span className="max-w-[120px] truncate text-[12px] text-[#1c1f23]">
+                          {product.title}
+                        </span>
                       </div>
-                      <div className="flex flex-wrap gap-2">
-                        {getProductsData.slice(0, 4).map((product) => (
-                          <div
-                            key={`get-${product.id}`}
-                            className="flex items-center gap-2 rounded-[8px] border border-[#e5e7eb] bg-white px-2 py-1"
-                          >
-                            <img
-                              src={product.image}
-                              alt={product.title}
-                              className="h-8 w-8 rounded object-cover"
-                            />
-                            <span className="max-w-[120px] truncate text-[12px] text-[#1c1f23]">
-                              {product.title}
-                            </span>
-                          </div>
-                        ))}
+                    ))}
+                    {eligibleProductsData.length > 4 ? (
+                      <div className="flex items-center rounded-[8px] border border-dashed border-[#dfe3e8] bg-white px-2 py-1 text-[12px] text-[#5c6166]">
+                        +{eligibleProductsData.length - 4} more
                       </div>
-                    </div>
-                  ) : null}
+                    ) : null}
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-3 rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[13px] text-[#5c6166]">
+                  Select the products that should participate in this tier.
                 </div>
               )}
 
               <OfferRuleFooterRow>
                 <Checkbox
-                  checked={!!rule.isDefault}
+                  checked={!!normalizedRule.isDefault}
                   onChange={(e) => {
                     const checked = e.target.checked;
                     if (updateRulePresentation) {
@@ -425,18 +298,10 @@ export default function DifferentProductsLogicEditor({
         );
       })}
 
-      <OfferRuleAddPanel description="Mix quantity-break and BXGY tiers inside the same shared product pool.">
-        <Dropdown
-          trigger={["click"]}
-          menu={{
-            items: addMenuItems,
-            onClick: ({ key }) => {
-              appendTier(key as DifferentProductsRuleTemplateId);
-            },
-          }}
-        >
-          <Button type="dashed">+ Add rule</Button>
-        </Dropdown>
+      <OfferRuleAddPanel description="Add another quantity-break tier and assign a product pool for that combination.">
+        <Button type="dashed" onClick={() => appendTier("simple")}>
+          + Add rule
+        </Button>
       </OfferRuleAddPanel>
     </OfferRulesSection>
   );

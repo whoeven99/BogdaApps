@@ -144,10 +144,10 @@ export const OFFER_TYPE_RULE_CAPABILITIES: OfferTypeRuleCapability[] = [
   },
   {
     offerType: "quantity-breaks-different",
-    primaryRuleTypes: ["quantity_break", "bxgy"],
+    primaryRuleTypes: ["quantity_break"],
     scopeModel: "shared_product_pool",
     publishSupport: "supported",
-    notes: "Uses a shared product pool and mixed rule list.",
+    notes: "Uses quantity-break tiers with a per-tier shared product pool.",
   },
   {
     offerType: "bxgy",

@@ -757,65 +757,6 @@ function PlaceholderModuleDetail({
   );
 }
 
-function ProductBundleModuleDetail({
-  draft,
-  actions,
-}: {
-  draft: CampaignDraft;
-  actions: CampaignDraftActions;
-}) {
-  return (
-    <DetailSection title="Product bundle">
-      <CompactActionRow
-        title="Bundle products"
-        meta={`${draft.productBundleProductsData.length} selected for this module`}
-        actionLabel={
-          draft.productBundleProductsData.length ? "Edit bundle products" : "Select bundle products"
-        }
-        onAction={() => void actions.handleSelectProducts("product_bundle")}
-      />
-
-      <FieldGrid>
-        <label className="block text-[13px] font-medium text-[#1c1f23]">
-          Module title
-          <Input
-            size="large"
-            className="mt-1"
-            value={draft.productBundleTitle}
-            onChange={(e) => actions.setProductBundleTitle(e.target.value)}
-          />
-        </label>
-        <label className="block text-[13px] font-medium text-[#1c1f23]">
-          Minimum bundle quantity
-          <Input
-            size="large"
-            type="number"
-            min={1}
-            className="mt-1"
-            value={draft.productBundleMinQuantity}
-            onChange={(e) =>
-              actions.setProductBundleMinQuantity(parsePositiveInt(e.target.value, 2))
-            }
-          />
-        </label>
-      </FieldGrid>
-
-      <div className="mt-4">
-        <label className="block text-[13px] font-medium text-[#1c1f23]">
-          Module subtitle
-          <Input
-            size="large"
-            className="mt-1"
-            value={draft.productBundleSubtitle}
-            onChange={(e) => actions.setProductBundleSubtitle(e.target.value)}
-          />
-        </label>
-      </div>
-
-    </DetailSection>
-  );
-}
-
 function CompleteBundleModuleDetail({
   draft,
   actions,
@@ -1151,8 +1092,6 @@ export default function StepTwoCompositionBuilder({
             renderCompleteBundleProductPricingCard={renderCompleteBundleProductPricingCard}
           />
         );
-      case "product_bundle":
-        return <ProductBundleModuleDetail draft={draft} actions={actions} />;
       case "checkbox_upsells":
         return (
           <DetailSection title="Checkbox upsells">
@@ -1422,16 +1361,6 @@ export default function StepTwoCompositionBuilder({
                               }
                               if (module.id === "countdown") {
                                 setShowCountdownBlock(Boolean(checked));
-                              }
-                              if (module.id === "product_bundle") {
-                                actions.setProductBundleEnabled(Boolean(checked));
-                                if (
-                                  checked &&
-                                  draft.productBundleProductIds.length === 0 &&
-                                  draft.selectedProductsData.length > 0
-                                ) {
-                                  void actions.handleSelectProducts("product_bundle");
-                                }
                               }
                               if (module.id === "complete_bundle" && !checked) {
                                 actions.clearCompleteBundleBars();

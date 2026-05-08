@@ -106,21 +106,27 @@ function DifferentProductsPreview() {
   return (
     <div className="flex min-h-[260px] flex-col rounded-[16px] border border-[#dfe3e8] bg-[#f6f6f7] p-[14px]">
       <div className="space-y-[8px]">
+        <PreviewRow title="Single" subtitle="Standard price" price="EUR65.00" />
+        <div className="relative">
+          <div className="absolute right-[10px] top-[-10px] rounded-full bg-[#f0f9f6] px-[10px] py-[4px] text-[10px] font-semibold uppercase tracking-[0.05em] text-[#108043]">
+            Recommended
+          </div>
+          <PreviewRow
+            title="Any 2 items"
+            subtitle="Choose from the eligible product pool"
+            price="EUR110.50"
+            badge="Save EUR19.50"
+            selected
+          />
+        </div>
         <PreviewRow
-          title="Mix any 2 items"
-          subtitle="Shared pool discount"
-          price="15% OFF"
-          badge="Recommended"
-          selected
-        />
-        <PreviewRow
-          title="Buy 2, get 1 mix-and-match"
-          subtitle="Reward comes from the same pool"
-          price="1 FREE"
-          badge="BXGY"
+          title="Any 3 items"
+          subtitle="A second tier can target another product group"
+          price="EUR156.00"
+          badge="Save EUR39.00"
         />
         <div className="rounded-[10px] bg-white px-[12px] py-[9px] text-[12px] text-[#5c6166] shadow-[inset_0_0_0_1px_rgba(17,24,39,0.08)]">
-          Customers can mix different products inside one shared bundle pool.
+          Each tier can choose its own eligible products while keeping the same quantity-break card style.
         </div>
       </div>
     </div>

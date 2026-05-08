@@ -2020,22 +2020,6 @@ export function CreateNewOffer({
       addScopeProducts(subscriptionProductIds);
     }
 
-    if (productBundleEnabled && productBundleProductIds.length > 0) {
-      logicBlocks.push({
-        id: "logic-product-bundle",
-        type: "product-bundle",
-        config: {
-          enabled: true,
-          title: productBundleTitle.trim() || "Build your bundle",
-          subtitle:
-            productBundleSubtitle.trim() || "Choose products to unlock the bundle offer",
-          minQuantity: Math.max(1, productBundleMinQuantity),
-          productIds: productBundleProductIds,
-        },
-      });
-      addScopeProducts(productBundleProductIds);
-    }
-
     return {
       version: 1,
       scope: {
@@ -2189,26 +2173,6 @@ export function CreateNewOffer({
     selectedProductsData.length > 0
       ? "Subscription bar will only be shown in products that are eligible for subscription. You can select those products in your subscription app."
       : "After selecting products, the app checks whether they have selling plans and decides whether to show a solid or dashed subscription bar.";
-  const productBundlePreview = useMemo(
-    () => ({
-      enabled: productBundleEnabled,
-      title: productBundleTitle.trim() || "Build your bundle",
-      subtitle:
-        productBundleSubtitle.trim() || "Choose products to unlock the bundle offer",
-      minQuantity: Math.max(1, productBundleMinQuantity),
-      products: productBundleProductsData.map((product) => ({
-        image: product.image,
-        name: product.title,
-      })),
-    }),
-    [
-      productBundleEnabled,
-      productBundleTitle,
-      productBundleSubtitle,
-      productBundleMinQuantity,
-      productBundleProductsData,
-    ],
-  );
   const checkboxUpsellPreview = useMemo(
     () => ({
       enabled: checkboxUpsellsEnabled,
@@ -2399,9 +2363,6 @@ export function CreateNewOffer({
   );
   const activeDisplayRules = orderedCompositionRulesSnapshot;
   const getModuleBlockingMessage = () => {
-    if (productBundleEnabled && productBundleProductIds.length === 0) {
-      return "Product bundle module requires at least one selected product.";
-    }
     if (
       completeBundleBars.length > 0 &&
       completeBundleBars.every((bar) => bar.products.length === 0)
@@ -3296,7 +3257,6 @@ export function CreateNewOffer({
                     showSubscriptionExplanation={shouldShowSubscriptionExplanation}
                     subscriptionExplanationTitle={subscriptionExplanationTitle}
                     subscriptionExplanationBody={subscriptionExplanationBody}
-                    productBundlePreview={productBundlePreview}
                     checkboxUpsellPreview={checkboxUpsellPreview}
                     stickyAddToCartPreview={stickyAddToCartPreview}
                   />
@@ -3365,7 +3325,6 @@ export function CreateNewOffer({
                       subscriptionTitle={subscriptionTitle}
                       subscriptionSubtitle={subscriptionSubtitle}
                       showSubscriptionExplanation={shouldShowSubscriptionExplanation}
-                      productBundlePreview={productBundlePreview}
                       checkboxUpsellPreview={checkboxUpsellPreview}
                       stickyAddToCartPreview={stickyAddToCartPreview}
                       subscriptionExplanationTitle={subscriptionExplanationTitle}
@@ -3417,7 +3376,6 @@ export function CreateNewOffer({
                     subscriptionPreviewStyle={subscriptionPreviewStyle}
                     subscriptionTitle={subscriptionTitle}
                     subscriptionSubtitle={subscriptionSubtitle}
-                    productBundlePreview={productBundlePreview}
                     checkboxUpsellPreview={checkboxUpsellPreview}
                     stickyAddToCartPreview={stickyAddToCartPreview}
                     showSubscriptionExplanation={shouldShowSubscriptionExplanation}
