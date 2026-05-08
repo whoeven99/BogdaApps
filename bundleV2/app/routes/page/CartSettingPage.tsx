@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useFetcher } from "react-router";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, X } from "lucide-react";
 import { Button, Form, Input, InputNumber, Select, Switch, message } from "antd";
 import "../../styles/tailwind.css";
 
@@ -50,7 +50,7 @@ const DEFAULT_SETTINGS: CartSettings = {
   version: 1,
   enabled: true,
   ui: {
-    accentColor: "#008060",
+    accentColor: "#7d5ce6",
     surfaceColor: "#ffffff",
     borderColor: "#dfe3e8",
     radiusPx: 10,
@@ -93,6 +93,22 @@ function safeParseJson(value: string): { ok: true; data: unknown } | { ok: false
   }
 }
 
+function formatSecondsAsMMSS(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+  const mm = String(Math.floor(s / 60)).padStart(2, "0");
+  const ss = String(s % 60).padStart(2, "0");
+  return `${mm}:${ss}`;
+}
+
+function formatMinorMoney(minor: number, currency: string) {
+  const amount = (Number(minor) || 0) / 100;
+  try {
+    return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(amount);
+  } catch {
+    return `${amount.toFixed(2)} ${currency}`;
+  }
+}
+
 export function CartSettingPage({
   shop,
   apiKey,
@@ -106,6 +122,7 @@ export function CartSettingPage({
   const saveFetcher = useFetcher<{ ok: boolean; error?: string }>();
   const [form] = Form.useForm<CartSettings>();
   const [rawJson, setRawJson] = useState<string>("");
+  const [showJsonEditor, setShowJsonEditor] = useState(false);
 
   const parsedRawJson = useMemo(() => {
     if (!rawJson.trim()) return { ok: true as const, data: null as unknown };
@@ -174,6 +191,14 @@ export function CartSettingPage({
     }
     saveFetcher.submit({ intent: "save-cart-settings", settingsJson: next }, { method: "post" });
   };
+
+  const previewSettings = useMemo(() => {
+    const parsed = rawJson.trim() ? safeParseJson(rawJson) : { ok: true as const, data: null as unknown };
+    if (parsed.ok && parsed.data && typeof parsed.data === "object") {
+      return parsed.data as Partial<CartSettings>;
+    }
+    return form.getFieldsValue() as CartSettings;
+  }, [rawJson, form]);
 
   return (
     <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px]">
@@ -301,23 +326,147 @@ export function CartSettingPage({
         <div className="bg-white rounded-[12px] border border-[#e3e8ed] shadow-sm p-[16px]">
           <div className="flex items-center justify-between gap-[8px] mb-[8px]">
             <div className="font-sans font-semibold text-[16px] text-[#1c1f23]">
-              Cart Settings JSON（Theme 端读取）
+              Cart Review
             </div>
-            <div className="text-[12px] text-[#6d7175]">
-              保存后写入 shop metafield：<span className="font-mono">ciwi_bundle/ciwi-cart-settings</span>
+            <button
+              type="button"
+              onClick={() => setShowJsonEditor((v) => !v)}
+              className="text-[12px] text-[#5c6166] hover:text-[#1c1f23] border border-[#e5e7eb] rounded-[8px] px-[10px] py-[6px] bg-white"
+            >
+              {showJsonEditor ? "隐藏 JSON" : "显示 JSON"}
+            </button>
+          </div>
+          <div
+            className="rounded-[16px] border border-[#e5e7eb] overflow-hidden bg-white"
+            style={{
+              ["--accent" as any]: String(previewSettings?.ui?.accentColor || "#7d5ce6"),
+            }}
+          >
+            <div className="bg-white px-[16px] py-[12px] border-b border-[#eef0f2] flex items-center justify-between">
+              <div className="font-sans font-semibold text-[16px] text-[#111827]">
+                购物车 <span className="text-[#6b7280] font-normal">• 2</span>
+              </div>
+              <button
+                type="button"
+                className="w-[32px] h-[32px] rounded-full flex items-center justify-center hover:bg-black/5"
+                aria-label="Close"
+              >
+                <X size={18} className="text-[#111827]" />
+              </button>
+            </div>
+
+            {previewSettings?.modules?.timer?.enabled !== false ? (
+              <div
+                className="px-[16px] py-[10px] text-center text-[13px]"
+                style={{
+                  background: "rgba(125, 92, 230, 0.12)",
+                  color: String(previewSettings?.ui?.accentColor || "#7d5ce6"),
+                }}
+              >
+                Your cart will expire in{" "}
+                <span className="font-semibold">
+                  {formatSecondsAsMMSS(previewSettings?.modules?.timer?.durationSeconds ?? 600)}
+                </span>
+              </div>
+            ) : null}
+
+            {previewSettings?.modules?.promotions?.enabled !== false ? (
+              <div className="px-[16px] pt-[12px]">
+                <div className="text-center text-[13px] font-semibold text-[#111827]">
+                  Free shipping unlocked!
+                </div>
+                <div className="mt-[10px] h-[10px] rounded-full bg-[#e5e7eb] overflow-hidden">
+                  <div
+                    className="h-full rounded-full"
+                    style={{
+                      width: "78%",
+                      background: String(previewSettings?.ui?.accentColor || "#7d5ce6"),
+                      transition: "width 180ms ease",
+                    }}
+                  />
+                </div>
+              </div>
+            ) : null}
+
+            <div className="px-[16px] py-[14px] space-y-[16px]">
+              {[
+                {
+                  title: "Casual Pink Mountain Landscape Printed White Pullover",
+                  priceMinor: 18000,
+                  currency: "EUR",
+                },
+                { title: "Bosch Siemens Cleaning Tablets", priceMinor: 999, currency: "EUR" },
+              ].map((item) => (
+                <div key={item.title} className="flex gap-[12px]">
+                  <div className="w-[64px] h-[64px] rounded-[10px] bg-[#f3f4f6] flex-shrink-0" />
+                  <div className="flex-1">
+                    <div className="text-[13px] font-semibold text-[#111827] leading-snug">
+                      {item.title}
+                    </div>
+                    <div className="mt-[6px] text-[13px] font-semibold text-[#111827]">
+                      {formatMinorMoney(item.priceMinor, item.currency)}
+                    </div>
+                    <div className="mt-[10px] flex items-center gap-[8px]">
+                      <div className="inline-flex items-center rounded-[10px] border border-[#e5e7eb] overflow-hidden">
+                        <button type="button" className="w-[34px] h-[32px] text-[#111827] hover:bg-black/5">
+                          −
+                        </button>
+                        <div className="w-[36px] h-[32px] flex items-center justify-center text-[13px]">
+                          1
+                        </div>
+                        <button type="button" className="w-[34px] h-[32px] text-[#111827] hover:bg-black/5">
+                          +
+                        </button>
+                      </div>
+                      <button type="button" className="text-[#6b7280] hover:text-[#111827] text-[13px]">
+                        删除
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="border-t border-[#eef0f2] px-[16px] py-[14px]">
+              <div className="flex items-center justify-between text-[13px] text-[#111827]">
+                <span className="text-[#6b7280]">Subtotal</span>
+                <span className="font-semibold">{formatMinorMoney(18999, "EUR")}</span>
+              </div>
+              <button
+                type="button"
+                className="mt-[12px] w-full h-[44px] rounded-[12px] text-white font-semibold text-[14px]"
+                style={{
+                  background: String(previewSettings?.ui?.accentColor || "#7d5ce6"),
+                }}
+              >
+                Checkout • {formatMinorMoney(18999, "EUR")}
+              </button>
+              <div className="mt-[10px] text-center text-[13px] text-[#111827] underline">
+                or continue shopping
+              </div>
             </div>
           </div>
-          <div className="text-[12px] text-[#6d7175] mb-[8px]">
-            这里是最终写入的配置。Theme App Extension 会在 storefront 端读取并注入到 Cart Drawer / Cart Page。
-          </div>
-          <textarea
-            className="w-full min-h-[520px] font-mono text-[12px] border border-[#dfe3e8] rounded-[8px] p-[12px] outline-none focus:border-[#008060]"
-            value={rawJson}
-            onChange={(e) => setRawJson(e.target.value)}
-          />
-          {!parsedRawJson.ok ? (
-            <div className="mt-[8px] text-[12px] text-[#d72c0d]">
-              JSON 校验失败：{parsedRawJson.error}
+
+          {showJsonEditor ? (
+            <div className="mt-[14px]">
+              <div className="flex items-center justify-between gap-[8px] mb-[8px]">
+                <div className="text-[12px] text-[#6d7175]">
+                  保存后写入：<span className="font-mono">ciwi_bundle/ciwi-cart-settings</span>
+                </div>
+                <Button size="small" onClick={() => void onApplyFormToJson()}>
+                  从表单同步
+                </Button>
+              </div>
+              <textarea
+                className="w-full min-h-[320px] font-mono text-[12px] border border-[#dfe3e8] rounded-[8px] p-[12px] outline-none focus:border-[#7d5ce6]"
+                value={rawJson}
+                onChange={(e) => setRawJson(e.target.value)}
+              />
+              {!parsedRawJson.ok ? (
+                <div className="mt-[8px] text-[12px] text-[#d72c0d]">
+                  JSON 校验失败：{parsedRawJson.error}
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>
