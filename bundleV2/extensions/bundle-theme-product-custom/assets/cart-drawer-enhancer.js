@@ -93,13 +93,31 @@
   }
 
   class AjaxCartApi {
+    constructor() {
+      this.root =
+        (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || "/";
+      if (typeof this.root !== "string" || !this.root.trim()) this.root = "/";
+      if (!this.root.startsWith("/")) this.root = `/${this.root}`;
+      if (!this.root.endsWith("/")) this.root = `${this.root}/`;
+    }
+    url(path) {
+      const p = String(path || "").replace(/^\/+/, "");
+      return `${this.root}${p}`;
+    }
     async getCart() {
-      const res = await fetch("/cart.js", { credentials: "same-origin" });
+      const res = await fetch(this.url("cart.js"), { credentials: "same-origin" });
       if (!res.ok) throw new Error(`GET /cart.js failed: ${res.status}`);
+      const ct = String(res.headers.get("content-type") || "");
+      if (!ct.includes("application/json")) {
+        const text = await res.text();
+        throw new Error(
+          `GET cart.js expected JSON but got ${ct || "(no content-type)"}: ${text.slice(0, 80)}`,
+        );
+      }
       return /** @type {ShopifyCart} */ (await res.json());
     }
     async add(body) {
-      const res = await fetch("/cart/add.js", {
+      const res = await fetch(this.url("cart/add.js"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
@@ -108,7 +126,7 @@
       return res;
     }
     async change(body) {
-      const res = await fetch("/cart/change.js", {
+      const res = await fetch(this.url("cart/change.js"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
@@ -117,7 +135,7 @@
       return res;
     }
     async update(body) {
-      const res = await fetch("/cart/update.js", {
+      const res = await fetch(this.url("cart/update.js"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
@@ -228,6 +246,15 @@
     }
   }
 
+  function looksLikeCartContainer(el) {
+    if (!el || !el.querySelector) return false;
+    if (el.querySelector('form[action*="/cart"]')) return true;
+    if (el.querySelector('[name="updates[]"], [name^="updates["]')) return true;
+    if (el.querySelector('a[href*="/cart"], button[name="checkout"]')) return true;
+    if (el.querySelector("[data-cart-items], .cart__items, .cart-items")) return true;
+    return false;
+  }
+
   function findMountPoints() {
     /** @type {HTMLElement[]} */
     const mounts = [];
@@ -244,9 +271,20 @@
       document.querySelector("#CartDrawer"),
       document.querySelector(".cart-drawer"),
       document.querySelector("[data-cart-drawer]"),
+      document.querySelector('[role="dialog"][open]'),
+      document.querySelector("dialog[open]"),
     ].filter(Boolean);
     for (const el of drawerCandidates) {
-      mounts.push(/** @type {HTMLElement} */ (el));
+      const node = /** @type {HTMLElement} */ (el);
+      if (looksLikeCartContainer(node)) mounts.push(node);
+    }
+
+    const openDialogs = Array.from(
+      document.querySelectorAll('dialog[open], [role="dialog"][open]'),
+    );
+    for (const d of openDialogs) {
+      const node = /** @type {HTMLElement} */ (d);
+      if (looksLikeCartContainer(node)) mounts.push(node);
     }
 
     // De-dup
