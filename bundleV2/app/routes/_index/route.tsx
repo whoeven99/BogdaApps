@@ -20,7 +20,7 @@ import { DashboardPage } from "../page/DashboardPage";
 import { AllOffersPage } from "../page/AllOffersPage";
 import { AnalyticsPage } from "../page/AnalyticsPage";
 import { PricingPage } from "../page/PricingPage";
-import { CartSettingPage } from "../page/CartSettingPage";
+import { CartSettingPage } from "../page/CartSettingPage.js";
 import { CreateNewOffer } from "../component/CreateNewOffer/CreateNewOffer";
 import prisma from "../../db.server";
 import { randomBytes } from "crypto";

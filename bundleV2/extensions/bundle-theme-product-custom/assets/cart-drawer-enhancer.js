@@ -1,6 +1,11 @@
 (() => {
   "use strict";
 
+  const log = (...args) => {
+    // eslint-disable-next-line no-console
+    console.log("[ciwi-cart]", ...args);
+  };
+
   /** @typedef {{ thresholdMinor: number, label: string }} PromotionTier */
   /** @typedef {"hide" | "restart" | "clearCart"} TimerExpireAction */
   /**
@@ -258,25 +263,31 @@
   function findMountPoints() {
     /** @type {HTMLElement[]} */
     const mounts = [];
+    /** @type {string[]} */
+    const sources = [];
 
     // Cart page common anchors
     const cartForm = document.querySelector('form[action="/cart"]');
     if (cartForm && cartForm.parentElement) {
       mounts.push(/** @type {HTMLElement} */ (cartForm.parentElement));
+      sources.push("cartFormParent");
     }
 
     // Common drawer roots across themes
     const drawerCandidates = [
-      document.querySelector("cart-drawer"),
-      document.querySelector("#CartDrawer"),
-      document.querySelector(".cart-drawer"),
-      document.querySelector("[data-cart-drawer]"),
-      document.querySelector('[role="dialog"][open]'),
-      document.querySelector("dialog[open]"),
-    ].filter(Boolean);
+      { label: "cart-drawer", node: document.querySelector("cart-drawer") },
+      { label: "#CartDrawer", node: document.querySelector("#CartDrawer") },
+      { label: ".cart-drawer", node: document.querySelector(".cart-drawer") },
+      { label: "[data-cart-drawer]", node: document.querySelector("[data-cart-drawer]") },
+      { label: 'dialog[open][role="dialog"]', node: document.querySelector('[role="dialog"][open]') },
+      { label: "dialog[open]", node: document.querySelector("dialog[open]") },
+    ].filter((item) => item.node);
     for (const el of drawerCandidates) {
-      const node = /** @type {HTMLElement} */ (el);
-      if (looksLikeCartContainer(node)) mounts.push(node);
+      const node = /** @type {HTMLElement} */ (el.node);
+      if (looksLikeCartContainer(node)) {
+        mounts.push(node);
+        sources.push(el.label);
+      }
     }
 
     const openDialogs = Array.from(
@@ -284,11 +295,15 @@
     );
     for (const d of openDialogs) {
       const node = /** @type {HTMLElement} */ (d);
-      if (looksLikeCartContainer(node)) mounts.push(node);
+      if (looksLikeCartContainer(node)) {
+        mounts.push(node);
+        sources.push("dialog[open]");
+      }
     }
 
     // De-dup
-    return Array.from(new Set(mounts)).filter((el) => el && el.isConnected);
+    const uniqueMounts = Array.from(new Set(mounts)).filter((el) => el && el.isConnected);
+    return { mounts: uniqueMounts, sources: Array.from(new Set(sources)) };
   }
 
   function applyCssVars(root, ui) {
@@ -302,6 +317,7 @@
     root.style.setProperty("--ciwi-cart-surface", surface);
     root.style.setProperty("--ciwi-cart-border", border);
     root.style.setProperty("--ciwi-cart-radius", `${radius}px`);
+    log("已应用样式变量", { accent, surface, border, radius });
   }
 
   function buildEnhancerElement() {
@@ -332,7 +348,8 @@
     let enhancers = [];
 
     const mountOnce = () => {
-      const mounts = findMountPoints();
+      const { mounts, sources } = findMountPoints();
+      log("尝试挂载 Cart Enhancer", { mounts: mounts.length, sources });
       if (mounts.length === 0) return false;
 
       const mounted = [];
@@ -344,8 +361,12 @@
         host.prepend(el);
         mounted.push(el);
       }
-      if (mounted.length === 0) return false;
+      if (mounted.length === 0) {
+        log("找到挂载点，但已经挂载过");
+        return false;
+      }
       enhancers = mounted;
+      log("挂载完成", { count: enhancers.length });
       return true;
     };
 
@@ -371,6 +392,13 @@
 
     const timerEnabled = settings?.modules?.timer?.enabled !== false;
     const promoEnabled = settings?.modules?.promotions?.enabled !== false;
+    log("模块开关状态", {
+      timerEnabled,
+      promoEnabled,
+      promotionsTierCount: Array.isArray(settings?.modules?.promotions?.tiers)
+        ? settings.modules.promotions.tiers.length
+        : 0,
+    });
     const tiers = Array.isArray(settings?.modules?.promotions?.tiers)
       ? settings.modules.promotions.tiers
           .map((t) => ({
@@ -472,25 +500,50 @@
 
   function main() {
     const configEl = document.getElementById("ciwi-cart-enhancer-config");
-    if (!configEl) return;
+    if (!configEl) {
+      log("未找到配置节点，可能未启用 App Embed");
+      return;
+    }
     const raw = configEl.textContent || "";
     const config = safeJsonParse(raw, null);
-    if (!config || typeof config !== "object") return;
+    if (!config || typeof config !== "object") {
+      log("配置 JSON 解析失败", { raw: raw.slice(0, 120) });
+      return;
+    }
 
     /** @type {CartSettings} */
-    const settings = config.settings && typeof config.settings === "object" ? config.settings : {};
+    let settings = config.settings && typeof config.settings === "object" ? config.settings : {};
+    if (typeof config.settings === "string") {
+      const parsed = safeJsonParse(config.settings, null);
+      if (parsed && typeof parsed === "object") {
+        settings = parsed;
+        log("settings 为字符串，已解析成对象");
+      } else {
+        log("settings 为字符串，但解析失败", { sample: String(config.settings).slice(0, 120) });
+      }
+    }
     const enabled = settings.enabled !== false;
-    if (!enabled) return;
+    log("初始化配置", {
+      settingsType: typeof config.settings,
+      enabled,
+      shopName: config.shopName,
+    });
+    if (!enabled) {
+      log("购物车增强已关闭（settings.enabled=false）");
+      return;
+    }
 
     const currencyCode =
       String((config && config.currencyCode) || "") ||
       String((window.Shopify && window.Shopify.currency && window.Shopify.currency.active) || "") ||
       "USD";
+    log("货币信息", { currencyCode });
 
     const bus = new EventBus();
     const api = new AjaxCartApi();
     const debounceMs = clampNumber(settings?.ajax?.debounceMs, 0, 2000, 120);
     const store = new CartStore(api, bus, debounceMs);
+    log("初始化 AjaxCartApi", { debounceMs, root: api.root });
     patchFetchForCart(store);
 
     const timerKey = settings?.storage?.timerKey || "ciwi_cart_timer_v1";
