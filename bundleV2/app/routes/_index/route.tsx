@@ -527,6 +527,10 @@ export type StoreProductItem = {
   handle: string;
   price: string;
   image: string;
+  collections: Array<{
+    id: string;
+    title: string;
+  }>;
   variants: Array<{
     id: string;
     title: string;
@@ -541,6 +545,14 @@ type AdminProductNode = {
   title?: string;
   handle?: string;
   featuredImage?: { url?: string | null } | null;
+  collections?: {
+    edges?: Array<{
+      node?: {
+        id?: string | null;
+        title?: string | null;
+      } | null;
+    }>;
+  } | null;
   variants?: {
     edges?: Array<{
       node?: {
@@ -601,6 +613,14 @@ function mapAdminProductNodeToStoreProductItem(
     handle: String(node.handle || ""),
     price: priceRaw ? `$${priceRaw}` : "$0.00",
     image: image || "https://via.placeholder.com/60",
+    collections:
+      node.collections?.edges
+        ?.map((edge) => edge?.node)
+        .filter((collection): collection is NonNullable<typeof collection> => Boolean(collection?.id))
+        .map((collection) => ({
+          id: String(collection.id || ""),
+          title: String(collection.title || ""),
+        })) || [],
     variants:
       node.variants?.edges
         ?.map((edgeV) => edgeV?.node)
@@ -678,67 +698,89 @@ async function fetchStoreProducts(
   admin: any,
   includeProductIds: string[] = [],
 ): Promise<StoreProductItem[]> {
-  let productsResponse;
-  let productsJson;
-  try {
-    productsResponse = await admin.graphql(
-      `#graphql
-        query AppProducts {
-          products(first: 100) {
-            edges {
-              node {
-                id
-                title
-                handle
-                options {
-                  name
-                }
-                featuredImage {
-                  url
-                }
-                variants(first: 50) {
-                  edges {
-                    node {
-                      id
-                      title
-                      price
-                      selectedOptions {
-                        name
-                        value
+  const productMap = new Map<string, StoreProductItem>();
+  let cursor: string | null = null;
+  let hasNextPage = true;
+  let pageCount = 0;
+
+  while (hasNextPage && pageCount < 10) {
+    let productsJson: any;
+    try {
+      const productsResponse: any = await admin.graphql(
+        `#graphql
+          query AppProducts($after: String) {
+            products(first: 100, after: $after) {
+              pageInfo {
+                hasNextPage
+                endCursor
+              }
+              edges {
+                node {
+                  id
+                  title
+                  handle
+                  options {
+                    name
+                  }
+                  featuredImage {
+                    url
+                  }
+                  collections(first: 20) {
+                    edges {
+                      node {
+                        id
+                        title
                       }
                     }
                   }
-                }
-                sellingPlanGroups(first: 1) {
-                  edges {
-                    node {
-                      id
+                  variants(first: 50) {
+                    edges {
+                      node {
+                        id
+                        title
+                        price
+                        selectedOptions {
+                          name
+                          value
+                        }
+                      }
+                    }
+                  }
+                  sellingPlanGroups(first: 1) {
+                    edges {
+                      node {
+                        id
+                      }
                     }
                   }
                 }
               }
             }
           }
-        }
-      `,
-    );
-    productsJson = await productsResponse.json();
-  } catch (error) {
-    console.error("Failed to fetch or parse products GraphQL response", error);
-    return [];
-  }
+        `,
+        { variables: { after: cursor } },
+      );
+      productsJson = await productsResponse.json();
+    } catch (error) {
+      console.error("Failed to fetch or parse products GraphQL response", error);
+      return Array.from(productMap.values());
+    }
 
-  const productEdges =
-    (productsJson?.data?.products?.edges as
-      | Array<{
-          node?: AdminProductNode;
-        }>
-      | undefined) ?? [];
+    const productEdges =
+      (productsJson?.data?.products?.edges as
+        | Array<{
+            node?: AdminProductNode;
+          }>
+        | undefined) ?? [];
 
-  const productMap = new Map<string, StoreProductItem>();
-  for (const edge of productEdges) {
-    const mapped = mapAdminProductNodeToStoreProductItem(edge?.node);
-    if (mapped) productMap.set(mapped.id, mapped);
+    for (const edge of productEdges) {
+      const mapped = mapAdminProductNodeToStoreProductItem(edge?.node);
+      if (mapped) productMap.set(mapped.id, mapped);
+    }
+
+    hasNextPage = Boolean(productsJson?.data?.products?.pageInfo?.hasNextPage);
+    cursor = String(productsJson?.data?.products?.pageInfo?.endCursor || "") || null;
+    pageCount += 1;
   }
 
   const missingIds = Array.from(
@@ -764,6 +806,14 @@ async function fetchStoreProducts(
                 featuredImage {
                   url
                 }
+              collections(first: 20) {
+                edges {
+                  node {
+                    id
+                    title
+                  }
+                }
+              }
                 variants(first: 50) {
                   edges {
                     node {

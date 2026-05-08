@@ -23,7 +23,6 @@ import SubscriptionSettingsEditor from "./SubscriptionSettingsEditor";
 type Props = {
   draft: CampaignDraft;
   actions: CampaignDraftActions;
-  availableProducts: Array<CampaignDraft["selectedProductsData"][number]>;
   bars: CampaignBarItem[];
   modules: CampaignModuleItem[];
   showCountdownBlock: boolean;
@@ -148,88 +147,14 @@ function QuietEmptyState({ children }: { children: ReactNode }) {
 
 function ProductPoolManager({
   selectedProducts,
-  availableProducts,
   onOpenPicker,
-  onChange,
 }: {
   selectedProducts: CampaignDraft["selectedProductsData"];
-  availableProducts: Array<CampaignDraft["selectedProductsData"][number]>;
   onOpenPicker: () => void;
-  onChange: React.Dispatch<
-    React.SetStateAction<CampaignDraft["selectedProductsData"]>
-  >;
 }) {
-  const [query, setQuery] = useState("");
-  const [checkedIds, setCheckedIds] = useState<string[]>([]);
-
-  const selectedIdSet = useMemo(
-    () => new Set(selectedProducts.map((product) => String(product.id))),
-    [selectedProducts],
-  );
-
-  const filteredProducts = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    const source = availableProducts.filter((product) => String(product.id).trim());
-    if (!normalizedQuery) return source.slice(0, 60);
-    return source
-      .filter((product) => product.title.toLowerCase().includes(normalizedQuery))
-      .slice(0, 60);
-  }, [availableProducts, query]);
-
-  useEffect(() => {
-    const visibleIds = new Set(filteredProducts.map((product) => String(product.id)));
-    setCheckedIds((prev) => prev.filter((id) => visibleIds.has(id)));
-  }, [filteredProducts]);
-
-  const filteredIds = filteredProducts.map((product) => String(product.id));
-  const checkedIdSet = new Set(checkedIds);
-  const selectedCountInFilter = filteredProducts.filter((product) =>
-    selectedIdSet.has(String(product.id)),
-  ).length;
-
-  const toggleChecked = (productId: string, checked: boolean) => {
-    setCheckedIds((prev) => {
-      const next = new Set(prev);
-      if (checked) next.add(productId);
-      else next.delete(productId);
-      return Array.from(next);
-    });
-  };
-
-  const selectAllFiltered = () => setCheckedIds(filteredIds);
-  const invertFiltered = () =>
-    setCheckedIds(filteredIds.filter((id) => !checkedIdSet.has(id)));
-
-  const addCheckedToPool = () => {
-    if (!checkedIds.length) return;
-    const availableMap = new Map(
-      availableProducts.map((product) => [String(product.id), product]),
-    );
-    onChange((prev) => {
-      const existingIds = new Set(prev.map((product) => String(product.id)));
-      const additions = checkedIds
-        .map((id) => availableMap.get(String(id)))
-        .filter(
-          (
-            product,
-          ): product is CampaignDraft["selectedProductsData"][number] => Boolean(product),
-        )
-        .filter((product) => !existingIds.has(String(product.id)));
-      return additions.length > 0 ? [...prev, ...additions] : prev;
-    });
-  };
-
-  const removeCheckedFromPool = () => {
-    if (!checkedIds.length) return;
-    const idsToRemove = new Set(checkedIds);
-    onChange((prev) =>
-      prev.filter((product) => !idsToRemove.has(String(product.id))),
-    );
-  };
-
   return (
-    <div className="space-y-3 rounded-[10px] border border-[#e3e8ed] bg-white p-4">
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+    <div className="rounded-[10px] border border-[#e3e8ed] bg-white p-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
           <div className="text-[13px] font-medium text-[#1c1f23]">Trigger products</div>
           <div className="mt-1 text-[12px] text-[#5c6166]">
@@ -238,103 +163,14 @@ function ProductPoolManager({
         </div>
         <div className="flex flex-wrap gap-2">
           <Button onClick={onOpenPicker}>
-            {selectedProducts.length ? "Edit in Shopify picker" : "Select in Shopify picker"}
-          </Button>
-          <Button
-            danger={selectedProducts.length > 0}
-            disabled={selectedProducts.length === 0}
-            onClick={() => onChange([])}
-          >
-            Clear pool
+            {selectedProducts.length ? "Edit in product selector" : "Select in product selector"}
           </Button>
         </div>
       </div>
-
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
-        <label className="block text-[13px] font-medium text-[#1c1f23]">
-          Search products
-          <Input
-            size="large"
-            className="mt-1"
-            value={query}
-            placeholder="Search by product title"
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </label>
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={selectAllFiltered} disabled={filteredProducts.length === 0}>
-            Select all
-          </Button>
-          <Button onClick={invertFiltered} disabled={filteredProducts.length === 0}>
-            Invert
-          </Button>
-          <Button type="primary" onClick={addCheckedToPool} disabled={checkedIds.length === 0}>
-            Add checked
-          </Button>
-          <Button onClick={removeCheckedFromPool} disabled={checkedIds.length === 0}>
-            Remove checked
-          </Button>
-        </div>
+      <div className="mt-3 rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
+        Trigger products are managed in the product selector. Use the button above to
+        search, filter, and update the shared product pool.
       </div>
-
-      <div className="rounded-[10px] bg-[#f6f8f9] px-3 py-2 text-[12px] text-[#5c6166]">
-        {filteredProducts.length} visible
-        {query.trim() ? ` for "${query.trim()}"` : ""} • {selectedCountInFilter} already in pool •{" "}
-        {checkedIds.length} checked
-      </div>
-
-      {filteredProducts.length === 0 ? (
-        <QuietEmptyState>
-          No products match the current filter. Try another keyword or use the Shopify picker.
-        </QuietEmptyState>
-      ) : (
-        <div className="max-h-[320px] space-y-2 overflow-y-auto pr-1">
-          {filteredProducts.map((product) => {
-            const productId = String(product.id);
-            const isChecked = checkedIdSet.has(productId);
-            const isSelected = selectedIdSet.has(productId);
-            return (
-              <label
-                key={productId}
-                className={`flex cursor-pointer items-center gap-3 rounded-[10px] border px-3 py-3 transition ${
-                  isSelected
-                    ? "border-[#b7e1d3] bg-[#f5fff9]"
-                    : "border-[#e3e8ed] bg-white hover:border-[#c9ccd0]"
-                }`}
-              >
-                <Checkbox
-                  checked={isChecked}
-                  onChange={(e) => toggleChecked(productId, e.target.checked)}
-                />
-                <img
-                  src={product.image}
-                  alt={product.title}
-                  className="h-10 w-10 rounded object-cover"
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[13px] font-medium text-[#1c1f23]">
-                    {product.title}
-                  </div>
-                  <div className="mt-1 text-[12px] text-[#5c6166]">
-                    {product.price} • {product.variantsCount} variant
-                    {product.variantsCount > 1 ? "s" : ""}
-                    {product.hasSubscription ? " • Subscription" : ""}
-                  </div>
-                </div>
-                <span
-                  className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                    isSelected
-                      ? "bg-[#f0faf6] text-[#006e52]"
-                      : "bg-[#f4f6f8] text-[#5c6166]"
-                  }`}
-                >
-                  {isSelected ? "In pool" : "Available"}
-                </span>
-              </label>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }
@@ -900,7 +736,6 @@ function CompleteBundleModuleDetail({
 export default function StepTwoCompositionBuilder({
   draft,
   actions,
-  availableProducts,
   bars,
   modules,
   showCountdownBlock,
@@ -1301,9 +1136,7 @@ export default function StepTwoCompositionBuilder({
                 ? (
                   <ProductPoolManager
                     selectedProducts={draft.selectedProductsData}
-                    availableProducts={availableProducts}
                     onOpenPicker={() => void actions.handleSelectProducts("normal")}
-                    onChange={actions.setSelectedProductsData}
                   />
                 )
                 : null}
