@@ -93,6 +93,37 @@ function safeParseJson(value: string): { ok: true; data: unknown } | { ok: false
   }
 }
 
+function normalizeCartSettings(
+  values: Partial<CartSettings>,
+  rawJson: string,
+): CartSettings {
+  const parsedRaw = rawJson.trim() ? safeParseJson(rawJson) : null;
+  let tierFallback = DEFAULT_SETTINGS.modules.promotions.tiers;
+  if (parsedRaw?.ok && parsedRaw.data && typeof parsedRaw.data === "object") {
+    const existingTiers = (parsedRaw.data as CartSettings)?.modules?.promotions?.tiers;
+    if (Array.isArray(existingTiers) && existingTiers.length > 0) {
+      tierFallback = existingTiers;
+    }
+  }
+
+  const nextModules = values.modules ?? DEFAULT_SETTINGS.modules;
+  const nextPromotions = nextModules.promotions ?? DEFAULT_SETTINGS.modules.promotions;
+
+  return {
+    ...DEFAULT_SETTINGS,
+    ...values,
+    modules: {
+      ...DEFAULT_SETTINGS.modules,
+      ...nextModules,
+      promotions: {
+        ...DEFAULT_SETTINGS.modules.promotions,
+        ...nextPromotions,
+        tiers: tierFallback,
+      },
+    },
+  };
+}
+
 function formatSecondsAsMMSS(totalSeconds: number): string {
   const s = Math.max(0, Math.floor(Number(totalSeconds) || 0));
   const mm = String(Math.floor(s / 60)).padStart(2, "0");
@@ -179,11 +210,21 @@ export function CartSettingPage({
 
   const onApplyFormToJson = async () => {
     const values = await form.validateFields();
-    setRawJson(JSON.stringify(values, null, 2));
+    const normalized = normalizeCartSettings(values, rawJson);
+    setRawJson(JSON.stringify(normalized, null, 2));
   };
 
   const onSave = () => {
-    const next = rawJson.trim() ? rawJson : JSON.stringify(form.getFieldsValue(), null, 2);
+    const raw = rawJson.trim();
+    const base = raw
+      ? safeParseJson(raw)
+      : { ok: true as const, data: form.getFieldsValue() as CartSettings };
+    const normalized =
+      base.ok && base.data && typeof base.data === "object"
+        ? normalizeCartSettings(base.data as CartSettings, rawJson)
+        : normalizeCartSettings(form.getFieldsValue() as CartSettings, rawJson);
+    const next = JSON.stringify(normalized, null, 2);
+    setRawJson(next);
     const parsed = safeParseJson(next);
     if (!parsed.ok) {
       void message.error(`JSON 校验失败：${parsed.error}`);

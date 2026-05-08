@@ -145,13 +145,18 @@
       const res = await fetch(this.url("cart.js"), { credentials: "same-origin" });
       if (!res.ok) throw new Error(`GET /cart.js failed: ${res.status}`);
       const ct = String(res.headers.get("content-type") || "");
-      if (!ct.includes("application/json")) {
+      if (!ct.includes("application/json") && !ct.includes("text/javascript")) {
         const text = await res.text();
         throw new Error(
           `GET cart.js expected JSON but got ${ct || "(no content-type)"}: ${text.slice(0, 80)}`,
         );
       }
-      return /** @type {ShopifyCart} */ (await res.json());
+      const text = await res.text();
+      try {
+        return /** @type {ShopifyCart} */ (JSON.parse(text));
+      } catch (error) {
+        throw new Error(`GET cart.js JSON parse failed: ${String(error)}; body=${text.slice(0, 80)}`);
+      }
     }
     async add(body) {
       const res = await fetch(this.url("cart/add.js"), {
