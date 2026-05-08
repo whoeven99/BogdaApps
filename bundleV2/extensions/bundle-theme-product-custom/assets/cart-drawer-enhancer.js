@@ -41,6 +41,38 @@
     }
   }
 
+  function parseJsonLoose(text) {
+    const raw = String(text || "").trim();
+    if (!raw) return null;
+    try {
+      const first = JSON.parse(raw);
+      if (typeof first === "string") {
+        try {
+          const second = JSON.parse(first);
+          log("检测到双层 JSON，已二次解析");
+          return second;
+        } catch (error) {
+          log("配置 JSON 二次解析失败", { error: String(error) });
+          return null;
+        }
+      }
+      return first;
+    } catch (error) {
+      const unescaped = raw.replace(/\\n/g, "\n").replace(/\\"/g, '"');
+      try {
+        const parsed = JSON.parse(unescaped);
+        log("配置 JSON 经过反转义后解析成功");
+        return parsed;
+      } catch (error2) {
+        log("配置 JSON 解析失败", {
+          error: String(error),
+          retryError: String(error2),
+        });
+        return null;
+      }
+    }
+  }
+
   function debounce(fn, waitMs) {
     let t = 0;
     return (...args) => {
@@ -505,7 +537,7 @@
       return;
     }
     const raw = configEl.textContent || "";
-    const config = safeJsonParse(raw, null);
+    const config = parseJsonLoose(raw);
     if (!config || typeof config !== "object") {
       log("配置 JSON 解析失败", { raw: raw.slice(0, 120) });
       return;
