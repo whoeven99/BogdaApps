@@ -482,7 +482,7 @@ export function AllOffersPage({
       {showThemeExtensionModal && (
         <AdminModal
           title="Activate Theme Extension"
-          description="You need to activate the theme extension first before you can turn on any offers."
+          description="You need to activate the theme extension on an online or draft theme before you can turn on any offers."
           actions={
             <>
               <button

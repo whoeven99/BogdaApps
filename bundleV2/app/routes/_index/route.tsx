@@ -956,10 +956,11 @@ const collectTypedBlocks = (
 
 /**
  * App embed status for a single theme extension block (e.g. product_detail_message -> product-detail-message.js).
+ * Checks all themes so merchants can validate offers on draft themes before publishing them live.
  * Matches editor deep-link form: `appEmbed={client_id}/{blockHandle}` e.g. `1cdf.../product_detail_message`.
  * `type` in JSON may be `.../apps/{client_id}/blocks/{handle}/...` or `.../apps/{client_id}/{handle}/...`.
  */
-const getThemeExtensionEnabled = async (
+const getThemeExtensionEnabledAcrossThemes = async (
   admin: any,
   extensionHandle: string,
   /** Liquid filename base, e.g. product_detail_message for product_detail_message.liquid */
@@ -972,10 +973,13 @@ const getThemeExtensionEnabled = async (
   try {
     const response = await admin.graphql(
       `#graphql
-        query MainThemeSettingsData {
-          themes(first: 1, roles: [MAIN]) {
+        query ThemeSettingsDataAcrossThemes {
+          themes(first: 50) {
             edges {
               node {
+                id
+                name
+                role
                 files(filenames: ["config/settings_data.json"], first: 1) {
                   nodes {
                     ... on OnlineStoreThemeFile {
@@ -994,28 +998,10 @@ const getThemeExtensionEnabled = async (
       `,
     );
     const json = await response.json();
-    const content =
-      json?.data?.themes?.edges?.[0]?.node?.files?.nodes?.[0]?.body?.content;
-
-    if (!content || typeof content !== "string") {
-      return false;
-    }
-
-    // Some themes may include comments in settings_data content.
-    // Strip JS-style comments before JSON.parse for compatibility.
-    const normalizedContent = content
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/^\s*\/\/.*$/gm, "");
-
-    let settingsData;
-    try {
-      settingsData = JSON.parse(normalizedContent);
-    } catch (e) {
-      console.error("[theme-extension] failed to parse settings_data.json", e);
-      return false;
-    }
-    const blockEntries: Array<Record<string, any>> = [];
-    collectTypedBlocks(settingsData, blockEntries);
+    const themeNodes =
+      json?.data?.themes?.edges
+        ?.map((edge: { node?: Record<string, any> | null }) => edge?.node)
+        .filter(Boolean) ?? [];
 
     const handleKebab = blockHandle.replace(/_/g, "-");
     const blockPathSegments = [
@@ -1051,34 +1037,74 @@ const getThemeExtensionEnabled = async (
       return blockPathSegments.some((seg) => blockType.includes(seg));
     };
 
-    for (const block of blockEntries) {
-      const blockType = String(block?.type || "");
-      const matchesBlock = matchesEmbedFromEditorUrl(blockType);
-      if (!matchesBlock) continue;
-      const matchedByApp = isOurAppBlock(blockType);
-      if (!matchedByApp) {
-        console.log("[theme-extension] skipped block from other app", {
-          extensionHandle,
-          blockHandle,
-          appClientId,
-          appName,
-          appNameSlug,
-          blockType,
+    let scannedBlockCount = 0;
+
+    for (const theme of themeNodes) {
+      const content = theme?.files?.nodes?.[0]?.body?.content;
+      if (!content || typeof content !== "string") {
+        continue;
+      }
+
+      // Some themes may include comments in settings_data content.
+      // Strip JS-style comments before JSON.parse for compatibility.
+      const normalizedContent = content
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/^\s*\/\/.*$/gm, "");
+
+      let settingsData;
+      try {
+        settingsData = JSON.parse(normalizedContent);
+      } catch (e) {
+        console.error("[theme-extension] failed to parse settings_data.json", {
+          themeId: theme?.id,
+          themeName: theme?.name,
+          themeRole: theme?.role,
+          error: e,
         });
         continue;
       }
-      const enabled = block?.disabled !== true;
-      console.log("[theme-extension] matched embed block", {
-        extensionHandle,
-        blockHandle,
-        appClientId,
-        appNameSlug,
-        blockType,
-        matchedByApp,
-        disabled: block?.disabled,
-        enabled,
-      });
-      return enabled;
+
+      const blockEntries: Array<Record<string, any>> = [];
+      collectTypedBlocks(settingsData, blockEntries);
+      scannedBlockCount += blockEntries.length;
+
+      for (const block of blockEntries) {
+        const blockType = String(block?.type || "");
+        const matchesBlock = matchesEmbedFromEditorUrl(blockType);
+        if (!matchesBlock) continue;
+        const matchedByApp = isOurAppBlock(blockType);
+        if (!matchedByApp) {
+          console.log("[theme-extension] skipped block from other app", {
+            extensionHandle,
+            blockHandle,
+            appClientId,
+            appName,
+            appNameSlug,
+            themeId: theme?.id,
+            themeName: theme?.name,
+            themeRole: theme?.role,
+            blockType,
+          });
+          continue;
+        }
+        const enabled = block?.disabled !== true;
+        console.log("[theme-extension] matched embed block", {
+          extensionHandle,
+          blockHandle,
+          appClientId,
+          appNameSlug,
+          themeId: theme?.id,
+          themeName: theme?.name,
+          themeRole: theme?.role,
+          blockType,
+          matchedByApp,
+          disabled: block?.disabled,
+          enabled,
+        });
+        if (enabled) {
+          return true;
+        }
+      }
     }
 
     console.log("[theme-extension] no matched embed block", {
@@ -1086,7 +1112,8 @@ const getThemeExtensionEnabled = async (
       blockHandle,
       appClientId,
       appNameSlug,
-      scannedBlockCount: blockEntries.length,
+      scannedThemeCount: themeNodes.length,
+      scannedBlockCount,
     });
   } catch (error) {
     console.error("Failed to read theme extension status", error);
@@ -1101,7 +1128,7 @@ async function getCurrentThemeExtensionEnabled(admin: any): Promise<boolean> {
     sanitizeEnvLikeValue(process.env.SHOPIFY_APP_NAME) ||
     sanitizeEnvLikeValue(process.env.APP_NAME);
   try {
-    return await getThemeExtensionEnabled(
+    return await getThemeExtensionEnabledAcrossThemes(
       admin,
       "bundlev2-theme-product-custom",
       "product_detail_message",

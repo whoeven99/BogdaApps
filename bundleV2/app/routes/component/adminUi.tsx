@@ -71,7 +71,7 @@ export function ThemeExtensionBanner({
             Activate Theme Extension
           </h3>
           <p className="m-0 text-[14px] leading-[20px] text-[#5c6166]">
-            Offers stay hidden until the extension is enabled.
+            Offers stay hidden until the extension is enabled on an online or draft theme.
           </p>
           <div className="mt-[12px]">
             <button

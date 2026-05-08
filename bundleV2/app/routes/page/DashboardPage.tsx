@@ -382,7 +382,7 @@ export function DashboardPage({
                 Action required: Activate Theme Extension
               </h3>
               <p className="font-sans text-[14px] leading-[20px] text-[#5c6166] m-0">
-                Your offer has been created, but it won't be visible on your store until you activate the theme extension.
+                Your offer has been created, but it won't be visible until the theme extension is enabled on an online or draft theme.
               </p>
               <div className="mt-[12px]">
                 <button
@@ -1177,7 +1177,7 @@ export function DashboardPage({
               Activate Theme Extension
             </h2>
             <p className="font-sans text-[14px] leading-[21px] text-[#5c6166] mb-[16px]">
-              You need to activate the theme extension first before you can turn on any offers.
+              You need to activate the theme extension on an online or draft theme before you can turn on any offers.
             </p>
             <div className="flex justify-end gap-[8px]">
               <button
