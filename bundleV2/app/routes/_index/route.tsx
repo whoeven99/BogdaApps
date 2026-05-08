@@ -20,6 +20,7 @@ import { DashboardPage } from "../page/DashboardPage";
 import { AllOffersPage } from "../page/AllOffersPage";
 import { AnalyticsPage } from "../page/AnalyticsPage";
 import { PricingPage } from "../page/PricingPage";
+import { CartSettingPage } from "../page/CartSettingPage";
 import { CreateNewOffer } from "../component/CreateNewOffer/CreateNewOffer";
 import prisma from "../../db.server";
 import { randomBytes } from "crypto";
@@ -132,6 +133,7 @@ const BUNDLE_METAFIELD_NAMESPACE = "ciwi_bundle";
 const BUNDLE_METAFIELD_BASE_KEY = "ciwi-bundle-offers";
 /** 主题端 A/B assign 等请求使用的应用根 URL（与 SHOPIFY_APP_URL 一致，无尾斜杠） */
 const BUNDLE_METAFIELD_API_ORIGIN_KEY = "ciwi-bundle-api-origin";
+const BUNDLE_METAFIELD_CART_SETTINGS_KEY = "ciwi-cart-settings";
 const BUNDLE_METAFIELD_ENABLED_PROD_KEY = "ciwi-bundle-enabled-prod";
 const BUNDLE_METAFIELD_ENABLED_TEST_KEY = "ciwi-bundle-enabled-test";
 const BUNDLE_METAFIELD_ACTIVE_ENV_KEY = "ciwi-bundle-offers-active-env";
@@ -1078,13 +1080,26 @@ async function getCurrentThemeExtensionEnabled(admin: any): Promise<boolean> {
     sanitizeEnvLikeValue(process.env.SHOPIFY_APP_NAME) ||
     sanitizeEnvLikeValue(process.env.APP_NAME);
   try {
-    return await getThemeExtensionEnabled(
-      admin,
-      "bundlev2-theme-product-custom",
-      "product_detail_message",
-      apiKey,
-      appDisplayName,
-    );
+    const results = await Promise.allSettled([
+      getThemeExtensionEnabled(
+        admin,
+        "bundlev2-theme-product-custom",
+        "product_detail_message",
+        apiKey,
+        appDisplayName,
+      ),
+      getThemeExtensionEnabled(
+        admin,
+        "bundlev2-theme-product-custom",
+        "cart_drawer_enhancer",
+        apiKey,
+        appDisplayName,
+      ),
+    ]);
+
+    const productEmbed = results[0].status === "fulfilled" ? results[0].value : false;
+    const cartEmbed = results[1].status === "fulfilled" ? results[1].value : false;
+    return Boolean(productEmbed || cartEmbed);
   } catch (error) {
     console.error("Failed to check theme extension status", error);
     return false;
@@ -1256,6 +1271,140 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const prismaAny: any = prisma;
   let intent = formData.get("intent");
+
+  if (intent === "load-cart-settings") {
+    try {
+      const queryResponse = await admin.graphql(
+        `#graphql
+          query CartSettingsMetafield($namespace: String!, $key: String!) {
+            shop {
+              metafield(namespace: $namespace, key: $key) {
+                id
+                type
+                value
+              }
+            }
+          }
+        `,
+        { variables: { namespace: BUNDLE_METAFIELD_NAMESPACE, key: BUNDLE_METAFIELD_CART_SETTINGS_KEY } },
+      );
+      const json = (await queryResponse.json()) as {
+        data?: { shop?: { metafield?: { id?: string; type?: string; value?: string } | null } };
+        errors?: Array<{ message?: string }>;
+      };
+      if (json.errors?.length) {
+        console.error("[cart-settings] load graphql errors", json.errors);
+        return Response.json(
+          { ok: false as const, error: json.errors.map((e) => e.message || "unknown").join("; ") },
+          { status: 502 },
+        );
+      }
+      const valueRaw = json?.data?.shop?.metafield?.value ?? "";
+      return Response.json({ ok: true as const, settingsJson: valueRaw || "" });
+    } catch (error) {
+      console.error("[cart-settings] load failed", error);
+      return Response.json(
+        { ok: false as const, error: "Failed to load cart settings" },
+        { status: 500 },
+      );
+    }
+  }
+
+  if (intent === "save-cart-settings") {
+    const settingsJsonRaw = String(formData.get("settingsJson") || "").trim();
+    if (settingsJsonRaw.length > 200_000) {
+      return Response.json(
+        { ok: false as const, error: "Cart settings JSON is too large." },
+        { status: 400 },
+      );
+    }
+    if (settingsJsonRaw) {
+      try {
+        JSON.parse(settingsJsonRaw);
+      } catch {
+        return Response.json(
+          { ok: false as const, error: "Invalid JSON." },
+          { status: 400 },
+        );
+      }
+    }
+    try {
+      const shopIdResponse = await admin.graphql(
+        `#graphql
+          query ShopId {
+            shop { id }
+          }
+        `,
+      );
+      const shopIdJson = (await shopIdResponse.json()) as {
+        data?: { shop?: { id?: string } };
+        errors?: Array<{ message?: string }>;
+      };
+      if (shopIdJson.errors?.length) {
+        console.error("[cart-settings] shop id graphql errors", shopIdJson.errors);
+        return Response.json(
+          { ok: false as const, error: shopIdJson.errors.map((e) => e.message || "unknown").join("; ") },
+          { status: 502 },
+        );
+      }
+      const shopId = shopIdJson?.data?.shop?.id;
+      if (!shopId) {
+        return Response.json(
+          { ok: false as const, error: "Missing shop id." },
+          { status: 502 },
+        );
+      }
+      const setResponse = await admin.graphql(
+        `#graphql
+          mutation MetafieldsSet($metafields: [MetafieldsSetInput!]!) {
+            metafieldsSet(metafields: $metafields) {
+              userErrors { field message }
+              metafields { id namespace key }
+            }
+          }
+        `,
+        {
+          variables: {
+            metafields: [
+              {
+                ownerId: shopId,
+                namespace: BUNDLE_METAFIELD_NAMESPACE,
+                key: BUNDLE_METAFIELD_CART_SETTINGS_KEY,
+                type: "json",
+                value: settingsJsonRaw || "{}",
+              },
+            ],
+          },
+        },
+      );
+      const setJson = (await setResponse.json()) as {
+        data?: { metafieldsSet?: { userErrors?: Array<{ message?: string }> } };
+        errors?: Array<{ message?: string }>;
+      };
+      if (setJson.errors?.length) {
+        console.error("[cart-settings] metafieldsSet graphql errors", setJson.errors);
+        return Response.json(
+          { ok: false as const, error: setJson.errors.map((e) => e.message || "unknown").join("; ") },
+          { status: 502 },
+        );
+      }
+      const userErrors = setJson?.data?.metafieldsSet?.userErrors ?? [];
+      if (userErrors.length > 0) {
+        console.error("[cart-settings] metafieldsSet userErrors", userErrors);
+        return Response.json(
+          { ok: false as const, error: userErrors.map((e) => e.message || "unknown").join("; ") },
+          { status: 400 },
+        );
+      }
+      return Response.json({ ok: true as const });
+    } catch (error) {
+      console.error("[cart-settings] save failed", error);
+      return Response.json(
+        { ok: false as const, error: "Failed to save cart settings" },
+        { status: 500 },
+      );
+    }
+  }
 
   if (intent === "load-store-products") {
     const offers = await fetchShopOffers(session.shop);
@@ -2376,7 +2525,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   });
 };
 
-type HomeTabKey = "dashboard" | "offers" | "analytics" | "pricing";
+type HomeTabKey = "dashboard" | "offers" | "analytics" | "pricing" | "cartSetting";
 
 export default function Index() {
   const {
@@ -2586,6 +2735,24 @@ export default function Index() {
                 Pricing
               </span>
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowCreateOffer(false);
+                setActiveTab("cartSetting");
+              }}
+              className={`rounded-[8px] px-[12px] py-[8px] text-center cursor-pointer transition-all ${
+                activeTab === "cartSetting"
+                  ? "bg-[#f6f6f7] text-[#1c1f23]"
+                  : "text-[#5c6166] hover:bg-[#f6f6f7] hover:text-[#1c1f23]"
+              }`}
+            >
+              <span
+                className={`font-sans leading-[20px] text-[13px] font-medium tracking-normal ${activeTab === "cartSetting" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
+              >
+                Cart Setting
+              </span>
+            </button>
             </div>
           </nav>
         )}
@@ -2681,6 +2848,9 @@ export default function Index() {
             activeSubscriptions={billingSubscriptions}
             billingTestMode={billingTestMode}
           />
+        )}
+        {activeTab === "cartSetting" && !showCreateOffer && !editingOfferId && (
+          <CartSettingPage shop={shop} apiKey={apiKey} themeExtensionEnabled={themeExtensionEnabled} />
         )}
         </div>
         <div className="mt-[8px] mb-[24px] flex w-full flex-wrap items-center justify-center gap-[10px] rounded-[12px] border border-[#e9edf1] bg-[#fcfcfd] px-[16px] py-[14px] text-[13px] text-[#666]">

@@ -18,7 +18,8 @@ database.sqlite
 !.env.example
 
 
-
+# windows
+prompt.md
 
 
 /extensions/*/dist

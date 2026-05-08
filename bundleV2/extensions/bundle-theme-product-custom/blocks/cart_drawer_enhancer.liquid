@@ -1,0 +1,35 @@
+{%- comment -%}
+  Ciwi Cart Drawer Enhancer (App Embed)
+  - 读取 shop metafield：ciwi_bundle/ciwi-cart-settings
+  - 注入 Cart UI 模块（Timer / Promotions Progress 等）
+{%- endcomment -%}
+
+{%- assign ciwi_cart_settings = shop.metafields.ciwi_bundle["ciwi-cart-settings"] -%}
+
+<script id="ciwi-cart-enhancer-config" type="application/json">
+  {
+    "shopName": {{ shop.permanent_domain | json }},
+    "shopDisplayName": {{ shop.name | json }},
+    "moneyFormat": {{ shop.money_format | json }},
+    "marketId": {{ localization.market.id | json }},
+    "countryIsoCode": {{ localization.country.iso_code | json }},
+    "currencyCode": {{ localization.country.currency.iso_code | json }},
+    "currencySymbol": {{ localization.country.currency.symbol | json }},
+    "settings": {% if ciwi_cart_settings != blank %}{{ ciwi_cart_settings.value }}{% else %}{}{% endif %}
+  }
+</script>
+
+<link rel="stylesheet" href="{{ 'cart-drawer-enhancer.css' | asset_url }}">
+<script src="{{ 'cart-drawer-enhancer.js' | asset_url }}" defer></script>
+
+{% schema %}
+{
+  "name": "Ciwi Cart Enhancer",
+  "target": "body",
+  "enabled_on": {
+    "templates": ["index", "product", "collection", "cart"]
+  },
+  "settings": []
+}
+{% endschema %}
+
