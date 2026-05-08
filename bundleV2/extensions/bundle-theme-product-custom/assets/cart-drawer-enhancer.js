@@ -290,15 +290,46 @@
   }
 
   function wireUi(bus, store, timer, settings, currencyCode) {
-    const mounts = findMountPoints();
-    if (mounts.length === 0) return;
+    /** @type {HTMLElement[]} */
+    let enhancers = [];
 
-    const enhancers = mounts.map((host) => {
-      const el = buildEnhancerElement();
-      applyCssVars(el, settings.ui || {});
-      host.prepend(el);
-      return el;
-    });
+    const mountOnce = () => {
+      const mounts = findMountPoints();
+      if (mounts.length === 0) return false;
+
+      const mounted = [];
+      for (const host of mounts) {
+        // 避免重复挂载（抽屉反复打开/关闭，DOM 可能重建）
+        if (host.querySelector(".ciwi-cart-enhancer__mount")) continue;
+        const el = buildEnhancerElement();
+        applyCssVars(el, settings.ui || {});
+        host.prepend(el);
+        mounted.push(el);
+      }
+      if (mounted.length === 0) return false;
+      enhancers = mounted;
+      return true;
+    };
+
+    // 初次尝试：页面加载时 cart page 可能已存在，drawer 可能还没插入 DOM
+    if (!mountOnce()) {
+      // drawer 常在点击后才插入；监听 DOM 变化，出现后再挂载
+      const observer = new MutationObserver(() => {
+        if (mountOnce()) observer.disconnect();
+      });
+      observer.observe(document.documentElement, { subtree: true, childList: true });
+
+      // 兜底：部分主题打开抽屉不会触发明显 DOM 变化（或先隐藏再显示）
+      const retry = () => {
+        if (enhancers.length > 0) return;
+        if (mountOnce()) {
+          observer.disconnect();
+          return;
+        }
+        window.setTimeout(retry, 250);
+      };
+      window.setTimeout(retry, 250);
+    }
 
     const timerEnabled = settings?.modules?.timer?.enabled !== false;
     const promoEnabled = settings?.modules?.promotions?.enabled !== false;
