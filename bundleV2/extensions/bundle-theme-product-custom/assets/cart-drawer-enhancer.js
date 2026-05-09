@@ -230,6 +230,7 @@
       this.api = api;
       this.bus = bus;
       this.cart = null;
+      this.isRefreshing = false;
       this.refresh = debounce(() => void this._refreshNow(), debounceMs);
     }
     getSnapshot() {
@@ -239,6 +240,8 @@
       await this._refreshNow();
     }
     async _refreshNow() {
+      if (this.isRefreshing) return;
+      this.isRefreshing = true;
       try {
         const cart = await this.api.getCart();
         this.cart = cart;
@@ -246,6 +249,8 @@
       } catch (e) {
         // eslint-disable-next-line no-console
         console.error("[ciwi-cart] refresh failed", e);
+      } finally {
+        this.isRefreshing = false;
       }
     }
   }
@@ -427,12 +432,21 @@
   function resolveMountTarget(host) {
     if (!host || !host.querySelector) return host;
     const inner =
+      host.querySelector(".cart-drawer__content") ||
+      host.querySelector("cart-items-component") ||
+      host.querySelector(".cart-items-component") ||
       host.querySelector(".cart-drawer__inner") ||
       host.querySelector(".drawer__inner") ||
       host.querySelector(".cart-drawer__content") ||
       host.querySelector(".cart__contents") ||
       host.querySelector("[data-cart-drawer-inner]") ||
       host.querySelector("[data-cart-drawer-content]");
+    log("挂载目标解析", {
+      hostTag: host.tagName,
+      hostClass: host.className,
+      resolvedTag: inner ? inner.tagName : host.tagName,
+      resolvedClass: inner ? inner.className : host.className,
+    });
     return inner || host;
   }
 
@@ -443,16 +457,34 @@
     const mountOnce = () => {
       const { mounts, sources } = findMountPoints();
       log("尝试挂载 Cart Enhancer", { mounts: mounts.length, sources });
-      if (mounts.length === 0) return false;
+      if (mounts.length === 0) {
+        log("未找到挂载点", {
+          cartForm: !!document.querySelector('form[action*="/cart"]'),
+          drawer: !!document.querySelector("cart-drawer"),
+          cartDrawer: !!document.querySelector("#CartDrawer"),
+          cartDrawerClass: !!document.querySelector(".cart-drawer"),
+          dialogOpen: !!document.querySelector("dialog[open]"),
+        });
+        return false;
+      }
 
       const mounted = [];
       for (const host of mounts) {
         // 避免重复挂载（抽屉反复打开/关闭，DOM 可能重建）
-      if (host.querySelector(".ciwi-cart-enhancer__mount")) continue;
+        if (host.querySelector(".ciwi-cart-enhancer__mount")) {
+          log("已存在挂载节点，跳过", { hostTag: host.tagName, hostClass: host.className });
+          continue;
+        }
         const el = buildEnhancerElement();
         applyCssVars(el, settings.ui || {});
       const target = resolveMountTarget(host);
       target.prepend(el);
+        log("挂载节点完成", {
+          hostTag: host.tagName,
+          hostClass: host.className,
+          targetTag: target.tagName,
+          targetClass: target.className,
+        });
         mounted.push(el);
       }
       if (mounted.length === 0) {
@@ -586,6 +618,7 @@
       try {
         const input = args[0];
         const url = typeof input === "string" ? input : input && typeof input.url === "string" ? input.url : "";
+        if (store.isRefreshing) return res;
         if (url.includes("/cart/") || url.includes("/cart.js")) {
           log("捕获购物车请求，准备刷新", { url });
           store.refresh();
