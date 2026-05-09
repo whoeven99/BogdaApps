@@ -340,6 +340,26 @@
     return false;
   }
 
+  function isElementVisible(el) {
+    if (!el || typeof window.getComputedStyle !== "function") return false;
+    const style = window.getComputedStyle(el);
+    if (style.display === "none" || style.visibility === "hidden") return false;
+    const rect = el.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  }
+
+  function findVisibleInRoot(root) {
+    if (!root) return null;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+    let count = 0;
+    while (walker.nextNode() && count < 80) {
+      const node = /** @type {HTMLElement} */ (walker.currentNode);
+      if (isElementVisible(node)) return node;
+      count += 1;
+    }
+    return null;
+  }
+
   function findMountPoints() {
     /** @type {HTMLElement[]} */
     const mounts = [];
@@ -352,6 +372,19 @@
       const host = cartForm.parentElement || cartForm;
       mounts.push(/** @type {HTMLElement} */ (host));
       sources.push("cartFormParent");
+    }
+
+    const openDialog = document.querySelector("dialog[open]");
+    if (openDialog) {
+      const dialogTarget =
+        openDialog.querySelector(".cart-drawer__content") ||
+        openDialog.querySelector(".cart-items__wrapper") ||
+        openDialog.querySelector("cart-items-component") ||
+        openDialog.querySelector(".cart-items-component");
+      if (dialogTarget) {
+        mounts.push(/** @type {HTMLElement} */ (dialogTarget));
+        sources.push("dialogOpenInner");
+      }
     }
 
     // Common drawer roots across themes
@@ -413,6 +446,10 @@
 
     // De-dup
     const uniqueMounts = Array.from(new Set(mounts)).filter((el) => el && el.isConnected);
+    const visibleMounts = uniqueMounts.filter((el) => isElementVisible(el));
+    if (visibleMounts.length > 0) {
+      return { mounts: visibleMounts, sources: Array.from(new Set(sources)) };
+    }
     return { mounts: uniqueMounts, sources: Array.from(new Set(sources)) };
   }
 
@@ -466,13 +503,36 @@
       host.querySelector(".cart__contents") ||
       host.querySelector("[data-cart-drawer-inner]") ||
       host.querySelector("[data-cart-drawer-content]");
+    const baseTarget = inner || host;
+    if (!isElementVisible(baseTarget)) {
+      const innerShadow = inner && inner.shadowRoot ? findVisibleInRoot(inner.shadowRoot) : null;
+      if (innerShadow) {
+        log("使用 inner shadowRoot 容器", {
+          hostTag: host.tagName,
+          hostClass: host.className,
+          targetTag: innerShadow.tagName,
+          targetClass: innerShadow.className,
+        });
+        return innerShadow;
+      }
+      const hostShadow = host.shadowRoot ? findVisibleInRoot(host.shadowRoot) : null;
+      if (hostShadow) {
+        log("使用 host shadowRoot 容器", {
+          hostTag: host.tagName,
+          hostClass: host.className,
+          targetTag: hostShadow.tagName,
+          targetClass: hostShadow.className,
+        });
+        return hostShadow;
+      }
+    }
     log("挂载目标解析", {
       hostTag: host.tagName,
       hostClass: host.className,
-      resolvedTag: inner ? inner.tagName : host.tagName,
-      resolvedClass: inner ? inner.className : host.className,
+      resolvedTag: baseTarget.tagName,
+      resolvedClass: baseTarget.className,
     });
-    return inner || host;
+    return baseTarget;
   }
 
   function logElementMetrics(el, label) {
@@ -489,6 +549,28 @@
       parentTag: el.parentElement ? el.parentElement.tagName : "",
       parentClass: el.parentElement ? el.parentElement.className : "",
     });
+  }
+
+  function tryFindVisibleCartContainer() {
+    const candidates = [
+      ".cart-items__wrapper",
+      ".cart-drawer__content",
+      ".cart-items-component",
+      "cart-items-component",
+      ".cart-drawer",
+      "cart-drawer-component",
+      "cart-drawer",
+    ];
+    for (const selector of candidates) {
+      const node = document.querySelector(selector);
+      if (!node) continue;
+      if (isElementVisible(node)) return node;
+      if (node.shadowRoot) {
+        const shadowVisible = findVisibleInRoot(node.shadowRoot);
+        if (shadowVisible) return shadowVisible;
+      }
+    }
+    return null;
   }
 
   function wireUi(bus, store, timer, settings, currencyCode) {
@@ -518,8 +600,8 @@
         }
         const el = buildEnhancerElement();
         applyCssVars(el, settings.ui || {});
-      const target = resolveMountTarget(host);
-      target.prepend(el);
+        const target = resolveMountTarget(host);
+        target.prepend(el);
         log("挂载节点完成", {
           hostTag: host.tagName,
           hostClass: host.className,
@@ -529,7 +611,7 @@
         window.requestAnimationFrame(() => {
           logElementMetrics(el, "挂载节点可见性检查");
           if (el.getBoundingClientRect().height === 0) {
-            const fallback = document.querySelector(".cart-drawer__content");
+            const fallback = tryFindVisibleCartContainer();
             if (fallback && fallback !== target) {
               fallback.prepend(el);
               log("挂载节点移动到备用容器", {
@@ -537,6 +619,8 @@
                 fallbackClass: fallback.className,
               });
               window.requestAnimationFrame(() => logElementMetrics(el, "备用容器可见性检查"));
+            } else {
+              log("未找到可见容器，保持当前位置");
             }
           }
         });
