@@ -387,6 +387,30 @@
       }
     }
 
+    // Shadow DOM: cart drawer component
+    const shadowHosts = Array.from(document.querySelectorAll("cart-drawer-component, cart-drawer"));
+    for (const host of shadowHosts) {
+      if (!host || !host.shadowRoot) continue;
+      const root = host.shadowRoot;
+      const shadowTarget =
+        root.querySelector(".cart-items__wrapper") ||
+        root.querySelector(".cart-drawer__content") ||
+        root.querySelector("cart-items-component") ||
+        root.querySelector(".cart-items-component") ||
+        root.querySelector("dialog[open]") ||
+        root.querySelector("dialog");
+      if (shadowTarget) {
+        mounts.push(/** @type {HTMLElement} */ (shadowTarget));
+        sources.push("shadowRoot");
+        log("发现 shadowRoot 挂载点", {
+          hostTag: host.tagName,
+          hostClass: host.className,
+          targetTag: shadowTarget.tagName,
+          targetClass: shadowTarget.className,
+        });
+      }
+    }
+
     // De-dup
     const uniqueMounts = Array.from(new Set(mounts)).filter((el) => el && el.isConnected);
     return { mounts: uniqueMounts, sources: Array.from(new Set(sources)) };
