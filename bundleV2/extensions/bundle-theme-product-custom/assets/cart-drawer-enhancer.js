@@ -134,6 +134,13 @@
       this.root =
         (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || "/";
       if (typeof this.root !== "string" || !this.root.trim()) this.root = "/";
+      if (/^https?:\/\//i.test(this.root)) {
+        try {
+          this.root = new URL(this.root).pathname || "/";
+        } catch {
+          this.root = "/";
+        }
+      }
       if (!this.root.startsWith("/")) this.root = `/${this.root}`;
       if (!this.root.endsWith("/")) this.root = `${this.root}/`;
     }
@@ -145,13 +152,27 @@
       const res = await fetch(this.url("cart.js"), { credentials: "same-origin" });
       if (!res.ok) throw new Error(`GET /cart.js failed: ${res.status}`);
       const ct = String(res.headers.get("content-type") || "");
+      const text = await res.text();
       if (!ct.includes("application/json") && !ct.includes("text/javascript")) {
-        const text = await res.text();
+        const fallback = await fetch("/cart.js", { credentials: "same-origin" });
+        const fallbackCt = String(fallback.headers.get("content-type") || "");
+        const fallbackText = await fallback.text();
+        if (
+          fallback.ok &&
+          (fallbackCt.includes("application/json") || fallbackCt.includes("text/javascript"))
+        ) {
+          try {
+            return /** @type {ShopifyCart} */ (JSON.parse(fallbackText));
+          } catch (error) {
+            throw new Error(
+              `GET /cart.js JSON parse failed: ${String(error)}; body=${fallbackText.slice(0, 80)}`,
+            );
+          }
+        }
         throw new Error(
           `GET cart.js expected JSON but got ${ct || "(no content-type)"}: ${text.slice(0, 80)}`,
         );
       }
-      const text = await res.text();
       try {
         return /** @type {ShopifyCart} */ (JSON.parse(text));
       } catch (error) {
@@ -303,10 +324,11 @@
     /** @type {string[]} */
     const sources = [];
 
-    // Cart page common anchors
-    const cartForm = document.querySelector('form[action="/cart"]');
-    if (cartForm && cartForm.parentElement) {
-      mounts.push(/** @type {HTMLElement} */ (cartForm.parentElement));
+    // Cart page common anchors（多语言场景 action 可能不是 /cart）
+    const cartForm = document.querySelector('form[action*="/cart"]');
+    if (cartForm) {
+      const host = cartForm.parentElement || cartForm;
+      mounts.push(/** @type {HTMLElement} */ (host));
       sources.push("cartFormParent");
     }
 
@@ -321,7 +343,12 @@
     ].filter((item) => item.node);
     for (const el of drawerCandidates) {
       const node = /** @type {HTMLElement} */ (el.node);
-      if (looksLikeCartContainer(node)) {
+      const isDrawerRoot =
+        node.matches("cart-drawer") ||
+        node.matches("#CartDrawer") ||
+        node.matches(".cart-drawer") ||
+        node.matches("[data-cart-drawer]");
+      if (isDrawerRoot || looksLikeCartContainer(node)) {
         mounts.push(node);
         sources.push(el.label);
       }
