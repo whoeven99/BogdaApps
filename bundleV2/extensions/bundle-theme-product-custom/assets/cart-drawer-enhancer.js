@@ -158,7 +158,12 @@
       }
       const ct = String(res.headers.get("content-type") || "");
       const text = await res.text();
-      log("cart.js 响应信息", { status: res.status, contentType: ct, sample: text.slice(0, 120) });
+      log("cart.js 响应信息", {
+        status: res.status,
+        contentType: ct,
+        sample: text.slice(0, 400),
+        length: text.length,
+      });
       if (!ct.includes("application/json") && !ct.includes("text/javascript")) {
         const fallback = await fetch("/cart.js", { credentials: "same-origin" });
         const fallbackCt = String(fallback.headers.get("content-type") || "");
@@ -166,7 +171,8 @@
         log("cart.js 兜底响应", {
           status: fallback.status,
           contentType: fallbackCt,
-          sample: fallbackText.slice(0, 120),
+          sample: fallbackText.slice(0, 400),
+          length: fallbackText.length,
         });
         if (
           fallback.ok &&
