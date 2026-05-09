@@ -824,10 +824,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       if (existing) {
         return Response.json({
           ok: true as const,
-          settingsJson: mergeCartSettingParts(
-            existing.cartSettingRulesJson,
-            existing.cartSettingStylesJson,
-          ),
+          rulesJson: existing.cartSettingRulesJson,
+          stylesJson: existing.cartSettingStylesJson,
         });
       }
     } catch (error) {
@@ -879,7 +877,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           }
         }
       }
-      return Response.json({ ok: true as const, settingsJson: valueRaw || "" });
+      if (!valueRaw) {
+        return Response.json({ ok: true as const, rulesJson: "", stylesJson: "" });
+      }
+      const split = trySplitCartSettingJson(valueRaw);
+      if (!split.ok) {
+        return Response.json(
+          { ok: false as const, error: "Cart settings must be a JSON object." },
+          { status: 400 },
+        );
+      }
+      return Response.json({
+        ok: true as const,
+        rulesJson: split.parts.rulesJson,
+        stylesJson: split.parts.stylesJson,
+      });
     } catch (error) {
       console.error("[cart-settings] load failed", error);
       return Response.json(
@@ -890,29 +902,33 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (intent === "save-cart-settings") {
-    const settingsJsonRaw = String(formData.get("settingsJson") || "").trim();
-    if (settingsJsonRaw.length > 200_000) {
+    const rulesJsonRaw = String(formData.get("rulesJson") || "").trim();
+    const stylesJsonRaw = String(formData.get("stylesJson") || "").trim();
+    if (rulesJsonRaw.length > 200_000 || stylesJsonRaw.length > 200_000) {
       return Response.json(
         { ok: false as const, error: "Cart settings JSON is too large." },
         { status: 400 },
       );
     }
-    if (settingsJsonRaw) {
+    if (rulesJsonRaw) {
       try {
-        JSON.parse(settingsJsonRaw);
+        JSON.parse(rulesJsonRaw);
       } catch {
         return Response.json(
-          { ok: false as const, error: "Invalid JSON." },
+          { ok: false as const, error: "Invalid rules JSON." },
           { status: 400 },
         );
       }
     }
-    const split = trySplitCartSettingJson(settingsJsonRaw);
-    if (!split.ok) {
-      return Response.json(
-        { ok: false as const, error: "Cart settings must be a JSON object." },
-        { status: 400 },
-      );
+    if (stylesJsonRaw) {
+      try {
+        JSON.parse(stylesJsonRaw);
+      } catch {
+        return Response.json(
+          { ok: false as const, error: "Invalid styles JSON." },
+          { status: 400 },
+        );
+      }
     }
     const now = BigInt(Date.now());
     try {
@@ -920,14 +936,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         where: { shopName: session.shop },
         create: {
           shopName: session.shop,
-          cartSettingRulesJson: split.parts.rulesJson,
-          cartSettingStylesJson: split.parts.stylesJson,
+          cartSettingRulesJson: rulesJsonRaw || "{}",
+          cartSettingStylesJson: stylesJsonRaw || "{}",
           createdAt: now,
           updatedAt: now,
         },
         update: {
-          cartSettingRulesJson: split.parts.rulesJson,
-          cartSettingStylesJson: split.parts.stylesJson,
+          cartSettingRulesJson: rulesJsonRaw || "{}",
+          cartSettingStylesJson: stylesJsonRaw || "{}",
           updatedAt: now,
         },
       });
@@ -964,6 +980,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           { status: 502 },
         );
       }
+      const merged = mergeCartSettingParts(rulesJsonRaw, stylesJsonRaw);
       const setResponse = await admin.graphql(
         `#graphql
           mutation MetafieldsSet($metafields: [MetafieldsSetInput!]!) {
@@ -981,7 +998,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                 namespace: BUNDLE_METAFIELD_NAMESPACE,
                 key: BUNDLE_METAFIELD_CART_SETTINGS_KEY,
                 type: "json",
-                value: settingsJsonRaw || "{}",
+                value: merged || "{}",
               },
             ],
           },

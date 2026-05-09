@@ -11,28 +11,29 @@ type PromotionTier = {
   label: string;
 };
 
-export type CartSettings = {
-  version: 1;
+type TimerRules = {
   enabled: boolean;
-  ui: {
-    accentColor: string;
-    surfaceColor: string;
-    borderColor: string;
-    radiusPx: number;
-  };
+  durationSeconds: number;
+  expireAction: TimerExpireAction;
+  resetOnAdd: boolean;
+  textTemplate: string;
+};
+
+type PromotionsRules = {
+  enabled: boolean;
+  freeShippingThresholdMinor: number;
+  successMessage: string;
+  progressMessage: string;
+  tiers?: PromotionTier[];
+};
+
+type CartSettingsRules = {
+  version: 2;
+  enabled: boolean;
   modules: {
     topBar: { enabled: boolean; order: number };
-    timer: {
-      enabled: boolean;
-      order: number;
-      durationSeconds: number;
-      expireAction: TimerExpireAction;
-    };
-    promotions: {
-      enabled: boolean;
-      order: number;
-      tiers: PromotionTier[];
-    };
+    timer: TimerRules & { order: number };
+    promotions: PromotionsRules & { order: number };
     trustBadges: { enabled: boolean; order: number };
     footer: { enabled: boolean; order: number };
   };
@@ -46,15 +47,25 @@ export type CartSettings = {
   };
 };
 
-const DEFAULT_SETTINGS: CartSettings = {
-  version: 1,
-  enabled: true,
+type CartSettingsStyles = {
   ui: {
-    accentColor: "#7d5ce6",
-    surfaceColor: "#ffffff",
-    borderColor: "#dfe3e8",
-    radiusPx: 10,
-  },
+    accentColor: string;
+    surfaceColor: string;
+    borderColor: string;
+    radiusPx: number;
+    timerTextColor: string;
+    timerBackgroundColor: string;
+    promotionsProgressColor: string;
+    promotionsBackgroundColor: string;
+    promotionsRadiusPx: number;
+  };
+};
+
+type CartSettingsFormValues = CartSettingsRules & CartSettingsStyles;
+
+const DEFAULT_RULES: CartSettingsRules = {
+  version: 2,
+  enabled: true,
   modules: {
     topBar: { enabled: true, order: 10 },
     timer: {
@@ -62,15 +73,16 @@ const DEFAULT_SETTINGS: CartSettings = {
       order: 20,
       durationSeconds: 10 * 60,
       expireAction: "hide",
+      resetOnAdd: true,
+      textTemplate: "Your cart will expire in {timer}",
     },
     promotions: {
       enabled: true,
       order: 30,
-      tiers: [
-        { thresholdMinor: 5000, label: "Free Gift" },
-        { thresholdMinor: 10000, label: "Free Shipping" },
-        { thresholdMinor: 20000, label: "VIP Discount" },
-      ],
+      freeShippingThresholdMinor: 10000,
+      successMessage: "Free shipping unlocked!",
+      progressMessage: "Spend {remaining} more to unlock free shipping",
+      tiers: [{ thresholdMinor: 10000, label: "Free Shipping" }],
     },
     trustBadges: { enabled: false, order: 80 },
     footer: { enabled: true, order: 90 },
@@ -85,6 +97,20 @@ const DEFAULT_SETTINGS: CartSettings = {
   },
 };
 
+const DEFAULT_STYLES: CartSettingsStyles = {
+  ui: {
+    accentColor: "#7d5ce6",
+    surfaceColor: "#ffffff",
+    borderColor: "#dfe3e8",
+    radiusPx: 10,
+    timerTextColor: "#7d5ce6",
+    timerBackgroundColor: "#f3efff",
+    promotionsProgressColor: "#7d5ce6",
+    promotionsBackgroundColor: "#e5e7eb",
+    promotionsRadiusPx: 999,
+  },
+};
+
 function safeParseJson(value: string): { ok: true; data: unknown } | { ok: false; error: string } {
   try {
     return { ok: true as const, data: JSON.parse(value) as unknown };
@@ -93,35 +119,112 @@ function safeParseJson(value: string): { ok: true; data: unknown } | { ok: false
   }
 }
 
-function normalizeCartSettings(
-  values: Partial<CartSettings>,
-  rawJson: string,
-): CartSettings {
-  const parsedRaw = rawJson.trim() ? safeParseJson(rawJson) : null;
-  let tierFallback = DEFAULT_SETTINGS.modules.promotions.tiers;
-  if (parsedRaw?.ok && parsedRaw.data && typeof parsedRaw.data === "object") {
-    const existingTiers = (parsedRaw.data as CartSettings)?.modules?.promotions?.tiers;
-    if (Array.isArray(existingTiers) && existingTiers.length > 0) {
-      tierFallback = existingTiers;
-    }
+function parseJsonObject(value: string | null | undefined): Record<string, unknown> | null {
+  if (!value) return null;
+  const parsed = safeParseJson(value);
+  if (!parsed.ok || !parsed.data || typeof parsed.data !== "object" || Array.isArray(parsed.data)) {
+    return null;
   }
+  return parsed.data as Record<string, unknown>;
+}
 
-  const nextModules = values.modules ?? DEFAULT_SETTINGS.modules;
-  const nextPromotions = nextModules.promotions ?? DEFAULT_SETTINGS.modules.promotions;
-
-  return {
-    ...DEFAULT_SETTINGS,
+function normalizeRules(values: Partial<CartSettingsRules> = {}): CartSettingsRules {
+  const merged: CartSettingsRules = {
+    ...DEFAULT_RULES,
     ...values,
     modules: {
-      ...DEFAULT_SETTINGS.modules,
-      ...nextModules,
+      ...DEFAULT_RULES.modules,
+      ...values.modules,
+      timer: {
+        ...DEFAULT_RULES.modules.timer,
+        ...values.modules?.timer,
+      },
       promotions: {
-        ...DEFAULT_SETTINGS.modules.promotions,
-        ...nextPromotions,
-        tiers: tierFallback,
+        ...DEFAULT_RULES.modules.promotions,
+        ...values.modules?.promotions,
       },
     },
+    ajax: {
+      ...DEFAULT_RULES.ajax,
+      ...values.ajax,
+    },
+    storage: {
+      ...DEFAULT_RULES.storage,
+      ...values.storage,
+    },
   };
+
+  const tiers = Array.isArray(merged.modules.promotions.tiers)
+    ? merged.modules.promotions.tiers
+    : [];
+  if (!merged.modules.promotions.freeShippingThresholdMinor && tiers.length > 0) {
+    const lastTier = tiers[tiers.length - 1];
+    merged.modules.promotions.freeShippingThresholdMinor = lastTier.thresholdMinor;
+  }
+  if (!merged.modules.promotions.freeShippingThresholdMinor) {
+    merged.modules.promotions.freeShippingThresholdMinor =
+      DEFAULT_RULES.modules.promotions.freeShippingThresholdMinor;
+  }
+  if (tiers.length <= 1) {
+    merged.modules.promotions.tiers = [
+      {
+        thresholdMinor: merged.modules.promotions.freeShippingThresholdMinor,
+        label: merged.modules.promotions.successMessage || "Free Shipping",
+      },
+    ];
+  }
+
+  return merged;
+}
+
+function normalizeStyles(values: Partial<CartSettingsStyles> = {}): CartSettingsStyles {
+  return {
+    ui: {
+      ...DEFAULT_STYLES.ui,
+      ...values.ui,
+    },
+  };
+}
+
+function buildFormValues(
+  rules: CartSettingsRules,
+  styles: CartSettingsStyles,
+): CartSettingsFormValues {
+  return {
+    ...rules,
+    ui: { ...styles.ui },
+  };
+}
+
+function normalizeFormValues(values: Partial<CartSettingsFormValues>): CartSettingsFormValues {
+  const { ui, ...rest } = values;
+  const rules = normalizeRules(rest as Partial<CartSettingsRules>);
+  const styles = normalizeStyles({ ui });
+  return buildFormValues(rules, styles);
+}
+
+function splitFormValues(values: CartSettingsFormValues): {
+  rules: CartSettingsRules;
+  styles: CartSettingsStyles;
+} {
+  const { ui, ...rest } = values;
+  return {
+    rules: normalizeRules(rest),
+    styles: normalizeStyles({ ui }),
+  };
+}
+
+function useDebouncedValue<T>(value: T, delayMs: number) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebounced(value), delayMs);
+    return () => window.clearTimeout(timer);
+  }, [value, delayMs]);
+  return debounced;
+}
+
+function renderTemplate(template: string, variables: Record<string, string>) {
+  return template.replace(/\{(\w+)\}/g, (_, key: string) => variables[key] ?? "");
 }
 
 function formatSecondsAsMMSS(totalSeconds: number): string {
@@ -149,16 +252,22 @@ export function CartSettingPage({
   apiKey: string;
   themeExtensionEnabled: boolean;
 }) {
-  const loadFetcher = useFetcher<{ ok: boolean; settingsJson?: string; error?: string }>();
+  const loadFetcher = useFetcher<{
+    ok: boolean;
+    rulesJson?: string;
+    stylesJson?: string;
+    error?: string;
+  }>();
   const saveFetcher = useFetcher<{ ok: boolean; error?: string }>();
-  const [form] = Form.useForm<CartSettings>();
-  const [rawJson, setRawJson] = useState<string>("");
-  const [showJsonEditor, setShowJsonEditor] = useState(false);
-
-  const parsedRawJson = useMemo(() => {
-    if (!rawJson.trim()) return { ok: true as const, data: null as unknown };
-    return safeParseJson(rawJson);
-  }, [rawJson]);
+  const [form] = Form.useForm<CartSettingsFormValues>();
+  const [draftValues, setDraftValues] = useState<CartSettingsFormValues>(
+    buildFormValues(DEFAULT_RULES, DEFAULT_STYLES),
+  );
+  const debouncedDraft = useDebouncedValue(draftValues, 120);
+  const previewValues = useMemo(() => normalizeFormValues(debouncedDraft), [debouncedDraft]);
+  const [previewTimerLeft, setPreviewTimerLeft] = useState(
+    DEFAULT_RULES.modules.timer.durationSeconds,
+  );
 
   const openThemeEditorEmbed = () => {
     const storeHandle = shop.replace(".myshopify.com", "");
@@ -177,25 +286,22 @@ export function CartSettingPage({
     if (!loadFetcher.data) return;
     if (!loadFetcher.data.ok) {
       void message.error(loadFetcher.data.error || "加载 Cart Settings 失败");
-      form.setFieldsValue(DEFAULT_SETTINGS);
-      setRawJson(JSON.stringify(DEFAULT_SETTINGS, null, 2));
+      const fallback = buildFormValues(DEFAULT_RULES, DEFAULT_STYLES);
+      form.setFieldsValue(fallback);
+      setDraftValues(fallback);
       return;
     }
-    const raw = String(loadFetcher.data.settingsJson || "").trim();
-    if (!raw) {
-      form.setFieldsValue(DEFAULT_SETTINGS);
-      setRawJson(JSON.stringify(DEFAULT_SETTINGS, null, 2));
-      return;
-    }
-    const parsed = safeParseJson(raw);
-    if (!parsed.ok || !parsed.data || typeof parsed.data !== "object") {
-      form.setFieldsValue(DEFAULT_SETTINGS);
-      setRawJson(JSON.stringify(DEFAULT_SETTINGS, null, 2));
-      void message.warning("已读取到历史配置，但 JSON 格式异常，已回退到默认配置");
-      return;
-    }
-    form.setFieldsValue(parsed.data as CartSettings);
-    setRawJson(JSON.stringify(parsed.data, null, 2));
+    const rulesObj = parseJsonObject(loadFetcher.data.rulesJson);
+    const stylesObj = parseJsonObject(loadFetcher.data.stylesJson);
+    const normalizedRules = normalizeRules((rulesObj ?? {}) as Partial<CartSettingsRules>);
+    const normalizedStyles = normalizeStyles(
+      stylesObj && typeof stylesObj.ui === "object" && !Array.isArray(stylesObj.ui)
+        ? { ui: stylesObj.ui as CartSettingsStyles["ui"] }
+        : { ui: (stylesObj ?? {}) as CartSettingsStyles["ui"] },
+    );
+    const nextValues = buildFormValues(normalizedRules, normalizedStyles);
+    form.setFieldsValue(nextValues);
+    setDraftValues(nextValues);
   }, [loadFetcher.data, form]);
 
   useEffect(() => {
@@ -208,38 +314,65 @@ export function CartSettingPage({
     }
   }, [saveFetcher.state, saveFetcher.data]);
 
-  const onApplyFormToJson = async () => {
-    const values = await form.validateFields();
-    const normalized = normalizeCartSettings(values, rawJson);
-    setRawJson(JSON.stringify(normalized, null, 2));
+  const handleValuesChange = () => {
+    const values = form.getFieldsValue(true) as CartSettingsFormValues;
+    setDraftValues(values);
+  };
+
+  const handleReset = () => {
+    const defaults = buildFormValues(DEFAULT_RULES, DEFAULT_STYLES);
+    form.setFieldsValue(defaults);
+    setDraftValues(defaults);
   };
 
   const onSave = () => {
-    const raw = rawJson.trim();
-    const base = raw
-      ? safeParseJson(raw)
-      : { ok: true as const, data: form.getFieldsValue() as CartSettings };
-    const normalized =
-      base.ok && base.data && typeof base.data === "object"
-        ? normalizeCartSettings(base.data as CartSettings, rawJson)
-        : normalizeCartSettings(form.getFieldsValue() as CartSettings, rawJson);
-    const next = JSON.stringify(normalized, null, 2);
-    setRawJson(next);
-    const parsed = safeParseJson(next);
-    if (!parsed.ok) {
-      void message.error(`JSON 校验失败：${parsed.error}`);
-      return;
-    }
-    saveFetcher.submit({ intent: "save-cart-settings", settingsJson: next }, { method: "post" });
+    const values = normalizeFormValues(form.getFieldsValue(true) as CartSettingsFormValues);
+    const { rules, styles } = splitFormValues(values);
+    saveFetcher.submit(
+      {
+        intent: "save-cart-settings",
+        rulesJson: JSON.stringify(rules),
+        stylesJson: JSON.stringify(styles.ui),
+      },
+      { method: "post" },
+    );
   };
 
-  const previewSettings = useMemo(() => {
-    const parsed = rawJson.trim() ? safeParseJson(rawJson) : { ok: true as const, data: null as unknown };
-    if (parsed.ok && parsed.data && typeof parsed.data === "object") {
-      return parsed.data as Partial<CartSettings>;
+  useEffect(() => {
+    if (!previewValues.modules.timer.enabled) {
+      setPreviewTimerLeft(0);
+      return;
     }
-    return form.getFieldsValue() as CartSettings;
-  }, [rawJson, form]);
+    const duration = previewValues.modules.timer.durationSeconds;
+    setPreviewTimerLeft(duration);
+    const startAt = Date.now();
+    const interval = window.setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startAt) / 1000);
+      const left = Math.max(0, duration - elapsed);
+      setPreviewTimerLeft(left);
+      if (left <= 0) {
+        window.clearInterval(interval);
+      }
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [previewValues.modules.timer.enabled, previewValues.modules.timer.durationSeconds]);
+
+  const previewCurrency = "EUR";
+  const previewCartTotalMinor = 18999;
+  const timerLabel = formatSecondsAsMMSS(previewTimerLeft);
+  const timerText = renderTemplate(previewValues.modules.timer.textTemplate, { timer: timerLabel });
+  const thresholdMinor = previewValues.modules.promotions.freeShippingThresholdMinor;
+  const progressPct =
+    thresholdMinor > 0 ? Math.min(1, previewCartTotalMinor / thresholdMinor) : 0;
+  const remainingMinor = Math.max(0, thresholdMinor - previewCartTotalMinor);
+  const progressText =
+    previewCartTotalMinor >= thresholdMinor
+      ? previewValues.modules.promotions.successMessage
+      : renderTemplate(previewValues.modules.promotions.progressMessage, {
+          remaining: formatMinorMoney(remainingMinor, previewCurrency),
+          threshold: formatMinorMoney(thresholdMinor, previewCurrency),
+          total: formatMinorMoney(previewCartTotalMinor, previewCurrency),
+        });
 
   return (
     <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px]">
@@ -288,75 +421,115 @@ export function CartSettingPage({
             Cart Setting（可视化配置）
           </div>
 
-          <Form<CartSettings> form={form} layout="vertical" initialValues={DEFAULT_SETTINGS}>
+          <Form<CartSettingsFormValues>
+            form={form}
+            layout="vertical"
+            initialValues={buildFormValues(DEFAULT_RULES, DEFAULT_STYLES)}
+            onValuesChange={handleValuesChange}
+          >
             <Form.Item name={["enabled"]} valuePropName="checked" label="总开关">
               <Switch />
             </Form.Item>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-[12px]">
-              <Form.Item name={["ui", "accentColor"]} label="Accent Color">
-                <Input />
-              </Form.Item>
-              <Form.Item name={["ui", "borderColor"]} label="Border Color">
-                <Input />
-              </Form.Item>
-              <Form.Item name={["ui", "surfaceColor"]} label="Surface Color">
-                <Input />
-              </Form.Item>
-              <Form.Item name={["ui", "radiusPx"]} label="Radius（px）">
-                <InputNumber min={0} max={24} className="w-full" />
-              </Form.Item>
-            </div>
-
-            <div className="mt-[8px] font-sans font-semibold text-[14px] text-[#1c1f23]">
-              Timer（倒计时）
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-[12px] mt-[8px]">
-              <Form.Item name={["modules", "timer", "enabled"]} valuePropName="checked" label="启用">
-                <Switch />
-              </Form.Item>
-              <Form.Item name={["modules", "timer", "durationSeconds"]} label="时长（秒）">
-                <InputNumber min={10} max={24 * 60 * 60} className="w-full" />
-              </Form.Item>
-              <Form.Item name={["modules", "timer", "expireAction"]} label="结束动作">
-                <Select
-                  options={[
-                    { value: "hide", label: "隐藏" },
-                    { value: "restart", label: "重新开始" },
-                    { value: "clearCart", label: "清空购物车" },
-                  ]}
-                />
-              </Form.Item>
-              <Form.Item name={["storage", "timerKey"]} label="LocalStorage Key">
-                <Input />
-              </Form.Item>
-            </div>
-
-            <div className="mt-[8px] font-sans font-semibold text-[14px] text-[#1c1f23]">
-              Promotions Progress Bar（促销进度条）
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-[12px] mt-[8px]">
+            <div className="mt-[12px] rounded-[12px] border border-[#e5e7eb] p-[12px]">
+              <div className="font-sans font-semibold text-[14px] text-[#1c1f23]">
+                Timer（倒计时）
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-[12px] mt-[10px]">
+                <Form.Item name={["modules", "timer", "enabled"]} valuePropName="checked" label="启用">
+                  <Switch />
+                </Form.Item>
+                <Form.Item name={["modules", "timer", "durationSeconds"]} label="时长（秒）">
+                  <InputNumber min={10} max={24 * 60 * 60} className="w-full" />
+                </Form.Item>
+                <Form.Item name={["modules", "timer", "expireAction"]} label="结束动作">
+                  <Select
+                    options={[
+                      { value: "hide", label: "隐藏" },
+                      { value: "restart", label: "重新开始" },
+                      { value: "clearCart", label: "清空购物车" },
+                    ]}
+                  />
+                </Form.Item>
+                <Form.Item name={["storage", "timerKey"]} label="LocalStorage Key">
+                  <Input />
+                </Form.Item>
+              </div>
               <Form.Item
-                name={["modules", "promotions", "enabled"]}
-                valuePropName="checked"
-                label="启用"
+                name={["modules", "timer", "textTemplate"]}
+                label="文案内容（支持 {timer}）"
               >
-                <Switch />
+                <Input />
               </Form.Item>
-              <Form.Item name={["ajax", "debounceMs"]} label="防抖（ms）">
-                <InputNumber min={0} max={2000} className="w-full" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-[12px]">
+                <Form.Item name={["modules", "timer", "resetOnAdd"]} valuePropName="checked" label="加入购物车重置">
+                  <Switch />
+                </Form.Item>
+                <div className="hidden sm:block" />
+                <Form.Item name={["ui", "timerTextColor"]} label="文字颜色">
+                  <Input type="color" className="h-[40px] px-[4px]" />
+                </Form.Item>
+                <Form.Item name={["ui", "timerBackgroundColor"]} label="背景颜色">
+                  <Input type="color" className="h-[40px] px-[4px]" />
+                </Form.Item>
+              </div>
+            </div>
+
+            <div className="mt-[12px] rounded-[12px] border border-[#e5e7eb] p-[12px]">
+              <div className="font-sans font-semibold text-[14px] text-[#1c1f23]">
+                Promotions Progress Bar（促销进度条）
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-[12px] mt-[10px]">
+                <Form.Item
+                  name={["modules", "promotions", "enabled"]}
+                  valuePropName="checked"
+                  label="启用"
+                >
+                  <Switch />
+                </Form.Item>
+                <Form.Item name={["ajax", "debounceMs"]} label="防抖（ms）">
+                  <InputNumber min={0} max={2000} className="w-full" />
+                </Form.Item>
+                <Form.Item
+                  name={["ajax", "optimisticUpdate"]}
+                  valuePropName="checked"
+                  label="Optimistic Update（乐观更新）"
+                >
+                  <Switch />
+                </Form.Item>
+                <Form.Item
+                  name={["ajax", "sectionRender"]}
+                  valuePropName="checked"
+                  label="Section Render（分段刷新）"
+                >
+                  <Switch />
+                </Form.Item>
+                <Form.Item
+                  name={["modules", "promotions", "freeShippingThresholdMinor"]}
+                  label="Free Shipping Threshold（最小单位）"
+                >
+                  <InputNumber min={0} max={10_000_000_00} className="w-full" />
+                </Form.Item>
+                <Form.Item name={["ui", "promotionsRadiusPx"]} label="Border Radius（px）">
+                  <InputNumber min={0} max={999} className="w-full" />
+                </Form.Item>
+                <Form.Item name={["ui", "promotionsProgressColor"]} label="Progress Bar Color">
+                  <Input type="color" className="h-[40px] px-[4px]" />
+                </Form.Item>
+                <Form.Item name={["ui", "promotionsBackgroundColor"]} label="Background Color">
+                  <Input type="color" className="h-[40px] px-[4px]" />
+                </Form.Item>
+              </div>
+              <Form.Item name={["modules", "promotions", "successMessage"]} label="Success Message">
+                <Input />
               </Form.Item>
-              <Form.Item name={["ajax", "optimisticUpdate"]} valuePropName="checked" label="Optimistic update（乐观更新）">
-                <Switch />
-              </Form.Item>
-              <Form.Item name={["ajax", "sectionRender"]} valuePropName="checked" label="Section render（分段刷新）">
-                <Switch />
+              <Form.Item name={["modules", "promotions", "progressMessage"]} label="Progress Message">
+                <Input />
               </Form.Item>
             </div>
 
             <div className="flex gap-[8px] mt-[12px]">
-              <Button onClick={() => form.setFieldsValue(DEFAULT_SETTINGS)}>恢复默认</Button>
-              <Button onClick={() => void onApplyFormToJson()}>同步到 JSON</Button>
+              <Button onClick={handleReset}>恢复默认</Button>
               <Button type="primary" loading={saveFetcher.state !== "idle"} onClick={onSave}>
                 保存
               </Button>
@@ -369,18 +542,11 @@ export function CartSettingPage({
             <div className="font-sans font-semibold text-[16px] text-[#1c1f23]">
               Cart Review
             </div>
-            <button
-              type="button"
-              onClick={() => setShowJsonEditor((v) => !v)}
-              className="text-[12px] text-[#5c6166] hover:text-[#1c1f23] border border-[#e5e7eb] rounded-[8px] px-[10px] py-[6px] bg-white"
-            >
-              {showJsonEditor ? "隐藏 JSON" : "显示 JSON"}
-            </button>
           </div>
           <div
             className="rounded-[16px] border border-[#e5e7eb] overflow-hidden bg-white"
             style={{
-              ["--accent" as any]: String(previewSettings?.ui?.accentColor || "#7d5ce6"),
+              ["--accent" as any]: String(previewValues.ui.accentColor || "#7d5ce6"),
             }}
           >
             <div className="bg-white px-[16px] py-[12px] border-b border-[#eef0f2] flex items-center justify-between">
@@ -396,32 +562,36 @@ export function CartSettingPage({
               </button>
             </div>
 
-            {previewSettings?.modules?.timer?.enabled !== false ? (
+            {previewValues.modules.timer.enabled ? (
               <div
                 className="px-[16px] py-[10px] text-center text-[13px]"
                 style={{
-                  background: "rgba(125, 92, 230, 0.12)",
-                  color: String(previewSettings?.ui?.accentColor || "#7d5ce6"),
+                  background: previewValues.ui.timerBackgroundColor,
+                  color: previewValues.ui.timerTextColor,
                 }}
               >
-                Your cart will expire in{" "}
-                <span className="font-semibold">
-                  {formatSecondsAsMMSS(previewSettings?.modules?.timer?.durationSeconds ?? 600)}
-                </span>
+                <span className="font-semibold">{timerText}</span>
               </div>
             ) : null}
 
-            {previewSettings?.modules?.promotions?.enabled !== false ? (
+            {previewValues.modules.promotions.enabled ? (
               <div className="px-[16px] pt-[12px]">
                 <div className="text-center text-[13px] font-semibold text-[#111827]">
-                  Free shipping unlocked!
+                  {progressText}
                 </div>
-                <div className="mt-[10px] h-[10px] rounded-full bg-[#e5e7eb] overflow-hidden">
+                <div
+                  className="mt-[10px] h-[10px] overflow-hidden"
+                  style={{
+                    background: previewValues.ui.promotionsBackgroundColor,
+                    borderRadius: `${previewValues.ui.promotionsRadiusPx}px`,
+                  }}
+                >
                   <div
-                    className="h-full rounded-full"
+                    className="h-full"
                     style={{
-                      width: "78%",
-                      background: String(previewSettings?.ui?.accentColor || "#7d5ce6"),
+                      width: `${Math.round(progressPct * 100)}%`,
+                      background: previewValues.ui.promotionsProgressColor,
+                      borderRadius: `${previewValues.ui.promotionsRadiusPx}px`,
                       transition: "width 180ms ease",
                     }}
                   />
@@ -477,7 +647,7 @@ export function CartSettingPage({
                 type="button"
                 className="mt-[12px] w-full h-[44px] rounded-[12px] text-white font-semibold text-[14px]"
                 style={{
-                  background: String(previewSettings?.ui?.accentColor || "#7d5ce6"),
+                  background: previewValues.ui.accentColor,
                 }}
               >
                 Checkout • {formatMinorMoney(18999, "EUR")}
@@ -487,29 +657,6 @@ export function CartSettingPage({
               </div>
             </div>
           </div>
-
-          {showJsonEditor ? (
-            <div className="mt-[14px]">
-              <div className="flex items-center justify-between gap-[8px] mb-[8px]">
-                <div className="text-[12px] text-[#6d7175]">
-                  保存后写入：<span className="font-mono">ciwi_bundle/ciwi-cart-settings</span>
-                </div>
-                <Button size="small" onClick={() => void onApplyFormToJson()}>
-                  从表单同步
-                </Button>
-              </div>
-              <textarea
-                className="w-full min-h-[320px] font-mono text-[12px] border border-[#dfe3e8] rounded-[8px] p-[12px] outline-none focus:border-[#7d5ce6]"
-                value={rawJson}
-                onChange={(e) => setRawJson(e.target.value)}
-              />
-              {!parsedRawJson.ok ? (
-                <div className="mt-[8px] text-[12px] text-[#d72c0d]">
-                  JSON 校验失败：{parsedRawJson.error}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
         </div>
       </div>
     </div>
