@@ -63,6 +63,15 @@ model Offer {
   @@unique([shopName, name])
 }
 
+model CartSetting {
+  id                    String @id @default(cuid())
+  shopName              String @unique
+  cartSettingRulesJson  String
+  cartSettingStylesJson String
+  createdAt             BigInt
+  updatedAt             BigInt
+}
+
 /// 商家在应用内「发起订阅」（appSubscriptionCreate 成功、跳转确认页）时写入一条
 model BillingInitLog {
   id                    String   @id @default(cuid())

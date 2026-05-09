@@ -116,6 +116,63 @@ function resolveBundleEnvironment(): BundleEnvironment {
   return process.env.NODE_ENV === "production" ? "prod" : "test";
 }
 
+type CartSettingParts = {
+  rulesJson: string;
+  stylesJson: string;
+};
+
+function parseJsonObjectStrict(raw: string): Record<string, unknown> | null {
+  if (!raw.trim()) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    return parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function parseJsonObjectLoose(raw: string | null | undefined): Record<string, unknown> {
+  if (!raw) return {};
+  return parseJsonObjectStrict(raw) ?? {};
+}
+
+function trySplitCartSettingJson(raw: string): { ok: true; parts: CartSettingParts } | { ok: false } {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return { ok: true as const, parts: { rulesJson: "{}", stylesJson: "{}" } };
+  }
+  const parsed = parseJsonObjectStrict(trimmed);
+  if (!parsed) return { ok: false as const };
+  const { ui, ...rest } = parsed;
+  const uiValue =
+    ui && typeof ui === "object" && !Array.isArray(ui) ? (ui as Record<string, unknown>) : {};
+  return {
+    ok: true as const,
+    parts: {
+      rulesJson: JSON.stringify(rest),
+      stylesJson: JSON.stringify(uiValue),
+    },
+  };
+}
+
+function mergeCartSettingParts(
+  rulesJson: string | null | undefined,
+  stylesJson: string | null | undefined,
+): string {
+  const rules = parseJsonObjectLoose(rulesJson);
+  const uiFromRules =
+    rules.ui && typeof rules.ui === "object" && !Array.isArray(rules.ui)
+      ? (rules.ui as Record<string, unknown>)
+      : {};
+  if ("ui" in rules) {
+    delete (rules as Record<string, unknown>).ui;
+  }
+  const styles = parseJsonObjectLoose(stylesJson);
+  const ui = Object.keys(styles).length > 0 ? styles : uiFromRules;
+  return JSON.stringify({ ...rules, ui });
+}
+
 function buildOfferMetafieldsInput(
   ownerId: string,
   offersPayload: string,
@@ -759,6 +816,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   let intent = formData.get("intent");
 
   if (intent === "load-cart-settings") {
+    const shopName = session.shop;
+    try {
+      const existing = await prismaAny.cartSetting.findUnique({
+        where: { shopName },
+      });
+      if (existing) {
+        return Response.json({
+          ok: true as const,
+          settingsJson: mergeCartSettingParts(
+            existing.cartSettingRulesJson,
+            existing.cartSettingStylesJson,
+          ),
+        });
+      }
+    } catch (error) {
+      console.error("[cart-settings] db load failed, fallback to metafield", error);
+    }
     try {
       const queryResponse = await admin.graphql(
         `#graphql
@@ -786,6 +860,25 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         );
       }
       const valueRaw = json?.data?.shop?.metafield?.value ?? "";
+      if (valueRaw) {
+        const split = trySplitCartSettingJson(valueRaw);
+        if (split.ok) {
+          const now = BigInt(Date.now());
+          try {
+            await prismaAny.cartSetting.create({
+              data: {
+                shopName,
+                cartSettingRulesJson: split.parts.rulesJson,
+                cartSettingStylesJson: split.parts.stylesJson,
+                createdAt: now,
+                updatedAt: now,
+              },
+            });
+          } catch (error) {
+            console.error("[cart-settings] db migrate failed", error);
+          }
+        }
+      }
       return Response.json({ ok: true as const, settingsJson: valueRaw || "" });
     } catch (error) {
       console.error("[cart-settings] load failed", error);
@@ -813,6 +906,37 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           { status: 400 },
         );
       }
+    }
+    const split = trySplitCartSettingJson(settingsJsonRaw);
+    if (!split.ok) {
+      return Response.json(
+        { ok: false as const, error: "Cart settings must be a JSON object." },
+        { status: 400 },
+      );
+    }
+    const now = BigInt(Date.now());
+    try {
+      await prismaAny.cartSetting.upsert({
+        where: { shopName: session.shop },
+        create: {
+          shopName: session.shop,
+          cartSettingRulesJson: split.parts.rulesJson,
+          cartSettingStylesJson: split.parts.stylesJson,
+          createdAt: now,
+          updatedAt: now,
+        },
+        update: {
+          cartSettingRulesJson: split.parts.rulesJson,
+          cartSettingStylesJson: split.parts.stylesJson,
+          updatedAt: now,
+        },
+      });
+    } catch (error) {
+      console.error("[cart-settings] db save failed", error);
+      return Response.json(
+        { ok: false as const, error: "Failed to save cart settings." },
+        { status: 500 },
+      );
     }
     try {
       const shopIdResponse = await admin.graphql(
