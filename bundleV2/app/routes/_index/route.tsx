@@ -173,6 +173,13 @@ function mergeCartSettingParts(
   return JSON.stringify({ ...rules, ui });
 }
 
+function formatTimestampMs(value: bigint | number | null | undefined): string | null {
+  if (value === null || value === undefined) return null;
+  const numeric = typeof value === "bigint" ? Number(value) : Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return null;
+  return new Date(numeric).toISOString().replace("Z", "+00:00");
+}
+
 function buildOfferMetafieldsInput(
   ownerId: string,
   offersPayload: string,
@@ -826,6 +833,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           ok: true as const,
           rulesJson: existing.cartSettingRulesJson,
           stylesJson: existing.cartSettingStylesJson,
+          createdAt: Number(existing.createdAt),
+          updatedAt: Number(existing.updatedAt),
+          createdAtIso: formatTimestampMs(existing.createdAt),
+          updatedAtIso: formatTimestampMs(existing.updatedAt),
         });
       }
     } catch (error) {

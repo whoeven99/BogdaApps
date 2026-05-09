@@ -409,6 +409,7 @@
   function buildEnhancerElement() {
     const mount = document.createElement("div");
     mount.className = "ciwi-cart-enhancer ciwi-cart-enhancer__mount";
+    mount.setAttribute("data-ciwi-enhancer", "true");
     mount.innerHTML = `
       <div class="ciwi-cart-enhancer__card">
         <div class="ciwi-cart-enhancer__row">
@@ -450,6 +451,22 @@
     return inner || host;
   }
 
+  function logElementMetrics(el, label) {
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const style = window.getComputedStyle(el);
+    log(label, {
+      width: rect.width,
+      height: rect.height,
+      display: style.display,
+      visibility: style.visibility,
+      opacity: style.opacity,
+      position: style.position,
+      parentTag: el.parentElement ? el.parentElement.tagName : "",
+      parentClass: el.parentElement ? el.parentElement.className : "",
+    });
+  }
+
   function wireUi(bus, store, timer, settings, currencyCode) {
     /** @type {HTMLElement[]} */
     let enhancers = [];
@@ -484,6 +501,20 @@
           hostClass: host.className,
           targetTag: target.tagName,
           targetClass: target.className,
+        });
+        window.requestAnimationFrame(() => {
+          logElementMetrics(el, "挂载节点可见性检查");
+          if (el.getBoundingClientRect().height === 0) {
+            const fallback = document.querySelector(".cart-drawer__content");
+            if (fallback && fallback !== target) {
+              fallback.prepend(el);
+              log("挂载节点移动到备用容器", {
+                fallbackTag: fallback.tagName,
+                fallbackClass: fallback.className,
+              });
+              window.requestAnimationFrame(() => logElementMetrics(el, "备用容器可见性检查"));
+            }
+          }
         });
         mounted.push(el);
       }
