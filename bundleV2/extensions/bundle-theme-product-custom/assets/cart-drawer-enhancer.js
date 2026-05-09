@@ -149,14 +149,25 @@
       return `${this.root}${p}`;
     }
     async getCart() {
-      const res = await fetch(this.url("cart.js"), { credentials: "same-origin" });
-      if (!res.ok) throw new Error(`GET /cart.js failed: ${res.status}`);
+      const requestUrl = this.url("cart.js");
+      log("请求 cart.js", { url: requestUrl });
+      const res = await fetch(requestUrl, { credentials: "same-origin" });
+      if (!res.ok) {
+        log("cart.js 响应异常", { status: res.status, statusText: res.statusText, url: requestUrl });
+        throw new Error(`GET /cart.js failed: ${res.status}`);
+      }
       const ct = String(res.headers.get("content-type") || "");
       const text = await res.text();
+      log("cart.js 响应信息", { status: res.status, contentType: ct, sample: text.slice(0, 120) });
       if (!ct.includes("application/json") && !ct.includes("text/javascript")) {
         const fallback = await fetch("/cart.js", { credentials: "same-origin" });
         const fallbackCt = String(fallback.headers.get("content-type") || "");
         const fallbackText = await fallback.text();
+        log("cart.js 兜底响应", {
+          status: fallback.status,
+          contentType: fallbackCt,
+          sample: fallbackText.slice(0, 120),
+        });
         if (
           fallback.ok &&
           (fallbackCt.includes("application/json") || fallbackCt.includes("text/javascript"))
@@ -512,6 +523,8 @@
           updateSub("Failed to clear cart. Please try again.");
         }
       });
+    } else {
+      log("Timer 模块已关闭");
     }
 
     if (promoEnabled && tiers.length > 0) {
@@ -536,6 +549,8 @@
           }
         }
       });
+    } else {
+      log("Promotions 模块不可用", { promoEnabled, tiersCount: tiers.length });
     }
 
     bus.on("cart:updated", (cart) => {
@@ -553,6 +568,7 @@
         const input = args[0];
         const url = typeof input === "string" ? input : input && typeof input.url === "string" ? input.url : "";
         if (url.includes("/cart/") || url.includes("/cart.js")) {
+          log("捕获购物车请求，准备刷新", { url });
           store.refresh();
         }
       } catch {
