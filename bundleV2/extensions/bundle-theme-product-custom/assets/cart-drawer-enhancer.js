@@ -377,14 +377,16 @@
     const openDialog = document.querySelector("dialog[open]");
     if (openDialog) {
       const dialogTarget =
+        openDialog.querySelector("scroll-hint.cart-drawer__content") ||
+        openDialog.querySelector("scroll-hint[aria-label]") ||
         openDialog.querySelector(".cart-drawer__content") ||
         openDialog.querySelector(".cart-items__wrapper") ||
         openDialog.querySelector("cart-items-component") ||
         openDialog.querySelector(".cart-items-component");
       if (dialogTarget) {
-        mounts.push(/** @type {HTMLElement} */ (dialogTarget));
-        sources.push("dialogOpenInner");
+        return { mounts: [/** @type {HTMLElement} */ (dialogTarget)], sources: ["dialogOpenInner"] };
       }
+      return { mounts: [/** @type {HTMLElement} */ (openDialog)], sources: ["dialogOpen"] };
     }
 
     // Common drawer roots across themes
@@ -494,6 +496,8 @@
   function resolveMountTarget(host) {
     if (!host || !host.querySelector) return host;
     const inner =
+      host.querySelector("scroll-hint.cart-drawer__content") ||
+      host.querySelector("scroll-hint[aria-label]") ||
       host.querySelector(".cart-drawer__content") ||
       host.querySelector("cart-items-component") ||
       host.querySelector(".cart-items-component") ||
