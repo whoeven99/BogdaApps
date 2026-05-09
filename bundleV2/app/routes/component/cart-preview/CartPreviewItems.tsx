@@ -9,9 +9,13 @@ function formatOptions(options: PreviewCartItem["optionsWithValues"]) {
 export function CartPreviewItems({
   items,
   market,
+  onQuantityChange,
+  onRemove,
 }: {
   items: PreviewCartItem[];
   market: PreviewMarketContext;
+  onQuantityChange: (id: string, nextQty: number) => void;
+  onRemove: (id: string) => void;
 }) {
   return (
     <div className="px-[16px] py-[14px] space-y-[16px]">
@@ -52,17 +56,31 @@ export function CartPreviewItems({
             </div>
             <div className="mt-[10px] flex items-center gap-[8px]">
               <div className="inline-flex items-center rounded-[10px] border border-[#e5e7eb] overflow-hidden">
-                <button type="button" className="w-[34px] h-[32px] text-[#111827] hover:bg-black/5">
+                <button
+                  type="button"
+                  className="w-[34px] h-[32px] text-[#111827] hover:bg-black/5"
+                  onClick={() =>
+                    onQuantityChange(item.id, Math.max(1, item.quantity - 1))
+                  }
+                >
                   −
                 </button>
                 <div className="w-[36px] h-[32px] flex items-center justify-center text-[13px]">
                   {item.quantity}
                 </div>
-                <button type="button" className="w-[34px] h-[32px] text-[#111827] hover:bg-black/5">
+                <button
+                  type="button"
+                  className="w-[34px] h-[32px] text-[#111827] hover:bg-black/5"
+                  onClick={() => onQuantityChange(item.id, item.quantity + 1)}
+                >
                   +
                 </button>
               </div>
-              <button type="button" className="text-[#6b7280] hover:text-[#111827] text-[13px]">
+              <button
+                type="button"
+                className="text-[#6b7280] hover:text-[#111827] text-[13px]"
+                onClick={() => onRemove(item.id)}
+              >
                 删除
               </button>
             </div>

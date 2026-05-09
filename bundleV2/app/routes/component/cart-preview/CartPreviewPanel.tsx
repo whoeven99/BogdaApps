@@ -13,7 +13,15 @@ type Props = {
   styles: CartSettingsStyles;
 };
 
-export function CartPreviewPanel({ rules, styles }: Props) {
+export function CartPreviewPanel({
+  rules,
+  styles,
+  onQuantityChange,
+  onRemove,
+}: Props & {
+  onQuantityChange: (id: string, nextQty: number) => void;
+  onRemove: (id: string) => void;
+}) {
   const state = usePreviewState();
   const derived: PreviewDerived = usePreviewDerived(rules, state);
   const itemCount = derived.items.reduce((sum, item) => sum + Math.max(1, item.quantity), 0);
@@ -45,7 +53,12 @@ export function CartPreviewPanel({ rules, styles }: Props) {
           radiusPx={styles.ui.promotionsRadiusPx}
         />
       ) : null}
-      <CartPreviewItems items={derived.items} market={state.market} />
+      <CartPreviewItems
+        items={derived.items}
+        market={state.market}
+        onQuantityChange={onQuantityChange}
+        onRemove={onRemove}
+      />
       <CartPreviewUpsell
         enabled={upsellEnabled}
         title={upsell?.title || "You may also like"}

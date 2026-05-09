@@ -560,29 +560,10 @@ function CartSettingContent({
       ? markets.map((market) => ({ value: market.id, label: market.name }))
       : [{ value: selectedMarketId, label: selectedMarketContext.marketName }];
 
-  const updateMarketContext = (updates: Partial<PreviewMarketContext>) => {
-    const nextContext = { ...selectedMarketContext, ...updates };
-    setPreviewMarketMap((prev) => ({
-      currentMarketId: selectedMarketId,
-      contexts: { ...prev.contexts, [selectedMarketId]: nextContext },
-    }));
-    previewActions.setMarket(nextContext);
-  };
-
   const updatePreviewItem = (id: string, patch: Partial<PreviewCartItem>) => {
     const target = previewState.settings.items.find((item) => item.id === id);
     if (!target) return;
     previewActions.updateItem(id, { ...target, ...patch });
-  };
-
-  const updateItemOption = (id: string, name: string, value: string) => {
-    const target = previewState.settings.items.find((item) => item.id === id);
-    if (!target) return;
-    const nextOptions = target.optionsWithValues.filter((opt) => opt.name !== name);
-    if (value.trim()) {
-      nextOptions.push({ name, value: value.trim() });
-    }
-    previewActions.updateItem(id, { ...target, optionsWithValues: nextOptions });
   };
 
   const addPreviewItem = () => {
@@ -601,6 +582,10 @@ function CartSettingContent({
 
   const removePreviewItem = (id: string) => {
     previewActions.removeItem(id);
+  };
+
+  const handleQuantityChange = (id: string, nextQty: number) => {
+    updatePreviewItem(id, { quantity: Math.max(1, Math.trunc(nextQty)) });
   };
 
   type ResourcePickerOption = { name?: string; value?: string };
@@ -835,7 +820,7 @@ function CartSettingContent({
                       const fallbackContext = buildDefaultMarketContext(
                         markets.find((item) => item.id === marketId) ?? null,
                       );
-                      const nextContext = previewMarketMap.contexts[marketId] ?? fallbackContext;
+                      const nextContext = fallbackContext;
                       setPreviewMarketMap((prev) => ({
                         currentMarketId: marketId,
                         contexts: { ...prev.contexts, [marketId]: nextContext },
@@ -849,85 +834,10 @@ function CartSettingContent({
                     options={marketOptions}
                   />
                 </div>
-                <div>
-                  <div className="text-[12px] text-[#6b7280] mb-[6px]">Currency Code</div>
-                  <Input
-                    value={selectedMarketContext.currencyCode}
-                    onChange={(event) =>
-                      updateMarketContext({ currencyCode: event.target.value.trim().toUpperCase() })
-                    }
-                  />
-                </div>
-                <div>
-                  <div className="text-[12px] text-[#6b7280] mb-[6px]">Currency Symbol</div>
-                  <Input
-                    value={selectedMarketContext.currencySymbol}
-                    onChange={(event) =>
-                      updateMarketContext({ currencySymbol: event.target.value })
-                    }
-                  />
-                </div>
-                <div>
-                  <div className="text-[12px] text-[#6b7280] mb-[6px]">Money Format</div>
-                  <Select
-                    value={selectedMarketContext.moneyFormat}
-                    onChange={(value) =>
-                      updateMarketContext({
-                        moneyFormat: value as PreviewMarketContext["moneyFormat"],
-                      })
-                    }
-                    options={[
-                      { value: "amount", label: "amount" },
-                      { value: "amount_no_decimals", label: "amount_no_decimals" },
-                      {
-                        value: "amount_with_comma_separator",
-                        label: "amount_with_comma_separator",
-                      },
-                      {
-                        value: "amount_no_decimals_with_comma_separator",
-                        label: "amount_no_decimals_with_comma_separator",
-                      },
-                      {
-                        value: "amount_with_apostrophe_separator",
-                        label: "amount_with_apostrophe_separator",
-                      },
-                      {
-                        value: "amount_no_decimals_with_space_separator",
-                        label: "amount_no_decimals_with_space_separator",
-                      },
-                      {
-                        value: "amount_with_space_separator",
-                        label: "amount_with_space_separator",
-                      },
-                      {
-                        value: "amount_with_period_and_space_separator",
-                        label: "amount_with_period_and_space_separator",
-                      },
-                    ]}
-                  />
-                </div>
-                <div>
-                  <div className="text-[12px] text-[#6b7280] mb-[6px]">Locale</div>
-                  <Input
-                    value={selectedMarketContext.locale}
-                    onChange={(event) => updateMarketContext({ locale: event.target.value })}
-                  />
-                </div>
-                <div>
-                  <div className="text-[12px] text-[#6b7280] mb-[6px]">Tax Display</div>
-                  <Select
-                    value={selectedMarketContext.taxDisplay}
-                    onChange={(value) =>
-                      updateMarketContext({
-                        taxDisplay: value as PreviewMarketContext["taxDisplay"],
-                      })
-                    }
-                    options={[
-                      { value: "inclusive", label: "Tax inclusive" },
-                      { value: "exclusive", label: "Tax exclusive" },
-                      { value: "unknown", label: "Unknown" },
-                    ]}
-                  />
+                <div className="flex items-end">
+                  <div className="w-full text-[12px] text-[#6b7280]">
+                    将自动读取该市场的货币与格式配置。
+                  </div>
                 </div>
               </div>
 
@@ -944,110 +854,28 @@ function CartSettingContent({
                   </Button>
                 </div>
               </div>
-              <div className="mt-[12px] space-y-[12px]">
+              <div className="mt-[12px] space-y-[8px]">
                 {previewState.settings.items.map((item) => (
-                  <div key={item.id} className="rounded-[10px] border border-[#e5e7eb] p-[10px]">
-                    <div className="flex items-center justify-between gap-[8px]">
-                      <div className="text-[13px] font-semibold text-[#111827]">
-                        {item.productTitle || "Preview item"}
+                  <div
+                    key={item.id}
+                    className="rounded-[10px] border border-[#e5e7eb] px-[10px] py-[8px] flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-[8px]">
+                      <div className="w-[32px] h-[32px] rounded-[6px] bg-[#f3f4f6] overflow-hidden">
+                        {item.image ? (
+                          <img
+                            src={item.image}
+                            alt={item.productTitle}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : null}
                       </div>
-                      <Button size="small" onClick={() => removePreviewItem(item.id)}>
-                        移除
-                      </Button>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-[10px] mt-[10px]">
-                      <div>
-                        <div className="text-[12px] text-[#6b7280] mb-[4px]">Product title</div>
-                        <Input
-                          value={item.productTitle}
-                          onChange={(event) =>
-                            updatePreviewItem(item.id, { productTitle: event.target.value })
-                          }
-                        />
-                      </div>
-                      <div>
-                        <div className="text-[12px] text-[#6b7280] mb-[4px]">Variant title</div>
-                        <Input
-                          value={item.variantTitle}
-                          onChange={(event) =>
-                            updatePreviewItem(item.id, { variantTitle: event.target.value })
-                          }
-                        />
-                      </div>
-                      <div>
-                        <div className="text-[12px] text-[#6b7280] mb-[4px]">Image</div>
-                        <Input
-                          value={item.image}
-                          onChange={(event) =>
-                            updatePreviewItem(item.id, { image: event.target.value })
-                          }
-                        />
-                      </div>
-                      <div>
-                        <div className="text-[12px] text-[#6b7280] mb-[4px]">Quantity</div>
-                        <InputNumber
-                          min={1}
-                          className="w-full"
-                          value={item.quantity}
-                          onChange={(value) =>
-                            updatePreviewItem(item.id, {
-                              quantity: Number.isFinite(value) ? Number(value) : 1,
-                            })
-                          }
-                        />
-                      </div>
-                      <div>
-                        <div className="text-[12px] text-[#6b7280] mb-[4px]">Price</div>
-                        <InputNumber
-                          min={0}
-                          className="w-full"
-                          value={item.priceMinor / 100}
-                          onChange={(value) =>
-                            updatePreviewItem(item.id, {
-                              priceMinor: Math.trunc((Number(value) || 0) * 100),
-                            })
-                          }
-                        />
-                      </div>
-                      <div>
-                        <div className="text-[12px] text-[#6b7280] mb-[4px]">Compare at</div>
-                        <InputNumber
-                          min={0}
-                          className="w-full"
-                          value={(item.compareAtMinor ?? 0) / 100}
-                          onChange={(value) =>
-                            updatePreviewItem(item.id, {
-                              compareAtMinor:
-                                value == null ? null : Math.trunc((Number(value) || 0) * 100),
-                            })
-                          }
-                        />
+                      <div className="text-[12px] text-[#111827]">
+                        {item.productTitle}
                       </div>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-[10px] mt-[10px]">
-                      {[
-                        { label: "Color", key: "Color" },
-                        { label: "Size", key: "Size" },
-                        { label: "Material", key: "Material" },
-                        { label: "Style", key: "Style" },
-                      ].map((opt) => {
-                        const current =
-                          item.optionsWithValues.find((entry) => entry.name === opt.key)?.value ??
-                          "";
-                        return (
-                          <div key={opt.key}>
-                            <div className="text-[12px] text-[#6b7280] mb-[4px]">
-                              {opt.label}
-                            </div>
-                            <Input
-                              value={current}
-                              onChange={(event) =>
-                                updateItemOption(item.id, opt.key, event.target.value)
-                              }
-                            />
-                          </div>
-                        );
-                      })}
+                    <div className="text-[12px] text-[#6b7280]">
+                      数量：{item.quantity}
                     </div>
                   </div>
                 ))}
@@ -1069,7 +897,12 @@ function CartSettingContent({
               Cart Review
             </div>
           </div>
-          <CartPreviewPanel rules={previewValues} styles={previewValues} />
+          <CartPreviewPanel
+            rules={previewValues}
+            styles={previewValues}
+            onQuantityChange={handleQuantityChange}
+            onRemove={removePreviewItem}
+          />
         </div>
       </div>
     </div>
