@@ -424,6 +424,18 @@
     return mount;
   }
 
+  function resolveMountTarget(host) {
+    if (!host || !host.querySelector) return host;
+    const inner =
+      host.querySelector(".cart-drawer__inner") ||
+      host.querySelector(".drawer__inner") ||
+      host.querySelector(".cart-drawer__content") ||
+      host.querySelector(".cart__contents") ||
+      host.querySelector("[data-cart-drawer-inner]") ||
+      host.querySelector("[data-cart-drawer-content]");
+    return inner || host;
+  }
+
   function wireUi(bus, store, timer, settings, currencyCode) {
     /** @type {HTMLElement[]} */
     let enhancers = [];
@@ -436,10 +448,11 @@
       const mounted = [];
       for (const host of mounts) {
         // 避免重复挂载（抽屉反复打开/关闭，DOM 可能重建）
-        if (host.querySelector(".ciwi-cart-enhancer__mount")) continue;
+      if (host.querySelector(".ciwi-cart-enhancer__mount")) continue;
         const el = buildEnhancerElement();
         applyCssVars(el, settings.ui || {});
-        host.prepend(el);
+      const target = resolveMountTarget(host);
+      target.prepend(el);
         mounted.push(el);
       }
       if (mounted.length === 0) {
