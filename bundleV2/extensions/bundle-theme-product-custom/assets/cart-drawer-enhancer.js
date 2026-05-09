@@ -366,14 +366,6 @@
     /** @type {string[]} */
     const sources = [];
 
-    // Cart page common anchors（多语言场景 action 可能不是 /cart）
-    const cartForm = document.querySelector('form[action*="/cart"]');
-    if (cartForm) {
-      const host = cartForm.parentElement || cartForm;
-      mounts.push(/** @type {HTMLElement} */ (host));
-      sources.push("cartFormParent");
-    }
-
     const openDialog = document.querySelector("dialog[open]");
     if (openDialog) {
       const dialogTarget =
@@ -387,6 +379,21 @@
         return { mounts: [/** @type {HTMLElement} */ (dialogTarget)], sources: ["dialogOpenInner"] };
       }
       return { mounts: [/** @type {HTMLElement} */ (openDialog)], sources: ["dialogOpen"] };
+    }
+
+    // Cart page common anchors（只在 cart 页面启用，避免 quick-add/快速加入）
+    const isCartPage =
+      String(window.location.pathname || "").includes("/cart") ||
+      String(document.body && document.body.dataset && document.body.dataset.template) === "cart";
+    if (isCartPage) {
+      const cartForm = document.querySelector('form[action*="/cart"]');
+      if (cartForm) {
+        const host = cartForm.parentElement || cartForm;
+        mounts.push(/** @type {HTMLElement} */ (host));
+        sources.push("cartFormParent");
+      }
+    } else {
+      log("跳过 cartForm（非 cart 页面）");
     }
 
     // Common drawer roots across themes
