@@ -18,6 +18,7 @@ import { DashboardPage } from "../page/DashboardPage";
 import { AllOffersPage } from "../page/AllOffersPage";
 import { AnalyticsPage } from "../page/AnalyticsPage";
 import { PricingPage } from "../page/PricingPage";
+import { CartSettingPage } from "../page/CartSettingPage.js";
 import { CreateNewOffer } from "../component/CreateNewOffer/CreateNewOffer";
 import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
 import prisma from "../../db.server";
@@ -91,6 +92,7 @@ type ShopOffersMetafieldSyncResult =
 
 const BUNDLE_METAFIELD_NAMESPACE = "ciwi_bundle";
 const BUNDLE_METAFIELD_BASE_KEY = "ciwi-bundle-offers";
+const BUNDLE_METAFIELD_CART_SETTINGS_KEY = "ciwi-cart-settings";
 const BUNDLE_METAFIELD_ACTIVE_ENV_KEY = "ciwi-bundle-offers-active-env";
 const BUNDLE_METAFIELD_ENABLED_PROD_KEY = "ciwi-bundle-enabled-prod";
 const BUNDLE_METAFIELD_ENABLED_TEST_KEY = "ciwi-bundle-enabled-test";
@@ -756,6 +758,140 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const prismaAny: any = prisma;
   let intent = formData.get("intent");
 
+  if (intent === "load-cart-settings") {
+    try {
+      const queryResponse = await admin.graphql(
+        `#graphql
+          query CartSettingsMetafield($namespace: String!, $key: String!) {
+            shop {
+              metafield(namespace: $namespace, key: $key) {
+                id
+                type
+                value
+              }
+            }
+          }
+        `,
+        { variables: { namespace: BUNDLE_METAFIELD_NAMESPACE, key: BUNDLE_METAFIELD_CART_SETTINGS_KEY } },
+      );
+      const json = (await queryResponse.json()) as {
+        data?: { shop?: { metafield?: { id?: string; type?: string; value?: string } | null } };
+        errors?: Array<{ message?: string }>;
+      };
+      if (json.errors?.length) {
+        console.error("[cart-settings] load graphql errors", json.errors);
+        return Response.json(
+          { ok: false as const, error: json.errors.map((e) => e.message || "unknown").join("; ") },
+          { status: 502 },
+        );
+      }
+      const valueRaw = json?.data?.shop?.metafield?.value ?? "";
+      return Response.json({ ok: true as const, settingsJson: valueRaw || "" });
+    } catch (error) {
+      console.error("[cart-settings] load failed", error);
+      return Response.json(
+        { ok: false as const, error: "Failed to load cart settings" },
+        { status: 500 },
+      );
+    }
+  }
+
+  if (intent === "save-cart-settings") {
+    const settingsJsonRaw = String(formData.get("settingsJson") || "").trim();
+    if (settingsJsonRaw.length > 200_000) {
+      return Response.json(
+        { ok: false as const, error: "Cart settings JSON is too large." },
+        { status: 400 },
+      );
+    }
+    if (settingsJsonRaw) {
+      try {
+        JSON.parse(settingsJsonRaw);
+      } catch {
+        return Response.json(
+          { ok: false as const, error: "Invalid JSON." },
+          { status: 400 },
+        );
+      }
+    }
+    try {
+      const shopIdResponse = await admin.graphql(
+        `#graphql
+          query ShopId {
+            shop { id }
+          }
+        `,
+      );
+      const shopIdJson = (await shopIdResponse.json()) as {
+        data?: { shop?: { id?: string } };
+        errors?: Array<{ message?: string }>;
+      };
+      if (shopIdJson.errors?.length) {
+        console.error("[cart-settings] shop id graphql errors", shopIdJson.errors);
+        return Response.json(
+          { ok: false as const, error: shopIdJson.errors.map((e) => e.message || "unknown").join("; ") },
+          { status: 502 },
+        );
+      }
+      const shopId = shopIdJson?.data?.shop?.id;
+      if (!shopId) {
+        return Response.json(
+          { ok: false as const, error: "Missing shop id." },
+          { status: 502 },
+        );
+      }
+      const setResponse = await admin.graphql(
+        `#graphql
+          mutation MetafieldsSet($metafields: [MetafieldsSetInput!]!) {
+            metafieldsSet(metafields: $metafields) {
+              userErrors { field message }
+              metafields { id namespace key }
+            }
+          }
+        `,
+        {
+          variables: {
+            metafields: [
+              {
+                ownerId: shopId,
+                namespace: BUNDLE_METAFIELD_NAMESPACE,
+                key: BUNDLE_METAFIELD_CART_SETTINGS_KEY,
+                type: "json",
+                value: settingsJsonRaw || "{}",
+              },
+            ],
+          },
+        },
+      );
+      const setJson = (await setResponse.json()) as {
+        data?: { metafieldsSet?: { userErrors?: Array<{ message?: string }> } };
+        errors?: Array<{ message?: string }>;
+      };
+      if (setJson.errors?.length) {
+        console.error("[cart-settings] metafieldsSet graphql errors", setJson.errors);
+        return Response.json(
+          { ok: false as const, error: setJson.errors.map((e) => e.message || "unknown").join("; ") },
+          { status: 502 },
+        );
+      }
+      const userErrors = setJson?.data?.metafieldsSet?.userErrors ?? [];
+      if (userErrors.length > 0) {
+        console.error("[cart-settings] metafieldsSet userErrors", userErrors);
+        return Response.json(
+          { ok: false as const, error: userErrors.map((e) => e.message || "unknown").join("; ") },
+          { status: 400 },
+        );
+      }
+      return Response.json({ ok: true as const });
+    } catch (error) {
+      console.error("[cart-settings] save failed", error);
+      return Response.json(
+        { ok: false as const, error: "Failed to save cart settings" },
+        { status: 500 },
+      );
+    }
+  }
+
   if (intent === "load-store-products") {
     const storeProducts = await fetchStoreProducts(admin);
     return Response.json({ storeProducts });
@@ -1240,7 +1376,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   });
 };
 
-type HomeTabKey = "dashboard" | "offers" | "analytics" | "pricing";
+type HomeTabKey = "dashboard" | "offers" | "analytics" | "pricing" | "cartSetting";
 
 export default function Index() {
   const {
@@ -1420,6 +1556,36 @@ export default function Index() {
               </span>
             </button>
 
+            <button
+              type="button"
+              onClick={() => {
+                setShowCreateOffer(false);
+                setActiveTab("pricing");
+              }}
+              className={`px-[16px] py-[12px] text-center sm:text-left cursor-pointer transition-all border-b-2 ${activeTab === "pricing" ? "border-[#008060] text-[#1c1f23]" : "border-transparent hover:border-[#8c9196] text-[#5c6166]"}`}
+            >
+              <span
+                className={`font-sans leading-[24px] text-[14px] font-medium tracking-normal ${activeTab === "pricing" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
+              >
+                Pricing
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setShowCreateOffer(false);
+                setActiveTab("cartSetting");
+              }}
+              className={`px-[16px] py-[12px] text-center sm:text-left cursor-pointer transition-all border-b-2 ${activeTab === "cartSetting" ? "border-[#008060] text-[#1c1f23]" : "border-transparent hover:border-[#8c9196] text-[#5c6166]"}`}
+            >
+              <span
+                className={`font-sans leading-[24px] text-[14px] font-medium tracking-normal ${activeTab === "cartSetting" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
+              >
+                Cart Setting
+              </span>
+            </button>
+
           </nav>
         )}
 
@@ -1510,6 +1676,9 @@ export default function Index() {
             activeSubscriptions={billingSubscriptions}
             billingTestMode={billingTestMode}
           />
+        )}
+        {activeTab === "cartSetting" && !showCreateOffer && !editingOfferId && (
+          <CartSettingPage shop={shop} apiKey={apiKey} themeExtensionEnabled={themeExtensionEnabled} />
         )}
         </div>
         <div className="py-8 text-center text-sm text-[#666] w-full">
