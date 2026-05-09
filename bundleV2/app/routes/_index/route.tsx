@@ -19,6 +19,7 @@ import { AllOffersPage } from "../page/AllOffersPage";
 import { AnalyticsPage } from "../page/AnalyticsPage";
 import { PricingPage } from "../page/PricingPage";
 import { CartSettingPage } from "../page/CartSettingPage.js";
+import type { MarketItem } from "../../types/market";
 import { CreateNewOffer } from "../component/CreateNewOffer/CreateNewOffer";
 import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
 import prisma from "../../db.server";
@@ -311,12 +312,6 @@ export type StoreProductItem = {
   name: string;
   price: string;
   image: string;
-};
-
-export type MarketItem = {
-  id: string;
-  name: string;
-  handle: string;
 };
 
 export type IndexLoaderData = {
@@ -907,6 +902,100 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       console.error("[cart-settings] load failed", error);
       return Response.json(
         { ok: false as const, error: "Failed to load cart settings" },
+        { status: 500 },
+      );
+    }
+  }
+
+  if (intent === "load-preview-settings") {
+    const shopName = session.shop;
+    try {
+      const existing = await prismaAny.previewSetting.findUnique({
+        where: { shopName },
+      });
+      if (existing) {
+        return Response.json({
+          ok: true as const,
+          previewSettingsJson: existing.previewSettingsJson,
+          previewCartItemsJson: existing.previewCartItemsJson,
+          previewMarketContextJson: existing.previewMarketContextJson,
+          createdAt: Number(existing.createdAt),
+          updatedAt: Number(existing.updatedAt),
+          createdAtIso: formatTimestampMs(existing.createdAt),
+          updatedAtIso: formatTimestampMs(existing.updatedAt),
+        });
+      }
+    } catch (error) {
+      console.error("[preview-settings] db load failed", error);
+      return Response.json(
+        { ok: false as const, error: "Failed to load preview settings." },
+        { status: 500 },
+      );
+    }
+    return Response.json({
+      ok: true as const,
+      previewSettingsJson: "",
+      previewCartItemsJson: "",
+      previewMarketContextJson: "",
+    });
+  }
+
+  if (intent === "save-preview-settings") {
+    const previewSettingsJsonRaw = String(formData.get("previewSettingsJson") || "").trim();
+    const previewCartItemsJsonRaw = String(formData.get("previewCartItemsJson") || "").trim();
+    const previewMarketContextJsonRaw = String(
+      formData.get("previewMarketContextJson") || "",
+    ).trim();
+    if (
+      previewSettingsJsonRaw.length > 200_000 ||
+      previewCartItemsJsonRaw.length > 200_000 ||
+      previewMarketContextJsonRaw.length > 200_000
+    ) {
+      return Response.json(
+        { ok: false as const, error: "Preview settings JSON is too large." },
+        { status: 400 },
+      );
+    }
+    const jsonPayloads = [
+      { key: "previewSettingsJson", value: previewSettingsJsonRaw },
+      { key: "previewCartItemsJson", value: previewCartItemsJsonRaw },
+      { key: "previewMarketContextJson", value: previewMarketContextJsonRaw },
+    ];
+    for (const payload of jsonPayloads) {
+      if (!payload.value) continue;
+      try {
+        JSON.parse(payload.value);
+      } catch {
+        return Response.json(
+          { ok: false as const, error: `Invalid ${payload.key}.` },
+          { status: 400 },
+        );
+      }
+    }
+    const now = BigInt(Date.now());
+    try {
+      await prismaAny.previewSetting.upsert({
+        where: { shopName: session.shop },
+        create: {
+          shopName: session.shop,
+          previewSettingsJson: previewSettingsJsonRaw || "{}",
+          previewCartItemsJson: previewCartItemsJsonRaw || "[]",
+          previewMarketContextJson: previewMarketContextJsonRaw || "{}",
+          createdAt: now,
+          updatedAt: now,
+        },
+        update: {
+          previewSettingsJson: previewSettingsJsonRaw || "{}",
+          previewCartItemsJson: previewCartItemsJsonRaw || "[]",
+          previewMarketContextJson: previewMarketContextJsonRaw || "{}",
+          updatedAt: now,
+        },
+      });
+      return Response.json({ ok: true as const });
+    } catch (error) {
+      console.error("[preview-settings] db save failed", error);
+      return Response.json(
+        { ok: false as const, error: "Failed to save preview settings." },
         { status: 500 },
       );
     }
@@ -1830,7 +1919,12 @@ export default function Index() {
           />
         )}
         {activeTab === "cartSetting" && !showCreateOffer && !editingOfferId && (
-          <CartSettingPage shop={shop} apiKey={apiKey} themeExtensionEnabled={themeExtensionEnabled} />
+          <CartSettingPage
+            shop={shop}
+            apiKey={apiKey}
+            themeExtensionEnabled={themeExtensionEnabled}
+            markets={markets}
+          />
         )}
         </div>
         <div className="py-8 text-center text-sm text-[#666] w-full">

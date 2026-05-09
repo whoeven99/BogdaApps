@@ -1,67 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { useFetcher } from "react-router";
-import { AlertCircle, X } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import { Button, Form, Input, InputNumber, Select, Switch, message } from "antd";
 import "../../styles/tailwind.css";
-
-type TimerExpireAction = "hide" | "restart" | "clearCart";
-
-type PromotionTier = {
-  thresholdMinor: number;
-  label: string;
-};
-
-type TimerRules = {
-  enabled: boolean;
-  durationSeconds: number;
-  expireAction: TimerExpireAction;
-  resetOnAdd: boolean;
-  textTemplate: string;
-};
-
-type PromotionsRules = {
-  enabled: boolean;
-  freeShippingThresholdMinor: number;
-  successMessage: string;
-  progressMessage: string;
-  tiers?: PromotionTier[];
-};
-
-type CartSettingsRules = {
-  version: 2;
-  enabled: boolean;
-  modules: {
-    topBar: { enabled: boolean; order: number };
-    timer: TimerRules & { order: number };
-    promotions: PromotionsRules & { order: number };
-    trustBadges: { enabled: boolean; order: number };
-    footer: { enabled: boolean; order: number };
-  };
-  ajax: {
-    optimisticUpdate: boolean;
-    sectionRender: boolean;
-    debounceMs: number;
-  };
-  storage: {
-    timerKey: string;
-  };
-};
-
-type CartSettingsStyles = {
-  ui: {
-    accentColor: string;
-    surfaceColor: string;
-    borderColor: string;
-    radiusPx: number;
-    timerTextColor: string;
-    timerBackgroundColor: string;
-    promotionsProgressColor: string;
-    promotionsBackgroundColor: string;
-    promotionsRadiusPx: number;
-  };
-};
-
-type CartSettingsFormValues = CartSettingsRules & CartSettingsStyles;
+import type { CartSettingsFormValues, CartSettingsRules, CartSettingsStyles } from "../../types/cartSettings";
+import type {
+  PreviewCartItem,
+  PreviewMarketContext,
+  PreviewMarketContextMap,
+  PreviewSettings,
+  PreviewState,
+  PreviewUpsellItem,
+} from "../../types/cartPreview";
+import type { MarketItem } from "../../types/market";
+import { buildFallbackMarket } from "../../utils/moneyFormat";
+import { CartPreviewPanel } from "../component/cart-preview/CartPreviewPanel";
+import { PreviewProvider, usePreviewActions, usePreviewState } from "../../hooks/useCartPreview";
 
 const DEFAULT_RULES: CartSettingsRules = {
   version: 2,
@@ -223,35 +177,230 @@ function useDebouncedValue<T>(value: T, delayMs: number) {
   return debounced;
 }
 
-function renderTemplate(template: string, variables: Record<string, string>) {
-  return template.replace(/\{(\w+)\}/g, (_, key: string) => variables[key] ?? "");
+const DEFAULT_PREVIEW_ITEMS: PreviewCartItem[] = [
+  {
+    id: "preview-1",
+    productTitle: "Casual Pink Mountain Landscape Printed White Pullover",
+    variantTitle: "Rose / M",
+    optionsWithValues: [
+      { name: "Color", value: "Rose" },
+      { name: "Size", value: "M" },
+      { name: "Material", value: "Cotton" },
+    ],
+    quantity: 1,
+    priceMinor: 18000,
+    compareAtMinor: 22000,
+    image: "https://via.placeholder.com/64",
+    vendor: "Ciwi Studio",
+  },
+  {
+    id: "preview-2",
+    productTitle: "Bosch Siemens Cleaning Tablets",
+    variantTitle: "Default",
+    optionsWithValues: [{ name: "Style", value: "Standard" }],
+    quantity: 2,
+    priceMinor: 999,
+    compareAtMinor: null,
+    image: "https://via.placeholder.com/64",
+    vendor: "Ciwi Essentials",
+  },
+];
+
+const DEFAULT_UPSELL_ITEMS: PreviewUpsellItem[] = [
+  {
+    id: "upsell-1",
+    title: "Premium Wash Bag",
+    subtitle: "Add protection to your order",
+    image: "https://via.placeholder.com/44",
+    priceMinor: 1200,
+    compareAtMinor: 1800,
+    ctaLabel: "Add",
+  },
+];
+
+function parseJsonArray(value: string | null | undefined): unknown[] | null {
+  if (!value) return null;
+  const parsed = safeParseJson(value);
+  if (!parsed.ok || !Array.isArray(parsed.data)) return null;
+  return parsed.data;
 }
 
-function formatSecondsAsMMSS(totalSeconds: number): string {
-  const s = Math.max(0, Math.floor(Number(totalSeconds) || 0));
-  const mm = String(Math.floor(s / 60)).padStart(2, "0");
-  const ss = String(s % 60).padStart(2, "0");
-  return `${mm}:${ss}`;
+function normalizePreviewMarketContext(
+  raw: unknown,
+  fallback: PreviewMarketContext,
+): PreviewMarketContext {
+  if (!raw || typeof raw !== "object") return fallback;
+  const obj = raw as Record<string, unknown>;
+  return {
+    marketId: typeof obj.marketId === "string" ? obj.marketId : fallback.marketId,
+    marketName: typeof obj.marketName === "string" ? obj.marketName : fallback.marketName,
+    currencyCode: typeof obj.currencyCode === "string" ? obj.currencyCode : fallback.currencyCode,
+    currencySymbol:
+      typeof obj.currencySymbol === "string" ? obj.currencySymbol : fallback.currencySymbol,
+    moneyFormat:
+      typeof obj.moneyFormat === "string"
+        ? (obj.moneyFormat as PreviewMarketContext["moneyFormat"])
+        : fallback.moneyFormat,
+    locale: typeof obj.locale === "string" ? obj.locale : fallback.locale,
+    taxDisplay:
+      typeof obj.taxDisplay === "string"
+        ? (obj.taxDisplay as PreviewMarketContext["taxDisplay"])
+        : fallback.taxDisplay,
+    exchangeRate:
+      typeof obj.exchangeRate === "number" ? obj.exchangeRate : fallback.exchangeRate,
+  };
 }
 
-function formatMinorMoney(minor: number, currency: string) {
-  const amount = (Number(minor) || 0) / 100;
-  try {
-    return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(amount);
-  } catch {
-    return `${amount.toFixed(2)} ${currency}`;
+function buildDefaultMarketContext(market: MarketItem | null): PreviewMarketContext {
+  const fallback = buildFallbackMarket();
+  if (!market) return fallback;
+  return {
+    ...fallback,
+    marketId: market.id,
+    marketName: market.name,
+    currencyCode: market.currencyCode || fallback.currencyCode,
+    currencySymbol: market.currencySymbol || fallback.currencySymbol,
+    moneyFormat: (market.moneyFormat as PreviewMarketContext["moneyFormat"]) || fallback.moneyFormat,
+    locale: market.locale || fallback.locale,
+    taxDisplay: (market.taxDisplay as PreviewMarketContext["taxDisplay"]) || fallback.taxDisplay,
+  };
+}
+
+function buildMarketContextMap(markets: MarketItem[]): PreviewMarketContextMap {
+  const primaryMarket = markets[0] ?? null;
+  const base = buildDefaultMarketContext(primaryMarket);
+  const contexts: Record<string, PreviewMarketContext> = {};
+  for (const market of markets) {
+    contexts[market.id] = buildDefaultMarketContext(market);
   }
+  if (!primaryMarket) {
+    contexts[base.marketId] = base;
+  }
+  return {
+    currentMarketId: base.marketId,
+    contexts,
+  };
 }
 
-export function CartSettingPage({
+function normalizePreviewItems(raw: unknown, fallbackItems: PreviewCartItem[]) {
+  if (!Array.isArray(raw)) return fallbackItems;
+  const items: PreviewCartItem[] = raw
+    .map((entry, index) => {
+      if (!entry || typeof entry !== "object") return null;
+      const obj = entry as Record<string, unknown>;
+      const id = typeof obj.id === "string" ? obj.id : `preview-${index + 1}`;
+      const productTitle =
+        typeof obj.productTitle === "string" ? obj.productTitle : "Sample product";
+      const variantTitle =
+        typeof obj.variantTitle === "string" ? obj.variantTitle : "Default";
+      const options =
+        Array.isArray(obj.optionsWithValues)
+          ? obj.optionsWithValues
+              .map((opt) => {
+                if (!opt || typeof opt !== "object") return null;
+                const optionObj = opt as Record<string, unknown>;
+                if (typeof optionObj.name !== "string" || typeof optionObj.value !== "string") {
+                  return null;
+                }
+                return { name: optionObj.name, value: optionObj.value };
+              })
+              .filter((opt): opt is { name: string; value: string } => !!opt)
+          : [];
+      const quantity = Number(obj.quantity);
+      const priceMinor = Number(obj.priceMinor);
+      const compareAtNumber =
+        obj.compareAtMinor == null ? null : Number(obj.compareAtMinor);
+      const item: PreviewCartItem = {
+        id,
+        productTitle,
+        variantTitle,
+        optionsWithValues: options,
+        quantity: Number.isFinite(quantity) && quantity > 0 ? Math.trunc(quantity) : 1,
+        priceMinor: Number.isFinite(priceMinor) ? Math.trunc(priceMinor) : 0,
+        compareAtMinor:
+          compareAtNumber != null && Number.isFinite(compareAtNumber)
+            ? Math.trunc(compareAtNumber)
+            : null,
+        image: typeof obj.image === "string" ? obj.image : "",
+        vendor: typeof obj.vendor === "string" ? obj.vendor : undefined,
+        properties: Array.isArray(obj.properties)
+          ? obj.properties
+              .map((prop) => {
+                if (!prop || typeof prop !== "object") return null;
+                const propObj = prop as Record<string, unknown>;
+                if (typeof propObj.name !== "string" || typeof propObj.value !== "string") {
+                  return null;
+                }
+                return { name: propObj.name, value: propObj.value };
+              })
+              .filter((prop): prop is { name: string; value: string } => !!prop)
+          : undefined,
+      };
+      return item;
+    })
+    .filter((item): item is PreviewCartItem => !!item);
+  return items.length ? items : fallbackItems;
+}
+
+function buildPreviewSettings(
+  marketId: string,
+  items: PreviewCartItem[],
+): PreviewSettings {
+  return {
+    marketId,
+    items,
+    timerOverrides: {},
+    promotionsOverrides: {},
+    upsellOverrides: {
+      enabled: true,
+      title: "You may also like",
+      items: DEFAULT_UPSELL_ITEMS,
+    },
+  };
+}
+
+function mergePreviewSettings(
+  base: PreviewSettings,
+  raw: Record<string, unknown> | null,
+): PreviewSettings {
+  if (!raw) return base;
+  const overrides = raw as Partial<PreviewSettings>;
+  const upsellBase = base.upsellOverrides ?? {};
+  const upsellOverride = overrides.upsellOverrides ?? {};
+  return {
+    ...base,
+    ...overrides,
+    marketId: base.marketId,
+    items: base.items,
+    timerOverrides: {
+      ...base.timerOverrides,
+      ...overrides.timerOverrides,
+    },
+    promotionsOverrides: {
+      ...base.promotionsOverrides,
+      ...overrides.promotionsOverrides,
+    },
+    upsellOverrides: {
+      ...upsellBase,
+      ...upsellOverride,
+      items: upsellOverride.items ?? upsellBase.items,
+    },
+  };
+}
+
+function CartSettingContent({
   shop,
   apiKey,
   themeExtensionEnabled,
+  markets,
 }: {
   shop: string;
   apiKey: string;
   themeExtensionEnabled: boolean;
+  markets: MarketItem[];
 }) {
+  const previewState = usePreviewState();
+  const previewActions = usePreviewActions();
   const loadFetcher = useFetcher<{
     ok: boolean;
     rulesJson?: string;
@@ -259,14 +408,22 @@ export function CartSettingPage({
     error?: string;
   }>();
   const saveFetcher = useFetcher<{ ok: boolean; error?: string }>();
+  const previewLoadFetcher = useFetcher<{
+    ok: boolean;
+    previewSettingsJson?: string;
+    previewCartItemsJson?: string;
+    previewMarketContextJson?: string;
+    error?: string;
+  }>();
+  const previewSaveFetcher = useFetcher<{ ok: boolean; error?: string }>();
   const [form] = Form.useForm<CartSettingsFormValues>();
   const [draftValues, setDraftValues] = useState<CartSettingsFormValues>(
     buildFormValues(DEFAULT_RULES, DEFAULT_STYLES),
   );
   const debouncedDraft = useDebouncedValue(draftValues, 120);
   const previewValues = useMemo(() => normalizeFormValues(debouncedDraft), [debouncedDraft]);
-  const [previewTimerLeft, setPreviewTimerLeft] = useState(
-    DEFAULT_RULES.modules.timer.durationSeconds,
+  const [previewMarketMap, setPreviewMarketMap] = useState<PreviewMarketContextMap>(
+    buildMarketContextMap(markets),
   );
 
   const openThemeEditorEmbed = () => {
@@ -281,6 +438,12 @@ export function CartSettingPage({
     if (loadFetcher.data) return;
     loadFetcher.submit({ intent: "load-cart-settings" }, { method: "post" });
   }, [loadFetcher]);
+
+  useEffect(() => {
+    if (previewLoadFetcher.state !== "idle") return;
+    if (previewLoadFetcher.data) return;
+    previewLoadFetcher.submit({ intent: "load-preview-settings" }, { method: "post" });
+  }, [previewLoadFetcher]);
 
   useEffect(() => {
     if (!loadFetcher.data) return;
@@ -305,6 +468,35 @@ export function CartSettingPage({
   }, [loadFetcher.data, form]);
 
   useEffect(() => {
+    if (!previewLoadFetcher.data) return;
+    if (!previewLoadFetcher.data.ok) {
+      void message.error(previewLoadFetcher.data.error || "加载 Preview Settings 失败");
+      return;
+    }
+    const marketMap = buildMarketContextMap(markets);
+    const marketRaw = parseJsonObject(previewLoadFetcher.data.previewMarketContextJson);
+    const market =
+      marketRaw && typeof marketRaw === "object"
+        ? normalizePreviewMarketContext(marketRaw, marketMap.contexts[marketMap.currentMarketId])
+        : marketMap.contexts[marketMap.currentMarketId];
+    const itemsRaw = parseJsonArray(previewLoadFetcher.data.previewCartItemsJson);
+    const items = normalizePreviewItems(itemsRaw, DEFAULT_PREVIEW_ITEMS);
+    const settingsRaw = parseJsonObject(previewLoadFetcher.data.previewSettingsJson);
+    const marketId =
+      settingsRaw && typeof settingsRaw.marketId === "string"
+        ? String(settingsRaw.marketId)
+        : market.marketId;
+    const baseSettings = buildPreviewSettings(marketId, items);
+    const nextSettings = mergePreviewSettings(baseSettings, settingsRaw);
+    setPreviewMarketMap((prev) => ({
+      currentMarketId: marketId,
+      contexts: { ...prev.contexts, [market.marketId]: market },
+    }));
+    previewActions.setMarket(market);
+    previewActions.setSettings(nextSettings);
+  }, [previewLoadFetcher.data, markets]);
+
+  useEffect(() => {
     if (saveFetcher.state !== "idle") return;
     if (!saveFetcher.data) return;
     if (saveFetcher.data.ok) {
@@ -313,6 +505,16 @@ export function CartSettingPage({
       void message.error(saveFetcher.data.error || "保存失败");
     }
   }, [saveFetcher.state, saveFetcher.data]);
+
+  useEffect(() => {
+    if (previewSaveFetcher.state !== "idle") return;
+    if (!previewSaveFetcher.data) return;
+    if (previewSaveFetcher.data.ok) {
+      void message.success("已保存 Preview Settings");
+    } else {
+      void message.error(previewSaveFetcher.data.error || "Preview 保存失败");
+    }
+  }, [previewSaveFetcher.state, previewSaveFetcher.data]);
 
   const handleValuesChange = () => {
     const values = form.getFieldsValue(true) as CartSettingsFormValues;
@@ -336,43 +538,134 @@ export function CartSettingPage({
       },
       { method: "post" },
     );
+    previewSaveFetcher.submit(
+      {
+        intent: "save-preview-settings",
+        previewSettingsJson: JSON.stringify(previewState.settings),
+        previewCartItemsJson: JSON.stringify(previewState.settings.items),
+        previewMarketContextJson: JSON.stringify(
+          previewMarketMap.contexts[previewMarketMap.currentMarketId],
+        ),
+      },
+      { method: "post" },
+    );
+  };
+  const selectedMarketContext =
+    previewMarketMap.contexts[previewState.settings.marketId] ??
+    previewMarketMap.contexts[previewMarketMap.currentMarketId] ??
+    buildFallbackMarket();
+  const selectedMarketId = previewState.settings.marketId;
+  const marketOptions =
+    markets.length > 0
+      ? markets.map((market) => ({ value: market.id, label: market.name }))
+      : [{ value: selectedMarketId, label: selectedMarketContext.marketName }];
+
+  const updateMarketContext = (updates: Partial<PreviewMarketContext>) => {
+    const nextContext = { ...selectedMarketContext, ...updates };
+    setPreviewMarketMap((prev) => ({
+      currentMarketId: selectedMarketId,
+      contexts: { ...prev.contexts, [selectedMarketId]: nextContext },
+    }));
+    previewActions.setMarket(nextContext);
   };
 
-  useEffect(() => {
-    if (!previewValues.modules.timer.enabled) {
-      setPreviewTimerLeft(0);
+  const updatePreviewItem = (id: string, patch: Partial<PreviewCartItem>) => {
+    const target = previewState.settings.items.find((item) => item.id === id);
+    if (!target) return;
+    previewActions.updateItem(id, { ...target, ...patch });
+  };
+
+  const updateItemOption = (id: string, name: string, value: string) => {
+    const target = previewState.settings.items.find((item) => item.id === id);
+    if (!target) return;
+    const nextOptions = target.optionsWithValues.filter((opt) => opt.name !== name);
+    if (value.trim()) {
+      nextOptions.push({ name, value: value.trim() });
+    }
+    previewActions.updateItem(id, { ...target, optionsWithValues: nextOptions });
+  };
+
+  const addPreviewItem = () => {
+    const nextItem: PreviewCartItem = {
+      id: `preview-${Date.now()}`,
+      productTitle: "New product",
+      variantTitle: "Default",
+      optionsWithValues: [],
+      quantity: 1,
+      priceMinor: 0,
+      compareAtMinor: null,
+      image: "",
+    };
+    previewActions.updateItems([...previewState.settings.items, nextItem]);
+  };
+
+  const removePreviewItem = (id: string) => {
+    previewActions.removeItem(id);
+  };
+
+  type ResourcePickerOption = { name?: string; value?: string };
+  type ResourcePickerVariant = {
+    id?: string;
+    title?: string;
+    price?: string;
+    compareAtPrice?: string;
+    selectedOptions?: ResourcePickerOption[];
+  };
+  type ResourcePickerImage = { originalSrc?: string };
+  type ResourcePickerProduct = {
+    id?: string;
+    title?: string;
+    vendor?: string;
+    images?: ResourcePickerImage[];
+    variants?: ResourcePickerVariant[];
+  };
+
+  const handleSelectProducts = async () => {
+    const picker = (window as { shopify?: { resourcePicker?: Function } }).shopify?.resourcePicker;
+    if (!picker) {
+      void message.warning("当前环境不支持资源选择器");
       return;
     }
-    const duration = previewValues.modules.timer.durationSeconds;
-    setPreviewTimerLeft(duration);
-    const startAt = Date.now();
-    const interval = window.setInterval(() => {
-      const elapsed = Math.floor((Date.now() - startAt) / 1000);
-      const left = Math.max(0, duration - elapsed);
-      setPreviewTimerLeft(left);
-      if (left <= 0) {
-        window.clearInterval(interval);
-      }
-    }, 1000);
-    return () => window.clearInterval(interval);
-  }, [previewValues.modules.timer.enabled, previewValues.modules.timer.durationSeconds]);
-
-  const previewCurrency = "EUR";
-  const previewCartTotalMinor = 18999;
-  const timerLabel = formatSecondsAsMMSS(previewTimerLeft);
-  const timerText = renderTemplate(previewValues.modules.timer.textTemplate, { timer: timerLabel });
-  const thresholdMinor = previewValues.modules.promotions.freeShippingThresholdMinor;
-  const progressPct =
-    thresholdMinor > 0 ? Math.min(1, previewCartTotalMinor / thresholdMinor) : 0;
-  const remainingMinor = Math.max(0, thresholdMinor - previewCartTotalMinor);
-  const progressText =
-    previewCartTotalMinor >= thresholdMinor
-      ? previewValues.modules.promotions.successMessage
-      : renderTemplate(previewValues.modules.promotions.progressMessage, {
-          remaining: formatMinorMoney(remainingMinor, previewCurrency),
-          threshold: formatMinorMoney(thresholdMinor, previewCurrency),
-          total: formatMinorMoney(previewCartTotalMinor, previewCurrency),
-        });
+    const selected = (await picker({
+      type: "product",
+      action: "select",
+      multiple: true,
+    })) as ResourcePickerProduct[] | undefined;
+    if (!selected || !Array.isArray(selected)) return;
+    const nextItems = selected.map((item, index) => {
+      const variant = item?.variants?.[0];
+      const optionsWithValues = Array.isArray(variant?.selectedOptions)
+        ? variant.selectedOptions
+            .map((opt) => {
+              if (!opt?.name || !opt?.value) return null;
+              return { name: String(opt.name), value: String(opt.value) };
+            })
+            .filter((opt): opt is { name: string; value: string } => !!opt)
+        : [];
+      const priceMinor = Number(variant?.price) * 100;
+      const compareAtMinor =
+        variant?.compareAtPrice != null ? Number(variant.compareAtPrice) * 100 : null;
+      return {
+        id: `preview-picker-${Date.now()}-${index}`,
+        productId: item?.id ? String(item.id) : undefined,
+        variantId: variant?.id ? String(variant.id) : undefined,
+        productTitle: String(item?.title || "Sample product"),
+        variantTitle: String(variant?.title || "Default"),
+        optionsWithValues,
+        quantity: 1,
+        priceMinor: Number.isFinite(priceMinor) ? Math.trunc(priceMinor) : 0,
+        compareAtMinor:
+          compareAtMinor != null && Number.isFinite(compareAtMinor)
+            ? Math.trunc(compareAtMinor)
+            : null,
+        image: item?.images?.[0]?.originalSrc
+          ? String(item.images[0].originalSrc)
+          : "",
+        vendor: item?.vendor ? String(item.vendor) : undefined,
+      } satisfies PreviewCartItem;
+    });
+    previewActions.updateItems(nextItems);
+  };
 
   return (
     <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px]">
@@ -528,6 +821,239 @@ export function CartSettingPage({
               </Form.Item>
             </div>
 
+            <div className="mt-[12px] rounded-[12px] border border-[#e5e7eb] p-[12px]">
+              <div className="font-sans font-semibold text-[14px] text-[#1c1f23]">
+                Preview Settings（预览配置）
+              </div>
+              <div className="mt-[10px] grid grid-cols-1 sm:grid-cols-2 gap-[12px]">
+                <div>
+                  <div className="text-[12px] text-[#6b7280] mb-[6px]">Previewing Market</div>
+                  <Select
+                    value={selectedMarketId}
+                    onChange={(value) => {
+                      const marketId = String(value);
+                      const fallbackContext = buildDefaultMarketContext(
+                        markets.find((item) => item.id === marketId) ?? null,
+                      );
+                      const nextContext = previewMarketMap.contexts[marketId] ?? fallbackContext;
+                      setPreviewMarketMap((prev) => ({
+                        currentMarketId: marketId,
+                        contexts: { ...prev.contexts, [marketId]: nextContext },
+                      }));
+                      previewActions.setMarket(nextContext);
+                      previewActions.setSettings({
+                        ...previewState.settings,
+                        marketId,
+                      });
+                    }}
+                    options={marketOptions}
+                  />
+                </div>
+                <div>
+                  <div className="text-[12px] text-[#6b7280] mb-[6px]">Currency Code</div>
+                  <Input
+                    value={selectedMarketContext.currencyCode}
+                    onChange={(event) =>
+                      updateMarketContext({ currencyCode: event.target.value.trim().toUpperCase() })
+                    }
+                  />
+                </div>
+                <div>
+                  <div className="text-[12px] text-[#6b7280] mb-[6px]">Currency Symbol</div>
+                  <Input
+                    value={selectedMarketContext.currencySymbol}
+                    onChange={(event) =>
+                      updateMarketContext({ currencySymbol: event.target.value })
+                    }
+                  />
+                </div>
+                <div>
+                  <div className="text-[12px] text-[#6b7280] mb-[6px]">Money Format</div>
+                  <Select
+                    value={selectedMarketContext.moneyFormat}
+                    onChange={(value) =>
+                      updateMarketContext({
+                        moneyFormat: value as PreviewMarketContext["moneyFormat"],
+                      })
+                    }
+                    options={[
+                      { value: "amount", label: "amount" },
+                      { value: "amount_no_decimals", label: "amount_no_decimals" },
+                      {
+                        value: "amount_with_comma_separator",
+                        label: "amount_with_comma_separator",
+                      },
+                      {
+                        value: "amount_no_decimals_with_comma_separator",
+                        label: "amount_no_decimals_with_comma_separator",
+                      },
+                      {
+                        value: "amount_with_apostrophe_separator",
+                        label: "amount_with_apostrophe_separator",
+                      },
+                      {
+                        value: "amount_no_decimals_with_space_separator",
+                        label: "amount_no_decimals_with_space_separator",
+                      },
+                      {
+                        value: "amount_with_space_separator",
+                        label: "amount_with_space_separator",
+                      },
+                      {
+                        value: "amount_with_period_and_space_separator",
+                        label: "amount_with_period_and_space_separator",
+                      },
+                    ]}
+                  />
+                </div>
+                <div>
+                  <div className="text-[12px] text-[#6b7280] mb-[6px]">Locale</div>
+                  <Input
+                    value={selectedMarketContext.locale}
+                    onChange={(event) => updateMarketContext({ locale: event.target.value })}
+                  />
+                </div>
+                <div>
+                  <div className="text-[12px] text-[#6b7280] mb-[6px]">Tax Display</div>
+                  <Select
+                    value={selectedMarketContext.taxDisplay}
+                    onChange={(value) =>
+                      updateMarketContext({
+                        taxDisplay: value as PreviewMarketContext["taxDisplay"],
+                      })
+                    }
+                    options={[
+                      { value: "inclusive", label: "Tax inclusive" },
+                      { value: "exclusive", label: "Tax exclusive" },
+                      { value: "unknown", label: "Unknown" },
+                    ]}
+                  />
+                </div>
+              </div>
+
+              <div className="mt-[16px] flex items-center justify-between">
+                <div className="font-sans font-semibold text-[13px] text-[#1c1f23]">
+                  Previewing Items
+                </div>
+                <div className="flex gap-[8px]">
+                  <Button size="small" onClick={addPreviewItem}>
+                    添加商品
+                  </Button>
+                  <Button size="small" onClick={handleSelectProducts}>
+                    选择商品
+                  </Button>
+                </div>
+              </div>
+              <div className="mt-[12px] space-y-[12px]">
+                {previewState.settings.items.map((item) => (
+                  <div key={item.id} className="rounded-[10px] border border-[#e5e7eb] p-[10px]">
+                    <div className="flex items-center justify-between gap-[8px]">
+                      <div className="text-[13px] font-semibold text-[#111827]">
+                        {item.productTitle || "Preview item"}
+                      </div>
+                      <Button size="small" onClick={() => removePreviewItem(item.id)}>
+                        移除
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-[10px] mt-[10px]">
+                      <div>
+                        <div className="text-[12px] text-[#6b7280] mb-[4px]">Product title</div>
+                        <Input
+                          value={item.productTitle}
+                          onChange={(event) =>
+                            updatePreviewItem(item.id, { productTitle: event.target.value })
+                          }
+                        />
+                      </div>
+                      <div>
+                        <div className="text-[12px] text-[#6b7280] mb-[4px]">Variant title</div>
+                        <Input
+                          value={item.variantTitle}
+                          onChange={(event) =>
+                            updatePreviewItem(item.id, { variantTitle: event.target.value })
+                          }
+                        />
+                      </div>
+                      <div>
+                        <div className="text-[12px] text-[#6b7280] mb-[4px]">Image</div>
+                        <Input
+                          value={item.image}
+                          onChange={(event) =>
+                            updatePreviewItem(item.id, { image: event.target.value })
+                          }
+                        />
+                      </div>
+                      <div>
+                        <div className="text-[12px] text-[#6b7280] mb-[4px]">Quantity</div>
+                        <InputNumber
+                          min={1}
+                          className="w-full"
+                          value={item.quantity}
+                          onChange={(value) =>
+                            updatePreviewItem(item.id, {
+                              quantity: Number.isFinite(value) ? Number(value) : 1,
+                            })
+                          }
+                        />
+                      </div>
+                      <div>
+                        <div className="text-[12px] text-[#6b7280] mb-[4px]">Price</div>
+                        <InputNumber
+                          min={0}
+                          className="w-full"
+                          value={item.priceMinor / 100}
+                          onChange={(value) =>
+                            updatePreviewItem(item.id, {
+                              priceMinor: Math.trunc((Number(value) || 0) * 100),
+                            })
+                          }
+                        />
+                      </div>
+                      <div>
+                        <div className="text-[12px] text-[#6b7280] mb-[4px]">Compare at</div>
+                        <InputNumber
+                          min={0}
+                          className="w-full"
+                          value={(item.compareAtMinor ?? 0) / 100}
+                          onChange={(value) =>
+                            updatePreviewItem(item.id, {
+                              compareAtMinor:
+                                value == null ? null : Math.trunc((Number(value) || 0) * 100),
+                            })
+                          }
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-[10px] mt-[10px]">
+                      {[
+                        { label: "Color", key: "Color" },
+                        { label: "Size", key: "Size" },
+                        { label: "Material", key: "Material" },
+                        { label: "Style", key: "Style" },
+                      ].map((opt) => {
+                        const current =
+                          item.optionsWithValues.find((entry) => entry.name === opt.key)?.value ??
+                          "";
+                        return (
+                          <div key={opt.key}>
+                            <div className="text-[12px] text-[#6b7280] mb-[4px]">
+                              {opt.label}
+                            </div>
+                            <Input
+                              value={current}
+                              onChange={(event) =>
+                                updateItemOption(item.id, opt.key, event.target.value)
+                              }
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <div className="flex gap-[8px] mt-[12px]">
               <Button onClick={handleReset}>恢复默认</Button>
               <Button type="primary" loading={saveFetcher.state !== "idle"} onClick={onSave}>
@@ -543,123 +1069,43 @@ export function CartSettingPage({
               Cart Review
             </div>
           </div>
-          <div
-            className="rounded-[16px] border border-[#e5e7eb] overflow-hidden bg-white"
-            style={{
-              ["--accent" as any]: String(previewValues.ui.accentColor || "#7d5ce6"),
-            }}
-          >
-            <div className="bg-white px-[16px] py-[12px] border-b border-[#eef0f2] flex items-center justify-between">
-              <div className="font-sans font-semibold text-[16px] text-[#111827]">
-                购物车 <span className="text-[#6b7280] font-normal">• 2</span>
-              </div>
-              <button
-                type="button"
-                className="w-[32px] h-[32px] rounded-full flex items-center justify-center hover:bg-black/5"
-                aria-label="Close"
-              >
-                <X size={18} className="text-[#111827]" />
-              </button>
-            </div>
-
-            {previewValues.modules.timer.enabled ? (
-              <div
-                className="px-[16px] py-[10px] text-center text-[13px]"
-                style={{
-                  background: previewValues.ui.timerBackgroundColor,
-                  color: previewValues.ui.timerTextColor,
-                }}
-              >
-                <span className="font-semibold">{timerText}</span>
-              </div>
-            ) : null}
-
-            {previewValues.modules.promotions.enabled ? (
-              <div className="px-[16px] pt-[12px]">
-                <div className="text-center text-[13px] font-semibold text-[#111827]">
-                  {progressText}
-                </div>
-                <div
-                  className="mt-[10px] h-[10px] overflow-hidden"
-                  style={{
-                    background: previewValues.ui.promotionsBackgroundColor,
-                    borderRadius: `${previewValues.ui.promotionsRadiusPx}px`,
-                  }}
-                >
-                  <div
-                    className="h-full"
-                    style={{
-                      width: `${Math.round(progressPct * 100)}%`,
-                      background: previewValues.ui.promotionsProgressColor,
-                      borderRadius: `${previewValues.ui.promotionsRadiusPx}px`,
-                      transition: "width 180ms ease",
-                    }}
-                  />
-                </div>
-              </div>
-            ) : null}
-
-            <div className="px-[16px] py-[14px] space-y-[16px]">
-              {[
-                {
-                  title: "Casual Pink Mountain Landscape Printed White Pullover",
-                  priceMinor: 18000,
-                  currency: "EUR",
-                },
-                { title: "Bosch Siemens Cleaning Tablets", priceMinor: 999, currency: "EUR" },
-              ].map((item) => (
-                <div key={item.title} className="flex gap-[12px]">
-                  <div className="w-[64px] h-[64px] rounded-[10px] bg-[#f3f4f6] flex-shrink-0" />
-                  <div className="flex-1">
-                    <div className="text-[13px] font-semibold text-[#111827] leading-snug">
-                      {item.title}
-                    </div>
-                    <div className="mt-[6px] text-[13px] font-semibold text-[#111827]">
-                      {formatMinorMoney(item.priceMinor, item.currency)}
-                    </div>
-                    <div className="mt-[10px] flex items-center gap-[8px]">
-                      <div className="inline-flex items-center rounded-[10px] border border-[#e5e7eb] overflow-hidden">
-                        <button type="button" className="w-[34px] h-[32px] text-[#111827] hover:bg-black/5">
-                          −
-                        </button>
-                        <div className="w-[36px] h-[32px] flex items-center justify-center text-[13px]">
-                          1
-                        </div>
-                        <button type="button" className="w-[34px] h-[32px] text-[#111827] hover:bg-black/5">
-                          +
-                        </button>
-                      </div>
-                      <button type="button" className="text-[#6b7280] hover:text-[#111827] text-[13px]">
-                        删除
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="border-t border-[#eef0f2] px-[16px] py-[14px]">
-              <div className="flex items-center justify-between text-[13px] text-[#111827]">
-                <span className="text-[#6b7280]">Subtotal</span>
-                <span className="font-semibold">{formatMinorMoney(18999, "EUR")}</span>
-              </div>
-              <button
-                type="button"
-                className="mt-[12px] w-full h-[44px] rounded-[12px] text-white font-semibold text-[14px]"
-                style={{
-                  background: previewValues.ui.accentColor,
-                }}
-              >
-                Checkout • {formatMinorMoney(18999, "EUR")}
-              </button>
-              <div className="mt-[10px] text-center text-[13px] text-[#111827] underline">
-                or continue shopping
-              </div>
-            </div>
-          </div>
+          <CartPreviewPanel rules={previewValues} styles={previewValues} />
         </div>
       </div>
     </div>
+  );
+}
+
+export function CartSettingPage({
+  shop,
+  apiKey,
+  themeExtensionEnabled,
+  markets,
+}: {
+  shop: string;
+  apiKey: string;
+  themeExtensionEnabled: boolean;
+  markets: MarketItem[];
+}) {
+  const initialMarketMap = useMemo(() => buildMarketContextMap(markets), [markets]);
+  const initialPreviewState: PreviewState = useMemo(
+    () => ({
+      market:
+        initialMarketMap.contexts[initialMarketMap.currentMarketId] ?? buildFallbackMarket(),
+      settings: buildPreviewSettings(initialMarketMap.currentMarketId, DEFAULT_PREVIEW_ITEMS),
+    }),
+    [initialMarketMap],
+  );
+
+  return (
+    <PreviewProvider initialState={initialPreviewState}>
+      <CartSettingContent
+        shop={shop}
+        apiKey={apiKey}
+        themeExtensionEnabled={themeExtensionEnabled}
+        markets={markets}
+      />
+    </PreviewProvider>
   );
 }
 
