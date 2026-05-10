@@ -2,89 +2,69 @@
 
 ## Purpose
 
-This document defines the visual language for Bundle V2.
-It is written for AI coding agents and developers who will build or update UI in this repository.
+This file defines the UI rules for Bundle V2.
+It is for coding agents and developers working on this repository.
 
-This is not a marketing-site design brief.
-This is a product UI system for a Shopify embedded app with a related storefront theme extension.
+This is a Shopify embedded app.
+Design for Shopify Admin first, not for a marketing site.
 
 ## Product Context
 
-- Product type: Shopify embedded app for bundle offers, analytics, and storefront merchandising
-- Primary environment: Shopify Admin
-- Secondary environment: Shopify storefront theme extension
-- Main user mindset: operational, task-focused, configuration-heavy
-- Design goal: feel trustworthy, efficient, native to Shopify Admin, and easy to scan
+- Product: bundle offers, analytics, pricing, and storefront merchandising
+- Primary surface: Shopify Admin
+- Secondary surface: storefront theme extension
+- User mindset: task-focused, operational, configuration-heavy
 
-## Core Personality
+## Core Direction
 
-The product should feel:
+- Feel native to Shopify Admin
+- Feel calm, clear, and compact
+- Keep brand expression subtle
+- Prioritize scanning and task completion
+- Prefer practical structure over decorative styling
 
-- Calm, not loud
-- Precise, not decorative
-- Friendly, not playful
-- Branded, but never more dominant than the workflow
-- Native to Shopify Admin first, modern SaaS second
+## Hard Rules
 
-Preferred reference points:
+- Do not use eyebrow labels by default
+- Do not place descriptive paragraphs under page titles by default
+- Do not place descriptive paragraphs under section titles by default
+- Do not place descriptive paragraphs under card titles by default
+- Do not create stacked title + subtitle + helper text unless the user explicitly needs onboarding
+- If a heading is unclear, rename the heading instead of adding a sentence below it
+- If guidance is necessary, place it next to the exact field, state, or action that needs explanation
+- Default to compact layouts and compact navigation
+- Match Shopify Admin hierarchy before adding brand styling
 
-- Shopify Admin: hierarchy, spacing, contrast, and interaction tone
-- Polaris guidance: predictable controls, practical page structure, and clear status meaning
-- Modern SaaS restraint: compact hierarchy and reduced visual noise
+## Shopify Alignment
 
-Do not mimic any external brand literally.
-Do not make the product feel like a separate design system living inside Shopify Admin.
+Use Shopify Admin and Polaris principles as the baseline:
+
+- Clear page hierarchy
+- Compact, readable spacing
+- White surfaces and restrained borders
+- Calm status treatment
+- Minimal visual drama
+- Action-first page structure
+
+If a UI choice feels louder than Shopify Admin, it is probably wrong.
 
 ## Tech Reality
 
-Generate UI that matches the actual repository:
+Generate UI that fits this repository:
 
-- Framework: React 18 + React Router
-- Styling: Tailwind CSS for layout, spacing, and quick composition
-- Components: Ant Design for form controls, feedback, and common app UI
-- Custom CSS: allowed for complex previews, multistep builders, and storefront extension styling
-- Host environment: Shopify embedded app shell
+- React 18 + React Router
+- Tailwind for layout and spacing
+- Ant Design for common controls and feedback
+- Custom CSS only for complex builders, previews, and storefront extension styling
 
-Do not assume this project uses a pure design system package, pure Tailwind approach, or official Polaris React components everywhere.
-Design decisions must fit the existing mixed stack while still following Shopify Admin visual expectations.
-
-## Fit Into Admin
-
-The app lives inside merchant workflows that already move across Shopify Admin surfaces.
-UI should reduce context switching rather than announce a separate brand world.
-
-- Match Shopify Admin expectations in spacing, density, headings, and status treatment
-- Prefer practical page headers over hero compositions
-- Prefer white surfaces, neutral text, and restrained borders over decorative treatments
-- Use icons and color as support, not as the primary carrier of meaning
-- If a UI choice feels more like a marketing site than an operations tool, it is probably wrong
-
-## Design Principles
-
-1. Optimize for task completion.
-2. Prefer compact layouts over explanatory copy.
-3. Keep dense screens readable through spacing and hierarchy.
-4. Keep the experience visually harmonious with Shopify Admin.
-5. Use color with semantic intent, not as decoration.
-6. Favor stable patterns over visual novelty.
-7. Preserve compatibility with Shopify admin expectations.
-8. Keep brand expression subtle and secondary to usability.
-
-Title rule:
-
-- Titles should carry meaning on their own
-- Do not place descriptive sentences directly under titles by default
-- If context is necessary, prefer inline metadata, concise helper text near the relevant control, or a compact status row
-- Repeating a title with a second explanatory sentence is considered visual noise unless the user explicitly needs instructional onboarding
+Do not assume pure Polaris or pure Tailwind.
+Design choices must work with the current mixed stack.
 
 ## Visual Tokens
 
-These values define the default visual language.
-Reuse them consistently across pages, custom CSS, and component styling.
-
 ### Colors
 
-- Primary accent: `#008060`
+- Primary: `#008060`
 - Primary hover: `#006e52`
 - Primary active: `#005c43`
 - Surface: `#ffffff`
@@ -96,268 +76,249 @@ Reuse them consistently across pages, custom CSS, and component styling.
 - Text secondary: `#1c1f23`
 - Text subdued: `#6d7175`
 - Success tint: `#f0faf6`
-- Featured tint: `#f5fff9`
 - Critical: `#d72c0d`
 - Warning: `#b98900`
 
-Color usage rules:
+Rules:
 
-- Most text should use neutral dark text, not accent colors
-- Green should signal primary action or positive state, but must not be sprayed across the page
-- Yellow or amber should indicate caution, incomplete work, or attention-needed states
-- Orange may be used for pending or in-progress states when stronger non-blocking emphasis is needed
-- Red is only for destructive actions, blocking errors, or clearly critical states
-- Never rely on color alone to explain status; pair it with text and, when useful, iconography
+- Most text uses neutral dark colors
+- Green is for primary action or positive state, not general decoration
+- Red is only for destructive or critical states
+- Warning colors are for caution only
+- Never rely on color alone to convey meaning
 
 ### Radius
 
 - Small controls: `6px`
-- Standard cards and inputs: `8px`
-- Featured cards or premium blocks: `12px`
+- Standard controls and cards: `8px`
+- Featured cards: `12px`
 
 ### Shadow
 
-- Default card shadow: subtle only
-- Featured card shadow: slightly stronger but still soft
-- Never use dramatic glow, glassmorphism, or heavy layered shadows
+- Keep shadows very light
+- Avoid heavy shadows, glow, glassmorphism, and visual effects
 
 ### Typography
 
-- System sans stack is acceptable
-- Prioritize legibility over stylistic typography
-- Headings should feel compact and strong
-- Body copy should stay clean and neutral
-- Helper text should be optional, not default
-- Prefer one clear label over a label plus explanatory sentence
-- Prefer standalone headings over heading-plus-description stacks
-- Page, section, and card titles should usually appear without a subtitle or descriptive paragraph underneath
-- If a title needs support text, question whether the title should be renamed more clearly first
-- Avoid using color alone to imply heading hierarchy
-- The current page title should be the strongest text element on the page
+- Use a clean system sans stack
+- Prioritize legibility over style
+- Keep headings compact
+- Keep support text sparse
 
-Minimum size guidance:
+Recommended sizes:
 
-- Headings, body text, and interactive text: `13px` minimum
-- Smaller supporting text: `12px` minimum
-
-Recommended hierarchy:
-
-- Page title: `22px` to `28px`, semibold
-- Section title: `18px` to `20px`, semibold
-- Card title: `14px` to `16px`, semibold
+- Page title: `22px` to `28px`
+- Section title: `18px` to `20px`
+- Card title: `14px` to `16px`
 - Body text: `14px`
 - Secondary text: `12px` to `13px`
 
 ## Layout Rules
 
+### Page Header
+
+- Keep page headers short
+- Preferred pattern: title on the left, actions on the right
+- Do not add eyebrow + title + paragraph stacks
+- Do not add marketing-style copy under titles
+- If extra context is needed, use a small inline status, count, or notice
+- Reduce top padding and bottom padding where possible
+
+### Navigation
+
+- Navigation must stay compact
+- Tabs should usually fit on one row
+- Avoid thick tab containers and oversized wrappers
+- Prefer low-height tabs or segmented controls
+- Navigation must not push main content below the fold unnecessarily
+
 ### App Pages
 
-- Prefer white surface cards on a soft neutral page background
-- Use clear section spacing instead of large decorative panels
-- Keep width practical for admin workflows
-- Avoid oversized hero sections or landing-page composition
-- Keep page headers short; title plus actions is preferred
-- Do not add descriptive marketing-style copy under page titles
-- If page-level context is required, use compact status chips, inline counts, or contextual notices instead of a paragraph under the title
-- Avoid eyebrow labels unless they add real navigation value
-- Favor consistent merchant-facing spacing over dramatic whitespace
-- Page structure should feel like an admin tool, not a branded microsite
+- Use white cards on a neutral background
+- Keep widths practical for admin workflows
+- Avoid hero sections and oversized empty space
+- Use spacing for structure, not decorative panels
+- Keep content density closer to Shopify Admin than to a SaaS landing page
 
-### Complex Builder Pages
+### Builder Pages
 
-For multistep configuration pages like offer creation:
-
-- Prefer a two-column layout on desktop
-- Left column: controls, form sections, and configuration logic
-- Right column: sticky preview or contextual summary
+- Prefer two columns on desktop
+- Left: configuration
+- Right: sticky preview or summary
 - Collapse to one column on smaller screens
-- Use a persistent bottom action area only when forms are long enough to justify it
-- Step navigation must stay compact and should not push form content below the fold
-- In dense builder steps, top-level groups like `Product pool`, `Bars`, and `Components` can be separated by headings and vertical spacing alone; do not add another outer bordered card when inner controls already provide enough structure
+- Step navigation must be compact
+- Use a sticky bottom action bar only when necessary
+- In dense sections, headings plus spacing are often enough; do not wrap every group in another bordered card
 
 ### Cards
 
-Card states should be visually consistent:
-
 - Default: white background, light border
 - Selected: stronger border, minimal emphasis
-- Featured: green border or green-tinted background
-- Read-only: same structure, lower interactivity cues
-- Card titles should stay short and should not be followed by descriptive body copy unless the card is an empty state or warning
-- Prefer content, controls, or compact metadata directly under the title instead of explanatory paragraphs
-
-Avoid inventing different card languages on each page.
+- Featured: subtle green emphasis only
+- Read-only: same structure, lower interaction cues
+- Card titles should be short
+- Do not put descriptive body copy under card titles unless the card is an empty state, warning, or destructive action
 
 ## Components
 
 ### Buttons
 
-- Primary action should be singular and obvious in each decision area
-- Primary button can use the app green accent, but only for the most important action
-- Secondary button is quiet and supportive
-- Plain button is text-like and used for lower-priority actions
-- Any dark-filled button must use white text for inverse contrast
-- Destructive actions must use critical styling, never brand green
-- Do not create multiple competing primary actions in one area
+- One clear primary action per area
+- Primary button may use the app green
+- Secondary buttons should be quiet
+- Plain buttons should feel lightweight
+- Any dark-filled button must use white text
+- Destructive actions use critical styling, not brand green
 
 ### Inputs
 
 - Labels sit above fields
-- Helper text sits below fields
-- Error text is short, direct, and visible
-- Input styling should remain simple and stable
-- Avoid decorative field chrome
+- Helper text is optional, not default
+- Error text is short and direct
+- Keep fields visually simple
 
 ### Steps
 
-- Steps should be compact, readable, and clearly state progress
-- Active step uses the brand color
-- Inactive steps use muted backgrounds and subdued text
-- Step components should feel utilitarian, not celebratory
-- Do not add paragraph-length explanations inside each step item
+- Steps must be compact
+- Each step should have a short title
+- Do not add paragraph descriptions inside step items
+- Active state may use the brand color
+- Inactive state should stay muted
 
 ### Tables and Lists
 
-- Favor clean rows, clear spacing, and restrained borders
-- Use visual emphasis for important status or actions, not for every cell
-- Keep actions aligned and predictable
-- Avoid dense visual noise or unnecessary badges
+- Keep rows clean and predictable
+- Use emphasis only where it changes action or state
+- Avoid too many badges, icons, or inline labels
+
+### Alerts and Notices
+
+- Use notices only when action or awareness is truly needed
+- Keep notice text short
+- Avoid turning every page into stacked banners
+- Informational notices should stay low-drama
 
 ### Empty States
 
 - Be concise
-- Explain what the user can do next
+- State what is missing
+- State the next action
 - Prefer one primary CTA
-- Do not over-illustrate
-- Avoid multi-line product education in empty states
 
-### Alerts and Status
+## Content Rules
 
-- Success uses green accents sparingly
-- Warning uses amber or muted emphasis
-- Pending or in-progress states may use orange when needed
-- Critical uses red and must be unambiguous
-- Informational notices should stay low-drama and practical
+- Use short, direct labels
+- Prefer operational language
+- Remove filler text
+- Avoid repeating the same explanation in multiple places
+- Do not restate the title in the description below it
+- Do not explain obvious sections
+- Prefer inline metadata over explanatory paragraphs
+
+Default behavior:
+
+- No eyebrow
+- No subtitle under title
+- No description under section header
+- No description under card header
+
+Allowed exceptions:
+
+- Empty states
+- Warnings and critical notices
+- Risky actions
+- Complex fields that cannot be understood from the label alone
 
 ## Page Archetypes
 
-All new pages should fit one of these patterns before introducing a new layout style.
-
 ### Dashboard
 
-- High-level status
-- Important recommendations
-- Fast access to next actions
-- Light data density
+- Summary first
+- Fast actions second
+- Light to medium density
 
-### List / Management Page
+### List Page
 
-- Search, filter, sort, and quick actions
-- Data-first composition
-- Stable table or list rhythm
+- Filters and actions first
+- Data-first layout
+- Stable table rhythm
 
-### Builder / Configuration Page
+### Builder Page
 
-- Step-based flow
-- Sectioned inputs
+- Step flow
+- Compact sectioning
 - Sticky preview or summary
-- Strong save/publish affordances
+- Strong save or publish action
 
 ### Analytics Page
 
-- Clear summary first
-- Visualizations should support decisions, not become decoration
-- Use restrained chart styling
+- Summary first
+- Charts support decisions
+- Avoid decorative charts
 
 ### Pricing Page
 
 - Clear plan comparison
-- Trustworthy and simple
-- Avoid a separate visual language from the rest of the app
+- Simple and trustworthy
+- Must not look like a different product
 
-## Storefront Extension Rules
+## Storefront Extension
 
-The storefront extension is related to the app, but it is not the same surface.
-
-- Keep it lighter and less admin-like
+- Keep it lighter than the admin
 - Preserve compatibility with many Shopify themes
-- Reuse core color and card logic where reasonable
-- Keep storefront UI compact and easy to embed near product forms
-- Do not force heavy app-shell styling into storefront blocks
+- Reuse color and card logic where useful
+- Do not force admin shell styling into storefront blocks
 
-When a preview exists in admin, it should feel directionally consistent with storefront output.
-The preview does not need to be pixel-identical, but it should not feel like a different product.
+Admin preview should feel close in intent to storefront output, but does not need to be pixel-identical.
 
 ## Motion
 
-- Motion should be minimal and purposeful
-- Prefer quick fades, subtle hover changes, and lightweight transitions
-- Avoid dramatic entrance animations
-- Avoid motion that slows down form-heavy workflows
-
-## Content Style
-
-- Use short, direct labels
-- Prefer operational language over marketing language
-- Make actions explicit
-- Keep helper text useful, compact, and sparse
-- Remove descriptive filler under headings, section titles, and card titles
-- Do not use title-following sentences just to restate what the section is about
-- When extra guidance is needed, place it next to the exact field, toggle, or state that needs explanation
-- Avoid vague slogans inside product UI
-- Avoid repeating the same explanation in page header, section header, and preview panel
-- Prefer merchant-facing clarity over internal jargon
-- Explain the outcome of an action instead of selling the feature
+- Keep motion minimal
+- Prefer subtle hover and quick transitions
+- Avoid dramatic entrances
+- Avoid motion that slows down workflows
 
 ## Accessibility
 
-- Maintain clear contrast between text, borders, and surfaces
-- Do not rely on color alone to indicate state
-- Keep interactive targets comfortable to use
-- Preserve keyboard and form usability
-- Ensure selected, featured, and error states are distinguishable
+- Maintain strong text and surface contrast
+- Do not rely on color alone
+- Keep controls easy to target
+- Preserve keyboard usability
 
 ## Implementation Guidance
 
-When generating code for this repository:
-
-- Prefer Ant Design components for common controls and feedback
-- Prefer Tailwind for layout, spacing, alignment, and page composition
-- Use custom CSS only when utility classes become hard to manage or when storefront preview fidelity matters
-- Reuse existing visual patterns before inventing new ones
-- Keep Shopify Admin harmony as the default visual target
-- Use the app green as a restrained accent, not a page-wide brand wash
-- If Ant Design defaults feel too far from Shopify Admin tone, tune spacing, borders, radius, and color usage at the composition layer instead of introducing a new library
-
-Before adding new visual patterns, check whether an existing page already solves the same problem.
+- Prefer Ant Design for controls and feedback
+- Prefer Tailwind for layout and spacing
+- Use custom CSS only when necessary
+- Reuse existing patterns before creating new ones
+- Tune Ant Design toward Shopify Admin tone through spacing, borders, radius, and color restraint
 
 ## Anti-Patterns
 
-Do not generate UI that looks like:
+Do not create UI that looks like:
 
-- A flashy AI landing page
-- A neon cyberpunk dashboard
-- A heavy dark-mode-only interface
-- A glassmorphism experiment
-- A gradient-saturated startup hero
-- A playful consumer app
+- a landing page
+- a flashy startup dashboard
+- a neon or heavy dark interface
+- a glassmorphism experiment
+- a gradient-first branded microsite
 
 Do not:
 
-- Introduce another primary component library
-- Mix unrelated design languages on the same page
-- Overuse arbitrary values when existing patterns are enough
-- Create oversized empty space without functional purpose
-- Use large decorative icons where simple hierarchy works better
-- Make pricing or analytics feel disconnected from the rest of the app
-- Add heading-description stacks by default across admin pages, builder sections, or settings cards
+- introduce another primary component library
+- add eyebrow labels everywhere
+- add title-description stacks by default
+- create oversized navigation blocks
+- create oversized empty space without function
+- overuse color, badges, or decorative icons
+- let pricing or analytics drift into a separate visual language
 
 ## Decision Rule
 
-If a design choice is unclear, choose the option that is:
+If a choice is unclear, choose the option that is:
 
-1. more readable,
-2. more consistent with existing app structure,
-3. more compatible with Shopify admin expectations,
-4. easier to maintain in `Ant Design + Tailwind + custom CSS`,
+1. more compact,
+2. more readable,
+3. closer to Shopify Admin,
+4. easier to maintain in this repository,
 5. less visually noisy.
