@@ -585,8 +585,57 @@ export type IndexLoaderData = {
   apiKey: string;
   ianaTimezone: string;
   themeExtensionEnabled: boolean;
+  themeExtensionDebug?: ThemeExtensionDetectionDebug;
   billingSubscriptions: Array<{ name: string; status: string }>;
   billingTestMode: boolean;
+};
+
+type ThemeExtensionDebugEntry = {
+  entryKey: string | null;
+  blockType: string;
+  disabled?: boolean;
+  hasSettings: boolean;
+};
+
+type ThemeExtensionMatchedEntry = ThemeExtensionDebugEntry & {
+  matchedByApp: boolean;
+  matchedByUid: boolean;
+  matchedByHandleOnly: boolean;
+  enabled: boolean;
+};
+
+type ThemeExtensionThemeDebug = {
+  id: string;
+  name: string;
+  role: string;
+  hasSettingsData: boolean;
+  parseOk?: boolean;
+  totalBlockEntries?: number;
+  appRelatedEntries?: ThemeExtensionDebugEntry[];
+  matchedEntries?: ThemeExtensionMatchedEntry[];
+  result?: string;
+};
+
+export type ThemeExtensionDetectionDebug = {
+  pluginKey: string;
+  extensionHandle: string;
+  extensionUid: string;
+  embedHandle: string;
+  appClientId: string;
+  appName: string;
+  appNameSlug: string;
+  enabled: boolean;
+  scannedThemeCount: number;
+  scannedBlockCount: number;
+  themes: ThemeExtensionThemeDebug[];
+  matchedTheme?: {
+    id: string;
+    name: string;
+    role: string;
+    entryKey: string | null;
+    blockType: string;
+  };
+  error?: string;
 };
 
 async function fetchShopOffers(shop: string): Promise<OfferListItem[]> {
@@ -972,6 +1021,7 @@ const collectThemeBlockEntries = (
  */
 const getThemeExtensionEnabledAcrossThemes = async (
   admin: any,
+  pluginKey: string,
   extensionHandle: string,
   /** Liquid filename base, e.g. product_detail_message for product_detail_message.liquid */
   blockHandle: string,
@@ -980,7 +1030,23 @@ const getThemeExtensionEnabledAcrossThemes = async (
   appClientId: string,
   /** App display name from shopify.app.*.toml (will be normalized to slug for matching) */
   appName?: string,
-): Promise<boolean> => {
+): Promise<{
+  enabled: boolean;
+  debug: ThemeExtensionDetectionDebug;
+}> => {
+  const debug: ThemeExtensionDetectionDebug = {
+    pluginKey,
+    extensionHandle,
+    extensionUid,
+    embedHandle: blockHandle,
+    appClientId,
+    appName: String(appName || ""),
+    appNameSlug: "",
+    enabled: false,
+    scannedThemeCount: 0,
+    scannedBlockCount: 0,
+    themes: [],
+  };
   try {
     const response = await admin.graphql(
       `#graphql
@@ -1013,7 +1079,9 @@ const getThemeExtensionEnabledAcrossThemes = async (
       json?.data?.themes?.edges
         ?.map((edge: { node?: Record<string, any> | null }) => edge?.node)
         .filter(Boolean) ?? [];
-    console.log("[theme-extension] scanning themes", {
+    debug.scannedThemeCount = themeNodes.length;
+    console.error("[theme-extension] scanning themes", {
+      pluginKey,
       extensionHandle,
       blockHandle,
       extensionUid,
@@ -1048,6 +1116,7 @@ const getThemeExtensionEnabledAcrossThemes = async (
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "");
+    debug.appNameSlug = appNameSlug;
 
     const isOurAppBlock = (blockType: string) => {
       if (!appClientId && !extensionHandle) return false;
@@ -1095,8 +1164,17 @@ const getThemeExtensionEnabledAcrossThemes = async (
 
     for (const theme of themeNodes) {
       const content = theme?.files?.nodes?.[0]?.body?.content;
+      const themeDebug: ThemeExtensionThemeDebug = {
+        id: String(theme?.id || ""),
+        name: String(theme?.name || ""),
+        role: String(theme?.role || ""),
+        hasSettingsData: Boolean(content && typeof content === "string"),
+        matchedEntries: [],
+      };
+      debug.themes.push(themeDebug);
       if (!content || typeof content !== "string") {
-        console.log("[theme-extension] theme missing settings_data", {
+        themeDebug.result = "missing-settings-data";
+        console.error("[theme-extension] theme missing settings_data", {
           themeId: theme?.id,
           themeName: theme?.name,
           themeRole: theme?.role,
@@ -1113,7 +1191,10 @@ const getThemeExtensionEnabledAcrossThemes = async (
       let settingsData;
       try {
         settingsData = JSON.parse(normalizedContent);
+        themeDebug.parseOk = true;
       } catch (e) {
+        themeDebug.parseOk = false;
+        themeDebug.result = "parse-failed";
         console.error("[theme-extension] failed to parse settings_data.json", {
           themeId: theme?.id,
           themeName: theme?.name,
@@ -1126,6 +1207,8 @@ const getThemeExtensionEnabledAcrossThemes = async (
       const blockEntries: ThemeBlockEntry[] = [];
       collectThemeBlockEntries(settingsData, blockEntries);
       scannedBlockCount += blockEntries.length;
+      debug.scannedBlockCount = scannedBlockCount;
+      themeDebug.totalBlockEntries = blockEntries.length;
       const appRelatedEntries = blockEntries
         .filter(({ block, entryKey }) => {
           const blockType = String(block?.type || "");
@@ -1143,7 +1226,8 @@ const getThemeExtensionEnabledAcrossThemes = async (
           disabled: block?.disabled,
           hasSettings: "settings" in block,
         }));
-      console.log("[theme-extension] theme scan summary", {
+      themeDebug.appRelatedEntries = appRelatedEntries;
+      console.error("[theme-extension] theme scan summary", {
         themeId: theme?.id,
         themeName: theme?.name,
         themeRole: theme?.role,
@@ -1163,7 +1247,17 @@ const getThemeExtensionEnabledAcrossThemes = async (
         const matchedByHandleOnly =
           !matchedByApp && !matchedByUid && isLikelyThemeEmbedBlock(block);
         const enabled = block?.disabled !== true;
-        console.log("[theme-extension] matched embed block", {
+        themeDebug.matchedEntries?.push({
+          entryKey,
+          blockType,
+          disabled: block?.disabled,
+          hasSettings: "settings" in block,
+          matchedByApp,
+          matchedByUid,
+          matchedByHandleOnly,
+          enabled,
+        });
+        console.error("[theme-extension] matched embed block", {
           extensionHandle,
           blockHandle,
           extensionUid,
@@ -1181,25 +1275,37 @@ const getThemeExtensionEnabledAcrossThemes = async (
           enabled,
         });
         if (enabled && (matchedByApp || matchedByUid || matchedByHandleOnly)) {
-          console.log("[theme-extension] enabled theme embed detected", {
+          themeDebug.result = "enabled-match";
+          debug.enabled = true;
+          debug.matchedTheme = {
+            id: String(theme?.id || ""),
+            name: String(theme?.name || ""),
+            role: String(theme?.role || ""),
+            entryKey,
+            blockType,
+          };
+          console.error("[theme-extension] enabled theme embed detected", {
             themeId: theme?.id,
             themeName: theme?.name,
             themeRole: theme?.role,
             entryKey,
             blockType,
           });
-          return true;
+          return { enabled: true, debug };
         }
       }
 
-      console.log("[theme-extension] no enabled embed in theme", {
+      themeDebug.result = themeDebug.matchedEntries?.length
+        ? "matched-but-disabled"
+        : "no-match-in-theme";
+      console.error("[theme-extension] no enabled embed in theme", {
         themeId: theme?.id,
         themeName: theme?.name,
         themeRole: theme?.role,
       });
     }
 
-    console.log("[theme-extension] no matched embed block", {
+    console.error("[theme-extension] no matched embed block", {
       extensionHandle,
       blockHandle,
       extensionUid,
@@ -1209,20 +1315,33 @@ const getThemeExtensionEnabledAcrossThemes = async (
       scannedBlockCount,
     });
   } catch (error) {
+    debug.error = error instanceof Error ? error.message : JSON.stringify(error);
     console.error("Failed to read theme extension status", error);
   }
 
-  return false;
+  return { enabled: false, debug };
 };
 
-async function getCurrentThemeExtensionEnabled(admin: any): Promise<boolean> {
+async function getCurrentThemeExtensionEnabled(admin: any): Promise<{
+  enabled: boolean;
+  debug: ThemeExtensionDetectionDebug;
+}> {
   const apiKey = sanitizeEnvLikeValue(process.env.SHOPIFY_API_KEY);
   const appDisplayName =
     sanitizeEnvLikeValue(process.env.SHOPIFY_APP_NAME) ||
     sanitizeEnvLikeValue(process.env.APP_NAME);
   try {
+    console.error("[theme-extension] start detection", {
+      apiKey,
+      appDisplayName,
+      pluginKey: BUNDLE_THEME_PRODUCT_PLUGIN.key,
+      extensionHandle: BUNDLE_THEME_PRODUCT_PLUGIN.extensionHandle,
+      extensionUid: BUNDLE_THEME_PRODUCT_PLUGIN.extensionUid,
+      embedHandle: BUNDLE_THEME_PRODUCT_PLUGIN.embedHandle,
+    });
     return await getThemeExtensionEnabledAcrossThemes(
       admin,
+      BUNDLE_THEME_PRODUCT_PLUGIN.key,
       BUNDLE_THEME_PRODUCT_PLUGIN.extensionHandle,
       BUNDLE_THEME_PRODUCT_PLUGIN.embedHandle,
       BUNDLE_THEME_PRODUCT_PLUGIN.extensionUid,
@@ -1231,7 +1350,23 @@ async function getCurrentThemeExtensionEnabled(admin: any): Promise<boolean> {
     );
   } catch (error) {
     console.error("Failed to check theme extension status", error);
-    return false;
+    return {
+      enabled: false,
+      debug: {
+        pluginKey: BUNDLE_THEME_PRODUCT_PLUGIN.key,
+        extensionHandle: BUNDLE_THEME_PRODUCT_PLUGIN.extensionHandle,
+        extensionUid: BUNDLE_THEME_PRODUCT_PLUGIN.extensionUid,
+        embedHandle: BUNDLE_THEME_PRODUCT_PLUGIN.embedHandle,
+        appClientId: apiKey,
+        appName: String(appDisplayName || ""),
+        appNameSlug: "",
+        enabled: false,
+        scannedThemeCount: 0,
+        scannedBlockCount: 0,
+        themes: [],
+        error: error instanceof Error ? error.message : JSON.stringify(error),
+      },
+    };
   }
 }
 
@@ -1339,8 +1474,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.error("Failed to fetch shop timezone", error);
   }
 
-  let themeExtensionEnabled = false;
-  themeExtensionEnabled = await getCurrentThemeExtensionEnabled(admin);
+  const themeExtensionDetection = await getCurrentThemeExtensionEnabled(admin);
+  const themeExtensionEnabled = themeExtensionDetection.enabled;
   void syncBundleEnabledMetafield(admin, themeExtensionEnabled);
   void syncShopOffersMetafield(admin, session.shop, themeExtensionEnabled).catch((error) => {
     console.error("Failed to sync shop offers metafield in loader", error);
@@ -1390,6 +1525,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     apiKey,
     ianaTimezone,
     themeExtensionEnabled,
+    themeExtensionDebug: themeExtensionDetection.debug,
     billingSubscriptions,
     billingTestMode: billingIsTestCharge(),
   } satisfies IndexLoaderData);
@@ -2107,7 +2243,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     }
 
-    const themeExtensionEnabled = await getCurrentThemeExtensionEnabled(admin);
+    const themeExtensionEnabled = (await getCurrentThemeExtensionEnabled(admin)).enabled;
     const syncResult = await syncShopOffersMetafield(
       admin,
       shopName,
@@ -2157,7 +2293,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     try {
       const shopNameToSync = updatedOffer?.shopName as string | undefined;
       if (shopNameToSync) {
-        const themeExtensionEnabled = await getCurrentThemeExtensionEnabled(admin);
+        const themeExtensionEnabled = (await getCurrentThemeExtensionEnabled(admin)).enabled;
         const syncResult = await syncShopOffersMetafield(
           admin,
           shopNameToSync,
@@ -2208,7 +2344,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // Sync metafield after deleting offer
     try {
       if (shopNameToSync) {
-        const themeExtensionEnabled = await getCurrentThemeExtensionEnabled(admin);
+        const themeExtensionEnabled = (await getCurrentThemeExtensionEnabled(admin)).enabled;
         const syncResult = await syncShopOffersMetafield(
           admin,
           shopNameToSync,
