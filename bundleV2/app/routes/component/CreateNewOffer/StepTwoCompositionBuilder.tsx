@@ -55,6 +55,8 @@ const ADD_BAR_MENU_ITEMS: Array<{ key: CampaignBarType; label: string }> = [
   { key: "free_gift", label: "Add Free gift bar" },
 ];
 
+const HIDDEN_BAR_TYPES: CampaignBarType[] = ["free_gift"];
+
 function parsePositiveInt(value: string, fallback = 1) {
   const parsed = Math.trunc(Number(value) || fallback);
   return Math.max(1, parsed);
@@ -858,6 +860,10 @@ export default function StepTwoCompositionBuilder({
 }: Props) {
   const [activeModuleId, setActiveModuleId] = useState<ActiveModuleId>(null);
   const visibleModules = useMemo(() => modules, [modules]);
+  const visibleAddBarMenuItems = useMemo(
+    () => ADD_BAR_MENU_ITEMS.filter((item) => !HIDDEN_BAR_TYPES.includes(item.key)),
+    [],
+  );
 
   const clearBarDefaults = () => {
     actions.setDiscountRules((prev) =>
@@ -1271,7 +1277,7 @@ export default function StepTwoCompositionBuilder({
               <Dropdown
                 trigger={["click"]}
                 menu={{
-                  items: ADD_BAR_MENU_ITEMS,
+                  items: visibleAddBarMenuItems,
                   onClick: ({ key }) =>
                     appendCampaignCompositionBar(
                       key as CampaignBarType,

@@ -55,6 +55,11 @@ export type CampaignModuleItem = {
   toggleable: boolean;
 };
 
+const HIDDEN_COMPONENT_MODULE_IDS: StepTwoModuleId[] = [
+  "checkbox_upsells",
+  "progressive_gifts",
+];
+
 function getDraftDiscountRuleType(rule: DraftDiscountRule): CampaignBarType {
   if (rule.logicType === "bxgy") return "bxgy";
   if (rule.rewardType === "gift_product") return "free_gift";
@@ -158,7 +163,7 @@ export function getCampaignCompositionModules(
   draft: CampaignDraft,
   options: { showCountdownBlock: boolean },
 ): CampaignModuleItem[] {
-  return [
+  const modules: CampaignModuleItem[] = [
     {
       id: "complete_bundle",
       label: "Complete bundle",
@@ -196,6 +201,8 @@ export function getCampaignCompositionModules(
       toggleable: true,
     },
   ];
+
+  return modules.filter((module) => !HIDDEN_COMPONENT_MODULE_IDS.includes(module.id));
 }
 
 export function getCampaignCompositionRulesSnapshot(

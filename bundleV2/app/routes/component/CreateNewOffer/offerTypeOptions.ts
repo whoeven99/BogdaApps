@@ -64,3 +64,14 @@ export const OFFER_TYPE_OPTIONS: OfferTypeOption[] = [
     primaryRuleType: "Free gift",
   },
 ];
+
+const HIDDEN_OFFER_TYPE_IDS: OfferTypeId[] = ["free-gift"];
+
+export function getVisibleOfferTypeOptions(
+  selectedOfferType?: OfferTypeId,
+): OfferTypeOption[] {
+  return OFFER_TYPE_OPTIONS.filter(
+    (option) =>
+      !HIDDEN_OFFER_TYPE_IDS.includes(option.id) || option.id === selectedOfferType,
+  );
+}

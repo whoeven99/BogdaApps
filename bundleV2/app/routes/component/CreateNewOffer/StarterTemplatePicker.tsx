@@ -1,4 +1,7 @@
-import { OFFER_TYPE_OPTIONS, type OfferTypeId } from "./offerTypeOptions";
+import {
+  getVisibleOfferTypeOptions,
+  type OfferTypeId,
+} from "./offerTypeOptions";
 
 function PreviewRow({
   title,
@@ -305,13 +308,15 @@ export default function StarterTemplatePicker({
   disabled = false,
   compact = false,
 }: Props) {
+  const visibleOfferTypeOptions = getVisibleOfferTypeOptions(selectedOfferType);
+
   return (
     <div
       className={`grid grid-cols-1 gap-[16px] ${
         compact ? "md:grid-cols-2 xl:grid-cols-2" : "md:grid-cols-2 xl:grid-cols-4"
       }`}
     >
-      {OFFER_TYPE_OPTIONS.map((option) => {
+      {visibleOfferTypeOptions.map((option) => {
         const isSelected = option.id === selectedOfferType;
         return (
           <button
