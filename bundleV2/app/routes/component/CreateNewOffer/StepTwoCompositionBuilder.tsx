@@ -23,6 +23,11 @@ import SubscriptionSettingsEditor from "./SubscriptionSettingsEditor";
 type Props = {
   draft: CampaignDraft;
   actions: CampaignDraftActions;
+  totalStoreProductsCount: number;
+  onSelectAllTriggerProducts: () => void;
+  onSelectTriggerProductsByCollection: () => void;
+  onExcludeTriggerProducts: () => void;
+  onCustomFilterTriggerProducts: () => void;
   bars: CampaignBarItem[];
   modules: CampaignModuleItem[];
   showCountdownBlock: boolean;
@@ -147,29 +152,60 @@ function QuietEmptyState({ children }: { children: ReactNode }) {
 
 function ProductPoolManager({
   selectedProducts,
-  onOpenPicker,
+  totalStoreProductsCount,
+  onSelectAll,
+  onSelectByCollection,
+  onExclude,
+  onCustomFilter,
+  allowBulkSelection,
 }: {
   selectedProducts: CampaignDraft["selectedProductsData"];
-  onOpenPicker: () => void;
+  totalStoreProductsCount: number;
+  onSelectAll: () => void;
+  onSelectByCollection: () => void;
+  onExclude: () => void;
+  onCustomFilter: () => void;
+  allowBulkSelection: boolean;
 }) {
   return (
-    <div className="rounded-[10px] border border-[#e3e8ed] bg-white p-4">
+    <div className="space-y-3 rounded-[10px] border border-[#e3e8ed] bg-white p-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
           <div className="text-[13px] font-medium text-[#1c1f23]">Trigger products</div>
           <div className="mt-1 text-[12px] text-[#5c6166]">
-            {selectedProducts.length} selected in the shared pool
+            {selectedProducts.length} selected
+            {totalStoreProductsCount > 0 ? ` of ${totalStoreProductsCount} products` : ""} in the
+            shared pool
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button onClick={onOpenPicker}>
-            {selectedProducts.length ? "Edit in product selector" : "Select in product selector"}
+          <Button onClick={onCustomFilter}>
+            {selectedProducts.length ? "Edit in product picker" : "Open product picker"}
           </Button>
         </div>
       </div>
-      <div className="mt-3 rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
-        Trigger products are managed in the product selector. Use the button above to
-        search, filter, and update the shared product pool.
+
+      {allowBulkSelection ? (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <Button block onClick={onSelectAll}>
+            Select all
+          </Button>
+          <Button block onClick={onSelectByCollection}>
+            Select by collection
+          </Button>
+          <Button block onClick={onExclude}>
+            Exclude products
+          </Button>
+          <Button block onClick={onCustomFilter}>
+            Custom filter
+          </Button>
+        </div>
+      ) : null}
+
+      <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
+        {allowBulkSelection
+          ? "Choose a selection shortcut above, then confirm the final set in Shopify's native product picker when needed."
+          : "Use Shopify's native product picker to choose the product for this step."}
       </div>
     </div>
   );
@@ -736,6 +772,11 @@ function CompleteBundleModuleDetail({
 export default function StepTwoCompositionBuilder({
   draft,
   actions,
+  totalStoreProductsCount,
+  onSelectAllTriggerProducts,
+  onSelectTriggerProductsByCollection,
+  onExcludeTriggerProducts,
+  onCustomFilterTriggerProducts,
   bars,
   modules,
   showCountdownBlock,
@@ -1136,7 +1177,12 @@ export default function StepTwoCompositionBuilder({
                 ? (
                   <ProductPoolManager
                     selectedProducts={draft.selectedProductsData}
-                    onOpenPicker={() => void actions.handleSelectProducts("normal")}
+                    totalStoreProductsCount={totalStoreProductsCount}
+                    onSelectAll={onSelectAllTriggerProducts}
+                    onSelectByCollection={onSelectTriggerProductsByCollection}
+                    onExclude={onExcludeTriggerProducts}
+                    onCustomFilter={onCustomFilterTriggerProducts}
+                    allowBulkSelection={draft.offerType !== "subscription"}
                   />
                 )
                 : null}

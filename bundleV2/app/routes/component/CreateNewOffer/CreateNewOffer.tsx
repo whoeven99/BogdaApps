@@ -35,7 +35,6 @@ import OfferComponentsDisplayCustomizer from "./OfferComponentsDisplayCustomizer
 import { ProgressiveGiftsSection } from "./ProgressiveGiftsSection";
 import ScheduleTargetingEditor from "./ScheduleTargetingEditor";
 import StepTwoCompositionBuilder from "./StepTwoCompositionBuilder";
-import EnhancedProductPickerModal from "./EnhancedProductPickerModal";
 import { getStarterTemplateDefaults } from "./starterTemplateDefaults";
 import {
   OFFER_TEXT_LIMITS,
@@ -262,10 +261,10 @@ interface CreateNewOfferProps {
   ianaTimezone?: string;
 }
 
-type EnhancedPickerTarget =
-  | { type: "buy" | "get" | "gift" | "normal" | "product_bundle" }
-  | { type: "bxgy_rule_reward"; ruleIndex: number }
-  | { type: "free_gift_rule_reward"; ruleIndex: number };
+type CollectionOption = {
+  label: string;
+  value: string;
+};
 
 /** 与 `_index/route` action 错误响应一致，避免从 route 循环引用 */
 type OfferActionErrorBody = {
@@ -827,8 +826,41 @@ export function CreateNewOffer({
         hasSubscription: found?.hasSubscription === true,
       };
     });
-  const [enhancedPickerTarget, setEnhancedPickerTarget] = useState<EnhancedPickerTarget | null>(
-    null,
+  const mapPickerSelectionToDraftProducts = (selectedList: any[]) =>
+    selectedList.map((item: any) => ({
+      id: String(item.id),
+      title: String(item.title || ""),
+      image: item.images?.[0]?.originalSrc || "https://via.placeholder.com/60",
+      price: item.variants?.[0]?.price || "€0.00",
+      variantsCount: item.variants?.length || 1,
+      hasSubscription:
+        ((item.sellingPlanGroups?.edges as Array<unknown> | undefined) ?? []).length > 0 ||
+        storeProducts.some((p) => String(p.id) === String(item.id) && p.hasSubscription),
+    }));
+  const [collectionSelectionModalOpen, setCollectionSelectionModalOpen] = useState(false);
+  const [pendingCollectionIds, setPendingCollectionIds] = useState<string[]>([]);
+  const allStoreProductIds = useMemo(
+    () => storeProducts.map((product) => String(product.id || "")).filter(Boolean),
+    [storeProducts],
+  );
+  const collectionOptions = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          storeProducts.flatMap((product) =>
+            (product.collections || []).map((collection) => [
+              String(collection.id || ""),
+              {
+                label: String(collection.title || ""),
+                value: String(collection.id || ""),
+              } satisfies CollectionOption,
+            ]),
+          ),
+        ).values(),
+      )
+        .filter((option) => option.value && option.label)
+        .sort((left, right) => left.label.localeCompare(right.label)),
+    [storeProducts],
   );
   const areStringArraysEqual = (left: string[], right: string[]) =>
     left.length === right.length && left.every((value, index) => value === right[index]);
@@ -847,29 +879,203 @@ export function CreateNewOffer({
   const handleSelectProducts = async (
     type: "buy" | "get" | "gift" | "normal" | "product_bundle" = "normal",
   ) => {
-    if (storeProducts.length === 0) {
+    const selected = await (window as any).shopify.resourcePicker({
+      type: "product",
+      action: "select",
+      // 保持 Shopify 原生 picker 机制，不传 filter.query，避免 collection 过滤 UI 失效
+      multiple: type === "normal" && offerType === "subscription" ? false : true,
+      selectionIds:
+        type === "buy"
+          ? buyProducts.map((id) => ({ id }))
+          : type === "get"
+            ? aggregatedBxgyRewardProductIds.map((id) => ({ id }))
+            : type === "gift"
+              ? aggregatedFreeGiftRewardProductIds.map((id) => ({ id }))
+              : type === "product_bundle"
+                ? productBundleProductIds.map((id) => ({ id }))
+                : selectedProductsData.map((p) => ({ id: p.id })),
+    });
+
+    if (!selected) return;
+    const selectedList = Array.isArray(selected) ? selected : [selected];
+    const newData = mapPickerSelectionToDraftProducts(selectedList);
+
+    if (type === "buy") {
+      const nextIds = newData.map((item: any) => String(item.id));
+      setBuyProducts(nextIds);
+      setSelectedProductsData(newData);
+      if (freeGiftRules.length > 0) {
+        setFreeGiftTriggerProducts(nextIds);
+      }
+      return;
+    }
+
+    if (type === "get") {
+      const nextIds = newData.map((item: any) => String(item.id));
+      setGetProducts(nextIds);
+      setBxgyDiscountRules((prev) =>
+        prev.map((rule) => ({
+          ...rule,
+          getProductIds: nextIds,
+        })),
+      );
+      return;
+    }
+
+    if (type === "gift") {
+      const nextIds = newData.map((item: any) => String(item.id));
+      setFreeGiftRules((prev) =>
+        prev.map((rule) => ({
+          ...rule,
+          giftProductIds: nextIds,
+        })),
+      );
+      return;
+    }
+
+    if (type === "product_bundle") {
+      setProductBundleProductIds(newData.map((item: any) => String(item.id)));
+      return;
+    }
+
+    const nextProducts = offerType === "subscription" ? newData.slice(0, 1) : newData;
+    const nextIds = nextProducts.map((item: any) => String(item.id));
+    setSelectedProductsData(nextProducts);
+    if (bxgyDiscountRules.length > 0 || offerType === "bxgy") {
+      setBuyProducts(nextIds);
+    }
+    if (freeGiftRules.length > 0 || offerType === "free-gift") {
+      setFreeGiftTriggerProducts(nextIds);
+    }
+
+    if (offerType === "subscription" && nextProducts[0]?.id) {
+      subscriptionStatusFetcher.submit(
+        {
+          intent: "get-product-subscription-status",
+          productId: String(nextProducts[0].id),
+        },
+        { method: "post" },
+      );
+    }
+  };
+  const applyStepTwoTriggerProducts = (products: ReturnType<typeof mapProductIdsToDraftProducts>) => {
+    const nextProducts = offerType === "subscription" ? products.slice(0, 1) : products;
+    const nextIds = nextProducts.map((product) => String(product.id));
+    setSelectedProductsData(nextProducts);
+    if (bxgyDiscountRules.length > 0 || offerType === "bxgy") {
+      setBuyProducts(nextIds);
+    }
+    if (freeGiftRules.length > 0 || offerType === "free-gift") {
+      setFreeGiftTriggerProducts(nextIds);
+    }
+    if (offerType === "subscription" && nextProducts[0]?.id) {
+      subscriptionStatusFetcher.submit(
+        {
+          intent: "get-product-subscription-status",
+          productId: String(nextProducts[0].id),
+        },
+        { method: "post" },
+      );
+    }
+  };
+  const openStepTwoTriggerProductPicker = async (selectionProductIds?: string[]) => {
+    const selected = await (window as any).shopify.resourcePicker({
+      type: "product",
+      action: "select",
+      multiple: offerType === "subscription" ? false : true,
+      selectionIds: (selectionProductIds || selectedProductsData.map((product) => String(product.id))).map(
+        (id) => ({ id }),
+      ),
+    });
+    if (!selected) return;
+    const selectedList = Array.isArray(selected) ? selected : [selected];
+    applyStepTwoTriggerProducts(mapPickerSelectionToDraftProducts(selectedList));
+  };
+  const handleSelectAllTriggerProducts = () => {
+    if (allStoreProductIds.length === 0) {
       message.warning("Products are still loading. Please try again in a moment.");
       return;
     }
-    setEnhancedPickerTarget({ type });
+    applyStepTwoTriggerProducts(mapProductIdsToDraftProducts(allStoreProductIds));
+  };
+  const handleExcludeTriggerProducts = async () => {
+    if (allStoreProductIds.length === 0) {
+      message.warning("Products are still loading. Please try again in a moment.");
+      return;
+    }
+    await openStepTwoTriggerProductPicker(allStoreProductIds);
+  };
+  const handleSelectTriggerProductsByCollection = () => {
+    if (collectionOptions.length === 0) {
+      message.warning("No collections are available for selection right now.");
+      return;
+    }
+    setPendingCollectionIds([]);
+    setCollectionSelectionModalOpen(true);
+  };
+  const confirmTriggerProductsByCollection = () => {
+    if (pendingCollectionIds.length === 0) {
+      message.warning("Select at least one collection first.");
+      return;
+    }
+    const collectionIdSet = new Set(pendingCollectionIds);
+    const matchedProductIds = Array.from(
+      new Set(
+        storeProducts
+          .filter((product) =>
+            (product.collections || []).some((collection) =>
+              collectionIdSet.has(String(collection.id || "")),
+            ),
+          )
+          .map((product) => String(product.id || ""))
+          .filter(Boolean),
+      ),
+    );
+    if (matchedProductIds.length === 0) {
+      message.warning("No products were found in the selected collections.");
+      return;
+    }
+    setCollectionSelectionModalOpen(false);
+    setPendingCollectionIds([]);
+    window.setTimeout(() => {
+      void openStepTwoTriggerProductPicker(matchedProductIds);
+    }, 0);
   };
   const selectBxgyRewardProducts = async (ruleIndex: number) => {
     const targetRule = bxgyDiscountRules[ruleIndex];
     if (!targetRule) return;
-    if (storeProducts.length === 0) {
-      message.warning("Products are still loading. Please try again in a moment.");
-      return;
-    }
-    setEnhancedPickerTarget({ type: "bxgy_rule_reward", ruleIndex });
+    const selected = await (window as any).shopify.resourcePicker({
+      type: "product",
+      action: "select",
+      multiple: true,
+      selectionIds: (targetRule.getProductIds || []).map((id) => ({ id })),
+    });
+    if (!selected) return;
+    const selectedList = Array.isArray(selected) ? selected : [selected];
+    const nextIds = selectedList.map((item: any) => String(item.id));
+    setBxgyDiscountRules((prev) =>
+      prev.map((rule, index) =>
+        index === ruleIndex ? { ...rule, getProductIds: nextIds } : rule,
+      ),
+    );
   };
   const selectFreeGiftRewardProducts = async (ruleIndex: number) => {
     const targetRule = freeGiftRules[ruleIndex];
     if (!targetRule) return;
-    if (storeProducts.length === 0) {
-      message.warning("Products are still loading. Please try again in a moment.");
-      return;
-    }
-    setEnhancedPickerTarget({ type: "free_gift_rule_reward", ruleIndex });
+    const selected = await (window as any).shopify.resourcePicker({
+      type: "product",
+      action: "select",
+      multiple: true,
+      selectionIds: (targetRule.giftProductIds || []).map((id) => ({ id })),
+    });
+    if (!selected) return;
+    const selectedList = Array.isArray(selected) ? selected : [selected];
+    const nextIds = selectedList.map((item: any) => String(item.id));
+    setFreeGiftRules((prev) =>
+      prev.map((rule, index) =>
+        index === ruleIndex ? { ...rule, giftProductIds: nextIds } : rule,
+      ),
+    );
   };
   const addCompleteBundleBar = (type: "quantity-break-same" | "bxgy") => {
     const nextBar = createDefaultCompleteBundleBar(type);
@@ -1236,170 +1442,6 @@ export function CreateNewOffer({
       ),
     [storeProducts],
   );
-  const enhancedPickerProducts = useMemo(
-    () =>
-      storeProducts.map((product) => ({
-        id: String(product.id),
-        name: product.name,
-        handle: product.handle,
-        image: product.image || "https://via.placeholder.com/60",
-        price: product.price || "€0.00",
-        variantsCount: Array.isArray(product.variants) ? product.variants.length : 1,
-        hasSubscription: product.hasSubscription === true,
-        collections: Array.isArray(product.collections) ? product.collections : [],
-        variants: Array.isArray(product.variants) ? product.variants : [],
-      })),
-    [storeProducts],
-  );
-  const enhancedPickerSelectedProductIds = useMemo(() => {
-    if (!enhancedPickerTarget) return [];
-    switch (enhancedPickerTarget.type) {
-      case "buy":
-        return buyProducts;
-      case "get":
-        return aggregatedBxgyRewardProductIds;
-      case "gift":
-        return aggregatedFreeGiftRewardProductIds;
-      case "product_bundle":
-        return productBundleProductIds;
-      case "normal":
-        return selectedProductsData.map((product) => String(product.id));
-      case "bxgy_rule_reward":
-        return bxgyDiscountRules[enhancedPickerTarget.ruleIndex]?.getProductIds || [];
-      case "free_gift_rule_reward":
-        return freeGiftRules[enhancedPickerTarget.ruleIndex]?.giftProductIds || [];
-      default:
-        return [];
-    }
-  }, [
-    aggregatedBxgyRewardProductIds,
-    aggregatedFreeGiftRewardProductIds,
-    buyProducts,
-    bxgyDiscountRules,
-    enhancedPickerTarget,
-    freeGiftRules,
-    productBundleProductIds,
-    selectedProductsData,
-  ]);
-  const enhancedPickerTitle = useMemo(() => {
-    if (!enhancedPickerTarget) return "Select products";
-    switch (enhancedPickerTarget.type) {
-      case "buy":
-        return "Select trigger products";
-      case "get":
-        return "Select shared reward products";
-      case "gift":
-        return "Select shared gift products";
-      case "product_bundle":
-        return "Select product bundle items";
-      case "normal":
-        return offerType === "subscription"
-          ? "Select subscription product"
-          : "Select trigger products";
-      case "bxgy_rule_reward":
-        return "Select reward products for this rule";
-      case "free_gift_rule_reward":
-        return "Select gift products for this rule";
-      default:
-        return "Select products";
-    }
-  }, [enhancedPickerTarget, offerType]);
-  const enhancedPickerMultiple = useMemo(() => {
-    if (!enhancedPickerTarget) return true;
-    return !(enhancedPickerTarget.type === "normal" && offerType === "subscription");
-  }, [enhancedPickerTarget, offerType]);
-  const applyEnhancedPickerSelection = (productIds: string[]) => {
-    if (!enhancedPickerTarget) return;
-    const normalizedIds = Array.from(
-      new Set(productIds.map((id) => String(id || "").trim()).filter(Boolean)),
-    );
-    const mappedProducts = mapProductIdsToDraftProducts(normalizedIds);
-
-    if (enhancedPickerTarget.type === "buy") {
-      setBuyProducts(normalizedIds);
-      setSelectedProductsData(mappedProducts);
-      if (freeGiftRules.length > 0) {
-        setFreeGiftTriggerProducts(normalizedIds);
-      }
-      setEnhancedPickerTarget(null);
-      return;
-    }
-
-    if (enhancedPickerTarget.type === "get") {
-      setGetProducts(normalizedIds);
-      setBxgyDiscountRules((prev) =>
-        prev.map((rule) => ({
-          ...rule,
-          getProductIds: normalizedIds,
-        })),
-      );
-      setEnhancedPickerTarget(null);
-      return;
-    }
-
-    if (enhancedPickerTarget.type === "gift") {
-      setFreeGiftRules((prev) =>
-        prev.map((rule) => ({
-          ...rule,
-          giftProductIds: normalizedIds,
-        })),
-      );
-      setEnhancedPickerTarget(null);
-      return;
-    }
-
-    if (enhancedPickerTarget.type === "product_bundle") {
-      setProductBundleProductIds(normalizedIds);
-      setEnhancedPickerTarget(null);
-      return;
-    }
-
-    if (enhancedPickerTarget.type === "bxgy_rule_reward") {
-      setBxgyDiscountRules((prev) =>
-        prev.map((rule, index) =>
-          index === enhancedPickerTarget.ruleIndex
-            ? { ...rule, getProductIds: normalizedIds }
-            : rule,
-        ),
-      );
-      setEnhancedPickerTarget(null);
-      return;
-    }
-
-    if (enhancedPickerTarget.type === "free_gift_rule_reward") {
-      setFreeGiftRules((prev) =>
-        prev.map((rule, index) =>
-          index === enhancedPickerTarget.ruleIndex
-            ? { ...rule, giftProductIds: normalizedIds }
-            : rule,
-        ),
-      );
-      setEnhancedPickerTarget(null);
-      return;
-    }
-
-    const nextProducts = offerType === "subscription" ? mappedProducts.slice(0, 1) : mappedProducts;
-    const nextIds = nextProducts.map((product) => String(product.id));
-    setSelectedProductsData(nextProducts);
-    if (bxgyDiscountRules.length > 0 || offerType === "bxgy") {
-      setBuyProducts(nextIds);
-    }
-    if (freeGiftRules.length > 0 || offerType === "free-gift") {
-      setFreeGiftTriggerProducts(nextIds);
-    }
-
-    // 中文注释：订阅型 offer 选完商品后，使用用户指定的 GraphQL 单独校验该商品是否有 selling plan
-    if (offerType === "subscription" && nextProducts[0]?.id) {
-      subscriptionStatusFetcher.submit(
-        {
-          intent: "get-product-subscription-status",
-          productId: String(nextProducts[0].id),
-        },
-        { method: "post" },
-      );
-    }
-    setEnhancedPickerTarget(null);
-  };
 
   // 兼容历史轻量数据：若 selectedProductsJson 里没有变体明细，则用 storeProducts 按 productId 动态补全
   useEffect(() => {
@@ -3047,15 +3089,38 @@ export function CreateNewOffer({
         }
       }}
     >
-      <EnhancedProductPickerModal
-        open={Boolean(enhancedPickerTarget)}
-        title={enhancedPickerTitle}
-        products={enhancedPickerProducts}
-        selectedProductIds={enhancedPickerSelectedProductIds}
-        multiple={enhancedPickerMultiple}
-        onCancel={() => setEnhancedPickerTarget(null)}
-        onConfirm={applyEnhancedPickerSelection}
-      />
+      <Modal
+        open={collectionSelectionModalOpen}
+        title="Select collections"
+        okText="Continue to product picker"
+        cancelText="Cancel"
+        onCancel={() => {
+          setCollectionSelectionModalOpen(false);
+          setPendingCollectionIds([]);
+        }}
+        onOk={confirmTriggerProductsByCollection}
+      >
+        <div className="space-y-3">
+          <div className="text-[13px] text-[#5c6166]">
+            Choose one or more collections first. The next step opens Shopify&apos;s native
+            product picker with those collection products preselected so you can confirm the final
+            discount scope.
+          </div>
+          <label className="block text-[13px] font-medium text-[#1c1f23]">
+            Collections
+            <Select
+              mode="multiple"
+              size="large"
+              className="mt-1 w-full"
+              value={pendingCollectionIds}
+              options={collectionOptions}
+              placeholder="Select collections"
+              allowClear
+              onChange={(values) => setPendingCollectionIds(values)}
+            />
+          </label>
+        </div>
+      </Modal>
       {submitErrorToast && (
         <FloatingFeedbackBanner
           title="Save failed"
@@ -3341,6 +3406,11 @@ export function CreateNewOffer({
               <StepTwoCompositionBuilder
                 draft={campaignDraft}
                 actions={campaignDraftActions}
+                totalStoreProductsCount={allStoreProductIds.length}
+                onSelectAllTriggerProducts={handleSelectAllTriggerProducts}
+                onSelectTriggerProductsByCollection={handleSelectTriggerProductsByCollection}
+                onExcludeTriggerProducts={() => void handleExcludeTriggerProducts()}
+                onCustomFilterTriggerProducts={() => void handleSelectProducts("normal")}
                 bars={orderedCompositionBars}
                 modules={compositionModules}
                 showCountdownBlock={showCountdownBlock}
