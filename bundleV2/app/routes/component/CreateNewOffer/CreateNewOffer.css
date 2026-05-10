@@ -729,6 +729,10 @@
   overflow: hidden;
 }
 
+.create-offer-style-preview-item--with-badge {
+  padding-top: 18px;
+}
+
 .create-offer-style-preview-item--featured {
   border-color: #008060;
   background: #f0faf6;
@@ -777,17 +781,19 @@
 .create-offer-style-preview-badge {
   position: absolute;
   right: 8px;
-  top: -8px;
+  top: 8px;
   background: #f0f9f6;
   color: #108043;
   border-radius: 999px;
   padding: 2px 8px;
   font-size: 10px;
   font-weight: 600;
+  line-height: 1.2;
   max-width: calc(100% - 16px);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  box-sizing: border-box;
 }
 
 /* Step 4 sections */

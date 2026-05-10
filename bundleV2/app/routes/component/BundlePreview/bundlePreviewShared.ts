@@ -201,31 +201,13 @@ export function renderBundlePreviewHtml({
     if (!products || products.length === 0) return "";
     const showChooser = products.some((product) => product.actionLabel);
     if (!showChooser) return "";
-    const selectedLabel = products[0]?.name || "Choose product";
-    const countLabel =
-      products.length > 1 ? `+${products.length - 1} more` : products[0]?.variant || "";
     const buttonLabel = products.find((product) => product.actionLabel)?.actionLabel || "Choose";
-    return `<div style="margin-top:10px;border:1px solid ${esc(
-      borderColor,
-    )};border-radius:10px;padding:10px;background:#ffffff;box-sizing:border-box;max-width:100%;overflow:hidden;">
-      <div style="font-size:11px;font-weight:600;color:#5c6166;margin-bottom:6px;">Eligible product</div>
-      <div style="display:flex;align-items:center;gap:8px;min-width:0;max-width:100%;">
-        <div style="flex:1;min-width:0;max-width:100%;height:34px;border:1px solid ${esc(
-          borderColor,
-        )};border-radius:8px;background:#ffffff;color:#1c1f23;padding:0 10px;font-size:12px;display:flex;align-items:center;justify-content:space-between;gap:8px;box-sizing:border-box;overflow:hidden;">
-          <span style="min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(
-            selectedLabel,
-          )}</span>
-          <span style="flex-shrink:0;color:#6d7175;font-size:11px;white-space:nowrap;">${esc(
-            countLabel,
-          )}</span>
-        </div>
-        <span style="flex-shrink:0;border-radius:999px;background:${esc(
-          accentColor,
-        )};color:${esc(labelColor)};font-size:10px;font-weight:600;padding:6px 10px;max-width:84px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(
-          buttonLabel,
-        )}</span>
-      </div>
+    return `<div style="margin-top:10px;display:flex;justify-content:flex-start;">
+      <span style="display:inline-flex;align-items:center;justify-content:center;border-radius:999px;background:${esc(
+        accentColor,
+      )};color:${esc(labelColor)};font-size:11px;font-weight:600;padding:7px 14px;min-width:74px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-sizing:border-box;">${esc(
+        buttonLabel,
+      )}</span>
     </div>`;
   }
 
@@ -251,13 +233,14 @@ export function renderBundlePreviewHtml({
 
   const itemsHtml = items.map((item) => {
     const featuredClass = item.featured ? " create-offer-style-preview-item--featured" : "";
+    const badgeClass = item.badge ? " create-offer-style-preview-item--with-badge" : "";
     const featuredStyle = item.featured 
       ? `border-color: ${esc(accentColor)} !important; background: ${esc(cardBackgroundColor)} !important; box-shadow: 0 8px 18px ${esc(accentColor)}25 !important; cursor: pointer;`
       : `border-color: ${esc(borderColor)} !important; background: ${esc(cardBackgroundColor)} !important; cursor: pointer;`;
     const chooserHtml = renderProductChooserHtml(item.products);
     const galleryHtml = chooserHtml ? "" : renderProductsGalleryHtml(item.products);
 
-    return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle};box-sizing:border-box;max-width:100%;overflow:hidden;">
+    return `<div class="create-offer-style-preview-item${featuredClass}${badgeClass}" style="${featuredStyle};box-sizing:border-box;max-width:100%;overflow:hidden;">
       ${
         item.badge
           ? `<div class="create-offer-style-preview-badge" style="background:${esc(accentColor)} !important; color:${esc(labelColor)} !important;">${esc(item.badge)}</div>`

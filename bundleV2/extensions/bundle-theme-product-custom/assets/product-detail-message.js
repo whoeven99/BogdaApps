@@ -1315,7 +1315,7 @@ function getDifferentProductsCatalog(offer) {
   return parseSelectedProductsCatalog(offer?.selectedProductsJson);
 }
 
-function renderDifferentProductsPoolControlHtml(offer, selectedRule, borderColor) {
+function renderDifferentProductsPoolControlHtml(offer, selectedRule, borderColor, accentColor) {
   if (!selectedRule || !Array.isArray(selectedRule.buyProductIds) || !selectedRule.buyProductIds.length) {
     return "";
   }
@@ -1336,34 +1336,31 @@ function renderDifferentProductsPoolControlHtml(offer, selectedRule, borderColor
     </div>`;
   }
 
-  const hasCurrent = poolProducts.some(
-    (product) => currentProductGid && String(product.productId) === String(currentProductGid),
-  );
-  const optionHtml = [
-    `<option value=""${hasCurrent ? "" : " selected"}>Choose included trigger product</option>`,
-    ...poolProducts.map((product) => {
+  const optionHtml = poolProducts
+    .map((product) => {
       const isCurrent = currentProductGid && String(product.productId) === String(currentProductGid);
       const href = product.handle ? `/products/${encodeURIComponent(product.handle)}` : "";
       return `<option value="${esc(href)}"${isCurrent ? " selected" : ""}>${esc(
         product.title || "Included trigger product",
       )}${isCurrent ? " (Current)" : ""}</option>`;
-    }),
-  ].join("");
+    })
+    .join("");
 
-  return `<div style="margin-top:10px;border:1px solid ${esc(
-    borderColor,
-  )};border-radius:10px;padding:10px;background:#ffffff;box-sizing:border-box;max-width:100%;overflow:hidden;" onclick="event.stopPropagation();" onmousedown="event.stopPropagation();">
-    <div style="font-size:11px;font-weight:600;color:#5c6166;margin-bottom:6px;">Eligible product</div>
+  return `<div style="margin-top:10px;display:flex;justify-content:flex-start;" onclick="event.stopPropagation();" onmousedown="event.stopPropagation();">
+    <div style="position:relative;display:inline-flex;min-width:74px;max-width:100%;">
+      <span style="display:inline-flex;align-items:center;justify-content:center;border-radius:999px;background:${esc(
+        accentColor || "#008060",
+      )};color:#ffffff;font-size:11px;font-weight:600;padding:7px 14px;min-width:74px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-sizing:border-box;">Choose</span>
     <select
-      style="display:block;width:100%;max-width:100%;min-width:0;height:34px;border:1px solid ${esc(
-        borderColor,
-      )};border-radius:8px;background:#ffffff;color:#1c1f23;padding:0 10px;font-size:12px;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+      aria-label="Choose eligible product"
+      style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;"
       onclick="event.stopPropagation();"
       onmousedown="event.stopPropagation();"
       onchange="if(this.value){ window.ciwiOpenEligibleProduct(this.value); }"
     >
       ${optionHtml}
     </select>
+    </div>
   </div>`;
 }
 
@@ -2533,6 +2530,7 @@ function renderBundlePreviewHtml(offer) {
           offer,
           rule,
           borderColor,
+          accentColor,
         ),
       };
     }),
