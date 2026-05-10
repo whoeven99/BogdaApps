@@ -1,4 +1,4 @@
-import { Button, Checkbox, Dropdown, Input, Select, Switch } from "antd";
+import { Button, Checkbox, Dropdown, Input, Modal, Select, Switch } from "antd";
 import { ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { CompleteBundleProduct } from "../../../utils/offerParsing";
@@ -646,15 +646,25 @@ function DifferentProductsRuleBarDetail({
 }) {
   const triggerProductIds = draft.selectedProductsData.map((product) => String(product.id));
   const triggerProductIdSet = new Set(triggerProductIds);
-  const productOptions = draft.selectedProductsData.map((product) => ({
-    label: product.title,
-    value: String(product.id),
-  }));
   const effectiveScopedIds = (rule.buyProductIds || []).filter((id) =>
     triggerProductIdSet.has(String(id)),
   );
   const scopedCount = effectiveScopedIds.length;
   const totalTriggerCount = triggerProductIds.length;
+  const [isEligiblePoolModalOpen, setIsEligiblePoolModalOpen] = useState(false);
+  const [draftScopedIds, setDraftScopedIds] = useState<string[]>(effectiveScopedIds);
+
+  const openEligiblePoolModal = () => {
+    setDraftScopedIds(effectiveScopedIds);
+    setIsEligiblePoolModalOpen(true);
+  };
+
+  const applyEligiblePoolChanges = () => {
+    onChange({
+      buyProductIds: draftScopedIds.length > 0 ? draftScopedIds : triggerProductIds,
+    });
+    setIsEligiblePoolModalOpen(false);
+  };
 
   return (
     <BuilderBarCard bar={bar} actions={headerActions}>
@@ -695,23 +705,16 @@ function DifferentProductsRuleBarDetail({
       </BuilderSection>
 
       <BuilderSection title="Eligible product pool">
-        <label className="block text-[13px] font-medium text-[#1c1f23]">
-          Reduce from Trigger products
-          <Select
-            mode="multiple"
-            size="large"
-            className="mt-1 w-full"
-            value={effectiveScopedIds}
-            options={productOptions}
-            onChange={(values) =>
-              onChange({
-                buyProductIds: values.length > 0 ? values : triggerProductIds,
-              })
-            }
-            placeholder="Inherits all trigger products by default. Remove products to narrow this bar."
-            disabled={totalTriggerCount === 0}
-          />
-        </label>
+        <CompactActionRow
+          title="Reduce from Trigger products"
+          meta={
+            totalTriggerCount > 0
+              ? `${scopedCount} of ${totalTriggerCount} trigger products are included in this bar.`
+              : "Add Trigger products first. Eligible product pool inherits from that selection."
+          }
+          actionLabel={totalTriggerCount > 0 ? "Edit eligible products" : "No trigger products"}
+          onAction={openEligiblePoolModal}
+        />
         <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
           {totalTriggerCount > 0 ? (
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -735,6 +738,68 @@ function DifferentProductsRuleBarDetail({
             "Add Trigger products first. Eligible product pool inherits from that selection and can then be narrowed for this bar."
           )}
         </div>
+        <Modal
+          title="Edit eligible product pool"
+          open={isEligiblePoolModalOpen}
+          onCancel={() => setIsEligiblePoolModalOpen(false)}
+          onOk={applyEligiblePoolChanges}
+          okText="Apply"
+          cancelText="Cancel"
+          okButtonProps={{ disabled: totalTriggerCount === 0 }}
+        >
+          <div className="space-y-4">
+            <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
+              Eligible product pool inherits from Trigger products. Remove products here to narrow this bar without changing the shared trigger pool.
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="text-[12px] text-[#5c6166]">
+                {draftScopedIds.length} of {totalTriggerCount} trigger products selected
+              </div>
+              <Button
+                type="link"
+                size="small"
+                className="px-0"
+                onClick={() => setDraftScopedIds(triggerProductIds)}
+                disabled={totalTriggerCount === 0}
+              >
+                Use all trigger products
+              </Button>
+            </div>
+            <div className="max-h-[320px] space-y-2 overflow-auto pr-1">
+              {draft.selectedProductsData.map((product) => {
+                const productId = String(product.id);
+                const checked = draftScopedIds.includes(productId);
+                return (
+                  <label
+                    key={productId}
+                    className="flex cursor-pointer items-center gap-3 rounded-[10px] border border-[#e3e8ed] bg-white px-3 py-3"
+                  >
+                    <Checkbox
+                      checked={checked}
+                      onChange={(e) => {
+                        setDraftScopedIds((prev) =>
+                          e.target.checked
+                            ? [...prev, productId]
+                            : prev.filter((id) => id !== productId),
+                        );
+                      }}
+                    />
+                    <img
+                      src={product.image}
+                      alt={product.title}
+                      className="h-10 w-10 rounded-[8px] border border-[#edf1f4] object-cover"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13px] font-medium text-[#1c1f23]">
+                        {product.title}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        </Modal>
       </BuilderSection>
     </BuilderBarCard>
   );
