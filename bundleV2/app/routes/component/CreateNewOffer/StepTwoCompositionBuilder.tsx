@@ -644,18 +644,17 @@ function DifferentProductsRuleBarDetail({
   headerActions?: ReactNode;
   onChange: (patch: Partial<CampaignDraft["differentProductsDiscountRules"][number]>) => void;
 }) {
+  const triggerProductIds = draft.selectedProductsData.map((product) => String(product.id));
+  const triggerProductIdSet = new Set(triggerProductIds);
   const productOptions = draft.selectedProductsData.map((product) => ({
     label: product.title,
     value: String(product.id),
   }));
-  const scopedCount = Array.isArray(rule.buyProductIds) ? rule.buyProductIds.length : 0;
-  const scopedIds = new Set((rule.buyProductIds || []).map((id) => String(id)));
-  const toggleScopedProduct = (productId: string) => {
-    const nextIds = scopedIds.has(productId)
-      ? (rule.buyProductIds || []).filter((id) => String(id) !== productId)
-      : [...(rule.buyProductIds || []), productId];
-    onChange({ buyProductIds: nextIds });
-  };
+  const effectiveScopedIds = (rule.buyProductIds || []).filter((id) =>
+    triggerProductIdSet.has(String(id)),
+  );
+  const scopedCount = effectiveScopedIds.length;
+  const totalTriggerCount = triggerProductIds.length;
 
   return (
     <BuilderBarCard bar={bar} actions={headerActions}>
@@ -697,59 +696,44 @@ function DifferentProductsRuleBarDetail({
 
       <BuilderSection title="Eligible product pool">
         <label className="block text-[13px] font-medium text-[#1c1f23]">
-          Products included in this bar
+          Reduce from Trigger products
           <Select
             mode="multiple"
             size="large"
             className="mt-1 w-full"
-            value={rule.buyProductIds}
+            value={effectiveScopedIds}
             options={productOptions}
             onChange={(values) =>
               onChange({
-                buyProductIds: values,
+                buyProductIds: values.length > 0 ? values : triggerProductIds,
               })
             }
-            placeholder="Select the products eligible for this quantity break"
+            placeholder="Inherits all trigger products by default. Remove products to narrow this bar."
+            disabled={totalTriggerCount === 0}
           />
         </label>
-        {draft.selectedProductsData.length > 0 ? (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {draft.selectedProductsData.map((product) => {
-              const productId = String(product.id);
-              const isSelected = scopedIds.has(productId);
-              return (
-                <button
-                  key={productId}
-                  type="button"
-                  onClick={() => toggleScopedProduct(productId)}
-                  className={`flex items-start gap-3 rounded-[12px] border px-3 py-3 text-left transition ${
-                    isSelected
-                      ? "border-[#008060] bg-[#f0f9f4] shadow-[0_0_0_1px_rgba(0,128,96,0.08)]"
-                      : "border-[#dfe3e8] bg-white hover:border-[#9fb4aa]"
-                  }`}
-                >
-                  <img
-                    src={product.image}
-                    alt={product.title}
-                    className="h-12 w-12 rounded-[10px] border border-[#edf1f4] object-cover"
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-medium text-[#1c1f23]">
-                      {product.title}
-                    </span>
-                    <span className="mt-1 block text-[12px] text-[#5c6166]">
-                      {isSelected ? "Included in this bar" : "Click to include in this bar"}
-                    </span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
         <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
-          {draft.selectedProductsData.length > 0
-            ? `${scopedCount} products are scoped to this bar. Different bars can target different product combinations.`
-            : "Add campaign products to the shared pool first, then choose which products belong to this bar."}
+          {totalTriggerCount > 0 ? (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span>
+                Eligible product pool is a subset of Trigger products.
+                {" "}
+                {scopedCount} of {totalTriggerCount} trigger products are currently included in this bar.
+              </span>
+              {scopedCount !== totalTriggerCount ? (
+                <Button
+                  type="link"
+                  size="small"
+                  className="px-0"
+                  onClick={() => onChange({ buyProductIds: triggerProductIds })}
+                >
+                  Use all trigger products
+                </Button>
+              ) : null}
+            </div>
+          ) : (
+            "Add Trigger products first. Eligible product pool inherits from that selection and can then be narrowed for this bar."
+          )}
         </div>
       </BuilderSection>
     </BuilderBarCard>

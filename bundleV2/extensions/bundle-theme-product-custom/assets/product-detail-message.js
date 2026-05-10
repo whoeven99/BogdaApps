@@ -1338,7 +1338,7 @@ function renderDifferentProductsPoolHtml(
     return `<div style="margin-top:12px;border:1px dashed ${esc(
       borderColor,
     )};border-radius:12px;padding:12px;background:#ffffff;color:#5c6166;font-size:12px;">
-      Eligible products will appear here after the product pool is loaded.
+      Included trigger products will appear here after the product pool is loaded.
     </div>`;
   }
 
@@ -1346,7 +1346,7 @@ function renderDifferentProductsPoolHtml(
     .map((product) => {
       const isCurrent = currentProductGid && String(product.productId) === String(currentProductGid);
       const href = product.handle ? `/products/${encodeURIComponent(product.handle)}` : "";
-      const actionLabel = isCurrent ? "Current product" : "View product";
+      const actionLabel = isCurrent ? "Current trigger product" : "Open product";
       const actionHtml = href && !isCurrent
         ? `<a href="${esc(href)}" style="flex-shrink:0;border-radius:999px;background:${esc(
             accentColor,
@@ -1370,9 +1370,9 @@ function renderDifferentProductsPoolHtml(
         }
         <div style="min-width:0;flex:1;">
           <div style="font-size:12px;font-weight:600;color:#1c1f23;line-height:1.35;">${esc(
-            product.title || "Eligible product",
+            product.title || "Included trigger product",
           )}</div>
-          <div style="margin-top:2px;font-size:11px;color:#6b7280;">Eligible for this shared discount</div>
+          <div style="margin-top:2px;font-size:11px;color:#6b7280;">Included in this bar's trigger subset</div>
         </div>
         ${actionHtml}
       </div>`;
@@ -1382,8 +1382,8 @@ function renderDifferentProductsPoolHtml(
   return `<div style="margin-top:12px;border:1px solid ${esc(
     borderColor,
   )};border-radius:12px;padding:12px;background:#f8faf9;">
-    <div style="font-size:13px;font-weight:600;color:#1c1f23;">Eligible product pool</div>
-    <div style="margin-top:4px;font-size:12px;color:#5c6166;">View any eligible product and continue the shared discount on that product page.</div>
+    <div style="font-size:13px;font-weight:600;color:#1c1f23;">Included trigger products for this bar</div>
+    <div style="margin-top:4px;font-size:12px;color:#5c6166;">This bar narrows the trigger product pool. Open another included product page to continue the same shared discount flow.</div>
     <div style="display:grid;gap:8px;margin-top:10px;">
       ${itemsHtml}
     </div>
@@ -2539,7 +2539,7 @@ function renderBundlePreviewHtml(offer) {
         title: rule.title || `Any ${rule.count} items`,
         subtitle:
           rule.subtitle ||
-          `Choose from ${rule.buyProductIds.length} eligible product${
+          `Includes ${rule.buyProductIds.length} trigger product${
             rule.buyProductIds.length === 1 ? "" : "s"
           }`,
         price: formatPrice(amounts.discountedTotal),

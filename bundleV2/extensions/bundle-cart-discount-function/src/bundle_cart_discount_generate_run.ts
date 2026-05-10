@@ -1129,48 +1129,57 @@ function calculateBxgyDiscount(
 
     const candidates: ProductDiscountCandidate[] = [];
 
-    // Calculate total buy quantity across all buyProductIds in the first rule
-    // (all rules within an offer share the same buyProductIds)
-    const rule = bxgyRules[0];
-    if (!rule.buyProductIds.length) continue;
+    const totalBuyQuantity = cartLines.reduce(
+      (sum, line) => sum + Math.max(0, Number(line.quantity) || 0),
+      0,
+    );
 
-    // totalBuyQuantity = total cart items (all products) — to check against count threshold
-    let totalBuyQuantity = 0;
-    // buyProductCount = cart items that match buyProductIds — to check against buyQuantity
-    let buyProductCount = 0;
-    for (const line of cartLines) {
-      totalBuyQuantity += line.quantity;
-      const productId = line.merchandise?.product?.id;
-      const variantId = line.merchandise?.id;
-      if (matchesAnyConfiguredId(rule.buyProductIds, productId, variantId)) {
-        buyProductCount += line.quantity;
-      }
-    }
-
-    log("bxgy_calculation", {
-      offerId: offer.id,
-      totalBuyQuantity,
-      buyProductCount,
-      buyQuantityRequired: rule.buyQuantity,
-      getProductIds: rule.getProductIds,
-    });
-
-    // Find the best matching tier: highest count that cart meets
+    // Find the best matching tier: highest count that cart meets.
+    // For quantity-breaks-different each tier may have its own eligible product subset,
+    // so matching must be computed per rule rather than assuming a shared buy pool.
     let bestRule: BxgyDiscountRule | null = null;
     for (const r of bxgyRules) {
-      if (buyProductCount >= r.buyQuantity) {
+      if (!r.buyProductIds.length) continue;
+      let matchingBuyProductCount = 0;
+      for (const line of cartLines) {
+        const productId = line.merchandise?.product?.id;
+        const variantId = line.merchandise?.id;
+        if (matchesAnyConfiguredId(r.buyProductIds, productId, variantId)) {
+          matchingBuyProductCount += line.quantity;
+        }
+      }
+
+      log("bxgy_rule_match_eval", {
+        offerId: offer.id,
+        ruleCount: r.count,
+        tierType: r.tierType,
+        totalBuyQuantity,
+        matchingBuyProductCount,
+        buyQuantityRequired: r.buyQuantity,
+        buyProductIds: r.buyProductIds,
+      });
+
+      if (matchingBuyProductCount >= r.buyQuantity && totalBuyQuantity >= r.count) {
         bestRule = r;
       }
     }
     if (!bestRule) {
       log("bxgy_insufficient_buy_quantity", {
         offerId: offer.id,
-        buyProductCount,
-        required: bxgyRules[0].buyQuantity,
+        evaluatedRules: bxgyRules.length,
       });
       continue;
     }
     const selectedRule = bestRule;
+
+    let buyProductCount = 0;
+    for (const line of cartLines) {
+      const productId = line.merchandise?.product?.id;
+      const variantId = line.merchandise?.id;
+      if (matchesAnyConfiguredId(selectedRule.buyProductIds, productId, variantId)) {
+        buyProductCount += line.quantity;
+      }
+    }
 
     // Check the count threshold (cart must have at least `count` items total)
     if (totalBuyQuantity < selectedRule.count) {

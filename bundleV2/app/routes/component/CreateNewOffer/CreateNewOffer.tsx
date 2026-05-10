@@ -1457,6 +1457,33 @@ export function CreateNewOffer({
     freeGiftTriggerProducts,
   ]);
   useEffect(() => {
+    const triggerIds = selectedProductsData.map((product) => String(product.id));
+    const triggerIdSet = new Set(triggerIds);
+    setDifferentProductsDiscountRules((prev) => {
+      let changed = false;
+      const next = prev.map((rule) => {
+        const scopedIds = (rule.buyProductIds || []).filter((id) =>
+          triggerIdSet.has(String(id)),
+        );
+        const normalizedScopedIds =
+          triggerIds.length > 0
+            ? scopedIds.length > 0
+              ? scopedIds
+              : triggerIds
+            : [];
+        if (areStringArraysEqual(rule.buyProductIds || [], normalizedScopedIds)) {
+          return rule;
+        }
+        changed = true;
+        return {
+          ...rule,
+          buyProductIds: normalizedScopedIds,
+        };
+      });
+      return changed ? next : prev;
+    });
+  }, [selectedProductsData]);
+  useEffect(() => {
     const persistedOrder = initialCampaignConfig?.settings.compositionBarOrder;
     if (Array.isArray(persistedOrder) && persistedOrder.length > 0) {
       setCompositionBarOrder(
