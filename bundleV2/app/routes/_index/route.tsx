@@ -1013,6 +1013,20 @@ const getThemeExtensionEnabledAcrossThemes = async (
       json?.data?.themes?.edges
         ?.map((edge: { node?: Record<string, any> | null }) => edge?.node)
         .filter(Boolean) ?? [];
+    console.log("[theme-extension] scanning themes", {
+      extensionHandle,
+      blockHandle,
+      extensionUid,
+      appClientId,
+      appName,
+      themeCount: themeNodes.length,
+      themes: themeNodes.map((theme: any) => ({
+        id: theme?.id,
+        name: theme?.name,
+        role: theme?.role,
+        hasSettingsData: Boolean(theme?.files?.nodes?.[0]?.body?.content),
+      })),
+    });
 
     const handleKebab = blockHandle.replace(/_/g, "-");
     const embedHandleCandidates = [
@@ -1082,6 +1096,11 @@ const getThemeExtensionEnabledAcrossThemes = async (
     for (const theme of themeNodes) {
       const content = theme?.files?.nodes?.[0]?.body?.content;
       if (!content || typeof content !== "string") {
+        console.log("[theme-extension] theme missing settings_data", {
+          themeId: theme?.id,
+          themeName: theme?.name,
+          themeRole: theme?.role,
+        });
         continue;
       }
 
@@ -1107,6 +1126,31 @@ const getThemeExtensionEnabledAcrossThemes = async (
       const blockEntries: ThemeBlockEntry[] = [];
       collectThemeBlockEntries(settingsData, blockEntries);
       scannedBlockCount += blockEntries.length;
+      const appRelatedEntries = blockEntries
+        .filter(({ block, entryKey }) => {
+          const blockType = String(block?.type || "");
+          return (
+            Boolean(entryKey && entryKey.includes("/")) ||
+            blockType.includes("shopify://apps/") ||
+            blockType.includes("/apps/") ||
+            blockType.includes("/blocks/")
+          );
+        })
+        .slice(0, 12)
+        .map(({ block, entryKey }) => ({
+          entryKey,
+          blockType: String(block?.type || ""),
+          disabled: block?.disabled,
+          hasSettings: "settings" in block,
+        }));
+      console.log("[theme-extension] theme scan summary", {
+        themeId: theme?.id,
+        themeName: theme?.name,
+        themeRole: theme?.role,
+        totalBlockEntries: blockEntries.length,
+        appRelatedEntryCount: appRelatedEntries.length,
+        appRelatedEntries,
+      });
 
       for (const { block, entryKey } of blockEntries) {
         const blockType = String(block?.type || "");
@@ -1137,9 +1181,22 @@ const getThemeExtensionEnabledAcrossThemes = async (
           enabled,
         });
         if (enabled && (matchedByApp || matchedByUid || matchedByHandleOnly)) {
+          console.log("[theme-extension] enabled theme embed detected", {
+            themeId: theme?.id,
+            themeName: theme?.name,
+            themeRole: theme?.role,
+            entryKey,
+            blockType,
+          });
           return true;
         }
       }
+
+      console.log("[theme-extension] no enabled embed in theme", {
+        themeId: theme?.id,
+        themeName: theme?.name,
+        themeRole: theme?.role,
+      });
     }
 
     console.log("[theme-extension] no matched embed block", {
