@@ -9,6 +9,8 @@ import {
   getOfferRulesText,
   getOfferScheduleTimezone,
 } from "../../utils/offerParsing";
+import { buildThemeEditorAppEmbedUrl } from "../../utils/themeEditor";
+import { BUNDLE_THEME_PRODUCT_PLUGIN } from "../../utils/themePlugins";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -110,9 +112,11 @@ export function AllOffersPage({
 
   const handleThemeExtensionToggle = () => {
     if (!shop || !apiKey) return;
-    const storeHandle = shop.replace(".myshopify.com", "");
-    const appEmbed = `${apiKey}/product_detail_message`;
-    const editorUrl = `https://admin.shopify.com/store/${storeHandle}/themes/current/editor?context=apps&appEmbed=${encodeURIComponent(appEmbed)}`;
+    const editorUrl = buildThemeEditorAppEmbedUrl(
+      shop,
+      apiKey,
+      BUNDLE_THEME_PRODUCT_PLUGIN,
+    );
     window.open(editorUrl, "_top");
   };
 
@@ -170,19 +174,6 @@ export function AllOffersPage({
   }, [navigation.state, navigation.formData, togglingIds.length]);
 
   const getIsToggling = (offerId: string) => togglingIds.includes(offerId);
-  const formatTime = (offer: AllOffersRow, timeStr: string | Date | undefined) => {
-    if (!timeStr) return "-";
-    const d = dayjs(timeStr);
-    if (!d.isValid()) return "-";
-    let tz = ianaTimezone;
-    try {
-      if (offer.offerSettingsJson) {
-        const parsed = JSON.parse(offer.offerSettingsJson);
-        if (parsed.scheduleTimezone) tz = parsed.scheduleTimezone;
-      }
-    } catch (e) {}
-    return d.tz(tz).format("YYYY-MM-DD HH:mm:ss") + ` (UTC${d.tz(tz).format('Z')})`;
-  };
 
   return (
     <div className="max-w-[1280px] mx-auto pb-[24px]">

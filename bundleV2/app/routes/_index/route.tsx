@@ -59,6 +59,7 @@ import {
   sanitizeSingleLineText,
 } from "../../utils/offerParsing";
 import { sanitizeEnvLikeValue, sanitizeUrlLikeEnvValue } from "../../utils/env";
+import { BUNDLE_THEME_PRODUCT_PLUGIN } from "../../utils/themePlugins";
 import type { OfferTypeId } from "../component/CreateNewOffer/offerTypeOptions";
 
 type OfferListItem = {
@@ -137,7 +138,6 @@ const BUNDLE_METAFIELD_ENABLED_TEST_KEY = "ciwi-bundle-enabled-test";
 const LONG_RUNNING_OFFER_END_TIME = new Date("2999-12-31T23:59:59.000Z");
 const PROD_SHOPIFY_API_KEY = "bfc13ad696f2a8d2a77ba6eee1e26966";
 const TEST_SHOPIFY_API_KEY = "ab25ea895c6df574ae9ff70e9c7731c5";
-
 type BundleEnvironment = "prod" | "test";
 
 function resolveBundleEnvironment(): BundleEnvironment {
@@ -967,14 +967,15 @@ const collectThemeBlockEntries = (
  * App embed status for a single theme extension block (e.g. product_detail_message -> product-detail-message.js).
  * Checks all themes so merchants can validate offers on draft themes before publishing them live.
  * Matches editor deep-link form: `appEmbed={client_id}/{blockHandle}` e.g. `1cdf.../product_detail_message`.
- * `type` in JSON may be `.../apps/{client_id}/blocks/{handle}/...`, `.../apps/{client_id}/{handle}/...`,
- * or another Shopify-managed app identifier. Treat the block handle as the primary signal.
+ * In settings_data, Shopify may persist app embeds as generic block types like
+ * `shopify://apps/{app-slug}/blocks/app-embed/{extensionUid}` rather than the liquid block filename.
  */
 const getThemeExtensionEnabledAcrossThemes = async (
   admin: any,
   extensionHandle: string,
   /** Liquid filename base, e.g. product_detail_message for product_detail_message.liquid */
   blockHandle: string,
+  extensionUid: string,
   /** SHOPIFY_API_KEY / app client id - required to match real storefront block types */
   appClientId: string,
   /** App display name from shopify.app.*.toml (will be normalized to slug for matching) */
@@ -1022,6 +1023,11 @@ const getThemeExtensionEnabledAcrossThemes = async (
       `/blocks/${blockHandle}/`,
       `/blocks/${handleKebab}/`,
     ];
+    const embedUidSegments = [
+      extensionUid ? `/blocks/app-embed/${extensionUid}` : "",
+      extensionUid ? `/blocks/${blockHandle}/${extensionUid}` : "",
+      extensionUid ? `/blocks/${handleKebab}/${extensionUid}` : "",
+    ].filter(Boolean);
 
     const appNameSlug = String(appName || "")
       .trim()
@@ -1057,6 +1063,9 @@ const getThemeExtensionEnabledAcrossThemes = async (
         blockType.includes(`/apps/${appClientId}/${blockHandle}/`) ||
         blockType.includes(`/apps/${appClientId}/${handleKebab}/`)
       ) {
+        return true;
+      }
+      if (embedUidSegments.some((seg) => blockType.includes(seg))) {
         return true;
       }
       return blockPathSegments.some((seg) => blockType.includes(seg));
@@ -1104,11 +1113,16 @@ const getThemeExtensionEnabledAcrossThemes = async (
         const matchesBlock = matchesEmbedFromEditorUrl(blockType, entryKey);
         if (!matchesBlock) continue;
         const matchedByApp = hasEditorEmbedHandle(entryKey) || isOurAppBlock(blockType);
-        const matchedByHandleOnly = !matchedByApp && isLikelyThemeEmbedBlock(block);
+        const matchedByUid = Boolean(
+          extensionUid && embedUidSegments.some((seg) => blockType.includes(seg)),
+        );
+        const matchedByHandleOnly =
+          !matchedByApp && !matchedByUid && isLikelyThemeEmbedBlock(block);
         const enabled = block?.disabled !== true;
         console.log("[theme-extension] matched embed block", {
           extensionHandle,
           blockHandle,
+          extensionUid,
           appClientId,
           appNameSlug,
           themeId: theme?.id,
@@ -1117,11 +1131,12 @@ const getThemeExtensionEnabledAcrossThemes = async (
           entryKey,
           blockType,
           matchedByApp,
+          matchedByUid,
           matchedByHandleOnly,
           disabled: block?.disabled,
           enabled,
         });
-        if (enabled && (matchedByApp || matchedByHandleOnly)) {
+        if (enabled && (matchedByApp || matchedByUid || matchedByHandleOnly)) {
           return true;
         }
       }
@@ -1130,6 +1145,7 @@ const getThemeExtensionEnabledAcrossThemes = async (
     console.log("[theme-extension] no matched embed block", {
       extensionHandle,
       blockHandle,
+      extensionUid,
       appClientId,
       appNameSlug,
       scannedThemeCount: themeNodes.length,
@@ -1150,8 +1166,9 @@ async function getCurrentThemeExtensionEnabled(admin: any): Promise<boolean> {
   try {
     return await getThemeExtensionEnabledAcrossThemes(
       admin,
-      "bundlev2-theme-product-custom",
-      "product_detail_message",
+      BUNDLE_THEME_PRODUCT_PLUGIN.extensionHandle,
+      BUNDLE_THEME_PRODUCT_PLUGIN.embedHandle,
+      BUNDLE_THEME_PRODUCT_PLUGIN.extensionUid,
       apiKey,
       appDisplayName,
     );
