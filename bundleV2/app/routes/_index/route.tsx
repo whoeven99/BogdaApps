@@ -936,21 +936,30 @@ const ensureWebPixel = async (admin: any, shop: string) => {
  * Collect objects that look like theme JSON blocks (have string `type`).
  * App embeds may live under `current.blocks` or nested elsewhere in settings_data.
  */
-const collectTypedBlocks = (
+type ThemeBlockEntry = {
+  block: Record<string, any>;
+  entryKey: string | null;
+};
+
+const collectThemeBlockEntries = (
   node: unknown,
-  out: Array<Record<string, any>>,
+  out: ThemeBlockEntry[],
+  entryKey: string | null = null,
 ): void => {
   if (node === null || typeof node !== "object") return;
   if (Array.isArray(node)) {
-    for (const item of node) collectTypedBlocks(item, out);
+    for (const item of node) collectThemeBlockEntries(item, out, entryKey);
     return;
   }
   const rec = node as Record<string, unknown>;
-  if (typeof rec.type === "string") {
-    out.push(rec);
+  if (typeof rec.type === "string" || entryKey) {
+    out.push({
+      block: rec as Record<string, any>,
+      entryKey,
+    });
   }
-  for (const v of Object.values(rec)) {
-    collectTypedBlocks(v, out);
+  for (const [key, value] of Object.entries(rec)) {
+    collectThemeBlockEntries(value, out, key);
   }
 };
 
@@ -1004,6 +1013,10 @@ const getThemeExtensionEnabledAcrossThemes = async (
         .filter(Boolean) ?? [];
 
     const handleKebab = blockHandle.replace(/_/g, "-");
+    const embedHandleCandidates = [
+      `${appClientId}/${blockHandle}`,
+      `${appClientId}/${handleKebab}`,
+    ].filter(Boolean);
     const blockPathSegments = [
       `/blocks/${blockHandle}/`,
       `/blocks/${handleKebab}/`,
@@ -1026,7 +1039,18 @@ const getThemeExtensionEnabledAcrossThemes = async (
       return false;
     };
 
-    const matchesEmbedFromEditorUrl = (blockType: string) => {
+    const hasEditorEmbedHandle = (value: string | null | undefined) => {
+      if (!value) return false;
+      return embedHandleCandidates.some((candidate) => value.includes(candidate));
+    };
+
+    const matchesEmbedFromEditorUrl = (
+      blockType: string,
+      entryKey: string | null,
+    ) => {
+      if (hasEditorEmbedHandle(entryKey)) {
+        return true;
+      }
       if (!appClientId) return false;
       if (
         blockType.includes(`/apps/${appClientId}/${blockHandle}/`) ||
@@ -1064,15 +1088,15 @@ const getThemeExtensionEnabledAcrossThemes = async (
         continue;
       }
 
-      const blockEntries: Array<Record<string, any>> = [];
-      collectTypedBlocks(settingsData, blockEntries);
+      const blockEntries: ThemeBlockEntry[] = [];
+      collectThemeBlockEntries(settingsData, blockEntries);
       scannedBlockCount += blockEntries.length;
 
-      for (const block of blockEntries) {
+      for (const { block, entryKey } of blockEntries) {
         const blockType = String(block?.type || "");
-        const matchesBlock = matchesEmbedFromEditorUrl(blockType);
+        const matchesBlock = matchesEmbedFromEditorUrl(blockType, entryKey);
         if (!matchesBlock) continue;
-        const matchedByApp = isOurAppBlock(blockType);
+        const matchedByApp = hasEditorEmbedHandle(entryKey) || isOurAppBlock(blockType);
         if (!matchedByApp) {
           console.log("[theme-extension] skipped block from other app", {
             extensionHandle,
@@ -1083,6 +1107,7 @@ const getThemeExtensionEnabledAcrossThemes = async (
             themeId: theme?.id,
             themeName: theme?.name,
             themeRole: theme?.role,
+            entryKey,
             blockType,
           });
           continue;
@@ -1096,6 +1121,7 @@ const getThemeExtensionEnabledAcrossThemes = async (
           themeId: theme?.id,
           themeName: theme?.name,
           themeRole: theme?.role,
+          entryKey,
           blockType,
           matchedByApp,
           disabled: block?.disabled,
