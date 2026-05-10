@@ -967,7 +967,8 @@ const collectThemeBlockEntries = (
  * App embed status for a single theme extension block (e.g. product_detail_message -> product-detail-message.js).
  * Checks all themes so merchants can validate offers on draft themes before publishing them live.
  * Matches editor deep-link form: `appEmbed={client_id}/{blockHandle}` e.g. `1cdf.../product_detail_message`.
- * `type` in JSON may be `.../apps/{client_id}/blocks/{handle}/...` or `.../apps/{client_id}/{handle}/...`.
+ * `type` in JSON may be `.../apps/{client_id}/blocks/{handle}/...`, `.../apps/{client_id}/{handle}/...`,
+ * or another Shopify-managed app identifier. Treat the block handle as the primary signal.
  */
 const getThemeExtensionEnabledAcrossThemes = async (
   admin: any,
@@ -1061,6 +1062,12 @@ const getThemeExtensionEnabledAcrossThemes = async (
       return blockPathSegments.some((seg) => blockType.includes(seg));
     };
 
+    const isLikelyThemeEmbedBlock = (block: Record<string, any>) => {
+      if ("disabled" in block) return true;
+      if ("settings" in block) return true;
+      return false;
+    };
+
     let scannedBlockCount = 0;
 
     for (const theme of themeNodes) {
@@ -1097,21 +1104,7 @@ const getThemeExtensionEnabledAcrossThemes = async (
         const matchesBlock = matchesEmbedFromEditorUrl(blockType, entryKey);
         if (!matchesBlock) continue;
         const matchedByApp = hasEditorEmbedHandle(entryKey) || isOurAppBlock(blockType);
-        if (!matchedByApp) {
-          console.log("[theme-extension] skipped block from other app", {
-            extensionHandle,
-            blockHandle,
-            appClientId,
-            appName,
-            appNameSlug,
-            themeId: theme?.id,
-            themeName: theme?.name,
-            themeRole: theme?.role,
-            entryKey,
-            blockType,
-          });
-          continue;
-        }
+        const matchedByHandleOnly = !matchedByApp && isLikelyThemeEmbedBlock(block);
         const enabled = block?.disabled !== true;
         console.log("[theme-extension] matched embed block", {
           extensionHandle,
@@ -1124,10 +1117,11 @@ const getThemeExtensionEnabledAcrossThemes = async (
           entryKey,
           blockType,
           matchedByApp,
+          matchedByHandleOnly,
           disabled: block?.disabled,
           enabled,
         });
-        if (enabled) {
+        if (enabled && (matchedByApp || matchedByHandleOnly)) {
           return true;
         }
       }
