@@ -103,7 +103,7 @@ export type CampaignDraftActions = {
     React.SetStateAction<DraftSelectedProduct[]>
   >;
   handleSelectProducts: (
-    type?: "buy" | "get" | "gift" | "normal" | "product_bundle",
+    type?: "buy" | "gift" | "normal" | "product_bundle",
   ) => void | Promise<void>;
   setDiscountRules: React.Dispatch<React.SetStateAction<DraftDiscountRule[]>>;
   setBxgyDiscountRules: React.Dispatch<
@@ -145,7 +145,6 @@ export type CampaignDraftActions = {
     React.SetStateAction<string[]>
   >;
   setFreeGiftRules: React.Dispatch<React.SetStateAction<FreeGiftRule[]>>;
-  selectBxgyRewardProducts: (ruleIndex: number) => void | Promise<void>;
   selectFreeGiftRewardProducts: (ruleIndex: number) => void | Promise<void>;
   setProgressiveGifts: (value: ProgressiveGiftsConfig) => void;
   updateUnifiedRulePresentation: (

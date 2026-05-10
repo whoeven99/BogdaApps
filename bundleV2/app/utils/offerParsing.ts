@@ -867,24 +867,35 @@ export function parseDiscountRules(discountRulesJson?: string | null): DiscountR
           (item as { logicType?: unknown }).logicType === "bxgy"
             ? "bxgy"
             : "standard",
-        buyQuantity: Number.isFinite(
-          Number((item as { buyQuantity?: unknown }).buyQuantity),
-        )
-          ? Math.max(1, Math.trunc(Number((item as { buyQuantity?: unknown }).buyQuantity)))
-          : undefined,
+        buyQuantity:
+          (item as { logicType?: unknown }).logicType === "bxgy"
+            ? Math.max(
+                1,
+                Math.trunc(
+                  Number(
+                    (item as { buyQuantity?: unknown; count?: unknown }).buyQuantity ??
+                      (item as { count?: unknown }).count ??
+                      2,
+                  ),
+                ),
+              )
+            : Number.isFinite(Number((item as { buyQuantity?: unknown }).buyQuantity))
+              ? Math.max(1, Math.trunc(Number((item as { buyQuantity?: unknown }).buyQuantity)))
+              : undefined,
         getQuantity: Number.isFinite(
           Number((item as { getQuantity?: unknown }).getQuantity),
         )
           ? Math.max(1, Math.trunc(Number((item as { getQuantity?: unknown }).getQuantity)))
           : undefined,
-        maxUsesPerOrder: Number.isFinite(
-          Number((item as { maxUsesPerOrder?: unknown }).maxUsesPerOrder),
-        )
-          ? Math.max(
-              1,
-              Math.trunc(Number((item as { maxUsesPerOrder?: unknown }).maxUsesPerOrder)),
-            )
-          : undefined,
+        maxUsesPerOrder:
+          (item as { logicType?: unknown }).logicType === "bxgy"
+            ? 1
+            : Number.isFinite(Number((item as { maxUsesPerOrder?: unknown }).maxUsesPerOrder))
+              ? Math.max(
+                  1,
+                  Math.trunc(Number((item as { maxUsesPerOrder?: unknown }).maxUsesPerOrder)),
+                )
+              : undefined,
       });
     }
     out.sort((a, b) => a.count - b.count);
@@ -975,11 +986,11 @@ function sanitizeQuantityBreakTier(raw: unknown): QuantityBreakTier | null {
 function sanitizeBxgyTier(raw: unknown): BxgyDiscountRule | null {
   if (!raw || typeof raw !== "object") return null;
   const item = raw as Record<string, unknown>;
-  const count = Math.trunc(Number(item.count));
-  const buyQuantity = Math.trunc(Number(item.buyQuantity));
+  const count = Math.trunc(Number(item.count ?? item.buyQuantity));
+  const buyQuantity = Math.trunc(Number(item.buyQuantity ?? item.count));
   const getQuantity = Math.trunc(Number(item.getQuantity));
-  const discountPercent = Number(item.discountPercent);
-  const maxUsesPerOrder = Math.trunc(Number(item.maxUsesPerOrder ?? 1));
+  const discountPercent = item.logicType === "bxgy" ? 100 : Number(item.discountPercent);
+  const maxUsesPerOrder = item.logicType === "bxgy" ? 1 : Math.trunc(Number(item.maxUsesPerOrder ?? 1));
   const buyProductIds = Array.isArray(item.buyProductIds)
     ? item.buyProductIds.map((id) => String(id || "").trim()).filter(Boolean)
     : [];
@@ -991,14 +1002,14 @@ function sanitizeBxgyTier(raw: unknown): BxgyDiscountRule | null {
   if (!Number.isFinite(buyQuantity) || buyQuantity < 1) return null;
   if (!Number.isFinite(getQuantity) || getQuantity < 1) return null;
   if (!Number.isFinite(discountPercent)) return null;
-  if (buyProductIds.length === 0 || getProductIds.length === 0) return null;
+  if (buyProductIds.length === 0) return null;
 
   return {
-    count,
+    count: buyQuantity,
     buyQuantity,
     getQuantity,
     buyProductIds,
-    getProductIds,
+    getProductIds: getProductIds.length ? getProductIds : buyProductIds,
     discountPercent: Math.max(0, Math.min(100, discountPercent)),
     maxUsesPerOrder: Number.isFinite(maxUsesPerOrder) && maxUsesPerOrder > 0 ? maxUsesPerOrder : 1,
     title: typeof item.title === "string" ? item.title : "",
@@ -1014,10 +1025,10 @@ function sanitizeDifferentProductsTier(
   if (!raw || typeof raw !== "object") return null;
   const item = raw as Record<string, unknown>;
   const count = Math.trunc(Number(item.count));
-  const buyQuantity = Math.trunc(Number(item.buyQuantity ?? 1));
+  const buyQuantity = Math.trunc(Number(item.buyQuantity ?? item.count ?? 1));
   const getQuantity = Math.trunc(Number(item.getQuantity ?? 0));
-  const discountPercent = Number(item.discountPercent);
-  const maxUsesPerOrder = Math.trunc(Number(item.maxUsesPerOrder ?? 1));
+  const discountPercent = item.tierType === "bxgy" ? 100 : Number(item.discountPercent);
+  const maxUsesPerOrder = item.tierType === "bxgy" ? 1 : Math.trunc(Number(item.maxUsesPerOrder ?? 1));
   const buyProductIds = Array.isArray(item.buyProductIds)
     ? item.buyProductIds.map((id) => String(id || "").trim()).filter(Boolean)
     : [];
@@ -1036,12 +1047,12 @@ function sanitizeDifferentProductsTier(
   }
 
   return {
-    count,
+    count: tierType === "bxgy" ? buyQuantity : count,
     discountPercent: Math.max(0, Math.min(100, discountPercent)),
     buyQuantity,
     getQuantity: tierType === "bxgy" ? getQuantity : 0,
     buyProductIds,
-    getProductIds: tierType === "bxgy" ? getProductIds : [],
+    getProductIds: tierType === "bxgy" ? (getProductIds.length ? getProductIds : buyProductIds) : [],
     maxUsesPerOrder:
       Number.isFinite(maxUsesPerOrder) && maxUsesPerOrder > 0
         ? maxUsesPerOrder
@@ -1511,9 +1522,6 @@ export function migrateLegacyOfferToCampaignConfig(params: {
     const buyProducts = Array.isArray(bxgySelectedProducts.buyProducts)
       ? bxgySelectedProducts.buyProducts.map((id) => String(id || "").trim()).filter(Boolean)
       : [];
-    const getProducts = Array.isArray(bxgySelectedProducts.getProducts)
-      ? bxgySelectedProducts.getProducts.map((id) => String(id || "").trim()).filter(Boolean)
-      : [];
     const bxgyTiers =
       tiers.length > 0
         ? tiers
@@ -1523,7 +1531,7 @@ export function migrateLegacyOfferToCampaignConfig(params: {
               buyQuantity: 2,
               getQuantity: 1,
               buyProductIds: buyProducts,
-              getProductIds: getProducts,
+              getProductIds: buyProducts,
               discountPercent: 100,
               maxUsesPerOrder: 1,
               title: "",
@@ -1535,7 +1543,7 @@ export function migrateLegacyOfferToCampaignConfig(params: {
     return {
       version: 1,
       scope: {
-        productIds: Array.from(new Set([...buyProducts, ...getProducts])),
+        productIds: Array.from(new Set(buyProducts)),
         markets: targetingMarkets,
         customerSegments: targetingSegments,
         customerProfileFilters: targetingProfileFilters,
@@ -1874,9 +1882,6 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
   const bxgyBuyProducts = Array.from(
     new Set(bxgyRules.flatMap((tier) => tier.buyProductIds)),
   );
-  const bxgyGetProducts = Array.from(
-    new Set(bxgyRules.flatMap((tier) => tier.getProductIds)),
-  );
   const freeGiftRules = buildFreeGiftRulesJson(freeGift?.config.tiers ?? []);
   const completeBundleConfig = completeBundle
     ? buildCompleteBundleConfig(completeBundle.config)
@@ -1988,7 +1993,6 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
       : bxgy
         ? JSON.stringify({
             buyProducts: bxgyBuyProducts,
-            getProducts: bxgyGetProducts,
           })
         : freeGift
           ? JSON.stringify({
@@ -2361,31 +2365,32 @@ export function parseBxgyDiscountRules(discountRulesJson?: string | null): BxgyD
     for (const item of parsed) {
       if (!item || typeof item !== "object") continue;
       
-      const buyQuantity = Number((item as { buyQuantity?: unknown }).buyQuantity);
+      const buyQuantity = Number(
+        (item as { buyQuantity?: unknown; count?: unknown }).buyQuantity ??
+          (item as { count?: unknown }).count,
+      );
       const getQuantity = Number((item as { getQuantity?: unknown }).getQuantity);
-      const discountPercent = Number((item as { discountPercent?: unknown }).discountPercent);
-      const maxUsesPerOrder = Number((item as { maxUsesPerOrder?: unknown }).maxUsesPerOrder) || 1;
       const tierType = (item as { tierType?: unknown }).tierType;
       
       const buyProductIds = (item as { buyProductIds?: unknown }).buyProductIds;
       const getProductIds = (item as { getProductIds?: unknown }).getProductIds;
       
-      const count = Number((item as { count?: unknown }).count);
-      if (!Number.isFinite(count) || count < 1) continue;
       if (!Number.isFinite(buyQuantity) || buyQuantity < 1) continue;
       if (!Number.isFinite(getQuantity) || getQuantity < 1) continue;
-      if (!Number.isFinite(discountPercent)) continue;
       if (!Array.isArray(buyProductIds) || !buyProductIds.length) continue;
       if (!Array.isArray(getProductIds) || !getProductIds.length) continue;
+      const normalizedBuyQuantity = Math.trunc(buyQuantity);
       
       out.push({
-        count: Math.trunc(count),
-        buyQuantity: Math.trunc(buyQuantity),
+        count: normalizedBuyQuantity,
+        buyQuantity: normalizedBuyQuantity,
         getQuantity: Math.trunc(getQuantity),
         buyProductIds: buyProductIds.filter(id => typeof id === "string") as string[],
-        getProductIds: getProductIds.filter(id => typeof id === "string") as string[],
-        discountPercent: Math.max(0, Math.min(100, discountPercent)),
-        maxUsesPerOrder: Math.max(1, Math.trunc(maxUsesPerOrder)),
+        getProductIds:
+          getProductIds.filter(id => typeof id === "string") as string[],
+        // Dedicated BXGY now uses a fixed free reward with one application per order.
+        discountPercent: 100,
+        maxUsesPerOrder: 1,
         // Legacy dedicated BXGY records may not persist tierType; treat them as BXGY by default.
         tierType: tierType === "simple" ? "simple" : "bxgy",
         title: (item as { title?: string }).title || "",
@@ -2445,21 +2450,22 @@ export function parseFreeGiftRules(discountRulesJson?: string | null): FreeGiftR
 export function buildBxgyDiscountRulesJson(tiers: BxgyDiscountRule[]): BxgyDiscountRule[] {
   const dedupedByCount = new Map<number, BxgyDiscountRule>();
   for (const tier of tiers) {
-    if (!Number.isFinite(tier.count) || tier.count < 1) continue;
-    if (!Number.isFinite(tier.buyQuantity) || tier.buyQuantity < 1) continue;
+    const normalizedBuyQuantity = Math.max(
+      1,
+      Math.trunc(Number(tier.buyQuantity) || Number(tier.count) || 1),
+    );
     if (!Number.isFinite(tier.getQuantity) || tier.getQuantity < 1) continue;
-    if (!Number.isFinite(tier.discountPercent)) continue;
-    dedupedByCount.set(Math.trunc(tier.count), {
-      count: Math.trunc(tier.count),
-      buyQuantity: Math.trunc(tier.buyQuantity),
+    dedupedByCount.set(normalizedBuyQuantity, {
+      count: normalizedBuyQuantity,
+      buyQuantity: normalizedBuyQuantity,
       getQuantity: Math.trunc(tier.getQuantity),
-      discountPercent: Math.max(0, Math.min(100, tier.discountPercent)),
-      maxUsesPerOrder: Math.max(1, Math.trunc(tier.maxUsesPerOrder || 1)),
+      discountPercent: 100,
+      maxUsesPerOrder: 1,
       buyProductIds: Array.isArray(tier.buyProductIds)
         ? tier.buyProductIds.filter(id => typeof id === "string")
         : [],
-      getProductIds: Array.isArray(tier.getProductIds)
-        ? tier.getProductIds.filter(id => typeof id === "string")
+      getProductIds: Array.isArray(tier.buyProductIds)
+        ? tier.buyProductIds.filter(id => typeof id === "string")
         : [],
       tierType: tier.tierType === "simple" ? "simple" : "bxgy",
       title: tier.title || "",

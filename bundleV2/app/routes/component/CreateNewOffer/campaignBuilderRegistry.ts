@@ -18,24 +18,10 @@ type CampaignBuilderMeta = {
   stepTwoDescription: string;
 };
 
-function getBxgyRewardBarCount(ctx: CampaignBuilderRegistryContext) {
-  return ctx.bxgyDiscountRules.filter(
-    (rule) => Array.isArray(rule.getProductIds) && rule.getProductIds.length > 0,
-  ).length;
-}
-
 function getFreeGiftRewardBarCount(ctx: CampaignBuilderRegistryContext) {
   return ctx.freeGiftRules.filter(
     (rule) => Array.isArray(rule.giftProductIds) && rule.giftProductIds.length > 0,
   ).length;
-}
-
-function getBxgyRewardProductCount(ctx: CampaignBuilderRegistryContext) {
-  return new Set(
-    ctx.bxgyDiscountRules.flatMap((rule) =>
-      Array.isArray(rule.getProductIds) ? rule.getProductIds : [],
-    ),
-  ).size;
 }
 
 function getFreeGiftRewardProductCount(ctx: CampaignBuilderRegistryContext) {
@@ -62,11 +48,11 @@ const META_BY_OFFER_TYPE: Record<OfferTypeId, CampaignBuilderMeta> = {
       "Select the campaign products, then define each tier and the eligible product pool tied to that tier.",
   },
   bxgy: {
-    logicBlockLabel: "Buy X Get Y",
+    logicBlockLabel: "Buy X, Get Y Free",
     logicBlockDescription:
-      "Promote a buy-and-reward mechanic with a global trigger pool and bar-specific reward products.",
+      "Promote a same-product buy-and-free-item mechanic across the selected product pool.",
     stepTwoDescription:
-      "Choose the global Buy trigger pool, then configure reward products and quantities inside each BXGY bar.",
+      "Choose the BXGY product pool, then configure each bar as Buy X, Get Y Free.",
   },
   "complete-bundle": {
     logicBlockLabel: "Complete Bundle",
@@ -104,7 +90,7 @@ export function getCampaignScopeSummary(
     case "quantity-breaks-different":
       return `${ctx.selectedProductsData.length} products available for tier product pools`;
     case "bxgy":
-      return `${ctx.buyProducts.length} products in the global Buy pool, ${getBxgyRewardBarCount(ctx)} bars with reward products`;
+      return `${ctx.buyProducts.length} products in the BXGY pool`;
     case "complete-bundle": {
       const uniqueProductCount = new Set(
         ctx.completeBundleBars.flatMap((bar) =>
@@ -131,11 +117,11 @@ export function getCampaignLogicSummary(
       return `${ctx.differentProductsDiscountRules.length} quantity-break tiers across ${uniqueScopedProducts} scoped products`;
     }
     case "bxgy": {
-      const bestDiscount = ctx.bxgyDiscountRules.reduce(
-        (max, rule) => Math.max(max, rule.discountPercent),
+      const bestFreeQty = ctx.bxgyDiscountRules.reduce(
+        (max, rule) => Math.max(max, rule.getQuantity),
         0,
       );
-      return `${ctx.bxgyDiscountRules.length} BXGY bars, ${getBxgyRewardProductCount(ctx)} reward products, up to ${bestDiscount}% off`;
+      return `${ctx.bxgyDiscountRules.length} BXGY bars, up to ${bestFreeQty} free item${bestFreeQty > 1 ? "s" : ""}`;
     }
     case "complete-bundle": {
       return `${ctx.normalizedDiscountRules.length} quantity bars + ${ctx.completeBundleBars.length} bundle group${ctx.completeBundleBars.length > 1 ? "s" : ""}`;
@@ -219,13 +205,6 @@ export function buildSelectedProductsPayload(
     case "bxgy":
       return {
         buyProducts: ctx.buyProducts,
-        getProducts: Array.from(
-          new Set(
-            ctx.bxgyDiscountRules.flatMap((rule) =>
-              Array.isArray(rule.getProductIds) ? rule.getProductIds : [],
-            ),
-          ),
-        ),
       };
     case "complete-bundle":
       return {
@@ -278,11 +257,8 @@ export function validateScopeAndLogicStep(
         ? "Please select campaign products and configure at least one quantity-break tier."
         : null;
     case "bxgy":
-      return ctx.buyProducts.length === 0 ||
-        ctx.bxgyDiscountRules.some(
-          (rule) => !Array.isArray(rule.getProductIds) || rule.getProductIds.length === 0,
-        )
-        ? "Please select the global Buy pool and configure reward products inside every BXGY bar."
+      return ctx.buyProducts.length === 0 || ctx.bxgyDiscountRules.length === 0
+        ? "Please select the BXGY product pool and configure at least one BXGY bar."
         : null;
     case "complete-bundle": {
       const hasNoTriggerProducts = ctx.selectedProductsData.length === 0;
@@ -319,11 +295,8 @@ export function validateFinalSubmitScopeAndLogic(
         ? "Quantity breaks for different products require campaign products and at least one configured tier."
         : null;
     case "bxgy":
-      return ctx.buyProducts.length === 0 ||
-        ctx.bxgyDiscountRules.some(
-          (rule) => !Array.isArray(rule.getProductIds) || rule.getProductIds.length === 0,
-        )
-        ? "For BXGY offers, you must configure the global Buy pool and reward products inside every BXGY bar."
+      return ctx.buyProducts.length === 0 || ctx.bxgyDiscountRules.length === 0
+        ? "For BXGY offers, you must configure the BXGY product pool and at least one BXGY bar."
         : null;
     case "complete-bundle": {
       const hasNoTriggerProducts = ctx.selectedProductsData.length === 0;

@@ -923,14 +923,24 @@ function parseDiscountRulesJson(
     for (const item of parsed) {
       if (!item || typeof item !== "object") continue;
       const count = Number((item as { count?: unknown }).count);
+      const logicType =
+        (item as { logicType?: unknown }).logicType === "bxgy" ? "bxgy" : "standard";
       const discountPercent = Number(
         (item as { discountPercent?: unknown }).discountPercent,
       );
       if (!Number.isFinite(count) || count < 1) continue;
       if (!Number.isFinite(discountPercent) || discountPercent < 0) continue;
+      const normalizedBuyQuantity =
+        logicType === "bxgy" &&
+        Number.isFinite(Number((item as { buyQuantity?: unknown }).buyQuantity))
+          ? Math.max(
+              1,
+              Math.trunc(Number((item as { buyQuantity?: unknown }).buyQuantity)),
+            )
+          : undefined;
       tiers.push({
-        count: Math.trunc(count),
-        discountPercent,
+        count: logicType === "bxgy" ? normalizedBuyQuantity || Math.trunc(count) : Math.trunc(count),
+        discountPercent: logicType === "bxgy" ? 100 : discountPercent,
         discountClass:
           (item as { discountClass?: unknown }).discountClass === "order" ||
           (item as { discountClass?: unknown }).discountClass === "shipping"
@@ -950,18 +960,8 @@ function parseDiscountRulesJson(
           (item as { rewardType?: unknown }).rewardType === "free_shipping"
             ? ((item as { rewardType: "gift_product" | "free_shipping" }).rewardType)
             : "percentage_off",
-        logicType:
-          (item as { logicType?: unknown }).logicType === "bxgy"
-            ? "bxgy"
-            : "standard",
-        buyQuantity: Number.isFinite(
-          Number((item as { buyQuantity?: unknown }).buyQuantity),
-        )
-          ? Math.max(
-              1,
-              Math.trunc(Number((item as { buyQuantity?: unknown }).buyQuantity)),
-            )
-          : undefined,
+        logicType,
+        buyQuantity: normalizedBuyQuantity,
         getQuantity: Number.isFinite(
           Number((item as { getQuantity?: unknown }).getQuantity),
         )
@@ -970,14 +970,15 @@ function parseDiscountRulesJson(
               Math.trunc(Number((item as { getQuantity?: unknown }).getQuantity)),
             )
           : undefined,
-        maxUsesPerOrder: Number.isFinite(
-          Number((item as { maxUsesPerOrder?: unknown }).maxUsesPerOrder),
-        )
-          ? Math.max(
-              1,
-              Math.trunc(Number((item as { maxUsesPerOrder?: unknown }).maxUsesPerOrder)),
-            )
-          : undefined,
+        maxUsesPerOrder:
+          logicType === "bxgy"
+            ? 1
+            : Number.isFinite(Number((item as { maxUsesPerOrder?: unknown }).maxUsesPerOrder))
+              ? Math.max(
+                  1,
+                  Math.trunc(Number((item as { maxUsesPerOrder?: unknown }).maxUsesPerOrder)),
+                )
+              : undefined,
         rewardProductIds: Array.isArray(
           (item as { rewardProductIds?: unknown }).rewardProductIds,
         )
@@ -1007,7 +1008,10 @@ function parseBxgyDiscountRules(discountRulesJson?: string | null): BxgyDiscount
       if (!item || typeof item !== "object") continue;
       
       const count = Number((item as { count?: unknown }).count);
-      const buyQuantity = Number((item as { buyQuantity?: unknown }).buyQuantity);
+      const buyQuantity = Number(
+        (item as { buyQuantity?: unknown; count?: unknown }).buyQuantity ??
+          (item as { count?: unknown }).count,
+      );
       const getQuantity = Number((item as { getQuantity?: unknown }).getQuantity);
       const discountPercent = Number((item as { discountPercent?: unknown }).discountPercent);
       const maxUsesPerOrder = Number((item as { maxUsesPerOrder?: unknown }).maxUsesPerOrder) || 1;
@@ -1016,19 +1020,21 @@ function parseBxgyDiscountRules(discountRulesJson?: string | null): BxgyDiscount
       const buyProductIds = (item as { buyProductIds?: unknown }).buyProductIds;
       const getProductIds = (item as { getProductIds?: unknown }).getProductIds;
       
-      if (!Number.isFinite(count) || count < 1) continue;
       if (!Number.isFinite(buyQuantity) || buyQuantity < 1) continue;
       if (!Number.isFinite(getQuantity) || getQuantity < 1) continue;
       if (!Number.isFinite(discountPercent)) continue;
       if (!Array.isArray(buyProductIds) || !buyProductIds.length) continue;
-      if (!Array.isArray(getProductIds) || !getProductIds.length) continue;
+      const normalizedBuyProductIds = buyProductIds.filter(id => typeof id === "string") as string[];
       
       out.push({
-        count: Math.trunc(count),
-        buyQuantity: Math.trunc(buyQuantity),
+        count: Math.max(1, Math.trunc(buyQuantity)),
+        buyQuantity: Math.max(1, Math.trunc(buyQuantity)),
         getQuantity: Math.trunc(getQuantity),
-        buyProductIds: buyProductIds.filter(id => typeof id === "string") as string[],
-        getProductIds: getProductIds.filter(id => typeof id === "string") as string[],
+        buyProductIds: normalizedBuyProductIds,
+        getProductIds:
+          Array.isArray(getProductIds) && getProductIds.length > 0
+            ? getProductIds.filter(id => typeof id === "string") as string[]
+            : normalizedBuyProductIds,
         discountPercent: Math.max(0, Math.min(100, discountPercent)),
         maxUsesPerOrder: Math.max(1, Math.trunc(maxUsesPerOrder)),
         // Legacy dedicated BXGY records may not persist tierType; default them to BXGY.
@@ -1067,18 +1073,14 @@ function buildBxgyRulesFromUnifiedDiscountRules(offer: Offer): BxgyDiscountRule[
   if (!tiers.length) return [];
 
   return tiers.map((tier) => {
-    const configuredRewardPool =
-      Array.isArray(tier.rewardProductIds) && tier.rewardProductIds.length > 0
-        ? tier.rewardProductIds
-        : productPool;
     return {
-      count: Math.max(1, Math.trunc(Number(tier.count) || 1)),
+      count: Math.max(1, Math.trunc(Number(tier.buyQuantity) || Number(tier.count) || 1)),
       buyQuantity: Math.max(1, Math.trunc(Number(tier.buyQuantity) || 1)),
       getQuantity: Math.max(1, Math.trunc(Number(tier.getQuantity) || 1)),
       buyProductIds: productPool,
-      getProductIds: configuredRewardPool,
-      discountPercent: Math.max(0, Math.min(100, Number(tier.discountPercent) || 0)),
-      maxUsesPerOrder: Math.max(1, Math.trunc(Number(tier.maxUsesPerOrder) || 1)),
+      getProductIds: productPool,
+      discountPercent: 100,
+      maxUsesPerOrder: 1,
       tierType: "bxgy",
     };
   });
@@ -1106,12 +1108,177 @@ function calculateBxgyDiscount(
   const allCandidates: ProductDiscountCandidate[] = [];
 
   for (const offer of offers) {
+    if (offer.offerType === "bxgy") {
+      const dedicatedBxgyRules = parseBxgyDiscountRules(offer.discountRulesJson);
+      const bxgyRules =
+        dedicatedBxgyRules.length > 0
+          ? dedicatedBxgyRules
+          : buildBxgyRulesFromUnifiedDiscountRules(offer);
+      if (!bxgyRules.length) continue;
+
+      const selectedProductIds = parseSelectedIds(offer.selectedProductsJson);
+      if (!selectedProductIds.length) {
+        log("bxgy_same_product_skip_missing_pool", { offerId: offer.id });
+        continue;
+      }
+
+      let bestRule: BxgyDiscountRule | null = null;
+      for (const rule of bxgyRules) {
+        if (selectedProductIds.length === 0) continue;
+        const matchingQuantity = cartLines.reduce((sum, line) => {
+          const productId = line.merchandise?.product?.id;
+          const variantId = line.merchandise?.id;
+          return matchesAnyConfiguredId(selectedProductIds, productId, variantId)
+            ? sum + Math.max(0, Number(line.quantity) || 0)
+            : sum;
+        }, 0);
+
+        if (matchingQuantity >= Math.max(1, Math.trunc(Number(rule.buyQuantity) || 1))) {
+          bestRule = rule;
+        }
+      }
+
+      if (!bestRule) {
+        log("bxgy_same_product_no_matching_rule", { offerId: offer.id });
+        continue;
+      }
+
+      const candidates: ProductDiscountCandidate[] = [];
+      for (const selectedProductId of selectedProductIds) {
+        const matchingLines = cartLines
+          .filter((line) => {
+            if (line.merchandise?.__typename !== "ProductVariant") return false;
+            const productId = line.merchandise?.product?.id;
+            return productIdsMatch(productId, selectedProductId);
+          })
+          .map((line) => ({
+            line,
+            unitPrice: parseMoneyAmount(line.cost?.amountPerQuantity?.amount),
+            quantity: Math.max(0, Number(line.quantity) || 0),
+          }))
+          .filter((entry) => entry.quantity > 0);
+
+        if (!matchingLines.length) continue;
+
+        const totalQuantity = matchingLines.reduce((sum, entry) => sum + entry.quantity, 0);
+        const buyQuantity = Math.max(1, Math.trunc(Number(bestRule.buyQuantity) || 1));
+        const getQuantity = Math.max(1, Math.trunc(Number(bestRule.getQuantity) || 1));
+        const bundleSize = buyQuantity + getQuantity;
+        const promotionTimes = Math.floor(totalQuantity / bundleSize);
+        const maxPromotionTimes = Math.min(
+          promotionTimes,
+          Math.max(1, Math.trunc(Number(bestRule.maxUsesPerOrder) || 1)),
+        );
+        let remainingFreeQuantity = maxPromotionTimes * getQuantity;
+
+        if (remainingFreeQuantity <= 0) continue;
+
+        const sortedByUnitPrice = matchingLines
+          .slice()
+          .sort((a, b) => a.unitPrice - b.unitPrice);
+
+        for (const entry of sortedByUnitPrice) {
+          if (remainingFreeQuantity <= 0) break;
+          const discountQuantity = Math.min(entry.quantity, remainingFreeQuantity);
+          if (discountQuantity <= 0) continue;
+          candidates.push({
+            message: offer.cartTitle || "Buy X Get Y",
+            targets: [
+              {
+                cartLine: {
+                  id: entry.line.id,
+                  quantity: discountQuantity,
+                },
+              },
+            ],
+            value: {
+              percentage: {
+                value: "100.0",
+              },
+            },
+          });
+          remainingFreeQuantity -= discountQuantity;
+        }
+      }
+
+      allCandidates.push(...candidates);
+      continue;
+    }
+
     const dedicatedBxgyRules = parseBxgyDiscountRules(offer.discountRulesJson);
     const bxgyRules =
       dedicatedBxgyRules.length > 0
         ? dedicatedBxgyRules
         : buildBxgyRulesFromUnifiedDiscountRules(offer);
     if (!bxgyRules.length) continue;
+
+    if (offer.offerType !== "quantity-breaks-different") {
+      let bestRule: BxgyDiscountRule | null = null;
+      for (const rule of bxgyRules) {
+        const matchingQuantity = cartLines.reduce((sum, line) => {
+          const productId = line.merchandise?.product?.id;
+          const variantId = line.merchandise?.id;
+          return matchesAnyConfiguredId(rule.buyProductIds, productId, variantId)
+            ? sum + Math.max(0, Number(line.quantity) || 0)
+            : sum;
+        }, 0);
+
+        if (matchingQuantity >= Math.max(1, Math.trunc(Number(rule.buyQuantity) || 1))) {
+          bestRule = rule;
+        }
+      }
+
+      if (!bestRule) {
+        log("bxgy_same_product_no_matching_rule", { offerId: offer.id });
+        continue;
+      }
+
+      const candidates: ProductDiscountCandidate[] = [];
+      for (const selectedProductId of bestRule.buyProductIds) {
+        const matchingLines = cartLines
+          .filter((line) => {
+            if (line.merchandise?.__typename !== "ProductVariant") return false;
+            const productId = line.merchandise?.product?.id;
+            return productIdsMatch(productId, selectedProductId);
+          })
+          .map((line) => ({
+            line,
+            unitPrice: parseMoneyAmount(line.cost?.amountPerQuantity?.amount),
+            quantity: Math.max(0, Number(line.quantity) || 0),
+          }))
+          .filter((entry) => entry.quantity > 0);
+
+        if (!matchingLines.length) continue;
+
+        const totalQuantity = matchingLines.reduce((sum, entry) => sum + entry.quantity, 0);
+        const buyQuantity = Math.max(1, Math.trunc(Number(bestRule.buyQuantity) || 1));
+        const getQuantity = Math.max(1, Math.trunc(Number(bestRule.getQuantity) || 1));
+        const bundleSize = buyQuantity + getQuantity;
+        const promotionTimes = Math.floor(totalQuantity / bundleSize);
+        let remainingFreeQuantity = promotionTimes * getQuantity;
+        if (remainingFreeQuantity <= 0) continue;
+
+        const sortedByUnitPrice = matchingLines.slice().sort((a, b) => a.unitPrice - b.unitPrice);
+        for (const entry of sortedByUnitPrice) {
+          if (remainingFreeQuantity <= 0) break;
+          const discountQuantity = Math.min(entry.quantity, remainingFreeQuantity);
+          if (discountQuantity <= 0) continue;
+          candidates.push({
+            message: offer.cartTitle || "Buy X Get Y",
+            targets: [{ cartLine: { id: entry.line.id, quantity: discountQuantity } }],
+            value: {
+              percentage: {
+                value: "100.0",
+              },
+            },
+          });
+          remainingFreeQuantity -= discountQuantity;
+        }
+      }
+
+      allCandidates.push(...candidates);
+      continue;
+    }
 
     const candidates: ProductDiscountCandidate[] = [];
 

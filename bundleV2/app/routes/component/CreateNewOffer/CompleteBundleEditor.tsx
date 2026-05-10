@@ -43,7 +43,7 @@ type Props = {
 };
 
 function getDefaultBarTitle(type: "quantity-break-same" | "bxgy") {
-  return type === "bxgy" ? "Buy X, Get Y" : "Complete the bundle";
+  return type === "bxgy" ? "Buy X, Get Y Free" : "Complete the bundle";
 }
 
 export default function CompleteBundleEditor({
@@ -188,7 +188,7 @@ export default function CompleteBundleEditor({
                   <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
                     <OfferRuleSummaryBox
                       label="Condition Type"
-                      value={bar.type === "bxgy" ? "Buy X, Get Y" : "Bundle completion"}
+                      value={bar.type === "bxgy" ? "Buy X, Get Y Free" : "Bundle completion"}
                       description={
                         bar.type === "bxgy"
                           ? "Customers unlock this bar when the buy/get rule is satisfied."
@@ -267,7 +267,7 @@ export default function CompleteBundleEditor({
                   : `Group #${activeBarIndex + 1} - ${
                       activeBar.title ||
                       (activeBar.type === "bxgy"
-                        ? "Buy X, Get Y"
+                        ? "Buy X, Get Y Free"
                         : "Complete the bundle")
                     }`}
               </div>

@@ -130,7 +130,7 @@ export default function UnifiedRulesEditor({
                       size="large"
                       className="mt-1 w-full"
                       value="buy_x_get_y"
-                      options={[{ label: "Buy X, Get Y", value: "buy_x_get_y" }]}
+                      options={[{ label: "Buy X, Get Y Free", value: "buy_x_get_y" }]}
                       disabled
                     />
                   ) : (
@@ -161,7 +161,7 @@ export default function UnifiedRulesEditor({
                   {usesCartAmount
                     ? "Cart Amount Threshold"
                     : usesBxgy
-                      ? "Trigger Quantity"
+                      ? "Buy Quantity (X)"
                       : "Item Quantity"}
                   <Input
                     size="large"
@@ -176,19 +176,22 @@ export default function UnifiedRulesEditor({
                         index,
                         usesCartAmount
                           ? { amountThreshold: value }
-                          : { count: Math.trunc(value) },
+                          : usesBxgy
+                            ? {
+                                count: Math.trunc(value),
+                                buyQuantity: Math.trunc(value),
+                              }
+                            : { count: Math.trunc(value) },
                       );
                     }}
                   />
                 </label>
 
-                {usesPercentageReward ? (
+                {usesPercentageReward && !usesBxgy ? (
                   <label className="block text-[14px] font-medium text-[#1c1f23]">
                     {usesOrderDiscount
                       ? "Order Discount (%)"
-                      : usesBxgy
-                        ? "Reward Discount (%)"
-                        : usesQuantityBreak
+                      : usesQuantityBreak
                           ? "Discount (%)"
                           : "Discount (%)"}
                     <Input
@@ -221,14 +224,16 @@ export default function UnifiedRulesEditor({
                       step={1}
                       className="mt-1"
                       value={rule.buyQuantity || 2}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const buyQuantity = Math.max(
+                          1,
+                          Math.trunc(Number(e.target.value) || 1),
+                        );
                         updateRule(index, {
-                          buyQuantity: Math.max(
-                            1,
-                            Math.trunc(Number(e.target.value) || 1),
-                          ),
-                        })
-                      }
+                          count: buyQuantity,
+                          buyQuantity,
+                        });
+                      }}
                     />
                   </label>
                 ) : null}
@@ -246,28 +251,6 @@ export default function UnifiedRulesEditor({
                       onChange={(e) =>
                         updateRule(index, {
                           getQuantity: Math.max(
-                            1,
-                            Math.trunc(Number(e.target.value) || 1),
-                          ),
-                        })
-                      }
-                    />
-                  </label>
-                ) : null}
-
-                {usesBxgy ? (
-                  <label className="block text-[14px] font-medium text-[#1c1f23]">
-                    Max Uses Per Order
-                    <Input
-                      size="large"
-                      type="number"
-                      min={1}
-                      step={1}
-                      className="mt-1"
-                      value={rule.maxUsesPerOrder || 1}
-                      onChange={(e) =>
-                        updateRule(index, {
-                          maxUsesPerOrder: Math.max(
                             1,
                             Math.trunc(Number(e.target.value) || 1),
                           ),
@@ -303,7 +286,7 @@ export default function UnifiedRulesEditor({
                   <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[13px] text-[#5c6166]">
                     {usesShippingReward
                       ? "Free shipping rules map to the delivery discount function target."
-                      : "BXGY in this unified editor reuses the same product scope on both the buy and get sides for now."}
+                      : "BXGY uses the same selected product scope on both sides. Free items come from the same product and discount the cheapest eligible variant once per order."}
                   </div>
                 ) : null}
               </div>

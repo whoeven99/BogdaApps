@@ -64,10 +64,7 @@ export function adaptBxgyRules(
     scope: {
       kind: "buy_get_products",
       buyProductIds,
-      getProductIds:
-        Array.isArray(rule.getProductIds) && rule.getProductIds.length > 0
-          ? rule.getProductIds
-          : fallbackGetProductIds,
+      getProductIds: buyProductIds,
     },
     condition: {
       kind: "buy_x_get_y",

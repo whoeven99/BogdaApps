@@ -72,7 +72,7 @@ function buildQuantityBreakSummary(rule: DraftDiscountRule) {
 }
 
 function buildBxgySummary(rule: DraftBxgyDiscountRule) {
-  return `Buy ${rule.buyQuantity || 2}, get ${rule.getQuantity || 1} • ${Math.max(0, Number(rule.discountPercent) || 0)}% off`;
+  return `Buy ${rule.buyQuantity || 2}, Get ${rule.getQuantity || 1} Free`;
 }
 
 function buildFreeGiftSummary(rule: FreeGiftRule) {
@@ -108,7 +108,7 @@ export function getCampaignCompositionBars(
       title:
         rule.title ||
         (type === "bxgy"
-          ? `Bar #${index + 1} - Buy X, Get Y`
+          ? `Bar #${index + 1} - Buy X, Get Y Free`
           : type === "free_gift"
             ? `Bar #${index + 1} - Free gift`
             : `Bar #${index + 1} - Quantity break`),
@@ -126,7 +126,7 @@ export function getCampaignCompositionBars(
   const bxgyBars = draft.bxgyDiscountRules.map((rule, index) => ({
     id: `bxgy-rule-${index + 1}`,
     type: "bxgy" as const,
-    title: rule.title || `Bar #${index + 1} - Buy X, Get Y`,
+    title: rule.title || `Bar #${index + 1} - Buy X, Get Y Free`,
     summary: rule.subtitle || buildBxgySummary(rule),
     enabled: true,
     isDefault: !!rule.isDefault,
@@ -212,7 +212,7 @@ export function getCampaignCompositionRulesSnapshot(
       ...adaptBxgyRules(
         draft.bxgyDiscountRules,
         draft.buyProducts,
-        draft.getProducts,
+        draft.buyProducts,
       ),
     );
   }

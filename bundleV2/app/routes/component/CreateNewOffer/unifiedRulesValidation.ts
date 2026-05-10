@@ -73,13 +73,13 @@ export function getUnifiedRuleAuditIssuesForRules(
   const hasBxgyScopeGap = rules.some(
     (rule) =>
       rule.scope.kind === "buy_get_products" &&
-      (rule.scope.buyProductIds.length === 0 || rule.scope.getProductIds.length === 0),
+      rule.scope.buyProductIds.length === 0,
   );
   if (hasBxgyScopeGap) {
     issues.push({
       severity: "error",
       message:
-        "BXGY bars require the global Buy pool and reward products inside every bar before continuing.",
+        "BXGY bars require a BXGY product pool before continuing.",
     });
   }
 

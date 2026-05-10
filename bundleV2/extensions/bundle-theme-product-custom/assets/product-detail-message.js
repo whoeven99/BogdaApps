@@ -439,12 +439,22 @@ function parseDiscountRulesJson(discountRulesJson) {
       .map((item) => {
         if (!item || typeof item !== "object") return null;
         const count = Number(item.count);
-        const discountPercent = Number(item.discountPercent);
+        const logicType = item.logicType === "bxgy" ? "bxgy" : "standard";
+        const buyQuantity = Number(item.buyQuantity ?? item.count ?? 1);
+        const getQuantity = Number(item.getQuantity ?? 1);
+        const discountPercent = logicType === "bxgy" ? 100 : Number(item.discountPercent);
         if (!Number.isFinite(count) || count < 1) return null;
         if (!Number.isFinite(discountPercent)) return null;
+        if (logicType === "bxgy") {
+          if (!Number.isFinite(buyQuantity) || buyQuantity < 1) return null;
+          if (!Number.isFinite(getQuantity) || getQuantity < 1) return null;
+        }
         return {
-        count: Math.trunc(count),
+        count: logicType === "bxgy" ? Math.trunc(buyQuantity) : Math.trunc(count),
         discountPercent: Math.max(0, Math.min(100, discountPercent)),
+        logicType: logicType,
+        buyQuantity: logicType === "bxgy" ? Math.trunc(buyQuantity) : undefined,
+        getQuantity: logicType === "bxgy" ? Math.trunc(getQuantity) : undefined,
         title: item.title || "",
         subtitle: item.subtitle || "",
         badge: item.badge || "",
@@ -489,10 +499,10 @@ function parseBxgyDiscountRulesJson(discountRulesJson) {
           : [];
         const getProductIds = Array.isArray(item.getProductIds)
           ? item.getProductIds.map(String)
-          : [];
+          : buyProductIds;
 
         return {
-          count: Math.trunc(count),
+          count: Math.trunc(buyQuantity),
           buyQuantity: Math.trunc(buyQuantity),
           getQuantity: Math.trunc(getQuantity),
           discountPercent: discountPercent,
@@ -2410,13 +2420,14 @@ function renderBundlePreviewHtml(offer) {
       const displayCount = rule.count || 1;
       return {
         count: displayCount,
-        title: rule.title || `Buy ${rule.buyQuantity}, Get ${rule.getQuantity}`,
-        subtitle: rule.subtitle || `Buy ${rule.buyQuantity}, Get ${rule.getQuantity}`,
+        title: rule.title || `Buy ${rule.buyQuantity}, Get ${rule.getQuantity} Free`,
+        subtitle:
+          rule.subtitle || `Same product, cheapest eligible variant becomes free`,
         price: rule.discountPercent === 100
-          ? `${rule.getQuantity} FREE`
+          ? `Get ${rule.getQuantity} Free`
           : `${rule.discountPercent}% OFF`,
         badge: rule.badge || (isFeatured ? "Most Popular" : ""),
-        saveLabel: `BUY ${rule.buyQuantity} + GET ${rule.getQuantity}`,
+        saveLabel: `BUY ${rule.buyQuantity}, GET ${rule.getQuantity} FREE`,
       };
     });
 
@@ -2632,6 +2643,18 @@ function renderBundlePreviewHtml(offer) {
       price: formatPrice(unitPrice),
     },
     ...discountRules.map((rule, index) => {
+      if (rule.logicType === "bxgy") {
+        const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
+        return {
+          count: rule.count,
+          title: rule.title || `Buy ${rule.buyQuantity}, Get ${rule.getQuantity} Free`,
+          subtitle:
+            rule.subtitle || "Same product, cheapest eligible variant becomes free",
+          price: `Get ${rule.getQuantity} Free`,
+          badge: rule.badge || (isFeatured ? "Most Popular" : ""),
+          saveLabel: `BUY ${rule.buyQuantity}, GET ${rule.getQuantity} FREE`,
+        };
+      }
       const { originalTotal, discountedTotal, saved } = calculateBundleAmounts(
         unitPrice,
         rule.count,

@@ -179,7 +179,7 @@ type DiscountRule = {
 };
 
 type BxgyDiscountRule = {
-  /** Cart quantity threshold (from buy-product list) to trigger this tier */
+  /** Dedicated BXGY keeps count mirrored with buyQuantity for compatibility. */
   count: number;
   buyQuantity: number;
   getQuantity: number;
@@ -287,10 +287,14 @@ function buildDiscountRulesJson(tiers: DiscountRule[]): DiscountRule[] {
   for (const tier of tiers) {
     if (!Number.isFinite(tier.count) || tier.count < 1) continue;
     if (!Number.isFinite(tier.discountPercent)) continue;
+    const isBxgy = tier.logicType === "bxgy";
+    const normalizedBuyQuantity = isBxgy
+      ? Math.max(1, Math.trunc(Number(tier.buyQuantity) || Number(tier.count) || 2))
+      : undefined;
     out.push({
       id: tier.id,
-      count: Math.trunc(tier.count),
-      discountPercent: Math.max(0, Math.min(100, tier.discountPercent)),
+      count: isBxgy ? normalizedBuyQuantity! : Math.trunc(tier.count),
+      discountPercent: isBxgy ? 100 : Math.max(0, Math.min(100, tier.discountPercent)),
       title: tier.title || "",
       subtitle: tier.subtitle || "",
       badge: tier.badge || "",
@@ -311,18 +315,12 @@ function buildDiscountRulesJson(tiers: DiscountRule[]): DiscountRule[] {
           ? Math.max(1, Math.trunc(Number(tier.giftQuantity) || 1))
           : undefined,
       logicType: tier.logicType === "bxgy" ? "bxgy" : "standard",
-      buyQuantity:
-        tier.logicType === "bxgy"
-          ? Math.max(1, Math.trunc(Number(tier.buyQuantity) || 2))
-          : undefined,
+      buyQuantity: isBxgy ? normalizedBuyQuantity : undefined,
       getQuantity:
         tier.logicType === "bxgy"
           ? Math.max(1, Math.trunc(Number(tier.getQuantity) || 1))
           : undefined,
-      maxUsesPerOrder:
-        tier.logicType === "bxgy"
-          ? Math.max(1, Math.trunc(Number(tier.maxUsesPerOrder) || 1))
-          : undefined,
+      maxUsesPerOrder: tier.logicType === "bxgy" ? 1 : undefined,
     });
   }
 
@@ -365,6 +363,10 @@ function sanitizeDiscountRules(tiers: DiscountRule[]): DiscountRule[] {
       continue;
     }
     const normalizedCount = Math.trunc(tier.count);
+    const isBxgy = tier.logicType === "bxgy";
+    const normalizedBuyQuantity = isBxgy
+      ? Math.max(1, Math.trunc(Number(tier.buyQuantity) || normalizedCount || 2))
+      : undefined;
     const normalizedThreshold =
       tier.conditionType === "cart_amount"
         ? Math.max(0, Number(tier.amountThreshold) || 0)
@@ -378,8 +380,8 @@ function sanitizeDiscountRules(tiers: DiscountRule[]): DiscountRule[] {
     ].join("|");
     dedupedByKey.set(key, {
       id: tier.id,
-      count: normalizedCount,
-      discountPercent: Math.max(0, Math.min(100, tier.discountPercent)),
+      count: isBxgy ? normalizedBuyQuantity! : normalizedCount,
+      discountPercent: isBxgy ? 100 : Math.max(0, Math.min(100, tier.discountPercent)),
       title: tier.title || "",
       subtitle: tier.subtitle || "",
       badge: tier.badge || "",
@@ -402,18 +404,12 @@ function sanitizeDiscountRules(tiers: DiscountRule[]): DiscountRule[] {
           ? Math.max(1, Math.trunc(Number(tier.giftQuantity) || 1))
           : undefined,
       logicType: tier.logicType === "bxgy" ? "bxgy" : "standard",
-      buyQuantity:
-        tier.logicType === "bxgy"
-          ? Math.max(1, Math.trunc(Number(tier.buyQuantity) || 2))
-          : undefined,
+      buyQuantity: isBxgy ? normalizedBuyQuantity : undefined,
       getQuantity:
         tier.logicType === "bxgy"
           ? Math.max(1, Math.trunc(Number(tier.getQuantity) || 1))
           : undefined,
-      maxUsesPerOrder:
-        tier.logicType === "bxgy"
-          ? Math.max(1, Math.trunc(Number(tier.maxUsesPerOrder) || 1))
-          : undefined,
+      maxUsesPerOrder: tier.logicType === "bxgy" ? 1 : undefined,
     });
   }
 
@@ -873,7 +869,7 @@ export function CreateNewOffer({
   ): CompleteBundleBar => ({
     id: `bar-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     type,
-    title: type === "bxgy" ? "Buy X, Get Y" : "Complete the bundle",
+    title: type === "bxgy" ? "Buy X, Get Y Free" : "Complete the bundle",
     subtitle: "",
     quantity: 2,
     products: [],
@@ -881,7 +877,7 @@ export function CreateNewOffer({
   });
 
   const handleSelectProducts = async (
-    type: "buy" | "get" | "gift" | "normal" | "product_bundle" = "normal",
+    type: "buy" | "gift" | "normal" | "product_bundle" = "normal",
   ) => {
     const selected = await (window as any).shopify.resourcePicker({
       type: "product",
@@ -891,13 +887,11 @@ export function CreateNewOffer({
       selectionIds:
         type === "buy"
           ? buyProducts.map((id) => ({ id }))
-          : type === "get"
-            ? aggregatedBxgyRewardProductIds.map((id) => ({ id }))
-            : type === "gift"
-              ? aggregatedFreeGiftRewardProductIds.map((id) => ({ id }))
-              : type === "product_bundle"
-                ? productBundleProductIds.map((id) => ({ id }))
-                : selectedProductsData.map((p) => ({ id: p.id })),
+          : type === "gift"
+            ? aggregatedFreeGiftRewardProductIds.map((id) => ({ id }))
+            : type === "product_bundle"
+              ? productBundleProductIds.map((id) => ({ id }))
+              : selectedProductsData.map((p) => ({ id: p.id })),
     });
 
     if (!selected) return;
@@ -911,18 +905,6 @@ export function CreateNewOffer({
       if (freeGiftRules.length > 0) {
         setFreeGiftTriggerProducts(nextIds);
       }
-      return;
-    }
-
-    if (type === "get") {
-      const nextIds = newData.map((item: any) => String(item.id));
-      setGetProducts(nextIds);
-      setBxgyDiscountRules((prev) =>
-        prev.map((rule) => ({
-          ...rule,
-          getProductIds: nextIds,
-        })),
-      );
       return;
     }
 
@@ -1073,24 +1055,6 @@ export function CreateNewOffer({
       mode: "custom",
       summary: "Custom filter with Shopify product picker",
     });
-  };
-  const selectBxgyRewardProducts = async (ruleIndex: number) => {
-    const targetRule = bxgyDiscountRules[ruleIndex];
-    if (!targetRule) return;
-    const selected = await (window as any).shopify.resourcePicker({
-      type: "product",
-      action: "select",
-      multiple: true,
-      selectionIds: (targetRule.getProductIds || []).map((id) => ({ id })),
-    });
-    if (!selected) return;
-    const selectedList = Array.isArray(selected) ? selected : [selected];
-    const nextIds = selectedList.map((item: any) => String(item.id));
-    setBxgyDiscountRules((prev) =>
-      prev.map((rule, index) =>
-        index === ruleIndex ? { ...rule, getProductIds: nextIds } : rule,
-      ),
-    );
   };
   const selectFreeGiftRewardProducts = async (ruleIndex: number) => {
     const targetRule = freeGiftRules[ruleIndex];
@@ -1291,32 +1255,6 @@ export function CreateNewOffer({
   const giftProductsData = useMemo(
     () => mapProductIdsToDraftProducts(aggregatedFreeGiftRewardProductIds),
     [aggregatedFreeGiftRewardProductIds, storeProducts],
-  );
-  const [getProducts, setGetProducts] = useState<string[]>(() => {
-    const selectedProductsJson =
-      initialCampaignLegacy?.offerType === "bxgy"
-        ? initialCampaignLegacy.selectedProductsJson
-        : initialOffer?.offerType === "bxgy"
-          ? initialOffer.selectedProductsJson
-          : null;
-    if (!selectedProductsJson) return [];
-    try {
-      const parsed = JSON.parse(selectedProductsJson);
-      return Array.isArray(parsed.getProducts) ? parsed.getProducts.map(String) : [];
-    } catch (e) {
-      return [];
-    }
-  });
-  const aggregatedBxgyRewardProductIds = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          bxgyDiscountRules.flatMap((rule) =>
-            Array.isArray(rule.getProductIds) ? rule.getProductIds : [],
-          ),
-        ),
-      ),
-    [bxgyDiscountRules],
   );
   const [freeGiftTriggerProducts, setFreeGiftTriggerProducts] = useState<string[]>(() => {
     const selectedProductsJson =
@@ -1872,16 +1810,13 @@ export function CreateNewOffer({
       setBxgyDiscountRules(prev =>
         prev.map(rule => ({
           ...rule,
-          count: rule.count || 1,
+          count: rule.buyQuantity || rule.count || 1,
           buyProductIds: buyProducts,
-          getProductIds:
-            Array.isArray(rule.getProductIds) && rule.getProductIds.length > 0
-              ? rule.getProductIds
-              : getProducts,
+          getProductIds: buyProducts,
         })),
       );
     }
-  }, [buyProducts, getProducts, offerType]);
+  }, [buyProducts, offerType]);
   useEffect(() => {
     if (offerType !== "complete-bundle") return;
     if (!completeBundleBars.length) return;
@@ -1914,7 +1849,7 @@ export function CreateNewOffer({
     if (offerType === "bxgy") {
       return bxgyDiscountRules.map((r, i) => ({
         value: i + 1,
-        label: `Bar #${i + 1} (count ≥ ${r.count})`,
+        label: `Bar #${i + 1} (buy ${r.buyQuantity}, get ${r.getQuantity})`,
       }));
     }
     if (offerType === "quantity-breaks-different") {
@@ -2021,7 +1956,7 @@ export function CreateNewOffer({
       ];
     } else if (offerType === "bxgy") {
       logicBlockId = "logic-bxgy";
-      scopeProductIds = Array.from(new Set([...buyProducts, ...aggregatedBxgyRewardProductIds]));
+      scopeProductIds = Array.from(new Set(buyProducts));
       logicBlocks = [
         {
           id: logicBlockId,
@@ -2143,7 +2078,7 @@ export function CreateNewOffer({
           tiers: buildBxgyDiscountRulesJson(bxgyDiscountRules),
         },
       });
-      addScopeProducts([...buyProducts, ...aggregatedBxgyRewardProductIds]);
+      addScopeProducts(buyProducts);
     }
 
     if (offerType !== "free-gift" && freeGiftRules.length > 0) {
@@ -2301,7 +2236,6 @@ export function CreateNewOffer({
     productBundleTitle,
     scheduleTimezone,
     selectedProductsData,
-    aggregatedBxgyRewardProductIds,
     showCountdownBlock,
     showCustomButton,
     startTime,
@@ -2386,7 +2320,7 @@ export function CreateNewOffer({
         offerType,
         selectedProductIds: selectedProductsData.map((product) => String(product.id)),
         buyProductIds: buyProducts,
-        getProductIds: aggregatedBxgyRewardProductIds,
+        getProductIds: buyProducts,
         freeGiftTriggerProductIds: freeGiftTriggerProducts,
         freeGiftGiftProductIds: aggregatedFreeGiftRewardProductIds,
         discountRules: normalizedDiscountRules,
@@ -2400,7 +2334,7 @@ export function CreateNewOffer({
       offerType,
       selectedProductsData,
       buyProducts,
-      aggregatedBxgyRewardProductIds,
+      buyProducts,
       freeGiftTriggerProducts,
       aggregatedFreeGiftRewardProductIds,
       normalizedDiscountRules,
@@ -2417,7 +2351,7 @@ export function CreateNewOffer({
       selectedProductsData,
       discountRules,
       buyProducts,
-      getProducts: aggregatedBxgyRewardProductIds,
+      getProducts: buyProducts,
       activeBundleBarId,
       completeBundleBars,
       productBundleEnabled,
@@ -2460,7 +2394,6 @@ export function CreateNewOffer({
       selectedProductsData,
       discountRules,
       buyProducts,
-      aggregatedBxgyRewardProductIds,
       activeBundleBarId,
       completeBundleBars,
       productBundleEnabled,
@@ -2759,7 +2692,6 @@ export function CreateNewOffer({
     setSubscriptionDefaultSelected,
     setFreeGiftTriggerProducts,
     setFreeGiftRules,
-    selectBxgyRewardProducts,
     selectFreeGiftRewardProducts,
     setProgressiveGifts,
     updateUnifiedRulePresentation,

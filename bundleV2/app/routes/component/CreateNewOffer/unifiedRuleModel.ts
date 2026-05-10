@@ -50,11 +50,18 @@ export function normalizeUnifiedRule(rule: DiscountRule): DiscountRule {
     rule.rewardType === "gift_product" || rule.rewardType === "free_shipping"
       ? rule.rewardType
       : "percentage_off";
+  const normalizedBuyQuantity = Math.max(1, Math.trunc(Number(rule.buyQuantity) || 2));
+  const normalizedGetQuantity = Math.max(1, Math.trunc(Number(rule.getQuantity) || 1));
+  const isBxgy = rule.logicType === "bxgy";
 
   return {
     id: rule.id || buildRuleId(),
-    count: Math.max(1, Math.trunc(Number(rule.count) || 1)),
-    discountPercent: Math.max(0, Math.min(100, Number(rule.discountPercent) || 0)),
+    count: isBxgy
+      ? normalizedBuyQuantity
+      : Math.max(1, Math.trunc(Number(rule.count) || 1)),
+    discountPercent: isBxgy
+      ? 100
+      : Math.max(0, Math.min(100, Number(rule.discountPercent) || 0)),
     title: rule.title || "",
     subtitle: rule.subtitle || "",
     badge: rule.badge || "",
@@ -77,10 +84,10 @@ export function normalizeUnifiedRule(rule: DiscountRule): DiscountRule {
       rewardType === "gift_product"
         ? Math.max(1, Math.trunc(Number(rule.giftQuantity) || 1))
         : undefined,
-    logicType: rule.logicType === "bxgy" ? "bxgy" : "standard",
-    buyQuantity: Math.max(1, Math.trunc(Number(rule.buyQuantity) || 2)),
-    getQuantity: Math.max(1, Math.trunc(Number(rule.getQuantity) || 1)),
-    maxUsesPerOrder: Math.max(1, Math.trunc(Number(rule.maxUsesPerOrder) || 1)),
+    logicType: isBxgy ? "bxgy" : "standard",
+    buyQuantity: normalizedBuyQuantity,
+    getQuantity: normalizedGetQuantity,
+    maxUsesPerOrder: isBxgy ? 1 : Math.max(1, Math.trunc(Number(rule.maxUsesPerOrder) || 1)),
   };
 }
 
@@ -126,7 +133,7 @@ export function createRuleFromTemplate(
     return normalizeUnifiedRule({
       id: buildRuleId(),
       count: 2,
-      discountPercent: 50,
+      discountPercent: 100,
       logicType: "bxgy",
       discountClass: "product",
       offerKind: "percentage_discount",
@@ -203,9 +210,11 @@ export function applyDiscountType(rule: DiscountRule, discountType: DiscountType
       offerKind: "percentage_discount",
       conditionType: "item_quantity",
       rewardType: "percentage_off",
+      count: Math.max(1, Math.trunc(Number(normalized.buyQuantity) || 2)),
+      discountPercent: 100,
       buyQuantity: Math.max(1, Math.trunc(Number(normalized.buyQuantity) || 2)),
       getQuantity: Math.max(1, Math.trunc(Number(normalized.getQuantity) || 1)),
-      maxUsesPerOrder: Math.max(1, Math.trunc(Number(normalized.maxUsesPerOrder) || 1)),
+      maxUsesPerOrder: 1,
     });
   }
 
@@ -260,17 +269,20 @@ export function syncRuleDependencies(rule: DiscountRule): DiscountRule {
   }
 
   if (normalized.logicType === "bxgy") {
+    const normalizedBuyQuantity = Math.max(1, Math.trunc(Number(normalized.buyQuantity) || 2));
     return {
       ...normalized,
+      count: normalizedBuyQuantity,
+      discountPercent: 100,
       discountClass: "product",
       offerKind: "percentage_discount",
       conditionType: "item_quantity",
       rewardType: "percentage_off",
       rewardProductIds: [],
       giftQuantity: undefined,
-      buyQuantity: Math.max(1, Math.trunc(Number(normalized.buyQuantity) || 2)),
+      buyQuantity: normalizedBuyQuantity,
       getQuantity: Math.max(1, Math.trunc(Number(normalized.getQuantity) || 1)),
-      maxUsesPerOrder: Math.max(1, Math.trunc(Number(normalized.maxUsesPerOrder) || 1)),
+      maxUsesPerOrder: 1,
     };
   }
 
@@ -335,9 +347,7 @@ export function isExecutableDiscountRule(rule: DiscountRule): boolean {
       Number.isFinite(Number(normalized.buyQuantity)) &&
       Number(normalized.buyQuantity) >= 1 &&
       Number.isFinite(Number(normalized.getQuantity)) &&
-      Number(normalized.getQuantity) >= 1 &&
-      Number.isFinite(Number(normalized.maxUsesPerOrder)) &&
-      Number(normalized.maxUsesPerOrder) >= 1
+      Number(normalized.getQuantity) >= 1
     );
   }
   if (
@@ -475,7 +485,7 @@ export function getUnifiedRuleBlockingMessage(rules: DiscountRule[]): string | n
     if (unsupportedRule.rewardType === "gift_product") {
       return "Free gift is publish-ready in the dedicated Free Gift flow with a trigger pool and gift products. Unified gift-product rules inside the selected-products flow are still draft-only.";
     }
-    return "Some rule combinations are not supported yet. Supported combinations are: product percentage by item quantity (including BXGY with valid buy/get quantities), order percentage by item quantity or cart amount, and free shipping by item quantity or cart amount.";
+    return "Some rule combinations are not supported yet. Supported combinations are: product percentage by item quantity (including BXGY same-product free tiers with valid buy/get quantities), order percentage by item quantity or cart amount, and free shipping by item quantity or cart amount.";
   }
 
   return null;

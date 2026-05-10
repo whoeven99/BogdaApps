@@ -154,7 +154,7 @@ export const OFFER_TYPE_RULE_CAPABILITIES: OfferTypeRuleCapability[] = [
     primaryRuleTypes: ["bxgy"],
     scopeModel: "buy_get_products",
     publishSupport: "supported",
-    notes: "Uses dedicated buy/get product scopes and bar-level reward products.",
+    notes: "Uses a dedicated BXGY product pool and applies free items within the same product scope.",
   },
   {
     offerType: "free-gift",
@@ -190,12 +190,16 @@ export function getDiscountRuleType(rule: DiscountRule): UnifiedRuleType {
 
 export function buildDiscountRuleCondition(rule: DiscountRule): UnifiedRuleCondition {
   if (rule.logicType === "bxgy") {
+    const normalizedBuyQuantity = Math.max(
+      1,
+      Math.trunc(Number(rule.buyQuantity) || Number(rule.count) || 2),
+    );
     return {
       kind: "buy_x_get_y",
-      triggerCount: Math.max(1, Math.trunc(Number(rule.count) || 1)),
-      buyQuantity: Math.max(1, Math.trunc(Number(rule.buyQuantity) || 2)),
+      triggerCount: normalizedBuyQuantity,
+      buyQuantity: normalizedBuyQuantity,
       getQuantity: Math.max(1, Math.trunc(Number(rule.getQuantity) || 1)),
-      maxUsesPerOrder: Math.max(1, Math.trunc(Number(rule.maxUsesPerOrder) || 1)),
+      maxUsesPerOrder: 1,
     };
   }
 
@@ -229,7 +233,10 @@ export function buildDiscountRuleReward(rule: DiscountRule): UnifiedRuleReward {
   return {
     kind: "percentage_off",
     discountClass: rule.discountClass === "order" ? "order" : "product",
-    discountPercent: Math.max(0, Math.min(100, Number(rule.discountPercent) || 0)),
+    discountPercent:
+      rule.logicType === "bxgy"
+        ? 100
+        : Math.max(0, Math.min(100, Number(rule.discountPercent) || 0)),
   };
 }
 
@@ -276,7 +283,7 @@ export function describeUnifiedRuleScope(scope: UnifiedRuleScope): string {
     case "shared_product_pool":
       return `${scope.productIds.length} products in shared pool`;
     case "buy_get_products":
-      return `${scope.buyProductIds.length} products in global Buy pool, ${scope.getProductIds.length} reward products in this bar`;
+      return `${scope.buyProductIds.length} products in the BXGY pool`;
     case "trigger_gift_products":
       return `${scope.triggerProductIds.length} products in global trigger pool, ${scope.giftProductIds.length} gift products in this bar`;
     case "bundle_bar_products":

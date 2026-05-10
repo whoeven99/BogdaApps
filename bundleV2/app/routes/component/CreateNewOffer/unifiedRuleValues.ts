@@ -70,9 +70,25 @@ export function updateBxgyRuleValues(
   ruleId: string,
   patch: UnifiedRuleValuePatch,
 ): BxgyDiscountRule[] {
-  return rules.map((rule, index) =>
-    getBxgyUnifiedRuleId(index) === ruleId ? { ...rule, ...patch } : rule,
-  );
+  return rules.map((rule, index) => {
+    if (getBxgyUnifiedRuleId(index) !== ruleId) return rule;
+
+    const nextRule = { ...rule, ...patch };
+    const normalizedBuyQuantity =
+      typeof patch.buyQuantity === "number"
+        ? Math.max(1, Math.trunc(Number(patch.buyQuantity) || 1))
+        : typeof patch.count === "number"
+          ? Math.max(1, Math.trunc(Number(patch.count) || 1))
+          : Math.max(1, Math.trunc(Number(nextRule.buyQuantity) || Number(nextRule.count) || 1));
+
+    return {
+      ...nextRule,
+      buyQuantity: normalizedBuyQuantity,
+      count: normalizedBuyQuantity,
+      discountPercent: 100,
+      maxUsesPerOrder: 1,
+    };
+  });
 }
 
 export function updateFreeGiftRuleValues(

@@ -100,9 +100,7 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
         render: () => (
           <BxgyLogicEditor
             buyProductsCount={props.draft.buyProducts.length}
-            getProductsCount={props.draft.getProducts.length}
             onSelectBuyProducts={() => props.actions.handleSelectProducts("buy")}
-            onSelectGetProducts={() => props.actions.handleSelectProducts("get")}
             bxgyDiscountRules={props.draft.bxgyDiscountRules}
             setBxgyDiscountRules={props.actions.setBxgyDiscountRules}
             updateRuleValues={props.actions.updateUnifiedRuleValues}
@@ -112,41 +110,17 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
         ),
       },
       {
-        id: "bxgy-get-scope",
-        group: "scope",
-        title: "Reward Products",
-        description:
-          "Choose which products can be discounted or given away on the Y side.",
-        required: true,
-        active: true,
-        render: () => (
-          <BxgyLogicEditor
-            buyProductsCount={props.draft.buyProducts.length}
-            getProductsCount={props.draft.getProducts.length}
-            onSelectBuyProducts={() => props.actions.handleSelectProducts("buy")}
-            onSelectGetProducts={() => props.actions.handleSelectProducts("get")}
-            bxgyDiscountRules={props.draft.bxgyDiscountRules}
-            setBxgyDiscountRules={props.actions.setBxgyDiscountRules}
-            updateRuleValues={props.actions.updateUnifiedRuleValues}
-            updateRulePresentation={props.actions.updateUnifiedRulePresentation}
-            section="get-products"
-          />
-        ),
-      },
-      {
         id: "bxgy-rules",
         group: "rules",
         title: "Offer Rules",
         description:
-          "Define the BXGY unlock logic, reward quantities, discount values, and labels for each rule.",
+          "Define the BXGY buy quantity, free quantity, and labels for each rule.",
         required: true,
         active: true,
         render: () => (
           <BxgyLogicEditor
             buyProductsCount={props.draft.buyProducts.length}
-            getProductsCount={props.draft.getProducts.length}
             onSelectBuyProducts={() => props.actions.handleSelectProducts("buy")}
-            onSelectGetProducts={() => props.actions.handleSelectProducts("get")}
             bxgyDiscountRules={props.draft.bxgyDiscountRules}
             setBxgyDiscountRules={props.actions.setBxgyDiscountRules}
             updateRuleValues={props.actions.updateUnifiedRuleValues}

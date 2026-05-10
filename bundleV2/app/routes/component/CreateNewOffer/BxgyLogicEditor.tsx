@@ -17,21 +17,17 @@ import { getBxgyRuleCapability } from "./ruleCapabilityRegistry";
 
 type Props = {
   buyProductsCount: number;
-  getProductsCount: number;
   onSelectBuyProducts: () => void | Promise<void>;
-  onSelectGetProducts: () => void | Promise<void>;
   bxgyDiscountRules: BxgyDiscountRule[];
   setBxgyDiscountRules: React.Dispatch<React.SetStateAction<BxgyDiscountRule[]>>;
-  section?: "buy-products" | "get-products" | "rules" | "all";
+  section?: "buy-products" | "rules" | "all";
   updateRuleValues?: (id: string, patch: UnifiedRuleValuePatch) => void;
   updateRulePresentation?: (id: string, patch: RulePresentationPatch) => void;
 };
 
 export default function BxgyLogicEditor({
   buyProductsCount,
-  getProductsCount,
   onSelectBuyProducts,
-  onSelectGetProducts,
   bxgyDiscountRules,
   setBxgyDiscountRules,
   section = "all",
@@ -39,21 +35,21 @@ export default function BxgyLogicEditor({
   updateRulePresentation,
 }: Props) {
   const { discountTypeOptions, addMenuItems } = getBxgyRuleCapability();
-  const conditionTypeOptions = [{ label: "Buy X, Get Y", value: "buy_x_get_y" }];
+  const conditionTypeOptions = [{ label: "Buy X, Get Y Free", value: "buy_x_get_y" }];
   const showBuyProducts = section === "all" || section === "buy-products";
-  const showGetProducts = section === "all" || section === "get-products";
   const showRules = section === "all" || section === "rules";
   const appendBxgyTier = () => {
     setBxgyDiscountRules((prev) => {
-      const maxCount = prev.reduce(
-        (max, rule) => Math.max(max, rule.count),
+      const maxBuyQuantity = prev.reduce(
+        (max, rule) => Math.max(max, rule.buyQuantity || rule.count),
         1,
       );
+      const nextBuyQuantity = maxBuyQuantity + 1;
       return [
         ...prev,
         {
-          count: maxCount + 1,
-          buyQuantity: 2,
+          count: nextBuyQuantity,
+          buyQuantity: nextBuyQuantity,
           getQuantity: 1,
           buyProductIds: [],
           getProductIds: [],
@@ -94,32 +90,8 @@ export default function BxgyLogicEditor({
         </div>
       ) : null}
 
-      {showGetProducts ? (
-        <div className="mb-8">
-          <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <div className="text-[14px] font-medium text-[#1c1f23]">Get Products (Y)</div>
-                <div className="mt-1 text-[12px] text-[#5c6166]">
-                  {getProductsCount} selected
-                </div>
-              </div>
-              <Button
-                size="middle"
-                onClick={(e) => {
-                  void onSelectGetProducts();
-                  e.preventDefault();
-                }}
-              >
-                {getProductsCount === 0 ? "Select get products" : "Edit get products"}
-              </Button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
       {showRules ? (
-        <OfferRulesSection description="BXGY rules use a fixed discount type. Configure the buy condition, the reward quantity, and the reward discount per rule.">
+        <OfferRulesSection description="BXGY rules use a fixed same-product free-item model. Configure the buy quantity, free quantity, and labels for each rule.">
           {bxgyDiscountRules.map((rule, index) => (
             <OfferRuleCard
               key={index}
@@ -162,35 +134,6 @@ export default function BxgyLogicEditor({
 
                 <div className="create-offer-discount-form-row create-offer-discount-form-row--inline">
                   <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                    Trigger Quantity
-                    <Input
-                      size="large"
-                      type="number"
-                      min={1}
-                      step={1}
-                      className="mt-1"
-                      value={rule.count}
-                      onChange={(e) => {
-                        const parsedValue = Number(e.target.value);
-                        const nextCount =
-                          Number.isFinite(parsedValue) && parsedValue >= 1
-                            ? Math.trunc(parsedValue)
-                            : 1;
-                        if (updateRuleValues) {
-                          updateRuleValues(ruleId, { count: nextCount });
-                          return;
-                        }
-                        setBxgyDiscountRules((prev) =>
-                          prev.map((currentRule, currentIndex) =>
-                            currentIndex === index
-                              ? { ...currentRule, count: nextCount }
-                              : currentRule,
-                          ),
-                        );
-                      }}
-                    />
-                  </label>
-                  <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
                     Buy Quantity (X)
                     <Input
                       size="large"
@@ -206,13 +149,20 @@ export default function BxgyLogicEditor({
                             ? Math.trunc(parsedValue)
                             : 1;
                         if (updateRuleValues) {
-                          updateRuleValues(ruleId, { buyQuantity: nextCount });
+                          updateRuleValues(ruleId, {
+                            buyQuantity: nextCount,
+                            count: nextCount,
+                          });
                           return;
                         }
                         setBxgyDiscountRules((prev) =>
                           prev.map((currentRule, currentIndex) =>
                             currentIndex === index
-                              ? { ...currentRule, buyQuantity: nextCount }
+                              ? {
+                                  ...currentRule,
+                                  buyQuantity: nextCount,
+                                  count: nextCount,
+                                }
                               : currentRule,
                           ),
                         );
@@ -247,42 +197,6 @@ export default function BxgyLogicEditor({
                         );
                       }}
                     />
-                  </label>
-                  <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                    Reward Discount (%)
-                    <Input
-                      size="large"
-                      type="number"
-                      min={0}
-                      max={100}
-                      step={1}
-                      className="mt-1"
-                      value={rule.discountPercent}
-                      onChange={(e) => {
-                        const parsedValue = Number(e.target.value);
-                        if (parsedValue > 100) return;
-                        const nextPercent =
-                          Number.isFinite(parsedValue) && parsedValue >= 0
-                            ? parsedValue
-                            : 0;
-                        if (updateRuleValues) {
-                          updateRuleValues(ruleId, { discountPercent: nextPercent });
-                          return;
-                        }
-                        setBxgyDiscountRules((prev) =>
-                          prev.map((currentRule, currentIndex) =>
-                            currentIndex === index
-                              ? { ...currentRule, discountPercent: nextPercent }
-                              : currentRule,
-                          ),
-                        );
-                      }}
-                    />
-                    {rule.discountPercent === 100 && (
-                      <div className="text-[#52c41a] text-[12px] mt-1 font-normal">
-                        Y products will be FREE
-                      </div>
-                    )}
                   </label>
                 </div>
 
@@ -359,39 +273,13 @@ export default function BxgyLogicEditor({
                 </OfferRuleFormGrid>
 
                 <OfferRuleFormGrid columns={2}>
-                  <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                    Max Uses Per Order
-                    <Input
-                      size="large"
-                      type="number"
-                      min={1}
-                      step={1}
-                      className="mt-1"
-                      value={rule.maxUsesPerOrder}
-                      onChange={(e) => {
-                        const parsedValue = Number(e.target.value);
-                        const nextMax =
-                          Number.isFinite(parsedValue) && parsedValue >= 1
-                            ? Math.trunc(parsedValue)
-                            : 1;
-                        if (updateRuleValues) {
-                          updateRuleValues(ruleId, { maxUsesPerOrder: nextMax });
-                          return;
-                        }
-                        setBxgyDiscountRules((prev) =>
-                          prev.map((currentRule, currentIndex) =>
-                            currentIndex === index
-                              ? { ...currentRule, maxUsesPerOrder: nextMax }
-                              : currentRule,
-                          ),
-                        );
-                      }}
-                    />
-                  </label>
                   <OfferRuleNotice title="Scope source" intent="info">
-                    Buy scope and reward scope are managed in the modules above,
-                    so each BXGY rule here only controls the unlock math and
-                    reward intensity.
+                    BXGY applies within the selected buy products, so each rule
+                    here only controls the buy quantity and free quantity.
+                  </OfferRuleNotice>
+                  <OfferRuleNotice title="Reward behavior" intent="success">
+                    BXGY rewards use the same product and discount the cheapest
+                    eligible variant once per order.
                   </OfferRuleNotice>
                 </OfferRuleFormGrid>
 

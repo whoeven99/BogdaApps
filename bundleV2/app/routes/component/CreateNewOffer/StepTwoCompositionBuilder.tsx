@@ -489,17 +489,6 @@ function BxgyRuleBarDetail({
       <BuilderSection title="Trigger">
         <FieldGrid>
           <label className="block text-[13px] font-medium text-[#1c1f23]">
-            Trigger quantity
-            <Input
-              size="large"
-              type="number"
-              min={1}
-              className="mt-1"
-              value={rule.count}
-              onChange={(e) => onChange({ count: parsePositiveInt(e.target.value, rule.count) })}
-            />
-          </label>
-          <label className="block text-[13px] font-medium text-[#1c1f23]">
             Buy quantity (X)
             <Input
               size="large"
@@ -507,9 +496,10 @@ function BxgyRuleBarDetail({
               min={1}
               className="mt-1"
               value={rule.buyQuantity}
-              onChange={(e) =>
-                onChange({ buyQuantity: parsePositiveInt(e.target.value, rule.buyQuantity) })
-              }
+              onChange={(e) => {
+                const buyQuantity = parsePositiveInt(e.target.value, rule.buyQuantity);
+                onChange({ buyQuantity, count: buyQuantity });
+              }}
             />
           </label>
         </FieldGrid>
@@ -518,26 +508,10 @@ function BxgyRuleBarDetail({
       <BuilderSection
         title="Reward"
       >
-        <CompactActionRow
-          title="Reward products (Y)"
-          meta={`${rule.getProductIds.length} selected for this bar`}
-          actionLabel="Edit reward products"
-          onAction={() => void actions.selectBxgyRewardProducts(bar.sourceRef.index)}
-        />
-        <label className="block text-[13px] font-medium text-[#1c1f23]">
-          Reward discount (%)
-          <Input
-            size="large"
-            type="number"
-            min={0}
-            max={100}
-            className="mt-1"
-            value={rule.discountPercent}
-            onChange={(e) =>
-              onChange({ discountPercent: parsePercent(e.target.value, rule.discountPercent) })
-            }
-          />
-        </label>
+        <div className="rounded-[10px] bg-[#f6f8f9] px-3 py-2 text-[12px] text-[#5c6166]">
+          Free items come from the same product and discount the cheapest
+          eligible variant once per order.
+        </div>
         <FieldGrid>
           <label className="block text-[13px] font-medium text-[#1c1f23]">
             Get quantity (Y)
@@ -549,21 +523,6 @@ function BxgyRuleBarDetail({
               value={rule.getQuantity}
               onChange={(e) =>
                 onChange({ getQuantity: parsePositiveInt(e.target.value, rule.getQuantity) })
-              }
-            />
-          </label>
-          <label className="block text-[13px] font-medium text-[#1c1f23]">
-            Max uses per order
-            <Input
-              size="large"
-              type="number"
-              min={1}
-              className="mt-1"
-              value={rule.maxUsesPerOrder}
-              onChange={(e) =>
-                onChange({
-                  maxUsesPerOrder: parsePositiveInt(e.target.value, rule.maxUsesPerOrder),
-                })
               }
             />
           </label>

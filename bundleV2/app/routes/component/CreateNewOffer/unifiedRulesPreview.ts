@@ -132,17 +132,17 @@ function buildStandardRuleItem(
       id: rule.id,
       title:
         rule.presentation.title ||
-        `Buy ${rule.condition.buyQuantity}, Get ${rule.condition.getQuantity}`,
+        `Buy ${rule.condition.buyQuantity}, Get ${rule.condition.getQuantity} Free`,
       subtitle:
         rule.presentation.subtitle ||
-        `Same product scope, ${percentOff}% off reward items`,
+        `Same product scope, Buy ${rule.condition.buyQuantity}, Get ${rule.condition.getQuantity} Free`,
       price:
         percentOff === 100
-          ? `${rule.condition.getQuantity} FREE`
+          ? `Get ${rule.condition.getQuantity} Free`
           : `${percentOff}% OFF`,
       featured,
       badge,
-      saveLabel: `BUY ${rule.condition.buyQuantity} + GET ${rule.condition.getQuantity}`,
+      saveLabel: `BUY ${rule.condition.buyQuantity}, GET ${rule.condition.getQuantity} FREE`,
     };
   }
 
@@ -223,27 +223,22 @@ function buildStandardRuleItem(
       id: rule.id,
       title:
         rule.presentation.title ||
-        `Buy ${rule.condition.buyQuantity}, Get ${rule.condition.getQuantity}`,
+        `Buy ${rule.condition.buyQuantity}, Get ${rule.condition.getQuantity} Free`,
       subtitle:
         rule.presentation.subtitle ||
-        `Across ${
+        `Same product scope across ${
           rule.scope.kind === "buy_get_products"
             ? rule.scope.buyProductIds.length
             : 0
-        } buy products`,
-      price:
-        rule.reward.discountPercent === 100
-          ? `${rule.condition.getQuantity} FREE`
-          : `${rule.reward.discountPercent}% OFF`,
+        } selected products`,
+      price: `Get ${rule.condition.getQuantity} Free`,
       featured,
       badge: rule.presentation.badge || (featured ? "Best Reward" : ""),
-      saveLabel: `BUY ${rule.condition.buyQuantity} + GET ${rule.condition.getQuantity}`,
+      saveLabel: `BUY ${rule.condition.buyQuantity}, GET ${rule.condition.getQuantity} FREE`,
       products:
         rule.scope.kind === "buy_get_products"
           ? mapProducts(
-              rule.scope.getProductIds.length > 0
-                ? rule.scope.getProductIds
-                : rule.scope.buyProductIds,
+              rule.scope.buyProductIds,
               params.selectedProducts,
             )
           : undefined,
@@ -400,7 +395,7 @@ function buildCompleteBundleItem(
     title: rule.presentation.title || `Bar #${index + 1}`,
     subtitle:
       rule.presentation.subtitle ||
-      `${rule.type === "bxgy" ? "Buy X Get Y" : "Quantity break"} · ${productsCount} products`,
+      `${rule.type === "bxgy" ? "Buy X, Get Y Free" : "Quantity break"} · ${productsCount} products`,
     price: params.formatPrice(sumFinal),
     original: sumOriginal > sumFinal ? params.formatPrice(sumOriginal) : undefined,
     featured: index === 0,
