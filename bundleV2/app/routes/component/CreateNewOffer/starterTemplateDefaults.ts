@@ -108,19 +108,10 @@ export function getStarterTemplateDefaults(
         discountRules: [
           {
             count: 2,
-            discountPercent: 10,
-            title: "Buy 2",
-            subtitle: "Unlock the first bundle tier",
-            badge: "Starter",
+            discountPercent: 20,
+            title: "Bundle trigger",
+            subtitle: "Unlock the complete bundle offer",
             isDefault: true,
-          },
-          {
-            count: 3,
-            discountPercent: 15,
-            title: "Buy 3",
-            subtitle: "Best entry point for the full bundle",
-            badge: "Most popular",
-            isDefault: false,
           },
         ],
         bxgyDiscountRules: [],
@@ -142,39 +133,26 @@ export function getStarterTemplateDefaults(
         previewFallbackItems: [
           {
             id: "starter-complete-bundle-base",
-            title: "Camera with 2K microphone",
+            title: "FetchLink C10 GPS Wireless Dog Fence with 2K Camera - ciwi",
             subtitle: "Standard price",
             price: "EUR65.00",
-            products: [
-              {
-                image: "https://via.placeholder.com/48",
-                name: "Camera",
-              },
-            ],
-          },
-          {
-            id: "starter-complete-bundle-qty",
-            title: "Buy 2",
-            subtitle: "Unlock the first bundle tier",
-            price: "EUR58.50",
-            badge: "Starter",
           },
           {
             id: "starter-complete-bundle-offer",
             title: "Complete the bundle",
-            subtitle: "Add the full set to unlock the bundle price",
-            price: "EUR50.00",
+            subtitle: "Save EUR49.00!",
+            price: "EUR196.00",
+            original: "EUR245.00",
             featured: true,
-            badge: "Bundle",
-            saveLabel: "SAVE EUR14.99",
+            saveLabel: "SAVE EUR49.00",
             products: [
               {
                 image: "https://via.placeholder.com/48",
-                name: "Wireless Dog Fence",
+                name: "FetchLink C10 GPS Wireless Dog Fence with 2K Camera - ciwi",
               },
               {
                 image: "https://via.placeholder.com/48",
-                name: "Siemens Tablets",
+                name: "Casual Pink Mountain Landscape Printed White Pullover",
               },
             ],
           },

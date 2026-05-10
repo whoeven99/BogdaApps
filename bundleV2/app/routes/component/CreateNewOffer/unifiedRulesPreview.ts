@@ -410,11 +410,32 @@ function buildCompleteBundleItem(
   };
 }
 
+function buildCompleteBundleSingleItem(
+  params: BuildPreviewParams,
+): PreviewItem | null {
+  const firstProduct = params.completeBundleBars[0]?.products?.[0];
+  if (!firstProduct) return null;
+
+  const selectedVariant =
+    firstProduct.variants?.find((variant) => variant.id === firstProduct.selectedVariantId) ||
+    firstProduct.variants?.[0];
+  const base = parseMoneyStringToNumber(selectedVariant?.price || firstProduct.price);
+
+  return {
+    id: "complete-bundle-single",
+    title: firstProduct.title || "Single product",
+    subtitle: "Standard price",
+    price: params.formatPrice(base),
+  };
+}
+
 export function buildUnifiedPreviewItems(params: BuildPreviewParams): PreviewItem[] {
   if (params.offerType === "complete-bundle") {
-    return params.rules.map((rule, index) =>
-      buildCompleteBundleItem(rule, index, params),
-    );
+    const singleItem = buildCompleteBundleSingleItem(params);
+    const bundleItems = params.rules
+      .filter((rule) => rule.sourceOfferType === "complete-bundle")
+      .map((rule, index) => buildCompleteBundleItem(rule, index, params));
+    return singleItem ? [singleItem, ...bundleItems] : bundleItems;
   }
 
   if (params.offerType === "quantity-breaks-different") {
@@ -453,6 +474,16 @@ export function buildUnifiedPreviewItems(params: BuildPreviewParams): PreviewIte
 export function buildCompositionPreviewItems(
   params: Omit<BuildPreviewParams, "offerType">,
 ): PreviewItem[] {
+  const hasCompleteBundleSource = params.rules.some(
+    (rule) => rule.sourceOfferType === "complete-bundle",
+  );
+  if (hasCompleteBundleSource) {
+    return buildUnifiedPreviewItems({
+      ...params,
+      offerType: "complete-bundle",
+    });
+  }
+
   const mixedParams: BuildPreviewParams = {
     ...params,
     offerType: "quantity-breaks-same",

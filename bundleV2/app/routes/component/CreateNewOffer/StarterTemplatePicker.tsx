@@ -157,47 +157,73 @@ function CompleteBundlePreview() {
   return (
     <div className="flex min-h-[260px] flex-col rounded-[16px] border border-[#dfe3e8] bg-[#f6f6f7] p-[14px]">
       <div className="space-y-[8px]">
-        <PreviewRow
-          title="Camera with 2K microphone"
-          subtitle="Standard price"
-          price="EUR65.00"
-        />
-        <PreviewRow
-          title="Buy 2"
-          subtitle="Unlock the first bundle tier"
-          price="EUR58.50"
-          badge="Starter"
-          selected
-        />
-        <PreviewRow
-          title="Buy 3"
-          subtitle="Best entry point for the full bundle"
-          price="EUR55.25"
-          badge="Most popular"
-        />
-        <div className="rounded-[10px] border border-[#d1d5db] bg-[#f1f2f4] p-[12px] opacity-70">
+        <div className="rounded-[10px] border border-[#bfc4c9] bg-[#f3f3f3] px-[12px] py-[10px]">
           <div className="flex items-start gap-[10px]">
-            <span className="mt-[3px] h-[14px] w-[14px] rounded-full border border-[#c9ccd0]" />
+            <span className="mt-[3px] h-[14px] w-[14px] rounded-full border border-[#a6aaae]" />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-start justify-between gap-[8px]">
+                <div className="min-w-0 text-[14px] font-semibold leading-[18px] text-[#1c1f23]">
+                  FetchLink C10 GPS Wireless Dog Fence with 2K Camera - ciwi
+                </div>
+                <div className="shrink-0 text-[14px] font-semibold leading-[18px] text-[#1c1f23]">
+                  EUR65.00
+                </div>
+              </div>
+              <div className="mt-[4px] text-[12px] text-[#6d7175]">Standard price</div>
+            </div>
+          </div>
+        </div>
+        <div className="rounded-[10px] border border-[#cfd3d7] bg-[#f7f7f7] px-[12px] py-[10px] opacity-80">
+          <div className="flex items-start gap-[10px]">
+            <span className="mt-[3px] flex h-[14px] w-[14px] items-center justify-center rounded-full border border-[#a6aaae]">
+              <span className="h-[7px] w-[7px] rounded-full bg-[#a6aaae]" />
+            </span>
             <div className="min-w-0 flex-1">
               <div className="flex items-start justify-between gap-[8px]">
                 <div className="min-w-0">
-                  <div className="text-[14px] font-semibold leading-[18px] text-[#5c6166]">
+                  <div className="text-[14px] font-semibold leading-[18px] text-[#8c9196]">
                     Complete the bundle
                   </div>
-                  <div className="mt-[2px] text-[12px] leading-[16px] text-[#8c9196]">
-                    Add the full set to unlock the bundle price
+                  <div className="mt-[2px] text-[12px] leading-[16px] text-[#a8adb2]">
+                    Save EUR49.00!
                   </div>
                 </div>
-                <div className="text-[14px] font-semibold leading-[18px] text-[#8c9196]">
-                  EUR50.00
+                <div className="text-right">
+                  <div className="text-[14px] font-semibold leading-[18px] text-[#8c9196]">
+                    EUR196.00
+                  </div>
+                  <div className="mt-[2px] text-[12px] text-[#b6bbc0] line-through">
+                    EUR245.00
+                  </div>
                 </div>
               </div>
-              <div className="mt-[10px] grid grid-cols-2 gap-[8px]">
-                <div className="rounded-[8px] bg-white px-[8px] py-[10px] text-[11px] text-[#6d7175]">
-                  Wireless Dog Fence
+              <div className="relative mt-[10px] grid grid-cols-2 overflow-hidden rounded-[10px] border border-[#d9dddf] bg-[#fbfbfb]">
+                <div className="min-h-[132px] px-[10px] py-[12px] text-center">
+                  <div className="mx-auto h-[48px] w-[48px] rounded-[6px] bg-white shadow-[inset_0_0_0_1px_rgba(17,24,39,0.06)]" />
+                  <div className="mt-[8px] text-[11px] font-semibold leading-[16px] text-[#9aa0a6]">
+                    FetchLink C10 GPS Wireless Dog Fence with 2K Camera - ciwi
+                  </div>
+                  <div className="mt-[6px] text-[11px] font-semibold text-[#9aa0a6]">
+                    EUR52.00
+                    <span className="ml-[4px] font-normal text-[#b7bcc1] line-through">
+                      EUR65.00
+                    </span>
+                  </div>
                 </div>
-                <div className="rounded-[8px] bg-white px-[8px] py-[10px] text-[11px] text-[#6d7175]">
-                  Siemens Tablets
+                <div className="border-l border-[#d9dddf] min-h-[132px] px-[10px] py-[12px] text-center">
+                  <div className="mx-auto h-[48px] w-[48px] rounded-[6px] bg-white shadow-[inset_0_0_0_1px_rgba(17,24,39,0.06)]" />
+                  <div className="mt-[8px] text-[11px] font-semibold leading-[16px] text-[#9aa0a6]">
+                    Casual Pink Mountain Landscape Printed White Pullover
+                  </div>
+                  <div className="mt-[6px] text-[11px] font-semibold text-[#9aa0a6]">
+                    EUR144.00
+                    <span className="ml-[4px] font-normal text-[#b7bcc1] line-through">
+                      EUR180.00
+                    </span>
+                  </div>
+                </div>
+                <div className="absolute left-1/2 top-1/2 flex h-[22px] w-[22px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-[#e2e4e7] text-[16px] font-semibold leading-none text-white">
+                  +
                 </div>
               </div>
             </div>
