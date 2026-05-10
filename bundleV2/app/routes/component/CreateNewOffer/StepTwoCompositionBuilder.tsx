@@ -24,6 +24,8 @@ type Props = {
   draft: CampaignDraft;
   actions: CampaignDraftActions;
   totalStoreProductsCount: number;
+  activeTriggerSelectionMode: "all" | "collection" | "exclude" | "custom" | null;
+  activeTriggerSelectionSummary: string;
   onSelectAllTriggerProducts: () => void;
   onSelectTriggerProductsByCollection: () => void;
   onExcludeTriggerProducts: () => void;
@@ -153,6 +155,8 @@ function QuietEmptyState({ children }: { children: ReactNode }) {
 function ProductPoolManager({
   selectedProducts,
   totalStoreProductsCount,
+  activeSelectionMode,
+  activeSelectionSummary,
   onSelectAll,
   onSelectByCollection,
   onExclude,
@@ -161,12 +165,28 @@ function ProductPoolManager({
 }: {
   selectedProducts: CampaignDraft["selectedProductsData"];
   totalStoreProductsCount: number;
+  activeSelectionMode: "all" | "collection" | "exclude" | "custom" | null;
+  activeSelectionSummary: string;
   onSelectAll: () => void;
   onSelectByCollection: () => void;
   onExclude: () => void;
   onCustomFilter: () => void;
   allowBulkSelection: boolean;
 }) {
+  const renderModeButton = (
+    mode: "all" | "collection" | "exclude" | "custom",
+    label: string,
+    onClick: () => void,
+  ) => (
+    <Button
+      block
+      type={activeSelectionMode === mode ? "primary" : "default"}
+      onClick={onClick}
+    >
+      {label}
+    </Button>
+  );
+
   return (
     <div className="space-y-3 rounded-[10px] border border-[#e3e8ed] bg-white p-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -187,18 +207,10 @@ function ProductPoolManager({
 
       {allowBulkSelection ? (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <Button block onClick={onSelectAll}>
-            Select all
-          </Button>
-          <Button block onClick={onSelectByCollection}>
-            Select by collection
-          </Button>
-          <Button block onClick={onExclude}>
-            Exclude products
-          </Button>
-          <Button block onClick={onCustomFilter}>
-            Custom filter
-          </Button>
+          {renderModeButton("all", "Select all", onSelectAll)}
+          {renderModeButton("collection", "Select by collection", onSelectByCollection)}
+          {renderModeButton("exclude", "Exclude products", onExclude)}
+          {renderModeButton("custom", "Custom filter", onCustomFilter)}
         </div>
       ) : null}
 
@@ -206,6 +218,11 @@ function ProductPoolManager({
         {allowBulkSelection
           ? "Choose a selection shortcut above, then confirm the final set in Shopify's native product picker when needed."
           : "Use Shopify's native product picker to choose the product for this step."}
+        {allowBulkSelection && activeSelectionSummary ? (
+          <div className="mt-2 text-[12px] font-medium text-[#1c1f23]">
+            Current selection mode: {activeSelectionSummary}
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -814,6 +831,8 @@ export default function StepTwoCompositionBuilder({
   draft,
   actions,
   totalStoreProductsCount,
+  activeTriggerSelectionMode,
+  activeTriggerSelectionSummary,
   onSelectAllTriggerProducts,
   onSelectTriggerProductsByCollection,
   onExcludeTriggerProducts,
@@ -1219,6 +1238,8 @@ export default function StepTwoCompositionBuilder({
                   <ProductPoolManager
                     selectedProducts={draft.selectedProductsData}
                     totalStoreProductsCount={totalStoreProductsCount}
+                    activeSelectionMode={activeTriggerSelectionMode}
+                    activeSelectionSummary={activeTriggerSelectionSummary}
                     onSelectAll={onSelectAllTriggerProducts}
                     onSelectByCollection={onSelectTriggerProductsByCollection}
                     onExclude={onExcludeTriggerProducts}

@@ -266,6 +266,8 @@ type CollectionOption = {
   value: string;
 };
 
+type TriggerSelectionMode = "all" | "collection" | "exclude" | "custom" | null;
+
 /** 与 `_index/route` action 错误响应一致，避免从 route 循环引用 */
 type OfferActionErrorBody = {
   _offerActionError: true;
@@ -839,6 +841,8 @@ export function CreateNewOffer({
     }));
   const [collectionSelectionModalOpen, setCollectionSelectionModalOpen] = useState(false);
   const [pendingCollectionIds, setPendingCollectionIds] = useState<string[]>([]);
+  const [triggerSelectionMode, setTriggerSelectionMode] = useState<TriggerSelectionMode>(null);
+  const [triggerSelectionSummary, setTriggerSelectionSummary] = useState("");
   const allStoreProductIds = useMemo(
     () => storeProducts.map((product) => String(product.id || "")).filter(Boolean),
     [storeProducts],
@@ -978,7 +982,10 @@ export function CreateNewOffer({
       );
     }
   };
-  const openStepTwoTriggerProductPicker = async (selectionProductIds?: string[]) => {
+  const openStepTwoTriggerProductPicker = async (
+    selectionProductIds?: string[],
+    meta?: { mode: Exclude<TriggerSelectionMode, null>; summary: string },
+  ) => {
     const selected = await (window as any).shopify.resourcePicker({
       type: "product",
       action: "select",
@@ -990,6 +997,10 @@ export function CreateNewOffer({
     if (!selected) return;
     const selectedList = Array.isArray(selected) ? selected : [selected];
     applyStepTwoTriggerProducts(mapPickerSelectionToDraftProducts(selectedList));
+    if (meta) {
+      setTriggerSelectionMode(meta.mode);
+      setTriggerSelectionSummary(meta.summary);
+    }
   };
   const handleSelectAllTriggerProducts = () => {
     if (allStoreProductIds.length === 0) {
@@ -997,13 +1008,18 @@ export function CreateNewOffer({
       return;
     }
     applyStepTwoTriggerProducts(mapProductIdsToDraftProducts(allStoreProductIds));
+    setTriggerSelectionMode("all");
+    setTriggerSelectionSummary(`All products selected (${allStoreProductIds.length})`);
   };
   const handleExcludeTriggerProducts = async () => {
     if (allStoreProductIds.length === 0) {
       message.warning("Products are still loading. Please try again in a moment.");
       return;
     }
-    await openStepTwoTriggerProductPicker(allStoreProductIds);
+    await openStepTwoTriggerProductPicker(allStoreProductIds, {
+      mode: "exclude",
+      summary: "All products selected, with excluded items removed in picker",
+    });
   };
   const handleSelectTriggerProductsByCollection = () => {
     if (collectionOptions.length === 0) {
@@ -1035,11 +1051,28 @@ export function CreateNewOffer({
       message.warning("No products were found in the selected collections.");
       return;
     }
+    const summaryLabel = collectionOptions
+      .filter((option) => pendingCollectionIds.includes(option.value))
+      .slice(0, 2)
+      .map((option) => option.label)
+      .join(", ");
     setCollectionSelectionModalOpen(false);
     setPendingCollectionIds([]);
     window.setTimeout(() => {
-      void openStepTwoTriggerProductPicker(matchedProductIds);
+      void openStepTwoTriggerProductPicker(matchedProductIds, {
+        mode: "collection",
+        summary:
+          pendingCollectionIds.length > 2
+            ? `Collection selection: ${summaryLabel} +${pendingCollectionIds.length - 2} more`
+            : `Collection selection: ${summaryLabel}`,
+      });
     }, 0);
+  };
+  const handleCustomFilterTriggerProducts = async () => {
+    await openStepTwoTriggerProductPicker(undefined, {
+      mode: "custom",
+      summary: "Custom filter with Shopify product picker",
+    });
   };
   const selectBxgyRewardProducts = async (ruleIndex: number) => {
     const targetRule = bxgyDiscountRules[ruleIndex];
@@ -3407,10 +3440,12 @@ export function CreateNewOffer({
                 draft={campaignDraft}
                 actions={campaignDraftActions}
                 totalStoreProductsCount={allStoreProductIds.length}
+                activeTriggerSelectionMode={triggerSelectionMode}
+                activeTriggerSelectionSummary={triggerSelectionSummary}
                 onSelectAllTriggerProducts={handleSelectAllTriggerProducts}
                 onSelectTriggerProductsByCollection={handleSelectTriggerProductsByCollection}
                 onExcludeTriggerProducts={() => void handleExcludeTriggerProducts()}
-                onCustomFilterTriggerProducts={() => void handleSelectProducts("normal")}
+                onCustomFilterTriggerProducts={() => void handleCustomFilterTriggerProducts()}
                 bars={orderedCompositionBars}
                 modules={compositionModules}
                 showCountdownBlock={showCountdownBlock}
