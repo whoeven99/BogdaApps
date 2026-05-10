@@ -1352,12 +1352,12 @@ function renderDifferentProductsPoolControlHtml(offer, selectedRule, borderColor
 
   return `<div style="margin-top:10px;border:1px solid ${esc(
     borderColor,
-  )};border-radius:10px;padding:10px;background:#ffffff;" onclick="event.stopPropagation();" onmousedown="event.stopPropagation();">
+  )};border-radius:10px;padding:10px;background:#ffffff;box-sizing:border-box;max-width:100%;overflow:hidden;" onclick="event.stopPropagation();" onmousedown="event.stopPropagation();">
     <div style="font-size:11px;font-weight:600;color:#5c6166;margin-bottom:6px;">Eligible product</div>
     <select
-      style="width:100%;height:34px;border:1px solid ${esc(
+      style="display:block;width:100%;max-width:100%;min-width:0;height:34px;border:1px solid ${esc(
         borderColor,
-      )};border-radius:8px;background:#ffffff;color:#1c1f23;padding:0 10px;font-size:12px;"
+      )};border-radius:8px;background:#ffffff;color:#1c1f23;padding:0 10px;font-size:12px;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
       onclick="event.stopPropagation();"
       onmousedown="event.stopPropagation();"
       onchange="if(this.value){ window.ciwiOpenEligibleProduct(this.value); }"
