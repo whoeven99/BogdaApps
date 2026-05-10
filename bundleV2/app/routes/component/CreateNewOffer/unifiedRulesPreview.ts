@@ -95,6 +95,24 @@ function mapProducts(ids: string[], selectedProducts: SelectedPreviewProduct[]):
     }));
 }
 
+function mapDifferentProductsPool(
+  ids: string[],
+  selectedProducts: SelectedPreviewProduct[],
+): PreviewProduct[] {
+  return ids
+    .map((productId) =>
+      selectedProducts.find((product) => String(product.id) === String(productId)),
+    )
+    .filter((product): product is SelectedPreviewProduct => Boolean(product))
+    .slice(0, 4)
+    .map((product) => ({
+      image: product.image,
+      name: product.title,
+      variant: "Eligible product",
+      actionLabel: "Choose",
+    }));
+}
+
 function buildStandardRuleItem(
   rule: UnifiedRuleNode,
   index: number,
@@ -275,7 +293,7 @@ function buildDifferentProductsItem(
       : rule.scope.kind === "buy_get_products"
         ? rule.scope.buyProductIds
         : [];
-  const scopedProducts = mapProducts(productPoolIds, params.selectedProducts);
+  const scopedProducts = mapDifferentProductsPool(productPoolIds, params.selectedProducts);
   const scopedCount = productPoolIds.length;
 
   if (

@@ -632,6 +632,13 @@ function DifferentProductsRuleBarDetail({
     value: String(product.id),
   }));
   const scopedCount = Array.isArray(rule.buyProductIds) ? rule.buyProductIds.length : 0;
+  const scopedIds = new Set((rule.buyProductIds || []).map((id) => String(id)));
+  const toggleScopedProduct = (productId: string) => {
+    const nextIds = scopedIds.has(productId)
+      ? (rule.buyProductIds || []).filter((id) => String(id) !== productId)
+      : [...(rule.buyProductIds || []), productId];
+    onChange({ buyProductIds: nextIds });
+  };
 
   return (
     <BuilderBarCard bar={bar} actions={headerActions}>
@@ -688,6 +695,40 @@ function DifferentProductsRuleBarDetail({
             placeholder="Select the products eligible for this quantity break"
           />
         </label>
+        {draft.selectedProductsData.length > 0 ? (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {draft.selectedProductsData.map((product) => {
+              const productId = String(product.id);
+              const isSelected = scopedIds.has(productId);
+              return (
+                <button
+                  key={productId}
+                  type="button"
+                  onClick={() => toggleScopedProduct(productId)}
+                  className={`flex items-start gap-3 rounded-[12px] border px-3 py-3 text-left transition ${
+                    isSelected
+                      ? "border-[#008060] bg-[#f0f9f4] shadow-[0_0_0_1px_rgba(0,128,96,0.08)]"
+                      : "border-[#dfe3e8] bg-white hover:border-[#9fb4aa]"
+                  }`}
+                >
+                  <img
+                    src={product.image}
+                    alt={product.title}
+                    className="h-12 w-12 rounded-[10px] border border-[#edf1f4] object-cover"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13px] font-medium text-[#1c1f23]">
+                      {product.title}
+                    </span>
+                    <span className="mt-1 block text-[12px] text-[#5c6166]">
+                      {isSelected ? "Included in this bar" : "Click to include in this bar"}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
         <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
           {draft.selectedProductsData.length > 0
             ? `${scopedCount} products are scoped to this bar. Different bars can target different product combinations.`

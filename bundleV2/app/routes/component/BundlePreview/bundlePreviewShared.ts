@@ -19,6 +19,7 @@ export type PreviewProduct = {
   image: string;
   name: string;
   variant?: string;
+  actionLabel?: string;
 };
 
 export type ProductBundlePreview = {
@@ -198,6 +199,49 @@ export function renderBundlePreviewHtml({
 
   function renderProductsHtml(products?: PreviewProduct[]): string {
     if (!showProductImages || !products || products.length === 0) return "";
+    const showChooser = products.some((product) => product.actionLabel);
+    if (showChooser) {
+      return `<div style="display:grid;gap:8px;margin-bottom:8px;">
+        ${products
+          .map(
+            (product) => `
+              <div style="display:flex;align-items:center;gap:10px;border:1px solid ${esc(
+                borderColor,
+              )};border-radius:10px;padding:8px 10px;background:#ffffff;">
+                <div style="width:44px;height:44px;border-radius:10px;overflow:hidden;flex-shrink:0;border:1px solid ${esc(
+                  borderColor,
+                )};">
+                  <img src="${esc(product.image)}" alt="${esc(
+                    product.name,
+                  )}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none'" />
+                </div>
+                <div style="min-width:0;flex:1;">
+                  <div style="font-size:12px;font-weight:600;color:#1c1f23;line-height:1.35;">${esc(
+                    product.name,
+                  )}</div>
+                  ${
+                    product.variant
+                      ? `<div style="margin-top:2px;font-size:11px;color:#6b7280;">${esc(
+                          product.variant,
+                        )}</div>`
+                      : ""
+                  }
+                </div>
+                ${
+                  product.actionLabel
+                    ? `<span style="flex-shrink:0;border-radius:999px;background:${esc(
+                        accentColor,
+                      )};color:${esc(labelColor)};font-size:10px;font-weight:600;padding:5px 8px;">${esc(
+                        product.actionLabel,
+                      )}</span>`
+                    : ""
+                }
+              </div>
+            `,
+          )
+          .join("")}
+      </div>`;
+    }
     return `<div class="create-offer-preview-products" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
       ${products
         .map(
