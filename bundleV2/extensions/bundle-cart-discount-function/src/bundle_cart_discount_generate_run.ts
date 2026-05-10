@@ -538,7 +538,6 @@ export function bundleCartDiscountGenerateRun(
   input: CartInput,
 ): CartLinesDiscountsGenerateRunResult {
   const shopAny = input.shop as unknown as {
-    metafield?: { jsonValue?: unknown; value?: unknown; type?: string } | null;
     offersProd?: { jsonValue?: unknown; type?: string } | null;
     offersTest?: { jsonValue?: unknown; type?: string } | null;
     bundleEnabledProd?: { jsonValue?: unknown; type?: string } | null;
@@ -546,28 +545,19 @@ export function bundleCartDiscountGenerateRun(
   };
   const discountAny = input.discount as unknown as {
     appOwnedOffers?: { jsonValue?: unknown; value?: unknown; type?: string } | null;
-    defaultAppOffers?: { jsonValue?: unknown; value?: unknown; type?: string } | null;
     legacyOffers?: { jsonValue?: unknown; value?: unknown; type?: string } | null;
   };
-  const shopMetafield = shopAny.metafield as MetafieldSnapshot;
   const discountAppOwnedMetafield = discountAny.appOwnedOffers as MetafieldSnapshot;
-  const discountDefaultAppMetafield = discountAny.defaultAppOffers as MetafieldSnapshot;
   const discountLegacyMetafield = discountAny.legacyOffers as MetafieldSnapshot;
-  // 运行时优先读 discount owner 的 app-owned 配置，再尝试 legacy namespace，最后回退到 shop.metafield。
+  // 运行时优先读 discount owner 的 app-owned 配置，再尝试 legacy namespace。
   const activeOffersMetafield =
     discountAppOwnedMetafield ??
-    discountDefaultAppMetafield ??
-    discountLegacyMetafield ??
-    shopMetafield;
+    discountLegacyMetafield;
   const fallbackOffersSource = discountAppOwnedMetafield
     ? "discount_app_owned"
-    : discountDefaultAppMetafield
-      ? "discount_default_app"
-      : discountLegacyMetafield
-        ? "discount_legacy"
-        : shopMetafield
-          ? "shop"
-          : null;
+    : discountLegacyMetafield
+      ? "discount_legacy"
+      : null;
   const fallbackOffersPayload = activeOffersMetafield?.jsonValue as
     | OfferMetafieldPayload
     | null
@@ -634,18 +624,14 @@ export function bundleCartDiscountGenerateRun(
 
   log("shop_metafields_snapshot", {
     discountAppOwnedOffers: summarizeMetafield(discountAppOwnedMetafield),
-    discountDefaultAppOffers: summarizeMetafield(discountDefaultAppMetafield),
     discountLegacyOffers: summarizeMetafield(discountLegacyMetafield),
-    shopOffers: summarizeMetafield(shopMetafield),
     offersProd: summarizeMetafield(shopAny.offersProd as MetafieldSnapshot),
     offersTest: summarizeMetafield(shopAny.offersTest as MetafieldSnapshot),
     bundleEnabledProd: summarizeMetafield(shopAny.bundleEnabledProd as MetafieldSnapshot),
     bundleEnabledTest: summarizeMetafield(shopAny.bundleEnabledTest as MetafieldSnapshot),
     rawValueLens: {
       discountAppOwned: String(discountAppOwnedMetafield?.value || "").length,
-      discountDefaultApp: String(discountDefaultAppMetafield?.value || "").length,
       discountLegacy: String(discountLegacyMetafield?.value || "").length,
-      shop: String(shopMetafield?.value || "").length,
     },
     hasEnvConfig,
     prodEnabled,

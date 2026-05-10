@@ -25,35 +25,17 @@ query CartInput {
     }
   }
   shop {
-    metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-offers") {
-      jsonValue
-      value
-      type
-    }
     offersProd: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-offers-prod") {
       jsonValue
-      value
-      type
     }
     offersTest: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-offers-test") {
       jsonValue
-      value
-      type
-    }
-    offersActiveEnv: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-offers-active-env") {
-      jsonValue
-      value
-      type
     }
     bundleEnabledProd: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-enabled-prod") {
       jsonValue
-      value
-      type
     }
     bundleEnabledTest: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-enabled-test") {
       jsonValue
-      value
-      type
     }
   }
   localization {
@@ -64,18 +46,9 @@ query CartInput {
   discount {
     appOwnedOffers: metafield(namespace: "$app:ciwi_bundle", key: "offers") {
       jsonValue
-      value
-      type
-    }
-    defaultAppOffers: metafield(key: "offers") {
-      jsonValue
-      value
-      type
     }
     legacyOffers: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-offers") {
       jsonValue
-      value
-      type
     }
     discountClasses
   }
