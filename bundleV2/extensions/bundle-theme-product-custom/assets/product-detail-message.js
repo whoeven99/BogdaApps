@@ -1315,13 +1315,7 @@ function getDifferentProductsCatalog(offer) {
   return parseSelectedProductsCatalog(offer?.selectedProductsJson);
 }
 
-function renderDifferentProductsPoolHtml(
-  offer,
-  selectedRule,
-  accentColor,
-  borderColor,
-  labelColor,
-) {
+function renderDifferentProductsPoolControlHtml(offer, selectedRule, borderColor) {
   if (!selectedRule || !Array.isArray(selectedRule.buyProductIds) || !selectedRule.buyProductIds.length) {
     return "";
   }
@@ -1335,58 +1329,41 @@ function renderDifferentProductsPoolHtml(
     .filter(Boolean);
 
   if (!poolProducts.length) {
-    return `<div style="margin-top:12px;border:1px dashed ${esc(
+    return `<div style="margin-top:10px;border:1px dashed ${esc(
       borderColor,
-    )};border-radius:12px;padding:12px;background:#ffffff;color:#5c6166;font-size:12px;">
+    )};border-radius:10px;padding:10px;background:#ffffff;color:#5c6166;font-size:12px;">
       Included trigger products will appear here after the product pool is loaded.
     </div>`;
   }
 
-  const itemsHtml = poolProducts
-    .map((product) => {
+  const hasCurrent = poolProducts.some(
+    (product) => currentProductGid && String(product.productId) === String(currentProductGid),
+  );
+  const optionHtml = [
+    `<option value=""${hasCurrent ? "" : " selected"}>Choose included trigger product</option>`,
+    ...poolProducts.map((product) => {
       const isCurrent = currentProductGid && String(product.productId) === String(currentProductGid);
       const href = product.handle ? `/products/${encodeURIComponent(product.handle)}` : "";
-      const actionLabel = isCurrent ? "Current trigger product" : "Open product";
-      const actionHtml = href && !isCurrent
-        ? `<a href="${esc(href)}" style="flex-shrink:0;border-radius:999px;background:${esc(
-            accentColor,
-          )};color:${esc(labelColor)};font-size:10px;font-weight:600;padding:6px 9px;text-decoration:none;">${esc(
-            actionLabel,
-          )}</a>`
-        : `<span style="flex-shrink:0;border-radius:999px;background:${
-            isCurrent ? "#eef6f3" : "#f3f4f6"
-          };color:${isCurrent ? esc(accentColor) : "#4b5563"};font-size:10px;font-weight:600;padding:6px 9px;">${esc(
-            actionLabel,
-          )}</span>`;
-      return `<div style="display:flex;align-items:center;gap:10px;border:1px solid ${esc(
-        borderColor,
-      )};border-radius:10px;padding:9px 10px;background:#ffffff;">
-        ${
-          product.image
-            ? `<img src="${esc(product.image)}" alt="${esc(product.title || "Product")}" style="width:44px;height:44px;border-radius:10px;object-fit:cover;flex-shrink:0;border:1px solid ${esc(
-                borderColor,
-              )};" />`
-            : ""
-        }
-        <div style="min-width:0;flex:1;">
-          <div style="font-size:12px;font-weight:600;color:#1c1f23;line-height:1.35;">${esc(
-            product.title || "Included trigger product",
-          )}</div>
-          <div style="margin-top:2px;font-size:11px;color:#6b7280;">Included in this bar's trigger subset</div>
-        </div>
-        ${actionHtml}
-      </div>`;
-    })
-    .join("");
+      return `<option value="${esc(href)}"${isCurrent ? " selected" : ""}>${esc(
+        product.title || "Included trigger product",
+      )}${isCurrent ? " (Current)" : ""}</option>`;
+    }),
+  ].join("");
 
-  return `<div style="margin-top:12px;border:1px solid ${esc(
+  return `<div style="margin-top:10px;border:1px solid ${esc(
     borderColor,
-  )};border-radius:12px;padding:12px;background:#f8faf9;">
-    <div style="font-size:13px;font-weight:600;color:#1c1f23;">Included trigger products for this bar</div>
-    <div style="margin-top:4px;font-size:12px;color:#5c6166;">This bar narrows the trigger product pool. Open another included product page to continue the same shared discount flow.</div>
-    <div style="display:grid;gap:8px;margin-top:10px;">
-      ${itemsHtml}
-    </div>
+  )};border-radius:10px;padding:10px;background:#ffffff;" onclick="event.stopPropagation();" onmousedown="event.stopPropagation();">
+    <div style="font-size:11px;font-weight:600;color:#5c6166;margin-bottom:6px;">Eligible product</div>
+    <select
+      style="width:100%;height:34px;border:1px solid ${esc(
+        borderColor,
+      )};border-radius:8px;background:#ffffff;color:#1c1f23;padding:0 10px;font-size:12px;"
+      onclick="event.stopPropagation();"
+      onmousedown="event.stopPropagation();"
+      onchange="if(this.value){ window.ciwiOpenEligibleProduct(this.value); }"
+    >
+      ${optionHtml}
+    </select>
   </div>`;
 }
 
@@ -1956,6 +1933,12 @@ window.ciwiHandleBundleAddToCart = function(event) {
   } else {
     console.error("[ciwi] Add to cart form not found");
   }
+};
+
+window.ciwiOpenEligibleProduct = function(url) {
+  const href = String(url || "").trim();
+  if (!href) return;
+  window.location.assign(href);
 };
 
 window.ciwiSelectBundleVariant = function(barId, productId, variantId) {
@@ -2546,23 +2529,14 @@ function renderBundlePreviewHtml(offer) {
         original: formatPrice(amounts.originalTotal),
         badge: rule.badge || (isFeatured ? "Most Popular" : ""),
         saveLabel: `SAVE ${formatPrice(amounts.saved)}`,
+        chooserHtml: renderDifferentProductsPoolControlHtml(
+          offer,
+          rule,
+          borderColor,
+        ),
       };
     }),
     ];
-
-    const selectedRule =
-      differentRules.find((rule) => Number(rule.count) === Number(selectedCount)) ||
-      differentRules.find((rule) => !!rule.isDefault) ||
-      differentRules[0];
-    const productPoolHtml = selectedRule
-      ? renderDifferentProductsPoolHtml(
-          offer,
-          selectedRule,
-          accentColor,
-          borderColor,
-          labelColor,
-        )
-      : "";
 
     const itemsHtml = items
       .map((item) => {
@@ -2587,6 +2561,7 @@ function renderBundlePreviewHtml(offer) {
             ? `<div class="create-offer-style-preview-item-subtitle">${esc(item.saveLabel)}</div>`
             : ""
         }
+        ${item.chooserHtml || ""}
         <div class="create-offer-style-preview-item-price">${esc(item.price)}</div>
         ${
           item.original
@@ -2609,7 +2584,6 @@ function renderBundlePreviewHtml(offer) {
       <div class="create-offer-style-preview-list create-offer-style-preview-list--${layoutFormat}">
         ${itemsHtml}
       </div>
-      ${productPoolHtml}
       ${showCustomButton ? `<button class="create-offer-preview-button" onclick="window.ciwiHandleBundleAddToCart()" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
         ${esc(buttonText)}
       </button>` : ""}

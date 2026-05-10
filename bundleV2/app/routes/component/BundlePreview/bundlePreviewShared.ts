@@ -197,51 +197,38 @@ export function renderBundlePreviewHtml({
     ? layoutFormat
     : "vertical";
 
-  function renderProductsHtml(products?: PreviewProduct[]): string {
-    if (!showProductImages || !products || products.length === 0) return "";
+  function renderProductChooserHtml(products?: PreviewProduct[]): string {
+    if (!products || products.length === 0) return "";
     const showChooser = products.some((product) => product.actionLabel);
-    if (showChooser) {
-      return `<div style="display:grid;gap:8px;margin-bottom:8px;">
-        ${products
-          .map(
-            (product) => `
-              <div style="display:flex;align-items:center;gap:10px;border:1px solid ${esc(
-                borderColor,
-              )};border-radius:10px;padding:8px 10px;background:#ffffff;">
-                <div style="width:44px;height:44px;border-radius:10px;overflow:hidden;flex-shrink:0;border:1px solid ${esc(
-                  borderColor,
-                )};">
-                  <img src="${esc(product.image)}" alt="${esc(
-                    product.name,
-                  )}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none'" />
-                </div>
-                <div style="min-width:0;flex:1;">
-                  <div style="font-size:12px;font-weight:600;color:#1c1f23;line-height:1.35;">${esc(
-                    product.name,
-                  )}</div>
-                  ${
-                    product.variant
-                      ? `<div style="margin-top:2px;font-size:11px;color:#6b7280;">${esc(
-                          product.variant,
-                        )}</div>`
-                      : ""
-                  }
-                </div>
-                ${
-                  product.actionLabel
-                    ? `<span style="flex-shrink:0;border-radius:999px;background:${esc(
-                        accentColor,
-                      )};color:${esc(labelColor)};font-size:10px;font-weight:600;padding:5px 8px;">${esc(
-                        product.actionLabel,
-                      )}</span>`
-                    : ""
-                }
-              </div>
-            `,
-          )
-          .join("")}
-      </div>`;
-    }
+    if (!showChooser) return "";
+    const optionHtml = products
+      .map(
+        (product, index) =>
+          `<option${index === 0 ? " selected" : ""}>${esc(product.name)}</option>`,
+      )
+      .join("");
+    const buttonLabel = products.find((product) => product.actionLabel)?.actionLabel || "Choose";
+    return `<div style="margin-top:10px;border:1px solid ${esc(
+      borderColor,
+    )};border-radius:10px;padding:10px;background:#ffffff;">
+      <div style="font-size:11px;font-weight:600;color:#5c6166;margin-bottom:6px;">Eligible product</div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <select disabled style="flex:1;min-width:0;height:34px;border:1px solid ${esc(
+          borderColor,
+        )};border-radius:8px;background:#ffffff;color:#1c1f23;padding:0 10px;font-size:12px;">
+          ${optionHtml}
+        </select>
+        <span style="flex-shrink:0;border-radius:999px;background:${esc(
+          accentColor,
+        )};color:${esc(labelColor)};font-size:10px;font-weight:600;padding:6px 10px;">${esc(
+          buttonLabel,
+        )}</span>
+      </div>
+    </div>`;
+  }
+
+  function renderProductsGalleryHtml(products?: PreviewProduct[]): string {
+    if (!showProductImages || !products || products.length === 0) return "";
     return `<div class="create-offer-preview-products" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
       ${products
         .map(
@@ -265,14 +252,16 @@ export function renderBundlePreviewHtml({
     const featuredStyle = item.featured 
       ? `border-color: ${esc(accentColor)} !important; background: ${esc(cardBackgroundColor)} !important; box-shadow: 0 8px 18px ${esc(accentColor)}25 !important; cursor: pointer;`
       : `border-color: ${esc(borderColor)} !important; background: ${esc(cardBackgroundColor)} !important; cursor: pointer;`;
-      
+    const chooserHtml = renderProductChooserHtml(item.products);
+    const galleryHtml = chooserHtml ? "" : renderProductsGalleryHtml(item.products);
+
     return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}">
       ${
         item.badge
           ? `<div class="create-offer-style-preview-badge" style="background:${esc(accentColor)} !important; color:${esc(labelColor)} !important;">${esc(item.badge)}</div>`
           : ""
       }
-      ${renderProductsHtml(item.products)}
+      ${galleryHtml}
       <div class="create-offer-style-preview-item-title">${esc(item.title)}</div>
       <div class="create-offer-style-preview-item-subtitle">${esc(item.subtitle)}</div>
       ${
@@ -280,6 +269,7 @@ export function renderBundlePreviewHtml({
           ? `<div class="create-offer-style-preview-item-subtitle">${esc(item.saveLabel)}</div>`
           : ""
       }
+      ${chooserHtml}
       <div class="create-offer-style-preview-item-price">${esc(item.price)}</div>
       ${
         item.original
@@ -377,7 +367,7 @@ export function renderBundlePreviewHtml({
             </div>
             ${
               productBundlePreview.products.length > 0
-                ? `<div style="margin-top:12px;">${renderProductsHtml(productBundlePreview.products)}</div>`
+                ? `<div style="margin-top:12px;">${renderProductsGalleryHtml(productBundlePreview.products)}</div>`
                 : `<div style="margin-top:12px; font-size:12px; color:#8c9196;">Add bundle products to preview this module.</div>`
             }
           </div>
