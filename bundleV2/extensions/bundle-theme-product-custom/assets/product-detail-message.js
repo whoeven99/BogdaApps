@@ -679,17 +679,28 @@ function parseFreeGiftConfig(selectedProductsJson, discountRulesJson) {
 
 function parseCompleteBundleConfig(selectedProductsJson) {
   if (typeof selectedProductsJson !== "string" || !selectedProductsJson.trim()) {
-    return { bars: [] };
+    return { triggerProductIds: [], bars: [] };
   }
   try {
     const parsed = JSON.parse(selectedProductsJson);
     const bars = Array.isArray(parsed?.bars) ? parsed.bars : [];
+    const triggerProductIds = Array.isArray(parsed?.triggerProductIds)
+      ? parsed.triggerProductIds.map((id) => String(id || "").trim()).filter(Boolean)
+      : Array.isArray(parsed?.productIds)
+        ? parsed.productIds.map((id) => String(id || "").trim()).filter(Boolean)
+        : [];
     return {
+      triggerProductIds,
       bars: bars
         .filter((bar) => bar && typeof bar === "object" && bar.id)
         .map((bar) => {
           const barMode = String(bar?.pricing?.mode || "full_price");
           const barValue = Number(bar?.pricing?.value) || 0;
+          const minQuantity = Math.max(1, Math.trunc(Number(bar?.minQuantity) || 1));
+          const maxQuantity = Math.max(
+            minQuantity,
+            Math.trunc(Number(bar?.maxQuantity) || Number(bar?.quantity) || 1),
+          );
           const products = Array.isArray(bar.products)
             ? bar.products
                 .filter((p) => p && typeof p === "object" && p.productId)
@@ -733,14 +744,17 @@ function parseCompleteBundleConfig(selectedProductsJson) {
             type: bar.type === "bxgy" ? "bxgy" : "quantity-break-same",
             title: String(bar.title || ""),
             subtitle: String(bar.subtitle || ""),
-            quantity: Math.max(1, Math.trunc(Number(bar.quantity) || 1)),
+            minQuantity,
+            maxQuantity,
+            excludeTriggerProduct: bar?.excludeTriggerProduct !== false,
+            quantity: maxQuantity,
             pricing: { mode: barMode, value: barValue },
             products,
           };
         }),
     };
   } catch {
-    return { bars: [] };
+    return { triggerProductIds: [], bars: [] };
   }
 }
 
@@ -1110,8 +1124,62 @@ function resolveCompleteBundleVariant(bar, product) {
   return (product.variants || []).find((v) => String(v.id) === String(vid)) || product.variants?.[0] || null;
 }
 
+function getCurrentProductSummary() {
+  const configEl = document.getElementById("ciwi-bundles-config");
+  if (configEl) {
+    try {
+      const config = JSON.parse(configEl.textContent || "{}");
+      return {
+        title:
+          String(config?.productTitle || config?.title || "").trim() ||
+          String(window?.ShopifyAnalytics?.meta?.product?.title || "").trim() ||
+          "Current product",
+        image:
+          String(config?.productImage || config?.featuredImage || "").trim() ||
+          "",
+      };
+    } catch {}
+  }
+  return {
+    title: String(window?.ShopifyAnalytics?.meta?.product?.title || "").trim() || "Current product",
+    image: "",
+  };
+}
+
+function getCompleteBundleAccessoryProducts(config, bar) {
+  const currentProductId = getCurrentProductGid();
+  return (bar?.products || []).filter((product) => {
+    if (!bar?.excludeTriggerProduct) return true;
+    if (currentProductId && productIdsMatch(currentProductId, product.productId)) return false;
+    return !(config?.triggerProductIds || []).some((triggerId) =>
+      productIdsMatch(triggerId, product.productId),
+    );
+  });
+}
+
+function getSelectedCompleteBundleAccessoryIds(config, bar) {
+  const pool = getCompleteBundleAccessoryProducts(config, bar);
+  const allowedIds = new Set(pool.map((product) => String(product.productId)));
+  const rawMap = window.__ciwiBundleState?.selectedCompleteBundleProducts?.[bar.id] || {};
+  const explicitIds = Object.keys(rawMap).filter(
+    (productId) => rawMap[productId] && allowedIds.has(String(productId)),
+  );
+  const minQuantity = Math.max(1, Math.trunc(Number(bar?.minQuantity) || 1));
+  const maxQuantity = Math.max(
+    minQuantity,
+    Math.trunc(Number(bar?.maxQuantity) || Number(bar?.quantity) || 1),
+  );
+  const selectedIds = explicitIds.length
+    ? explicitIds.slice(0, maxQuantity)
+    : pool.slice(0, minQuantity).map((product) => String(product.productId));
+  return Array.from(new Set(selectedIds));
+}
+
 /** 渲染单个商品块（缩略图、标题、折后价/原价、变体下拉） */
-function buildOneCompleteBundleProductHtml(bar, product) {
+function buildOneCompleteBundleProductHtml(bar, product, options) {
+  const selected = options?.selected !== false;
+  const selectable = options?.selectable === true;
+  const disabled = options?.disabled === true;
   const v = resolveCompleteBundleVariant(bar, product);
   const base = parseMoneyStringToNumber(v?.price || product.price);
   const { final, original } = applyCompleteBundleProductPricing(
@@ -1139,6 +1207,15 @@ function buildOneCompleteBundleProductHtml(bar, product) {
       : "";
   return `<div style="${cardStyle}">
     <div style="display:flex;align-items:flex-start;gap:8px;">
+      ${
+        selectable
+          ? `<input type="checkbox" style="margin-top:2px;flex-shrink:0;" ${
+              selected ? "checked" : ""
+            } ${disabled ? "disabled" : ""} onchange="window.ciwiToggleCompleteBundleProduct('${esc(
+              bar.id,
+            )}','${esc(product.productId)}', this.checked)" />`
+          : ""
+      }
       ${
         product.image
           ? `<img src="${esc(product.image)}" alt="${esc(product.title)}" style="width:40px;height:40px;border-radius:6px;object-fit:cover;flex-shrink:0;" />`
@@ -1628,6 +1705,7 @@ window.__ciwiBundleState = window.__ciwiBundleState || {
   selectedBundleVariants: {},
   /** complete-bundle：顾客在多个 bar 中选中的那一档（仅该档加入购物车） */
   selectedCompleteBundleBarId: null,
+  selectedCompleteBundleProducts: {},
   subscriptionMode: null,
   selectedSellingPlanId: "",
 };
@@ -1967,6 +2045,42 @@ window.ciwiSelectBundleVariant = function(barId, productId, variantId) {
   }
 };
 
+window.ciwiToggleCompleteBundleProduct = function (barId, productId, checked) {
+  if (!window.__ciwiBundleState.selectedCompleteBundleProducts) {
+    window.__ciwiBundleState.selectedCompleteBundleProducts = {};
+  }
+  const currentOffer = getCurrentOffer(offersConfigCache);
+  const config =
+    currentOffer?.offerType === "complete-bundle"
+      ? parseCompleteBundleConfig(currentOffer.selectedProductsJson)
+      : null;
+  const bar = config?.bars.find((entry) => String(entry.id) === String(barId));
+  if (!bar) return;
+  const selectedIds = getSelectedCompleteBundleAccessoryIds(config, bar);
+  const maxQuantity = Math.max(
+    Math.max(1, Math.trunc(Number(bar?.minQuantity) || 1)),
+    Math.trunc(Number(bar?.maxQuantity) || Number(bar?.quantity) || 1),
+  );
+  const nextSet = new Set(selectedIds);
+  if (checked) {
+    if (nextSet.size >= maxQuantity && !nextSet.has(String(productId))) {
+      return;
+    }
+    nextSet.add(String(productId));
+  } else {
+    nextSet.delete(String(productId));
+  }
+  window.__ciwiBundleState.selectedCompleteBundleProducts[barId] = {};
+  Array.from(nextSet).forEach((id) => {
+    window.__ciwiBundleState.selectedCompleteBundleProducts[barId][id] = true;
+  });
+  const wrap = document.querySelector(".ciwi-bundle-wrapper");
+  if (wrap && currentOffer && currentOffer.offerType === "complete-bundle") {
+    const html = renderBundlePreviewHtml(currentOffer);
+    if (html) wrap.innerHTML = html;
+  }
+};
+
 /** 顾客切换「生效」的 complete-bundle 栏并刷新 widget */
 window.ciwiSelectCompleteBundleBar = function (barId) {
   if (!window.__ciwiBundleState) return;
@@ -2117,7 +2231,16 @@ async function performCompleteBundleCartAdd() {
     if (!barToUse || !Array.isArray(barToUse.products) || !barToUse.products.length) {
       return false;
     }
-    for (const product of barToUse.products) {
+    const mainVariantId = toAjaxVariantId(getSelectedVariantId());
+    if (!mainVariantId) return false;
+    const quantity = getCurrentQuantityFromThemeForm();
+    items.push({ id: Number(mainVariantId), quantity });
+    const selectedAccessoryIds = new Set(getSelectedCompleteBundleAccessoryIds(config, barToUse));
+    if (selectedAccessoryIds.size < Math.max(1, Math.trunc(Number(barToUse.minQuantity) || 1))) {
+      return false;
+    }
+    for (const product of getCompleteBundleAccessoryProducts(config, barToUse)) {
+      if (!selectedAccessoryIds.has(String(product.productId))) continue;
       const selectedMap = window.__ciwiBundleState?.selectedBundleVariants?.[barToUse.id] || {};
       const variantId = toAjaxVariantId(
         selectedMap[product.productId] ||
@@ -2128,10 +2251,11 @@ async function performCompleteBundleCartAdd() {
       if (!variantId) continue;
       items.push({ id: Number(variantId), quantity: 1 });
     }
-    if (!items.length) return false;
+    if (items.length <= 1) return false;
     const res = await fetch("/cart/add.js", {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
+      credentials: "same-origin",
       body: JSON.stringify({ items }),
     });
     const body = await res.json().catch(() => ({}));
@@ -2198,14 +2322,38 @@ function renderBundlePreviewHtml(offer) {
       window.__ciwiBundleState.selectedCompleteBundleBarId = completeBundle.bars[0].id;
     }
     const selectedBarId = String(window.__ciwiBundleState.selectedCompleteBundleBarId || "");
+    const currentProduct = getCurrentProductSummary();
+    const currentUnitPrice = getCurrentUnitPrice();
+
+    const singleHtml = `<div class="create-offer-style-preview-item" style="border:1px solid ${esc(
+      borderColor,
+    )};border-radius:8px;padding:10px;background:${esc(cardBackgroundColor)};">
+      <div style="display:flex;align-items:flex-start;gap:8px;">
+        <span style="margin-top:3px;width:16px;height:16px;border:2px solid ${esc(
+          borderColor,
+        )};border-radius:999px;flex-shrink:0;"></span>
+        <span style="flex:1;min-width:0;">
+          <div class="create-offer-style-preview-item-title" style="color:${esc(titleColor)};">${esc(
+            currentProduct.title || "Current product",
+          )}</div>
+          <div class="create-offer-style-preview-item-subtitle" style="font-size:12px;color:#5c6166;margin-top:2px;">Standard price</div>
+        </span>
+        <span style="font-size:13px;font-weight:700;color:#1c1f23;">${esc(
+          formatPrice(currentUnitPrice),
+        )}</span>
+      </div>
+    </div>`;
 
     const barsHtml = completeBundle.bars
       .map((bar) => {
         const isSelected = String(bar.id) === selectedBarId;
         const borderCol = isSelected ? accentColor : borderColor;
-        let sumOriginal = 0;
-        let sumFinal = 0;
-        for (const p of bar.products || []) {
+        const accessoryProducts = getCompleteBundleAccessoryProducts(completeBundle, bar);
+        const selectedAccessoryIds = new Set(getSelectedCompleteBundleAccessoryIds(completeBundle, bar));
+        let sumOriginal = currentUnitPrice;
+        let sumFinal = currentUnitPrice;
+        for (const p of accessoryProducts) {
+          if (!selectedAccessoryIds.has(String(p.productId))) continue;
           const v = resolveCompleteBundleVariant(bar, p);
           const base = parseMoneyStringToNumber(v?.price || p.price);
           const r = applyCompleteBundleProductPricing(
@@ -2218,7 +2366,7 @@ function renderBundlePreviewHtml(offer) {
         }
         const saved = Math.max(0, sumOriginal - sumFinal);
         const summaryHtml =
-          bar.products && bar.products.length
+          accessoryProducts && accessoryProducts.length
             ? `<div style="margin-top:8px;">
                 <div style="font-size:13px;font-weight:700;color:#1c1f23;display:flex;flex-wrap:wrap;gap:6px;align-items:baseline;">
                   <span>${esc(formatPrice(sumFinal))}</span>
@@ -2236,12 +2384,20 @@ function renderBundlePreviewHtml(offer) {
               </div>`
             : "";
         let productsHtml = "";
-        const plist = bar.products || [];
+        const plist = accessoryProducts || [];
+        const minQuantity = Math.max(1, Math.trunc(Number(bar.minQuantity) || 1));
+        const maxQuantity = Math.max(minQuantity, Math.trunc(Number(bar.maxQuantity) || Number(bar.quantity) || 1));
         for (let idx = 0; idx < plist.length; idx++) {
           if (idx > 0 && plist.length >= 2) {
             productsHtml += `<div style="display:flex;align-items:center;justify-content:center;color:#9aa0a6;font-weight:700;width:22px;flex-shrink:0;font-size:16px;">+</div>`;
           }
-          productsHtml += buildOneCompleteBundleProductHtml(bar, plist[idx]);
+          const isChecked = selectedAccessoryIds.has(String(plist[idx].productId));
+          const disableUnchecked = !isChecked && selectedAccessoryIds.size >= maxQuantity;
+          productsHtml += buildOneCompleteBundleProductHtml(bar, plist[idx], {
+            selectable: true,
+            selected: isChecked,
+            disabled: disableUnchecked,
+          });
         }
         const productsWrap =
           plist.length >= 2
@@ -2259,7 +2415,7 @@ function renderBundlePreviewHtml(offer) {
                 bar.title || "Complete the bundle",
               )}</div>
               <div class="create-offer-style-preview-item-subtitle" style="font-size:12px;color:#5c6166;margin-top:2px;">${esc(
-                bar.subtitle || `Quantity break · Qty ${bar.quantity}`,
+                bar.subtitle || `Pick ${minQuantity}-${maxQuantity} accessories`,
               )}</div>
             </span>
           </label>
@@ -2275,7 +2431,7 @@ function renderBundlePreviewHtml(offer) {
       )} !important; font-size:${esc(titleFontSize)}px !important; font-weight:${esc(
         titleFontWeight,
       )} !important;">${esc(widgetTitle)}</div>
-      <div class="create-offer-style-preview-list create-offer-style-preview-list--vertical">${barsHtml}</div>
+      <div class="create-offer-style-preview-list create-offer-style-preview-list--vertical">${singleHtml}${barsHtml}</div>
       ${
         showCustomButton
           ? `<button type="button" class="create-offer-preview-button" onclick="window.ciwiHandleCompleteBundleAddToCart(event)" style="width:100%;margin-top:12px;padding:12px;background:${esc(

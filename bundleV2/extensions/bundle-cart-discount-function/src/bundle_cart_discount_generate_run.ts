@@ -116,6 +116,9 @@ type CompleteBundleProductRow = {
 
 type CompleteBundleBarRow = {
   id: string;
+  minQuantity: number;
+  maxQuantity: number;
+  excludeTriggerProduct: boolean;
   pricing: { mode: CompleteBundlePricingMode; value: number };
   products: CompleteBundleProductRow[];
 };
@@ -242,12 +245,17 @@ function normalizePricingMode(raw: unknown): CompleteBundlePricingMode {
 /** 解析 selectedProductsJson 中的 complete-bundle bars（与后台 offerParsing 结构一致） */
 function parseCompleteBundleBarsJson(
   selectedProductsJson?: string | null,
-): CompleteBundleBarRow[] {
-  if (!selectedProductsJson) return [];
+): { triggerProductIds: string[]; bars: CompleteBundleBarRow[] } {
+  if (!selectedProductsJson) return { triggerProductIds: [], bars: [] };
   try {
     const parsed = JSON.parse(selectedProductsJson) as unknown;
+    const triggerProductIds = Array.isArray((parsed as { productIds?: unknown })?.productIds)
+      ? ((parsed as { productIds?: unknown[] }).productIds || [])
+          .map((id) => String(id || "").trim())
+          .filter(Boolean)
+      : [];
     const barsIn = (parsed as { bars?: unknown })?.bars;
-    if (!Array.isArray(barsIn)) return [];
+    if (!Array.isArray(barsIn)) return { triggerProductIds, bars: [] };
 
     const out: CompleteBundleBarRow[] = [];
     for (const rawBar of barsIn) {
@@ -262,6 +270,23 @@ function parseCompleteBundleBarsJson(
         (rawBar as { pricing?: { value?: unknown } }).pricing?.value,
       );
       const barValue = Number.isFinite(barValueRaw) ? barValueRaw : 0;
+      const minQuantityRaw = Number((rawBar as { minQuantity?: unknown }).minQuantity);
+      const minQuantity =
+        Number.isFinite(minQuantityRaw) && minQuantityRaw > 0
+          ? Math.trunc(minQuantityRaw)
+          : 1;
+      const maxQuantityRaw = Number((rawBar as { maxQuantity?: unknown }).maxQuantity);
+      const quantityRaw = Number((rawBar as { quantity?: unknown }).quantity);
+      const maxQuantity = Math.max(
+        minQuantity,
+        Number.isFinite(maxQuantityRaw) && maxQuantityRaw > 0
+          ? Math.trunc(maxQuantityRaw)
+          : Number.isFinite(quantityRaw) && quantityRaw > 0
+            ? Math.trunc(quantityRaw)
+            : 1,
+      );
+      const excludeTriggerProduct =
+        (rawBar as { excludeTriggerProduct?: unknown }).excludeTriggerProduct !== false;
 
       const productsRaw = (rawBar as { products?: unknown }).products;
       const products: CompleteBundleProductRow[] = [];
@@ -295,13 +320,16 @@ function parseCompleteBundleBarsJson(
 
       out.push({
         id,
+        minQuantity,
+        maxQuantity,
+        excludeTriggerProduct,
         pricing: { mode: barMode, value: barValue },
         products,
       });
     }
-    return out;
+    return { triggerProductIds, bars: out };
   } catch {
-    return [];
+    return { triggerProductIds: [], bars: [] };
   }
 }
 
@@ -407,87 +435,64 @@ function calculateCompleteBundleDiscounts(
       continue;
     }
 
-    const barsRaw = parseCompleteBundleBarsJson(offer.selectedProductsJson);
-    if (!barsRaw.length) {
+    const parsedConfig = parseCompleteBundleBarsJson(offer.selectedProductsJson);
+    const barsRaw = parsedConfig.bars;
+    if (!barsRaw.length || !parsedConfig.triggerProductIds.length) {
       log("complete_bundle_skip", { offerId: offer.id, reason: "no_bars" });
       continue;
     }
 
-    // 强校验：只允许按「商品数最多」的完整捆绑档位命中，不回退到单商品/较少商品档位
-    const maxProductCount = barsRaw.reduce(
-      (max, bar) => Math.max(max, Array.isArray(bar.products) ? bar.products.length : 0),
-      0,
-    );
-    if (maxProductCount < 2) {
-      log("complete_bundle_skip", {
-        offerId: offer.id,
-        reason: "max_product_count_lt_2",
-        maxProductCount,
-      });
-      continue;
-    }
-    const bars = barsRaw.filter(
-      (bar) => Array.isArray(bar.products) && bar.products.length === maxProductCount,
-    );
-    log("complete_bundle_strict_bars", {
-      offerId: offer.id,
-      maxProductCount,
-      candidateBars: bars.map((b) => b.id),
-    });
-
-    for (const bar of bars) {
+    for (const bar of barsRaw) {
       if (!bar.products.length) continue;
+      const anchorLine = cartLines.find((line) => {
+        if (line.merchandise.__typename !== "ProductVariant") return false;
+        const pid = line.merchandise.product?.id;
+        return parsedConfig.triggerProductIds.some((triggerId) => productIdsMatch(pid, triggerId));
+      });
+      if (!anchorLine) continue;
 
-      // 每个槽位 = 捆绑内的一件商品及其独立 pricing（与主题端 widget 一致）
-      const slots = bar.products.map((p) => ({
-        productId: p.productId,
-        pricing: p.pricing,
-      }));
-
-      const usage = new Map<string, number>();
-      const allocations: Array<{
+      const accessoryAllocations: Array<{
         lineId: string;
         qty: number;
         unitBase: number;
         mode: CompleteBundlePricingMode;
         value: number;
       }> = [];
-
-      let failed = false;
-      for (const slot of slots) {
-        let picked: CartLineForBundle | null = null;
-        for (const line of cartLines) {
-          if (line.merchandise.__typename !== "ProductVariant") continue;
+      for (const accessory of bar.products) {
+        const matchedLine = cartLines.find((line) => {
+          if (line.merchandise.__typename !== "ProductVariant") return false;
           const pid = line.merchandise.product?.id;
-          if (!productIdsMatch(pid, slot.productId)) continue;
-          const used = usage.get(line.id) || 0;
-          const avail = line.quantity - used;
-          if (avail <= 0) continue;
-          picked = line;
-          break;
-        }
-        if (!picked) {
-          failed = true;
-          break;
-        }
-        usage.set(picked.id, (usage.get(picked.id) || 0) + 1);
-        const unitBase = parseMoneyAmount(picked.cost?.amountPerQuantity?.amount);
-        allocations.push({
-          lineId: picked.id,
+          if (!productIdsMatch(pid, accessory.productId)) return false;
+          if (
+            bar.excludeTriggerProduct &&
+            parsedConfig.triggerProductIds.some((triggerId) => productIdsMatch(pid, triggerId))
+          ) {
+            return false;
+          }
+          return true;
+        });
+        if (!matchedLine) continue;
+        accessoryAllocations.push({
+          lineId: matchedLine.id,
           qty: 1,
-          unitBase,
-          mode: slot.pricing.mode,
-          value: slot.pricing.value,
+          unitBase: parseMoneyAmount(matchedLine.cost?.amountPerQuantity?.amount),
+          mode: accessory.pricing.mode,
+          value: accessory.pricing.value,
         });
       }
 
-      if (failed || !allocations.length) {
+      if (accessoryAllocations.length < bar.minQuantity) {
         log("complete_bundle_bar_no_match", {
           offerId: offer.id,
           barId: bar.id,
+          reason: "insufficient_accessories",
+          matchedAccessories: accessoryAllocations.length,
+          minQuantity: bar.minQuantity,
         });
         continue;
       }
+
+      const allocations = accessoryAllocations.slice(0, bar.maxQuantity);
 
       // 同一购物车行可能对应多个槽位（同款多件），合并为一条 fixedAmount，避免多条 candidate 互相覆盖
       const mergeByLine = new Map<string, { qty: number; totalDiscount: number }>();

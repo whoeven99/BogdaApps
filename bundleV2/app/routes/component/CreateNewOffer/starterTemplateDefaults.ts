@@ -22,6 +22,34 @@ export type StarterTemplateDefaults = {
   previewFallbackItems?: PreviewItem[];
 };
 
+export const COMPLETE_BUNDLE_TEMPLATE_PREVIEW_ITEMS: PreviewItem[] = [
+  {
+    id: "starter-complete-bundle-base",
+    title: "FetchLink C10 GPS Wireless Dog Fence with 2K Camera - ciwi",
+    subtitle: "Standard price",
+    price: "EUR65.00",
+  },
+  {
+    id: "starter-complete-bundle-offer",
+    title: "Complete the bundle",
+    subtitle: "Save EUR49.00!",
+    price: "EUR196.00",
+    original: "EUR245.00",
+    featured: true,
+    saveLabel: "SAVE EUR49.00",
+    products: [
+      {
+        image: "https://via.placeholder.com/48",
+        name: "FetchLink C10 GPS Wireless Dog Fence with 2K Camera - ciwi",
+      },
+      {
+        image: "https://via.placeholder.com/48",
+        name: "Casual Pink Mountain Landscape Printed White Pullover",
+      },
+    ],
+  },
+];
+
 function buildOfferSettings(
   overrides: Partial<OfferSettings> = {},
 ): OfferSettings {
@@ -122,41 +150,18 @@ export function getStarterTemplateDefaults(
             id: "starter-complete-bundle-bar",
             type: "quantity-break-same",
             title: "Complete the bundle",
-            subtitle: "Add the full set to unlock the bundle price",
-            quantity: 2,
+            subtitle: "Pick up to 3 accessories and unlock accessory savings",
+            minQuantity: 1,
+            maxQuantity: 3,
+            excludeTriggerProduct: true,
+            quantity: 3,
             products: [],
-            pricing: { mode: "full_price", value: 0 },
+            pricing: { mode: "percentage_off", value: 15 },
           },
         ],
         showCountdownBlock: false,
         countdownLabel: "Limited time offer",
-        previewFallbackItems: [
-          {
-            id: "starter-complete-bundle-base",
-            title: "FetchLink C10 GPS Wireless Dog Fence with 2K Camera - ciwi",
-            subtitle: "Standard price",
-            price: "EUR65.00",
-          },
-          {
-            id: "starter-complete-bundle-offer",
-            title: "Complete the bundle",
-            subtitle: "Save EUR49.00!",
-            price: "EUR196.00",
-            original: "EUR245.00",
-            featured: true,
-            saveLabel: "SAVE EUR49.00",
-            products: [
-              {
-                image: "https://via.placeholder.com/48",
-                name: "FetchLink C10 GPS Wireless Dog Fence with 2K Camera - ciwi",
-              },
-              {
-                image: "https://via.placeholder.com/48",
-                name: "Casual Pink Mountain Landscape Printed White Pullover",
-              },
-            ],
-          },
-        ],
+        previewFallbackItems: COMPLETE_BUNDLE_TEMPLATE_PREVIEW_ITEMS,
       };
     case "subscription":
       return {

@@ -745,6 +745,9 @@ export type CompleteBundleBar = {
   type: "quantity-break-same" | "bxgy";
   title?: string;
   subtitle?: string;
+  minQuantity?: number;
+  maxQuantity?: number;
+  excludeTriggerProduct?: boolean;
   quantity: number;
   products: CompleteBundleProduct[];
   pricing: {
@@ -754,6 +757,7 @@ export type CompleteBundleBar = {
 };
 
 export type CompleteBundleConfig = {
+  triggerProductIds?: string[];
   bars: CompleteBundleBar[];
 };
 
@@ -1686,9 +1690,12 @@ export function migrateLegacyOfferToCampaignConfig(params: {
       scope: {
         productIds: Array.from(
           new Set(
-            completeBundleConfig.bars.flatMap((bar) =>
-              bar.products.map((product) => product.productId),
-            ),
+            [
+              ...(completeBundleConfig.triggerProductIds ?? []),
+              ...completeBundleConfig.bars.flatMap((bar) =>
+                bar.products.map((product) => product.productId),
+              ),
+            ],
           ),
         ),
         markets: targetingMarkets,
@@ -1885,7 +1892,7 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
   const freeGiftRules = buildFreeGiftRulesJson(freeGift?.config.tiers ?? []);
   const completeBundleConfig = completeBundle
     ? buildCompleteBundleConfig(completeBundle.config)
-    : { bars: [] };
+    : { triggerProductIds: [], bars: [] };
 
   const offerSettings = {
     title: offerCard?.config.title || "Bundle & Save",
@@ -2001,7 +2008,7 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
             })
         : completeBundle
           ? JSON.stringify({
-              productIds: quantityBreaks ? config.scope.productIds : [],
+              productIds: completeBundleConfig.triggerProductIds ?? [],
               bars: completeBundleConfig.bars,
             })
         : config.scope.productIds.length > 0
@@ -2534,11 +2541,16 @@ export function buildFreeGiftRulesJson(tiers: FreeGiftRule[]): FreeGiftRule[] {
 export function parseCompleteBundleConfig(
   selectedProductsJson?: string | null,
 ): CompleteBundleConfig {
-  if (!selectedProductsJson) return { bars: [] };
+  if (!selectedProductsJson) return { triggerProductIds: [], bars: [] };
   try {
     const parsed = JSON.parse(selectedProductsJson) as unknown;
+    const triggerProductIds = Array.isArray((parsed as { productIds?: unknown })?.productIds)
+      ? ((parsed as { productIds?: unknown[] }).productIds || [])
+          .map((id) => String(id || "").trim())
+          .filter(Boolean)
+      : [];
     const barsInput = (parsed as { bars?: unknown })?.bars;
-    if (!Array.isArray(barsInput)) return { bars: [] };
+    if (!Array.isArray(barsInput)) return { triggerProductIds, bars: [] };
 
     const bars: CompleteBundleBar[] = [];
     for (const rawBar of barsInput) {
@@ -2550,6 +2562,19 @@ export function parseCompleteBundleConfig(
         typeRaw === "bxgy" ? "bxgy" : "quantity-break-same";
       const quantityNum = Number((rawBar as { quantity?: unknown }).quantity);
       const quantity = Number.isFinite(quantityNum) && quantityNum > 0 ? Math.trunc(quantityNum) : 1;
+      const minQuantityRaw = Number((rawBar as { minQuantity?: unknown }).minQuantity);
+      const minQuantity =
+        Number.isFinite(minQuantityRaw) && minQuantityRaw > 0
+          ? Math.trunc(minQuantityRaw)
+          : 1;
+      const maxQuantityRaw = Number((rawBar as { maxQuantity?: unknown }).maxQuantity);
+      const maxQuantityCandidate =
+        Number.isFinite(maxQuantityRaw) && maxQuantityRaw > 0
+          ? Math.trunc(maxQuantityRaw)
+          : quantity;
+      const maxQuantity = Math.max(minQuantity, maxQuantityCandidate);
+      const excludeTriggerProduct =
+        (rawBar as { excludeTriggerProduct?: unknown }).excludeTriggerProduct !== false;
 
       const pricingRaw = (rawBar as { pricing?: unknown }).pricing;
       const modeRaw = String((pricingRaw as { mode?: unknown })?.mode || "full_price");
@@ -2625,14 +2650,17 @@ export function parseCompleteBundleConfig(
         type,
         title: String((rawBar as { title?: unknown }).title || ""),
         subtitle: String((rawBar as { subtitle?: unknown }).subtitle || ""),
+        minQuantity,
+        maxQuantity,
+        excludeTriggerProduct,
         quantity,
         pricing: { mode, value },
         products,
       });
     }
-    return { bars };
+    return { triggerProductIds, bars };
   } catch {
-    return { bars: [] };
+    return { triggerProductIds: [], bars: [] };
   }
 }
 
@@ -2641,6 +2669,9 @@ export function buildCompleteBundleConfig(
 ): CompleteBundleConfig {
   const bars = Array.isArray(config?.bars) ? config.bars : [];
   return {
+    triggerProductIds: Array.isArray(config?.triggerProductIds)
+      ? config.triggerProductIds.map((id) => String(id || "").trim()).filter(Boolean)
+      : [],
     bars: bars
       .filter((bar) => bar && typeof bar === "object" && String(bar.id || "").trim())
       .map((bar) => ({
@@ -2648,7 +2679,16 @@ export function buildCompleteBundleConfig(
         type: bar.type === "bxgy" ? "bxgy" : "quantity-break-same",
         title: String(bar.title || ""),
         subtitle: String(bar.subtitle || ""),
-        quantity: Math.max(1, Math.trunc(Number(bar.quantity) || 1)),
+        minQuantity: Math.max(1, Math.trunc(Number(bar.minQuantity) || 1)),
+        maxQuantity: Math.max(
+          Math.max(1, Math.trunc(Number(bar.minQuantity) || 1)),
+          Math.trunc(Number(bar.maxQuantity) || Number(bar.quantity) || 1),
+        ),
+        excludeTriggerProduct: bar.excludeTriggerProduct !== false,
+        quantity: Math.max(
+          Math.max(1, Math.trunc(Number(bar.minQuantity) || 1)),
+          Math.trunc(Number(bar.maxQuantity) || Number(bar.quantity) || 1),
+        ),
         pricing: {
           mode: (
             ["full_price", "percentage_off", "amount_off", "fixed_price"] as const

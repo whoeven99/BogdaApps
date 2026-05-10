@@ -119,21 +119,19 @@ export function updateCompleteBundleRuleValues(
   patch: UnifiedRuleValuePatch,
 ): CompleteBundleBar[] {
   return bars.map((bar) =>
-    getCompleteBundleUnifiedRuleId(bar.id) === ruleId
-      ? {
-          ...bar,
-          ...(typeof patch.count === "number"
-            ? { quantity: Math.max(1, Math.trunc(Number(patch.count) || 1)) }
-            : null),
-          ...(patch.tierType
-            ? {
-                type:
-                  patch.tierType === "bxgy"
-                    ? "bxgy"
-                    : "quantity-break-same",
-              }
-            : null),
-        }
-      : bar,
+    getCompleteBundleUnifiedRuleId(bar.id) !== ruleId
+      ? bar
+      : (() => {
+          const minQuantity = Math.max(1, Math.trunc(Number(bar.minQuantity) || 1));
+          const nextMax =
+            typeof patch.count === "number"
+              ? Math.max(minQuantity, Math.trunc(Number(patch.count) || 1))
+              : Math.max(minQuantity, Math.trunc(Number(bar.maxQuantity) || Number(bar.quantity) || 1));
+          return {
+            ...bar,
+            maxQuantity: nextMax,
+            quantity: nextMax,
+          };
+        })(),
   );
 }

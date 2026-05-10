@@ -170,14 +170,14 @@ export function adaptCompleteBundleBars(
       bar.type === "bxgy"
         ? {
             kind: "buy_x_get_y",
-            triggerCount: Math.max(1, Math.trunc(Number(bar.quantity) || 1)),
-            buyQuantity: Math.max(1, Math.trunc(Number(bar.quantity) || 1)),
+            triggerCount: Math.max(1, Math.trunc(Number(bar.maxQuantity) || Number(bar.quantity) || 1)),
+            buyQuantity: Math.max(1, Math.trunc(Number(bar.maxQuantity) || Number(bar.quantity) || 1)),
             getQuantity: 1,
             maxUsesPerOrder: 1,
           }
         : {
             kind: "bundle_completion",
-            quantity: Math.max(1, Math.trunc(Number(bar.quantity) || 1)),
+            quantity: Math.max(1, Math.trunc(Number(bar.maxQuantity) || Number(bar.quantity) || 1)),
           },
     reward: {
       kind: "bundle_pricing",

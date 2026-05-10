@@ -35,7 +35,10 @@ import OfferComponentsDisplayCustomizer from "./OfferComponentsDisplayCustomizer
 import { ProgressiveGiftsSection } from "./ProgressiveGiftsSection";
 import ScheduleTargetingEditor from "./ScheduleTargetingEditor";
 import StepTwoCompositionBuilder from "./StepTwoCompositionBuilder";
-import { getStarterTemplateDefaults } from "./starterTemplateDefaults";
+import {
+  COMPLETE_BUNDLE_TEMPLATE_PREVIEW_ITEMS,
+  getStarterTemplateDefaults,
+} from "./starterTemplateDefaults";
 import {
   OFFER_TEXT_LIMITS,
   buildLegacyFieldsFromCampaignConfig,
@@ -869,11 +872,14 @@ export function CreateNewOffer({
   ): CompleteBundleBar => ({
     id: `bar-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     type,
-    title: type === "bxgy" ? "Buy X, Get Y Free" : "Complete the bundle",
-    subtitle: "",
-    quantity: 2,
+    title: "Complete the bundle",
+    subtitle: "Pick up to 3 accessories and unlock accessory savings",
+    minQuantity: 1,
+    maxQuantity: 3,
+    excludeTriggerProduct: true,
+    quantity: 3,
     products: [],
-    pricing: { mode: "full_price", value: 0 },
+    pricing: { mode: "percentage_off", value: 15 },
   });
 
   const handleSelectProducts = async (
@@ -1076,24 +1082,9 @@ export function CreateNewOffer({
   };
   const addCompleteBundleBar = (type: "quantity-break-same" | "bxgy") => {
     const nextBar = createDefaultCompleteBundleBar(type);
-    const seededProducts =
-      mainBundleProduct && mainBundleProduct.productId
-        ? [
-            {
-              ...mainBundleProduct,
-              pricing: mainBundleProduct.pricing ?? { mode: "full_price", value: 0 },
-              selectedVariantId:
-                mainBundleProduct.selectedVariantId ||
-                mainBundleProduct.defaultVariantId ||
-                mainBundleProduct.variants?.[0]?.id ||
-                "",
-            },
-          ]
-        : [];
     const newBar: CompleteBundleBar = {
       ...nextBar,
-      // 新增 bar 默认继承主产品，后续可在预览里继续编辑
-      products: seededProducts,
+      products: [],
     };
     setCompleteBundleBars((prev) => [...prev, newBar]);
     setActiveBundleBarId(newBar.id);
@@ -1132,17 +1123,18 @@ export function CreateNewOffer({
   const handleSelectProductsForBundleBar = async (barId: string) => {
     const targetBar = completeBundleBars.find((bar) => bar.id === barId);
     if (!targetBar) return;
-    const targetBarIndex = completeBundleBars.findIndex((bar) => bar.id === barId);
-    const isFirstBar = targetBarIndex === 0;
     const selected = await (window as any).shopify.resourcePicker({
       type: "product",
       action: "select",
-      // bar #1 仅允许一个主产品；其他 bar 允许扩展多产品
-      multiple: !isFirstBar,
+      multiple: true,
       selectionIds: targetBar.products.map((p) => ({ id: p.productId })),
     });
     if (!selected) return;
-    let mappedProducts: CompleteBundleProductDraft[] = selected.map((item: any) => ({
+    const triggerProductIds = new Set(
+      selectedProductsData.map((product) => String(product.id || "")),
+    );
+    const mappedProducts: CompleteBundleProductDraft[] = selected
+      .map((item: any) => ({
       productId: String(item.id),
       handle: String(item.handle || ""),
       title: item.title,
@@ -1164,18 +1156,8 @@ export function CreateNewOffer({
               : [],
           }))
         : [],
-    }));
-    if (isFirstBar) {
-      mappedProducts = mappedProducts.slice(0, 1);
-    } else if (mainBundleProduct?.productId) {
-      const hasMain = mappedProducts.some(
-        (product) => product.productId === mainBundleProduct.productId,
-      );
-      if (!hasMain) {
-        // 后续 bar 默认包含主产品
-        mappedProducts = [mainBundleProduct as CompleteBundleProductDraft, ...mappedProducts];
-      }
-    }
+    }))
+      .filter((product: CompleteBundleProductDraft) => !triggerProductIds.has(product.productId));
     updateCompleteBundleBar(barId, {
       products: mappedProducts.map((p) => {
         const prev = targetBar.products.find((op) => op.productId === p.productId);
@@ -1429,7 +1411,6 @@ export function CreateNewOffer({
       );
     }
   }, [initialCampaignConfig]);
-  const mainBundleProduct = completeBundleBars[0]?.products?.[0];
   const storeProductMap = useMemo(
     () =>
       new Map(
@@ -1575,83 +1556,30 @@ export function CreateNewOffer({
    * 向 Bar #2 及之后追加新商品（多选 resourcePicker，按 productId 去重后合并到该栏）
    */
   const appendProductsToBundleBar = async (barId: string) => {
-    const selected = await (window as any).shopify.resourcePicker({
-      type: "product",
-      action: "select",
-      multiple: true,
-      selectionIds: [],
-    });
-    if (!selected || !Array.isArray(selected) || selected.length === 0) return;
-    const mappedProducts: CompleteBundleProductDraft[] = selected.map((item: any) => ({
-      productId: String(item.id),
-      handle: String(item.handle || ""),
-      title: item.title,
-      image: item.images?.[0]?.originalSrc || "https://via.placeholder.com/60",
-      price: item.variants?.[0]?.price || "€0.00",
-      defaultVariantId: item.variants?.[0]?.id ? String(item.variants[0].id) : "",
-      selectedVariantId: item.variants?.[0]?.id ? String(item.variants[0].id) : "",
-      selectedOptions: {},
-      variants: Array.isArray(item.variants)
-        ? item.variants.map((variant: any) => ({
-            id: String(variant.id),
-            title: String(variant.title || ""),
-            price: String(variant.price || ""),
-            selectedOptions: Array.isArray(variant.selectedOptions)
-              ? variant.selectedOptions.map((opt: any) => ({
-                  name: String(opt.name || ""),
-                  value: String(opt.value || ""),
-                }))
-              : [],
-          }))
-        : [],
-    }));
-    setCompleteBundleBars((prev) => {
-      const targetBarIndex = prev.findIndex((bar) => bar.id === barId);
-      if (targetBarIndex <= 0) return prev;
-      const targetBar = prev[targetBarIndex];
-      const existingIds = new Set(targetBar.products.map((p) => p.productId));
-      const toAdd = mappedProducts.filter((p) => !existingIds.has(p.productId));
-      if (!toAdd.length) return prev;
-      return prev.map((bar) =>
-        bar.id !== barId
-          ? bar
-          : {
-              ...bar,
-              products: [
-                ...bar.products,
-                ...toAdd.map((p) => ({
-                  ...p,
-                  pricing: { mode: "full_price" as const, value: 0 },
-                })),
-              ],
-            },
-      );
-    });
+    await handleSelectProductsForBundleBar(barId);
   };
 
   /**
    * 仅 Bar #2 及之后：从该 bundle 栏移除单个商品（Bar1 仅默认主商品，不提供删除入口）
    */
   const removeProductFromBundleBar = (barId: string, productId: string) => {
-    setCompleteBundleBars((prev) => {
-      const targetBarIndex = prev.findIndex((bar) => bar.id === barId);
-      if (targetBarIndex <= 0) return prev;
-      return prev.map((bar) =>
+    setCompleteBundleBars((prev) =>
+      prev.map((bar) =>
         bar.id !== barId
           ? bar
           : { ...bar, products: bar.products.filter((p) => p.productId !== productId) },
-      );
-    });
+      ),
+    );
   };
 
   /**
-   * 左侧栏内：单个商品的定价模式 + 变体预览控件（Bar1 与 Bar2+ 共用；仅 Bar2+ 显示删除）
+   * 配件池内：单个配件商品的折扣模式 + 变体预览控件。
    */
   const renderCompleteBundleProductPricingCard = (
     bar: CompleteBundleBar,
     product: CompleteBundleProduct,
     productIdx: number,
-    isFirstOfferBar: boolean,
+    _isFirstOfferBar: boolean,
   ) => {
     const selectedVariant =
       product.variants?.find((v) => v.id === product.selectedVariantId) ||
@@ -1677,7 +1605,7 @@ export function CreateNewOffer({
           : pMode === "fixed_price"
             ? "Total price (€)"
             : "Pricing value";
-    const productLabel = isFirstOfferBar ? "默认产品" : `商品 ${productIdx + 1}`;
+    const productLabel = `Accessory ${productIdx + 1}`;
 
     return (
       <div
@@ -1700,22 +1628,20 @@ export function CreateNewOffer({
               </div>
             </div>
           </div>
-          {!isFirstOfferBar && (
-            <Button
-              type="text"
-              danger
-              size="small"
-              className="shrink-0"
-              icon={<Trash2 size={14} aria-hidden />}
-              onClick={() => removeProductFromBundleBar(bar.id, product.productId)}
-            >
-              删除
-            </Button>
-          )}
+          <Button
+            type="text"
+            danger
+            size="small"
+            className="shrink-0"
+            icon={<Trash2 size={14} aria-hidden />}
+            onClick={() => removeProductFromBundleBar(bar.id, product.productId)}
+          >
+            删除
+          </Button>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <label className="block text-[12px] font-medium text-[#1c1f23]">
-            Price
+            Accessory pricing
             <Select
               size="small"
               className="mt-1 w-full"
@@ -1968,7 +1894,10 @@ export function CreateNewOffer({
       ];
     } else if (offerType === "complete-bundle") {
       logicBlockId = "logic-complete-bundle";
-      const completeBundleConfig = buildCompleteBundleConfig({ bars: completeBundleBars });
+      const completeBundleConfig = buildCompleteBundleConfig({
+        triggerProductIds: selectedProductsData.map((product) => String(product.id)),
+        bars: completeBundleBars,
+      });
       scopeProductIds = Array.from(
         new Set(
           [
@@ -2098,16 +2027,22 @@ export function CreateNewOffer({
     }
 
     if (offerType !== "complete-bundle" && completeBundleBars.length > 0) {
-      const completeBundleConfig = buildCompleteBundleConfig({ bars: completeBundleBars });
+      const completeBundleConfig = buildCompleteBundleConfig({
+        triggerProductIds: selectedProductsData.map((product) => String(product.id)),
+        bars: completeBundleBars,
+      });
       logicBlocks.push({
         id: "logic-complete-bundle",
         type: "complete-bundle",
         config: completeBundleConfig,
       });
       addScopeProducts(
-        completeBundleConfig.bars.flatMap((bar) =>
-          bar.products.map((product) => String(product.productId)),
-        ),
+        [
+          ...(completeBundleConfig.triggerProductIds ?? []),
+          ...completeBundleConfig.bars.flatMap((bar) =>
+            bar.products.map((product) => String(product.productId)),
+          ),
+        ],
       );
     }
 
@@ -2705,25 +2640,32 @@ export function CreateNewOffer({
       .tz(scheduleTimezone)
       .format("YYYY-MM-DD HH:mm")}`;
   }, [countdownLabel, endTime, scheduleTimezone, showCountdownBlock]);
+  const completeBundlePreviewFallbackItems = useMemo(() => {
+    const source =
+      starterTemplateDefaults?.previewFallbackItems?.length
+        ? starterTemplateDefaults.previewFallbackItems
+        : COMPLETE_BUNDLE_TEMPLATE_PREVIEW_ITEMS;
+    const starterBar = completeBundleBars[0];
+    return source.map((item, index, items) => {
+      const shouldMirrorBundleCard =
+        item.id === "starter-complete-bundle-offer" ||
+        (index === items.length - 1 && item.featured);
+      if (!shouldMirrorBundleCard) return item;
+      return {
+        ...item,
+        id: starterBar?.id || item.id,
+        title: starterBar?.title || item.title,
+        subtitle: starterBar?.subtitle || item.subtitle,
+      };
+    });
+  }, [starterTemplateDefaults, completeBundleBars]);
   const previewItems: PreviewItem[] = useMemo(() => {
-    if (offerType === "complete-bundle" && completeBundleBars.length > 0) {
+    if (offerType === "complete-bundle") {
       const hasConfiguredProducts = completeBundleBars.some(
         (bar) => Array.isArray(bar.products) && bar.products.length > 0,
       );
-      if (!hasConfiguredProducts && starterTemplateDefaults?.previewFallbackItems?.length) {
-        const starterBar = completeBundleBars[0];
-        return starterTemplateDefaults.previewFallbackItems.map((item, index, items) => {
-          const shouldMirrorBundleCard =
-            item.id === "starter-complete-bundle-offer" ||
-            (index === items.length - 1 && item.featured);
-          if (!shouldMirrorBundleCard) return item;
-          return {
-            ...item,
-            id: starterBar?.id || item.id,
-            title: starterBar?.title || item.title,
-            subtitle: starterBar?.subtitle || item.subtitle,
-          };
-        });
+      if (!hasConfiguredProducts) {
+        return completeBundlePreviewFallbackItems;
       }
     }
 
@@ -2737,7 +2679,7 @@ export function CreateNewOffer({
       orderedCompositionRulesSnapshot.map((rule) => rule.sourceOfferType),
     ).size > 1;
 
-    return hasMixedCompositionSources
+    const computedItems = hasMixedCompositionSources
       ? buildCompositionPreviewItems({
           rules: orderedCompositionRulesSnapshot,
           selectedProducts: previewSelectedProducts,
@@ -2753,6 +2695,10 @@ export function CreateNewOffer({
           baseUnitPrice,
           formatPrice: formatPreviewPrice,
         });
+    if (offerType === "complete-bundle" && computedItems.length === 0) {
+      return completeBundlePreviewFallbackItems;
+    }
+    return computedItems;
   }, [
     offerType,
     orderedCompositionRulesSnapshot,
@@ -2760,7 +2706,7 @@ export function CreateNewOffer({
     selectedProductsData,
     baseUnitPrice,
     formatPreviewPrice,
-    starterTemplateDefaults,
+    completeBundlePreviewFallbackItems,
   ]);
 
   const steps = [

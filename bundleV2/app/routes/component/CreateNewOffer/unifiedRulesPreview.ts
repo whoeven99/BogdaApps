@@ -360,8 +360,10 @@ function buildCompleteBundleItem(
     ? params.completeBundleBars.find((entry) => entry.id === barId)
     : undefined;
   const productsCount = Array.isArray(bar?.products) ? bar.products.length : 0;
-  let sumOriginal = 0;
-  let sumFinal = 0;
+  const anchorProduct = params.selectedProducts[0];
+  const anchorBase = Math.max(0, Number(params.baseUnitPrice) || 0);
+  let sumOriginal = anchorBase;
+  let sumFinal = anchorBase;
 
   for (const product of bar?.products || []) {
     const selectedVariant =
@@ -376,26 +378,39 @@ function buildCompleteBundleItem(
   }
 
   const saved = Math.max(0, sumOriginal - sumFinal);
-  const products = (bar?.products || []).slice(0, 4).map((product) => {
-    const selectedVariant =
-      product.variants?.find((variant) => variant.id === product.selectedVariantId) ||
-      product.variants?.[0];
-    return {
-      image: product.image || "https://via.placeholder.com/48",
-      name: product.title || "Bundle product",
-      variant:
-        selectedVariant?.title && selectedVariant.title !== "Default Title"
-          ? selectedVariant.title
-          : undefined,
-    };
-  });
+  const products = [
+    anchorProduct
+      ? {
+          image: anchorProduct.image || "https://via.placeholder.com/48",
+          name: anchorProduct.title || "Current product",
+        }
+      : null,
+    ...(bar?.products || []).slice(0, 3).map((product) => {
+      const selectedVariant =
+        product.variants?.find((variant) => variant.id === product.selectedVariantId) ||
+        product.variants?.[0];
+      return {
+        image: product.image || "https://via.placeholder.com/48",
+        name: product.title || "Accessory product",
+        variant:
+          selectedVariant?.title && selectedVariant.title !== "Default Title"
+            ? selectedVariant.title
+            : undefined,
+      };
+    }),
+  ].filter(Boolean) as PreviewProduct[];
+  const minQuantity = Math.max(1, Math.trunc(Number(bar?.minQuantity) || 1));
+  const maxQuantity = Math.max(
+    minQuantity,
+    Math.trunc(Number(bar?.maxQuantity) || Number(bar?.quantity) || 1),
+  );
 
   return {
     id: rule.id,
     title: rule.presentation.title || `Bar #${index + 1}`,
     subtitle:
       rule.presentation.subtitle ||
-      `${rule.type === "bxgy" ? "Buy X, Get Y Free" : "Quantity break"} · ${productsCount} products`,
+      `Current product + ${minQuantity}-${maxQuantity} accessories from ${productsCount} options`,
     price: params.formatPrice(sumFinal),
     original: sumOriginal > sumFinal ? params.formatPrice(sumOriginal) : undefined,
     featured: index === 0,
@@ -404,7 +419,7 @@ function buildCompleteBundleItem(
       saved > 0
         ? `SAVE ${params.formatPrice(saved)}`
         : rule.condition.kind === "bundle_completion"
-          ? `Qty ${Math.max(1, Number(rule.condition.quantity) || 1)}`
+          ? `UP TO ${Math.max(1, Number(rule.condition.quantity) || 1)} ACCESSORIES`
           : undefined,
     products: products.length > 0 ? products : undefined,
   };
@@ -413,17 +428,13 @@ function buildCompleteBundleItem(
 function buildCompleteBundleSingleItem(
   params: BuildPreviewParams,
 ): PreviewItem | null {
-  const firstProduct = params.completeBundleBars[0]?.products?.[0];
-  if (!firstProduct) return null;
-
-  const selectedVariant =
-    firstProduct.variants?.find((variant) => variant.id === firstProduct.selectedVariantId) ||
-    firstProduct.variants?.[0];
-  const base = parseMoneyStringToNumber(selectedVariant?.price || firstProduct.price);
+  const currentProduct = params.selectedProducts[0];
+  const base = Math.max(0, Number(params.baseUnitPrice) || 0);
+  if (!currentProduct && base <= 0) return null;
 
   return {
     id: "complete-bundle-single",
-    title: firstProduct.title || "Single product",
+    title: currentProduct?.title || "Current product",
     subtitle: "Standard price",
     price: params.formatPrice(base),
   };

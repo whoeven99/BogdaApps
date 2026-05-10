@@ -9,7 +9,7 @@ import {
   getOfferRulesText,
   getOfferScheduleTimezone,
 } from "../../utils/offerParsing";
-import { buildThemeEditorAppEmbedUrl } from "../../utils/themeEditor";
+import { openThemeEditorAppEmbed } from "../../utils/themeEditor";
 import { BUNDLE_THEME_PRODUCT_PLUGIN } from "../../utils/themePlugins";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
@@ -112,12 +112,11 @@ export function AllOffersPage({
 
   const handleThemeExtensionToggle = () => {
     if (!shop || !apiKey) return;
-    const editorUrl = buildThemeEditorAppEmbedUrl(
+    openThemeEditorAppEmbed(
       shop,
       apiKey,
       BUNDLE_THEME_PRODUCT_PLUGIN,
     );
-    window.open(editorUrl, "_top");
   };
 
   const toast = searchParams.get("toast") || actionData?.toast;

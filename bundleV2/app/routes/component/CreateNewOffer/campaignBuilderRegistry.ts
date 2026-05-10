@@ -57,9 +57,9 @@ const META_BY_OFFER_TYPE: Record<OfferTypeId, CampaignBuilderMeta> = {
   "complete-bundle": {
     logicBlockLabel: "Complete Bundle",
     logicBlockDescription:
-      "Present multi-bar bundle combinations with per-product pricing and variant previews.",
+      "Attach accessory pools to the current PDP product and discount only the selected accessories.",
     stepTwoDescription:
-      "Build each bundle bar, attach the right products, and control how the combined offer is priced.",
+      "Select the trigger products, build each accessory bundle bar, and control min/max accessory selection plus accessory pricing.",
   },
   subscription: {
     logicBlockLabel: "Subscription",
@@ -97,7 +97,7 @@ export function getCampaignScopeSummary(
           bar.products.map((product) => String(product.productId)),
         ),
       ).size;
-      return `${ctx.selectedProductsData.length} trigger products, ${uniqueProductCount} bundled products`;
+      return `${ctx.selectedProductsData.length} trigger products, ${uniqueProductCount} accessory products`;
     }
     case "free-gift":
       return `${ctx.freeGiftTriggerProducts.length} products in the global trigger pool, ${getFreeGiftRewardBarCount(ctx)} bars with gift products`;
@@ -124,7 +124,7 @@ export function getCampaignLogicSummary(
       return `${ctx.bxgyDiscountRules.length} BXGY bars, up to ${bestFreeQty} free item${bestFreeQty > 1 ? "s" : ""}`;
     }
     case "complete-bundle": {
-      return `${ctx.normalizedDiscountRules.length} quantity bars + ${ctx.completeBundleBars.length} bundle group${ctx.completeBundleBars.length > 1 ? "s" : ""}`;
+      return `${ctx.completeBundleBars.length} accessory bundle bar${ctx.completeBundleBars.length > 1 ? "s" : ""} with trigger + accessory pricing`;
     }
     case "subscription":
       return ctx.subscriptionEnabled
@@ -207,10 +207,10 @@ export function buildSelectedProductsPayload(
         buyProducts: ctx.buyProducts,
       };
     case "complete-bundle":
-      return {
-        productIds: ctx.selectedProductsData.map((product) => String(product.id)),
-        bars: buildCompleteBundleConfig({ bars: ctx.completeBundleBars }).bars,
-      };
+      return buildCompleteBundleConfig({
+        triggerProductIds: ctx.selectedProductsData.map((product) => String(product.id)),
+        bars: ctx.completeBundleBars,
+      });
     case "free-gift":
       return {
         triggerProducts: ctx.freeGiftTriggerProducts,
@@ -262,12 +262,19 @@ export function validateScopeAndLogicStep(
         : null;
     case "complete-bundle": {
       const hasNoTriggerProducts = ctx.selectedProductsData.length === 0;
-      const hasNoQuantityBars = ctx.normalizedDiscountRules.length === 0;
-      const hasEmptyBar = ctx.completeBundleBars.some(
-        (bar) => bar.products.length === 0,
+      const triggerIds = new Set(
+        ctx.selectedProductsData.map((product) => String(product.id || "")),
       );
-      return hasNoTriggerProducts || hasNoQuantityBars || hasEmptyBar
-        ? "Please select trigger products, configure at least one quantity-break bar, and add products to every bundle group."
+      const hasInvalidBar = ctx.completeBundleBars.some((bar) => {
+        const min = Math.max(1, Math.trunc(Number(bar.minQuantity) || 1));
+        const max = Math.max(min, Math.trunc(Number(bar.maxQuantity) || Number(bar.quantity) || 1));
+        const overlapsTrigger = bar.products.some((product) =>
+          triggerIds.has(String(product.productId || "")),
+        );
+        return bar.products.length < min || max < min || overlapsTrigger;
+      });
+      return hasNoTriggerProducts || hasInvalidBar || ctx.completeBundleBars.length === 0
+        ? "Please select trigger products, keep accessory pools different from the trigger product, and make sure every bar has enough accessories for its min/max rule."
         : null;
     }
     case "free-gift":
@@ -300,18 +307,19 @@ export function validateFinalSubmitScopeAndLogic(
         : null;
     case "complete-bundle": {
       const hasNoTriggerProducts = ctx.selectedProductsData.length === 0;
-      const hasNoQuantityBars = ctx.normalizedDiscountRules.length === 0;
-      const hasInvalidBar = ctx.completeBundleBars.some(
-        (bar) =>
-          !bar.products?.length ||
-          !Number.isFinite(Number(bar.quantity)) ||
-          Number(bar.quantity) < 1,
+      const triggerIds = new Set(
+        ctx.selectedProductsData.map((product) => String(product.id || "")),
       );
-      return hasNoTriggerProducts ||
-        hasNoQuantityBars ||
-        ctx.completeBundleBars.length === 0 ||
-        hasInvalidBar
-        ? "Complete bundle offers require trigger products, at least one quantity-break bar, and a valid bundle group with products."
+      const hasInvalidBar = ctx.completeBundleBars.some((bar) => {
+        const min = Math.max(1, Math.trunc(Number(bar.minQuantity) || 1));
+        const max = Math.max(min, Math.trunc(Number(bar.maxQuantity) || Number(bar.quantity) || 1));
+        const overlapsTrigger = bar.products.some((product) =>
+          triggerIds.has(String(product.productId || "")),
+        );
+        return !bar.products?.length || bar.products.length < min || max < min || overlapsTrigger;
+      });
+      return hasNoTriggerProducts || ctx.completeBundleBars.length === 0 || hasInvalidBar
+        ? "Complete bundle offers require trigger products, accessory pools that exclude the trigger product, and valid min/max accessory limits in every bar."
         : null;
     }
     case "free-gift":

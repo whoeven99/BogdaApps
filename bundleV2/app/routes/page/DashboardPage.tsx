@@ -19,7 +19,7 @@ import "../../styles/tailwind.css";
 import { CreateNewOffer } from "../component/CreateNewOffer/CreateNewOffer";
 import type { IndexLoaderData } from "../_index/route";
 import { parseDiscountRules } from "../../utils/offerParsing";
-import { buildThemeEditorAppEmbedUrl } from "../../utils/themeEditor";
+import { openThemeEditorAppEmbed } from "../../utils/themeEditor";
 import { BUNDLE_THEME_PRODUCT_PLUGIN } from "../../utils/themePlugins";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
@@ -259,12 +259,11 @@ export function DashboardPage({
   };
   const handleViewAllAbTests = () => {}; // mock
   const handleThemeExtensionToggle = () => {
-    const editorUrl = buildThemeEditorAppEmbedUrl(
+    openThemeEditorAppEmbed(
       shop,
       apiKey,
       BUNDLE_THEME_PRODUCT_PLUGIN,
     );
-    window.open(editorUrl, "_top");
   };
 
   const toast = searchParams.get("toast") || actionData?.toast;

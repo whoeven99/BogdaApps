@@ -15,15 +15,19 @@ export function buildThemeEditorAppEmbedUrl(
   );
 
   url.searchParams.set("context", "apps");
-  url.searchParams.set("template", plugin.template || "index");
-  url.searchParams.set(
-    "activateAppId",
-    `${plugin.extensionUid}/${plugin.embedHandle}`,
-  );
   url.searchParams.set(
     "appEmbed",
     `${normalizedApiKey}/${plugin.embedHandle}`,
   );
 
   return url.toString();
+}
+
+export function openThemeEditorAppEmbed(
+  shop: string,
+  apiKey: string,
+  plugin: ThemeAppEmbedConfig = BUNDLE_THEME_PRODUCT_PLUGIN,
+): void {
+  const editorUrl = buildThemeEditorAppEmbedUrl(shop, apiKey, plugin);
+  window.open(editorUrl, "_blank", "noopener,noreferrer");
 }
