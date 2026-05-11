@@ -1965,6 +1965,26 @@ function rerenderCurrentBundleWidget() {
   syncSubscriptionSelectionToTheme(currentOffer);
 }
 
+function getCartQuantityForSelectedOffer(offer, selectedCount) {
+  const normalizedCount = Math.max(1, Math.trunc(Number(selectedCount) || 1));
+  if (!offer || offer.offerType !== "bxgy") {
+    return normalizedCount;
+  }
+  const rules = parseBxgyDiscountRulesJson(offer.discountRulesJson);
+  const selectedRule =
+    rules.find((rule) => Number(rule.count) === normalizedCount) || rules[0] || null;
+  if (!selectedRule) return normalizedCount;
+  const buyQuantity = Math.max(
+    1,
+    Math.trunc(Number(selectedRule.buyQuantity) || normalizedCount),
+  );
+  const getQuantity = Math.max(
+    1,
+    Math.trunc(Number(selectedRule.getQuantity) || 0),
+  );
+  return Math.max(1, buyQuantity + getQuantity);
+}
+
 function updateThemeQuantityInput(count) {
   const form = getAddToCartForm();
   if (form) {
@@ -2091,8 +2111,8 @@ window.ciwiSelectBundleOption = function(count) {
   if (window.__ciwiBundleState) {
     window.__ciwiBundleState.selectedCount = count;
   }
-  updateThemeQuantityInput(count);
   const currentOffer = getCurrentOffer(offersConfigCache);
+  updateThemeQuantityInput(getCartQuantityForSelectedOffer(currentOffer, count));
   if (currentOffer) {
     syncCurrentBundleToSessionStorage(currentOffer);
     ensureBundleLineProperties(currentOffer);
@@ -2239,9 +2259,9 @@ window.ciwiHandleBundleAddToCart = function(event) {
     event.preventDefault();
     event.stopPropagation();
   }
-  const count = window.__ciwiBundleState?.selectedCount || 1;
-  updateThemeQuantityInput(count);
   const currentOffer = getCurrentOffer(offersConfigCache);
+  const count = window.__ciwiBundleState?.selectedCount || 1;
+  updateThemeQuantityInput(getCartQuantityForSelectedOffer(currentOffer, count));
   syncSubscriptionSelectionToTheme(currentOffer);
   if (currentOffer?.offerType === "quantity-breaks-different") {
     performDifferentProductsCartAdd()
@@ -2856,7 +2876,13 @@ function renderBundlePreviewHtml(offer) {
       window.__ciwiBundleState.selectedCount = defaultRule
         ? defaultRule.count
         : (freeGiftConfig.tiers[0]?.count || 1);
-      setTimeout(() => updateThemeQuantityInput(window.__ciwiBundleState.selectedCount), 0);
+      setTimeout(
+        () =>
+          updateThemeQuantityInput(
+            getCartQuantityForSelectedOffer(offer, window.__ciwiBundleState.selectedCount),
+          ),
+        0,
+      );
     }
     const selectedCount = window.__ciwiBundleState.selectedCount;
 
@@ -2944,7 +2970,13 @@ function renderBundlePreviewHtml(offer) {
     if (!window.__ciwiBundleState.selectedCount) {
       const defaultRule = bxgyRules.find(r => r.isDefault);
       window.__ciwiBundleState.selectedCount = defaultRule ? defaultRule.count : (bxgyRules[0]?.count || 1);
-      setTimeout(() => updateThemeQuantityInput(window.__ciwiBundleState.selectedCount), 0);
+      setTimeout(
+        () =>
+          updateThemeQuantityInput(
+            getCartQuantityForSelectedOffer(offer, window.__ciwiBundleState.selectedCount),
+          ),
+        0,
+      );
     }
     const selectedCount = window.__ciwiBundleState.selectedCount;
 
@@ -3038,7 +3070,13 @@ function renderBundlePreviewHtml(offer) {
       window.__ciwiBundleState.selectedCount = defaultRule
         ? defaultRule.count
         : (differentRules[0]?.count || 1);
-      setTimeout(() => updateThemeQuantityInput(window.__ciwiBundleState.selectedCount), 0);
+      setTimeout(
+        () =>
+          updateThemeQuantityInput(
+            getCartQuantityForSelectedOffer(offer, window.__ciwiBundleState.selectedCount),
+          ),
+        0,
+      );
     }
     const selectedCount = window.__ciwiBundleState.selectedCount;
 
@@ -3162,7 +3200,13 @@ function renderBundlePreviewHtml(offer) {
   if (!window.__ciwiBundleState.selectedCount) {
     const defaultRule = discountRules.find(r => r.isDefault);
     window.__ciwiBundleState.selectedCount = defaultRule ? defaultRule.count : (discountRules[0]?.count || 1);
-    setTimeout(() => updateThemeQuantityInput(window.__ciwiBundleState.selectedCount), 0);
+    setTimeout(
+      () =>
+        updateThemeQuantityInput(
+          getCartQuantityForSelectedOffer(offer, window.__ciwiBundleState.selectedCount),
+        ),
+      0,
+    );
   }
   const selectedCount = window.__ciwiBundleState.selectedCount;
 
