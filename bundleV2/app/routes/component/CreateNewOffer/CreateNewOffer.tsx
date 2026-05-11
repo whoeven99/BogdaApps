@@ -122,6 +122,27 @@ function PreviewShell({
   );
 }
 
+function normalizeBuilderCampaignConfig(
+  config: CampaignConfig | null,
+): CampaignConfig | null {
+  if (!config) return null;
+  const fallbackConfig = migrateLegacyOfferToCampaignConfig({});
+
+  return {
+    ...config,
+    scope:
+      config.scope && typeof config.scope === "object"
+        ? config.scope
+        : fallbackConfig.scope,
+    logicBlocks: Array.isArray(config.logicBlocks) ? config.logicBlocks : [],
+    displayBlocks: Array.isArray(config.displayBlocks) ? config.displayBlocks : [],
+    settings:
+      config.settings && typeof config.settings === "object"
+        ? config.settings
+        : fallbackConfig.settings,
+  };
+}
+
 function FloatingFeedbackBanner({
   title,
   message,
@@ -448,33 +469,54 @@ export function CreateNewOffer({
   const confirmedHighDiscountRef = useRef(false);
   const initialCampaignConfig = useMemo(() => {
     if (!initialOffer) return null;
-    return (
+    return normalizeBuilderCampaignConfig(
       parseCampaignConfig(initialOffer.campaignConfigJson) ??
-      migrateLegacyOfferToCampaignConfig({
-        offerType: initialOffer.offerType,
-        selectedProductsJson: initialOffer.selectedProductsJson,
-        discountRulesJson: initialOffer.discountRulesJson,
-        offerSettingsJson: initialOffer.offerSettingsJson,
-        startTime: initialOffer.startTime,
-        endTime: initialOffer.endTime,
-        status: initialOffer.status,
-      })
+        migrateLegacyOfferToCampaignConfig({
+          offerType: initialOffer.offerType,
+          selectedProductsJson: initialOffer.selectedProductsJson,
+          discountRulesJson: initialOffer.discountRulesJson,
+          offerSettingsJson: initialOffer.offerSettingsJson,
+          startTime: initialOffer.startTime,
+          endTime: initialOffer.endTime,
+          status: initialOffer.status,
+        }),
     );
   }, [initialOffer]);
-  const initialCampaignLegacy = useMemo(
-    () =>
-      initialCampaignConfig
-        ? buildLegacyFieldsFromCampaignConfig(initialCampaignConfig)
-        : null,
-    [initialCampaignConfig],
-  );
-  const initialCountdownBlock = useMemo(
-    () =>
-      initialCampaignConfig?.displayBlocks.find(
+  const initialCampaignLegacy = useMemo(() => {
+    if (!initialCampaignConfig) return null;
+    try {
+      return buildLegacyFieldsFromCampaignConfig(initialCampaignConfig);
+    } catch (error) {
+      console.error("Failed to derive legacy fields from campaign config for builder", {
+        offerId: initialOffer?.id,
+        error,
+      });
+      const fallbackConfig = normalizeBuilderCampaignConfig(
+        migrateLegacyOfferToCampaignConfig({
+          offerType: initialOffer?.offerType,
+          selectedProductsJson: initialOffer?.selectedProductsJson,
+          discountRulesJson: initialOffer?.discountRulesJson,
+          offerSettingsJson: initialOffer?.offerSettingsJson,
+          startTime: initialOffer?.startTime,
+          endTime: initialOffer?.endTime,
+          status: initialOffer?.status,
+        }),
+      );
+      return fallbackConfig
+        ? buildLegacyFieldsFromCampaignConfig(fallbackConfig)
+        : null;
+    }
+  }, [initialCampaignConfig, initialOffer]);
+  const initialCountdownBlock = useMemo(() => {
+    const displayBlocks = Array.isArray(initialCampaignConfig?.displayBlocks)
+      ? initialCampaignConfig.displayBlocks
+      : [];
+    return (
+      displayBlocks.find(
         (block) => block.type === "countdown",
-      ) ?? null,
-    [initialCampaignConfig],
-  );
+      ) ?? null
+    );
+  }, [initialCampaignConfig]);
   const starterTemplateDefaults = useMemo(() => {
     if (initialOffer || !initialOfferType) return null;
     return getStarterTemplateDefaults(initialOfferType);
