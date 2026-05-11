@@ -783,10 +783,14 @@ function PlaceholderModuleDetail({
 function CompleteBundleModuleDetail({
   draft,
   actions,
+  totalStoreProductsCount,
+  onEditTriggerProducts,
   renderCompleteBundleProductPricingCard,
 }: {
   draft: CampaignDraft;
   actions: CampaignDraftActions;
+  totalStoreProductsCount: number;
+  onEditTriggerProducts: () => void;
   renderCompleteBundleProductPricingCard: Props["renderCompleteBundleProductPricingCard"];
 }) {
   const isPrimaryTemplate = draft.offerType === "complete-bundle";
@@ -839,6 +843,26 @@ function CompleteBundleModuleDetail({
       ) : null}
 
       <div className="mt-4">
+        {isPrimaryTemplate ? (
+          <div className="mb-4 space-y-3">
+            <CompactActionRow
+              title="Applies to products"
+              meta={
+                draft.selectedProductsData.length > 0
+                  ? `${draft.selectedProductsData.length} selected${totalStoreProductsCount > 0 ? ` of ${totalStoreProductsCount} products` : ""}`
+                  : "Choose which products should show this bundle offer."
+              }
+              actionLabel={
+                draft.selectedProductsData.length > 0 ? "Edit products" : "Select products"
+              }
+              onAction={onEditTriggerProducts}
+            />
+            <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
+              Select the products where this bundle should appear, then configure the bundle
+              products and discounts below.
+            </div>
+          </div>
+        ) : null}
         <CompleteBundleEditor
           completeBundleBars={draft.completeBundleBars}
           activeBundleBarId={draft.activeBundleBarId}
@@ -940,6 +964,7 @@ export default function StepTwoCompositionBuilder({
     draft.selectedProductsData.length ||
     draft.buyProducts.length ||
     draft.freeGiftTriggerProducts.length;
+  const isPrimaryCompleteBundle = draft.offerType === "complete-bundle";
   const enabledModuleCount = visibleModules.filter((module) => module.enabled).length;
 
   const renderBarActions = (bar: CampaignBarItem, index: number) => (
@@ -1184,6 +1209,8 @@ export default function StepTwoCompositionBuilder({
           <CompleteBundleModuleDetail
             draft={draft}
             actions={actions}
+            totalStoreProductsCount={totalStoreProductsCount}
+            onEditTriggerProducts={onCustomFilterTriggerProducts}
             renderCompleteBundleProductPricingCard={renderCompleteBundleProductPricingCard}
           />
         );
@@ -1265,56 +1292,60 @@ export default function StepTwoCompositionBuilder({
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="min-w-0 space-y-4">
-          <DetailSection
-            title="Product pool"
-            meta={showGlobalProductPool ? `${globalTriggerCount} selected` : "Optional"}
-          >
-            <div className="space-y-3">
-              {showGlobalProductPool
-                ? (
-                  <ProductPoolManager
-                    selectedProducts={draft.selectedProductsData}
-                    totalStoreProductsCount={totalStoreProductsCount}
-                    activeSelectionMode={activeTriggerSelectionMode}
-                    activeSelectionSummary={activeTriggerSelectionSummary}
-                    onSelectAll={onSelectAllTriggerProducts}
-                    onSelectByCollection={onSelectTriggerProductsByCollection}
-                    onExclude={onExcludeTriggerProducts}
-                    onCustomFilter={onCustomFilterTriggerProducts}
-                    allowBulkSelection={draft.offerType !== "subscription"}
-                  />
-                )
-                : null}
-              {!showGlobalProductPool ? (
-                <QuietEmptyState>
-                  Shared trigger product selection appears here when the campaign needs it.
-                </QuietEmptyState>
-              ) : null}
-            </div>
-          </DetailSection>
+          {!isPrimaryCompleteBundle ? (
+            <DetailSection
+              title="Product pool"
+              meta={showGlobalProductPool ? `${globalTriggerCount} selected` : "Optional"}
+            >
+              <div className="space-y-3">
+                {showGlobalProductPool
+                  ? (
+                    <ProductPoolManager
+                      selectedProducts={draft.selectedProductsData}
+                      totalStoreProductsCount={totalStoreProductsCount}
+                      activeSelectionMode={activeTriggerSelectionMode}
+                      activeSelectionSummary={activeTriggerSelectionSummary}
+                      onSelectAll={onSelectAllTriggerProducts}
+                      onSelectByCollection={onSelectTriggerProductsByCollection}
+                      onExclude={onExcludeTriggerProducts}
+                      onCustomFilter={onCustomFilterTriggerProducts}
+                      allowBulkSelection={draft.offerType !== "subscription"}
+                    />
+                  )
+                  : null}
+                {!showGlobalProductPool ? (
+                  <QuietEmptyState>
+                    Shared trigger product selection appears here when the campaign needs it.
+                  </QuietEmptyState>
+                ) : null}
+              </div>
+            </DetailSection>
+          ) : null}
 
-          <DetailSection
-            title="Bars"
-            meta={`${primaryBarsCount} configured`}
-            actions={
-              <Dropdown
-                trigger={["click"]}
-                menu={{
-                  items: visibleAddBarMenuItems,
-                  onClick: ({ key }) =>
-                    appendCampaignCompositionBar(
-                      key as CampaignBarType,
-                      draft,
-                      actions,
-                    ),
-                }}
-              >
-                <Button type="dashed">+ Add bar</Button>
-              </Dropdown>
-            }
-          >
-            {renderBarsSection()}
-          </DetailSection>
+          {!isPrimaryCompleteBundle ? (
+            <DetailSection
+              title="Bars"
+              meta={`${primaryBarsCount} configured`}
+              actions={
+                <Dropdown
+                  trigger={["click"]}
+                  menu={{
+                    items: visibleAddBarMenuItems,
+                    onClick: ({ key }) =>
+                      appendCampaignCompositionBar(
+                        key as CampaignBarType,
+                        draft,
+                        actions,
+                      ),
+                  }}
+                >
+                  <Button type="dashed">+ Add bar</Button>
+                </Dropdown>
+              }
+            >
+              {renderBarsSection()}
+            </DetailSection>
+          ) : null}
 
           <DetailSection
             title="Components"

@@ -254,35 +254,55 @@ export default function CompleteBundleEditor({
                     : "No bundle products yet. Use the Shopify product picker to choose the accessory products for this component."}
                 </div>
               ) : (
-                <div className="mt-3 flex flex-col gap-2">
-                  {activeBar.products.map((product) => {
-                    const selectedVariant =
-                      product.variants?.find((variant) => variant.id === product.selectedVariantId) ||
-                      product.variants?.[0];
+                <div className="mt-3 space-y-4">
+                  <div className="space-y-2">
+                    {activeBar.products.map((product) => {
+                      const selectedVariant =
+                        product.variants?.find((variant) => variant.id === product.selectedVariantId) ||
+                        product.variants?.[0];
 
-                    return (
-                      <div
-                        key={product.productId}
-                        className="flex items-center gap-3 rounded-[10px] border border-[#e3e8ed] bg-white px-3 py-3"
-                      >
-                        <img
-                          src={product.image || "https://via.placeholder.com/48"}
-                          alt={product.title || "Bundle product"}
-                          className="h-10 w-10 rounded-[8px] border border-[#edf1f4] object-cover"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-[13px] font-medium text-[#1c1f23]">
-                            {product.title || "Bundle product"}
-                          </div>
-                          <div className="mt-1 truncate text-[12px] text-[#5c6166]">
-                            {selectedVariant?.title && selectedVariant.title !== "Default Title"
-                              ? selectedVariant.title
-                              : "Default variant"}
+                      return (
+                        <div
+                          key={product.productId}
+                          className="flex items-center gap-3 rounded-[10px] border border-[#e3e8ed] bg-white px-3 py-3"
+                        >
+                          <img
+                            src={product.image || "https://via.placeholder.com/48"}
+                            alt={product.title || "Bundle product"}
+                            className="h-10 w-10 rounded-[8px] border border-[#edf1f4] object-cover"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-[13px] font-medium text-[#1c1f23]">
+                              {product.title || "Bundle product"}
+                            </div>
+                            <div className="mt-1 truncate text-[12px] text-[#5c6166]">
+                              {selectedVariant?.title && selectedVariant.title !== "Default Title"
+                                ? selectedVariant.title
+                                : "Default variant"}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
+
+                  <div className="rounded-[10px] border border-[#e3e8ed] bg-white p-4">
+                    <div className="text-[14px] font-medium text-[#1c1f23]">Bundle discount</div>
+                    <div className="mt-1 text-[12px] text-[#5c6166]">
+                      Configure how each selected bundle product is discounted when customers add
+                      it through this bundle.
+                    </div>
+                    <div className="mt-4 flex flex-col gap-4">
+                      {activeBar.products.map((product, productIdx) =>
+                        renderCompleteBundleProductPricingCard(
+                          activeBar,
+                          product,
+                          productIdx,
+                          true,
+                        ),
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
             </>

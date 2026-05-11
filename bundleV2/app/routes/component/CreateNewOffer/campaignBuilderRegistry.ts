@@ -207,10 +207,10 @@ export function buildSelectedProductsPayload(
         buyProducts: ctx.buyProducts,
       };
     case "complete-bundle":
-      return buildCompleteBundleConfig({
-        triggerProductIds: ctx.selectedProductsData.map((product) => String(product.id)),
+      return {
+        productIds: ctx.selectedProductsData.map((product) => String(product.id)),
         bars: ctx.completeBundleBars,
-      });
+      };
     case "free-gift":
       return {
         triggerProducts: ctx.freeGiftTriggerProducts,

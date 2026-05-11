@@ -1220,9 +1220,14 @@ function sanitizeLogicBlock(raw: unknown): LogicBlock | null {
   }
 
   if (item.type === "complete-bundle") {
-    const config = buildCompleteBundleConfig(
-      parseCompleteBundleConfig(JSON.stringify({ bars: configRecord.bars || [] })),
-    );
+    const config = buildCompleteBundleConfig({
+      triggerProductIds: Array.isArray(configRecord.triggerProductIds)
+        ? configRecord.triggerProductIds
+            .map((id) => String(id || "").trim())
+            .filter(Boolean)
+        : [],
+      bars: Array.isArray(configRecord.bars) ? configRecord.bars : [],
+    });
     if (config.bars.length === 0) return null;
     return {
       id:
@@ -2544,12 +2549,20 @@ export function parseCompleteBundleConfig(
   if (!selectedProductsJson) return { triggerProductIds: [], bars: [] };
   try {
     const parsed = JSON.parse(selectedProductsJson) as unknown;
-    const triggerProductIds = Array.isArray((parsed as { productIds?: unknown })?.productIds)
-      ? ((parsed as { productIds?: unknown[] }).productIds || [])
+    const parsedRecord = parsed as {
+      productIds?: unknown[];
+      triggerProductIds?: unknown[];
+      bars?: unknown;
+    };
+    const rawTriggerProductIds = Array.isArray(parsedRecord.productIds)
+      ? parsedRecord.productIds
+      : Array.isArray(parsedRecord.triggerProductIds)
+        ? parsedRecord.triggerProductIds
+        : [];
+    const triggerProductIds = rawTriggerProductIds
           .map((id) => String(id || "").trim())
-          .filter(Boolean)
-      : [];
-    const barsInput = (parsed as { bars?: unknown })?.bars;
+          .filter(Boolean);
+    const barsInput = parsedRecord.bars;
     if (!Array.isArray(barsInput)) return { triggerProductIds, bars: [] };
 
     const bars: CompleteBundleBar[] = [];
