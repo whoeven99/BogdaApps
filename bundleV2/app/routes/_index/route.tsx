@@ -1014,7 +1014,7 @@ const collectThemeBlockEntries = (
 
 /**
  * App embed status for a single theme extension block (e.g. product_detail_message -> product-detail-message.js).
- * Checks all themes so merchants can validate offers on draft themes before publishing them live.
+ * Defaults to the MAIN theme to avoid broader theme-scan access regressions.
  * Matches editor deep-link form: `appEmbed={client_id}/{blockHandle}` e.g. `1cdf.../product_detail_message`.
  * In settings_data, Shopify may persist app embeds as generic block types like
  * `shopify://apps/{app-slug}/blocks/app-embed/{extensionUid}` rather than the liquid block filename.
@@ -1051,7 +1051,7 @@ const getThemeExtensionEnabledAcrossThemes = async (
     const response = await admin.graphql(
       `#graphql
         query ThemeSettingsDataAcrossThemes {
-          themes(first: 50) {
+          themes(first: 1, roles: [MAIN]) {
             edges {
               node {
                 id
