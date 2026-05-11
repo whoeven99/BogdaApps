@@ -270,17 +270,29 @@ function buildHydratedDifferentProductsSelectedProductsJson(
     .map((productId) => {
       const hit = storeProductMap.get(String(productId || ""));
       if (!hit) return null;
+      const firstVariant = Array.isArray(hit.variants) ? hit.variants[0] : null;
       return {
         id: hit.id,
         handle: hit.handle || "",
         title: hit.name || "",
         image: hit.image || "",
+        price: firstVariant?.price || hit.price || "",
+        selectedVariantId: String(firstVariant?.id || ""),
+        variants: Array.isArray(hit.variants) ? hit.variants : [],
       };
     })
     .filter(
       (
         product,
-      ): product is { id: string; handle: string; title: string; image: string } =>
+      ): product is {
+        id: string;
+        handle: string;
+        title: string;
+        image: string;
+        price: string;
+        selectedVariantId: string;
+        variants: StoreProductItem["variants"];
+      } =>
         Boolean(product?.id),
     );
 

@@ -618,6 +618,25 @@ function parseSelectedProductsCatalog(selectedProductsJson) {
         handle: String(item.handle || "").trim(),
         title: String(item.title || "").trim(),
         image: String(item.image || "").trim(),
+        price: String(item.price || "").trim(),
+        selectedVariantId: String(item.selectedVariantId || "").trim(),
+        variants: Array.isArray(item.variants)
+          ? item.variants
+              .filter((variant) => variant && typeof variant === "object" && variant.id)
+              .map((variant) => ({
+                id: String(variant.id || "").trim(),
+                title: String(variant.title || "").trim(),
+                price: String(variant.price || "").trim(),
+                selectedOptions: Array.isArray(variant.selectedOptions)
+                  ? variant.selectedOptions
+                      .filter((opt) => opt && typeof opt === "object")
+                      .map((opt) => ({
+                        name: String(opt.name || "").trim(),
+                        value: String(opt.value || "").trim(),
+                      }))
+                  : [],
+              }))
+          : [],
       }))
       .filter((item) => item.productId);
   } catch {
@@ -1063,8 +1082,17 @@ async function hydrateDifferentProductsOfferInPlace(offer) {
       handle: "",
       title: "",
       image: "",
+      price: "",
+      selectedVariantId: "",
+      variants: [],
     };
-    const needsHydrate = !existing.handle || !existing.title || !existing.image;
+    const needsHydrate =
+      !existing.handle ||
+      !existing.title ||
+      !existing.image ||
+      !existing.price ||
+      !Array.isArray(existing.variants) ||
+      existing.variants.length === 0;
     if (!needsHydrate) {
       catalogById.set(productId, existing);
       continue;
@@ -1077,6 +1105,9 @@ async function hydrateDifferentProductsOfferInPlace(offer) {
         handle: hydrated.handle || "",
         title: hydrated.title || "",
         image: hydrated.image || "",
+        price: hydrated.price || "",
+        selectedVariantId: hydrated.selectedVariantId || "",
+        variants: Array.isArray(hydrated.variants) ? hydrated.variants : [],
       });
       changed = true;
       continue;
@@ -1096,8 +1127,20 @@ async function hydrateDifferentProductsOfferInPlace(offer) {
       handle: "",
       title: "",
       image: "",
+      price: "",
+      selectedVariantId: "",
+      variants: [],
     };
-    if (existing.handle && existing.title && existing.image) continue;
+    if (
+      existing.handle &&
+      existing.title &&
+      existing.image &&
+      existing.price &&
+      Array.isArray(existing.variants) &&
+      existing.variants.length > 0
+    ) {
+      continue;
+    }
     const cached = readCachedStorefrontProduct(productId);
     if (!cached) continue;
     const hydrated = hydrateProductFromStorefrontJson(cached, existing);
@@ -1106,6 +1149,9 @@ async function hydrateDifferentProductsOfferInPlace(offer) {
       handle: hydrated.handle || "",
       title: hydrated.title || "",
       image: hydrated.image || "",
+      price: hydrated.price || "",
+      selectedVariantId: hydrated.selectedVariantId || "",
+      variants: Array.isArray(hydrated.variants) ? hydrated.variants : [],
     });
     changed = true;
   }
@@ -1402,18 +1448,191 @@ function getDifferentProductsCatalog(offer) {
   return parseSelectedProductsCatalog(offer?.selectedProductsJson);
 }
 
-function renderDifferentProductsPoolControlHtml(offer, selectedRule, borderColor, accentColor) {
+function getDifferentProductsPickerKey(offer, rule) {
+  return `${String(offer?.id || offer?.offerId || "offer")}:${String(rule?.count || 1)}`;
+}
+
+function getDifferentProductsRequiredQuantity(rule) {
+  return Math.max(1, Math.trunc(Number(rule?.count) || 1));
+}
+
+function getDifferentProductsPoolProducts(offer, selectedRule) {
   if (!selectedRule || !Array.isArray(selectedRule.buyProductIds) || !selectedRule.buyProductIds.length) {
-    return "";
+    return [];
   }
-  const currentProductGid = getCurrentProductGid();
   const catalog = getDifferentProductsCatalog(offer);
   const productMap = new Map(
     (Array.isArray(catalog) ? catalog : []).map((product) => [String(product.productId), product]),
   );
-  const poolProducts = selectedRule.buyProductIds
+  return selectedRule.buyProductIds
     .map((productId) => productMap.get(String(productId)))
     .filter(Boolean);
+}
+
+function getDefaultDifferentProductsSelectionIds(poolProducts, requiredQty) {
+  const limit = Math.max(1, Math.trunc(Number(requiredQty) || 1));
+  const currentProductGid = getCurrentProductGid();
+  const selectedIds = [];
+  if (currentProductGid) {
+    const currentProduct = (poolProducts || []).find((product) =>
+      productIdsMatch(currentProductGid, product?.productId),
+    );
+    if (currentProduct?.productId) {
+      selectedIds.push(String(currentProduct.productId));
+    }
+  }
+  for (const product of poolProducts || []) {
+    const productId = String(product?.productId || "");
+    if (!productId || selectedIds.includes(productId)) continue;
+    selectedIds.push(productId);
+    if (selectedIds.length >= limit) break;
+  }
+  return selectedIds.slice(0, limit);
+}
+
+function getSelectedDifferentProductsIds(offer, selectedRule, poolProducts) {
+  const pickerKey = getDifferentProductsPickerKey(offer, selectedRule);
+  const limit = getDifferentProductsRequiredQuantity(selectedRule);
+  const allowedIds = new Set((poolProducts || []).map((product) => String(product.productId || "")));
+  const stored = window.__ciwiBundleState?.selectedDifferentProducts?.[pickerKey];
+  if (Array.isArray(stored)) {
+    return stored
+      .map((id) => String(id || ""))
+      .filter((id) => allowedIds.has(id))
+      .slice(0, limit);
+  }
+  return getDefaultDifferentProductsSelectionIds(poolProducts, limit);
+}
+
+function resolveDifferentProductsVariant(product) {
+  const currentProductGid = getCurrentProductGid();
+  const picked =
+    window.__ciwiBundleState?.selectedDifferentProductVariants?.[product.productId] || "";
+  const currentVariantId =
+    currentProductGid && productIdsMatch(currentProductGid, product?.productId)
+      ? getSelectedVariantId()
+      : "";
+  const variantId =
+    picked || currentVariantId || product.selectedVariantId || product.variants?.[0]?.id || "";
+  return (
+    (product.variants || []).find((variant) => String(variant.id) === String(variantId)) ||
+    product.variants?.[0] ||
+    null
+  );
+}
+
+function buildEligibleProductHref(product) {
+  const handle = String(product?.handle || "").trim();
+  if (!handle) return "";
+  const base = `/products/${encodeURIComponent(handle)}`;
+  const variant = resolveDifferentProductsVariant(product);
+  const ajaxVariantId = toAjaxVariantId(variant?.id || product?.selectedVariantId || "");
+  return ajaxVariantId ? `${base}?variant=${encodeURIComponent(ajaxVariantId)}` : base;
+}
+
+function buildDifferentProductsProductCardHtml(
+  offer,
+  selectedRule,
+  product,
+  borderColor,
+  accentColor,
+  options,
+) {
+  const variant = resolveDifferentProductsVariant(product);
+  const currentProductGid = getCurrentProductGid();
+  const isCurrent =
+    currentProductGid && String(currentProductGid) === String(product?.productId || "");
+  const variants = Array.isArray(product?.variants) ? product.variants : [];
+  const pickerKey = getDifferentProductsPickerKey(offer, selectedRule);
+  const requiredQty = getDifferentProductsRequiredQuantity(selectedRule);
+  const isSelected = options?.isSelected === true;
+  const selectionCount = Math.max(0, Math.trunc(Number(options?.selectionCount) || 0));
+  const selectionLocked = selectionCount >= requiredQty && !isSelected;
+  const priceValue = parseMoneyStringToNumber(variant?.price || product?.price || "");
+  const priceHtml =
+    priceValue > 0
+      ? `<div class="ciwi-different-products-picker__price">${esc(formatPrice(priceValue))}</div>`
+      : "";
+  const variantOptionsHtml =
+    variants.length > 1
+      ? `<select class="ciwi-different-products-picker__variant-select" aria-label="Choose variant" onclick="event.stopPropagation();" onmousedown="event.stopPropagation();" onchange="window.ciwiSetDifferentProductsVariant('${esc(
+          product.productId,
+        )}', this.value)">
+          ${variants
+            .map(
+              (entry) =>
+                `<option value="${esc(entry.id)}"${
+                  String(entry.id) === String(variant?.id || "") ? " selected" : ""
+                }>${esc(entry.title || "Default")}</option>`,
+            )
+            .join("")}
+        </select>`
+      : "";
+
+  return `<div class="ciwi-different-products-picker__card"${
+    isCurrent ? ' data-current="1"' : ""
+  }${isSelected ? ' data-selected="1"' : ""}${
+    selectionLocked ? ' data-selection-locked="1"' : ""
+  } onclick="event.stopPropagation();" onmousedown="event.stopPropagation();">
+    <div class="ciwi-different-products-picker__card-top">
+      ${
+        product.image
+          ? `<img class="ciwi-different-products-picker__image" src="${esc(
+              product.image,
+            )}" alt="${esc(product.title || "Eligible product")}" loading="lazy" decoding="async" />`
+          : `<div class="ciwi-different-products-picker__image ciwi-different-products-picker__image--placeholder"></div>`
+      }
+      <div class="ciwi-different-products-picker__meta">
+        <div class="ciwi-different-products-picker__title-row">
+          <div class="ciwi-different-products-picker__title">${esc(
+            product.title || "Included trigger product",
+          )}</div>
+          ${
+            isCurrent
+              ? `<span class="ciwi-different-products-picker__pill" style="background:${esc(
+                  accentColor || "#008060",
+                )}12;color:${esc(accentColor || "#008060")};border-color:${esc(
+                  accentColor || "#008060",
+                )}35;">Current</span>`
+              : ""
+          }
+        </div>
+        ${priceHtml}
+      </div>
+    </div>
+    ${variantOptionsHtml}
+    <div class="ciwi-different-products-picker__actions">
+      <button type="button" class="ciwi-different-products-picker__select" style="background:${
+        isSelected ? esc(accentColor || "#008060") : "#ffffff"
+      };color:${isSelected ? "#ffffff" : esc(accentColor || "#008060")};border-color:${esc(
+        accentColor || "#008060",
+      )};" onclick="event.stopPropagation();window.ciwiToggleDifferentProductSelection('${esc(
+        pickerKey,
+      )}','${esc(product.productId)}',${requiredQty})" ${selectionLocked ? "disabled" : ""}>
+        ${
+          isSelected
+            ? "Selected"
+            : selectionLocked
+              ? "Selection full"
+              : "Select"
+        }
+      </button>
+      <button type="button" class="ciwi-different-products-picker__open" style="border-color:${esc(
+        borderColor || "#dfe3e8",
+      )};color:${esc(accentColor || "#008060")};" onclick="event.stopPropagation();window.ciwiOpenEligibleProductByProduct('${esc(
+        product.productId,
+      )}','${esc(product.handle || "")}')">
+        ${isCurrent ? "Open current" : "Open product"}
+      </button>
+    </div>
+  </div>`;
+}
+
+function renderDifferentProductsPoolControlHtml(offer, selectedRule, borderColor, accentColor) {
+  if (!selectedRule || !Array.isArray(selectedRule.buyProductIds) || !selectedRule.buyProductIds.length) {
+    return "";
+  }
+  const poolProducts = getDifferentProductsPoolProducts(offer, selectedRule);
 
   if (!poolProducts.length) {
     return `<div style="margin-top:10px;border:1px dashed ${esc(
@@ -1423,31 +1642,53 @@ function renderDifferentProductsPoolControlHtml(offer, selectedRule, borderColor
     </div>`;
   }
 
-  const optionHtml = poolProducts
-    .map((product) => {
-      const isCurrent = currentProductGid && String(product.productId) === String(currentProductGid);
-      const href = product.handle ? `/products/${encodeURIComponent(product.handle)}` : "";
-      return `<option value="${esc(href)}"${isCurrent ? " selected" : ""}>${esc(
-        product.title || "Included trigger product",
-      )}${isCurrent ? " (Current)" : ""}</option>`;
-    })
+  const pickerKey = getDifferentProductsPickerKey(offer, selectedRule);
+  const requiredQty = getDifferentProductsRequiredQuantity(selectedRule);
+  const selectedIds = getSelectedDifferentProductsIds(offer, selectedRule, poolProducts);
+  const isOpen =
+    String(window.__ciwiBundleState?.openDifferentProductsPickerKey || "") === pickerKey;
+  const cardsHtml = poolProducts
+    .map((product) =>
+      buildDifferentProductsProductCardHtml(
+        offer,
+        selectedRule,
+        product,
+        borderColor,
+        accentColor,
+        {
+          isSelected: selectedIds.includes(String(product.productId || "")),
+          selectionCount: selectedIds.length,
+        },
+      ),
+    )
     .join("");
 
-  return `<div style="margin-top:10px;display:flex;justify-content:flex-start;" onclick="event.stopPropagation();" onmousedown="event.stopPropagation();">
-    <div style="position:relative;display:inline-flex;min-width:74px;max-width:100%;">
-      <span style="display:inline-flex;align-items:center;justify-content:center;border-radius:999px;background:${esc(
-        accentColor || "#008060",
-      )};color:#ffffff;font-size:11px;font-weight:600;padding:7px 14px;min-width:74px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-sizing:border-box;">Choose</span>
-    <select
-      aria-label="Choose eligible product"
-      style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;"
-      onclick="event.stopPropagation();"
-      onmousedown="event.stopPropagation();"
-      onchange="if(this.value){ window.ciwiOpenEligibleProduct(this.value); }"
+  return `<div class="ciwi-different-products-picker" onclick="event.stopPropagation();" onmousedown="event.stopPropagation();">
+    <button
+      type="button"
+      class="ciwi-different-products-picker__toggle"
+      style="background:${esc(accentColor || "#008060")};"
+      onclick="event.stopPropagation();window.ciwiToggleDifferentProductsPicker('${esc(
+        pickerKey,
+      )}')"
     >
-      ${optionHtml}
-    </select>
-    </div>
+      ${isOpen ? "Hide choices" : "Choose"}
+    </button>
+    ${
+      isOpen
+        ? `<div class="ciwi-different-products-picker__panel" style="border-color:${esc(
+            borderColor || "#dfe3e8",
+          )};">
+            <div class="ciwi-different-products-picker__header">
+              <span>Eligible products</span>
+              <span>${selectedIds.length} / ${requiredQty} selected</span>
+            </div>
+            <div class="ciwi-different-products-picker__list">
+              ${cardsHtml}
+            </div>
+          </div>`
+        : ""
+    }
   </div>`;
 }
 
@@ -1703,12 +1944,26 @@ function getCurrentOffer(offersConfig) {
 window.__ciwiBundleState = window.__ciwiBundleState || {
   selectedCount: null,
   selectedBundleVariants: {},
+  selectedDifferentProductVariants: {},
+  selectedDifferentProducts: {},
+  openDifferentProductsPickerKey: null,
   /** complete-bundle：顾客在多个 bar 中选中的那一档（仅该档加入购物车） */
   selectedCompleteBundleBarId: null,
   selectedCompleteBundleProducts: {},
   subscriptionMode: null,
   selectedSellingPlanId: "",
 };
+
+function rerenderCurrentBundleWidget() {
+  const wrap = document.querySelector(".ciwi-bundle-wrapper");
+  const currentOffer = getCurrentOffer(offersConfigCache);
+  if (!wrap || !currentOffer) return;
+  const html = renderBundlePreviewHtml(currentOffer);
+  if (!html) return;
+  wrap.innerHTML = html;
+  bindBundleInteractions(wrap);
+  syncSubscriptionSelectionToTheme(currentOffer);
+}
 
 function updateThemeQuantityInput(count) {
   const form = getAddToCartForm();
@@ -1988,6 +2243,14 @@ window.ciwiHandleBundleAddToCart = function(event) {
   updateThemeQuantityInput(count);
   const currentOffer = getCurrentOffer(offersConfigCache);
   syncSubscriptionSelectionToTheme(currentOffer);
+  if (currentOffer?.offerType === "quantity-breaks-different") {
+    performDifferentProductsCartAdd()
+      .then((ok) => (ok ? notifyThemeAfterCartAdd() : false))
+      .catch((error) => {
+        console.error("[ciwi] performDifferentProductsCartAdd failed", error);
+      });
+    return;
+  }
   if (currentOffer?.offerType === "free-gift") {
     performFreeGiftCartAdd()
       .then((ok) => (ok ? notifyThemeAfterCartAdd() : false))
@@ -1996,17 +2259,21 @@ window.ciwiHandleBundleAddToCart = function(event) {
       });
     return;
   }
+  submitBundleFormFallback();
+};
+
+function submitBundleFormFallback() {
   const form = getAddToCartForm();
-  
   if (form) {
-    // 优先尝试寻找表单内部的提交按钮或带有 name="add" 的按钮
-    let addBtn = form.querySelector("button[type='submit'], button[name='add'], input[type='submit'], input[name='add'], [name='add']");
-    
-    // 如果找不到，可能通过 form 属性关联在外部
+    let addBtn = form.querySelector(
+      "button[type='submit'], button[name='add'], input[type='submit'], input[name='add'], [name='add']",
+    );
     if (!addBtn) {
       const formId = form.getAttribute("id");
       if (formId) {
-        addBtn = document.querySelector(`button[type='submit'][form='${formId}'], button[name='add'][form='${formId}'], input[type='submit'][form='${formId}'], input[name='add'][form='${formId}']`);
+        addBtn = document.querySelector(
+          `button[type='submit'][form='${formId}'], button[name='add'][form='${formId}'], input[type='submit'][form='${formId}'], input[name='add'][form='${formId}']`,
+        );
       }
     }
 
@@ -2018,13 +2285,146 @@ window.ciwiHandleBundleAddToCart = function(event) {
   } else {
     console.error("[ciwi] Add to cart form not found");
   }
+}
+
+window.ciwiToggleDifferentProductsPicker = function(pickerKey) {
+  const nextKey = String(pickerKey || "");
+  const currentKey = String(window.__ciwiBundleState?.openDifferentProductsPickerKey || "");
+  window.__ciwiBundleState.openDifferentProductsPickerKey =
+    currentKey === nextKey ? null : nextKey;
+  rerenderCurrentBundleWidget();
 };
 
-window.ciwiOpenEligibleProduct = function(url) {
+window.ciwiToggleDifferentProductSelection = function(pickerKey, productId, requiredQty) {
+  if (!window.__ciwiBundleState.selectedDifferentProducts) {
+    window.__ciwiBundleState.selectedDifferentProducts = {};
+  }
+  const key = String(pickerKey || "");
+  const nextId = String(productId || "");
+  const limit = Math.max(1, Math.trunc(Number(requiredQty) || 1));
+  const prev = Array.isArray(window.__ciwiBundleState.selectedDifferentProducts[key])
+    ? window.__ciwiBundleState.selectedDifferentProducts[key].map((id) => String(id || ""))
+    : [];
+  const next = prev.includes(nextId)
+    ? prev.filter((id) => id !== nextId)
+    : prev.length >= limit
+      ? prev
+      : [...prev, nextId];
+  window.__ciwiBundleState.selectedDifferentProducts[key] = next;
+  rerenderCurrentBundleWidget();
+};
+
+window.ciwiSetDifferentProductsVariant = function(productId, variantId) {
+  if (!window.__ciwiBundleState.selectedDifferentProductVariants) {
+    window.__ciwiBundleState.selectedDifferentProductVariants = {};
+  }
+  window.__ciwiBundleState.selectedDifferentProductVariants[String(productId || "")] = String(
+    variantId || "",
+  );
+  rerenderCurrentBundleWidget();
+};
+
+window.ciwiOpenEligibleProduct = function(url, variantId) {
   const href = String(url || "").trim();
   if (!href) return;
-  window.location.assign(href);
+  const ajaxVariantId = toAjaxVariantId(variantId);
+  if (!ajaxVariantId) {
+    window.location.assign(href);
+    return;
+  }
+  const nextUrl = new URL(href, window.location.origin);
+  nextUrl.searchParams.set("variant", ajaxVariantId);
+  window.location.assign(nextUrl.toString());
 };
+
+window.ciwiOpenEligibleProductByProduct = function(productId, handle) {
+  const currentOffer = getCurrentOffer(offersConfigCache);
+  const catalog = getDifferentProductsCatalog(currentOffer);
+  const product =
+    (Array.isArray(catalog) ? catalog : []).find(
+      (entry) => String(entry.productId || "") === String(productId || ""),
+    ) || null;
+  const href = handle ? `/products/${encodeURIComponent(String(handle))}` : buildEligibleProductHref(product);
+  const variantId =
+    window.__ciwiBundleState?.selectedDifferentProductVariants?.[String(productId || "")] ||
+    product?.selectedVariantId ||
+    product?.variants?.[0]?.id ||
+    "";
+  if (!href) return;
+  window.ciwiOpenEligibleProduct(href, variantId);
+};
+
+function resolveDifferentProductsSelectedRule(offer) {
+  if (!offer || offer.offerType !== "quantity-breaks-different") return null;
+  const selectedCount = Math.max(1, Math.trunc(Number(window.__ciwiBundleState?.selectedCount) || 1));
+  const rules = parseDifferentProductsDiscountRulesJson(offer.discountRulesJson);
+  return rules.find((rule) => Number(rule.count) === selectedCount) || null;
+}
+
+async function performDifferentProductsCartAdd() {
+  const currentOffer = getCurrentOffer(offersConfigCache);
+  if (!currentOffer || currentOffer.offerType !== "quantity-breaks-different") return false;
+  await hydrateDifferentProductsOfferInPlace(currentOffer);
+
+  const selectedRule = resolveDifferentProductsSelectedRule(currentOffer);
+  if (!selectedRule) {
+    submitBundleFormFallback();
+    return false;
+  }
+
+  const poolProducts = getDifferentProductsPoolProducts(currentOffer, selectedRule);
+  const requiredQty = getDifferentProductsRequiredQuantity(selectedRule);
+  const selectedIds = getSelectedDifferentProductsIds(currentOffer, selectedRule, poolProducts);
+  if (selectedIds.length < requiredQty) {
+    window.alert(`Please select ${requiredQty} products for this bundle.`);
+    return false;
+  }
+
+  const productMap = new Map(poolProducts.map((product) => [String(product.productId || ""), product]));
+  const tierValue = computeSelectedBarIndexForOffer(currentOffer);
+  const items = selectedIds
+    .slice(0, requiredQty)
+    .map((productId) => {
+      const product = productMap.get(String(productId || ""));
+      if (!product) return null;
+      const selectedVariant = resolveDifferentProductsVariant(product);
+      const variantId = toAjaxVariantId(
+        selectedVariant?.id || product.selectedVariantId || product.variants?.[0]?.id || "",
+      );
+      if (!variantId) return null;
+      return {
+        id: Number(variantId),
+        quantity: 1,
+        properties: {
+          [CIWI_PROP_OFFER_ID]: String(currentOffer.id || ""),
+          [CIWI_PROP_TIER]: String(tierValue),
+        },
+      };
+    })
+    .filter(Boolean);
+
+  if (items.length < requiredQty) {
+    window.alert("Some selected products are missing variants. Please reselect them.");
+    return false;
+  }
+
+  const res = await fetch("/cart/add.js", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ items }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    console.error(
+      "[ciwi] different products cart/add.js failed",
+      res.status,
+      body?.description || body?.message || body,
+    );
+    return false;
+  }
+  return true;
+}
 
 window.ciwiSelectBundleVariant = function(barId, productId, variantId) {
   if (!window.__ciwiBundleState.selectedBundleVariants) {
