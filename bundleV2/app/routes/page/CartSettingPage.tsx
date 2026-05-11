@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFetcher } from "react-router";
 import { AlertCircle } from "lucide-react";
 import { Button, Form, Input, InputNumber, Select, Switch, message } from "antd";
@@ -418,6 +418,7 @@ function CartSettingContent({
   const [draftValues, setDraftValues] = useState<CartSettingsFormValues>(
     buildFormValues(DEFAULT_RULES, DEFAULT_STYLES),
   );
+  const previewInitOnceRef = useRef(false);
   const debouncedDraft = useDebouncedValue(draftValues, 120);
   const previewValues = useMemo(() => normalizeFormValues(debouncedDraft), [debouncedDraft]);
   const [previewMarketMap, setPreviewMarketMap] = useState<PreviewMarketContextMap>(
@@ -467,35 +468,97 @@ function CartSettingContent({
 
   useEffect(() => {
     if (!previewLoadFetcher.data) return;
+    const previewSettingsJson = previewLoadFetcher.data.previewSettingsJson ?? "";
+    const previewCartItemsJson = previewLoadFetcher.data.previewCartItemsJson ?? "";
+    const previewMarketContextJson = previewLoadFetcher.data.previewMarketContextJson ?? "";
+    const emptyPayload =
+      !previewSettingsJson && !previewCartItemsJson && !previewMarketContextJson;
+    const marketMap = buildMarketContextMap(markets);
+    const fallbackMarket =
+      marketMap.contexts[marketMap.currentMarketId] ?? buildFallbackMarket();
+    const applyPreviewState = (
+      market: PreviewMarketContext,
+      items: PreviewCartItem[],
+      settings: PreviewSettings,
+      shouldPersistDefaults: boolean,
+    ) => {
+      setPreviewMarketMap((prev) => ({
+        currentMarketId: market.marketId,
+        contexts: { ...prev.contexts, [market.marketId]: market },
+      }));
+      previewActions.setMarket(market);
+      previewActions.setItems(items);
+      previewActions.updateTimerOverrides(settings.timerOverrides ?? {});
+      previewActions.updatePromotionsOverrides(settings.promotionsOverrides ?? {});
+      previewActions.updateUpsellOverrides(settings.upsellOverrides ?? {});
+      if (
+        shouldPersistDefaults &&
+        !previewInitOnceRef.current &&
+        previewSaveFetcher.state === "idle"
+      ) {
+        previewInitOnceRef.current = true;
+        const previewSettings: PreviewSettings = {
+          marketId: market.marketId,
+          items,
+          timerOverrides: settings.timerOverrides ?? {},
+          promotionsOverrides: settings.promotionsOverrides ?? {},
+          upsellOverrides: settings.upsellOverrides ?? {},
+        };
+        previewSaveFetcher.submit(
+          {
+            intent: "save-preview-settings",
+            previewSettingsJson: JSON.stringify(previewSettings),
+            previewCartItemsJson: JSON.stringify(items),
+            previewMarketContextJson: JSON.stringify(market),
+          },
+          { method: "post" },
+        );
+      }
+    };
+
     if (!previewLoadFetcher.data.ok) {
-      void message.error(previewLoadFetcher.data.error || "加载 Preview Settings 失败");
+      // eslint-disable-next-line no-console
+      console.error("[preview-settings] load failed", {
+        error: previewLoadFetcher.data.error,
+        previewSettingsJson,
+        previewCartItemsJson,
+        previewMarketContextJson,
+      });
+      const fallbackItems = DEFAULT_PREVIEW_ITEMS;
+      const fallbackSettings = buildPreviewSettings(fallbackMarket.marketId, fallbackItems);
+      applyPreviewState(fallbackMarket, fallbackItems, fallbackSettings, true);
+      void message.warning("Preview Settings 加载失败，已使用默认值");
       return;
     }
-    const marketMap = buildMarketContextMap(markets);
-    const marketRaw = parseJsonObject(previewLoadFetcher.data.previewMarketContextJson);
+
+    const marketRaw = parseJsonObject(previewMarketContextJson);
+    if (!marketRaw && previewMarketContextJson) {
+      // eslint-disable-next-line no-console
+      console.warn("[preview-settings] invalid market context", previewMarketContextJson);
+    }
     const market =
       marketRaw && typeof marketRaw === "object"
-        ? normalizePreviewMarketContext(marketRaw, marketMap.contexts[marketMap.currentMarketId])
-        : marketMap.contexts[marketMap.currentMarketId];
-    const itemsRaw = parseJsonArray(previewLoadFetcher.data.previewCartItemsJson);
+        ? normalizePreviewMarketContext(marketRaw, fallbackMarket)
+        : fallbackMarket;
+    const itemsRaw = parseJsonArray(previewCartItemsJson);
+    if (!itemsRaw && previewCartItemsJson) {
+      // eslint-disable-next-line no-console
+      console.warn("[preview-settings] invalid cart items", previewCartItemsJson);
+    }
     const items = normalizePreviewItems(itemsRaw, DEFAULT_PREVIEW_ITEMS);
-    const settingsRaw = parseJsonObject(previewLoadFetcher.data.previewSettingsJson);
+    const settingsRaw = parseJsonObject(previewSettingsJson);
+    if (!settingsRaw && previewSettingsJson) {
+      // eslint-disable-next-line no-console
+      console.warn("[preview-settings] invalid settings", previewSettingsJson);
+    }
     const marketId =
       settingsRaw && typeof settingsRaw.marketId === "string"
         ? String(settingsRaw.marketId)
         : market.marketId;
     const baseSettings = buildPreviewSettings(marketId, items);
     const nextSettings = mergePreviewSettings(baseSettings, settingsRaw);
-    setPreviewMarketMap((prev) => ({
-      currentMarketId: marketId,
-      contexts: { ...prev.contexts, [market.marketId]: market },
-    }));
-    previewActions.setMarket(market);
-    previewActions.setItems(items);
-    previewActions.updateTimerOverrides(nextSettings.timerOverrides ?? {});
-    previewActions.updatePromotionsOverrides(nextSettings.promotionsOverrides ?? {});
-    previewActions.updateUpsellOverrides(nextSettings.upsellOverrides ?? {});
-  }, [previewLoadFetcher.data, markets]);
+    applyPreviewState(market, items, nextSettings, emptyPayload);
+  }, [previewLoadFetcher.data, markets, previewActions, previewSaveFetcher.state]);
 
   useEffect(() => {
     if (saveFetcher.state !== "idle") return;

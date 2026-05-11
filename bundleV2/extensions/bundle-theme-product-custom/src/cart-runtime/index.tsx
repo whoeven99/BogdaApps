@@ -215,6 +215,26 @@ function isElementVisible(el: HTMLElement | null) {
   return rect.width > 0 && rect.height > 0;
 }
 
+function dedupeMounts(mounts: HTMLElement[]) {
+  const unique = Array.from(new Set(mounts)).filter((el) => el && el.isConnected);
+  return unique.filter(
+    (el) => !unique.some((other) => other !== el && other.contains(el)),
+  );
+}
+
+function resolveShadowTarget(host: HTMLElement) {
+  if (!host.shadowRoot) return null;
+  const root = host.shadowRoot;
+  const shadowTarget =
+    root.querySelector(".cart-items__wrapper") ||
+    root.querySelector(".cart-drawer__content") ||
+    root.querySelector("cart-items-component") ||
+    root.querySelector(".cart-items-component") ||
+    root.querySelector("dialog[open]") ||
+    root.querySelector("dialog");
+  return shadowTarget as HTMLElement | null;
+}
+
 function findMountPoints() {
   const mounts: HTMLElement[] = [];
   const openDialog = document.querySelector("dialog[open]");
@@ -227,9 +247,11 @@ function findMountPoints() {
       openDialog.querySelector("cart-items-component") ||
       openDialog.querySelector(".cart-items-component");
     if (dialogTarget) {
-      return [dialogTarget as HTMLElement];
+      mounts.push(dialogTarget as HTMLElement);
+    } else {
+      mounts.push(openDialog as HTMLElement);
     }
-    return [openDialog as HTMLElement];
+    return dedupeMounts(mounts);
   }
 
   const isCartPage =
@@ -260,34 +282,12 @@ function findMountPoints() {
       node.matches("[data-cart-drawer]") ||
       looksLikeCartContainer(node)
     ) {
-      mounts.push(node);
+      const shadowTarget = resolveShadowTarget(node);
+      mounts.push(shadowTarget ?? resolveMountTarget(node));
     }
   }
 
-  const openDialogs = Array.from(
-    document.querySelectorAll('dialog[open], [role="dialog"][open]'),
-  ) as HTMLElement[];
-  for (const node of openDialogs) {
-    if (looksLikeCartContainer(node)) mounts.push(node);
-  }
-
-  const shadowHosts = Array.from(document.querySelectorAll("cart-drawer-component, cart-drawer"));
-  for (const host of shadowHosts) {
-    if (!host.shadowRoot) continue;
-    const root = host.shadowRoot;
-    const shadowTarget =
-      root.querySelector(".cart-items__wrapper") ||
-      root.querySelector(".cart-drawer__content") ||
-      root.querySelector("cart-items-component") ||
-      root.querySelector(".cart-items-component") ||
-      root.querySelector("dialog[open]") ||
-      root.querySelector("dialog");
-    if (shadowTarget) {
-      mounts.push(shadowTarget as HTMLElement);
-    }
-  }
-
-  return Array.from(new Set(mounts)).filter((el) => el && el.isConnected);
+  return dedupeMounts(mounts);
 }
 
 function resolveMountTarget(host: HTMLElement) {
@@ -425,18 +425,20 @@ function mountCartRuntime(config: CartRuntimeConfig) {
 
   const renderInto = (host: HTMLElement) => {
     const target = resolveMountTarget(host);
+    target.setAttribute("data-ciwi-cart-host", "true");
     const existingRoot = target.querySelector<HTMLElement>("[data-ciwi-cart-root]");
-    const rootEl =
-      existingRoot ||
-      (() => {
-        target.innerHTML = "";
-        const el = document.createElement("div");
-        el.setAttribute("data-ciwi-cart-root", "true");
-        target.appendChild(el);
-        return el;
-      })();
+    const rootEl = existingRoot || document.createElement("div");
+    rootEl.setAttribute("data-ciwi-cart-root", "true");
+    if (
+      !existingRoot ||
+      rootEl.parentElement !== target ||
+      target.childNodes.length !== 1 ||
+      target.firstChild !== rootEl
+    ) {
+      target.replaceChildren(rootEl);
+    }
 
-    const reactRoot = roots.get(rootEl) || createRoot(rootEl);
+    const reactRoot = roots.get(rootEl) ?? createRoot(rootEl);
     roots.set(rootEl, reactRoot);
     reactRoot.render(
       <CartStoreProvider store={store}>
@@ -459,6 +461,9 @@ function mountCartRuntime(config: CartRuntimeConfig) {
   };
 
   const mountOnce = () => {
+    for (const [rootEl] of roots) {
+      if (!rootEl.isConnected) roots.delete(rootEl);
+    }
     const mounts = findMountPoints();
     if (!mounts.length) return false;
     mounts.forEach((host) => renderInto(host));

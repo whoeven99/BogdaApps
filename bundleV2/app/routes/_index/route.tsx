@@ -926,9 +926,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         });
       }
     } catch (error) {
-      console.error("[preview-settings] db load failed", error);
+      console.error("[preview-settings] db load failed", { shopName, error });
       return Response.json(
-        { ok: false as const, error: "Failed to load preview settings." },
+        {
+          ok: false as const,
+          error: "Failed to load preview settings.",
+          previewSettingsJson: "{}",
+          previewCartItemsJson: "[]",
+          previewMarketContextJson: "{}",
+        },
         { status: 500 },
       );
     }
