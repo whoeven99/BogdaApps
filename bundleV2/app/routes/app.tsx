@@ -11,8 +11,7 @@ import { ConfigProvider } from "antd";
 
 import {
   authenticate,
-  ensureBundleDeliveryAutomaticDiscount,
-  ensureCartLinesAutomaticDiscount,
+  reconcileBundleAutomaticDiscounts,
 } from "../shopify.server";
 import { sanitizeEnvLikeValue, sanitizeUrlLikeEnvValue } from "../utils/env";
 
@@ -139,22 +138,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   try {
-    await ensureCartLinesAutomaticDiscount(admin);
-  } catch (error) {
-    console.error("Failed to ensure automatic app discount exists in action", error);
-    return Response.json(
-      { ok: false, error: "ensure-cart-discount-failed" },
-      { status: 500 },
-    );
-  }
-
-  try {
-    await ensureBundleDeliveryAutomaticDiscount(admin);
+    await reconcileBundleAutomaticDiscounts(admin);
     return Response.json({ ok: true });
   } catch (error) {
-    console.error("Failed to ensure shipping automatic app discount exists in action", error);
+    console.error("Failed to reconcile automatic app discounts in action", error);
     return Response.json(
-      { ok: false, error: "ensure-shipping-discount-failed" },
+      { ok: false, error: "reconcile-automatic-discounts-failed" },
       { status: 500 },
     );
   }

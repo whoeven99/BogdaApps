@@ -18,6 +18,13 @@ const CART_LINES_DISCOUNT_DEFAULT_APP_NAMESPACE = "$app";
 const CART_LINES_DISCOUNT_METAFIELD_KEY = "offers";
 const LEGACY_OFFERS_METAFIELD_NAMESPACE = "ciwi_bundle";
 const LEGACY_OFFERS_METAFIELD_KEY = "ciwi-bundle-offers";
+const CART_LINES_DISCOUNT_EXPECTED_CLASSES = ["PRODUCT"] as const;
+const CART_LINES_DISCOUNT_EXPECTED_COMBINES_WITH = {
+  orderDiscounts: false,
+  productDiscounts: true,
+  // 允许与配送类 Function 折扣叠加（阶梯赠品免邮）
+  shippingDiscounts: true,
+} as const;
 
 function getAutoDiscountTitle(): string {
   const appName = sanitizeEnvLikeValue(process.env.SHOPIFY_APP_NAME);
@@ -387,11 +394,19 @@ export async function ensureCartLinesAutomaticDiscount(admin: any) {
       query ExistingAutomaticAppDiscounts {
         discountNodes(first: 100, query: "method:automatic AND status:active") {
           nodes {
+            id
             discount {
               __typename
               ... on DiscountAutomaticApp {
+                discountId
                 title
                 status
+                discountClasses
+                combinesWith {
+                  orderDiscounts
+                  productDiscounts
+                  shippingDiscounts
+                }
                 appDiscountType {
                   functionId
                 }
@@ -408,7 +423,7 @@ export async function ensureCartLinesAutomaticDiscount(admin: any) {
     nodeCount: discountNodes.length,
     functionId,
   });
-  const alreadyExists = discountNodes.some((node: any) => {
+  const existingDiscount = discountNodes.find((node: any) => {
     const d = node?.discount;
     if (!d || d.__typename !== "DiscountAutomaticApp") return false;
     // 只有状态为 ACTIVE 的折扣才被认为是有效的
@@ -416,10 +431,81 @@ export async function ensureCartLinesAutomaticDiscount(admin: any) {
     return d?.appDiscountType?.functionId === functionId;
   });
 
-  if (alreadyExists) {
+  if (existingDiscount) {
+    const currentDiscount = existingDiscount.discount;
+    const currentClasses = Array.isArray(currentDiscount?.discountClasses)
+      ? currentDiscount.discountClasses.map((value: unknown) => String(value || "").trim())
+      : [];
+    const currentCombinesWith = currentDiscount?.combinesWith ?? {};
+    const needsUpdate =
+      String(currentDiscount?.title || "") !== getAutoDiscountTitle() ||
+      currentClasses.length !== CART_LINES_DISCOUNT_EXPECTED_CLASSES.length ||
+      CART_LINES_DISCOUNT_EXPECTED_CLASSES.some(
+        (value) => !currentClasses.includes(value),
+      ) ||
+      currentCombinesWith.orderDiscounts !==
+        CART_LINES_DISCOUNT_EXPECTED_COMBINES_WITH.orderDiscounts ||
+      currentCombinesWith.productDiscounts !==
+        CART_LINES_DISCOUNT_EXPECTED_COMBINES_WITH.productDiscounts ||
+      currentCombinesWith.shippingDiscounts !==
+        CART_LINES_DISCOUNT_EXPECTED_COMBINES_WITH.shippingDiscounts;
+
     console.log("[discount] automatic app discount already exists", {
       functionId,
+      discountNodeId: existingDiscount?.id,
+      discountId: currentDiscount?.discountId,
+      title: currentDiscount?.title,
+      discountClasses: currentClasses,
+      combinesWith: currentCombinesWith,
+      needsUpdate,
     });
+
+    if (needsUpdate) {
+      const updateResp = await admin.graphql(
+        `#graphql
+          mutation UpdateAutomaticAppDiscount($id: ID!, $automaticAppDiscount: DiscountAutomaticAppInput!) {
+            discountAutomaticAppUpdate(id: $id, automaticAppDiscount: $automaticAppDiscount) {
+              automaticAppDiscount {
+                discountId
+                title
+                status
+              }
+              userErrors {
+                field
+                message
+              }
+            }
+          }
+        `,
+        {
+          variables: {
+            id: String(existingDiscount.id || ""),
+            automaticAppDiscount: {
+              title: getAutoDiscountTitle(),
+              discountClasses: [...CART_LINES_DISCOUNT_EXPECTED_CLASSES],
+              combinesWith: CART_LINES_DISCOUNT_EXPECTED_COMBINES_WITH,
+            },
+          },
+        },
+      );
+      const updateJson = await updateResp.json();
+      const userErrors =
+        updateJson?.data?.discountAutomaticAppUpdate?.userErrors ?? [];
+      if (userErrors.length > 0) {
+        console.error(
+          "[discount] failed to update automatic app discount to expected config",
+          userErrors,
+        );
+      } else {
+        console.log("[discount] automatic app discount config updated", {
+          functionId,
+          discountNodeId: existingDiscount?.id,
+          title: getAutoDiscountTitle(),
+          discountClasses: CART_LINES_DISCOUNT_EXPECTED_CLASSES,
+          combinesWith: CART_LINES_DISCOUNT_EXPECTED_COMBINES_WITH,
+        });
+      }
+    }
     return;
   }
   console.log("[discount][ensure-auto] no existing active discount, creating new one", {
@@ -452,13 +538,8 @@ export async function ensureCartLinesAutomaticDiscount(admin: any) {
           title: getAutoDiscountTitle(),
           functionId,
           startsAt: new Date().toISOString(),
-          discountClasses: ["PRODUCT"],
-          combinesWith: {
-            orderDiscounts: false,
-            productDiscounts: true,
-            /** 允许与配送类 Function 折扣叠加（阶梯赠品免邮） */
-            shippingDiscounts: true,
-          },
+          discountClasses: [...CART_LINES_DISCOUNT_EXPECTED_CLASSES],
+          combinesWith: CART_LINES_DISCOUNT_EXPECTED_COMBINES_WITH,
           metafields: [
             {
               namespace: CART_LINES_DISCOUNT_METAFIELD_NAMESPACE,
@@ -676,6 +757,20 @@ export async function ensureBundleDeliveryAutomaticDiscount(admin: any) {
   });
 }
 
+export async function reconcileBundleAutomaticDiscounts(admin: any): Promise<void> {
+  try {
+    await ensureCartLinesAutomaticDiscount(admin);
+  } catch (error) {
+    console.error("[discount] reconcile automatic discount failed", error);
+  }
+
+  try {
+    await ensureBundleDeliveryAutomaticDiscount(admin);
+  } catch (error) {
+    console.error("[discount-shipping] reconcile automatic discount failed", error);
+  }
+}
+
 const shopify = shopifyApp({
   apiKey: sanitizeEnvLikeValue(process.env.SHOPIFY_API_KEY),
   apiSecretKey: process.env.SHOPIFY_API_SECRET || "",
@@ -690,16 +785,7 @@ const shopify = shopifyApp({
   },
   hooks: {
     afterAuth: async ({ admin }) => {
-      try {
-        await ensureCartLinesAutomaticDiscount(admin);
-      } catch (error) {
-        console.error("[discount] ensure automatic discount failed", error);
-      }
-      try {
-        await ensureBundleDeliveryAutomaticDiscount(admin);
-      } catch (error) {
-        console.error("[discount-shipping] ensure automatic discount failed", error);
-      }
+      await reconcileBundleAutomaticDiscounts(admin);
     },
   },
   ...(process.env.SHOP_CUSTOM_DOMAIN

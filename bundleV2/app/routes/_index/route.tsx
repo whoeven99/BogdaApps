@@ -11,7 +11,7 @@ import {
 } from "react-router";
 import {
   authenticate,
-  ensureCartLinesAutomaticDiscount,
+  reconcileBundleAutomaticDiscounts,
   syncCartLinesAutomaticDiscountMetafield,
 } from "../../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -557,7 +557,7 @@ async function syncShopOffersMetafield(
     // 关键：Discount Function 运行时优先从 discount owner 读取配置。
     // 这里把同一份 offers JSON 同步到自动折扣本身，避免 shop.metafield 在 Function 侧不可见。
     console.log("[offers-sync] ensure automatic discount before owner metafield sync");
-    await ensureCartLinesAutomaticDiscount(admin);
+    await reconcileBundleAutomaticDiscounts(admin);
     console.log("[offers-sync] syncing offers into automatic discount owner metafields");
     const discountSyncResult = await syncCartLinesAutomaticDiscountMetafield(
       admin,
@@ -587,6 +587,8 @@ const OFFER_POST_WRITE_SYNC_TIMEOUT_MS = 8_000;
 
 async function runOfferPostWriteSync(admin: any, shopName: string): Promise<void> {
   const syncTask = (async () => {
+    await reconcileBundleAutomaticDiscounts(admin);
+
     const themeExtensionDetection = await getCurrentThemeExtensionEnabled(admin);
     if (themeExtensionDetection.debug?.error) {
       console.error("Skip shop offers sync after offer write because theme detection failed", {
@@ -1574,6 +1576,8 @@ import { AppProvider } from "@shopify/shopify-app-react-router/react";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
+
+  await reconcileBundleAutomaticDiscounts(admin);
 
   // eslint-disable-next-line no-undef
   const apiKey = sanitizeEnvLikeValue(process.env.SHOPIFY_API_KEY);
