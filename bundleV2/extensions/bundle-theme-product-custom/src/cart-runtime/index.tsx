@@ -239,18 +239,7 @@ function findMountPoints() {
   const mounts: HTMLElement[] = [];
   const openDialog = document.querySelector("dialog[open]");
   if (openDialog) {
-    const dialogTarget =
-      openDialog.querySelector("scroll-hint.cart-drawer__content") ||
-      openDialog.querySelector("scroll-hint[aria-label]") ||
-      openDialog.querySelector(".cart-drawer__content") ||
-      openDialog.querySelector(".cart-items__wrapper") ||
-      openDialog.querySelector("cart-items-component") ||
-      openDialog.querySelector(".cart-items-component");
-    if (dialogTarget) {
-      mounts.push(dialogTarget as HTMLElement);
-    } else {
-      mounts.push(openDialog as HTMLElement);
-    }
+    mounts.push(openDialog as HTMLElement);
     return dedupeMounts(mounts);
   }
 
@@ -283,7 +272,7 @@ function findMountPoints() {
       looksLikeCartContainer(node)
     ) {
       const shadowTarget = resolveShadowTarget(node);
-      mounts.push(shadowTarget ?? resolveMountTarget(node));
+      mounts.push(shadowTarget ?? node);
     }
   }
 
@@ -309,6 +298,17 @@ function resolveMountTarget(host: HTMLElement) {
     if (visible) return visible as HTMLElement;
   }
   return baseTarget;
+}
+
+function resolveTakeoverTarget(host: HTMLElement) {
+  if (
+    host.matches(
+      "cart-drawer, #CartDrawer, .cart-drawer, [data-cart-drawer], dialog, [role='dialog']",
+    )
+  ) {
+    return host;
+  }
+  return resolveMountTarget(host);
 }
 
 function patchFetchForCart(refresh: () => void) {
@@ -424,7 +424,7 @@ function mountCartRuntime(config: CartRuntimeConfig) {
   };
 
   const renderInto = (host: HTMLElement) => {
-    const target = resolveMountTarget(host);
+    const target = resolveTakeoverTarget(host);
     target.setAttribute("data-ciwi-cart-host", "true");
     const existingRoot = target.querySelector<HTMLElement>("[data-ciwi-cart-root]");
     const rootEl = existingRoot || document.createElement("div");
