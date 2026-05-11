@@ -816,7 +816,14 @@ export function CreateNewOffer({
     let parsedObjects: any[] = [];
     try {
       if (selectedProductsJson) {
-        parsedObjects = JSON.parse(selectedProductsJson);
+        const parsedSelectedProducts = JSON.parse(selectedProductsJson);
+        parsedObjects = Array.isArray(parsedSelectedProducts)
+          ? parsedSelectedProducts
+          : Array.isArray(parsedSelectedProducts?.products)
+            ? parsedSelectedProducts.products
+            : Array.isArray(parsedSelectedProducts?.selectedProducts)
+              ? parsedSelectedProducts.selectedProducts
+              : [];
       }
     } catch (e) {}
 
