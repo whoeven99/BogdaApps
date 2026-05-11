@@ -386,58 +386,101 @@ async function buildStorefrontOffersPayload(
   });
 }
 
+async function loadShopOffersForSync(shopNameToSync: string): Promise<OfferListItem[]> {
+  const prismaAny: any = prisma;
+  try {
+    return (await prismaAny.offer.findMany({
+      where: { shopName: shopNameToSync },
+      orderBy: { createdAt: "desc" },
+    })) as OfferListItem[];
+  } catch (error) {
+    if (!isMissingOfferCampaignConfigColumnError(error)) {
+      throw error;
+    }
+    console.warn(
+      "[offers-sync] campaignConfigJson column missing, falling back to legacy offer read",
+    );
+    const legacyRows = await prismaAny.offer.findMany({
+      where: { shopName: shopNameToSync },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        name: true,
+        cartTitle: true,
+        offerType: true,
+        startTime: true,
+        endTime: true,
+        status: true,
+        selectedProductsJson: true,
+        discountRulesJson: true,
+        offerSettingsJson: true,
+        exposurePV: true,
+        addToCartPV: true,
+        gmv: true,
+        conversion: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    return legacyRows.map((offer: any) => ({
+      ...offer,
+      campaignConfigJson: null,
+    })) as OfferListItem[];
+  }
+}
+
+async function syncFunctionOwnerOffersMetafield(
+  admin: any,
+  shopNameToSync: string,
+): Promise<ShopOffersMetafieldSyncResult> {
+  try {
+    const shopOffers = await loadShopOffersForSync(shopNameToSync);
+    const functionMetafieldValue = await buildCompactOffersPayload(shopOffers);
+    console.log("[offers-sync][function-owner] syncing payload", {
+      shopName: shopNameToSync,
+      offerCount: shopOffers.length,
+      activeOffers: shopOffers.filter((offer) => offer.status === true).length,
+      payloadLength: functionMetafieldValue.length,
+    });
+    await reconcileBundleAutomaticDiscounts(admin);
+    const discountSyncResult = await syncCartLinesAutomaticDiscountMetafield(
+      admin,
+      functionMetafieldValue,
+    );
+    if (!discountSyncResult.ok) {
+      console.error("[offers-sync][function-owner] sync failed", {
+        shopName: shopNameToSync,
+        message: discountSyncResult.message,
+      });
+      return discountSyncResult;
+    }
+    console.log("[offers-sync][function-owner] sync success", {
+      shopName: shopNameToSync,
+      offerCount: shopOffers.length,
+    });
+    return { ok: true };
+  } catch (error) {
+    const message = getErrorMessage(error);
+    console.error("[offers-sync][function-owner] unexpected exception", {
+      shopName: shopNameToSync,
+      message,
+    });
+    return { ok: false, message };
+  }
+}
+
 async function syncShopOffersMetafield(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   admin: any,
   shopNameToSync: string,
   themeExtensionEnabled: boolean,
 ): Promise<ShopOffersMetafieldSyncResult> {
-  const prismaAny: any = prisma;
   try {
     console.log("[offers-sync] start syncShopOffersMetafield", {
       shopName: shopNameToSync,
       themeExtensionEnabled,
     });
-    let shopOffers: OfferListItem[];
-    try {
-      shopOffers = (await prismaAny.offer.findMany({
-        where: { shopName: shopNameToSync },
-        orderBy: { createdAt: "desc" },
-      })) as OfferListItem[];
-    } catch (error) {
-      if (!isMissingOfferCampaignConfigColumnError(error)) {
-        throw error;
-      }
-      console.warn(
-        "[offers-sync] campaignConfigJson column missing, falling back to legacy offer read",
-      );
-      const legacyRows = await prismaAny.offer.findMany({
-        where: { shopName: shopNameToSync },
-        orderBy: { createdAt: "desc" },
-        select: {
-          id: true,
-          name: true,
-          cartTitle: true,
-          offerType: true,
-          startTime: true,
-          endTime: true,
-          status: true,
-          selectedProductsJson: true,
-          discountRulesJson: true,
-          offerSettingsJson: true,
-          exposurePV: true,
-          addToCartPV: true,
-          gmv: true,
-          conversion: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      });
-      shopOffers = legacyRows.map((offer: any) => ({
-        ...offer,
-        campaignConfigJson: null,
-      })) as OfferListItem[];
-    }
+    const shopOffers = await loadShopOffersForSync(shopNameToSync);
     console.log("[offers-sync] loaded offers from db", {
       shopName: shopNameToSync,
       offerCount: shopOffers.length,
@@ -554,14 +597,10 @@ async function syncShopOffersMetafield(
       };
     }
 
-    // 关键：Discount Function 运行时优先从 discount owner 读取配置。
-    // 这里把同一份 offers JSON 同步到自动折扣本身，避免 shop.metafield 在 Function 侧不可见。
-    console.log("[offers-sync] ensure automatic discount before owner metafield sync");
-    await reconcileBundleAutomaticDiscounts(admin);
     console.log("[offers-sync] syncing offers into automatic discount owner metafields");
-    const discountSyncResult = await syncCartLinesAutomaticDiscountMetafield(
+    const discountSyncResult = await syncFunctionOwnerOffersMetafield(
       admin,
-      functionMetafieldValue,
+      shopNameToSync,
     );
     if (!discountSyncResult.ok) {
       console.error("[offers-sync] sync discount owner metafield failed", {
@@ -587,7 +626,16 @@ const OFFER_POST_WRITE_SYNC_TIMEOUT_MS = 8_000;
 
 async function runOfferPostWriteSync(admin: any, shopName: string): Promise<void> {
   const syncTask = (async () => {
-    await reconcileBundleAutomaticDiscounts(admin);
+    const functionOwnerSyncResult = await syncFunctionOwnerOffersMetafield(
+      admin,
+      shopName,
+    );
+    if (!functionOwnerSyncResult.ok) {
+      console.error("syncFunctionOwnerOffersMetafield failed after offer write", {
+        shopName,
+        message: functionOwnerSyncResult.message,
+      });
+    }
 
     const themeExtensionDetection = await getCurrentThemeExtensionEnabled(admin);
     if (themeExtensionDetection.debug?.error) {
@@ -1577,7 +1625,16 @@ import { AppProvider } from "@shopify/shopify-app-react-router/react";
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
 
-  await reconcileBundleAutomaticDiscounts(admin);
+  const functionOwnerSyncResult = await syncFunctionOwnerOffersMetafield(
+    admin,
+    session.shop,
+  );
+  if (!functionOwnerSyncResult.ok) {
+    console.error("Failed to sync function owner offers metafield in loader", {
+      shopName: session.shop,
+      message: functionOwnerSyncResult.message,
+    });
+  }
 
   // eslint-disable-next-line no-undef
   const apiKey = sanitizeEnvLikeValue(process.env.SHOPIFY_API_KEY);
