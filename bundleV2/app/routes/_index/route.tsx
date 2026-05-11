@@ -2420,6 +2420,7 @@ export default function Index() {
     ianaTimezone,
     themeExtensionEnabled,
     themeExtensionDetectionFailed,
+    themeExtensionDebug,
     billingSubscriptions,
     billingTestMode,
   } = useLoaderData() as IndexLoaderData;
@@ -2641,6 +2642,7 @@ export default function Index() {
             ianaTimezone={ianaTimezone}
             themeExtensionEnabled={themeExtensionEnabled}
             themeExtensionDetectionFailed={themeExtensionDetectionFailed}
+            themeExtensionError={themeExtensionDebug?.error}
             onViewAllOffers={() => setActiveTab("offers")}
             onViewAnalytics={(offerId) => {
               if (offerId) {

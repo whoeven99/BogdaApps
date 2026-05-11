@@ -41,6 +41,7 @@ interface DashboardPageProps {
   ianaTimezone: string;
   themeExtensionEnabled: boolean;
   themeExtensionDetectionFailed?: boolean;
+  themeExtensionError?: string;
 }
 
 type DashboardOfferRow = {
@@ -126,6 +127,7 @@ export function DashboardPage({
   ianaTimezone,
   themeExtensionEnabled,
   themeExtensionDetectionFailed = false,
+  themeExtensionError,
 }: DashboardPageProps) {
   const [searchParams] = useSearchParams();
   const actionData = useActionData() as { toast?: string } | undefined;
@@ -533,6 +535,16 @@ export function DashboardPage({
             This opens Theme Editor App Embeds. Toggle the extension there and
             click Save in Shopify.
           </p>
+          {themeExtensionStatus === "unknown" && themeExtensionError ? (
+            <div className="mb-[12px] rounded-[8px] border border-[#ffe0b2] bg-[#fff8e1] px-[12px] py-[10px]">
+              <p className="m-0 text-[12px] font-medium leading-[18px] text-[#916a00]">
+                Temporary debug error
+              </p>
+              <p className="mt-[4px] mb-0 break-words font-mono text-[12px] leading-[18px] text-[#6d4c00]">
+                {themeExtensionError}
+              </p>
+            </div>
+          ) : null}
           <div className="flex flex-col gap-[12px]">
             <button
               type="button"
