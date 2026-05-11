@@ -1,5 +1,8 @@
 (() => {
   "use strict";
+  if (window.__CIWI_CART_RUNTIME_ACTIVE__) {
+    return;
+  }
 
   const log = (...args) => {
     // eslint-disable-next-line no-console

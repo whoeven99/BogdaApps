@@ -12,6 +12,7 @@
     "shopDisplayName": {{ shop.name | json }},
     "moneyFormat": {{ shop.money_format | json }},
     "marketId": {{ localization.market.id | json }},
+    "locale": {{ localization.language.iso_code | json }},
     "countryIsoCode": {{ localization.country.iso_code | json }},
     "currencyCode": {{ localization.country.currency.iso_code | json }},
     "currencySymbol": {{ localization.country.currency.symbol | json }},
@@ -19,7 +20,8 @@
   }
 </script>
 
-<link rel="stylesheet" href="{{ 'cart-drawer-enhancer.css' | asset_url }}">
+<link rel="stylesheet" href="{{ 'cart-runtime.css' | asset_url }}">
+<script src="{{ 'cart-runtime.js' | asset_url }}" defer></script>
 <script src="{{ 'cart-drawer-enhancer.js' | asset_url }}" defer></script>
 
 {% schema %}

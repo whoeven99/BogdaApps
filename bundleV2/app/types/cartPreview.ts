@@ -1,92 +1,46 @@
-export type PreviewMoneyFormat =
-  | "amount"
-  | "amount_no_decimals"
-  | "amount_with_comma_separator"
-  | "amount_no_decimals_with_comma_separator"
-  | "amount_with_apostrophe_separator"
-  | "amount_no_decimals_with_space_separator"
-  | "amount_with_space_separator"
-  | "amount_with_period_and_space_separator";
+import type {
+  CartItem,
+  CartLineItemOption,
+  CartLineItemProperty,
+  CartMarketContext,
+  CartMoneyFormat,
+  CartPromotionsOverrides,
+  CartSettingsOverrides,
+  CartTaxDisplay,
+  CartTimerOverrides,
+  CartUpsellItem,
+  CartUpsellOverrides,
+} from "../../cart-runtime/types";
 
-export type TaxDisplay = "inclusive" | "exclusive" | "unknown";
+export type PreviewMoneyFormat = CartMoneyFormat;
 
-export type PreviewMarketContext = {
-  marketId: string;
-  marketName: string;
-  currencyCode: string;
-  currencySymbol: string;
-  moneyFormat: PreviewMoneyFormat;
-  locale: string;
-  taxDisplay: TaxDisplay;
-  exchangeRate?: number;
-};
+export type TaxDisplay = CartTaxDisplay;
+
+export type PreviewMarketContext = CartMarketContext;
 
 export type PreviewMarketContextMap = {
   currentMarketId: string;
   contexts: Record<string, PreviewMarketContext>;
 };
 
-export type PreviewLineItemOption = {
-  name: string;
-  value: string;
-};
+export type PreviewLineItemOption = CartLineItemOption;
 
-export type PreviewLineItemProperty = {
-  name: string;
-  value: string;
-};
+export type PreviewLineItemProperty = CartLineItemProperty;
 
-export type PreviewCartItem = {
-  id: string;
-  productId?: string;
-  variantId?: string;
-  productTitle: string;
-  variantTitle: string;
-  optionsWithValues: PreviewLineItemOption[];
-  quantity: number;
-  priceMinor: number;
-  compareAtMinor?: number | null;
-  image: string;
-  vendor?: string;
-  properties?: PreviewLineItemProperty[];
-};
+export type PreviewCartItem = CartItem;
 
-export type PreviewTimerOverrides = {
-  enabled?: boolean;
-  durationSeconds?: number;
-  textTemplate?: string;
-};
+export type PreviewTimerOverrides = CartTimerOverrides;
 
-export type PreviewPromotionsOverrides = {
-  enabled?: boolean;
-  freeShippingThresholdMinor?: number;
-  successMessage?: string;
-  progressMessage?: string;
-};
+export type PreviewPromotionsOverrides = CartPromotionsOverrides;
 
-export type PreviewUpsellItem = {
-  id: string;
-  title: string;
-  subtitle?: string;
-  image: string;
-  priceMinor: number;
-  compareAtMinor?: number | null;
-  ctaLabel?: string;
-};
+export type PreviewUpsellItem = CartUpsellItem;
 
-export type PreviewUpsellOverrides = {
-  enabled?: boolean;
-  title?: string;
-  items?: PreviewUpsellItem[];
-};
+export type PreviewUpsellOverrides = CartUpsellOverrides;
 
 export type PreviewSettings = {
   marketId: string;
   items: PreviewCartItem[];
-  timerOverrides?: PreviewTimerOverrides;
-  promotionsOverrides?: PreviewPromotionsOverrides;
-  upsellOverrides?: PreviewUpsellOverrides;
-};
+} & CartSettingsOverrides;
 
 export type PreviewState = {
   market: PreviewMarketContext;

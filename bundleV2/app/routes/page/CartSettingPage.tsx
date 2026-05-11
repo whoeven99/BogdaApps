@@ -9,13 +9,14 @@ import type {
   PreviewMarketContext,
   PreviewMarketContextMap,
   PreviewSettings,
-  PreviewState,
   PreviewUpsellItem,
 } from "../../types/cartPreview";
 import type { MarketItem } from "../../types/market";
 import { buildFallbackMarket } from "../../utils/moneyFormat";
-import { CartPreviewPanel } from "../component/cart-preview/CartPreviewPanel";
-import { PreviewProvider, usePreviewActions, usePreviewState } from "../../hooks/useCartPreview";
+import { CartRenderer } from "../../../cart-runtime/renderer/CartRenderer";
+import { CartStoreProvider, useCartActions, useCartState } from "../../../cart-runtime/react";
+import { createCartStore } from "../../../cart-runtime/store";
+import type { CartState } from "../../../cart-runtime/types";
 
 const DEFAULT_RULES: CartSettingsRules = {
   version: 2,
@@ -342,10 +343,7 @@ function normalizePreviewItems(raw: unknown, fallbackItems: PreviewCartItem[]) {
   return items.length ? items : fallbackItems;
 }
 
-function buildPreviewSettings(
-  marketId: string,
-  items: PreviewCartItem[],
-): PreviewSettings {
+function buildPreviewSettings(marketId: string, items: PreviewCartItem[]): PreviewSettings {
   return {
     marketId,
     items,
@@ -399,8 +397,8 @@ function CartSettingContent({
   themeExtensionEnabled: boolean;
   markets: MarketItem[];
 }) {
-  const previewState = usePreviewState();
-  const previewActions = usePreviewActions();
+  const previewState = useCartState();
+  const previewActions = useCartActions();
   const loadFetcher = useFetcher<{
     ok: boolean;
     rulesJson?: string;
@@ -493,7 +491,10 @@ function CartSettingContent({
       contexts: { ...prev.contexts, [market.marketId]: market },
     }));
     previewActions.setMarket(market);
-    previewActions.setSettings(nextSettings);
+    previewActions.setItems(items);
+    previewActions.updateTimerOverrides(nextSettings.timerOverrides ?? {});
+    previewActions.updatePromotionsOverrides(nextSettings.promotionsOverrides ?? {});
+    previewActions.updateUpsellOverrides(nextSettings.upsellOverrides ?? {});
   }, [previewLoadFetcher.data, markets]);
 
   useEffect(() => {
@@ -530,6 +531,13 @@ function CartSettingContent({
   const onSave = () => {
     const values = normalizeFormValues(form.getFieldsValue(true) as CartSettingsFormValues);
     const { rules, styles } = splitFormValues(values);
+    const previewSettings: PreviewSettings = {
+      marketId: previewMarketMap.currentMarketId,
+      items: previewState.items,
+      timerOverrides: previewState.overrides.timerOverrides,
+      promotionsOverrides: previewState.overrides.promotionsOverrides,
+      upsellOverrides: previewState.overrides.upsellOverrides,
+    };
     saveFetcher.submit(
       {
         intent: "save-cart-settings",
@@ -541,8 +549,8 @@ function CartSettingContent({
     previewSaveFetcher.submit(
       {
         intent: "save-preview-settings",
-        previewSettingsJson: JSON.stringify(previewState.settings),
-        previewCartItemsJson: JSON.stringify(previewState.settings.items),
+        previewSettingsJson: JSON.stringify(previewSettings),
+        previewCartItemsJson: JSON.stringify(previewState.items),
         previewMarketContextJson: JSON.stringify(
           previewMarketMap.contexts[previewMarketMap.currentMarketId],
         ),
@@ -551,17 +559,15 @@ function CartSettingContent({
     );
   };
   const selectedMarketContext =
-    previewMarketMap.contexts[previewState.settings.marketId] ??
-    previewMarketMap.contexts[previewMarketMap.currentMarketId] ??
-    buildFallbackMarket();
-  const selectedMarketId = previewState.settings.marketId;
+    previewMarketMap.contexts[previewMarketMap.currentMarketId] ?? buildFallbackMarket();
+  const selectedMarketId = previewMarketMap.currentMarketId;
   const marketOptions =
     markets.length > 0
       ? markets.map((market) => ({ value: market.id, label: market.name }))
       : [{ value: selectedMarketId, label: selectedMarketContext.marketName }];
 
   const updatePreviewItem = (id: string, patch: Partial<PreviewCartItem>) => {
-    const target = previewState.settings.items.find((item) => item.id === id);
+    const target = previewState.items.find((item) => item.id === id);
     if (!target) return;
     previewActions.updateItem(id, { ...target, ...patch });
   };
@@ -577,7 +583,7 @@ function CartSettingContent({
       compareAtMinor: null,
       image: "",
     };
-    previewActions.updateItems([...previewState.settings.items, nextItem]);
+    previewActions.setItems([...previewState.items, nextItem]);
   };
 
   const removePreviewItem = (id: string) => {
@@ -649,7 +655,7 @@ function CartSettingContent({
         vendor: item?.vendor ? String(item.vendor) : undefined,
       } satisfies PreviewCartItem;
     });
-    previewActions.updateItems(nextItems);
+    previewActions.setItems(nextItems);
   };
 
   return (
@@ -826,10 +832,6 @@ function CartSettingContent({
                         contexts: { ...prev.contexts, [marketId]: nextContext },
                       }));
                       previewActions.setMarket(nextContext);
-                      previewActions.setSettings({
-                        ...previewState.settings,
-                        marketId,
-                      });
                     }}
                     options={marketOptions}
                   />
@@ -855,7 +857,7 @@ function CartSettingContent({
                 </div>
               </div>
               <div className="mt-[12px] space-y-[8px]">
-                {previewState.settings.items.map((item) => (
+                {previewState.items.map((item) => (
                   <div
                     key={item.id}
                     className="rounded-[10px] border border-[#e5e7eb] px-[10px] py-[8px] flex items-center justify-between"
@@ -897,11 +899,24 @@ function CartSettingContent({
               Cart Review
             </div>
           </div>
-          <CartPreviewPanel
+          <CartRenderer
             rules={previewValues}
             styles={previewValues}
             onQuantityChange={handleQuantityChange}
             onRemove={removePreviewItem}
+            onUpsellAdd={(item) => {
+              const nextItem: PreviewCartItem = {
+                id: `preview-upsell-${Date.now()}`,
+                productTitle: item.title,
+                variantTitle: item.subtitle || "Upsell",
+                optionsWithValues: [],
+                quantity: 1,
+                priceMinor: item.priceMinor,
+                compareAtMinor: item.compareAtMinor ?? null,
+                image: item.image,
+              };
+              previewActions.setItems([...previewState.items, nextItem]);
+            }}
           />
         </div>
       </div>
@@ -921,24 +936,26 @@ export function CartSettingPage({
   markets: MarketItem[];
 }) {
   const initialMarketMap = useMemo(() => buildMarketContextMap(markets), [markets]);
-  const initialPreviewState: PreviewState = useMemo(
+  const initialPreviewState: CartState = useMemo(
     () => ({
       market:
         initialMarketMap.contexts[initialMarketMap.currentMarketId] ?? buildFallbackMarket(),
-      settings: buildPreviewSettings(initialMarketMap.currentMarketId, DEFAULT_PREVIEW_ITEMS),
+      items: DEFAULT_PREVIEW_ITEMS,
+      overrides: buildPreviewSettings(initialMarketMap.currentMarketId, DEFAULT_PREVIEW_ITEMS),
     }),
     [initialMarketMap],
   );
+  const previewStore = useMemo(() => createCartStore(initialPreviewState), [initialPreviewState]);
 
   return (
-    <PreviewProvider initialState={initialPreviewState}>
+    <CartStoreProvider store={previewStore}>
       <CartSettingContent
         shop={shop}
         apiKey={apiKey}
         themeExtensionEnabled={themeExtensionEnabled}
         markets={markets}
       />
-    </PreviewProvider>
+    </CartStoreProvider>
   );
 }
 
