@@ -34,6 +34,7 @@ type Props = {
   ) => ReactNode;
   section?: "bars" | "products" | "all";
   simpleMode?: boolean;
+  simpleModeContext?: "primary" | "component";
   updateRuleValues?: (id: string, patch: UnifiedRuleValuePatch) => void;
   updateRulePresentation?: (id: string, patch: RulePresentationPatch) => void;
 };
@@ -50,6 +51,7 @@ export default function CompleteBundleEditor({
   renderCompleteBundleProductPricingCard,
   section = "all",
   simpleMode = false,
+  simpleModeContext = "component",
   updateRuleValues,
   updateRulePresentation,
 }: Props) {
@@ -223,8 +225,9 @@ export default function CompleteBundleEditor({
                       Bundle products
                     </div>
                     <div className="mt-1 text-[12px] text-[#5c6166]">
-                      Add the products customers can attach to this offer. This component stays
-                      additive and does not replace the main campaign logic.
+                      {simpleModeContext === "primary"
+                        ? "Add the products customers can bundle with the trigger product."
+                        : "Add the products customers can attach to this offer. This component stays additive and does not replace the main campaign logic."}
                     </div>
                   </div>
                   <Button
@@ -246,8 +249,9 @@ export default function CompleteBundleEditor({
 
               {activeBarProductCount === 0 ? (
                 <div className="mt-3 rounded-[10px] border border-dashed border-[#dfe3e8] bg-white px-4 py-4 text-[13px] text-[#5c6166]">
-                  No bundle products yet. Use the Shopify product picker to choose the accessory
-                  products for this component.
+                  {simpleModeContext === "primary"
+                    ? "No bundle products yet. Use the Shopify product picker to choose the products for this offer."
+                    : "No bundle products yet. Use the Shopify product picker to choose the accessory products for this component."}
                 </div>
               ) : (
                 <div className="mt-3 flex flex-col gap-2">
