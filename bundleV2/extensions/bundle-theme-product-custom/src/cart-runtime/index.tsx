@@ -305,21 +305,49 @@ function resolveMountTarget(host: HTMLElement) {
 }
 
 function resolveTakeoverTarget(host: HTMLElement) {
+  const findInner = (container: HTMLElement | null) => {
+    if (!container) return null;
+    return (
+      container.querySelector(".cart-drawer__inner") ||
+      container.querySelector(".drawer__inner") ||
+      container.querySelector("[data-cart-drawer-inner]") ||
+      null
+    );
+  };
+
   const closest = host.closest(
     "dialog, [role='dialog'], cart-drawer, #CartDrawer, .cart-drawer, [data-cart-drawer], .cart-drawer__inner, .drawer__inner",
   );
-  if (closest) return closest as HTMLElement;
+  if (closest) {
+    if (closest.matches(".cart-drawer__inner, .drawer__inner, [data-cart-drawer-inner]")) {
+      return closest as HTMLElement;
+    }
+    const inner = findInner(closest as HTMLElement);
+    if (inner) return inner as HTMLElement;
+    return closest as HTMLElement;
+  }
   const rootNode = host.getRootNode();
   if (rootNode instanceof ShadowRoot) {
     const dialog =
       rootNode.querySelector("dialog[open]") ||
       rootNode.querySelector("dialog") ||
       rootNode.querySelector('[role="dialog"][open]') ||
-      rootNode.querySelector('[role="dialog"]') ||
+      rootNode.querySelector('[role="dialog"]');
+    if (dialog) {
+      const inner = findInner(dialog as HTMLElement);
+      if (inner) return inner as HTMLElement;
+      return dialog as HTMLElement;
+    }
+    const inner =
       rootNode.querySelector(".cart-drawer__inner") ||
-      rootNode.querySelector(".drawer__inner");
-    if (dialog) return dialog as HTMLElement;
-    if (rootNode.host) return rootNode.host as HTMLElement;
+      rootNode.querySelector(".drawer__inner") ||
+      rootNode.querySelector("[data-cart-drawer-inner]");
+    if (inner) return inner as HTMLElement;
+    if (rootNode.host) {
+      const hostInner = findInner(rootNode.host as HTMLElement);
+      if (hostInner) return hostInner as HTMLElement;
+      return rootNode.host as HTMLElement;
+    }
   }
   if (
     host.matches(
