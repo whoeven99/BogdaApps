@@ -226,12 +226,16 @@ function resolveShadowTarget(host: HTMLElement) {
   if (!host.shadowRoot) return null;
   const root = host.shadowRoot;
   const shadowTarget =
+    root.querySelector("dialog[open]") ||
+    root.querySelector("dialog") ||
+    root.querySelector('[role="dialog"][open]') ||
+    root.querySelector('[role="dialog"]') ||
+    root.querySelector(".cart-drawer__inner") ||
+    root.querySelector(".drawer__inner") ||
     root.querySelector(".cart-items__wrapper") ||
     root.querySelector(".cart-drawer__content") ||
     root.querySelector("cart-items-component") ||
-    root.querySelector(".cart-items-component") ||
-    root.querySelector("dialog[open]") ||
-    root.querySelector("dialog");
+    root.querySelector(".cart-items-component");
   return shadowTarget as HTMLElement | null;
 }
 
@@ -301,6 +305,22 @@ function resolveMountTarget(host: HTMLElement) {
 }
 
 function resolveTakeoverTarget(host: HTMLElement) {
+  const closest = host.closest(
+    "dialog, [role='dialog'], cart-drawer, #CartDrawer, .cart-drawer, [data-cart-drawer], .cart-drawer__inner, .drawer__inner",
+  );
+  if (closest) return closest as HTMLElement;
+  const rootNode = host.getRootNode();
+  if (rootNode instanceof ShadowRoot) {
+    const dialog =
+      rootNode.querySelector("dialog[open]") ||
+      rootNode.querySelector("dialog") ||
+      rootNode.querySelector('[role="dialog"][open]') ||
+      rootNode.querySelector('[role="dialog"]') ||
+      rootNode.querySelector(".cart-drawer__inner") ||
+      rootNode.querySelector(".drawer__inner");
+    if (dialog) return dialog as HTMLElement;
+    if (rootNode.host) return rootNode.host as HTMLElement;
+  }
   if (
     host.matches(
       "cart-drawer, #CartDrawer, .cart-drawer, [data-cart-drawer], dialog, [role='dialog']",
