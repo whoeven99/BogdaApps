@@ -1,0 +1,67 @@
+{
+  "cart": {
+    "cost": {
+      "subtotalAmount": {
+        "amount": "54.96"
+      }
+    },
+    "lines": [
+      {
+        "id": "gid://Shopify/CartLine/1",
+        "quantity": 3,
+        "cost": {
+          "amountPerQuantity": {
+            "amount": "18.32"
+          }
+        },
+        "merchandise": {
+          "__typename": "ProductVariant",
+          "id": "gid://shopify/ProductVariant/44218278707223",
+          "product": {
+            "id": "gid://shopify/Product/8682446553111"
+          }
+        }
+      }
+    ]
+  },
+  "shop": {
+    "offersProd": null,
+    "offersTest": {
+      "jsonValue": {
+        "updatedAt": "2026-05-11T08:00:00.000Z",
+        "offers": [
+          {
+            "id": "cmp0ukw0c0000ot1zmspzx9ll",
+            "name": "#offer 2026-05-11 06:54:48",
+            "cartTitle": "Bundle Discount",
+            "status": true,
+            "startTime": "2026-05-11T06:54:48.874+00:00",
+            "endTime": "2999-12-31T23:59:59.000+00:00",
+            "selectedProductsJson": "[{\"id\":\"gid://shopify/Product/8682446553111\"}]",
+            "discountRulesJson": "[{\"count\":2,\"discountPercent\":15,\"discountClass\":\"product\",\"conditionType\":\"item_quantity\",\"rewardType\":\"percentage_off\",\"logicType\":\"standard\"},{\"count\":3,\"discountPercent\":20,\"discountClass\":\"product\",\"conditionType\":\"item_quantity\",\"rewardType\":\"percentage_off\",\"logicType\":\"standard\"}]",
+            "offerSettingsJson": "{\"markets\":\"all\"}",
+            "offerType": "quantity-breaks-same"
+          }
+        ]
+      }
+    },
+    "bundleEnabledProd": null,
+    "bundleEnabledTest": {
+      "jsonValue": {
+        "enabled": true
+      }
+    }
+  },
+  "localization": {
+    "market": {
+      "id": "gid://shopify/Market/83581763607"
+    }
+  },
+  "discount": {
+    "appOwnedOffers": null,
+    "legacyOffers": null,
+    "discountClasses": [
+      "PRODUCT"
+    ]
+  }
+}

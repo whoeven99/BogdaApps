@@ -1,4 +1,4 @@
-import { Button, Input, Select } from "antd";
+import { Button, Input } from "antd";
 import type { ReactNode } from "react";
 import type {
   CompleteBundleBar,
@@ -65,6 +65,11 @@ export default function CompleteBundleEditor({
     ? 0
     : completeBundleBars.findIndex((bar) => bar.id === activeBar?.id);
   const activeBarProductCount = activeBar?.products.length ?? 0;
+  const activeBundleMinQuantity = Math.max(1, Math.trunc(Number(activeBar?.minQuantity) || 1));
+  const activeBundleMaxQuantity = Math.max(
+    activeBundleMinQuantity,
+    Math.trunc(Number(activeBar?.maxQuantity) || Number(activeBar?.quantity) || 1),
+  );
 
   return (
     <div className="mb-8">
@@ -218,7 +223,58 @@ export default function CompleteBundleEditor({
         <div className={showBars ? "mt-6" : ""}>
           {simpleMode ? (
             <>
-              <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-4">
+              <div className="rounded-[10px] border border-[#e3e8ed] bg-white p-4">
+                <div className="text-[14px] font-medium text-[#1c1f23]">Bundle configuration</div>
+                <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <label className="block text-[13px] font-medium text-[#1c1f23]">
+                    Minimum selection
+                    <Input
+                      size="large"
+                      type="number"
+                      min={1}
+                      className="mt-1"
+                      value={activeBundleMinQuantity}
+                      onChange={(e) => {
+                        if (!activeBar) return;
+                        const nextMin = Math.max(1, Math.trunc(Number(e.target.value) || 1));
+                        updateCompleteBundleBar(activeBar.id, {
+                          minQuantity: nextMin,
+                          maxQuantity: Math.max(nextMin, activeBundleMaxQuantity),
+                          quantity: Math.max(nextMin, activeBundleMaxQuantity),
+                        });
+                      }}
+                    />
+                  </label>
+                  <label className="block text-[13px] font-medium text-[#1c1f23]">
+                    Maximum selection
+                    <Input
+                      size="large"
+                      type="number"
+                      min={activeBundleMinQuantity}
+                      className="mt-1"
+                      value={activeBundleMaxQuantity}
+                      onChange={(e) => {
+                        if (!activeBar) return;
+                        const nextMax = Math.max(
+                          activeBundleMinQuantity,
+                          Math.trunc(Number(e.target.value) || activeBundleMinQuantity),
+                        );
+                        if (updateRuleValues) {
+                          updateRuleValues(getCompleteBundleUnifiedRuleId(activeBar.id), {
+                            count: nextMax,
+                          });
+                        }
+                        updateCompleteBundleBar(activeBar.id, {
+                          maxQuantity: nextMax,
+                          quantity: nextMax,
+                        });
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-[10px] bg-[#f6f8f9] px-4 py-4">
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
                     <div className="text-[14px] font-medium text-[#1c1f23]">
@@ -250,8 +306,8 @@ export default function CompleteBundleEditor({
               {activeBarProductCount === 0 ? (
                 <div className="mt-3 rounded-[10px] border border-dashed border-[#dfe3e8] bg-white px-4 py-4 text-[13px] text-[#5c6166]">
                   {simpleModeContext === "primary"
-                    ? "No bundle products yet. Use the Shopify product picker to choose the products for this offer."
-                    : "No bundle products yet. Use the Shopify product picker to choose the accessory products for this component."}
+                    ? "No bundle products yet. Use the Shopify product picker to choose the products for this bundle configuration."
+                    : "No bundle products yet. Use the Shopify product picker to choose the products for this bundle configuration."}
                 </div>
               ) : (
                 <div className="mt-3 space-y-4">

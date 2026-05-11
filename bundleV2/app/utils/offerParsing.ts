@@ -1228,7 +1228,7 @@ function sanitizeLogicBlock(raw: unknown): LogicBlock | null {
         : [],
       bars: Array.isArray(configRecord.bars) ? configRecord.bars : [],
     });
-    if (config.bars.length === 0) return null;
+    if (config.bars.length === 0 && (config.triggerProductIds?.length ?? 0) === 0) return null;
     return {
       id:
         typeof item.id === "string" && item.id ? item.id : "logic-complete-bundle",

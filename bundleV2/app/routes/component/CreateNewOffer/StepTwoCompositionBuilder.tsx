@@ -804,7 +804,7 @@ function CompleteBundleModuleDetail({
               Add the complete bundle component without changing the main offer logic.
             </div>
             <Button onClick={() => actions.addCompleteBundleBar("quantity-break-same")}>
-              Add bundle products
+              Add bundle configuration
             </Button>
           </div>
         </QuietEmptyState>
@@ -821,7 +821,7 @@ function CompleteBundleModuleDetail({
               Add the bundle products customers can choose alongside the current trigger product.
             </div>
             <Button onClick={() => actions.addCompleteBundleBar("quantity-break-same")}>
-              Add bundle products
+              Add bundle configuration
             </Button>
           </div>
         </QuietEmptyState>
