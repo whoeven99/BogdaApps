@@ -485,16 +485,6 @@ export function buildUnifiedPreviewItems(params: BuildPreviewParams): PreviewIte
 export function buildCompositionPreviewItems(
   params: Omit<BuildPreviewParams, "offerType">,
 ): PreviewItem[] {
-  const hasCompleteBundleSource = params.rules.some(
-    (rule) => rule.sourceOfferType === "complete-bundle",
-  );
-  if (hasCompleteBundleSource) {
-    return buildUnifiedPreviewItems({
-      ...params,
-      offerType: "complete-bundle",
-    });
-  }
-
   const mixedParams: BuildPreviewParams = {
     ...params,
     offerType: "quantity-breaks-same",

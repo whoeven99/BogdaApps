@@ -795,8 +795,25 @@ function CompleteBundleModuleDetail({
     return (
       <DetailSection title="Complete bundle">
         <QuietEmptyState>
-          <Button className="mt-4" onClick={() => actions.addCompleteBundleBar("quantity-break-same")}>
-            Enable complete bundle module
+          <div className="space-y-3">
+            <div>
+              Add the complete bundle component without changing the main offer logic.
+            </div>
+            <Button onClick={() => actions.addCompleteBundleBar("quantity-break-same")}>
+              Add bundle products
+            </Button>
+          </div>
+        </QuietEmptyState>
+      </DetailSection>
+    );
+  }
+
+  if (!draft.completeBundleBars.length) {
+    return (
+      <DetailSection title="Complete bundle">
+        <QuietEmptyState>
+          <Button onClick={() => actions.addCompleteBundleBar("quantity-break-same")}>
+            Add bundle bar
           </Button>
         </QuietEmptyState>
       </DetailSection>
@@ -829,7 +846,7 @@ function CompleteBundleModuleDetail({
           renderCompleteBundleProductPricingCard={renderCompleteBundleProductPricingCard}
           updateRuleValues={actions.updateUnifiedRuleValues}
           updateRulePresentation={actions.updateUnifiedRulePresentation}
-          section="all"
+          section={isPrimaryTemplate ? "all" : "products"}
           simpleMode={!isPrimaryTemplate}
         />
       </div>

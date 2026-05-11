@@ -62,6 +62,7 @@ export default function CompleteBundleEditor({
   const activeBarIndex = simpleMode
     ? 0
     : completeBundleBars.findIndex((bar) => bar.id === activeBar?.id);
+  const activeBarProductCount = activeBar?.products.length ?? 0;
 
   return (
     <div className="mb-8">
@@ -213,6 +214,76 @@ export default function CompleteBundleEditor({
 
       {showProducts && activeBar ? (
         <div className={showBars ? "mt-6" : ""}>
+          {simpleMode ? (
+            <>
+              <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <div className="text-[14px] font-medium text-[#1c1f23]">
+                      Bundle products
+                    </div>
+                    <div className="mt-1 text-[12px] text-[#5c6166]">
+                      Add the products customers can attach to this offer. This component stays
+                      additive and does not replace the main campaign logic.
+                    </div>
+                  </div>
+                  <Button
+                    type="primary"
+                    onClick={(e) => {
+                      setActiveBundleBarId(activeBar.id);
+                      void handleSelectProductsForBundleBar(activeBar.id);
+                      e.preventDefault();
+                    }}
+                  >
+                    {activeBarProductCount > 0 ? "Edit bundle products" : "Add bundle products"}
+                  </Button>
+                </div>
+                <div className="mt-3 text-[12px] text-[#5c6166]">
+                  {activeBarProductCount} product
+                  {activeBarProductCount === 1 ? "" : "s"} selected
+                </div>
+              </div>
+
+              {activeBarProductCount === 0 ? (
+                <div className="mt-3 rounded-[10px] border border-dashed border-[#dfe3e8] bg-white px-4 py-4 text-[13px] text-[#5c6166]">
+                  No bundle products yet. Use the Shopify product picker to choose the accessory
+                  products for this component.
+                </div>
+              ) : (
+                <div className="mt-3 flex flex-col gap-2">
+                  {activeBar.products.map((product) => {
+                    const selectedVariant =
+                      product.variants?.find((variant) => variant.id === product.selectedVariantId) ||
+                      product.variants?.[0];
+
+                    return (
+                      <div
+                        key={product.productId}
+                        className="flex items-center gap-3 rounded-[10px] border border-[#e3e8ed] bg-white px-3 py-3"
+                      >
+                        <img
+                          src={product.image || "https://via.placeholder.com/48"}
+                          alt={product.title || "Bundle product"}
+                          className="h-10 w-10 rounded-[8px] border border-[#edf1f4] object-cover"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-[13px] font-medium text-[#1c1f23]">
+                            {product.title || "Bundle product"}
+                          </div>
+                          <div className="mt-1 truncate text-[12px] text-[#5c6166]">
+                            {selectedVariant?.title && selectedVariant.title !== "Default Title"
+                              ? selectedVariant.title
+                              : "Default variant"}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          ) : (
+            <>
           <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3">
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <div>
@@ -296,6 +367,8 @@ export default function CompleteBundleEditor({
               )}
             </div>
           </div>
+            </>
+          )}
         </div>
       ) : null}
     </div>
