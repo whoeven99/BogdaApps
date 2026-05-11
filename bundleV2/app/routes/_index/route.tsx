@@ -50,6 +50,7 @@ import {
   parseProgressiveGiftsConfig,
   progressiveGiftsConfigToStorableJson,
   parseCompleteBundleConfig,
+  parseDifferentProductsDiscountRules,
   parseFreeGiftSelectedProducts,
   parseSelectedProductIds,
   migrateLegacyOfferToCampaignConfig,
@@ -248,6 +249,46 @@ function buildHydratedCompleteBundleSelectedProductsJson(
   return JSON.stringify({ bars });
 }
 
+function buildHydratedDifferentProductsSelectedProductsJson(
+  selectedProductsJson: string | null | undefined,
+  discountRulesJson: string | null | undefined,
+  storeProductMap: Map<string, StoreProductItem>,
+): string | null {
+  const referencedIds = Array.from(
+    new Set([
+      ...parseSelectedProductIds(selectedProductsJson),
+      ...parseDifferentProductsDiscountRules(discountRulesJson).flatMap((rule) => [
+        ...(Array.isArray(rule.buyProductIds) ? rule.buyProductIds : []),
+        ...(Array.isArray(rule.getProductIds) ? rule.getProductIds : []),
+      ]),
+    ]),
+  );
+
+  if (!referencedIds.length) return selectedProductsJson ?? null;
+
+  const hydratedCatalog = referencedIds
+    .map((productId) => {
+      const hit = storeProductMap.get(String(productId || ""));
+      if (!hit) return null;
+      return {
+        id: hit.id,
+        handle: hit.handle || "",
+        title: hit.name || "",
+        image: hit.image || "",
+      };
+    })
+    .filter(
+      (
+        product,
+      ): product is { id: string; handle: string; title: string; image: string } =>
+        Boolean(product?.id),
+    );
+
+  return hydratedCatalog.length > 0
+    ? JSON.stringify(hydratedCatalog)
+    : selectedProductsJson ?? null;
+}
+
 async function buildCompactOffersPayload(
   shopOffers: OfferListItem[],
 ): Promise<string> {
@@ -294,13 +335,17 @@ async function buildStorefrontOffersPayload(
     }>;
   };
 
-  // storefront 需要补齐 complete-bundle 展示字段，方便主题脚本直接渲染与加车。
-  const completeBundleProductIds = collectReferencedProductIds(
-    activeOffers.filter((offer) => offer.offerType === "complete-bundle"),
+  // storefront 需要补齐前台直接渲染所需的商品展示字段，避免主题脚本首次渲染时缺少 title/handle/image。
+  const storefrontCatalogProductIds = collectReferencedProductIds(
+    activeOffers.filter(
+      (offer) =>
+        offer.offerType === "complete-bundle" ||
+        offer.offerType === "quantity-breaks-different",
+    ),
   );
   const storeProducts =
-    completeBundleProductIds.length > 0
-      ? await fetchStoreProducts(admin, completeBundleProductIds)
+    storefrontCatalogProductIds.length > 0
+      ? await fetchStoreProducts(admin, storefrontCatalogProductIds)
       : [];
   const storeProductMap = new Map(
     storeProducts.map((product) => [String(product.id || ""), product]),
@@ -314,6 +359,12 @@ async function buildStorefrontOffersPayload(
             offer.selectedProductsJson,
             storeProductMap,
           )
+        : offer.offerType === "quantity-breaks-different"
+          ? buildHydratedDifferentProductsSelectedProductsJson(
+              offer.selectedProductsJson,
+              offer.discountRulesJson,
+              storeProductMap,
+            )
         : offer.selectedProductsJson ?? null,
   }));
 
@@ -773,11 +824,24 @@ function collectReferencedProductIds(offers: OfferListItem[]): string[] {
       continue;
     }
 
+    if (offer.offerType === "quantity-breaks-different") {
+      const selectedIds = parseSelectedProductIds(offer.selectedProductsJson);
+      const ruleIds = parseDifferentProductsDiscountRules(
+        offer.discountRulesJson,
+      ).flatMap((rule) => [
+        ...(Array.isArray(rule.buyProductIds) ? rule.buyProductIds : []),
+        ...(Array.isArray(rule.getProductIds) ? rule.getProductIds : []),
+      ]);
+      for (const productId of [...selectedIds, ...ruleIds]) {
+        const normalized = String(productId || "").trim();
+        if (normalized) ids.add(normalized);
+      }
+      continue;
+    }
+
     const selectedIds =
       offer.offerType === "bxgy"
         ? parseBxgySelectedProductIds(offer.selectedProductsJson)
-        : offer.offerType === "quantity-breaks-different"
-          ? parseSelectedProductIds(offer.selectedProductsJson)
         : offer.offerType === "free-gift"
           ? [
               ...parseFreeGiftSelectedProducts(offer.selectedProductsJson).triggerProducts,
