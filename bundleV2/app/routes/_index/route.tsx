@@ -12,7 +12,6 @@ import {
 import {
   authenticate,
   ensureCartLinesAutomaticDiscount,
-  ensureBundleDeliveryAutomaticDiscount,
   syncCartLinesAutomaticDiscountMetafield,
 } from "../../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -585,6 +584,7 @@ export type IndexLoaderData = {
   apiKey: string;
   ianaTimezone: string;
   themeExtensionEnabled: boolean;
+  themeExtensionDetectionFailed: boolean;
   themeExtensionDebug?: ThemeExtensionDetectionDebug;
   billingSubscriptions: Array<{ name: string; status: string }>;
   billingTestMode: boolean;
@@ -1075,6 +1075,17 @@ const getThemeExtensionEnabledAcrossThemes = async (
       `,
     );
     const json = await response.json();
+    const graphqlErrors = Array.isArray(json?.errors) ? json.errors : [];
+    if (graphqlErrors.length > 0) {
+      debug.error = graphqlErrors
+        .map((item: { message?: string }) => String(item?.message || "").trim())
+        .filter(Boolean)
+        .join(" | ");
+      console.error("[theme-extension] graphql errors while scanning themes", {
+        errors: graphqlErrors,
+      });
+      return { enabled: false, debug };
+    }
     const themeNodes =
       json?.data?.themes?.edges
         ?.map((edge: { node?: Record<string, any> | null }) => edge?.node)
@@ -1439,18 +1450,6 @@ import { AppProvider } from "@shopify/shopify-app-react-router/react";
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
 
-  // Ensure web pixel exists
-  void ensureWebPixel(admin, session.shop).catch((error) => {
-    console.error("Failed to ensure web pixel exists", error);
-  });
-  void ensureCartLinesAutomaticDiscount(admin).catch((error) => {
-    console.error("Failed to ensure automatic app discount exists", error);
-  });
-  // 中文说明：历史安装店可能只有商品折扣自动规则，需在每次进入 App 时补偿创建 SHIPPING 自动折扣
-  void ensureBundleDeliveryAutomaticDiscount(admin).catch((error) => {
-    console.error("Failed to ensure shipping automatic app discount exists", error);
-  });
-
   // eslint-disable-next-line no-undef
   const apiKey = sanitizeEnvLikeValue(process.env.SHOPIFY_API_KEY);
 
@@ -1476,10 +1475,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const themeExtensionDetection = await getCurrentThemeExtensionEnabled(admin);
   const themeExtensionEnabled = themeExtensionDetection.enabled;
-  void syncBundleEnabledMetafield(admin, themeExtensionEnabled);
-  void syncShopOffersMetafield(admin, session.shop, themeExtensionEnabled).catch((error) => {
-    console.error("Failed to sync shop offers metafield in loader", error);
-  });
+  const themeExtensionDetectionFailed = Boolean(themeExtensionDetection.debug?.error);
+  if (!themeExtensionDetectionFailed) {
+    await syncBundleEnabledMetafield(admin, themeExtensionEnabled);
+    const syncResult = await syncShopOffersMetafield(
+      admin,
+      session.shop,
+      themeExtensionEnabled,
+    );
+    if (!syncResult.ok) {
+      console.error("Failed to sync shop offers metafield in loader", {
+        shopName: session.shop,
+        message: syncResult.message,
+      });
+    }
+  } else {
+    console.error("[theme-extension] skip bundle metafield sync because detection failed", {
+      shopName: session.shop,
+      error: themeExtensionDetection.debug?.error,
+    });
+  }
 
   let markets: MarketItem[] = [];
   try {
@@ -1525,6 +1540,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     apiKey,
     ianaTimezone,
     themeExtensionEnabled,
+    themeExtensionDetectionFailed,
     themeExtensionDebug: themeExtensionDetection.debug,
     billingSubscriptions,
     billingTestMode: billingIsTestCharge(),
@@ -2243,21 +2259,28 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     }
 
-    const themeExtensionEnabled = (await getCurrentThemeExtensionEnabled(admin)).enabled;
-    const syncResult = await syncShopOffersMetafield(
-      admin,
-      shopName,
-      themeExtensionEnabled,
-    );
-    if (!syncResult.ok) {
-      console.error("syncShopOffersMetafield failed after offer write", {
+    const themeExtensionDetection = await getCurrentThemeExtensionEnabled(admin);
+    if (themeExtensionDetection.debug?.error) {
+      console.error("Skip shop offers sync after offer write because theme detection failed", {
         shopName,
-        message: syncResult.message,
+        error: themeExtensionDetection.debug.error,
       });
-      return offerActionErrorResponse(
-        `Failed to sync data: ${syncResult.message}`,
-        502,
+    } else {
+      const syncResult = await syncShopOffersMetafield(
+        admin,
+        shopName,
+        themeExtensionDetection.enabled,
       );
+      if (!syncResult.ok) {
+        console.error("syncShopOffersMetafield failed after offer write", {
+          shopName,
+          message: syncResult.message,
+        });
+        return offerActionErrorResponse(
+          `Failed to sync data: ${syncResult.message}`,
+          502,
+        );
+      }
     }
 
     invalidateShopOffersCache(shopName);
@@ -2293,17 +2316,24 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     try {
       const shopNameToSync = updatedOffer?.shopName as string | undefined;
       if (shopNameToSync) {
-        const themeExtensionEnabled = (await getCurrentThemeExtensionEnabled(admin)).enabled;
-        const syncResult = await syncShopOffersMetafield(
-          admin,
-          shopNameToSync,
-          themeExtensionEnabled,
-        );
-        if (!syncResult.ok) {
-          console.error("Failed to sync offers metafield after toggle", {
+        const themeExtensionDetection = await getCurrentThemeExtensionEnabled(admin);
+        if (themeExtensionDetection.debug?.error) {
+          console.error("Skip offers metafield sync after toggle because theme detection failed", {
             shopNameToSync,
-            message: syncResult.message,
+            error: themeExtensionDetection.debug.error,
           });
+        } else {
+          const syncResult = await syncShopOffersMetafield(
+            admin,
+            shopNameToSync,
+            themeExtensionDetection.enabled,
+          );
+          if (!syncResult.ok) {
+            console.error("Failed to sync offers metafield after toggle", {
+              shopNameToSync,
+              message: syncResult.message,
+            });
+          }
         }
       }
     } catch (error) {
@@ -2344,17 +2374,24 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // Sync metafield after deleting offer
     try {
       if (shopNameToSync) {
-        const themeExtensionEnabled = (await getCurrentThemeExtensionEnabled(admin)).enabled;
-        const syncResult = await syncShopOffersMetafield(
-          admin,
-          shopNameToSync,
-          themeExtensionEnabled,
-        );
-        if (!syncResult.ok) {
-          console.error("Failed to sync offers metafield after delete", {
+        const themeExtensionDetection = await getCurrentThemeExtensionEnabled(admin);
+        if (themeExtensionDetection.debug?.error) {
+          console.error("Skip offers metafield sync after delete because theme detection failed", {
             shopNameToSync,
-            message: syncResult.message,
+            error: themeExtensionDetection.debug.error,
           });
+        } else {
+          const syncResult = await syncShopOffersMetafield(
+            admin,
+            shopNameToSync,
+            themeExtensionDetection.enabled,
+          );
+          if (!syncResult.ok) {
+            console.error("Failed to sync offers metafield after delete", {
+              shopNameToSync,
+              message: syncResult.message,
+            });
+          }
         }
       }
     } catch (error) {
@@ -2382,6 +2419,7 @@ export default function Index() {
     apiKey,
     ianaTimezone,
     themeExtensionEnabled,
+    themeExtensionDetectionFailed,
     billingSubscriptions,
     billingTestMode,
   } = useLoaderData() as IndexLoaderData;
@@ -2602,6 +2640,7 @@ export default function Index() {
             apiKey={apiKey}
             ianaTimezone={ianaTimezone}
             themeExtensionEnabled={themeExtensionEnabled}
+            themeExtensionDetectionFailed={themeExtensionDetectionFailed}
             onViewAllOffers={() => setActiveTab("offers")}
             onViewAnalytics={(offerId) => {
               if (offerId) {
@@ -2625,6 +2664,7 @@ export default function Index() {
             offersLoading={isOffersLoading}
             ianaTimezone={ianaTimezone}
             themeExtensionEnabled={themeExtensionEnabled}
+            themeExtensionDetectionFailed={themeExtensionDetectionFailed}
             shop={shop}
             apiKey={apiKey}
             onCreateOffer={() => {

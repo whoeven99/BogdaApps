@@ -9,7 +9,11 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { ConfigProvider } from "antd";
 
-import { authenticate } from "../shopify.server";
+import {
+  authenticate,
+  ensureBundleDeliveryAutomaticDiscount,
+  ensureCartLinesAutomaticDiscount,
+} from "../shopify.server";
 import { sanitizeEnvLikeValue, sanitizeUrlLikeEnvValue } from "../utils/env";
 
 const ensureWebPixel = async (admin: any, shop: string) => {
@@ -108,11 +112,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.error("Failed to fetch shop timezone", error);
   }
 
-  // 不等待 web pixel 初始化完成，优先返回页面所需数据。
-  void ensureWebPixel(admin, session.shop).catch((error) => {
-    console.error("Failed to ensure web pixel exists", error);
-  });
-
   // eslint-disable-next-line no-undef
   return {
     apiKey: sanitizeEnvLikeValue(process.env.SHOPIFY_API_KEY),
@@ -125,16 +124,39 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "");
 
-  if (intent !== "ensure-web-pixel") {
+  if (intent !== "ensure-app-runtime-resources") {
     return Response.json({ ok: false, error: "unknown-intent" }, { status: 400 });
   }
 
   try {
     await ensureWebPixel(admin, session.shop);
-    return Response.json({ ok: true });
   } catch (error) {
     console.error("Failed to ensure web pixel exists in action", error);
-    return Response.json({ ok: false, error: "ensure-failed" }, { status: 500 });
+    return Response.json(
+      { ok: false, error: "ensure-web-pixel-failed" },
+      { status: 500 },
+    );
+  }
+
+  try {
+    await ensureCartLinesAutomaticDiscount(admin);
+  } catch (error) {
+    console.error("Failed to ensure automatic app discount exists in action", error);
+    return Response.json(
+      { ok: false, error: "ensure-cart-discount-failed" },
+      { status: 500 },
+    );
+  }
+
+  try {
+    await ensureBundleDeliveryAutomaticDiscount(admin);
+    return Response.json({ ok: true });
+  } catch (error) {
+    console.error("Failed to ensure shipping automatic app discount exists in action", error);
+    return Response.json(
+      { ok: false, error: "ensure-shipping-discount-failed" },
+      { status: 500 },
+    );
   }
 };
 
@@ -144,7 +166,7 @@ export default function App() {
 
   useEffect(() => {
     ensureWebPixelFetcher.submit(
-      { intent: "ensure-web-pixel" },
+      { intent: "ensure-app-runtime-resources" },
       { method: "POST" },
     );
   }, [ensureWebPixelFetcher]);

@@ -40,6 +40,7 @@ interface DashboardPageProps {
   apiKey: string;
   ianaTimezone: string;
   themeExtensionEnabled: boolean;
+  themeExtensionDetectionFailed?: boolean;
 }
 
 type DashboardOfferRow = {
@@ -124,6 +125,7 @@ export function DashboardPage({
   apiKey,
   ianaTimezone,
   themeExtensionEnabled,
+  themeExtensionDetectionFailed = false,
 }: DashboardPageProps) {
   const [searchParams] = useSearchParams();
   const actionData = useActionData() as { toast?: string } | undefined;
@@ -145,6 +147,12 @@ export function DashboardPage({
     }
     return false;
   });
+  const themeExtensionStatus = themeExtensionDetectionFailed
+    ? "unknown"
+    : themeExtensionEnabled
+      ? "active"
+      : "inactive";
+  const themeExtensionBlocksOffers = themeExtensionStatus === "inactive";
 
   const handleCloseBanner = () => {
     setHideBanner(true);
@@ -374,7 +382,7 @@ export function DashboardPage({
 
   return (
     <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px]">
-      {!themeExtensionEnabled && !hideBanner && (
+      {themeExtensionBlocksOffers && !hideBanner && (
         <div className="bg-[#fff4f4] border border-[#ffc9c9] rounded-[8px] p-[16px] mb-[24px] flex items-start justify-between">
           <div className="flex gap-[12px]">
             <div className="text-[#d72c0d] mt-[2px]">
@@ -480,22 +488,46 @@ export function DashboardPage({
               Theme extension
             </h2>
             <div
-              className={`flex items-center gap-[6px] px-[8px] py-[4px] rounded-[4px] ${themeExtensionEnabled ? "bg-[#d1f7c4]" : "bg-[#f4f6f8]"}`}
+              className={`flex items-center gap-[6px] px-[8px] py-[4px] rounded-[4px] ${
+                themeExtensionStatus === "active"
+                  ? "bg-[#d1f7c4]"
+                  : themeExtensionStatus === "unknown"
+                    ? "bg-[#fff1c2]"
+                    : "bg-[#f4f6f8]"
+              }`}
             >
               <div
-                className={`w-[8px] h-[8px] rounded-full ${themeExtensionEnabled ? "bg-[#108043]" : "bg-[#6d7175]"}`}
+                className={`w-[8px] h-[8px] rounded-full ${
+                  themeExtensionStatus === "active"
+                    ? "bg-[#108043]"
+                    : themeExtensionStatus === "unknown"
+                      ? "bg-[#b98900]"
+                      : "bg-[#6d7175]"
+                }`}
               />
               <span
-                className={`font-sans font-medium text-[14px] leading-[21px] tracking-normal ${themeExtensionEnabled ? "text-[#108043]" : "text-[#5c6166]"}`}
+                className={`font-sans font-medium text-[14px] leading-[21px] tracking-normal ${
+                  themeExtensionStatus === "active"
+                    ? "text-[#108043]"
+                    : themeExtensionStatus === "unknown"
+                      ? "text-[#916a00]"
+                      : "text-[#5c6166]"
+                }`}
               >
-                {themeExtensionEnabled ? "Active" : "Inactive"}
+                {themeExtensionStatus === "active"
+                  ? "Active"
+                  : themeExtensionStatus === "unknown"
+                    ? "Check failed"
+                    : "Inactive"}
               </span>
             </div>
           </div>
           <p className="font-sans font-normal text-[16px] leading-[25.6px] text-[#1c1f23] tracking-normal mb-[20px]">
-            {themeExtensionEnabled
+            {themeExtensionStatus === "active"
               ? "Bundles widget is visible in product pages."
-              : "Bundles widget is currently disabled."}
+              : themeExtensionStatus === "unknown"
+                ? "Bundle widget status could not be verified right now."
+                : "Bundles widget is currently disabled."}
           </p>
           <p className="font-sans font-normal text-[13px] leading-[20px] text-[#5c6166] tracking-[-0.1px] mb-[12px]">
             This opens Theme Editor App Embeds. Toggle the extension there and
@@ -506,12 +538,16 @@ export function DashboardPage({
               type="button"
               onClick={handleThemeExtensionToggle}
               className={`px-[16px] py-[8px] rounded-[6px] font-sans font-normal text-[16px] leading-[24px] tracking-normal cursor-pointer transition-colors w-full border ${
-                themeExtensionEnabled
+                themeExtensionStatus === "active"
                   ? "bg-white border-[#dfe3e8] text-[#d72c0d] hover:bg-[#fef3f2]"
                   : "bg-transparent border-[#1c1f23] text-[#1c1f23] hover:bg-black/5"
               }`}
             >
-              {themeExtensionEnabled ? "Disable" : "Enable"}
+              {themeExtensionStatus === "active"
+                ? "Disable"
+                : themeExtensionStatus === "unknown"
+                  ? "Open Theme Editor"
+                  : "Enable"}
             </button>
           </div>
         </div>
@@ -583,7 +619,7 @@ export function DashboardPage({
             ) : (
               visibleOffers.map((offer) => {
                 const isToggling = getIsToggling(offer.id);
-                const displayIsActive = themeExtensionEnabled ? offer.isActive : false;
+                const displayIsActive = themeExtensionBlocksOffers ? false : offer.isActive;
                 const statusLabel = displayIsActive ? "Active" : "Inactive";
                 const displayType = offer.offerType === "quantity-breaks-same" ? "Quantity breaks" : offer.offerType;
                 
@@ -639,7 +675,7 @@ export function DashboardPage({
                           type="submit"
                           disabled={isToggling}
                           onClick={(e) => {
-                            if (!themeExtensionEnabled) {
+                            if (themeExtensionBlocksOffers) {
                               e.preventDefault();
                               setShowThemeExtensionModal(true);
                             }
@@ -734,7 +770,7 @@ export function DashboardPage({
           ) : (
             visibleOffers.map((offer) => {
               const isToggling = getIsToggling(offer.id);
-              const displayIsActive = themeExtensionEnabled ? offer.isActive : false;
+              const displayIsActive = themeExtensionBlocksOffers ? false : offer.isActive;
               const statusLabel = displayIsActive ? "Active" : "Inactive";
               const gmvDisplay = `$${offer.gmv.toLocaleString()}`;
               const conversionDisplay = `${offer.conversion.toFixed(1)}%`;
@@ -767,7 +803,7 @@ export function DashboardPage({
                       type="submit"
                       disabled={isToggling}
                       onClick={(e) => {
-                        if (!themeExtensionEnabled) {
+                        if (themeExtensionBlocksOffers) {
                           e.preventDefault();
                           setShowThemeExtensionModal(true);
                         }

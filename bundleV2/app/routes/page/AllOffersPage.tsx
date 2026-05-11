@@ -47,6 +47,7 @@ interface AllOffersPageProps {
   offersLoading?: boolean;
   ianaTimezone?: string;
   themeExtensionEnabled?: boolean;
+  themeExtensionDetectionFailed?: boolean;
   shop?: string;
   apiKey?: string;
 }
@@ -58,9 +59,16 @@ export function AllOffersPage({
   offersLoading = false,
   ianaTimezone = "UTC",
   themeExtensionEnabled = false,
+  themeExtensionDetectionFailed = false,
   shop = "",
   apiKey = "",
 }: AllOffersPageProps) {
+  const themeExtensionStatus = themeExtensionDetectionFailed
+    ? "unknown"
+    : themeExtensionEnabled
+      ? "active"
+      : "inactive";
+  const themeExtensionBlocksOffers = themeExtensionStatus === "inactive";
   const handleShowGuide = () => {};
   const handleCreateOffer = () => {
     if (onCreateOffer) {
@@ -176,7 +184,7 @@ export function AllOffersPage({
 
   return (
     <div className="max-w-[1280px] mx-auto pb-[24px]">
-      {!themeExtensionEnabled && !hideBanner && (
+      {themeExtensionBlocksOffers && !hideBanner && (
         <ThemeExtensionBanner
           onActivate={handleThemeExtensionToggle}
           onDismiss={handleCloseBanner}
@@ -310,7 +318,7 @@ export function AllOffersPage({
             ) : (
               filteredRows.map((offer) => {
                 const isToggling = getIsToggling(offer.id);
-                const displayIsActive = themeExtensionEnabled ? offer.isActive : false;
+                const displayIsActive = themeExtensionBlocksOffers ? false : offer.isActive;
                 const statusLabel = displayIsActive ? "Active" : "Inactive";
                 const displayType = getOfferDisplayType(
                   offer.offerType,
@@ -363,7 +371,7 @@ export function AllOffersPage({
                           type="submit"
                           disabled={isToggling}
                           onClick={(e) => {
-                            if (!themeExtensionEnabled) {
+                            if (themeExtensionBlocksOffers) {
                               e.preventDefault();
                               setShowThemeExtensionModal(true);
                             }
