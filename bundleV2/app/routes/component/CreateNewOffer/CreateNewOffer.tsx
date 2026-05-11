@@ -838,6 +838,22 @@ export function CreateNewOffer({
         ((item.sellingPlanGroups?.edges as Array<unknown> | undefined) ?? []).length > 0 ||
         storeProducts.some((p) => String(p.id) === String(item.id) && p.hasSubscription),
     }));
+  const normalizeResourcePickerSelection = (selected: any): any[] => {
+    if (!selected) return [];
+    const rawList = Array.isArray(selected)
+      ? selected
+      : Array.isArray(selected.selection)
+        ? selected.selection
+        : [selected];
+
+    const deduped = new Map<string, any>();
+    rawList.forEach((item: any) => {
+      const id = String(item?.id || "").trim();
+      if (!id) return;
+      deduped.set(id, item);
+    });
+    return Array.from(deduped.values());
+  };
   const [collectionSelectionModalOpen, setCollectionSelectionModalOpen] = useState(false);
   const [pendingCollectionIds, setPendingCollectionIds] = useState<string[]>([]);
   const [triggerSelectionMode, setTriggerSelectionMode] = useState<TriggerSelectionMode>(null);
@@ -901,7 +917,7 @@ export function CreateNewOffer({
     });
 
     if (!selected) return;
-    const selectedList = Array.isArray(selected) ? selected : [selected];
+    const selectedList = normalizeResourcePickerSelection(selected);
     const newData = mapPickerSelectionToDraftProducts(selectedList);
 
     if (type === "buy") {
@@ -983,7 +999,7 @@ export function CreateNewOffer({
       ),
     });
     if (!selected) return;
-    const selectedList = Array.isArray(selected) ? selected : [selected];
+    const selectedList = normalizeResourcePickerSelection(selected);
     applyStepTwoTriggerProducts(mapPickerSelectionToDraftProducts(selectedList));
     if (meta) {
       setTriggerSelectionMode(meta.mode);
@@ -1072,7 +1088,7 @@ export function CreateNewOffer({
       selectionIds: (targetRule.giftProductIds || []).map((id) => ({ id })),
     });
     if (!selected) return;
-    const selectedList = Array.isArray(selected) ? selected : [selected];
+    const selectedList = normalizeResourcePickerSelection(selected);
     const nextIds = selectedList.map((item: any) => String(item.id));
     setFreeGiftRules((prev) =>
       prev.map((rule, index) =>
@@ -1123,58 +1139,84 @@ export function CreateNewOffer({
   const handleSelectProductsForBundleBar = async (barId: string) => {
     const targetBar = completeBundleBars.find((bar) => bar.id === barId);
     if (!targetBar) return;
-    const selected = await (window as any).shopify.resourcePicker({
-      type: "product",
-      action: "select",
-      multiple: true,
-      selectionIds: targetBar.products.map((p) => ({ id: p.productId })),
-    });
-    if (!selected) return;
-    const triggerProductIds = new Set(
-      selectedProductsData.map((product) => String(product.id || "")),
-    );
-    const mappedProducts: CompleteBundleProductDraft[] = selected
-      .map((item: any) => ({
-      productId: String(item.id),
-      handle: String(item.handle || ""),
-      title: item.title,
-      image: item.images?.[0]?.originalSrc || "https://via.placeholder.com/60",
-      price: item.variants?.[0]?.price || "€0.00",
-      defaultVariantId: item.variants?.[0]?.id ? String(item.variants[0].id) : "",
-      selectedVariantId: item.variants?.[0]?.id ? String(item.variants[0].id) : "",
-      selectedOptions: {},
-      variants: Array.isArray(item.variants)
-        ? item.variants.map((variant: any) => ({
-            id: String(variant.id),
-            title: String(variant.title || ""),
-            price: String(variant.price || ""),
-            selectedOptions: Array.isArray(variant.selectedOptions)
-              ? variant.selectedOptions.map((opt: any) => ({
-                  name: String(opt.name || ""),
-                  value: String(opt.value || ""),
-                }))
-              : [],
-          }))
-        : [],
-    }))
-      .filter((product: CompleteBundleProductDraft) => !triggerProductIds.has(product.productId));
-    updateCompleteBundleBar(barId, {
-      products: mappedProducts.map((p) => {
-        const prev = targetBar.products.find((op) => op.productId === p.productId);
-        return {
-          productId: p.productId,
-          handle: p.handle || "",
-          title: p.title,
-          image: p.image,
-          price: p.price,
-          defaultVariantId: p.defaultVariantId,
-          selectedVariantId: p.selectedVariantId,
-          selectedOptions: p.selectedOptions,
-          variants: p.variants,
-          pricing: prev?.pricing ?? p.pricing ?? { mode: "full_price" as const, value: 0 },
-        };
-      }),
-    });
+    try {
+      const selected = await (window as any).shopify.resourcePicker({
+        type: "product",
+        action: "select",
+        multiple: true,
+        selectionIds: targetBar.products.map((p) => ({ id: p.productId })),
+      });
+      if (!selected) return;
+
+      const selectedList = normalizeResourcePickerSelection(selected);
+      if (selectedList.length === 0) {
+        message.warning("No bundle products were returned from Shopify. Please try again.");
+        return;
+      }
+
+      const triggerProductIds = new Set(
+        selectedProductsData.map((product) => String(product.id || "")),
+      );
+      const mappedProducts: CompleteBundleProductDraft[] = selectedList
+        .map((item: any) => ({
+          productId: String(item.id),
+          handle: String(item.handle || ""),
+          title: item.title,
+          image: item.images?.[0]?.originalSrc || "https://via.placeholder.com/60",
+          price: item.variants?.[0]?.price || "€0.00",
+          defaultVariantId: item.variants?.[0]?.id ? String(item.variants[0].id) : "",
+          selectedVariantId: item.variants?.[0]?.id ? String(item.variants[0].id) : "",
+          selectedOptions: {},
+          variants: Array.isArray(item.variants)
+            ? item.variants.map((variant: any) => ({
+                id: String(variant.id),
+                title: String(variant.title || ""),
+                price: String(variant.price || ""),
+                selectedOptions: Array.isArray(variant.selectedOptions)
+                  ? variant.selectedOptions.map((opt: any) => ({
+                      name: String(opt.name || ""),
+                      value: String(opt.value || ""),
+                    }))
+                  : [],
+              }))
+            : [],
+        }))
+        .filter((product: CompleteBundleProductDraft) => !triggerProductIds.has(product.productId));
+
+      if (mappedProducts.length === 0) {
+        message.warning(
+          "Selected bundle products overlap with the trigger product, so nothing was added.",
+        );
+        return;
+      }
+
+      if (mappedProducts.length !== selectedList.length) {
+        message.warning(
+          "Some selected products match the trigger product and were skipped from the bundle.",
+        );
+      }
+
+      updateCompleteBundleBar(barId, {
+        products: mappedProducts.map((p) => {
+          const prev = targetBar.products.find((op) => op.productId === p.productId);
+          return {
+            productId: p.productId,
+            handle: p.handle || "",
+            title: p.title,
+            image: p.image,
+            price: p.price,
+            defaultVariantId: p.defaultVariantId,
+            selectedVariantId: p.selectedVariantId,
+            selectedOptions: p.selectedOptions,
+            variants: p.variants,
+            pricing: prev?.pricing ?? p.pricing ?? { mode: "full_price" as const, value: 0 },
+          };
+        }),
+      });
+    } catch (error) {
+      console.error("Failed to select complete bundle products", error);
+      message.error("Unable to add bundle products right now. Please try again.");
+    }
   };
 
   const [discountRules, setDiscountRules] = useState<DiscountRule[]>(() =>

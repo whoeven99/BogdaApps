@@ -520,6 +520,55 @@ async function syncShopOffersMetafield(
   }
 }
 
+const OFFER_POST_WRITE_SYNC_TIMEOUT_MS = 8_000;
+
+async function runOfferPostWriteSync(admin: any, shopName: string): Promise<void> {
+  const syncTask = (async () => {
+    const themeExtensionDetection = await getCurrentThemeExtensionEnabled(admin);
+    if (themeExtensionDetection.debug?.error) {
+      console.error("Skip shop offers sync after offer write because theme detection failed", {
+        shopName,
+        error: themeExtensionDetection.debug.error,
+      });
+      return;
+    }
+
+    const syncResult = await syncShopOffersMetafield(
+      admin,
+      shopName,
+      themeExtensionDetection.enabled,
+    );
+    if (!syncResult.ok) {
+      console.error("syncShopOffersMetafield failed after offer write", {
+        shopName,
+        message: syncResult.message,
+      });
+    }
+  })();
+
+  try {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    await Promise.race([
+      syncTask,
+      new Promise<void>((resolve) => {
+        timeoutId = setTimeout(() => {
+          console.error("Offer post-write sync timed out; save will still succeed", {
+            shopName,
+            timeoutMs: OFFER_POST_WRITE_SYNC_TIMEOUT_MS,
+          });
+          resolve();
+        }, OFFER_POST_WRITE_SYNC_TIMEOUT_MS);
+      }),
+    ]);
+    if (timeoutId) clearTimeout(timeoutId);
+  } catch (error) {
+    console.error("Offer post-write sync crashed unexpectedly", {
+      shopName,
+      error,
+    });
+  }
+}
+
 export type StoreProductItem = {
   id: string;
   name: string;
@@ -2259,29 +2308,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     }
 
-    const themeExtensionDetection = await getCurrentThemeExtensionEnabled(admin);
-    if (themeExtensionDetection.debug?.error) {
-      console.error("Skip shop offers sync after offer write because theme detection failed", {
-        shopName,
-        error: themeExtensionDetection.debug.error,
-      });
-    } else {
-      const syncResult = await syncShopOffersMetafield(
-        admin,
-        shopName,
-        themeExtensionDetection.enabled,
-      );
-      if (!syncResult.ok) {
-        console.error("syncShopOffersMetafield failed after offer write", {
-          shopName,
-          message: syncResult.message,
-        });
-        return offerActionErrorResponse(
-          `Failed to sync data: ${syncResult.message}`,
-          502,
-        );
-      }
-    }
+    await runOfferPostWriteSync(admin, shopName);
 
     invalidateShopOffersCache(shopName);
 
