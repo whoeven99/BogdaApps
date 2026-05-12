@@ -2,7 +2,7 @@
  * 配送折扣 Function（cart.delivery-options.discounts.generate.run）
  * ------------------------------------------------------------------
  * 与行项目折扣 Function 分离：仅处理「阶梯赠品」中的免邮（free_shipping）。
- * 配置来源：Shop metafield `ciwi_bundle` / `ciwi-bundle-offers`（与商品折扣相同）。
+ * 配置来源：Shop metafield `ciwi_bundle` / `ciwi-bundle-offers-fn`（瘦 JSON，与购物车折扣 Function 一致；主题仍用 `ciwi-bundle-offers`）。
  *
  * 购物车行属性（与主题 `properties[__ciwi_*]` 对应）：
  * - 理想情况：行上带有 `__ciwi_bundle_offer_id`、`__ciwi_bundle_tier`（主题脚本写入）。

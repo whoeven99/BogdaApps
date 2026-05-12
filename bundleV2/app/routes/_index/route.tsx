@@ -132,13 +132,19 @@ type ShopOffersMetafieldSyncResult =
 
 const BUNDLE_METAFIELD_NAMESPACE = "ciwi_bundle";
 const BUNDLE_METAFIELD_BASE_KEY = "ciwi-bundle-offers";
+/**
+ * 供 Shopify Functions input 读取的瘦 offers（与 buildCompactOffersPayload 一致）。
+ * 主题仍用 `ciwi-bundle-offers`（可含 hydrated 目录，易超 Function 单 metafield 10kB 上限而被平台置为 null）。
+ */
+const BUNDLE_METAFIELD_FUNCTION_OFFERS_KEY = "ciwi-bundle-offers-fn";
 /** 主题是否已启用 app embed（与 storefront / Function 读取逻辑一致） */
 const BUNDLE_METAFIELD_ENABLED_KEY = "ciwi-bundle-enabled";
 const LONG_RUNNING_OFFER_END_TIME = new Date("2999-12-31T23:59:59.000Z");
 
 function buildOfferMetafieldsInput(
   ownerId: string,
-  offersPayload: string,
+  storefrontOffersPayload: string,
+  functionOffersCompactPayload: string,
   themeExtensionEnabled: boolean,
 ) {
   const updatedAt = new Date().toISOString();
@@ -148,7 +154,14 @@ function buildOfferMetafieldsInput(
       namespace: BUNDLE_METAFIELD_NAMESPACE,
       key: BUNDLE_METAFIELD_BASE_KEY,
       type: "json",
-      value: offersPayload,
+      value: storefrontOffersPayload,
+    },
+    {
+      ownerId,
+      namespace: BUNDLE_METAFIELD_NAMESPACE,
+      key: BUNDLE_METAFIELD_FUNCTION_OFFERS_KEY,
+      type: "json",
+      value: functionOffersCompactPayload,
     },
     {
       ownerId,
@@ -457,6 +470,17 @@ async function syncShopOffersMetafield(
       functionReducedBy: fullPayload.length - functionMetafieldValue.length,
     });
 
+    const functionInputUtf8Bytes = new TextEncoder().encode(functionMetafieldValue).length;
+    if (functionInputUtf8Bytes > 10_000) {
+      console.warn(
+        "[offers-sync] compact offers JSON exceeds Shopify Function single-metafield input limit (~10kB UTF-8); cart/delivery Functions may receive null",
+        {
+          utf8Bytes: functionInputUtf8Bytes,
+          key: BUNDLE_METAFIELD_FUNCTION_OFFERS_KEY,
+        },
+      );
+    }
+
     const shopIdResponse = await admin.graphql(
       `#graphql
       query ShopId {
@@ -494,8 +518,10 @@ async function syncShopOffersMetafield(
     console.log("[offers-sync] writing shop metafield", {
       shopId,
       namespace: BUNDLE_METAFIELD_NAMESPACE,
-      key: BUNDLE_METAFIELD_BASE_KEY,
-      payloadLength: storefrontMetafieldValue.length,
+      storefrontKey: BUNDLE_METAFIELD_BASE_KEY,
+      storefrontPayloadLength: storefrontMetafieldValue.length,
+      functionInputKey: BUNDLE_METAFIELD_FUNCTION_OFFERS_KEY,
+      functionInputPayloadLength: functionMetafieldValue.length,
     });
     const metafieldsSetResponse = await admin.graphql(
       `#graphql
@@ -518,6 +544,7 @@ async function syncShopOffersMetafield(
           metafields: buildOfferMetafieldsInput(
             shopId,
             storefrontMetafieldValue,
+            functionMetafieldValue,
             themeExtensionEnabled,
           ),
         },

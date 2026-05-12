@@ -44,7 +44,7 @@ query CartDeliveryDiscountInput {
     }
   }
   shop {
-    metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-offers") {
+    metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-offers-fn") {
       jsonValue
       value
       type

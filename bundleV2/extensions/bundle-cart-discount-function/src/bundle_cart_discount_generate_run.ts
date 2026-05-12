@@ -83,7 +83,7 @@ type MetafieldSnapshot = {
   type?: string;
 } | null | undefined;
 
-/** 便于在 Function 日志里排查 Shop 上 ciwi-bundle-offers 是否注入、内容是否完整 */
+/** 便于在 Function 日志里排查 Shop 上 ciwi-bundle-offers-fn（瘦 payload）是否注入、内容是否完整 */
 const CIWI_BUNDLE_OFFERS_LOG_MAX_CHARS = 12_000;
 
 function logCiwiBundleOffersShopData(
@@ -105,7 +105,7 @@ function logCiwiBundleOffersShopData(
 
   log("ciwi_bundle_offers_shop", {
     namespace: "ciwi_bundle",
-    key: "ciwi-bundle-offers",
+    key: "ciwi-bundle-offers-fn",
     metafield: summarizeMetafield(offersShopMf),
     parsedOffersCount: Array.isArray(parsedPayload?.offers) ? parsedPayload.offers.length : null,
     parsedUpdatedAt: parsedPayload?.updatedAt ?? null,

@@ -1,3 +1,39 @@
-.cache
-build
+# 依赖与构建产物（由镜像内重新安装/生成）
 node_modules
+**/node_modules
+build
+.cache
+**/.cache
+*.tsbuildinfo
+
+# Git / IDE
+.git
+.github
+.cursor
+.vscode
+*.swp
+*.swo
+
+# 文档与计划（不参与构建）
+*.md
+
+# 本地环境与密钥
+.env
+.env.*
+!.env.example
+
+# 测试与覆盖率
+coverage
+.nyc_output
+**/__tests__
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+
+# 仅 npm 的锁文件（项目以 yarn 为准，减少上下文体积）
+package-lock.json
+
+# Function WASM 构建产物（Docker 内只做 react-router build；扩展由 shopify deploy 单独发布）
+extensions/**/dist
+extensions/**/.shopify
