@@ -83,6 +83,36 @@ type MetafieldSnapshot = {
   type?: string;
 } | null | undefined;
 
+/** 便于在 Function 日志里排查 Shop 上 ciwi-bundle-offers 是否注入、内容是否完整 */
+const CIWI_BUNDLE_OFFERS_LOG_MAX_CHARS = 12_000;
+
+function logCiwiBundleOffersShopData(
+  offersShopMf: MetafieldSnapshot,
+  parsedPayload: OfferMetafieldPayload | null | undefined,
+): void {
+  let payloadJson: string;
+  try {
+    if (parsedPayload === undefined) payloadJson = "undefined";
+    else if (parsedPayload === null) payloadJson = "null";
+    else payloadJson = JSON.stringify(parsedPayload);
+  } catch {
+    payloadJson = "(payload JSON.stringify failed)";
+  }
+  const truncated =
+    payloadJson.length > CIWI_BUNDLE_OFFERS_LOG_MAX_CHARS
+      ? `${payloadJson.slice(0, CIWI_BUNDLE_OFFERS_LOG_MAX_CHARS)}...(truncated total=${payloadJson.length})`
+      : payloadJson;
+
+  log("ciwi_bundle_offers_shop", {
+    namespace: "ciwi_bundle",
+    key: "ciwi-bundle-offers",
+    metafield: summarizeMetafield(offersShopMf),
+    parsedOffersCount: Array.isArray(parsedPayload?.offers) ? parsedPayload.offers.length : null,
+    parsedUpdatedAt: parsedPayload?.updatedAt ?? null,
+    payloadJson: truncated,
+  });
+}
+
 type BxgyDiscountRule = {
   count: number;
   buyQuantity: number;
@@ -558,6 +588,8 @@ export function bundleCartDiscountGenerateRun(
     | OfferMetafieldPayload
     | null
     | undefined;
+
+  logCiwiBundleOffersShopData(shopAny.offersShop as MetafieldSnapshot, shopOffersPayload);
 
   let offersPayload: OfferMetafieldPayload | null | undefined = null;
   let offersSource: string | null = null;
