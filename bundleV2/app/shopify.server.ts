@@ -18,7 +18,7 @@ const CART_LINES_DISCOUNT_DEFAULT_APP_NAMESPACE = "$app";
 const CART_LINES_DISCOUNT_METAFIELD_KEY = "offers";
 const LEGACY_OFFERS_METAFIELD_NAMESPACE = "ciwi_bundle";
 const LEGACY_OFFERS_METAFIELD_KEY = "ciwi-bundle-offers";
-const CART_LINES_DISCOUNT_EXPECTED_CLASSES = ["PRODUCT"] as const;
+const CART_LINES_DISCOUNT_EXPECTED_CLASSES = ["PRODUCT", "ORDER"] as const;
 const CART_LINES_DISCOUNT_EXPECTED_COMBINES_WITH = {
   orderDiscounts: false,
   productDiscounts: true,

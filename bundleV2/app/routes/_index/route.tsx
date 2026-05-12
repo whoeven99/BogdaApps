@@ -149,8 +149,16 @@ function resolveBundleEnvironment(): BundleEnvironment {
   if (explicit === "test" || explicit === "staging") return "test";
 
   const apiKey = sanitizeEnvLikeValue(process.env.SHOPIFY_API_KEY);
+  const prodApiKey = sanitizeEnvLikeValue(process.env.PROD_SHOPIFY_API_KEY);
+  const testApiKey = sanitizeEnvLikeValue(process.env.TEST_SHOPIFY_API_KEY);
   if (apiKey === PROD_SHOPIFY_API_KEY) return "prod";
   if (apiKey === TEST_SHOPIFY_API_KEY) return "test";
+  if (prodApiKey && apiKey === prodApiKey) return "prod";
+  if (testApiKey && apiKey === testApiKey) return "test";
+
+  const appUrl = sanitizeUrlLikeEnvValue(process.env.SHOPIFY_APP_URL);
+  if (appUrl === "https://bogdaapps-rh3r.onrender.com") return "prod";
+  if (appUrl === "https://bundlev2.onrender.com") return "test";
 
   return process.env.NODE_ENV === "production" ? "prod" : "test";
 }
