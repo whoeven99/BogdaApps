@@ -1872,10 +1872,16 @@ function getCurrentOffer(offersConfig) {
       if (!currentProductGid) {
         continue;
       }
-      const belongsToBar = completeBundle.bars.some((bar) =>
-        bar.products.some((p) => p.productId === currentProductGid),
-      );
-      if (!belongsToBar) {
+      const triggerProductIds = Array.isArray(completeBundle.triggerProductIds)
+        ? completeBundle.triggerProductIds
+        : [];
+      if (triggerProductIds.length > 0 && !triggerProductIds.includes(currentProductGid)) {
+        console.log(
+          "[ciwi] complete bundle skipped: current product not in trigger list",
+          offer.id,
+          currentProductGid,
+          triggerProductIds,
+        );
         continue;
       }
     } else {
