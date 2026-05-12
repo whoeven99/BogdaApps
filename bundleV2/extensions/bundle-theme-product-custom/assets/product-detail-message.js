@@ -803,6 +803,13 @@ function toProductGid(idLike) {
   return numericId ? `gid://shopify/Product/${numericId}` : raw;
 }
 
+function productIdsMatch(aLike, bLike) {
+  const a = toProductNumericId(aLike);
+  const b = toProductNumericId(bLike);
+  if (a && b) return a === b;
+  return String(aLike || "").trim() === String(bLike || "").trim();
+}
+
 function toVariantGid(idLike) {
   const raw = String(idLike || "").trim();
   if (!raw) return "";
@@ -1781,7 +1788,8 @@ function getCurrentOffer(offersConfig) {
     return null;
   }
 
-  for (const offer of offers) {
+  for (let index = 0; index < offers.length; index += 1) {
+    const offer = offers[index];
     if (!offer || typeof offer !== "object") continue;
     if (offer.status === false) {
       console.log("[ciwi] offer skipped: status is false", offer.id);
@@ -1940,6 +1948,13 @@ function getCurrentOffer(offersConfig) {
       }
     }
 
+    console.log("[ciwi] offer selected for current product", {
+      index,
+      offerId: offer.id,
+      offerName: offer.name,
+      offerType: offer.offerType,
+      currentProductGid,
+    });
     return offer;
   }
 
