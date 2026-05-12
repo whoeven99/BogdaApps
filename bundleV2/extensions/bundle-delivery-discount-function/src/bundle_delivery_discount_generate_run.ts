@@ -2,7 +2,8 @@
  * 配送折扣 Function（cart.delivery-options.discounts.generate.run）
  * ------------------------------------------------------------------
  * 与行项目折扣 Function 分离：仅处理「阶梯赠品」中的免邮（free_shipping）。
- * 配置来源：Shop metafield `ciwi_bundle` / `ciwi-bundle-offers-fn`（瘦 JSON，与购物车折扣 Function 一致；主题仍用 `ciwi-bundle-offers`）。
+ * 配置来源（按序兜底）：shop `ciwi-bundle-offers-fn` → shop `ciwi-bundle-offers` → 自动折扣 owner
+ * `$app:ciwi_bundle` / `offers`（与后台 sync、购物车 Function 对齐）。主题仍主要读 `ciwi-bundle-offers`。
  *
  * 购物车行属性（与主题 `properties[__ciwi_*]` 对应）：
  * - 理想情况：行上带有 `__ciwi_bundle_offer_id`、`__ciwi_bundle_tier`（主题脚本写入）。
@@ -457,6 +458,35 @@ function hasEligibleShippingRule(
   });
 }
 
+function extractOffersListFromJson(v: unknown): OfferRow[] {
+  if (!v || typeof v !== "object") return [];
+  const o = v as { offers?: unknown };
+  return Array.isArray(o.offers) ? (o.offers as OfferRow[]) : [];
+}
+
+function pickDeliveryOffersFromInput(input: CartDeliveryDiscountInput): {
+  offers: OfferRow[];
+  source: string;
+} {
+  const shop = input.shop as unknown as {
+    offersFn?: { jsonValue?: unknown } | null;
+    offersStore?: { jsonValue?: unknown } | null;
+  };
+  const discount = input.discount as unknown as {
+    offersDiscountOwner?: { jsonValue?: unknown } | null;
+  };
+  const ordered = [
+    { source: "shop_fn", v: shop.offersFn?.jsonValue },
+    { source: "shop_legacy", v: shop.offersStore?.jsonValue },
+    { source: "discount_owner", v: discount.offersDiscountOwner?.jsonValue },
+  ] as const;
+  for (const { source, v } of ordered) {
+    const list = extractOffersListFromJson(v);
+    if (list.length) return { offers: list, source };
+  }
+  return { offers: [], source: "none" };
+}
+
 export function bundleDeliveryDiscountGenerateRun(
   input: CartDeliveryDiscountInput,
 ): CartDeliveryOptionsDiscountsGenerateRunResult {
@@ -476,15 +506,11 @@ export function bundleDeliveryDiscountGenerateRun(
     return { operations: [] };
   }
 
-  const shopPayload = input.shop?.metafield?.jsonValue as
-    | { offers?: OfferRow[] }
-    | null
-    | undefined;
-  const offers = shopPayload?.offers ?? [];
+  const { offers, source: offersSource } = pickDeliveryOffersFromInput(input);
   if (!offers.length) {
     log("early_exit", { reason: "no_offers" });
-    logZh("提前退出：店铺 metafield 中无活动", {
-      metafieldPresent: Boolean(input.shop?.metafield),
+    logZh("提前退出：三源均无活动（fn / 店铺 legacy / 折扣 owner）", {
+      offersSource,
     });
     return { operations: [] };
   }

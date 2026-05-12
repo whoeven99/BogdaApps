@@ -87,14 +87,20 @@ type MetafieldSnapshot = {
 const CIWI_BUNDLE_OFFERS_LOG_MAX_CHARS = 12_000;
 
 function logCiwiBundleOffersShopData(
-  offersShopMf: MetafieldSnapshot,
-  parsedPayload: OfferMetafieldPayload | null | undefined,
+  offersFnMf: MetafieldSnapshot,
+  /** 实际参与折扣计算的 payload（可能来自 legacy / discount owner，未必等于 fn 字段） */
+  effectiveParsedPayload: OfferMetafieldPayload | null | undefined,
+  extra: {
+    resolvedSource: string;
+    offersLegacy: ReturnType<typeof summarizeMetafield>;
+    offersDiscountOwner: ReturnType<typeof summarizeMetafield>;
+  },
 ): void {
   let payloadJson: string;
   try {
-    if (parsedPayload === undefined) payloadJson = "undefined";
-    else if (parsedPayload === null) payloadJson = "null";
-    else payloadJson = JSON.stringify(parsedPayload);
+    if (effectiveParsedPayload === undefined) payloadJson = "undefined";
+    else if (effectiveParsedPayload === null) payloadJson = "null";
+    else payloadJson = JSON.stringify(effectiveParsedPayload);
   } catch {
     payloadJson = "(payload JSON.stringify failed)";
   }
@@ -106,9 +112,14 @@ function logCiwiBundleOffersShopData(
   log("ciwi_bundle_offers_shop", {
     namespace: "ciwi_bundle",
     key: "ciwi-bundle-offers-fn",
-    metafield: summarizeMetafield(offersShopMf),
-    parsedOffersCount: Array.isArray(parsedPayload?.offers) ? parsedPayload.offers.length : null,
-    parsedUpdatedAt: parsedPayload?.updatedAt ?? null,
+    resolvedSource: extra.resolvedSource,
+    metafield: summarizeMetafield(offersFnMf),
+    offersLegacy: extra.offersLegacy,
+    offersDiscountOwner: extra.offersDiscountOwner,
+    parsedOffersCount: Array.isArray(effectiveParsedPayload?.offers)
+      ? effectiveParsedPayload!.offers!.length
+      : null,
+    parsedUpdatedAt: effectiveParsedPayload?.updatedAt ?? null,
     payloadJson: truncated,
   });
 }
@@ -569,13 +580,64 @@ function calculateCompleteBundleDiscounts(
   return [];
 }
 
+function offersJsonHasList(v: unknown): v is OfferMetafieldPayload {
+  if (!v || typeof v !== "object") return false;
+  const o = v as OfferMetafieldPayload;
+  return Array.isArray(o.offers) && o.offers.length > 0;
+}
+
+/**
+ * 读取顺序：shop `ciwi-bundle-offers-fn`（瘦）→ shop `ciwi-bundle-offers`（主题胖 JSON，可能仍被 Function 10kB 剔除）
+ * → 自动折扣 owner `$app:ciwi_bundle` / `offers`（与后台 syncFunctionOwner 同步的 compact）。
+ */
+function resolveCartOffersPayload(input: CartInput): {
+  payload: OfferMetafieldPayload | null | undefined;
+  offersSource: string;
+  shopAny: {
+    offersShop?: { jsonValue?: unknown; type?: string } | null;
+    offersShopLegacy?: { jsonValue?: unknown; type?: string } | null;
+    bundleEnabledShop?: { jsonValue?: unknown; type?: string } | null;
+  };
+  discountAny: { offersDiscountOwner?: { jsonValue?: unknown; type?: string } | null };
+} {
+  const shopAny = input.shop as unknown as {
+    offersShop?: { jsonValue?: unknown; type?: string } | null;
+    offersShopLegacy?: { jsonValue?: unknown; type?: string } | null;
+    bundleEnabledShop?: { jsonValue?: unknown; type?: string } | null;
+  };
+  const discountAny = input.discount as unknown as {
+    offersDiscountOwner?: { jsonValue?: unknown; type?: string } | null;
+  };
+
+  const jFn = shopAny.offersShop?.jsonValue as OfferMetafieldPayload | null | undefined;
+  const jLegacy = shopAny.offersShopLegacy?.jsonValue as OfferMetafieldPayload | null | undefined;
+  const jDisc = discountAny.offersDiscountOwner?.jsonValue as OfferMetafieldPayload | null | undefined;
+
+  if (offersJsonHasList(jFn)) {
+    return { payload: jFn, offersSource: "shop_offers_fn", shopAny, discountAny };
+  }
+  if (offersJsonHasList(jLegacy)) {
+    return { payload: jLegacy, offersSource: "shop_offers_legacy", shopAny, discountAny };
+  }
+  if (offersJsonHasList(jDisc)) {
+    return { payload: jDisc, offersSource: "discount_owner_offers", shopAny, discountAny };
+  }
+
+  const fallback = jFn ?? jLegacy ?? jDisc ?? null;
+  return {
+    payload: fallback,
+    offersSource: fallback != null ? "shop_offers_empty_lists" : "no_shop_offers",
+    shopAny,
+    discountAny,
+  };
+}
+
 export function bundleCartDiscountGenerateRun(
   input: CartInput,
 ): CartLinesDiscountsGenerateRunResult {
-  const shopAny = input.shop as unknown as {
-    offersShop?: { jsonValue?: unknown; type?: string } | null;
-    bundleEnabledShop?: { jsonValue?: unknown; type?: string } | null;
-  };
+  const { payload: resolvedPayload, offersSource: resolvedSource, shopAny, discountAny } =
+    resolveCartOffersPayload(input);
+
   const bundleEnabledShopPayload = shopAny.bundleEnabledShop?.jsonValue as
     | { enabled?: boolean }
     | null
@@ -584,25 +646,30 @@ export function bundleCartDiscountGenerateRun(
   const embedDisabled =
     hasExplicitEmbedFlag && bundleEnabledShopPayload?.enabled !== true;
 
-  const shopOffersPayload = shopAny.offersShop?.jsonValue as
-    | OfferMetafieldPayload
-    | null
-    | undefined;
-
-  logCiwiBundleOffersShopData(shopAny.offersShop as MetafieldSnapshot, shopOffersPayload);
-
   let offersPayload: OfferMetafieldPayload | null | undefined = null;
   let offersSource: string | null = null;
   if (embedDisabled) {
     offersPayload = null;
     offersSource = "shop_embed_disabled";
   } else {
-    offersPayload = shopOffersPayload ?? null;
-    offersSource = shopOffersPayload != null ? "shop_offers" : "no_shop_offers";
+    offersPayload = resolvedPayload ?? null;
+    offersSource = resolvedSource;
   }
+
+  logCiwiBundleOffersShopData(
+    shopAny.offersShop as MetafieldSnapshot,
+    embedDisabled ? null : offersPayload,
+    {
+      resolvedSource: offersSource ?? "",
+      offersLegacy: summarizeMetafield(shopAny.offersShopLegacy as MetafieldSnapshot),
+      offersDiscountOwner: summarizeMetafield(discountAny.offersDiscountOwner as MetafieldSnapshot),
+    },
+  );
 
   log("shop_metafields_snapshot", {
     offersShop: summarizeMetafield(shopAny.offersShop as MetafieldSnapshot),
+    offersShopLegacy: summarizeMetafield(shopAny.offersShopLegacy as MetafieldSnapshot),
+    offersDiscountOwner: summarizeMetafield(discountAny.offersDiscountOwner as MetafieldSnapshot),
     bundleEnabledShop: summarizeMetafield(shopAny.bundleEnabledShop as MetafieldSnapshot),
     embedDisabled,
     activeSource: offersSource,

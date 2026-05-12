@@ -176,6 +176,54 @@ function buildOfferMetafieldsInput(
   ];
 }
 
+/**
+ * 主题与购物车 Function 仅需变体 id/价/option；写入 shop metafield 时去掉冗余 title 与重复字段以控制体积。
+ * （主题 parse 会从 selectedOptions 拼回展示文案；Function 不读 variants。）
+ */
+function slimVariantsForBundleStorefrontMetafield(
+  variants: StoreProductItem["variants"] | undefined,
+): Array<{ id: string; price: string; selectedOptions: Array<{ name: string; value: string }> }> {
+  if (!Array.isArray(variants)) return [];
+  return variants
+    .filter((v) => v && typeof v === "object" && v.id)
+    .map((v) => ({
+      id: String(v.id),
+      price: String(v.price ?? ""),
+      selectedOptions: Array.isArray(v.selectedOptions)
+        ? v.selectedOptions
+            .filter((opt) => opt && typeof opt === "object")
+            .map((opt) => ({
+              name: String(opt.name ?? ""),
+              value: String(opt.value ?? ""),
+            }))
+        : [],
+    }));
+}
+
+function slimVariantsFromStoredProductShape(
+  raw: unknown,
+): Array<{ id: string; price: string; selectedOptions: Array<{ name: string; value: string }> }> {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((v) => v && typeof v === "object" && (v as { id?: unknown }).id)
+    .map((v) => {
+      const selectedOptions = Array.isArray((v as { selectedOptions?: unknown }).selectedOptions)
+        ? ((v as { selectedOptions: Array<{ name?: unknown; value?: unknown }> }).selectedOptions || [])
+            .filter((opt) => opt && typeof opt === "object")
+            .map((opt) => ({
+              name: String(opt.name ?? ""),
+              value: String(opt.value ?? ""),
+            }))
+        : [];
+      return {
+        id: String((v as { id?: unknown }).id ?? ""),
+        price: String((v as { price?: unknown }).price ?? ""),
+        selectedOptions,
+      };
+    })
+    .filter((row) => row.id);
+}
+
 function buildHydratedCompleteBundleSelectedProductsJson(
   selectedProductsJson: string | null | undefined,
   storeProductMap: Map<string, StoreProductItem>,
@@ -185,31 +233,58 @@ function buildHydratedCompleteBundleSelectedProductsJson(
   if (!config.bars.length) return selectedProductsJson;
 
   const bars = config.bars.map((bar) => ({
-    ...bar,
+    id: bar.id,
+    type: bar.type,
+    title: bar.title,
+    subtitle: bar.subtitle,
+    minQuantity: bar.minQuantity,
+    maxQuantity: bar.maxQuantity,
+    excludeTriggerProduct: bar.excludeTriggerProduct,
+    quantity: bar.quantity,
+    pricing: bar.pricing,
     products: (bar.products || []).map((product) => {
       const hit = storeProductMap.get(String(product.productId || ""));
-      if (!hit) return product;
+      if (!hit) {
+        return {
+          productId: product.productId,
+          handle: product.handle ?? "",
+          title: product.title ?? "",
+          image: product.image ?? "",
+          price: product.price ?? "",
+          defaultVariantId: product.defaultVariantId ?? "",
+          selectedVariantId:
+            String(product.selectedVariantId || product.defaultVariantId || ""),
+          selectedOptions:
+            product.selectedOptions && typeof product.selectedOptions === "object"
+              ? product.selectedOptions
+              : {},
+          pricing: product.pricing ?? { mode: "full_price" as const, value: 0 },
+          variants: slimVariantsFromStoredProductShape(product.variants),
+        };
+      }
       const variants = Array.isArray(hit.variants) ? hit.variants : [];
       const preferredVariantId = String(product.selectedVariantId || "");
       const selectedVariant =
         variants.find((variant) => String(variant.id) === preferredVariantId) || variants[0];
 
       return {
-        ...product,
+        productId: product.productId,
         handle: hit.handle || product.handle || "",
         title: hit.name || product.title || "",
         image: hit.image || product.image || "",
         price: selectedVariant?.price || product.price || hit.price || "",
         defaultVariantId: String(variants[0]?.id || product.defaultVariantId || ""),
-        selectedVariantId:
-          String(selectedVariant?.id || product.selectedVariantId || variants[0]?.id || ""),
+        selectedVariantId: String(
+          selectedVariant?.id || product.selectedVariantId || variants[0]?.id || "",
+        ),
         selectedOptions:
           product.selectedOptions && Object.keys(product.selectedOptions).length > 0
             ? product.selectedOptions
             : Object.fromEntries(
                 (selectedVariant?.selectedOptions || []).map((opt) => [opt.name, opt.value]),
               ),
-        variants,
+        pricing: product.pricing ?? { mode: "full_price" as const, value: 0 },
+        variants: slimVariantsForBundleStorefrontMetafield(variants),
       };
     }),
   }));
@@ -246,7 +321,9 @@ function buildHydratedDifferentProductsSelectedProductsJson(
         image: hit.image || "",
         price: firstVariant?.price || hit.price || "",
         selectedVariantId: String(firstVariant?.id || ""),
-        variants: Array.isArray(hit.variants) ? hit.variants : [],
+        variants: slimVariantsForBundleStorefrontMetafield(
+          Array.isArray(hit.variants) ? hit.variants : undefined,
+        ),
       };
     })
     .filter(
@@ -259,9 +336,8 @@ function buildHydratedDifferentProductsSelectedProductsJson(
         image: string;
         price: string;
         selectedVariantId: string;
-        variants: StoreProductItem["variants"];
-      } =>
-        Boolean(product?.id),
+        variants: ReturnType<typeof slimVariantsForBundleStorefrontMetafield>;
+      } => Boolean(product?.id),
     );
 
   return hydratedCatalog.length > 0

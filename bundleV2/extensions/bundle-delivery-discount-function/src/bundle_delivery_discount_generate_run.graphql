@@ -44,7 +44,12 @@ query CartDeliveryDiscountInput {
     }
   }
   shop {
-    metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-offers-fn") {
+    offersFn: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-offers-fn") {
+      jsonValue
+      value
+      type
+    }
+    offersStore: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-offers") {
       jsonValue
       value
       type
@@ -57,5 +62,10 @@ query CartDeliveryDiscountInput {
   }
   discount {
     discountClasses
+    offersDiscountOwner: metafield(namespace: "$app:ciwi_bundle", key: "offers") {
+      jsonValue
+      value
+      type
+    }
   }
 }

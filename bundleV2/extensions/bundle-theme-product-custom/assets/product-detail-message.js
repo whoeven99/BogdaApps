@@ -623,19 +623,26 @@ function parseSelectedProductsCatalog(selectedProductsJson) {
         variants: Array.isArray(item.variants)
           ? item.variants
               .filter((variant) => variant && typeof variant === "object" && variant.id)
-              .map((variant) => ({
-                id: String(variant.id || "").trim(),
-                title: String(variant.title || "").trim(),
-                price: String(variant.price || "").trim(),
-                selectedOptions: Array.isArray(variant.selectedOptions)
+              .map((variant) => {
+                const selectedOptions = Array.isArray(variant.selectedOptions)
                   ? variant.selectedOptions
                       .filter((opt) => opt && typeof opt === "object")
                       .map((opt) => ({
                         name: String(opt.name || "").trim(),
                         value: String(opt.value || "").trim(),
                       }))
-                  : [],
-              }))
+                  : [];
+                const optLabel = selectedOptions
+                  .map((o) => String(o.value || "").trim())
+                  .filter(Boolean)
+                  .join(" / ");
+                return {
+                  id: String(variant.id || "").trim(),
+                  title: String(variant.title || "").trim() || optLabel,
+                  price: String(variant.price || "").trim(),
+                  selectedOptions,
+                };
+              })
           : [],
       }))
       .filter((item) => item.productId);
@@ -737,17 +744,24 @@ function parseCompleteBundleConfig(selectedProductsJson) {
                     variants: Array.isArray(p.variants)
                       ? p.variants
                           .filter((v) => v && typeof v === "object" && v.id)
-                          .map((v) => ({
+                          .map((v) => {
+                          const selectedOptions = Array.isArray(v.selectedOptions)
+                            ? v.selectedOptions.map((opt) => ({
+                                name: String(opt?.name || ""),
+                                value: String(opt?.value || ""),
+                              }))
+                            : [];
+                          const optLabel = selectedOptions
+                            .map((o) => String(o.value || "").trim())
+                            .filter(Boolean)
+                            .join(" / ");
+                          return {
                             id: String(v.id),
-                            title: String(v.title || ""),
+                            title: String(v.title || "").trim() || optLabel,
                             price: String(v.price || ""),
-                            selectedOptions: Array.isArray(v.selectedOptions)
-                              ? v.selectedOptions.map((opt) => ({
-                                  name: String(opt?.name || ""),
-                                  value: String(opt?.value || ""),
-                                }))
-                              : [],
-                          }))
+                            selectedOptions,
+                          };
+                        })
                       : [],
                   };
                 })
@@ -1250,7 +1264,16 @@ function buildOneCompleteBundleProductHtml(bar, product, options) {
           (variant) =>
             `<option value="${esc(variant.id)}"${
               String(variant.id) === String(curVid) ? " selected" : ""
-            }>${esc(variant.title || "Default")}</option>`,
+            }>${esc(
+              (variant.title && String(variant.title).trim()) ||
+                (Array.isArray(variant.selectedOptions)
+                  ? variant.selectedOptions
+                      .map((o) => String(o?.value || "").trim())
+                      .filter(Boolean)
+                      .join(" / ")
+                  : "") ||
+                "Default",
+            )}</option>`,
         )
         .join("")}</select>`
     : "";
@@ -1570,7 +1593,16 @@ function buildDifferentProductsProductCardHtml(
               (entry) =>
                 `<option value="${esc(entry.id)}"${
                   String(entry.id) === String(variant?.id || "") ? " selected" : ""
-                }>${esc(entry.title || "Default")}</option>`,
+                }>${esc(
+                  (entry.title && String(entry.title).trim()) ||
+                    (Array.isArray(entry.selectedOptions)
+                      ? entry.selectedOptions
+                          .map((o) => String(o?.value || "").trim())
+                          .filter(Boolean)
+                          .join(" / ")
+                      : "") ||
+                    "Default",
+                )}</option>`,
             )
             .join("")}
         </select>`

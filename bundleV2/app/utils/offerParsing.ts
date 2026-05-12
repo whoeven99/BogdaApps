@@ -2543,6 +2543,20 @@ export function buildFreeGiftRulesJson(tiers: FreeGiftRule[]): FreeGiftRule[] {
   return Array.from(dedupedByCount.values()).sort((a, b) => a.count - b.count);
 }
 
+/** 主题 / 下拉选项展示：优先用显式 title，否则用 option 值拼接（与瘦 metafield 变体省略 title 兼容） */
+function completeBundleVariantDisplayTitle(
+  explicitTitle: unknown,
+  selectedOptions: Array<{ name: string; value: string }>,
+): string {
+  const t = String(explicitTitle ?? "").trim();
+  if (t) return t;
+  if (!selectedOptions.length) return "";
+  return selectedOptions
+    .map((o) => String(o.value ?? "").trim())
+    .filter(Boolean)
+    .join(" / ");
+}
+
 export function parseCompleteBundleConfig(
   selectedProductsJson?: string | null,
 ): CompleteBundleConfig {
@@ -2632,18 +2646,28 @@ export function parseCompleteBundleConfig(
                 variants: Array.isArray(variantsRaw)
                   ? variantsRaw
                       .filter((v) => v && typeof v === "object")
-                      .map((v) => ({
-                        id: String((v as { id?: unknown }).id || ""),
-                        title: String((v as { title?: unknown }).title || ""),
-                        price: String((v as { price?: unknown }).price || ""),
-                        selectedOptions: Array.isArray((v as { selectedOptions?: unknown }).selectedOptions)
-                          ? ((v as { selectedOptions?: Array<{ name?: unknown; value?: unknown }> }).selectedOptions || [])
-                              .map((opt) => ({
-                                name: String(opt.name || ""),
-                                value: String(opt.value || ""),
-                              }))
-                          : [],
-                      }))
+                      .map((v) => {
+                        const selectedOptions = Array.isArray(
+                          (v as { selectedOptions?: unknown }).selectedOptions,
+                        )
+                          ? (
+                              (v as { selectedOptions?: Array<{ name?: unknown; value?: unknown }> })
+                                .selectedOptions || []
+                            ).map((opt) => ({
+                              name: String(opt.name || ""),
+                              value: String(opt.value || ""),
+                            }))
+                          : [];
+                        return {
+                          id: String((v as { id?: unknown }).id || ""),
+                          title: completeBundleVariantDisplayTitle(
+                            (v as { title?: unknown }).title,
+                            selectedOptions,
+                          ),
+                          price: String((v as { price?: unknown }).price || ""),
+                          selectedOptions,
+                        };
+                      })
                   : [],
               };
             })
