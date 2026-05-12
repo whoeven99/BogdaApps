@@ -132,86 +132,33 @@ type ShopOffersMetafieldSyncResult =
 
 const BUNDLE_METAFIELD_NAMESPACE = "ciwi_bundle";
 const BUNDLE_METAFIELD_BASE_KEY = "ciwi-bundle-offers";
-const BUNDLE_METAFIELD_ACTIVE_ENV_KEY = "ciwi-bundle-active-env";
-const BUNDLE_METAFIELD_ENABLED_PROD_KEY = "ciwi-bundle-enabled-prod";
-const BUNDLE_METAFIELD_ENABLED_TEST_KEY = "ciwi-bundle-enabled-test";
+/** 主题是否已启用 app embed（与 storefront / Function 读取逻辑一致） */
+const BUNDLE_METAFIELD_ENABLED_KEY = "ciwi-bundle-enabled";
 const LONG_RUNNING_OFFER_END_TIME = new Date("2999-12-31T23:59:59.000Z");
-const PROD_SHOPIFY_API_KEY = "bfc13ad696f2a8d2a77ba6eee1e26966";
-const TEST_SHOPIFY_API_KEY = "ab25ea895c6df574ae9ff70e9c7731c5";
-type BundleEnvironment = "prod" | "test";
-
-function resolveBundleEnvironment(): BundleEnvironment {
-  const explicit =
-    String(process.env.BUNDLE_ENV || process.env.APP_ENV || "")
-      .trim()
-      .toLowerCase();
-  if (explicit === "prod" || explicit === "production") return "prod";
-  if (explicit === "test" || explicit === "staging") return "test";
-
-  const apiKey = sanitizeEnvLikeValue(process.env.SHOPIFY_API_KEY);
-  const prodApiKey = sanitizeEnvLikeValue(process.env.PROD_SHOPIFY_API_KEY);
-  const testApiKey = sanitizeEnvLikeValue(process.env.TEST_SHOPIFY_API_KEY);
-  if (apiKey === PROD_SHOPIFY_API_KEY) return "prod";
-  if (apiKey === TEST_SHOPIFY_API_KEY) return "test";
-  if (prodApiKey && apiKey === prodApiKey) return "prod";
-  if (testApiKey && apiKey === testApiKey) return "test";
-
-  const appUrl = sanitizeUrlLikeEnvValue(process.env.SHOPIFY_APP_URL);
-  if (appUrl === "https://bogdaapps-rh3r.onrender.com") return "prod";
-  if (appUrl === "https://bundlev2.onrender.com") return "test";
-
-  return process.env.NODE_ENV === "production" ? "prod" : "test";
-}
 
 function buildOfferMetafieldsInput(
   ownerId: string,
   offersPayload: string,
   themeExtensionEnabled: boolean,
 ) {
-  const env = resolveBundleEnvironment();
-  const envOfferKey = `${BUNDLE_METAFIELD_BASE_KEY}-${env}`;
-  const envEnabledKey =
-    env === "prod"
-      ? BUNDLE_METAFIELD_ENABLED_PROD_KEY
-      : BUNDLE_METAFIELD_ENABLED_TEST_KEY;
-  const activeEnvPayload = JSON.stringify({
-    env,
-    updatedAt: new Date().toISOString(),
-  });
-
+  const updatedAt = new Date().toISOString();
   return [
-    {
-      ownerId,
-      namespace: BUNDLE_METAFIELD_NAMESPACE,
-      key: envOfferKey,
-      type: "json",
-      value: offersPayload,
-    },
-    {
-      ownerId,
-      namespace: BUNDLE_METAFIELD_NAMESPACE,
-      key: BUNDLE_METAFIELD_ACTIVE_ENV_KEY,
-      type: "json",
-      value: activeEnvPayload,
-    },
-    {
-      ownerId,
-      namespace: BUNDLE_METAFIELD_NAMESPACE,
-      key: envEnabledKey,
-      type: "json",
-      value: JSON.stringify({
-        enabled: themeExtensionEnabled,
-        env,
-        updatedAt: new Date().toISOString(),
-      }),
-    },
-    // 兼容历史读路径，避免函数/主题未更新时出现空数据。
     {
       ownerId,
       namespace: BUNDLE_METAFIELD_NAMESPACE,
       key: BUNDLE_METAFIELD_BASE_KEY,
       type: "json",
       value: offersPayload,
+    },
+    {
+      ownerId,
+      namespace: BUNDLE_METAFIELD_NAMESPACE,
+      key: BUNDLE_METAFIELD_ENABLED_KEY,
+      type: "json",
+      value: JSON.stringify({
+        enabled: themeExtensionEnabled,
+        updatedAt,
+      }),
     },
   ];
 }
@@ -646,14 +593,6 @@ async function runOfferPostWriteSync(admin: any, shopName: string): Promise<void
     }
 
     const themeExtensionDetection = await getCurrentThemeExtensionEnabled(admin);
-    if (themeExtensionDetection.debug?.error) {
-      console.error("Skip shop offers sync after offer write because theme detection failed", {
-        shopName,
-        error: themeExtensionDetection.debug.error,
-      });
-      return;
-    }
-
     const syncResult = await syncShopOffersMetafield(
       admin,
       shopName,
@@ -1564,65 +1503,6 @@ async function getCurrentThemeExtensionEnabled(admin: any): Promise<{
   }
 }
 
-async function syncBundleEnabledMetafield(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  admin: any,
-  themeExtensionEnabled: boolean,
-): Promise<void> {
-  try {
-    const env = resolveBundleEnvironment();
-    const envEnabledKey =
-      env === "prod"
-        ? BUNDLE_METAFIELD_ENABLED_PROD_KEY
-        : BUNDLE_METAFIELD_ENABLED_TEST_KEY;
-    const shopIdResponse = await admin.graphql(
-      `#graphql
-      query ShopId {
-        shop {
-          id
-        }
-      }
-    `,
-    );
-    const shopIdJson = (await shopIdResponse.json()) as {
-      data?: { shop?: { id?: string } };
-    };
-    const shopId = shopIdJson?.data?.shop?.id;
-    if (!shopId) return;
-
-    await admin.graphql(
-      `#graphql
-      mutation MetafieldsSet($metafields: [MetafieldsSetInput!]!) {
-        metafieldsSet(metafields: $metafields) {
-          userErrors {
-            message
-          }
-        }
-      }
-    `,
-      {
-        variables: {
-          metafields: [
-            {
-              ownerId: shopId,
-              namespace: BUNDLE_METAFIELD_NAMESPACE,
-              key: envEnabledKey,
-              type: "json",
-              value: JSON.stringify({
-                enabled: themeExtensionEnabled,
-                env,
-                updatedAt: new Date().toISOString(),
-              }),
-            },
-          ],
-        },
-      },
-    );
-  } catch (error) {
-    console.error("Failed to sync bundle enabled metafield", error);
-  }
-}
-
 /** Normalize offer name to a unique key */
 function normalizeOfferNameKey(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
@@ -1670,21 +1550,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const themeExtensionDetection = await getCurrentThemeExtensionEnabled(admin);
   const themeExtensionEnabled = themeExtensionDetection.enabled;
   const themeExtensionDetectionFailed = Boolean(themeExtensionDetection.debug?.error);
-  if (!themeExtensionDetectionFailed) {
-    await syncBundleEnabledMetafield(admin, themeExtensionEnabled);
-    const syncResult = await syncShopOffersMetafield(
-      admin,
-      session.shop,
-      themeExtensionEnabled,
-    );
-    if (!syncResult.ok) {
-      console.error("Failed to sync shop offers metafield in loader", {
-        shopName: session.shop,
-        message: syncResult.message,
-      });
-    }
-  } else {
-    console.error("[theme-extension] skip bundle metafield sync because detection failed", {
+
+  const syncResult = await syncShopOffersMetafield(
+    admin,
+    session.shop,
+    themeExtensionEnabled,
+  );
+  if (!syncResult.ok) {
+    console.error("Failed to sync shop offers metafield in loader", {
+      shopName: session.shop,
+      message: syncResult.message,
+    });
+  }
+  if (themeExtensionDetectionFailed) {
+    console.error("[theme-extension] theme detection failed (shop offers metafield still attempted)", {
       shopName: session.shop,
       error: themeExtensionDetection.debug?.error,
     });
@@ -2489,23 +2368,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       const shopNameToSync = updatedOffer?.shopName as string | undefined;
       if (shopNameToSync) {
         const themeExtensionDetection = await getCurrentThemeExtensionEnabled(admin);
-        if (themeExtensionDetection.debug?.error) {
-          console.error("Skip offers metafield sync after toggle because theme detection failed", {
+        const syncResult = await syncShopOffersMetafield(
+          admin,
+          shopNameToSync,
+          themeExtensionDetection.enabled,
+        );
+        if (!syncResult.ok) {
+          console.error("Failed to sync offers metafield after toggle", {
             shopNameToSync,
-            error: themeExtensionDetection.debug.error,
+            message: syncResult.message,
           });
-        } else {
-          const syncResult = await syncShopOffersMetafield(
-            admin,
-            shopNameToSync,
-            themeExtensionDetection.enabled,
-          );
-          if (!syncResult.ok) {
-            console.error("Failed to sync offers metafield after toggle", {
-              shopNameToSync,
-              message: syncResult.message,
-            });
-          }
         }
       }
     } catch (error) {
@@ -2547,23 +2419,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     try {
       if (shopNameToSync) {
         const themeExtensionDetection = await getCurrentThemeExtensionEnabled(admin);
-        if (themeExtensionDetection.debug?.error) {
-          console.error("Skip offers metafield sync after delete because theme detection failed", {
+        const syncResult = await syncShopOffersMetafield(
+          admin,
+          shopNameToSync,
+          themeExtensionDetection.enabled,
+        );
+        if (!syncResult.ok) {
+          console.error("Failed to sync offers metafield after delete", {
             shopNameToSync,
-            error: themeExtensionDetection.debug.error,
+            message: syncResult.message,
           });
-        } else {
-          const syncResult = await syncShopOffersMetafield(
-            admin,
-            shopNameToSync,
-            themeExtensionDetection.enabled,
-          );
-          if (!syncResult.ok) {
-            console.error("Failed to sync offers metafield after delete", {
-              shopNameToSync,
-              message: syncResult.message,
-            });
-          }
         }
       }
     } catch (error) {
