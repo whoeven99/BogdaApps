@@ -59,6 +59,11 @@ import {
   sanitizeSingleLineText,
 } from "../../utils/offerParsing";
 import { sanitizeEnvLikeValue, sanitizeUrlLikeEnvValue } from "../../utils/env";
+import {
+  BUNDLE_METAFIELD_ENABLED_KEY,
+  BUNDLE_METAFIELD_FUNCTION_OFFERS_KEY,
+} from "../../utils/bundleShopMetafieldKeys";
+import { reconcileShopOfferShardedMetafields } from "../../utils/bundleShopOfferMetafields.server";
 import { BUNDLE_THEME_PRODUCT_PLUGIN } from "../../utils/themePlugins";
 import type { OfferTypeId } from "../component/CreateNewOffer/offerTypeOptions";
 
@@ -130,51 +135,7 @@ type ShopOffersMetafieldSyncResult =
   | { ok: true }
   | { ok: false; message: string };
 
-const BUNDLE_METAFIELD_NAMESPACE = "ciwi_bundle";
-const BUNDLE_METAFIELD_BASE_KEY = "ciwi-bundle-offers";
-/**
- * 供 Shopify Functions input 读取的瘦 offers（与 buildCompactOffersPayload 一致）。
- * 主题仍用 `ciwi-bundle-offers`（可含 hydrated 目录，易超 Function 单 metafield 10kB 上限而被平台置为 null）。
- */
-const BUNDLE_METAFIELD_FUNCTION_OFFERS_KEY = "ciwi-bundle-offers-fn";
-/** 主题是否已启用 app embed（与 storefront / Function 读取逻辑一致） */
-const BUNDLE_METAFIELD_ENABLED_KEY = "ciwi-bundle-enabled";
 const LONG_RUNNING_OFFER_END_TIME = new Date("2999-12-31T23:59:59.000Z");
-
-function buildOfferMetafieldsInput(
-  ownerId: string,
-  storefrontOffersPayload: string,
-  functionOffersCompactPayload: string,
-  themeExtensionEnabled: boolean,
-) {
-  const updatedAt = new Date().toISOString();
-  return [
-    {
-      ownerId,
-      namespace: BUNDLE_METAFIELD_NAMESPACE,
-      key: BUNDLE_METAFIELD_BASE_KEY,
-      type: "json",
-      value: storefrontOffersPayload,
-    },
-    {
-      ownerId,
-      namespace: BUNDLE_METAFIELD_NAMESPACE,
-      key: BUNDLE_METAFIELD_FUNCTION_OFFERS_KEY,
-      type: "json",
-      value: functionOffersCompactPayload,
-    },
-    {
-      ownerId,
-      namespace: BUNDLE_METAFIELD_NAMESPACE,
-      key: BUNDLE_METAFIELD_ENABLED_KEY,
-      type: "json",
-      value: JSON.stringify({
-        enabled: themeExtensionEnabled,
-        updatedAt,
-      }),
-    },
-  ];
-}
 
 /**
  * 主题与购物车 Function 仅需变体 id/价/option；写入 shop metafield 时去掉冗余 title 与重复字段以控制体积。
@@ -369,10 +330,24 @@ async function buildCompactOffersPayload(
   });
 }
 
-async function buildStorefrontOffersPayload(
+async function buildStorefrontOffersStructured(
   admin: any,
   shopOffers: OfferListItem[],
-): Promise<string> {
+): Promise<{
+  updatedAt: string;
+  offers: Array<{
+    id: string;
+    name?: string;
+    cartTitle?: string;
+    status?: boolean;
+    startTime?: string;
+    endTime?: string;
+    selectedProductsJson?: string | null;
+    discountRulesJson?: string | null;
+    offerSettingsJson?: string | null;
+    offerType?: string;
+  }>;
+}> {
   const activeOffers = shopOffers.filter((offer) => offer.status === true);
   const compactPayload = await buildCompactOffersPayload(shopOffers);
   const compactPayloadParsed = JSON.parse(compactPayload) as {
@@ -421,13 +396,21 @@ async function buildStorefrontOffersPayload(
               offer.discountRulesJson,
               storeProductMap,
             )
-        : offer.selectedProductsJson ?? null,
+          : offer.selectedProductsJson ?? null,
   }));
 
-  return JSON.stringify({
-    updatedAt: compactPayloadParsed.updatedAt || new Date().toISOString(),
-    offers: storefrontOffers,
-  });
+  const updatedAt = compactPayloadParsed.updatedAt || new Date().toISOString();
+  const offers = storefrontOffers
+    .map((offer) => ({
+      ...offer,
+      id: String(offer.id || "").trim(),
+    }))
+    .filter((offer) => offer.id);
+
+  return {
+    updatedAt,
+    offers,
+  };
 }
 
 async function loadShopOffersForSync(shopNameToSync: string): Promise<OfferListItem[]> {
@@ -531,19 +514,19 @@ async function syncShopOffersMetafield(
       offerIds: shopOffers.map((o) => o.id),
     });
 
-    const fullPayload = JSON.stringify({
-      updatedAt: new Date().toISOString(),
-      offers: shopOffers,
-    });
     const functionMetafieldValue = await buildCompactOffersPayload(shopOffers);
-    const storefrontMetafieldValue = await buildStorefrontOffersPayload(admin, shopOffers);
+    const storefrontStructured = await buildStorefrontOffersStructured(admin, shopOffers);
+    const mergedStorefrontPreview = JSON.stringify({
+      updatedAt: storefrontStructured.updatedAt,
+      offers: storefrontStructured.offers,
+    });
     console.log("[offers-sync] payload size snapshot", {
       totalOffers: shopOffers.length,
       activeOffers: shopOffers.filter((offer) => offer.status === true).length,
-      fullPayloadLength: fullPayload.length,
+      mergedStorefrontPreviewLength: mergedStorefrontPreview.length,
       functionPayloadLength: functionMetafieldValue.length,
-      storefrontPayloadLength: storefrontMetafieldValue.length,
-      functionReducedBy: fullPayload.length - functionMetafieldValue.length,
+      storefrontShardCount: storefrontStructured.offers.length,
+      functionReducedBy: mergedStorefrontPreview.length - functionMetafieldValue.length,
     });
 
     const functionInputUtf8Bytes = new TextEncoder().encode(functionMetafieldValue).length;
@@ -591,68 +574,36 @@ async function syncShopOffersMetafield(
       };
     }
 
-    console.log("[offers-sync] writing shop metafield", {
+    const offerShardValueById = new Map<string, string>();
+    for (const row of storefrontStructured.offers) {
+      const id = String(row.id || "").trim();
+      if (!id) continue;
+      offerShardValueById.set(id, JSON.stringify(row));
+    }
+    const activeOfferIdsOrdered = storefrontStructured.offers
+      .map((o) => String(o.id || "").trim())
+      .filter(Boolean);
+
+    console.log("[offers-sync] writing sharded shop metafields", {
       shopId,
-      namespace: BUNDLE_METAFIELD_NAMESPACE,
-      storefrontKey: BUNDLE_METAFIELD_BASE_KEY,
-      storefrontPayloadLength: storefrontMetafieldValue.length,
+      namespace: "ciwi_bundle",
+      storefrontShardCount: activeOfferIdsOrdered.length,
       functionInputKey: BUNDLE_METAFIELD_FUNCTION_OFFERS_KEY,
       functionInputPayloadLength: functionMetafieldValue.length,
     });
-    const metafieldsSetResponse = await admin.graphql(
-      `#graphql
-      mutation MetafieldsSet($metafields: [MetafieldsSetInput!]!) {
-        metafieldsSet(metafields: $metafields) {
-          metafields {
-            id
-            key
-            namespace
-          }
-          userErrors {
-            field
-            message
-          }
-        }
-      }
-    `,
-      {
-        variables: {
-          metafields: buildOfferMetafieldsInput(
-            shopId,
-            storefrontMetafieldValue,
-            functionMetafieldValue,
-            themeExtensionEnabled,
-          ),
-        },
-      },
-    );
 
-    const metafieldsSetJson = (await metafieldsSetResponse.json()) as {
-      data?: {
-        metafieldsSet?: {
-          userErrors?: Array<{ message?: string }>;
-        };
-      };
-      errors?: Array<{ message?: string }>;
-    };
-
-    if (metafieldsSetJson.errors?.length) {
-      console.error("[offers-sync] metafieldsSet graphql errors", metafieldsSetJson.errors);
-      return {
-        ok: false,
-        message: metafieldsSetJson.errors
-          .map((e) => e.message || "unknown")
-          .join("; "),
-      };
-    }
-
-    const userErrors = metafieldsSetJson?.data?.metafieldsSet?.userErrors ?? [];
-    if (userErrors.length > 0) {
-      console.error("[offers-sync] metafieldsSet userErrors", userErrors);
-      return {
-        ok: false,
-        message: userErrors.map((e) => e.message || "unknown").join("; "),
-      };
+    const shardSync = await reconcileShopOfferShardedMetafields(admin, shopId, {
+      activeOfferIdsOrdered,
+      syncAtIso: storefrontStructured.updatedAt,
+      offerShardValueById,
+      functionOffersCompactPayload: functionMetafieldValue,
+      themeExtensionEnabled,
+    });
+    if (!shardSync.ok) {
+      console.error("[offers-sync] sharded metafield sync failed", {
+        message: shardSync.message,
+      });
+      return shardSync;
     }
 
     console.log("[offers-sync] syncing offers into automatic discount owner metafields");

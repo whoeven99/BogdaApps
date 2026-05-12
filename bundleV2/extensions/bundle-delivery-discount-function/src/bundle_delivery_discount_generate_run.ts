@@ -2,8 +2,8 @@
  * 配送折扣 Function（cart.delivery-options.discounts.generate.run）
  * ------------------------------------------------------------------
  * 与行项目折扣 Function 分离：仅处理「阶梯赠品」中的免邮（free_shipping）。
- * 配置来源（按序兜底）：shop `ciwi-bundle-offers-fn` → shop `ciwi-bundle-offers` → 自动折扣 owner
- * `$app:ciwi_bundle` / `offers`（与后台 sync、购物车 Function 对齐）。主题仍主要读 `ciwi-bundle-offers`。
+ * 配置来源（按序兜底）：shop `ciwi-bundle-offers-fn` → 自动折扣 owner
+ * `$app:ciwi_bundle` / `offers`（与后台 sync、购物车 Function 对齐）。主题 storefront 使用分片 `offer-{id}`。
  *
  * 购物车行属性（与主题 `properties[__ciwi_*]` 对应）：
  * - 理想情况：行上带有 `__ciwi_bundle_offer_id`、`__ciwi_bundle_tier`（主题脚本写入）。
@@ -470,14 +470,12 @@ function pickDeliveryOffersFromInput(input: CartDeliveryDiscountInput): {
 } {
   const shop = input.shop as unknown as {
     offersFn?: { jsonValue?: unknown } | null;
-    offersStore?: { jsonValue?: unknown } | null;
   };
   const discount = input.discount as unknown as {
     offersDiscountOwner?: { jsonValue?: unknown } | null;
   };
   const ordered = [
     { source: "shop_fn", v: shop.offersFn?.jsonValue },
-    { source: "shop_legacy", v: shop.offersStore?.jsonValue },
     { source: "discount_owner", v: discount.offersDiscountOwner?.jsonValue },
   ] as const;
   for (const { source, v } of ordered) {
@@ -509,7 +507,7 @@ export function bundleDeliveryDiscountGenerateRun(
   const { offers, source: offersSource } = pickDeliveryOffersFromInput(input);
   if (!offers.length) {
     log("early_exit", { reason: "no_offers" });
-    logZh("提前退出：三源均无活动（fn / 店铺 legacy / 折扣 owner）", {
+    logZh("提前退出：无活动（shop fn / 折扣 owner）", {
       offersSource,
     });
     return { operations: [] };

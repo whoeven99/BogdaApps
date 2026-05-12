@@ -3478,9 +3478,50 @@ function readOffersConfigFromMetafield() {
         return null;
       }
     }
-    return parseCiwiMetafieldScript("ciwi-bundle-offers");
+    const mergedEl = document.getElementById("ciwi-bundle-offers");
+    if (mergedEl) {
+      return parseCiwiMetafieldScript("ciwi-bundle-offers");
+    }
+    const idsEl = document.getElementById("ciwi-bundle-offer-ids");
+    if (!idsEl || !idsEl.textContent || !idsEl.textContent.trim()) {
+      return null;
+    }
+    const ids = JSON.parse(idsEl.textContent.trim());
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return null;
+    }
+    let updatedAt = new Date().toISOString();
+    const syncAtEl = document.getElementById("ciwi-bundle-offer-sync-at");
+    if (syncAtEl && syncAtEl.textContent && syncAtEl.textContent.trim()) {
+      try {
+        const parsed = JSON.parse(syncAtEl.textContent.trim());
+        if (typeof parsed === "string" && parsed.trim()) {
+          updatedAt = parsed.trim();
+        }
+      } catch {
+        const raw = syncAtEl.textContent.trim().replace(/^"|"$/g, "");
+        if (raw) updatedAt = raw;
+      }
+    }
+    const offers = [];
+    for (const rawId of ids) {
+      const id = String(rawId || "").trim();
+      if (!id) continue;
+      const esc =
+        typeof CSS !== "undefined" && typeof CSS.escape === "function"
+          ? CSS.escape(id)
+          : id.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+      const shard = document.querySelector(
+        `script[type="application/json"][data-ciwi-bundle-offer-shard="${esc}"]`,
+      );
+      if (!shard || !shard.textContent || !shard.textContent.trim()) continue;
+      const one = JSON.parse(shard.textContent.trim());
+      if (one && typeof one === "object") offers.push(one);
+    }
+    if (!offers.length) return null;
+    return { updatedAt, offers };
   } catch (e) {
-    console.error("[ciwi] Failed to parse ciwi-bundle-offers metafield", e);
+    console.error("[ciwi] Failed to parse bundle offer metafields (merged or sharded)", e);
     return null;
   }
 }

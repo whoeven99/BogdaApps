@@ -49,11 +49,6 @@ query CartDeliveryDiscountInput {
       value
       type
     }
-    offersStore: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-offers") {
-      jsonValue
-      value
-      type
-    }
   }
   localization {
     market {

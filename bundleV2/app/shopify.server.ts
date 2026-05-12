@@ -16,8 +16,6 @@ const DELIVERY_DISCOUNT_AUTO_TITLE = "Ciwi Bundle Auto Free Shipping";
 const CART_LINES_DISCOUNT_METAFIELD_NAMESPACE = "$app:ciwi_bundle";
 const CART_LINES_DISCOUNT_DEFAULT_APP_NAMESPACE = "$app";
 const CART_LINES_DISCOUNT_METAFIELD_KEY = "offers";
-const LEGACY_OFFERS_METAFIELD_NAMESPACE = "ciwi_bundle";
-const LEGACY_OFFERS_METAFIELD_KEY = "ciwi-bundle-offers";
 const CART_LINES_DISCOUNT_EXPECTED_CLASSES = ["PRODUCT", "ORDER"] as const;
 const CART_LINES_DISCOUNT_EXPECTED_COMBINES_WITH = {
   orderDiscounts: false,
@@ -90,7 +88,6 @@ export async function syncCartLinesAutomaticDiscountMetafield(
     console.log("[discount][sync-meta] start", {
       payloadLength: typeof metafieldValue === "string" ? metafieldValue.length : 0,
       appNamespace: CART_LINES_DISCOUNT_METAFIELD_NAMESPACE,
-      legacyNamespace: LEGACY_OFFERS_METAFIELD_NAMESPACE,
     });
     const functionId = await getCartLinesDiscountFunctionId(admin);
     if (!functionId) {
@@ -224,12 +221,6 @@ export async function syncCartLinesAutomaticDiscountMetafield(
                   type: "json",
                   value: buildAutomaticDiscountOffersPayload(metafieldValue),
                 },
-                {
-                  namespace: LEGACY_OFFERS_METAFIELD_NAMESPACE,
-                  key: LEGACY_OFFERS_METAFIELD_KEY,
-                  type: "json",
-                  value: buildAutomaticDiscountOffersPayload(metafieldValue),
-                },
               ],
             },
           },
@@ -299,13 +290,6 @@ export async function syncCartLinesAutomaticDiscountMetafield(
               type: "json",
               value: buildAutomaticDiscountOffersPayload(metafieldValue),
             },
-            {
-              ownerId,
-              namespace: LEGACY_OFFERS_METAFIELD_NAMESPACE,
-              key: LEGACY_OFFERS_METAFIELD_KEY,
-              type: "json",
-              value: buildAutomaticDiscountOffersPayload(metafieldValue),
-            },
           ]),
         },
       },
@@ -353,9 +337,6 @@ export async function syncCartLinesAutomaticDiscountMetafield(
               defaultAppOffers: metafield(namespace: "$app", key: "offers") {
                 value
               }
-              legacyOffers: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-offers") {
-                value
-              }
             }
           }
         `,
@@ -367,7 +348,6 @@ export async function syncCartLinesAutomaticDiscountMetafield(
         discountNodeId,
         appOwnedLen: String(node?.appOwnedOffers?.value || "").length,
         defaultAppLen: String(node?.defaultAppOffers?.value || "").length,
-        legacyLen: String(node?.legacyOffers?.value || "").length,
       });
     }
     return { ok: true };
