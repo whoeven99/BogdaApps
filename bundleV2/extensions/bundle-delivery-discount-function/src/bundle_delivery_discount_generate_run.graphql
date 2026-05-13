@@ -48,5 +48,8 @@ query CartDeliveryDiscountInput {
   }
   discount {
     discountClasses
+    offersFromDiscountOwner: metafield(namespace: "$app:ciwi_bundle", key: "offers") {
+      jsonValue
+    }
   }
 }

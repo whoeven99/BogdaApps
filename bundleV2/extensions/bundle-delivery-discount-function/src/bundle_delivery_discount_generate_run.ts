@@ -513,8 +513,47 @@ function pickDeliveryOffersFromInput(input: CartDeliveryDiscountInput): {
   const shop = input.shop as unknown as {
     offersFn?: { jsonValue?: unknown } | null;
   };
-  const list = extractOffersListFromJson(shop.offersFn?.jsonValue);
-  if (list.length) return { offers: list, source: "shop_fn" };
+  const discountOwnerMf = input.discount.offersFromDiscountOwner;
+  const jDisc = discountOwnerMf?.jsonValue;
+  const offersFnNode = shop.offersFn;
+  const jShop = offersFnNode?.jsonValue;
+
+  const logJv = (namespace: string, key: string, mfNode: unknown, jv: unknown) => {
+    log("read_ciwi_offers_metafield", {
+      namespace,
+      key,
+      metafieldNodePresent: mfNode != null,
+      jsonValueKind:
+        jv === undefined
+          ? "undefined"
+          : jv === null
+            ? "null"
+            : Array.isArray(jv)
+              ? "array"
+              : typeof jv,
+      topLevelKeys:
+        jv && typeof jv === "object" && !Array.isArray(jv)
+          ? Object.keys(jv as Record<string, unknown>).slice(0, 30)
+          : null,
+      offersArrayLength:
+        jv &&
+        typeof jv === "object" &&
+        !Array.isArray(jv) &&
+        Array.isArray((jv as { offers?: unknown }).offers)
+          ? (jv as { offers: unknown[] }).offers.length
+          : null,
+    });
+  };
+
+  logJv("$app:ciwi_bundle", "offers", discountOwnerMf, jDisc);
+  logJv("ciwi_bundle", "ciwi-bundle-offers-fn", offersFnNode, jShop);
+
+  const fromDiscount = extractOffersListFromJson(jDisc);
+  const fromShop = extractOffersListFromJson(jShop);
+  if (fromDiscount.length) {
+    return { offers: fromDiscount, source: "discount_owner_app_ciwi_bundle_offers" };
+  }
+  if (fromShop.length) return { offers: fromShop, source: "shop_ciwi_bundle_offers_fn" };
   return { offers: [], source: "none" };
 }
 

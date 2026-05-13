@@ -34,5 +34,9 @@ query CartInput {
   }
   discount {
     discountClasses
+    # automatic discount owner: syncCartLinesAutomaticDiscountMetafield + shipping discount sync
+    offersFromDiscountOwner: metafield(namespace: "$app:ciwi_bundle", key: "offers") {
+      jsonValue
+    }
   }
 }

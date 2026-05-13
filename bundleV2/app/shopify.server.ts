@@ -46,8 +46,10 @@ function buildAutomaticDiscountOffersPayload(value?: string): string {
   });
 }
 
-async function getCartLinesDiscountFunctionId(admin: any): Promise<string | null> {
-  console.log("[discount][function-id] start querying shopifyFunctions");
+async function resolveShopifyDiscountFunctionIdByExactTitle(
+  admin: any,
+  exactTitle: string,
+): Promise<string | null> {
   const functionsResp = await admin.graphql(
     `#graphql
       query AppDiscountFunctions {
@@ -63,19 +65,103 @@ async function getCartLinesDiscountFunctionId(admin: any): Promise<string | null
   );
   const functionsJson = await functionsResp.json();
   const functionNodes = functionsJson?.data?.shopifyFunctions?.nodes ?? [];
-  console.log("[discount][function-id] query finished", {
-    totalFunctions: functionNodes.length,
-    targetTitle: CART_LINES_DISCOUNT_FUNCTION_TITLE,
-  });
   const targetFn = functionNodes.find(
     (fn: any) =>
-      fn?.title === CART_LINES_DISCOUNT_FUNCTION_TITLE &&
-      String(fn?.apiType || "").toLowerCase() === "discount",
+      fn?.title === exactTitle && String(fn?.apiType || "").toLowerCase() === "discount",
   );
-  const functionId = targetFn?.id ? String(targetFn.id) : null;
+  return targetFn?.id ? String(targetFn.id) : null;
+}
+
+type AutomaticDiscountOwnerCollection = {
+  ownerIds: string[];
+  targetDiscountNodeIds: string[];
+  diagnostics: {
+    targetFunctionId: string;
+    matchedDiscounts: unknown[];
+    strictMatchCount: number;
+  };
+};
+
+function collectAutomaticDiscountOwnersForFunctionId(params: {
+  discountNodes: any[];
+  functionId: string;
+  baseTitleSubstring: string;
+  brandedTitleSubstring: string;
+}): AutomaticDiscountOwnerCollection | null {
+  const { discountNodes, functionId, baseTitleSubstring, brandedTitleSubstring } =
+    params;
+  const matchedDiscounts = discountNodes
+    .map((node: any) => {
+      const d = node?.discount;
+      if (!d || d.__typename !== "DiscountAutomaticApp") return null;
+      const title = String(d?.title || "");
+      return {
+        nodeId: String(node?.id || ""),
+        discountId: String(d?.discountId || ""),
+        title,
+        status: String(d?.status || ""),
+        discountFunctionId: String(d?.appDiscountType?.functionId || ""),
+        functionMatches: d?.appDiscountType?.functionId === functionId,
+        titleMatches: title.includes(baseTitleSubstring) || title.includes(brandedTitleSubstring),
+      };
+    })
+    .filter(Boolean);
+  const strictFunctionMatches = matchedDiscounts.filter((d: any) => d?.functionMatches);
+  const fallbackTitleMatches =
+    strictFunctionMatches.length === 0
+      ? matchedDiscounts.filter((d: any) => d?.titleMatches)
+      : [];
+  const targetDiscounts =
+    strictFunctionMatches.length > 0 ? strictFunctionMatches : fallbackTitleMatches;
+  if (!targetDiscounts.length) return null;
+
+  const ownerIds: string[] = Array.from(
+    new Set(
+      targetDiscounts.flatMap((d: any) =>
+        [d.discountId, d.nodeId].map((id: string) => String(id || "").trim()).filter(Boolean),
+      ),
+    ),
+  );
+  const targetDiscountNodeIds: string[] = Array.from(
+    new Set(
+      targetDiscounts.map((d: any) => String(d?.nodeId || "").trim()).filter(Boolean),
+    ),
+  );
+
+  return {
+    ownerIds,
+    targetDiscountNodeIds,
+    diagnostics: {
+      targetFunctionId: functionId,
+      matchedDiscounts,
+      strictMatchCount: strictFunctionMatches.length,
+    },
+  };
+}
+
+async function getCartLinesDiscountFunctionId(admin: any): Promise<string | null> {
+  console.log("[discount][function-id] start querying shopifyFunctions");
+  const functionId = await resolveShopifyDiscountFunctionIdByExactTitle(
+    admin,
+    CART_LINES_DISCOUNT_FUNCTION_TITLE,
+  );
   console.log("[discount][function-id] resolve result", {
     functionId,
     found: Boolean(functionId),
+    targetTitle: CART_LINES_DISCOUNT_FUNCTION_TITLE,
+  });
+  return functionId;
+}
+
+async function getDeliveryDiscountFunctionIdForSync(admin: any): Promise<string | null> {
+  const functionId = await resolveShopifyDiscountFunctionIdByExactTitle(
+    admin,
+    DELIVERY_DISCOUNT_FUNCTION_TITLE,
+  );
+  console.log("[discount-shipping][function-id] resolve result", {
+    functionId,
+    found: Boolean(functionId),
+    targetTitle: DELIVERY_DISCOUNT_FUNCTION_TITLE,
   });
   return functionId;
 }
@@ -123,65 +209,66 @@ export async function syncCartLinesAutomaticDiscountMetafield(
     const discountNodes = existingJson?.data?.discountNodes?.nodes ?? [];
     console.log("[discount][sync-meta] loaded automatic discount nodes", {
       nodeCount: discountNodes.length,
+      cartLinesFunctionId: functionId,
+    });
+
+    const cartOwners = collectAutomaticDiscountOwnersForFunctionId({
+      discountNodes,
       functionId,
+      baseTitleSubstring: CART_LINES_DISCOUNT_AUTO_TITLE,
+      brandedTitleSubstring: getAutoDiscountTitle(),
     });
-    const matchedDiscounts = discountNodes
-      .map((node: any) => {
-        const d = node?.discount;
-        if (!d || d.__typename !== "DiscountAutomaticApp") return null;
-        return {
-          nodeId: String(node?.id || ""),
-          discountId: String(d?.discountId || ""),
-          title: String(d?.title || ""),
-          status: String(d?.status || ""),
-          discountFunctionId: String(d?.appDiscountType?.functionId || ""),
-          functionMatches: d?.appDiscountType?.functionId === functionId,
-          titleMatches:
-            String(d?.title || "").includes(CART_LINES_DISCOUNT_AUTO_TITLE) ||
-            String(d?.title || "").includes(getAutoDiscountTitle()),
-        };
-      })
-      .filter(Boolean);
-    console.log("[discount][sync-meta] matched discount diagnostics", {
-      targetFunctionId: functionId,
-      matchedDiscounts,
+    console.log("[discount][sync-meta] matched discount diagnostics (cart lines)", {
+      cartOwners: cartOwners?.diagnostics ?? null,
     });
-    const strictFunctionMatches = matchedDiscounts.filter(
-      (d: any) => d && d.functionMatches,
-    );
-    const fallbackTitleMatches =
-      strictFunctionMatches.length === 0
-        ? matchedDiscounts.filter((d: any) => d && d.titleMatches)
-        : [];
-    const targetDiscounts =
-      strictFunctionMatches.length > 0 ? strictFunctionMatches : fallbackTitleMatches;
+
+    const shippingFunctionId = await getDeliveryDiscountFunctionIdForSync(admin);
+    const shippingOwners = shippingFunctionId
+      ? collectAutomaticDiscountOwnersForFunctionId({
+          discountNodes,
+          functionId: shippingFunctionId,
+          baseTitleSubstring: DELIVERY_DISCOUNT_AUTO_TITLE,
+          brandedTitleSubstring: getAutoShippingDiscountTitle(),
+        })
+      : null;
+    if (shippingOwners) {
+      console.log("[discount][sync-meta] matched discount diagnostics (delivery shipping)", {
+        shippingOwners: shippingOwners.diagnostics,
+      });
+    } else if (shippingFunctionId) {
+      console.warn(
+        "[discount][sync-meta] delivery Function id resolved but no automatic discount owner matched titles",
+      );
+    }
+
     const ownerIds: string[] = Array.from(
-      new Set(
-        targetDiscounts.flatMap((d: any) =>
-          [d.discountId, d.nodeId].map((id: string) => String(id || "").trim()).filter(Boolean),
-        ),
-      ),
+      new Set([...(cartOwners?.ownerIds ?? []), ...(shippingOwners?.ownerIds ?? [])]),
     );
     const targetDiscountNodeIds: string[] = Array.from(
-      new Set(
-        targetDiscounts
-          .map((d: any) => String(d?.nodeId || "").trim())
-          .filter(Boolean),
-      ),
+      new Set([
+        ...(cartOwners?.targetDiscountNodeIds ?? []),
+        ...(shippingOwners?.targetDiscountNodeIds ?? []),
+      ]),
     );
 
     if (!ownerIds.length) {
-      console.error("[discount][sync-meta] no owner ids matched function", { functionId });
+      console.error("[discount][sync-meta] no owner ids matched cart or shipping functions", {
+        cartLinesFunctionId: functionId,
+        shippingFunctionId,
+      });
       return {
         ok: false,
-        message: "No automatic app discount owner found for bundle function",
+        message:
+          "No automatic app discount owner found for bundle cart lines or delivery discount functions",
       };
     }
-    console.log("[discount][sync-meta] owner ids resolved", {
+
+    console.log("[discount][sync-meta] merged owner ids resolved", {
       ownerCount: ownerIds.length,
       ownerIds,
       targetDiscountNodeIds,
-      selectionMode: strictFunctionMatches.length > 0 ? "function_id" : "title_fallback",
+      matchedCartOwners: cartOwners != null,
+      matchedShippingOwners: shippingOwners != null,
     });
 
     // 先用 discountAutomaticAppUpdate 写入函数 owner 的 metafields（与函数运行时 owner 最稳定对齐）
