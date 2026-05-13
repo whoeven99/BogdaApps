@@ -2,8 +2,8 @@
  * 配送折扣 Function（cart.delivery-options.discounts.generate.run）
  * ------------------------------------------------------------------
  * 与行项目折扣 Function 分离：仅处理「阶梯赠品」中的免邮（free_shipping）。
- * 配置来源（按序兜底）：shop `ciwi-bundle-offers-fn` → 自动折扣 owner
- * `$app:ciwi_bundle` / `offers`（与后台 sync、购物车 Function 对齐）。主题 storefront 使用分片 `offer-{id}`。
+ * 配置来源（按序兜底）：shop `ciwi-bundle-offer-ids` + 固定槽位 `ciwi-bundle-fn-offer-*` 组装 → shop `ciwi-bundle-offers-fn` → 自动折扣 owner
+ * `$app:ciwi_bundle` / `offers`（与后台 sync、购物车 Function 对齐）。主题 storefront 使用按 id 分片 `offer-{id}`；Function 因 input 静态限制使用与 ids 顺序一致的 fn 槽位。
  *
  * 购物车行属性（与主题 `properties[__ciwi_*]` 对应）：
  * - 理想情况：行上带有 `__ciwi_bundle_offer_id`、`__ciwi_bundle_tier`（主题脚本写入）。
@@ -91,11 +91,44 @@ function parseSelectedIds(selectedProductsJson?: string | null): string[] {
   try {
     const parsed = JSON.parse(selectedProductsJson) as unknown;
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const productIds = (parsed as { productIds?: unknown }).productIds;
+      if (Array.isArray(productIds)) {
+        const ids = productIds
+          .map((id) => String(id || "").trim())
+          .filter(Boolean);
+        if (ids.length) return [...new Set(ids)];
+      }
+
+      const bars = (parsed as { bars?: unknown }).bars;
+      if (Array.isArray(bars) && bars.length) {
+        const ids: string[] = [];
+        for (const bar of bars) {
+          if (!bar || typeof bar !== "object") continue;
+          const products = (bar as { products?: unknown }).products;
+          if (!Array.isArray(products)) continue;
+          for (const p of products) {
+            if (p && typeof p === "object") {
+              const pid = (p as { productId?: unknown }).productId;
+              if (typeof pid === "string" && pid.trim()) ids.push(pid.trim());
+            }
+          }
+        }
+        if (ids.length) return [...new Set(ids)];
+      }
+
       const buyProducts = (parsed as { buyProducts?: string[] }).buyProducts;
       const getProducts = (parsed as { getProducts?: string[] }).getProducts;
+      const triggerProducts = (parsed as { triggerProducts?: string[] }).triggerProducts;
+      const giftProducts = (parsed as { giftProducts?: string[] }).giftProducts;
       const all: string[] = [];
       if (Array.isArray(buyProducts)) all.push(...buyProducts.filter((x) => typeof x === "string"));
       if (Array.isArray(getProducts)) all.push(...getProducts.filter((x) => typeof x === "string"));
+      if (Array.isArray(triggerProducts)) {
+        all.push(...triggerProducts.filter((x) => typeof x === "string"));
+      }
+      if (Array.isArray(giftProducts)) {
+        all.push(...giftProducts.filter((x) => typeof x === "string"));
+      }
       return [...new Set(all)];
     }
     if (!Array.isArray(parsed)) return [];
@@ -458,16 +491,88 @@ function hasEligibleShippingRule(
   });
 }
 
+const SHOP_FN_OFFER_SLOTS = 5;
+
 function extractOffersListFromJson(v: unknown): OfferRow[] {
   if (!v || typeof v !== "object") return [];
   const o = v as { offers?: unknown };
   return Array.isArray(o.offers) ? (o.offers as OfferRow[]) : [];
 }
 
+function offersEnvelopeHasList(v: unknown): boolean {
+  return extractOffersListFromJson(v).length > 0;
+}
+
+function tryMergeDeliveryOffersFromShopIdSlots(
+  input: CartDeliveryDiscountInput,
+): OfferRow[] | null {
+  const shop = input.shop as unknown as {
+    offerIdsShop?: { jsonValue?: unknown } | null;
+    offersFn?: { jsonValue?: unknown } | null;
+    fnOfferSlot0?: { jsonValue?: unknown } | null;
+    fnOfferSlot1?: { jsonValue?: unknown } | null;
+    fnOfferSlot2?: { jsonValue?: unknown } | null;
+    fnOfferSlot3?: { jsonValue?: unknown } | null;
+    fnOfferSlot4?: { jsonValue?: unknown } | null;
+  };
+
+  const idsRaw = shop.offerIdsShop?.jsonValue;
+  if (!Array.isArray(idsRaw) || idsRaw.length === 0) return null;
+  const ids = idsRaw.map((x) => String(x ?? "").trim()).filter(Boolean);
+  if (!ids.length) return null;
+
+  const slotMetas = [
+    shop.fnOfferSlot0,
+    shop.fnOfferSlot1,
+    shop.fnOfferSlot2,
+    shop.fnOfferSlot3,
+    shop.fnOfferSlot4,
+  ];
+
+  const pushSlot = (i: number, out: OfferRow[]): boolean => {
+    const jv = slotMetas[i]?.jsonValue;
+    if (jv == null || typeof jv !== "object" || Array.isArray(jv)) return false;
+    const oid = String((jv as { id?: unknown }).id ?? "").trim();
+    if (oid !== ids[i]) return false;
+    out.push(jv as OfferRow);
+    return true;
+  };
+
+  if (ids.length <= SHOP_FN_OFFER_SLOTS) {
+    const offers: OfferRow[] = [];
+    for (let i = 0; i < ids.length; i++) {
+      if (!pushSlot(i, offers)) return null;
+    }
+    return offers;
+  }
+
+  const fnJv = shop.offersFn?.jsonValue;
+  if (!offersEnvelopeHasList(fnJv)) return null;
+  const fnList = extractOffersListFromJson(fnJv);
+  const byId = new Map(fnList.map((o) => [String(o?.id ?? "").trim(), o]));
+
+  const offers: OfferRow[] = [];
+  for (let i = 0; i < ids.length; i++) {
+    if (i < SHOP_FN_OFFER_SLOTS) {
+      if (!pushSlot(i, offers)) return null;
+    } else {
+      const row = byId.get(ids[i]);
+      if (!row) return null;
+      offers.push(row);
+    }
+  }
+  return offers;
+}
+
 function pickDeliveryOffersFromInput(input: CartDeliveryDiscountInput): {
   offers: OfferRow[];
   source: string;
 } {
+  const merged = tryMergeDeliveryOffersFromShopIdSlots(input);
+  if (merged && merged.length) {
+    return { offers: merged, source: "shop_offer_ids_and_fn_slots" };
+  }
+
   const shop = input.shop as unknown as {
     offersFn?: { jsonValue?: unknown } | null;
   };
@@ -507,7 +612,7 @@ export function bundleDeliveryDiscountGenerateRun(
   const { offers, source: offersSource } = pickDeliveryOffersFromInput(input);
   if (!offers.length) {
     log("early_exit", { reason: "no_offers" });
-    logZh("提前退出：无活动（shop fn / 折扣 owner）", {
+    logZh("提前退出：无活动（ids+fn 槽位 / shop fn / 折扣 owner）", {
       offersSource,
     });
     return { operations: [] };

@@ -1,4 +1,6 @@
 import {
+  BUNDLE_FUNCTION_OFFER_SLOT_COUNT,
+  BUNDLE_FUNCTION_OFFER_SLOT_KEY_PREFIX,
   BUNDLE_LEGACY_MONOLITHIC_OFFERS_KEY,
   BUNDLE_METAFIELD_ENABLED_KEY,
   BUNDLE_METAFIELD_FUNCTION_OFFERS_KEY,
@@ -7,6 +9,7 @@ import {
   BUNDLE_OFFER_SHARD_PREFIX,
   BUNDLE_OFFER_SYNC_AT_KEY,
   BUNDLE_SHOP_METAFIELD_NAMESPACE,
+  bundleShopFunctionOfferSlotKey,
   bundleShopOfferShardKey,
 } from "./bundleShopMetafieldKeys";
 
@@ -119,6 +122,14 @@ function offerIdFromShardKey(key: string): string | null {
   return id || null;
 }
 
+function functionOfferSlotIndexFromKey(key: string): number | null {
+  if (!key.startsWith(BUNDLE_FUNCTION_OFFER_SLOT_KEY_PREFIX)) return null;
+  const rest = key.slice(BUNDLE_FUNCTION_OFFER_SLOT_KEY_PREFIX.length).trim();
+  const n = Number(rest);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.trunc(n);
+}
+
 async function metafieldsSetChunked(
   admin: any,
   metafields: MetafieldsSetInput[],
@@ -156,7 +167,7 @@ async function metafieldsSetChunked(
 }
 
 /**
- * 将活动 offer 写入 shop 分片 metafield，并删除已下线的 `offer-*` 与废弃的整包 `ciwi-bundle-offers`。
+ * 将活动 offer 写入 shop 分片 metafield（`offer-{id}` + Function 槽位 `ciwi-bundle-fn-offer-*`），并删除已下线的分片与废弃的整包 `ciwi-bundle-offers`。
  */
 export async function reconcileShopOfferShardedMetafields(
   admin: any,
@@ -168,6 +179,8 @@ export async function reconcileShopOfferShardedMetafields(
     /** 每个活动 offer 一条 JSON 字符串（已 JSON.stringify 的单条 offer 对象） */
     offerShardValueById: Map<string, string>;
     functionOffersCompactPayload: string;
+    /** 与 `activeOfferIdsOrdered` 前若干条一致，每条为单 offer compact 的 JSON 字符串（长度 ≤ `BUNDLE_FUNCTION_OFFER_SLOT_COUNT`） */
+    functionOfferSlotCompactValues: string[];
     themeExtensionEnabled: boolean;
   },
 ): Promise<{ ok: true } | { ok: false; message: string }> {
@@ -175,6 +188,9 @@ export async function reconcileShopOfferShardedMetafields(
     const wanted = new Set(
       params.activeOfferIdsOrdered.map((id) => String(id || "").trim()).filter(Boolean),
     );
+    const activeOfferCount = params.activeOfferIdsOrdered
+      .map((id) => String(id || "").trim())
+      .filter(Boolean).length;
 
     const existingKeys = await listShopCiBundleMetafieldKeys(admin);
     const keysToDelete: string[] = [];
@@ -182,6 +198,16 @@ export async function reconcileShopOfferShardedMetafields(
       const shardId = offerIdFromShardKey(key);
       if (shardId && !wanted.has(shardId)) {
         keysToDelete.push(key);
+        continue;
+      }
+      const slotIdx = functionOfferSlotIndexFromKey(key);
+      if (slotIdx !== null) {
+        if (
+          slotIdx >= BUNDLE_FUNCTION_OFFER_SLOT_COUNT ||
+          slotIdx >= activeOfferCount
+        ) {
+          keysToDelete.push(key);
+        }
         continue;
       }
       if (key === BUNDLE_LEGACY_MONOLITHIC_OFFERS_KEY) {
@@ -257,7 +283,28 @@ export async function reconcileShopOfferShardedMetafields(
       };
     });
 
-    await metafieldsSetChunked(admin, [...base, ...shardInputs]);
+    const slotLimit = Math.min(idsOrdered.length, BUNDLE_FUNCTION_OFFER_SLOT_COUNT);
+    if (params.functionOfferSlotCompactValues.length < slotLimit) {
+      throw new Error(
+        `functionOfferSlotCompactValues length ${params.functionOfferSlotCompactValues.length} < required ${slotLimit}`,
+      );
+    }
+    const fnSlotInputs: MetafieldsSetInput[] = [];
+    for (let i = 0; i < slotLimit; i++) {
+      const json = params.functionOfferSlotCompactValues[i];
+      if (typeof json !== "string" || !json.trim()) {
+        throw new Error(`Missing function slot compact JSON for index ${i}`);
+      }
+      fnSlotInputs.push({
+        ownerId: shopId,
+        namespace: BUNDLE_SHOP_METAFIELD_NAMESPACE,
+        key: bundleShopFunctionOfferSlotKey(i),
+        type: "json",
+        value: json,
+      });
+    }
+
+    await metafieldsSetChunked(admin, [...base, ...shardInputs, ...fnSlotInputs]);
     return { ok: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : JSON.stringify(error);

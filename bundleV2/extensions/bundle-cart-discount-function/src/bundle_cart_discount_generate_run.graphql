@@ -25,10 +25,28 @@ query CartInput {
     }
   }
   shop {
+    offerIdsShop: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-offer-ids") {
+      jsonValue
+    }
     offersShop: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-offers-fn") {
       jsonValue
     }
     bundleEnabledShop: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-enabled") {
+      jsonValue
+    }
+    fnOfferSlot0: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-fn-offer-0") {
+      jsonValue
+    }
+    fnOfferSlot1: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-fn-offer-1") {
+      jsonValue
+    }
+    fnOfferSlot2: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-fn-offer-2") {
+      jsonValue
+    }
+    fnOfferSlot3: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-fn-offer-3") {
+      jsonValue
+    }
+    fnOfferSlot4: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-fn-offer-4") {
       jsonValue
     }
   }

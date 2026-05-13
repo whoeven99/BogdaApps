@@ -2757,3 +2757,127 @@ export function buildCompleteBundleConfig(
       })),
   };
 }
+
+function normalizeCompleteBundlePricingModeForFn(raw: unknown): CompleteBundlePricingMode {
+  const m = String(raw || "full_price");
+  if (
+    m === "full_price" ||
+    m === "percentage_off" ||
+    m === "amount_off" ||
+    m === "fixed_price"
+  ) {
+    return m;
+  }
+  return "full_price";
+}
+
+/**
+ * Shopify Function 输入专用：裁剪 `selectedProductsJson`，去掉主题/预览用的大字段，
+ * 降低 shop `ciwi-bundle-offers-fn` 与 automatic discount owner 瘦配置的 UTF-8 体积。
+ * 不修改数据库中的原始 JSON，仅在 metafield 同步路径使用。
+ */
+export function trimSelectedProductsJsonForFunction(
+  offerType: string,
+  selectedProductsJson: string | null,
+): string | null {
+  if (selectedProductsJson == null || !String(selectedProductsJson).trim()) {
+    return null;
+  }
+  const raw = String(selectedProductsJson);
+
+  const finish = (next: string): string | null => {
+    const t = next.trim();
+    return t === "" ? null : t;
+  };
+
+  try {
+    if (offerType === "complete-bundle") {
+      const cfg = parseCompleteBundleConfig(raw);
+      if (!cfg.bars.length) {
+        return finish(raw);
+      }
+
+      const bars = cfg.bars
+        .map((bar) => {
+          const id = String(bar.id || "").trim();
+          if (!id) return null;
+
+          const minQuantity = Math.max(1, Math.trunc(Number(bar.minQuantity) || 1));
+          const maxQuantity = Math.max(
+            minQuantity,
+            Math.trunc(Number(bar.maxQuantity) || Number(bar.quantity) || 1),
+          );
+          const quantity = Math.max(
+            minQuantity,
+            Math.trunc(Number(bar.quantity) || maxQuantity || 1),
+          );
+
+          const mode = normalizeCompleteBundlePricingModeForFn(bar.pricing?.mode);
+          const value = Number.isFinite(Number(bar.pricing?.value)) ? Number(bar.pricing?.value) : 0;
+
+          const products = (Array.isArray(bar.products) ? bar.products : [])
+            .map((p) => {
+              const productId = String(p.productId || "").trim();
+              if (!productId) return null;
+              const pm = normalizeCompleteBundlePricingModeForFn(p.pricing?.mode);
+              const pv = Number.isFinite(Number(p.pricing?.value)) ? Number(p.pricing?.value) : 0;
+              return { productId, pricing: { mode: pm, value: pv } };
+            })
+            .filter(
+              (
+                row,
+              ): row is {
+                productId: string;
+                pricing: { mode: CompleteBundlePricingMode; value: number };
+              } => row !== null,
+            );
+
+          return {
+            id,
+            minQuantity,
+            maxQuantity,
+            quantity,
+            excludeTriggerProduct: bar.excludeTriggerProduct !== false,
+            pricing: { mode, value },
+            products,
+          };
+        })
+        .filter((row): row is NonNullable<typeof row> => row !== null);
+
+      if (!bars.length) {
+        return finish(raw);
+      }
+
+      const productIds = (Array.isArray(cfg.triggerProductIds) ? cfg.triggerProductIds : [])
+        .map((id) => String(id || "").trim())
+        .filter(Boolean);
+
+      return finish(JSON.stringify({ productIds, bars }));
+    }
+
+    if (offerType === "bxgy") {
+      const parsed = JSON.parse(raw) as { buyProducts?: unknown; getProducts?: unknown };
+      const buyProducts = Array.isArray(parsed.buyProducts)
+        ? parsed.buyProducts.map((id) => String(id || "").trim()).filter(Boolean)
+        : [];
+      const getProducts = Array.isArray(parsed.getProducts)
+        ? parsed.getProducts.map((id) => String(id || "").trim()).filter(Boolean)
+        : [];
+      return finish(JSON.stringify({ buyProducts, getProducts }));
+    }
+
+    if (offerType === "free-gift") {
+      const { triggerProducts, giftProducts } = parseFreeGiftSelectedProducts(raw);
+      return finish(JSON.stringify({ triggerProducts, giftProducts }));
+    }
+
+    const ids = parseSelectedProductIds(raw);
+    if (ids.length) {
+      return finish(JSON.stringify({ productIds: ids }));
+    }
+
+    return finish(raw);
+  } catch {
+    return finish(raw);
+  }
+}

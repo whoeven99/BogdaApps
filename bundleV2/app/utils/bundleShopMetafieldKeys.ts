@@ -26,4 +26,18 @@ export const BUNDLE_LEGACY_MONOLITHIC_OFFERS_KEY = "ciwi-bundle-offers";
 /** 供 Shopify Functions 读取的瘦 offers（合并后的单 JSON，需保持 ≤10k UTF-8） */
 export const BUNDLE_METAFIELD_FUNCTION_OFFERS_KEY = "ciwi-bundle-offers-fn";
 
+/**
+ * Function input query 只能静态声明 metafield，无法按任意 `offer-{id}` 拉全部分片。
+ * 因此在 shop 上为前 N 个活动 offer 写入固定槽位（与 `ciwi-bundle-offer-ids` 顺序一致），每条为单 offer 的 compact JSON（与合并 fn 内单条结构相同）。
+ */
+export const BUNDLE_FUNCTION_OFFER_SLOT_KEY_PREFIX = "ciwi-bundle-fn-offer-";
+
+/** 与 `bundle_cart_discount_generate_run.graphql` / `bundle_delivery_discount_generate_run.graphql` 中槽位数量一致 */
+export const BUNDLE_FUNCTION_OFFER_SLOT_COUNT = 5;
+
+export function bundleShopFunctionOfferSlotKey(index: number): string {
+  const i = Number.isFinite(index) && index >= 0 ? Math.trunc(index) : 0;
+  return `${BUNDLE_FUNCTION_OFFER_SLOT_KEY_PREFIX}${i}`;
+}
+
 export const BUNDLE_METAFIELD_ENABLED_KEY = "ciwi-bundle-enabled";

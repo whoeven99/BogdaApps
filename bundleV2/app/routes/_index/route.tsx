@@ -57,9 +57,11 @@ import {
   parseCampaignConfig,
   sanitizeHexColor,
   sanitizeSingleLineText,
+  trimSelectedProductsJsonForFunction,
 } from "../../utils/offerParsing";
 import { sanitizeEnvLikeValue, sanitizeUrlLikeEnvValue } from "../../utils/env";
 import {
+  BUNDLE_FUNCTION_OFFER_SLOT_COUNT,
   BUNDLE_METAFIELD_ENABLED_KEY,
   BUNDLE_METAFIELD_FUNCTION_OFFERS_KEY,
 } from "../../utils/bundleShopMetafieldKeys";
@@ -319,7 +321,10 @@ async function buildCompactOffersPayload(
     status: offer.status,
     startTime: offer.startTime,
     endTime: offer.endTime,
-    selectedProductsJson: offer.selectedProductsJson ?? null,
+    selectedProductsJson: trimSelectedProductsJsonForFunction(
+      offer.offerType,
+      offer.selectedProductsJson,
+    ),
     discountRulesJson: offer.discountRulesJson ?? null,
     offerSettingsJson: offer.offerSettingsJson ?? null,
     offerType: offer.offerType,
@@ -515,6 +520,12 @@ async function syncShopOffersMetafield(
     });
 
     const functionMetafieldValue = await buildCompactOffersPayload(shopOffers);
+    const compactForSlots = JSON.parse(functionMetafieldValue) as { offers?: unknown[] };
+    const compactOfferRows = Array.isArray(compactForSlots.offers) ? compactForSlots.offers : [];
+    const functionOfferSlotCompactValues = compactOfferRows
+      .slice(0, BUNDLE_FUNCTION_OFFER_SLOT_COUNT)
+      .map((row) => JSON.stringify(row));
+
     const storefrontStructured = await buildStorefrontOffersStructured(admin, shopOffers);
     const mergedStorefrontPreview = JSON.stringify({
       updatedAt: storefrontStructured.updatedAt,
@@ -584,6 +595,16 @@ async function syncShopOffersMetafield(
       .map((o) => String(o.id || "").trim())
       .filter(Boolean);
 
+    if (activeOfferIdsOrdered.length > BUNDLE_FUNCTION_OFFER_SLOT_COUNT) {
+      console.warn(
+        "[offers-sync] active offer count exceeds Function static input slot limit; cart/delivery Functions fall back to merged ciwi-bundle-offers-fn for offers beyond slots",
+        {
+          activeCount: activeOfferIdsOrdered.length,
+          slotLimit: BUNDLE_FUNCTION_OFFER_SLOT_COUNT,
+        },
+      );
+    }
+
     console.log("[offers-sync] writing sharded shop metafields", {
       shopId,
       namespace: "ciwi_bundle",
@@ -597,6 +618,7 @@ async function syncShopOffersMetafield(
       syncAtIso: storefrontStructured.updatedAt,
       offerShardValueById,
       functionOffersCompactPayload: functionMetafieldValue,
+      functionOfferSlotCompactValues,
       themeExtensionEnabled,
     });
     if (!shardSync.ok) {
