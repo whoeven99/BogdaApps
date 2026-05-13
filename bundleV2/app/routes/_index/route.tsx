@@ -58,6 +58,7 @@ import {
   sanitizeHexColor,
   sanitizeSingleLineText,
   trimSelectedProductsJsonForFunction,
+  isOfferPublishedForBundleMetafieldSync,
 } from "../../utils/offerParsing";
 import { sanitizeEnvLikeValue, sanitizeUrlLikeEnvValue } from "../../utils/env";
 import {
@@ -312,8 +313,8 @@ async function buildCompactOffersPayload(
   shopOffers: OfferListItem[],
   themeExtensionEnabled = true,
 ): Promise<string> {
-  // 仅同步 status=true 的活动，避免无效活动占用 payload 体积并干扰函数计算
-  const activeOffers = shopOffers.filter((offer) => offer.status === true);
+  // 仅同步后台仍「启用」的活动，避免无效活动占用 payload 体积并干扰函数计算
+  const activeOffers = shopOffers.filter(isOfferPublishedForBundleMetafieldSync);
   // 先生成 Function 可安全消费的瘦 payload，避免 complete-bundle 展示字段把 metafield 撑爆。
   const compactOffers = activeOffers.map((offer) => ({
     id: offer.id,
@@ -356,7 +357,7 @@ async function buildStorefrontOffersStructured(
     offerType?: string;
   }>;
 }> {
-  const activeOffers = shopOffers.filter((offer) => offer.status === true);
+  const activeOffers = shopOffers.filter(isOfferPublishedForBundleMetafieldSync);
   const compactPayload = await buildCompactOffersPayload(shopOffers, themeExtensionEnabled);
   const compactPayloadParsed = JSON.parse(compactPayload) as {
     updatedAt?: string;
@@ -479,7 +480,7 @@ async function syncFunctionOwnerOffersMetafield(
     console.log("[offers-sync][function-owner] syncing payload", {
       shopName: shopNameToSync,
       offerCount: shopOffers.length,
-      activeOffers: shopOffers.filter((offer) => offer.status === true).length,
+      activeOffers: shopOffers.filter(isOfferPublishedForBundleMetafieldSync).length,
       payloadLength: functionMetafieldValue.length,
     });
     await reconcileBundleAutomaticDiscounts(admin);
@@ -543,7 +544,7 @@ async function syncShopOffersMetafield(
     });
     console.log("[offers-sync] payload size snapshot", {
       totalOffers: shopOffers.length,
-      activeOffers: shopOffers.filter((offer) => offer.status === true).length,
+      activeOffers: shopOffers.filter(isOfferPublishedForBundleMetafieldSync).length,
       mergedStorefrontPreviewLength: mergedStorefrontPreview.length,
       functionPayloadLength: functionMetafieldValue.length,
       storefrontOfferRows: storefrontStructured.offers.length,

@@ -1459,6 +1459,31 @@ export function parseCampaignConfig(
   }
 }
 
+/** 写入主题 `ciwi-bundle-offers` 与 Function `ciwi-bundle-offers-fn`：排除后台已停用的活动。 */
+export function isOfferPublishedForBundleMetafieldSync(offer: {
+  status: boolean;
+  campaignConfigJson?: string | null;
+}): boolean {
+  if (offer.status !== true) return false;
+  const raw = offer.campaignConfigJson;
+  if (raw == null || !String(raw).trim()) return true;
+  const cfg = parseCampaignConfig(raw);
+  if (cfg) return cfg.settings.status === true;
+  try {
+    const shallow = JSON.parse(String(raw)) as { settings?: { status?: unknown } };
+    if (
+      shallow?.settings &&
+      typeof shallow.settings === "object" &&
+      shallow.settings.status === false
+    ) {
+      return false;
+    }
+  } catch {
+    // ignore
+  }
+  return true;
+}
+
 export function migrateLegacyOfferToCampaignConfig(params: {
   offerType?: string | null;
   selectedProductsJson?: string | null;
