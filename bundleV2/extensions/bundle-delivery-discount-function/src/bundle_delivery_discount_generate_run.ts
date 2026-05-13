@@ -2,8 +2,7 @@
  * 配送折扣 Function（cart.delivery-options.discounts.generate.run）
  * ------------------------------------------------------------------
  * 与行项目折扣 Function 分离：仅处理「阶梯赠品」中的免邮（free_shipping）。
- * 配置来源（按序兜底）：shop `ciwi-bundle-offer-ids` + 固定槽位 `ciwi-bundle-fn-offer-*` 组装 → shop `ciwi-bundle-offers-fn` → 自动折扣 owner
- * `$app:ciwi_bundle` / `offers`（与后台 sync、购物车 Function 对齐）。主题 storefront 使用按 id 分片 `offer-{id}`；Function 因 input 静态限制使用与 ids 顺序一致的 fn 槽位。
+ * 配置来源：shop `ciwi-bundle-offers-fn`；若 shop `ciwi-bundle-enabled` 中 `enabled === false` 则提前退出。
  *
  * 购物车行属性（与主题 `properties[__ciwi_*]` 对应）：
  * - 理想情况：行上带有 `__ciwi_bundle_offer_id`、`__ciwi_bundle_tier`（主题脚本写入）。
@@ -491,102 +490,31 @@ function hasEligibleShippingRule(
   });
 }
 
-const SHOP_FN_OFFER_SLOTS = 5;
-
 function extractOffersListFromJson(v: unknown): OfferRow[] {
   if (!v || typeof v !== "object") return [];
   const o = v as { offers?: unknown };
   return Array.isArray(o.offers) ? (o.offers as OfferRow[]) : [];
 }
 
-function offersEnvelopeHasList(v: unknown): boolean {
-  return extractOffersListFromJson(v).length > 0;
-}
-
-function tryMergeDeliveryOffersFromShopIdSlots(
-  input: CartDeliveryDiscountInput,
-): OfferRow[] | null {
-  const shop = input.shop as unknown as {
-    offerIdsShop?: { jsonValue?: unknown } | null;
-    offersFn?: { jsonValue?: unknown } | null;
-    fnOfferSlot0?: { jsonValue?: unknown } | null;
-    fnOfferSlot1?: { jsonValue?: unknown } | null;
-    fnOfferSlot2?: { jsonValue?: unknown } | null;
-    fnOfferSlot3?: { jsonValue?: unknown } | null;
-    fnOfferSlot4?: { jsonValue?: unknown } | null;
-  };
-
-  const idsRaw = shop.offerIdsShop?.jsonValue;
-  if (!Array.isArray(idsRaw) || idsRaw.length === 0) return null;
-  const ids = idsRaw.map((x) => String(x ?? "").trim()).filter(Boolean);
-  if (!ids.length) return null;
-
-  const slotMetas = [
-    shop.fnOfferSlot0,
-    shop.fnOfferSlot1,
-    shop.fnOfferSlot2,
-    shop.fnOfferSlot3,
-    shop.fnOfferSlot4,
-  ];
-
-  const pushSlot = (i: number, out: OfferRow[]): boolean => {
-    const jv = slotMetas[i]?.jsonValue;
-    if (jv == null || typeof jv !== "object" || Array.isArray(jv)) return false;
-    const oid = String((jv as { id?: unknown }).id ?? "").trim();
-    if (oid !== ids[i]) return false;
-    out.push(jv as OfferRow);
-    return true;
-  };
-
-  if (ids.length <= SHOP_FN_OFFER_SLOTS) {
-    const offers: OfferRow[] = [];
-    for (let i = 0; i < ids.length; i++) {
-      if (!pushSlot(i, offers)) return null;
-    }
-    return offers;
-  }
-
-  const fnJv = shop.offersFn?.jsonValue;
-  if (!offersEnvelopeHasList(fnJv)) return null;
-  const fnList = extractOffersListFromJson(fnJv);
-  const byId = new Map(fnList.map((o) => [String(o?.id ?? "").trim(), o]));
-
-  const offers: OfferRow[] = [];
-  for (let i = 0; i < ids.length; i++) {
-    if (i < SHOP_FN_OFFER_SLOTS) {
-      if (!pushSlot(i, offers)) return null;
-    } else {
-      const row = byId.get(ids[i]);
-      if (!row) return null;
-      offers.push(row);
-    }
-  }
-  return offers;
+/** 见购物车 Function：shop `ciwi-bundle-enabled.enabled === false` 时停运。 */
+function isBundleGloballyDisabledByShopMetafield(bundleEnabledShop: {
+  jsonValue?: unknown;
+} | null | undefined): boolean {
+  const raw = bundleEnabledShop?.jsonValue;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
+  const enabled = (raw as { enabled?: unknown }).enabled;
+  return typeof enabled === "boolean" && enabled === false;
 }
 
 function pickDeliveryOffersFromInput(input: CartDeliveryDiscountInput): {
   offers: OfferRow[];
   source: string;
 } {
-  const merged = tryMergeDeliveryOffersFromShopIdSlots(input);
-  if (merged && merged.length) {
-    return { offers: merged, source: "shop_offer_ids_and_fn_slots" };
-  }
-
   const shop = input.shop as unknown as {
     offersFn?: { jsonValue?: unknown } | null;
   };
-  const discount = input.discount as unknown as {
-    offersDiscountOwner?: { jsonValue?: unknown } | null;
-  };
-  const ordered = [
-    { source: "shop_fn", v: shop.offersFn?.jsonValue },
-    { source: "discount_owner", v: discount.offersDiscountOwner?.jsonValue },
-  ] as const;
-  for (const { source, v } of ordered) {
-    const list = extractOffersListFromJson(v);
-    if (list.length) return { offers: list, source };
-  }
+  const list = extractOffersListFromJson(shop.offersFn?.jsonValue);
+  if (list.length) return { offers: list, source: "shop_fn" };
   return { offers: [], source: "none" };
 }
 
@@ -609,10 +537,21 @@ export function bundleDeliveryDiscountGenerateRun(
     return { operations: [] };
   }
 
+  const shop = input.shop as unknown as {
+    bundleEnabledShop?: { jsonValue?: unknown } | null;
+    offersFn?: { jsonValue?: unknown } | null;
+  };
+
+  if (isBundleGloballyDisabledByShopMetafield(shop.bundleEnabledShop)) {
+    log("early_exit", { reason: "bundle_globally_disabled" });
+    logZh("提前退出：ciwi-bundle-enabled 关闭", {});
+    return { operations: [] };
+  }
+
   const { offers, source: offersSource } = pickDeliveryOffersFromInput(input);
   if (!offers.length) {
     log("early_exit", { reason: "no_offers" });
-    logZh("提前退出：无活动（ids+fn 槽位 / shop fn / 折扣 owner）", {
+    logZh("提前退出：无活动（shop ciwi-bundle-offers-fn）", {
       offersSource,
     });
     return { operations: [] };

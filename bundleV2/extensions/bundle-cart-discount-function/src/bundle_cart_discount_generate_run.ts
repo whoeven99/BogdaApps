@@ -63,6 +63,8 @@ function summarizeMetafield(
 
 type OfferMetafieldPayload = {
   updatedAt?: string;
+  /** 与 shop `ciwi-bundle-enabled` 同步；为降低 Function GraphQL 复杂度不再单独查询该 metafield */
+  themeExtensionEnabled?: boolean;
   offers?: Array<{
     id?: string;
     name?: string;
@@ -88,11 +90,9 @@ const CIWI_BUNDLE_OFFERS_LOG_MAX_CHARS = 12_000;
 
 function logCiwiBundleOffersShopData(
   offersFnMf: MetafieldSnapshot,
-  /** 实际参与折扣计算的 payload（可能来自 discount owner，未必等于 fn 字段） */
   effectiveParsedPayload: OfferMetafieldPayload | null | undefined,
   extra: {
     resolvedSource: string;
-    offersDiscountOwner: ReturnType<typeof summarizeMetafield>;
   },
 ): void {
   let payloadJson: string;
@@ -113,7 +113,6 @@ function logCiwiBundleOffersShopData(
     key: "ciwi-bundle-offers-fn",
     resolvedSource: extra.resolvedSource,
     metafield: summarizeMetafield(offersFnMf),
-    offersDiscountOwner: extra.offersDiscountOwner,
     parsedOffersCount: Array.isArray(effectiveParsedPayload?.offers)
       ? effectiveParsedPayload!.offers!.length
       : null,
@@ -584,142 +583,62 @@ function offersJsonHasList(v: unknown): v is OfferMetafieldPayload {
   return Array.isArray(o.offers) && o.offers.length > 0;
 }
 
-/** 与 `bundle_cart_discount_generate_run.graphql` / `BUNDLE_FUNCTION_OFFER_SLOT_COUNT` 一致 */
-const SHOP_FN_OFFER_SLOTS = 5;
-
 /**
- * 按 shop `ciwi-bundle-offer-ids` 顺序，从固定槽位 `ciwi-bundle-fn-offer-{0..4}` 组装 offers（与同步端写入同源）。
- * 活动数超过槽位时：前 N 条来自槽位，其余从 `ciwi-bundle-offers-fn` 按 id 补齐（仍依赖合并 metafield）。
+ * 与主题端一致：shop `ciwi-bundle-enabled` 中 `enabled === false` 时整站关停（结账 Function 不生效）。
+ * 缺失或非对象、或非布尔 `enabled` 时不据此退出。
  */
-function tryMergeOfferPayloadFromShopOfferIdSlots(input: CartInput): OfferMetafieldPayload | null {
-  const shop = input.shop;
-  const idsRaw = shop.offerIdsShop?.jsonValue;
-  if (!Array.isArray(idsRaw) || idsRaw.length === 0) return null;
-  const ids = idsRaw.map((x) => String(x ?? "").trim()).filter(Boolean);
-  if (!ids.length) return null;
-
-  const slotMetas = [
-    shop.fnOfferSlot0,
-    shop.fnOfferSlot1,
-    shop.fnOfferSlot2,
-    shop.fnOfferSlot3,
-    shop.fnOfferSlot4,
-  ];
-
-  const fnEnvelope = shop.offersShop?.jsonValue as OfferMetafieldPayload | null | undefined;
-  const fnUpdatedAt =
-    fnEnvelope &&
-    typeof fnEnvelope === "object" &&
-    !Array.isArray(fnEnvelope) &&
-    typeof fnEnvelope.updatedAt === "string"
-      ? fnEnvelope.updatedAt
-      : undefined;
-
-  const pushSlotOffer = (i: number, offers: Offer[]): boolean => {
-    const jv = slotMetas[i]?.jsonValue;
-    if (jv == null || typeof jv !== "object" || Array.isArray(jv)) return false;
-    const oid = String((jv as { id?: unknown }).id ?? "").trim();
-    if (oid !== ids[i]) return false;
-    offers.push(jv as Offer);
-    return true;
-  };
-
-  if (ids.length <= SHOP_FN_OFFER_SLOTS) {
-    const offers: Offer[] = [];
-    for (let i = 0; i < ids.length; i++) {
-      if (!pushSlotOffer(i, offers)) return null;
-    }
-    return { updatedAt: fnUpdatedAt, offers };
-  }
-
-  if (!offersJsonHasList(fnEnvelope)) return null;
-  const fnList = fnEnvelope!.offers!;
-  const byId = new Map(fnList.map((o) => [String(o?.id ?? "").trim(), o as Offer]));
-
-  const offers: Offer[] = [];
-  for (let i = 0; i < ids.length; i++) {
-    if (i < SHOP_FN_OFFER_SLOTS) {
-      if (!pushSlotOffer(i, offers)) return null;
-    } else {
-      const row = byId.get(ids[i]);
-      if (!row) return null;
-      offers.push(row);
-    }
-  }
-  return { updatedAt: fnEnvelope?.updatedAt ?? fnUpdatedAt, offers };
+function isBundleGloballyDisabledByShopMetafield(bundleEnabledShop: {
+  jsonValue?: unknown;
+} | null | undefined): boolean {
+  const raw = bundleEnabledShop?.jsonValue;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
+  const enabled = (raw as { enabled?: unknown }).enabled;
+  return typeof enabled === "boolean" && enabled === false;
 }
 
 type ShopMetafieldsForLog = {
-  offerIdsShop?: { jsonValue?: unknown; type?: string } | null;
-  offersShop?: { jsonValue?: unknown; type?: string } | null;
   bundleEnabledShop?: { jsonValue?: unknown; type?: string } | null;
-  fnOfferSlot0?: { jsonValue?: unknown; type?: string } | null;
-  fnOfferSlot1?: { jsonValue?: unknown; type?: string } | null;
-  fnOfferSlot2?: { jsonValue?: unknown; type?: string } | null;
-  fnOfferSlot3?: { jsonValue?: unknown; type?: string } | null;
-  fnOfferSlot4?: { jsonValue?: unknown; type?: string } | null;
+  offersShop?: { jsonValue?: unknown; type?: string } | null;
 };
 
 /**
- * 读取顺序：shop `ciwi-bundle-offer-ids` + `ciwi-bundle-fn-offer-*` 槽位组装 → `ciwi-bundle-offers-fn` → 自动折扣 owner。
+ * 仅读取 shop `ciwi-bundle-offers-fn`。
  */
 function resolveCartOffersPayload(input: CartInput): {
   payload: OfferMetafieldPayload | null | undefined;
   offersSource: string;
   shopAny: ShopMetafieldsForLog;
-  discountAny: { offersDiscountOwner?: { jsonValue?: unknown; type?: string } | null };
 } {
   const shopAny = input.shop as unknown as ShopMetafieldsForLog;
-  const discountAny = input.discount as unknown as {
-    offersDiscountOwner?: { jsonValue?: unknown; type?: string } | null;
-  };
-
-  const mergedFromIdsAndSlots = tryMergeOfferPayloadFromShopOfferIdSlots(input);
-  if (mergedFromIdsAndSlots && offersJsonHasList(mergedFromIdsAndSlots)) {
-    return {
-      payload: mergedFromIdsAndSlots,
-      offersSource: "shop_offer_ids_and_fn_slots",
-      shopAny,
-      discountAny,
-    };
-  }
-
   const jFn = shopAny.offersShop?.jsonValue as OfferMetafieldPayload | null | undefined;
-  const jDisc = discountAny.offersDiscountOwner?.jsonValue as OfferMetafieldPayload | null | undefined;
 
   if (offersJsonHasList(jFn)) {
-    return { payload: jFn, offersSource: "shop_offers_fn", shopAny, discountAny };
-  }
-  if (offersJsonHasList(jDisc)) {
-    return { payload: jDisc, offersSource: "discount_owner_offers", shopAny, discountAny };
+    return { payload: jFn, offersSource: "shop_offers_fn", shopAny };
   }
 
-  const fallback = jFn ?? jDisc ?? null;
+  const fallback = jFn ?? null;
   return {
     payload: fallback,
     offersSource: fallback != null ? "shop_offers_empty_lists" : "no_shop_offers",
     shopAny,
-    discountAny,
   };
 }
 
 export function bundleCartDiscountGenerateRun(
   input: CartInput,
 ): CartLinesDiscountsGenerateRunResult {
-  const { payload: resolvedPayload, offersSource: resolvedSource, shopAny, discountAny } =
+  const { payload: resolvedPayload, offersSource: resolvedSource, shopAny } =
     resolveCartOffersPayload(input);
 
-  const bundleEnabledShopPayload = shopAny.bundleEnabledShop?.jsonValue as
-    | { enabled?: boolean }
-    | null
-    | undefined;
-  const hasExplicitEmbedFlag = shopAny.bundleEnabledShop?.jsonValue != null;
-  const embedDisabled =
-    hasExplicitEmbedFlag && bundleEnabledShopPayload?.enabled !== true;
+  const globallyOff = isBundleGloballyDisabledByShopMetafield(shopAny.bundleEnabledShop);
+  const themeFlag = resolvedPayload?.themeExtensionEnabled;
 
   let offersPayload: OfferMetafieldPayload | null | undefined = null;
   let offersSource: string | null = null;
-  if (embedDisabled) {
+  if (globallyOff) {
+    offersPayload = null;
+    offersSource = "shop_bundle_enabled_metafield_off";
+  } else if (themeFlag === false) {
     offersPayload = null;
     offersSource = "shop_embed_disabled";
   } else {
@@ -727,27 +646,21 @@ export function bundleCartDiscountGenerateRun(
     offersSource = resolvedSource;
   }
 
+  const embedDisabled =
+    globallyOff || themeFlag === false;
+
   logCiwiBundleOffersShopData(
     shopAny.offersShop as MetafieldSnapshot,
     embedDisabled ? null : offersPayload,
     {
       resolvedSource: offersSource ?? "",
-      offersDiscountOwner: summarizeMetafield(discountAny.offersDiscountOwner as MetafieldSnapshot),
     },
   );
 
   log("shop_metafields_snapshot", {
-    offerIdsShop: summarizeMetafield(shopAny.offerIdsShop as MetafieldSnapshot),
-    offersShop: summarizeMetafield(shopAny.offersShop as MetafieldSnapshot),
-    offersDiscountOwner: summarizeMetafield(discountAny.offersDiscountOwner as MetafieldSnapshot),
     bundleEnabledShop: summarizeMetafield(shopAny.bundleEnabledShop as MetafieldSnapshot),
-    fnOfferSlots: [
-      summarizeMetafield(shopAny.fnOfferSlot0 as MetafieldSnapshot),
-      summarizeMetafield(shopAny.fnOfferSlot1 as MetafieldSnapshot),
-      summarizeMetafield(shopAny.fnOfferSlot2 as MetafieldSnapshot),
-      summarizeMetafield(shopAny.fnOfferSlot3 as MetafieldSnapshot),
-      summarizeMetafield(shopAny.fnOfferSlot4 as MetafieldSnapshot),
-    ],
+    offersShop: summarizeMetafield(shopAny.offersShop as MetafieldSnapshot),
+    globallyDisabledMetafield: globallyOff,
     embedDisabled,
     activeSource: offersSource,
   });
@@ -755,6 +668,7 @@ export function bundleCartDiscountGenerateRun(
   log("run_start", {
     cartLineCount: input.cart.lines.length,
     discountClasses: input.discount.discountClasses,
+    globallyDisabledMetafield: globallyOff,
     embedDisabled,
     hasOffers: Boolean(offersPayload),
     offersSource,

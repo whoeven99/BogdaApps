@@ -61,9 +61,9 @@ import {
 } from "../../utils/offerParsing";
 import { sanitizeEnvLikeValue, sanitizeUrlLikeEnvValue } from "../../utils/env";
 import {
-  BUNDLE_FUNCTION_OFFER_SLOT_COUNT,
   BUNDLE_METAFIELD_ENABLED_KEY,
   BUNDLE_METAFIELD_FUNCTION_OFFERS_KEY,
+  BUNDLE_STOREFRONT_OFFERS_KEY,
 } from "../../utils/bundleShopMetafieldKeys";
 import { reconcileShopOfferShardedMetafields } from "../../utils/bundleShopOfferMetafields.server";
 import { BUNDLE_THEME_PRODUCT_PLUGIN } from "../../utils/themePlugins";
@@ -310,6 +310,7 @@ function buildHydratedDifferentProductsSelectedProductsJson(
 
 async function buildCompactOffersPayload(
   shopOffers: OfferListItem[],
+  themeExtensionEnabled = true,
 ): Promise<string> {
   // 仅同步 status=true 的活动，避免无效活动占用 payload 体积并干扰函数计算
   const activeOffers = shopOffers.filter((offer) => offer.status === true);
@@ -331,6 +332,7 @@ async function buildCompactOffersPayload(
   }));
   return JSON.stringify({
     updatedAt: new Date().toISOString(),
+    themeExtensionEnabled: Boolean(themeExtensionEnabled),
     offers: compactOffers,
   });
 }
@@ -338,6 +340,7 @@ async function buildCompactOffersPayload(
 async function buildStorefrontOffersStructured(
   admin: any,
   shopOffers: OfferListItem[],
+  themeExtensionEnabled: boolean,
 ): Promise<{
   updatedAt: string;
   offers: Array<{
@@ -354,9 +357,10 @@ async function buildStorefrontOffersStructured(
   }>;
 }> {
   const activeOffers = shopOffers.filter((offer) => offer.status === true);
-  const compactPayload = await buildCompactOffersPayload(shopOffers);
+  const compactPayload = await buildCompactOffersPayload(shopOffers, themeExtensionEnabled);
   const compactPayloadParsed = JSON.parse(compactPayload) as {
     updatedAt?: string;
+    themeExtensionEnabled?: boolean;
     offers?: Array<{
       id?: string;
       name?: string;
@@ -467,7 +471,11 @@ async function syncFunctionOwnerOffersMetafield(
 ): Promise<ShopOffersMetafieldSyncResult> {
   try {
     const shopOffers = await loadShopOffersForSync(shopNameToSync);
-    const functionMetafieldValue = await buildCompactOffersPayload(shopOffers);
+    const themeExtensionDetection = await getCurrentThemeExtensionEnabled(admin);
+    const functionMetafieldValue = await buildCompactOffersPayload(
+      shopOffers,
+      themeExtensionDetection.enabled,
+    );
     console.log("[offers-sync][function-owner] syncing payload", {
       shopName: shopNameToSync,
       offerCount: shopOffers.length,
@@ -519,14 +527,16 @@ async function syncShopOffersMetafield(
       offerIds: shopOffers.map((o) => o.id),
     });
 
-    const functionMetafieldValue = await buildCompactOffersPayload(shopOffers);
-    const compactForSlots = JSON.parse(functionMetafieldValue) as { offers?: unknown[] };
-    const compactOfferRows = Array.isArray(compactForSlots.offers) ? compactForSlots.offers : [];
-    const functionOfferSlotCompactValues = compactOfferRows
-      .slice(0, BUNDLE_FUNCTION_OFFER_SLOT_COUNT)
-      .map((row) => JSON.stringify(row));
+    const functionMetafieldValue = await buildCompactOffersPayload(
+      shopOffers,
+      themeExtensionEnabled,
+    );
 
-    const storefrontStructured = await buildStorefrontOffersStructured(admin, shopOffers);
+    const storefrontStructured = await buildStorefrontOffersStructured(
+      admin,
+      shopOffers,
+      themeExtensionEnabled,
+    );
     const mergedStorefrontPreview = JSON.stringify({
       updatedAt: storefrontStructured.updatedAt,
       offers: storefrontStructured.offers,
@@ -536,7 +546,7 @@ async function syncShopOffersMetafield(
       activeOffers: shopOffers.filter((offer) => offer.status === true).length,
       mergedStorefrontPreviewLength: mergedStorefrontPreview.length,
       functionPayloadLength: functionMetafieldValue.length,
-      storefrontShardCount: storefrontStructured.offers.length,
+      storefrontOfferRows: storefrontStructured.offers.length,
       functionReducedBy: mergedStorefrontPreview.length - functionMetafieldValue.length,
     });
 
@@ -585,40 +595,19 @@ async function syncShopOffersMetafield(
       };
     }
 
-    const offerShardValueById = new Map<string, string>();
-    for (const row of storefrontStructured.offers) {
-      const id = String(row.id || "").trim();
-      if (!id) continue;
-      offerShardValueById.set(id, JSON.stringify(row));
-    }
-    const activeOfferIdsOrdered = storefrontStructured.offers
-      .map((o) => String(o.id || "").trim())
-      .filter(Boolean);
-
-    if (activeOfferIdsOrdered.length > BUNDLE_FUNCTION_OFFER_SLOT_COUNT) {
-      console.warn(
-        "[offers-sync] active offer count exceeds Function static input slot limit; cart/delivery Functions fall back to merged ciwi-bundle-offers-fn for offers beyond slots",
-        {
-          activeCount: activeOfferIdsOrdered.length,
-          slotLimit: BUNDLE_FUNCTION_OFFER_SLOT_COUNT,
-        },
-      );
-    }
-
-    console.log("[offers-sync] writing sharded shop metafields", {
+    console.log("[offers-sync] writing shop bundle metafields", {
       shopId,
       namespace: "ciwi_bundle",
-      storefrontShardCount: activeOfferIdsOrdered.length,
+      storefrontOffersKey: BUNDLE_STOREFRONT_OFFERS_KEY,
+      storefrontPayloadLength: mergedStorefrontPreview.length,
       functionInputKey: BUNDLE_METAFIELD_FUNCTION_OFFERS_KEY,
       functionInputPayloadLength: functionMetafieldValue.length,
     });
 
     const shardSync = await reconcileShopOfferShardedMetafields(admin, shopId, {
-      activeOfferIdsOrdered,
       syncAtIso: storefrontStructured.updatedAt,
-      offerShardValueById,
+      storefrontOffersPayload: mergedStorefrontPreview,
       functionOffersCompactPayload: functionMetafieldValue,
-      functionOfferSlotCompactValues,
       themeExtensionEnabled,
     });
     if (!shardSync.ok) {

@@ -1,19 +1,11 @@
 query CartDeliveryDiscountInput {
   cart {
-    cost {
-      subtotalAmount {
-        amount
-      }
-    }
     lines {
-      id
       quantity
       bundleTierProp: attribute(key: "__ciwi_bundle_tier") {
-        key
         value
       }
       bundleOfferProp: attribute(key: "__ciwi_bundle_offer_id") {
-        key
         value
       }
       merchandise {
@@ -32,10 +24,8 @@ query CartDeliveryDiscountInput {
       }
     }
     deliveryGroups {
-      id
       deliveryOptions {
         handle
-        title
         cost {
           amount
         }
@@ -44,27 +34,10 @@ query CartDeliveryDiscountInput {
     }
   }
   shop {
-    offerIdsShop: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-offer-ids") {
+    bundleEnabledShop: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-enabled") {
       jsonValue
     }
     offersFn: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-offers-fn") {
-      jsonValue
-      value
-      type
-    }
-    fnOfferSlot0: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-fn-offer-0") {
-      jsonValue
-    }
-    fnOfferSlot1: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-fn-offer-1") {
-      jsonValue
-    }
-    fnOfferSlot2: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-fn-offer-2") {
-      jsonValue
-    }
-    fnOfferSlot3: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-fn-offer-3") {
-      jsonValue
-    }
-    fnOfferSlot4: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-fn-offer-4") {
       jsonValue
     }
   }
@@ -75,10 +48,5 @@ query CartDeliveryDiscountInput {
   }
   discount {
     discountClasses
-    offersDiscountOwner: metafield(namespace: "$app:ciwi_bundle", key: "offers") {
-      jsonValue
-      value
-      type
-    }
   }
 }

@@ -59,38 +59,10 @@
     </script>
   {% endif %}
 
-  {% comment %}
-    旧版整包 ciwi-bundle-offers（已弃用）；新版为分片：ciwi-bundle-offer-ids + offer-{id}
-  {% endcomment %}
   {% if shop.metafields.ciwi_bundle["ciwi-bundle-offers"] %}
     <script id="ciwi-bundle-offers" type="application/json">
-      {{ shop.metafields.ciwi_bundle["ciwi-bundle-offers"].value }}
+      {{ shop.metafields.ciwi_bundle["ciwi-bundle-offers"].value | json }}
     </script>
-  {% elsif shop.metafields.ciwi_bundle["ciwi-bundle-offer-ids"] %}
-    <script id="ciwi-bundle-offer-ids" type="application/json">
-      {{ shop.metafields.ciwi_bundle["ciwi-bundle-offer-ids"].value }}
-    </script>
-    {% if shop.metafields.ciwi_bundle["ciwi-bundle-offer-sync-at"] %}
-      <script id="ciwi-bundle-offer-sync-at" type="application/json">
-        {{ shop.metafields.ciwi_bundle["ciwi-bundle-offer-sync-at"].value | json }}
-      </script>
-    {% endif %}
-    {% if shop.metafields.ciwi_bundle["ciwi-bundle-offer-count"] %}
-      <script id="ciwi-bundle-offer-count" type="application/json">
-        {{ shop.metafields.ciwi_bundle["ciwi-bundle-offer-count"].value | json }}
-      </script>
-    {% endif %}
-    {% assign _ciwi_offer_ids = shop.metafields.ciwi_bundle["ciwi-bundle-offer-ids"].value %}
-    {% if _ciwi_offer_ids %}
-      {% for _ciwi_oid in _ciwi_offer_ids %}
-        {% assign _ciwi_shard_key = "offer-" | append: _ciwi_oid %}
-        {% if shop.metafields.ciwi_bundle[_ciwi_shard_key] %}
-          <script type="application/json" data-ciwi-bundle-offer-shard="{{ _ciwi_oid | escape }}">
-            {{ shop.metafields.ciwi_bundle[_ciwi_shard_key].value }}
-          </script>
-        {% endif %}
-      {% endfor %}
-    {% endif %}
   {% endif %}
 {% endif %}
 
