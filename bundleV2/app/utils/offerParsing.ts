@@ -683,6 +683,62 @@ export type BxgyDiscountRule = {
   isDefault?: boolean;
 };
 
+export type BxgyDisplayMeta = {
+  buyQuantity: number;
+  configuredGetQuantity: number;
+  bundleQuantity: number;
+  freeQuantity: number;
+  semantics: "free_items" | "total_items";
+  title: string;
+  subtitle: string;
+  price: string;
+  saveLabel: string;
+  summary: string;
+};
+
+export function getBxgyDisplayMeta(rule: {
+  buyQuantity?: unknown;
+  getQuantity?: unknown;
+}): BxgyDisplayMeta {
+  const buyQuantity = Math.max(1, Math.trunc(Number(rule.buyQuantity) || 1));
+  const configuredGetQuantity = Math.max(1, Math.trunc(Number(rule.getQuantity) || 1));
+  const usesTotalItemsSemantics = configuredGetQuantity > buyQuantity;
+  const bundleQuantity = usesTotalItemsSemantics
+    ? configuredGetQuantity
+    : buyQuantity + configuredGetQuantity;
+  const freeQuantity = usesTotalItemsSemantics
+    ? Math.max(1, bundleQuantity - buyQuantity)
+    : configuredGetQuantity;
+
+  if (usesTotalItemsSemantics) {
+    return {
+      buyQuantity,
+      configuredGetQuantity,
+      bundleQuantity,
+      freeQuantity,
+      semantics: "total_items",
+      title: `Buy ${buyQuantity}, Get ${bundleQuantity} Total`,
+      subtitle: `Same product scope, pay for ${buyQuantity} and receive ${bundleQuantity} total items`,
+      price: `Pay for ${buyQuantity}`,
+      saveLabel: `GET ${bundleQuantity} TOTAL`,
+      summary: `Buy ${buyQuantity}, get ${bundleQuantity} total`,
+    };
+  }
+
+  return {
+    buyQuantity,
+    configuredGetQuantity,
+    bundleQuantity,
+    freeQuantity,
+    semantics: "free_items",
+    title: `Buy ${buyQuantity}, Get ${configuredGetQuantity} Free`,
+    subtitle: `Same product scope, cheapest eligible variant becomes free`,
+    price: `Get ${configuredGetQuantity} Free`,
+    saveLabel: `BUY ${buyQuantity}, GET ${configuredGetQuantity} FREE`,
+    summary: `Buy ${buyQuantity}, get ${configuredGetQuantity} free`,
+  };
+}
+
 export type FreeGiftRule = {
   count: number;
   giftQuantity: number;
@@ -2123,7 +2179,7 @@ export function getOfferRulesText(params: {
       return differentProductsTiers
         .map((tier) =>
           tier.tierType === "bxgy"
-            ? `Buy ${tier.buyQuantity} Get ${tier.getQuantity} ${tier.discountPercent === 100 ? "Free" : `${tier.discountPercent}% Off`}`
+            ? getBxgyDisplayMeta(tier).summary
             : `Buy ${tier.count} Get ${tier.discountPercent}% Off`,
         )
         .join(", ");
@@ -2131,10 +2187,7 @@ export function getOfferRulesText(params: {
     const bxgyTiers = bxgy?.config.tiers ?? [];
     if (bxgyTiers.length > 0) {
       return bxgyTiers
-        .map(
-          (tier) =>
-            `Buy ${tier.buyQuantity} Get ${tier.getQuantity} ${tier.discountPercent === 100 ? "Free" : `${tier.discountPercent}% Off`}`,
-        )
+        .map((tier) => getBxgyDisplayMeta(tier).summary)
         .join(", ");
     }
     const freeGift = config.logicBlocks.find(
@@ -2179,10 +2232,7 @@ export function getOfferRulesText(params: {
   const bxgyRules = parseBxgyDiscountRules(params.discountRulesJson);
   if (bxgyRules.length > 0) {
     return bxgyRules
-      .map(
-        (rule) =>
-          `Buy ${rule.buyQuantity} Get ${rule.getQuantity} ${rule.discountPercent === 100 ? "Free" : `${rule.discountPercent}% Off`}`,
-      )
+      .map((rule) => getBxgyDisplayMeta(rule).summary)
       .join(", ");
   }
 

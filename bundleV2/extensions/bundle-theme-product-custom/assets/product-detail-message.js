@@ -2014,6 +2014,31 @@ function rerenderCurrentBundleWidget() {
   syncSubscriptionSelectionToTheme(currentOffer);
 }
 
+function getBxgyDisplayMeta(rule) {
+  const buyQuantity = Math.max(1, Math.trunc(Number(rule && rule.buyQuantity) || 1));
+  const configuredGetQuantity = Math.max(1, Math.trunc(Number(rule && rule.getQuantity) || 1));
+  const usesTotalItemsSemantics = configuredGetQuantity > buyQuantity;
+  const bundleQuantity = usesTotalItemsSemantics
+    ? configuredGetQuantity
+    : buyQuantity + configuredGetQuantity;
+
+  if (usesTotalItemsSemantics) {
+    return {
+      title: `Buy ${buyQuantity}, Get ${bundleQuantity} Total`,
+      subtitle: `Same product scope, pay for ${buyQuantity} and receive ${bundleQuantity} total items`,
+      price: `Pay for ${buyQuantity}`,
+      saveLabel: `GET ${bundleQuantity} TOTAL`,
+    };
+  }
+
+  return {
+    title: `Buy ${buyQuantity}, Get ${configuredGetQuantity} Free`,
+    subtitle: "Same product, cheapest eligible variant becomes free",
+    price: `Get ${configuredGetQuantity} Free`,
+    saveLabel: `BUY ${buyQuantity}, GET ${configuredGetQuantity} FREE`,
+  };
+}
+
 function getCartQuantityForSelectedOffer(offer, selectedCount) {
   const normalizedCount = Math.max(1, Math.trunc(Number(selectedCount) || 1));
   if (!offer || offer.offerType !== "bxgy") {
@@ -2031,7 +2056,10 @@ function getCartQuantityForSelectedOffer(offer, selectedCount) {
     1,
     Math.trunc(Number(selectedRule.getQuantity) || 0),
   );
-  return Math.max(1, buyQuantity + getQuantity);
+  return Math.max(
+    1,
+    getQuantity > buyQuantity ? getQuantity : buyQuantity + getQuantity,
+  );
 }
 
 function updateThemeQuantityInput(count) {
@@ -3054,16 +3082,14 @@ function renderBundlePreviewHtml(offer) {
     const items = bxgyRules.map((rule, index) => {
       const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
       const displayCount = rule.count || 1;
+      const bxgyDisplay = getBxgyDisplayMeta(rule);
       return {
         count: displayCount,
-        title: rule.title || `Buy ${rule.buyQuantity}, Get ${rule.getQuantity} Free`,
-        subtitle:
-          rule.subtitle || `Same product, cheapest eligible variant becomes free`,
-        price: rule.discountPercent === 100
-          ? `Get ${rule.getQuantity} Free`
-          : `${rule.discountPercent}% OFF`,
+        title: rule.title || bxgyDisplay.title,
+        subtitle: rule.subtitle || bxgyDisplay.subtitle,
+        price: rule.discountPercent === 100 ? bxgyDisplay.price : `${rule.discountPercent}% OFF`,
         badge: rule.badge || (isFeatured ? "Most Popular" : ""),
-        saveLabel: `BUY ${rule.buyQuantity}, GET ${rule.getQuantity} FREE`,
+        saveLabel: bxgyDisplay.saveLabel,
       };
     });
 
@@ -3293,14 +3319,14 @@ function renderBundlePreviewHtml(offer) {
     ...discountRules.map((rule, index) => {
       if (rule.logicType === "bxgy") {
         const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
+        const bxgyDisplay = getBxgyDisplayMeta(rule);
         return {
           count: rule.count,
-          title: rule.title || `Buy ${rule.buyQuantity}, Get ${rule.getQuantity} Free`,
-          subtitle:
-            rule.subtitle || "Same product, cheapest eligible variant becomes free",
-          price: `Get ${rule.getQuantity} Free`,
+          title: rule.title || bxgyDisplay.title,
+          subtitle: rule.subtitle || bxgyDisplay.subtitle,
+          price: bxgyDisplay.price,
           badge: rule.badge || (isFeatured ? "Most Popular" : ""),
-          saveLabel: `BUY ${rule.buyQuantity}, GET ${rule.getQuantity} FREE`,
+          saveLabel: bxgyDisplay.saveLabel,
         };
       }
       const { originalTotal, discountedTotal, saved } = calculateBundleAmounts(

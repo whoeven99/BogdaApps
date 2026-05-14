@@ -3,6 +3,7 @@ import {
   buildCompleteBundleConfig,
   buildDifferentProductsDiscountRulesJson,
   buildFreeGiftRulesJson,
+  getBxgyDisplayMeta,
 } from "../../../utils/offerParsing";
 import type { CampaignDraft, DraftDiscountRule } from "./campaignDraft";
 import type { OfferTypeId } from "./offerTypeOptions";
@@ -48,11 +49,11 @@ const META_BY_OFFER_TYPE: Record<OfferTypeId, CampaignBuilderMeta> = {
       "Select the campaign products, then define each tier and the eligible product pool tied to that tier.",
   },
   bxgy: {
-    logicBlockLabel: "Buy X, Get Y Free",
+    logicBlockLabel: "Buy X, Get Y",
     logicBlockDescription:
-      "Promote a same-product buy-and-free-item mechanic across the selected product pool.",
+      "Promote a same-product BXGY mechanic across the selected product pool, including free-item and total-item bundles.",
     stepTwoDescription:
-      "Choose the BXGY product pool, then configure each bar as Buy X, Get Y Free.",
+      "Choose the BXGY product pool, then configure each bar as Buy X, Get Y with the quantity semantics you need.",
   },
   "complete-bundle": {
     logicBlockLabel: "Complete Bundle",
@@ -117,11 +118,11 @@ export function getCampaignLogicSummary(
       return `${ctx.differentProductsDiscountRules.length} quantity-break tiers across ${uniqueScopedProducts} scoped products`;
     }
     case "bxgy": {
-      const bestFreeQty = ctx.bxgyDiscountRules.reduce(
-        (max, rule) => Math.max(max, rule.getQuantity),
+      const bestBundleQty = ctx.bxgyDiscountRules.reduce(
+        (max, rule) => Math.max(max, getBxgyDisplayMeta(rule).bundleQuantity),
         0,
       );
-      return `${ctx.bxgyDiscountRules.length} BXGY bars, up to ${bestFreeQty} free item${bestFreeQty > 1 ? "s" : ""}`;
+      return `${ctx.bxgyDiscountRules.length} BXGY bars, up to ${bestBundleQty} items in one bundle`;
     }
     case "complete-bundle": {
       return `${ctx.completeBundleBars.length} complete-bundle bar${ctx.completeBundleBars.length > 1 ? "s" : ""} with trigger + whole-bundle pricing`;

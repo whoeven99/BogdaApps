@@ -114,7 +114,7 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
         group: "rules",
         title: "Offer Rules",
         description:
-          "Define the BXGY buy quantity, free quantity, and labels for each rule.",
+          "Define the BXGY buy quantity, target quantity, and labels for each rule.",
         required: true,
         active: true,
         render: () => (

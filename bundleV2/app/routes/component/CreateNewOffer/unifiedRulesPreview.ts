@@ -1,5 +1,9 @@
 import type { PreviewItem, PreviewProduct } from "../BundlePreview/bundlePreviewShared";
-import type { CompleteBundleBar, CompleteBundlePricingMode } from "../../../utils/offerParsing";
+import {
+  getBxgyDisplayMeta,
+  type CompleteBundleBar,
+  type CompleteBundlePricingMode,
+} from "../../../utils/offerParsing";
 import type { OfferTypeId } from "./offerTypeOptions";
 import type { UnifiedRuleNode } from "./unifiedRulesSchema";
 
@@ -128,21 +132,16 @@ function buildStandardRuleItem(
   if (rule.type === "bxgy" && rule.condition.kind === "buy_x_get_y") {
     const percentOff =
       rule.reward.kind === "percentage_off" ? rule.reward.discountPercent : 0;
+    const bxgyDisplay = getBxgyDisplayMeta(rule.condition);
     return {
       id: rule.id,
-      title:
-        rule.presentation.title ||
-        `Buy ${rule.condition.buyQuantity}, Get ${rule.condition.getQuantity} Free`,
-      subtitle:
-        rule.presentation.subtitle ||
-        `Same product scope, Buy ${rule.condition.buyQuantity}, Get ${rule.condition.getQuantity} Free`,
+      title: rule.presentation.title || bxgyDisplay.title,
+      subtitle: rule.presentation.subtitle || bxgyDisplay.subtitle,
       price:
-        percentOff === 100
-          ? `Get ${rule.condition.getQuantity} Free`
-          : `${percentOff}% OFF`,
+        percentOff === 100 ? bxgyDisplay.price : `${percentOff}% OFF`,
       featured,
       badge,
-      saveLabel: `BUY ${rule.condition.buyQuantity}, GET ${rule.condition.getQuantity} FREE`,
+      saveLabel: bxgyDisplay.saveLabel,
     };
   }
 
@@ -219,22 +218,21 @@ function buildStandardRuleItem(
     rule.reward.kind === "percentage_off" &&
     rule.condition.kind === "buy_x_get_y"
   ) {
+    const bxgyDisplay = getBxgyDisplayMeta(rule.condition);
     return {
       id: rule.id,
-      title:
-        rule.presentation.title ||
-        `Buy ${rule.condition.buyQuantity}, Get ${rule.condition.getQuantity} Free`,
+      title: rule.presentation.title || bxgyDisplay.title,
       subtitle:
         rule.presentation.subtitle ||
-        `Same product scope across ${
+        `${bxgyDisplay.subtitle} across ${
           rule.scope.kind === "buy_get_products"
             ? rule.scope.buyProductIds.length
             : 0
         } selected products`,
-      price: `Get ${rule.condition.getQuantity} Free`,
+      price: bxgyDisplay.price,
       featured,
       badge: rule.presentation.badge || (featured ? "Best Reward" : ""),
-      saveLabel: `BUY ${rule.condition.buyQuantity}, GET ${rule.condition.getQuantity} FREE`,
+      saveLabel: bxgyDisplay.saveLabel,
       products:
         rule.scope.kind === "buy_get_products"
           ? mapProducts(

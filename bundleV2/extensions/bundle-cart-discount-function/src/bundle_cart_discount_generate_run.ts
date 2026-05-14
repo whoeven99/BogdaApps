@@ -1202,6 +1202,35 @@ function matchesAnyConfiguredId(
   );
 }
 
+function resolveSameProductBxgyQuantities(rule: Pick<BxgyDiscountRule, "buyQuantity" | "getQuantity">): {
+  buyQuantity: number;
+  bundleQuantity: number;
+  freeQuantity: number;
+  semantics: "free_items" | "total_items";
+} {
+  const buyQuantity = Math.max(1, Math.trunc(Number(rule.buyQuantity) || 1));
+  const getQuantity = Math.max(1, Math.trunc(Number(rule.getQuantity) || 1));
+
+  // Some BXGY records use `getQuantity` as the final bundle size (pay X for Y total),
+  // while legacy records store it as free-item quantity. Treat larger-than-buy values as
+  // total-size semantics so "buy 3 get 5" charges 3 items across 5 total items.
+  if (getQuantity > buyQuantity) {
+    return {
+      buyQuantity,
+      bundleQuantity: getQuantity,
+      freeQuantity: Math.max(1, getQuantity - buyQuantity),
+      semantics: "total_items",
+    };
+  }
+
+  return {
+    buyQuantity,
+    bundleQuantity: buyQuantity + getQuantity,
+    freeQuantity: getQuantity,
+    semantics: "free_items",
+  };
+}
+
 /**
  * 计算 BXGY 折扣 — 支持多层级 (tier)，按 buyQuantity 字段选择最优匹配层级
  */
@@ -1247,6 +1276,7 @@ function calculateBxgyDiscount(
         continue;
       }
 
+      const resolvedBxgy = resolveSameProductBxgyQuantities(bestRule);
       const candidates: ProductDiscountCandidate[] = [];
       for (const selectedProductId of selectedProductIds) {
         const matchingLines = cartLines
@@ -1265,15 +1295,12 @@ function calculateBxgyDiscount(
         if (!matchingLines.length) continue;
 
         const totalQuantity = matchingLines.reduce((sum, entry) => sum + entry.quantity, 0);
-        const buyQuantity = Math.max(1, Math.trunc(Number(bestRule.buyQuantity) || 1));
-        const getQuantity = Math.max(1, Math.trunc(Number(bestRule.getQuantity) || 1));
-        const bundleSize = buyQuantity + getQuantity;
-        const promotionTimes = Math.floor(totalQuantity / bundleSize);
+        const promotionTimes = Math.floor(totalQuantity / resolvedBxgy.bundleQuantity);
         const maxPromotionTimes = Math.min(
           promotionTimes,
           Math.max(1, Math.trunc(Number(bestRule.maxUsesPerOrder) || 1)),
         );
-        let remainingFreeQuantity = maxPromotionTimes * getQuantity;
+        let remainingFreeQuantity = maxPromotionTimes * resolvedBxgy.freeQuantity;
 
         if (remainingFreeQuantity <= 0) continue;
 
@@ -1304,6 +1331,15 @@ function calculateBxgyDiscount(
           remainingFreeQuantity -= discountQuantity;
         }
       }
+
+      log("bxgy_same_product_rule_applied", {
+        offerId: offer.id,
+        buyQuantity: resolvedBxgy.buyQuantity,
+        configuredGetQuantity: bestRule.getQuantity,
+        bundleQuantity: resolvedBxgy.bundleQuantity,
+        freeQuantity: resolvedBxgy.freeQuantity,
+        semantics: resolvedBxgy.semantics,
+      });
 
       allCandidates.push(...candidates);
       continue;
@@ -1337,6 +1373,7 @@ function calculateBxgyDiscount(
         continue;
       }
 
+      const resolvedBxgy = resolveSameProductBxgyQuantities(bestRule);
       const candidates: ProductDiscountCandidate[] = [];
       for (const selectedProductId of bestRule.buyProductIds) {
         const matchingLines = cartLines
@@ -1355,11 +1392,8 @@ function calculateBxgyDiscount(
         if (!matchingLines.length) continue;
 
         const totalQuantity = matchingLines.reduce((sum, entry) => sum + entry.quantity, 0);
-        const buyQuantity = Math.max(1, Math.trunc(Number(bestRule.buyQuantity) || 1));
-        const getQuantity = Math.max(1, Math.trunc(Number(bestRule.getQuantity) || 1));
-        const bundleSize = buyQuantity + getQuantity;
-        const promotionTimes = Math.floor(totalQuantity / bundleSize);
-        let remainingFreeQuantity = promotionTimes * getQuantity;
+        const promotionTimes = Math.floor(totalQuantity / resolvedBxgy.bundleQuantity);
+        let remainingFreeQuantity = promotionTimes * resolvedBxgy.freeQuantity;
         if (remainingFreeQuantity <= 0) continue;
 
         const sortedByUnitPrice = matchingLines.slice().sort((a, b) => a.unitPrice - b.unitPrice);
@@ -1379,6 +1413,15 @@ function calculateBxgyDiscount(
           remainingFreeQuantity -= discountQuantity;
         }
       }
+
+      log("bxgy_shared_same_product_rule_applied", {
+        offerId: offer.id,
+        buyQuantity: resolvedBxgy.buyQuantity,
+        configuredGetQuantity: bestRule.getQuantity,
+        bundleQuantity: resolvedBxgy.bundleQuantity,
+        freeQuantity: resolvedBxgy.freeQuantity,
+        semantics: resolvedBxgy.semantics,
+      });
 
       allCandidates.push(...candidates);
       continue;

@@ -35,7 +35,7 @@ export default function BxgyLogicEditor({
   updateRulePresentation,
 }: Props) {
   const { discountTypeOptions, addMenuItems } = getBxgyRuleCapability();
-  const conditionTypeOptions = [{ label: "Buy X, Get Y Free", value: "buy_x_get_y" }];
+  const conditionTypeOptions = [{ label: "Buy X, Get Y", value: "buy_x_get_y" }];
   const showBuyProducts = section === "all" || section === "buy-products";
   const showRules = section === "all" || section === "rules";
   const appendBxgyTier = () => {
@@ -91,7 +91,7 @@ export default function BxgyLogicEditor({
       ) : null}
 
       {showRules ? (
-        <OfferRulesSection description="BXGY rules use a fixed same-product free-item model. Configure the buy quantity, free quantity, and labels for each rule.">
+        <OfferRulesSection description="BXGY rules support same-product free-item and total-item bundles. Configure the buy quantity, target quantity, and labels for each rule.">
           {bxgyDiscountRules.map((rule, index) => (
             <OfferRuleCard
               key={index}
@@ -230,7 +230,7 @@ export default function BxgyLogicEditor({
                       size="large"
                       className="mt-1"
                       value={rule.subtitle || ""}
-                      placeholder="e.g. Buy 2, get 1 free"
+                      placeholder="e.g. Buy 3, get 5 total"
                       onChange={(e) => {
                         const value = e.target.value;
                         if (updateRulePresentation) {
@@ -275,11 +275,11 @@ export default function BxgyLogicEditor({
                 <OfferRuleFormGrid columns={2}>
                   <OfferRuleNotice title="Scope source" intent="info">
                     BXGY applies within the selected buy products, so each rule
-                    here only controls the buy quantity and free quantity.
+                    here only controls the buy quantity and target quantity.
                   </OfferRuleNotice>
                   <OfferRuleNotice title="Reward behavior" intent="success">
-                    BXGY rewards use the same product and discount the cheapest
-                    eligible variant once per order.
+                    If Y is larger than X, the bar is treated as pay X for Y
+                    total items. Otherwise it keeps the legacy free-item model.
                   </OfferRuleNotice>
                 </OfferRuleFormGrid>
 

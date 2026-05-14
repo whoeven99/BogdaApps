@@ -2,6 +2,7 @@ import type {
   DifferentProductsDiscountRule,
   FreeGiftRule,
 } from "../../../utils/offerParsing";
+import { getBxgyDisplayMeta } from "../../../utils/offerParsing";
 import type {
   CampaignDraft,
   CampaignDraftActions,
@@ -77,7 +78,7 @@ function buildQuantityBreakSummary(rule: DraftDiscountRule) {
 }
 
 function buildBxgySummary(rule: DraftBxgyDiscountRule) {
-  return `Buy ${rule.buyQuantity || 2}, Get ${rule.getQuantity || 1} Free`;
+  return getBxgyDisplayMeta(rule).summary;
 }
 
 function buildFreeGiftSummary(rule: FreeGiftRule) {
@@ -113,7 +114,7 @@ export function getCampaignCompositionBars(
       title:
         rule.title ||
         (type === "bxgy"
-          ? `Bar #${index + 1} - Buy X, Get Y Free`
+          ? `Bar #${index + 1} - Buy X, Get Y`
           : type === "free_gift"
             ? `Bar #${index + 1} - Free gift`
             : `Bar #${index + 1} - Quantity break`),
@@ -131,7 +132,7 @@ export function getCampaignCompositionBars(
   const bxgyBars = draft.bxgyDiscountRules.map((rule, index) => ({
     id: `bxgy-rule-${index + 1}`,
     type: "bxgy" as const,
-    title: rule.title || `Bar #${index + 1} - Buy X, Get Y Free`,
+    title: rule.title || `Bar #${index + 1} - Buy X, Get Y`,
     summary: rule.subtitle || buildBxgySummary(rule),
     enabled: true,
     isDefault: !!rule.isDefault,

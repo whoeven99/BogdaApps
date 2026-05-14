@@ -33,9 +33,9 @@ export const OFFER_TYPE_OPTIONS: OfferTypeOption[] = [
   },
   {
     id: "bxgy",
-    name: "Buy X, Get Y Free (BXGY)",
+    name: "Buy X, Get Y (BXGY)",
     description:
-      "Set up same-product Buy X, Get Y Free offers (for example, Buy 2, Get 1 Free)",
+      "Set up same-product BXGY offers such as Buy 2, Get 1 Free or pay for 3 and receive 5 total items",
     primaryDiscountScope: "Product discounts",
     primaryRuleType: "BXGY",
   },

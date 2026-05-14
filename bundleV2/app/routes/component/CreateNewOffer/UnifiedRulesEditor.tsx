@@ -130,7 +130,7 @@ export default function UnifiedRulesEditor({
                       size="large"
                       className="mt-1 w-full"
                       value="buy_x_get_y"
-                      options={[{ label: "Buy X, Get Y Free", value: "buy_x_get_y" }]}
+                      options={[{ label: "Buy X, Get Y", value: "buy_x_get_y" }]}
                       disabled
                     />
                   ) : (
