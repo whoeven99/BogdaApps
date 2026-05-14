@@ -117,7 +117,7 @@ function parseMoneyStringToNumber(raw) {
   return Number.isFinite(n) ? n : 0;
 }
 
-/** Complete bundle 单件商品计价（与 CreateNewOffer 中 TS 逻辑对齐） */
+/** Complete bundle 整包计价（与 CreateNewOffer 中 TS 逻辑对齐） */
 function applyCompleteBundleProductPricing(mode, value, basePrice) {
   const original = Math.max(0, Number(basePrice) || 0);
   if (mode === "full_price") {
@@ -1213,7 +1213,7 @@ function getCurrentProductSummary() {
   };
 }
 
-function getCompleteBundleAccessoryProducts(config, bar) {
+function getCompleteBundleSelectableItems(config, bar) {
   const currentProductId = getCurrentProductGid();
   return (bar?.products || []).filter((product) => {
     if (!bar?.excludeTriggerProduct) return true;
@@ -1224,8 +1224,8 @@ function getCompleteBundleAccessoryProducts(config, bar) {
   });
 }
 
-function getSelectedCompleteBundleAccessoryIds(config, bar) {
-  const pool = getCompleteBundleAccessoryProducts(config, bar);
+function getSelectedCompleteBundleItemIds(config, bar) {
+  const pool = getCompleteBundleSelectableItems(config, bar);
   const allowedIds = new Set(pool.map((product) => String(product.productId)));
   const rawMap = window.__ciwiBundleState?.selectedCompleteBundleProducts?.[bar.id] || {};
   const explicitIds = Object.keys(rawMap).filter(
@@ -1242,18 +1242,13 @@ function getSelectedCompleteBundleAccessoryIds(config, bar) {
   return Array.from(new Set(selectedIds));
 }
 
-/** 渲染单个商品块（缩略图、标题、折后价/原价、变体下拉） */
+/** 渲染单个商品块（缩略图、标题、基础价格、变体下拉） */
 function buildOneCompleteBundleProductHtml(bar, product, options) {
   const selected = options?.selected !== false;
   const selectable = options?.selectable === true;
   const disabled = options?.disabled === true;
   const v = resolveCompleteBundleVariant(bar, product);
   const base = parseMoneyStringToNumber(v?.price || product.price);
-  const { final, original } = applyCompleteBundleProductPricing(
-    product.pricing?.mode || "full_price",
-    Number(product.pricing?.value) || 0,
-    base,
-  );
   const variantOptions = Array.isArray(product.variants) ? product.variants : [];
   const curVid = v?.id || "";
   const optionHtml = variantOptions.length
@@ -1300,12 +1295,7 @@ function buildOneCompleteBundleProductHtml(bar, product, options) {
       <div style="flex:1;min-width:0;">
         <div style="font-size:11px;font-weight:600;color:#1c1f23;line-height:1.35;">${esc(product.title || "Product")}</div>
         <div style="margin-top:4px;font-size:12px;display:flex;flex-wrap:wrap;gap:4px;align-items:baseline;">
-          <span style="font-weight:700;color:#1c1f23;">${esc(formatPrice(final))}</span>
-          ${
-            original > final
-              ? `<span style="font-size:11px;color:#9aa0a6;text-decoration:line-through;">${esc(formatPrice(original))}</span>`
-              : ""
-          }
+          <span style="font-weight:700;color:#1c1f23;">${esc(formatPrice(base))}</span>
         </div>
         ${optionHtml ? `<div style="margin-top:6px;">${optionHtml}</div>` : ""}
       </div>
@@ -1362,6 +1352,12 @@ function getProgressiveGiftsConfigFromOffer(offer) {
  * 根据当前选档（与 Bar 序号 1-based 对齐）计算 tier 属性值，规则与后台预览一致
  */
 function computeSelectedBarIndexForOffer(offer) {
+  if (offer.offerType === "complete-bundle") {
+    const config = parseCompleteBundleConfig(offer.selectedProductsJson);
+    const selectedBarId = String(window.__ciwiBundleState?.selectedCompleteBundleBarId || "");
+    const idx = config.bars.findIndex((bar) => String(bar.id) === selectedBarId);
+    return idx >= 0 ? idx + 1 : 1;
+  }
   const sc = Number(window.__ciwiBundleState?.selectedCount ?? 1);
   if (offer.offerType === "bxgy") {
     const rules = parseBxgyDiscountRulesJson(offer.discountRulesJson);
@@ -2529,7 +2525,7 @@ window.ciwiToggleCompleteBundleProduct = function (barId, productId, checked) {
       : null;
   const bar = config?.bars.find((entry) => String(entry.id) === String(barId));
   if (!bar) return;
-  const selectedIds = getSelectedCompleteBundleAccessoryIds(config, bar);
+  const selectedIds = getSelectedCompleteBundleItemIds(config, bar);
   const maxQuantity = Math.max(
     Math.max(1, Math.trunc(Number(bar?.minQuantity) || 1)),
     Math.trunc(Number(bar?.maxQuantity) || Number(bar?.quantity) || 1),
@@ -2708,12 +2704,12 @@ async function performCompleteBundleCartAdd() {
     if (!mainVariantId) return false;
     const quantity = getCurrentQuantityFromThemeForm();
     items.push({ id: Number(mainVariantId), quantity });
-    const selectedAccessoryIds = new Set(getSelectedCompleteBundleAccessoryIds(config, barToUse));
-    if (selectedAccessoryIds.size < Math.max(1, Math.trunc(Number(barToUse.minQuantity) || 1))) {
+    const selectedItemIds = new Set(getSelectedCompleteBundleItemIds(config, barToUse));
+    if (selectedItemIds.size < Math.max(1, Math.trunc(Number(barToUse.minQuantity) || 1))) {
       return false;
     }
-    for (const product of getCompleteBundleAccessoryProducts(config, barToUse)) {
-      if (!selectedAccessoryIds.has(String(product.productId))) continue;
+    for (const product of getCompleteBundleSelectableItems(config, barToUse)) {
+      if (!selectedItemIds.has(String(product.productId))) continue;
       const selectedMap = window.__ciwiBundleState?.selectedBundleVariants?.[barToUse.id] || {};
       const variantId = toAjaxVariantId(
         selectedMap[product.productId] ||
@@ -2821,25 +2817,24 @@ function renderBundlePreviewHtml(offer) {
       .map((bar) => {
         const isSelected = String(bar.id) === selectedBarId;
         const borderCol = isSelected ? accentColor : borderColor;
-        const accessoryProducts = getCompleteBundleAccessoryProducts(completeBundle, bar);
-        const selectedAccessoryIds = new Set(getSelectedCompleteBundleAccessoryIds(completeBundle, bar));
+        const bundleItems = getCompleteBundleSelectableItems(completeBundle, bar);
+        const selectedItemIds = new Set(getSelectedCompleteBundleItemIds(completeBundle, bar));
         let sumOriginal = currentUnitPrice;
-        let sumFinal = currentUnitPrice;
-        for (const p of accessoryProducts) {
-          if (!selectedAccessoryIds.has(String(p.productId))) continue;
+        for (const p of bundleItems) {
+          if (!selectedItemIds.has(String(p.productId))) continue;
           const v = resolveCompleteBundleVariant(bar, p);
           const base = parseMoneyStringToNumber(v?.price || p.price);
-          const r = applyCompleteBundleProductPricing(
-            p.pricing?.mode || "full_price",
-            Number(p.pricing?.value) || 0,
-            base,
-          );
-          sumOriginal += r.original;
-          sumFinal += r.final;
+          sumOriginal += Math.max(0, base);
         }
+        const bundlePricing = applyCompleteBundleProductPricing(
+          bar.pricing?.mode || "full_price",
+          Number(bar.pricing?.value) || 0,
+          sumOriginal,
+        );
+        const sumFinal = bundlePricing.final;
         const saved = Math.max(0, sumOriginal - sumFinal);
         const summaryHtml =
-          accessoryProducts && accessoryProducts.length
+          bundleItems && bundleItems.length
             ? `<div style="margin-top:8px;">
                 <div style="font-size:13px;font-weight:700;color:#1c1f23;display:flex;flex-wrap:wrap;gap:6px;align-items:baseline;">
                   <span>${esc(formatPrice(sumFinal))}</span>
@@ -2857,15 +2852,15 @@ function renderBundlePreviewHtml(offer) {
               </div>`
             : "";
         let productsHtml = "";
-        const plist = accessoryProducts || [];
+        const plist = bundleItems || [];
         const minQuantity = Math.max(1, Math.trunc(Number(bar.minQuantity) || 1));
         const maxQuantity = Math.max(minQuantity, Math.trunc(Number(bar.maxQuantity) || Number(bar.quantity) || 1));
         for (let idx = 0; idx < plist.length; idx++) {
           if (idx > 0 && plist.length >= 2) {
             productsHtml += `<div style="display:flex;align-items:center;justify-content:center;color:#9aa0a6;font-weight:700;width:22px;flex-shrink:0;font-size:16px;">+</div>`;
           }
-          const isChecked = selectedAccessoryIds.has(String(plist[idx].productId));
-          const disableUnchecked = !isChecked && selectedAccessoryIds.size >= maxQuantity;
+          const isChecked = selectedItemIds.has(String(plist[idx].productId));
+          const disableUnchecked = !isChecked && selectedItemIds.size >= maxQuantity;
           productsHtml += buildOneCompleteBundleProductHtml(bar, plist[idx], {
             selectable: true,
             selected: isChecked,
@@ -2888,7 +2883,7 @@ function renderBundlePreviewHtml(offer) {
                 bar.title || "Complete the bundle",
               )}</div>
               <div class="create-offer-style-preview-item-subtitle" style="font-size:12px;color:#5c6166;margin-top:2px;">${esc(
-                bar.subtitle || `Pick ${minQuantity}-${maxQuantity} accessories`,
+                bar.subtitle || `Pick ${minQuantity}-${maxQuantity} bundle items`,
               )}</div>
             </span>
           </label>

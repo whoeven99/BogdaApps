@@ -57,9 +57,9 @@ const META_BY_OFFER_TYPE: Record<OfferTypeId, CampaignBuilderMeta> = {
   "complete-bundle": {
     logicBlockLabel: "Complete Bundle",
     logicBlockDescription:
-      "Attach accessory pools to the current PDP product and discount only the selected accessories.",
+      "Attach bundle-item pools to the current PDP product and discount the whole bundle together.",
     stepTwoDescription:
-      "Select the trigger products, build each accessory bundle bar, and control min/max accessory selection plus accessory pricing.",
+      "Select the trigger products, build each bundle bar, and control min/max bundle-item selection plus whole-bundle pricing.",
   },
   subscription: {
     logicBlockLabel: "Subscription",
@@ -97,7 +97,7 @@ export function getCampaignScopeSummary(
           bar.products.map((product) => String(product.productId)),
         ),
       ).size;
-      return `${ctx.selectedProductsData.length} trigger products, ${uniqueProductCount} accessory products`;
+      return `${ctx.selectedProductsData.length} trigger products, ${uniqueProductCount} bundle items`;
     }
     case "free-gift":
       return `${ctx.freeGiftTriggerProducts.length} products in the global trigger pool, ${getFreeGiftRewardBarCount(ctx)} bars with gift products`;
@@ -124,7 +124,7 @@ export function getCampaignLogicSummary(
       return `${ctx.bxgyDiscountRules.length} BXGY bars, up to ${bestFreeQty} free item${bestFreeQty > 1 ? "s" : ""}`;
     }
     case "complete-bundle": {
-      return `${ctx.completeBundleBars.length} accessory bundle bar${ctx.completeBundleBars.length > 1 ? "s" : ""} with trigger + accessory pricing`;
+      return `${ctx.completeBundleBars.length} complete-bundle bar${ctx.completeBundleBars.length > 1 ? "s" : ""} with trigger + whole-bundle pricing`;
     }
     case "subscription":
       return ctx.subscriptionEnabled
@@ -274,7 +274,7 @@ export function validateScopeAndLogicStep(
         return bar.products.length < min || max < min || overlapsTrigger;
       });
       return hasNoTriggerProducts || hasInvalidBar || ctx.completeBundleBars.length === 0
-        ? "Please select trigger products, keep accessory pools different from the trigger product, and make sure every bar has enough accessories for its min/max rule."
+        ? "Please select trigger products, keep bundle-item pools different from the trigger product, and make sure every bar has enough items for its min/max rule."
         : null;
     }
     case "free-gift":
@@ -319,7 +319,7 @@ export function validateFinalSubmitScopeAndLogic(
         return !bar.products?.length || bar.products.length < min || max < min || overlapsTrigger;
       });
       return hasNoTriggerProducts || ctx.completeBundleBars.length === 0 || hasInvalidBar
-        ? "Complete bundle offers require trigger products, accessory pools that exclude the trigger product, and valid min/max accessory limits in every bar."
+        ? "Complete bundle offers require trigger products, bundle-item pools that exclude the trigger product, and valid min/max item limits in every bar."
         : null;
     }
     case "free-gift":

@@ -818,7 +818,7 @@ function CompleteBundleModuleDetail({
         <QuietEmptyState>
           <div className="space-y-3">
             <div>
-              Add the bundle products customers can choose alongside the current trigger product.
+              Add the bundle items customers can choose alongside the current trigger product.
             </div>
             <Button onClick={() => actions.addCompleteBundleBar("quantity-break-same")}>
               Add bundle configuration
@@ -859,7 +859,7 @@ function CompleteBundleModuleDetail({
             />
             <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
               Select the products where this bundle should appear, then configure the bundle
-              products and discounts below.
+              items and whole-bundle discount below.
             </div>
           </div>
         ) : null}

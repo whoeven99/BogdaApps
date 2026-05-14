@@ -150,7 +150,7 @@ export function getStarterTemplateDefaults(
             id: "starter-complete-bundle-bar",
             type: "quantity-break-same",
             title: "Complete the bundle",
-            subtitle: "Pick up to 3 accessories and unlock accessory savings",
+            subtitle: "Choose bundle items and unlock one discount for the whole bundle",
             minQuantity: 1,
             maxQuantity: 3,
             excludeTriggerProduct: true,

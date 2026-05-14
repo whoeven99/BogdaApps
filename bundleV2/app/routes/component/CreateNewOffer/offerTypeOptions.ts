@@ -43,9 +43,9 @@ export const OFFER_TYPE_OPTIONS: OfferTypeOption[] = [
     id: "complete-bundle",
     name: "Complete the bundle",
     description:
-      "Create multiple bundle bars and let customers choose product variants/options",
-    primaryDiscountScope: "Product discounts",
-    primaryRuleType: "Bundle completion",
+      "Create bundle bars where the current product and selected bundle items receive one combined discount",
+    primaryDiscountScope: "Order discounts",
+    primaryRuleType: "Whole-bundle discount",
   },
   {
     id: "subscription",

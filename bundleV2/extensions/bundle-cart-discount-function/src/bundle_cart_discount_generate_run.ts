@@ -148,7 +148,7 @@ type FreeGiftRule = {
 
 type Offer = NonNullable<OfferMetafieldPayload["offers"]>[number];
 
-/** complete-bundle：单件商品的计价方式（与主题端 offerParsing 对齐） */
+/** complete-bundle：整包计价方式（与主题端 offerParsing 对齐） */
 type CompleteBundlePricingMode =
   | "full_price"
   | "percentage_off"
@@ -460,21 +460,24 @@ function offerPassesScheduleAndMarket(
 }
 
 /**
- * complete-bundle 购物车折扣：
- * - 当某一「档位」bar 要求的全部商品都在购物车中（每件至少 1，可拆同一行的数量）时生效；
- * - 多档位时必须先试「件数最多」的一档，否则会出现只命中低档位、整包优惠漏算的问题；
- * - 商品 ID 需与购物车行 product.id 对齐（GID 与纯数字混合存储时通过归一化比较）。
+ * complete-bundle 整体订单折扣：
+ * - 主商品与所选 bundle items 一起组成整包，再按 bar.pricing 对整包 subtotal 计算折后价；
+ * - 每个匹配 bar 产出一条 order candidate，由 Shopify 选择最大优惠；
+ * - 商品 ID 仍按 product.id 比较（兼容 GID / 纯数字混存）。
  */
 function calculateCompleteBundleDiscounts(
   cartLines: CartLineForBundle[],
   offers: Offer[],
   marketId: string | undefined,
   nowMs: number | null,
-): ProductDiscountCandidate[] {
+): OrderDiscountCandidate[] {
   const completeOffers = offers.filter((o) => isCompleteBundleOfferType(o.offerType));
   if (!completeOffers.length) {
     return [];
   }
+
+  const allCartLineIds = cartLines.map((line) => line.id);
+  const candidates: OrderDiscountCandidate[] = [];
 
   for (const offer of completeOffers) {
     if (!offerPassesScheduleAndMarket(offer, marketId, nowMs)) {
@@ -488,7 +491,19 @@ function calculateCompleteBundleDiscounts(
       continue;
     }
 
-    for (const bar of barsRaw) {
+    const bars = [...barsRaw].sort((left, right) => {
+      const leftMax = Math.max(
+        Math.max(1, Math.trunc(Number(left.minQuantity) || 1)),
+        Math.trunc(Number(left.maxQuantity) || 1),
+      );
+      const rightMax = Math.max(
+        Math.max(1, Math.trunc(Number(right.minQuantity) || 1)),
+        Math.trunc(Number(right.maxQuantity) || 1),
+      );
+      return rightMax - leftMax;
+    });
+
+    for (const bar of bars) {
       if (!bar.products.length) continue;
       const anchorLine = cartLines.find((line) => {
         if (line.merchandise.__typename !== "ProductVariant") return false;
@@ -497,18 +512,17 @@ function calculateCompleteBundleDiscounts(
       });
       if (!anchorLine) continue;
 
-      const accessoryAllocations: Array<{
+      const bundleItemAllocations: Array<{
         lineId: string;
-        qty: number;
         unitBase: number;
-        mode: CompleteBundlePricingMode;
-        value: number;
       }> = [];
-      for (const accessory of bar.products) {
+      const usedLineIds = new Set<string>([anchorLine.id]);
+      for (const bundleItem of bar.products) {
         const matchedLine = cartLines.find((line) => {
           if (line.merchandise.__typename !== "ProductVariant") return false;
+          if (usedLineIds.has(line.id)) return false;
           const pid = line.merchandise.product?.id;
-          if (!productIdsMatch(pid, accessory.productId)) return false;
+          if (!productIdsMatch(pid, bundleItem.productId)) return false;
           if (
             bar.excludeTriggerProduct &&
             parsedConfig.triggerProductIds.some((triggerId) => productIdsMatch(pid, triggerId))
@@ -518,71 +532,66 @@ function calculateCompleteBundleDiscounts(
           return true;
         });
         if (!matchedLine) continue;
-        accessoryAllocations.push({
+        bundleItemAllocations.push({
           lineId: matchedLine.id,
-          qty: 1,
           unitBase: parseMoneyAmount(matchedLine.cost?.amountPerQuantity?.amount),
-          mode: accessory.pricing.mode,
-          value: accessory.pricing.value,
         });
+        usedLineIds.add(matchedLine.id);
       }
 
-      if (accessoryAllocations.length < bar.minQuantity) {
+      if (bundleItemAllocations.length < bar.minQuantity) {
         log("complete_bundle_bar_no_match", {
           offerId: offer.id,
           barId: bar.id,
-          reason: "insufficient_accessories",
-          matchedAccessories: accessoryAllocations.length,
+          reason: "insufficient_bundle_items",
+          matchedBundleItems: bundleItemAllocations.length,
           minQuantity: bar.minQuantity,
         });
         continue;
       }
 
-      const allocations = accessoryAllocations.slice(0, bar.maxQuantity);
+      const allocations = bundleItemAllocations.slice(0, bar.maxQuantity);
+      const bundleSubtotal = [
+        parseMoneyAmount(anchorLine.cost?.amountPerQuantity?.amount),
+        ...allocations.map((row) => row.unitBase),
+      ].reduce((sum, value) => sum + Math.max(0, value), 0);
+      const { final, original } = applyCompleteBundleUnitPricing(
+        bundleSubtotal,
+        bar.pricing.mode,
+        bar.pricing.value,
+      );
+      const totalDiscount = Math.max(0, original - final);
+      if (totalDiscount <= 0) continue;
 
-      // 同一购物车行可能对应多个槽位（同款多件），合并为一条 fixedAmount，避免多条 candidate 互相覆盖
-      const mergeByLine = new Map<string, { qty: number; totalDiscount: number }>();
+      const includedLineIds = new Set<string>([anchorLine.id, ...allocations.map((row) => row.lineId)]);
+      const excludedCartLineIds = allCartLineIds.filter((id) => !includedLineIds.has(id));
 
-      for (const a of allocations) {
-        const { final, original } = applyCompleteBundleUnitPricing(
-          a.unitBase,
-          a.mode,
-          a.value,
-        );
-        const unitDiscount = Math.max(0, original - final);
-        const row = mergeByLine.get(a.lineId) || { qty: 0, totalDiscount: 0 };
-        row.qty += 1;
-        row.totalDiscount += unitDiscount;
-        mergeByLine.set(a.lineId, row);
-      }
-
-      const candidates: ProductDiscountCandidate[] = [];
-      for (const [lineId, agg] of mergeByLine) {
-        if (agg.qty <= 0 || agg.totalDiscount <= 0) continue;
-        candidates.push({
-          message: offer.cartTitle || "Bundle Discount",
-          targets: [{ cartLine: { id: lineId, quantity: agg.qty } }],
-          value: {
-            fixedAmount: {
-              amount: agg.totalDiscount.toFixed(2),
-              appliesToEachItem: false,
+      candidates.push({
+        message: offer.cartTitle || "Bundle order discount",
+        targets: [
+          {
+            orderSubtotal: {
+              excludedCartLineIds,
             },
           },
-        });
-      }
+        ],
+        value: {
+          fixedAmount: {
+            amount: totalDiscount.toFixed(2),
+          },
+        },
+      });
 
-      if (candidates.length) {
-        log("complete_bundle_matched", {
-          offerId: offer.id,
-          barId: bar.id,
-          candidateCount: candidates.length,
-        });
-        return candidates;
-      }
+      log("complete_bundle_matched", {
+        offerId: offer.id,
+        barId: bar.id,
+        includedLineCount: includedLineIds.size,
+        totalDiscount,
+      });
     }
   }
 
-  return [];
+  return candidates;
 }
 
 function offersJsonHasList(v: unknown): v is OfferMetafieldPayload {
@@ -834,8 +843,8 @@ export function bundleCartDiscountGenerateRun(
     }
   }
 
-  // ② 再处理 complete-bundle：多 SKU 成套，与 discountRulesJson 阶梯无关
-  if (hasProductDiscountClass && productCandidates.length === 0) {
+  // ② 再处理 complete-bundle：主商品 + bundle items 一起走整包订单折扣
+  if (hasOrderDiscountClass && productCandidates.length === 0) {
     log("complete_bundle_evaluation_start", {
       marketId,
       cartLineCount: input.cart.lines.length,
@@ -847,7 +856,7 @@ export function bundleCartDiscountGenerateRun(
       nowMs,
     );
     if (completeBundleCandidates.length > 0) {
-      productCandidates.push(...completeBundleCandidates);
+      orderCandidates.push(...completeBundleCandidates);
       log("complete_bundle_evaluation_success", {
         candidateCount: completeBundleCandidates.length,
       });
@@ -859,7 +868,7 @@ export function bundleCartDiscountGenerateRun(
   }
 
   // ③ 最后按行匹配普通 bundle 的 discountRulesJson 数量阶梯
-  if (hasProductDiscountClass && productCandidates.length === 0) {
+  if (hasProductDiscountClass && productCandidates.length === 0 && orderCandidates.length === 0) {
     for (const line of input.cart.lines) {
       if (line.merchandise.__typename !== "ProductVariant") {
         log("line_skip", {

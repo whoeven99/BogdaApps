@@ -1,4 +1,4 @@
-import { Button, Input } from "antd";
+import { Button, Input, Select } from "antd";
 import type { ReactNode } from "react";
 import type {
   CompleteBundleBar,
@@ -70,11 +70,21 @@ export default function CompleteBundleEditor({
     activeBundleMinQuantity,
     Math.trunc(Number(activeBar?.maxQuantity) || Number(activeBar?.quantity) || 1),
   );
+  const activePricingMode = activeBar?.pricing?.mode ?? "full_price";
+  const activePricingValue = Number(activeBar?.pricing?.value) || 0;
+  const getPricingValueLabel = (mode: CompleteBundleBar["pricing"]["mode"]) =>
+    mode === "percentage_off"
+      ? "Bundle discount (%)"
+      : mode === "amount_off"
+        ? "Amount off bundle (€)"
+        : mode === "fixed_price"
+          ? "Bundle price (€)"
+          : "Pricing value";
 
   return (
     <div className="mb-8">
       {showBars ? (
-        <OfferRulesSection description="Each bar represents one anchor-plus-accessories offer. The current PDP product acts as X, while this editor controls the accessory pool Y and its pricing.">
+        <OfferRulesSection description="Each bar represents one whole-bundle offer. The current PDP product is always included, and customers add bundle items from the selected pool.">
           <div className="mt-3 flex flex-col gap-3">
             {completeBundleBars.map((bar, index) => (
               <OfferRuleCard
@@ -147,7 +157,7 @@ export default function CompleteBundleEditor({
                             />
                           </label>
                           <label className="block text-[14px] font-medium text-[#1c1f23]">
-                            Min accessories
+                            Min bundle items
                             <Input
                               size="large"
                               type="number"
@@ -165,7 +175,7 @@ export default function CompleteBundleEditor({
                             />
                           </label>
                           <label className="block text-[14px] font-medium text-[#1c1f23]">
-                            Max accessories
+                            Max bundle items
                             <Input
                               size="large"
                               type="number"
@@ -191,17 +201,17 @@ export default function CompleteBundleEditor({
                         <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
                           <OfferRuleSummaryBox
                             label="Trigger model"
-                            value="Current product + accessories"
-                            description="The current PDP product is always X. Customers choose from this accessory pool without re-selecting the main product."
+                            value="Current product + bundle items"
+                            description="The current PDP product is always included. The selected bundle items join it and the discount applies to the whole bundle subtotal."
                           />
                           <OfferRuleSummaryBox
                             label="Selection rule"
-                            value={`${minQuantity}-${maxQuantity} accessories`}
-                            description="Trigger products are automatically excluded from the accessory pool to avoid self-bundling."
+                            value={`${minQuantity}-${maxQuantity} bundle items`}
+                            description="Trigger products stay out of the selectable pool, so customers only choose the additional bundle items."
                           />
                         </div>
                         <div className="mt-3 text-[12px] text-[#5c6166]">
-                          {bar.products.length} accessory product
+                          {bar.products.length} bundle item
                           {bar.products.length === 1 ? "" : "s"} in this pool
                         </div>
                       </div>
@@ -211,7 +221,7 @@ export default function CompleteBundleEditor({
               </OfferRuleCard>
             ))}
           </div>
-          <OfferRuleAddPanel description="Add another bar when the same trigger product needs a different accessory pool or pricing combination.">
+          <OfferRuleAddPanel description="Add another bar when the same trigger product needs a different bundle-item pool or a different whole-bundle discount.">
             <Button type="dashed" onClick={() => addCompleteBundleBar("quantity-break-same")}>
               + Add bar
             </Button>
@@ -227,7 +237,7 @@ export default function CompleteBundleEditor({
                 <div className="text-[14px] font-medium text-[#1c1f23]">Bundle configuration</div>
                 <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
                   <label className="block text-[13px] font-medium text-[#1c1f23]">
-                    Minimum selection
+                    Minimum bundle items
                     <Input
                       size="large"
                       type="number"
@@ -246,7 +256,7 @@ export default function CompleteBundleEditor({
                     />
                   </label>
                   <label className="block text-[13px] font-medium text-[#1c1f23]">
-                    Maximum selection
+                    Maximum bundle items
                     <Input
                       size="large"
                       type="number"
@@ -274,16 +284,63 @@ export default function CompleteBundleEditor({
                 </div>
               </div>
 
+              <div className="mt-4 rounded-[10px] border border-[#e3e8ed] bg-white p-4">
+                <div className="text-[14px] font-medium text-[#1c1f23]">Bundle discount</div>
+                <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <label className="block text-[13px] font-medium text-[#1c1f23]">
+                    Discount model
+                    <Select
+                      size="large"
+                      className="mt-1 w-full"
+                      value={activePricingMode}
+                      onChange={(value) =>
+                        updateCompleteBundleBar(activeBar.id, {
+                          pricing: {
+                            mode: value as CompleteBundleBar["pricing"]["mode"],
+                            value: value === "full_price" ? 0 : activePricingValue,
+                          },
+                        })
+                      }
+                      options={[
+                        { label: "Full price", value: "full_price" },
+                        { label: "Percentage off", value: "percentage_off" },
+                        { label: "Amount off", value: "amount_off" },
+                        { label: "Fixed bundle price", value: "fixed_price" },
+                      ]}
+                    />
+                  </label>
+                  <label className="block text-[13px] font-medium text-[#1c1f23]">
+                    {getPricingValueLabel(activePricingMode)}
+                    <Input
+                      size="large"
+                      type="number"
+                      min={0}
+                      disabled={activePricingMode === "full_price"}
+                      className="mt-1"
+                      value={activePricingMode === "full_price" ? 0 : activePricingValue}
+                      onChange={(e) =>
+                        updateCompleteBundleBar(activeBar.id, {
+                          pricing: {
+                            mode: activePricingMode,
+                            value: Number(e.target.value) || 0,
+                          },
+                        })
+                      }
+                    />
+                  </label>
+                </div>
+              </div>
+
               <div className="mt-4 rounded-[10px] bg-[#f6f8f9] px-4 py-4">
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
                     <div className="text-[14px] font-medium text-[#1c1f23]">
-                      Bundle products
+                      Bundle items
                     </div>
                     <div className="mt-1 text-[12px] text-[#5c6166]">
                       {simpleModeContext === "primary"
-                        ? "Add the products customers can bundle with the trigger product."
-                        : "Add the products customers can attach to this offer. This component stays additive and does not replace the main campaign logic."}
+                        ? "Add the items customers can combine with the current product into one discounted bundle."
+                        : "Add the items customers can attach to this offer. This component stays additive and does not replace the main campaign logic."}
                     </div>
                   </div>
                   <Button
@@ -294,7 +351,7 @@ export default function CompleteBundleEditor({
                       e.preventDefault();
                     }}
                   >
-                    {activeBarProductCount > 0 ? "Edit bundle products" : "Add bundle products"}
+                    {activeBarProductCount > 0 ? "Edit bundle items" : "Add bundle items"}
                   </Button>
                 </div>
                 <div className="mt-3 text-[12px] text-[#5c6166]">
@@ -306,8 +363,8 @@ export default function CompleteBundleEditor({
               {activeBarProductCount === 0 ? (
                 <div className="mt-3 rounded-[10px] border border-dashed border-[#dfe3e8] bg-white px-4 py-4 text-[13px] text-[#5c6166]">
                   {simpleModeContext === "primary"
-                    ? "No bundle products yet. Use the Shopify product picker to choose the products for this bundle configuration."
-                    : "No bundle products yet. Use the Shopify product picker to choose the products for this bundle configuration."}
+                    ? "No bundle items yet. Use the Shopify product picker to choose the items for this bundle configuration."
+                    : "No bundle items yet. Use the Shopify product picker to choose the items for this bundle configuration."}
                 </div>
               ) : (
                 <div className="mt-3 space-y-4">
@@ -329,7 +386,7 @@ export default function CompleteBundleEditor({
                           />
                           <div className="min-w-0 flex-1">
                             <div className="truncate text-[13px] font-medium text-[#1c1f23]">
-                              {product.title || "Bundle product"}
+                              {product.title || "Bundle item"}
                             </div>
                             <div className="mt-1 truncate text-[12px] text-[#5c6166]">
                               {selectedVariant?.title && selectedVariant.title !== "Default Title"
@@ -343,10 +400,10 @@ export default function CompleteBundleEditor({
                   </div>
 
                   <div className="rounded-[10px] border border-[#e3e8ed] bg-white p-4">
-                    <div className="text-[14px] font-medium text-[#1c1f23]">Bundle discount</div>
+                    <div className="text-[14px] font-medium text-[#1c1f23]">Bundle items</div>
                     <div className="mt-1 text-[12px] text-[#5c6166]">
-                      Configure how each selected bundle product is discounted when customers add
-                      it through this bundle.
+                      Each selected item joins the current product, and the bundle discount above
+                      is applied to the combined subtotal.
                     </div>
                     <div className="mt-4 flex flex-col gap-4">
                       {activeBar.products.map((product, productIdx) =>
@@ -367,13 +424,13 @@ export default function CompleteBundleEditor({
           <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3">
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <div>
-                <div className="text-[14px] font-medium text-[#1c1f23]">Accessory pool</div>
+                <div className="text-[14px] font-medium text-[#1c1f23]">Bundle-item pool</div>
                 <div className="mt-1 text-[12px] text-[#5c6166]">
-                  Add or edit the products customers can pair with the current PDP product. Trigger products are excluded automatically.
+                  Add or edit the bundle items customers can pair with the current PDP product. Trigger products are excluded automatically.
                 </div>
               </div>
               <div className="text-[12px] text-[#5c6166]">
-                {activeBar.products.length} product
+                {activeBar.products.length} item
                 {activeBar.products.length > 1 ? "s" : ""} selected
               </div>
             </div>
@@ -401,7 +458,7 @@ export default function CompleteBundleEditor({
             <div className="flex items-center justify-between gap-3 mb-2">
               <div className="text-[14px] font-semibold text-[#1c1f23]">
                 {simpleMode
-                  ? "Accessory products"
+                  ? "Bundle items"
                   : `Bar #${activeBarIndex + 1} - ${activeBar.title || "Complete the bundle"}`}
               </div>
               <div className="text-[12px] text-[#5c6166]">
@@ -411,7 +468,7 @@ export default function CompleteBundleEditor({
             </div>
             <div className="mt-3 pt-3 border-t border-[#ebedef]">
               <div className="text-[13px] font-medium text-[#1c1f23] mb-2">
-                Accessory products
+                Bundle items
               </div>
               <div className="mb-2 flex flex-wrap items-center gap-2">
                 <Button
@@ -423,7 +480,7 @@ export default function CompleteBundleEditor({
                     e.preventDefault();
                   }}
                 >
-                  {activeBar.products.length ? "Edit accessory pool" : "Select accessory products"}
+                  {activeBar.products.length ? "Edit bundle items" : "Select bundle items"}
                 </Button>
                 <span className="text-[11px] text-[#5c6166]">
                   Products overlapping the trigger product are removed before saving.
@@ -431,7 +488,7 @@ export default function CompleteBundleEditor({
               </div>
               {activeBar.products.length === 0 ? (
                 <div className="text-[12px] text-[#5c6166]">
-                  This bar has no accessory products yet. Select the accessory pool to continue.
+                  This bar has no bundle items yet. Select the bundle-item pool to continue.
                 </div>
               ) : (
                 <div className="flex flex-col gap-4">

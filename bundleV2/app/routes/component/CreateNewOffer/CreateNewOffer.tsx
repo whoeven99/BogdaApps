@@ -938,7 +938,7 @@ export function CreateNewOffer({
     id: `bar-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     type,
     title: "Complete the bundle",
-    subtitle: "Pick up to 3 accessories and unlock accessory savings",
+    subtitle: "Choose bundle items and apply one discount to the whole bundle",
     minQuantity: 1,
     maxQuantity: 3,
     excludeTriggerProduct: true,
@@ -1199,7 +1199,7 @@ export function CreateNewOffer({
 
       const selectedList = normalizeResourcePickerSelection(selected);
       if (selectedList.length === 0) {
-        message.warning("No bundle products were returned from Shopify. Please try again.");
+        message.warning("No bundle items were returned from Shopify. Please try again.");
         return;
       }
 
@@ -1234,14 +1234,14 @@ export function CreateNewOffer({
 
       if (mappedProducts.length === 0) {
         message.warning(
-          "Selected bundle products overlap with the trigger product, so nothing was added.",
+          "Selected bundle items overlap with the trigger product, so nothing was added.",
         );
         return;
       }
 
       if (mappedProducts.length !== selectedList.length) {
         message.warning(
-          "Some selected products match the trigger product and were skipped from the bundle.",
+          "Some selected items match the trigger product and were skipped from the bundle.",
         );
       }
 
@@ -1263,8 +1263,8 @@ export function CreateNewOffer({
         }),
       });
     } catch (error) {
-      console.error("Failed to select complete bundle products", error);
-      message.error("Unable to add bundle products right now. Please try again.");
+      console.error("Failed to select complete bundle items", error);
+      message.error("Unable to add bundle items right now. Please try again.");
     }
   };
 
@@ -1625,24 +1625,6 @@ export function CreateNewOffer({
     );
   };
 
-  const updateBundleProductPricing = (
-    barId: string,
-    productId: string,
-    pricing: { mode: CompleteBundlePricingMode; value: number },
-  ) => {
-    setCompleteBundleBars((prev) =>
-      prev.map((bar) => {
-        if (bar.id !== barId) return bar;
-        return {
-          ...bar,
-          products: bar.products.map((p) =>
-            p.productId === productId ? { ...p, pricing } : p,
-          ),
-        };
-      }),
-    );
-  };
-
   /**
    * 向 Bar #2 及之后追加新商品（多选 resourcePicker，按 productId 去重后合并到该栏）
    */
@@ -1664,7 +1646,7 @@ export function CreateNewOffer({
   };
 
   /**
-   * 配件池内：单个配件商品的折扣模式 + 变体预览控件。
+   * complete-bundle 现在使用整包折扣；单个商品卡只保留变体预览与移除操作。
    */
   const renderCompleteBundleProductPricingCard = (
     bar: CompleteBundleBar,
@@ -1686,17 +1668,7 @@ export function CreateNewOffer({
     const selectedOptionsMap = Object.fromEntries(
       (selectedVariant?.selectedOptions || []).map((opt) => [opt.name, opt.value]),
     );
-    const pMode = product.pricing?.mode ?? "full_price";
-    const pValue = product.pricing?.value ?? 0;
-    const valueLabel =
-      pMode === "percentage_off"
-        ? "Discount per item (%)"
-        : pMode === "amount_off"
-          ? "Amount off (€)"
-          : pMode === "fixed_price"
-            ? "Total price (€)"
-            : "Pricing value";
-    const productLabel = `Accessory ${productIdx + 1}`;
+    const productLabel = `Bundle item ${productIdx + 1}`;
 
     return (
       <div
@@ -1730,44 +1702,9 @@ export function CreateNewOffer({
             删除
           </Button>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block text-[12px] font-medium text-[#1c1f23]">
-            Accessory pricing
-            <Select
-              size="small"
-              className="mt-1 w-full"
-              value={pMode}
-              onChange={(val) =>
-                updateBundleProductPricing(bar.id, product.productId, {
-                  mode: val as CompleteBundlePricingMode,
-                  value: val === "full_price" ? 0 : pValue,
-                })
-              }
-              options={[
-                { label: "Full price", value: "full_price" },
-                { label: "Percentage off", value: "percentage_off" },
-                { label: "Amount off", value: "amount_off" },
-                { label: "Fixed price", value: "fixed_price" },
-              ]}
-            />
-          </label>
-          <label className="block text-[12px] font-medium text-[#1c1f23]">
-            {valueLabel}
-            <Input
-              size="small"
-              type="number"
-              min={0}
-              disabled={pMode === "full_price"}
-              className="mt-1"
-              value={pMode === "full_price" ? 0 : pValue}
-              onChange={(e) =>
-                updateBundleProductPricing(bar.id, product.productId, {
-                  mode: pMode,
-                  value: Number(e.target.value) || 0,
-                })
-              }
-            />
-          </label>
+        <div className="rounded-[8px] border border-[#edf1f4] bg-[#f6f8f9] px-3 py-2 text-[12px] text-[#5c6166]">
+          This item participates in the bundle-level order discount. Configure pricing on the
+          bundle bar, not per product.
         </div>
         <div className="mt-3">
           <div className="text-[12px] font-medium mb-1 text-[#1c1f23]">Variant / Option preview</div>
@@ -2501,7 +2438,7 @@ export function CreateNewOffer({
       completeBundleBars.length > 0 &&
       completeBundleBars.every((bar) => bar.products.length === 0)
     ) {
-      return "Complete bundle module requires at least one configured bundle product.";
+      return "Complete bundle module requires at least one configured bundle item.";
     }
     return null;
   };

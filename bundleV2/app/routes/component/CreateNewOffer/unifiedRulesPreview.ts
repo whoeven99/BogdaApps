@@ -363,19 +363,20 @@ function buildCompleteBundleItem(
   const anchorProduct = params.selectedProducts[0];
   const anchorBase = Math.max(0, Number(params.baseUnitPrice) || 0);
   let sumOriginal = anchorBase;
-  let sumFinal = anchorBase;
 
   for (const product of bar?.products || []) {
     const selectedVariant =
       product.variants?.find((variant) => variant.id === product.selectedVariantId) ||
       product.variants?.[0];
     const base = parseMoneyStringToNumber(selectedVariant?.price || product.price);
-    const mode = product.pricing?.mode ?? "full_price";
-    const value = product.pricing?.value ?? 0;
-    const { final, original } = applyCompleteBundleProductPricing(mode, value, base);
-    sumOriginal += original;
-    sumFinal += final;
+    sumOriginal += Math.max(0, base);
   }
+
+  const { final: sumFinal } = applyCompleteBundleProductPricing(
+    bar?.pricing?.mode ?? "full_price",
+    Number(bar?.pricing?.value) || 0,
+    sumOriginal,
+  );
 
   const saved = Math.max(0, sumOriginal - sumFinal);
   const products = [
@@ -391,7 +392,7 @@ function buildCompleteBundleItem(
         product.variants?.[0];
       return {
         image: product.image || "https://via.placeholder.com/48",
-        name: product.title || "Accessory product",
+        name: product.title || "Bundle item",
         variant:
           selectedVariant?.title && selectedVariant.title !== "Default Title"
             ? selectedVariant.title
@@ -410,7 +411,7 @@ function buildCompleteBundleItem(
     title: rule.presentation.title || `Bar #${index + 1}`,
     subtitle:
       rule.presentation.subtitle ||
-      `Current product + ${minQuantity}-${maxQuantity} accessories from ${productsCount} options`,
+      `Current product + ${minQuantity}-${maxQuantity} bundle items from ${productsCount} options`,
     price: params.formatPrice(sumFinal),
     original: sumOriginal > sumFinal ? params.formatPrice(sumOriginal) : undefined,
     featured: index === 0,
@@ -419,7 +420,7 @@ function buildCompleteBundleItem(
       saved > 0
         ? `SAVE ${params.formatPrice(saved)}`
         : rule.condition.kind === "bundle_completion"
-          ? `UP TO ${Math.max(1, Number(rule.condition.quantity) || 1)} ACCESSORIES`
+          ? `SELECT ${Math.max(1, Number(rule.condition.quantity) || 1)} ITEMS`
           : undefined,
     products: products.length > 0 ? products : undefined,
   };
