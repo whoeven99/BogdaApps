@@ -979,6 +979,10 @@ function hydrateProductFromStorefrontJson(rawProduct, existing) {
         id: toVariantGid(v?.id),
         title: String(v?.title || ""),
         price: String(v?.price || ""),
+        available: v?.available === false ? false : true,
+        inventoryQuantity: Number.isFinite(Number(v?.inventory_quantity))
+          ? Math.trunc(Number(v.inventory_quantity))
+          : null,
         selectedOptions: options
           .map((name, idx) => {
             const value = v?.[`option${idx + 1}`];
@@ -1606,16 +1610,25 @@ function buildDifferentProductsProductCardHtml(
   const isSelected = options?.isSelected === true;
   const selectionCount = Math.max(0, Math.trunc(Number(options?.selectionCount) || 0));
   const selectionLocked = selectionCount >= requiredQty && !isSelected;
+  const isSoldOut = variant && variant.available === false;
+  const invQty = variant && variant.inventoryQuantity != null ? Number(variant.inventoryQuantity) : null;
+  const stockLabel = isSoldOut
+    ? "Sold out"
+    : invQty != null && invQty >= 0 && invQty <= 10
+      ? `Only ${invQty} left`
+      : variant
+        ? "In stock"
+        : "";
   const priceValue = parseMoneyStringToNumber(variant?.price || product?.price || "");
   const priceHtml =
     priceValue > 0
       ? `<div class="ciwi-different-products-picker__price">${esc(formatPrice(priceValue))}</div>`
       : "";
   const variantOptionsHtml =
-    variants.length > 1
+    variants.length > 0
       ? `<select class="ciwi-different-products-picker__variant-select" aria-label="Choose variant" onclick="event.stopPropagation();" onmousedown="event.stopPropagation();" onchange="window.ciwiSetDifferentProductsVariant('${esc(
           product.productId,
-        )}', this.value)">
+        )}', this.value)"${variants.length === 1 ? " disabled" : ""}>
           ${variants
             .map(
               (entry) =>
@@ -1663,6 +1676,17 @@ function buildDifferentProductsProductCardHtml(
                 )}35;">Current</span>`
               : ""
           }
+          ${
+            stockLabel
+              ? isSoldOut
+                ? `<span class="ciwi-different-products-picker__pill" style="background:#fef2f2;color:#991b1b;border-color:#fecaca;">${esc(stockLabel)}</span>`
+                : `<span class="ciwi-different-products-picker__pill" style="background:${esc(
+                    accentColor || "#008060",
+                  )}10;color:${esc(accentColor || "#008060")};border-color:${esc(
+                    accentColor || "#008060",
+                  )}30;">${esc(stockLabel)}</span>`
+              : ""
+          }
         </div>
         ${priceHtml}
       </div>
@@ -1675,10 +1699,12 @@ function buildDifferentProductsProductCardHtml(
         accentColor || "#008060",
       )};" onclick="event.stopPropagation();window.ciwiToggleDifferentProductSelection('${esc(
         pickerKey,
-      )}','${esc(product.productId)}',${requiredQty})" ${selectionLocked ? "disabled" : ""}>
+      )}','${esc(product.productId)}',${requiredQty})" ${selectionLocked || isSoldOut ? "disabled" : ""}>
         ${
           isSelected
             ? "Selected"
+            : isSoldOut
+              ? "Sold out"
             : selectionLocked
               ? "Selection full"
               : "Select"
@@ -1821,6 +1847,14 @@ window.ciwiOpenDifferentProductsModal = function(pickerKey, errorMessage) {
   window.__ciwiBundleState.openDifferentProductsPickerKey = String(pickerKey || "open");
   window.__ciwiBundleState.differentProductsModalError = String(errorMessage || "");
   rerenderDifferentProductsModal();
+  const currentOffer = getCurrentOffer(offersConfigCache);
+  if (currentOffer && currentOffer.offerType === "quantity-breaks-different") {
+    void hydrateDifferentProductsOfferInPlace(currentOffer).then((changed) => {
+      if (!changed) return;
+      rerenderCurrentBundleWidget();
+      rerenderDifferentProductsModal();
+    });
+  }
 };
 
 window.ciwiCloseDifferentProductsModal = function() {
@@ -2634,6 +2668,7 @@ async function performDifferentProductsCartAdd() {
       const product = productMap.get(String(productId || ""));
       if (!product) return null;
       const selectedVariant = resolveDifferentProductsVariant(product);
+      if (selectedVariant && selectedVariant.available === false) return null;
       const variantId = toAjaxVariantId(
         selectedVariant?.id || product.selectedVariantId || product.variants?.[0]?.id || "",
       );
@@ -2652,7 +2687,7 @@ async function performDifferentProductsCartAdd() {
   if (items.length < requiredQty) {
     window.ciwiOpenDifferentProductsModal(
       getDifferentProductsPickerKey(currentOffer, selectedRule),
-      "Some selected products are missing variants. Please reselect them.",
+      "Some selected products are unavailable. Please reselect them.",
     );
     return false;
   }

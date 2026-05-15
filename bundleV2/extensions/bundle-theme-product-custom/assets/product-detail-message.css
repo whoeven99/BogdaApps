@@ -284,7 +284,7 @@
 
 .ciwi-different-products-modal {
   width: min(720px, 100%);
-  max-height: min(80vh, 760px);
+  max-height: min(86vh, 860px);
   overflow: hidden;
   border: 1px solid #dfe3e8;
   border-radius: 12px;
@@ -364,6 +364,100 @@
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+}
+
+.ciwi-different-products-modal .ciwi-different-products-picker__card {
+  box-sizing: border-box;
+}
+
+.ciwi-different-products-modal .ciwi-different-products-picker__title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.ciwi-different-products-modal .ciwi-different-products-picker__variant-select {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.ciwi-different-products-modal .ciwi-different-products-picker__title-row {
+  flex-wrap: wrap;
+}
+
+.ciwi-different-products-modal .ciwi-different-products-picker__pill {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ciwi-different-products-modal .ciwi-different-products-picker__select {
+  width: 100%;
+}
+
+.ciwi-different-products-modal .ciwi-different-products-picker__actions {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.ciwi-different-products-modal .ciwi-different-products-picker__open {
+  display: none;
+}
+
+.ciwi-different-products-modal__header {
+  position: sticky;
+  top: 0;
+  background: #ffffff;
+  z-index: 1;
+}
+
+.ciwi-different-products-modal__meta {
+  position: sticky;
+  top: 49px;
+  background: #ffffff;
+  z-index: 1;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #eef0f2;
+}
+
+.ciwi-different-products-modal__footer {
+  position: sticky;
+  bottom: 0;
+  background: #ffffff;
+}
+
+.ciwi-different-products-modal__list {
+  padding-top: 10px;
+}
+
+.ciwi-different-products-modal__empty {
+  padding-top: 24px;
+  padding-bottom: 24px;
+}
+
+@media (max-width: 640px) {
+  .ciwi-different-products-modal__overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .ciwi-different-products-modal {
+    width: 100%;
+    max-height: 92vh;
+    border-radius: 14px 14px 0 0;
+  }
+
+  .ciwi-different-products-modal__header,
+  .ciwi-different-products-modal__meta,
+  .ciwi-different-products-modal__list,
+  .ciwi-different-products-modal__footer {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .ciwi-different-products-modal__list {
+    gap: 8px;
+  }
 }
 
 /* 阶梯赠品（Progressive gifts）— 与后台预览 class 对齐 */
