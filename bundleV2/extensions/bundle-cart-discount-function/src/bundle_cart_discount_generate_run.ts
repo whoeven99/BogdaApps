@@ -1249,6 +1249,53 @@ function calculateBxgyDiscount(
   const allProductCandidates: ProductDiscountCandidate[] = [];
   const allOrderCandidates: OrderDiscountCandidate[] = [];
   const allCartLineIds = cartLines.map((line) => line.id);
+  const pickBestSameProductRuleForQuantity = (
+    totalQuantity: number,
+    rules: BxgyDiscountRule[],
+  ): {
+    rule: BxgyDiscountRule;
+    resolved: ReturnType<typeof resolveSameProductBxgyQuantities>;
+    promotionTimes: number;
+    maxPromotionTimes: number;
+  } | null => {
+    let best: {
+      rule: BxgyDiscountRule;
+      resolved: ReturnType<typeof resolveSameProductBxgyQuantities>;
+      promotionTimes: number;
+      maxPromotionTimes: number;
+      score: number;
+    } | null = null;
+    for (const rule of rules) {
+      const resolved = resolveSameProductBxgyQuantities(rule);
+      const promotionTimes = Math.floor(totalQuantity / resolved.bundleQuantity);
+      const maxPromotionTimes = Math.min(
+        promotionTimes,
+        Math.max(1, Math.trunc(Number(rule.maxUsesPerOrder) || 1)),
+      );
+      if (maxPromotionTimes <= 0) continue;
+      const score = maxPromotionTimes * resolved.freeQuantity;
+      if (
+        !best ||
+        score > best.score ||
+        (score === best.score && resolved.bundleQuantity > best.resolved.bundleQuantity)
+      ) {
+        best = {
+          rule,
+          resolved,
+          promotionTimes,
+          maxPromotionTimes,
+          score,
+        };
+      }
+    }
+    if (!best) return null;
+    return {
+      rule: best.rule,
+      resolved: best.resolved,
+      promotionTimes: best.promotionTimes,
+      maxPromotionTimes: best.maxPromotionTimes,
+    };
+  };
 
   for (const offer of offers) {
     if (offer.offerType === "bxgy") {
@@ -1264,36 +1311,6 @@ function calculateBxgyDiscount(
         log("bxgy_same_product_skip_missing_pool", { offerId: offer.id });
         continue;
       }
-
-      let bestRule: BxgyDiscountRule | null = null;
-      for (const rule of bxgyRules) {
-        if (selectedProductIds.length === 0) continue;
-        const matchingQuantity = cartLines.reduce((sum, line) => {
-          const productId = line.merchandise?.product?.id;
-          const variantId = line.merchandise?.id;
-          return matchesAnyConfiguredId(selectedProductIds, productId, variantId)
-            ? sum + Math.max(0, Number(line.quantity) || 0)
-            : sum;
-        }, 0);
-        log("bxgy_same_product_rule_eval", {
-          offerId: offer.id,
-          ruleBuyQuantity: rule.buyQuantity,
-          ruleGetQuantity: rule.getQuantity,
-          selectedProductIdsCount: selectedProductIds.length,
-          matchingQuantity,
-        });
-
-        if (matchingQuantity >= Math.max(1, Math.trunc(Number(rule.buyQuantity) || 1))) {
-          bestRule = rule;
-        }
-      }
-
-      if (!bestRule) {
-        log("bxgy_same_product_no_matching_rule", { offerId: offer.id });
-        continue;
-      }
-
-      const resolvedBxgy = resolveSameProductBxgyQuantities(bestRule);
       const candidates: ProductDiscountCandidate[] = [];
       const discountedLineIds = new Set<string>();
       let totalOrderDiscountAmount = 0;
@@ -1314,20 +1331,32 @@ function calculateBxgyDiscount(
         if (!matchingLines.length) continue;
 
         const totalQuantity = matchingLines.reduce((sum, entry) => sum + entry.quantity, 0);
-        const promotionTimes = Math.floor(totalQuantity / resolvedBxgy.bundleQuantity);
-        const maxPromotionTimes = Math.min(
-          promotionTimes,
-          Math.max(1, Math.trunc(Number(bestRule.maxUsesPerOrder) || 1)),
-        );
+        const selected = pickBestSameProductRuleForQuantity(totalQuantity, bxgyRules);
+        if (!selected) {
+          log("bxgy_same_product_no_matching_rule", { offerId: offer.id });
+          continue;
+        }
+
+        log("bxgy_same_product_rule_eval", {
+          offerId: offer.id,
+          selectedProductId,
+          ruleBuyQuantity: selected.rule.buyQuantity,
+          ruleGetQuantity: selected.rule.getQuantity,
+          totalQuantity,
+          bundleQuantity: selected.resolved.bundleQuantity,
+          promotionTimes: selected.promotionTimes,
+          maxPromotionTimes: selected.maxPromotionTimes,
+        });
+
         log("bxgy_same_product_line_eval", {
           offerId: offer.id,
           selectedProductId,
           totalQuantity,
-          bundleQuantity: resolvedBxgy.bundleQuantity,
-          promotionTimes,
-          maxPromotionTimes,
+          bundleQuantity: selected.resolved.bundleQuantity,
+          promotionTimes: selected.promotionTimes,
+          maxPromotionTimes: selected.maxPromotionTimes,
         });
-        let remainingFreeQuantity = maxPromotionTimes * resolvedBxgy.freeQuantity;
+        let remainingFreeQuantity = selected.maxPromotionTimes * selected.resolved.freeQuantity;
 
         if (remainingFreeQuantity <= 0) continue;
 
@@ -1339,7 +1368,7 @@ function calculateBxgyDiscount(
           if (remainingFreeQuantity <= 0) break;
           const discountQuantity = Math.min(entry.quantity, remainingFreeQuantity);
           if (discountQuantity <= 0) continue;
-          if (resolvedBxgy.semantics === "total_items") {
+          if (selected.resolved.semantics === "total_items") {
             discountedLineIds.add(entry.line.id);
             totalOrderDiscountAmount += entry.unitPrice * discountQuantity;
           } else {
@@ -1365,13 +1394,24 @@ function calculateBxgyDiscount(
             cartLineId: entry.line.id,
             quantity: discountQuantity,
             unitPrice: entry.unitPrice,
-            semantics: resolvedBxgy.semantics,
+            semantics: selected.resolved.semantics,
           });
           remainingFreeQuantity -= discountQuantity;
         }
+
+        log("bxgy_same_product_rule_applied", {
+          offerId: offer.id,
+          selectedProductId,
+          buyQuantity: selected.resolved.buyQuantity,
+          configuredGetQuantity: selected.rule.getQuantity,
+          bundleQuantity: selected.resolved.bundleQuantity,
+          freeQuantity: selected.resolved.freeQuantity,
+          semantics: selected.resolved.semantics,
+          promotionTimes: selected.maxPromotionTimes,
+        });
       }
 
-      if (resolvedBxgy.semantics === "total_items" && totalOrderDiscountAmount > 0) {
+      if (totalOrderDiscountAmount > 0) {
         const excludedCartLineIds = allCartLineIds.filter((id) => !discountedLineIds.has(id));
         allOrderCandidates.push({
           message: offer.cartTitle || "Buy X Get Y",
@@ -1395,15 +1435,6 @@ function calculateBxgyDiscount(
         });
       }
 
-      log("bxgy_same_product_rule_applied", {
-        offerId: offer.id,
-        buyQuantity: resolvedBxgy.buyQuantity,
-        configuredGetQuantity: bestRule.getQuantity,
-        bundleQuantity: resolvedBxgy.bundleQuantity,
-        freeQuantity: resolvedBxgy.freeQuantity,
-        semantics: resolvedBxgy.semantics,
-      });
-
       allProductCandidates.push(...candidates);
       continue;
     }
@@ -1416,31 +1447,17 @@ function calculateBxgyDiscount(
     if (!bxgyRules.length) continue;
 
     if (offer.offerType !== "quantity-breaks-different") {
-      let bestRule: BxgyDiscountRule | null = null;
-      for (const rule of bxgyRules) {
-        const matchingQuantity = cartLines.reduce((sum, line) => {
-          const productId = line.merchandise?.product?.id;
-          const variantId = line.merchandise?.id;
-          return matchesAnyConfiguredId(rule.buyProductIds, productId, variantId)
-            ? sum + Math.max(0, Number(line.quantity) || 0)
-            : sum;
-        }, 0);
-
-        if (matchingQuantity >= Math.max(1, Math.trunc(Number(rule.buyQuantity) || 1))) {
-          bestRule = rule;
-        }
-      }
-
-      if (!bestRule) {
-        log("bxgy_same_product_no_matching_rule", { offerId: offer.id });
-        continue;
-      }
-
-      const resolvedBxgy = resolveSameProductBxgyQuantities(bestRule);
       const candidates: ProductDiscountCandidate[] = [];
       const discountedLineIds = new Set<string>();
       let totalOrderDiscountAmount = 0;
-      for (const selectedProductId of bestRule.buyProductIds) {
+      const productPool = Array.from(
+        new Set(
+          bxgyRules.flatMap((rule) =>
+            Array.isArray(rule.buyProductIds) ? rule.buyProductIds : [],
+          ),
+        ),
+      );
+      for (const selectedProductId of productPool) {
         const matchingLines = cartLines
           .filter((line) => {
             if (line.merchandise?.__typename !== "ProductVariant") return false;
@@ -1457,8 +1474,13 @@ function calculateBxgyDiscount(
         if (!matchingLines.length) continue;
 
         const totalQuantity = matchingLines.reduce((sum, entry) => sum + entry.quantity, 0);
-        const promotionTimes = Math.floor(totalQuantity / resolvedBxgy.bundleQuantity);
-        let remainingFreeQuantity = promotionTimes * resolvedBxgy.freeQuantity;
+        const applicableRules = bxgyRules.filter((rule) =>
+          (rule.buyProductIds ?? []).some((id) => productIdsMatch(id, selectedProductId)),
+        );
+        const selected = pickBestSameProductRuleForQuantity(totalQuantity, applicableRules);
+        if (!selected) continue;
+
+        let remainingFreeQuantity = selected.maxPromotionTimes * selected.resolved.freeQuantity;
         if (remainingFreeQuantity <= 0) continue;
 
         const sortedByUnitPrice = matchingLines.slice().sort((a, b) => a.unitPrice - b.unitPrice);
@@ -1466,7 +1488,7 @@ function calculateBxgyDiscount(
           if (remainingFreeQuantity <= 0) break;
           const discountQuantity = Math.min(entry.quantity, remainingFreeQuantity);
           if (discountQuantity <= 0) continue;
-          if (resolvedBxgy.semantics === "total_items") {
+          if (selected.resolved.semantics === "total_items") {
             discountedLineIds.add(entry.line.id);
             totalOrderDiscountAmount += entry.unitPrice * discountQuantity;
           } else {
@@ -1485,13 +1507,13 @@ function calculateBxgyDiscount(
             cartLineId: entry.line.id,
             quantity: discountQuantity,
             unitPrice: entry.unitPrice,
-            semantics: resolvedBxgy.semantics,
+            semantics: selected.resolved.semantics,
           });
           remainingFreeQuantity -= discountQuantity;
         }
       }
 
-      if (resolvedBxgy.semantics === "total_items" && totalOrderDiscountAmount > 0) {
+      if (totalOrderDiscountAmount > 0) {
         const excludedCartLineIds = allCartLineIds.filter((id) => !discountedLineIds.has(id));
         allOrderCandidates.push({
           message: offer.cartTitle || "Buy X Get Y",
@@ -1514,15 +1536,6 @@ function calculateBxgyDiscount(
           totalOrderDiscountAmount: Number(totalOrderDiscountAmount.toFixed(2)),
         });
       }
-
-      log("bxgy_shared_same_product_rule_applied", {
-        offerId: offer.id,
-        buyQuantity: resolvedBxgy.buyQuantity,
-        configuredGetQuantity: bestRule.getQuantity,
-        bundleQuantity: resolvedBxgy.bundleQuantity,
-        freeQuantity: resolvedBxgy.freeQuantity,
-        semantics: resolvedBxgy.semantics,
-      });
 
       allProductCandidates.push(...candidates);
       continue;
