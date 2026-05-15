@@ -65,11 +65,6 @@ export default function CompleteBundleEditor({
     ? 0
     : completeBundleBars.findIndex((bar) => bar.id === activeBar?.id);
   const activeBarProductCount = activeBar?.products.length ?? 0;
-  const activeBundleMinQuantity = Math.max(1, Math.trunc(Number(activeBar?.minQuantity) || 1));
-  const activeBundleMaxQuantity = Math.max(
-    activeBundleMinQuantity,
-    Math.trunc(Number(activeBar?.maxQuantity) || Number(activeBar?.quantity) || 1),
-  );
   const activePricingMode = activeBar?.pricing?.mode ?? "full_price";
   const activePricingValue = Number(activeBar?.pricing?.value) || 0;
   const getPricingValueLabel = (mode: CompleteBundleBar["pricing"]["mode"]) =>
@@ -233,55 +228,12 @@ export default function CompleteBundleEditor({
         <div className={showBars ? "mt-6" : ""}>
           {simpleMode ? (
             <>
-              <div className="rounded-[10px] border border-[#e3e8ed] bg-white p-4">
-                <div className="text-[14px] font-medium text-[#1c1f23]">Bundle configuration</div>
-                <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <label className="block text-[13px] font-medium text-[#1c1f23]">
-                    Minimum bundle items
-                    <Input
-                      size="large"
-                      type="number"
-                      min={1}
-                      className="mt-1"
-                      value={activeBundleMinQuantity}
-                      onChange={(e) => {
-                        if (!activeBar) return;
-                        const nextMin = Math.max(1, Math.trunc(Number(e.target.value) || 1));
-                        updateCompleteBundleBar(activeBar.id, {
-                          minQuantity: nextMin,
-                          maxQuantity: Math.max(nextMin, activeBundleMaxQuantity),
-                          quantity: Math.max(nextMin, activeBundleMaxQuantity),
-                        });
-                      }}
-                    />
-                  </label>
-                  <label className="block text-[13px] font-medium text-[#1c1f23]">
-                    Maximum bundle items
-                    <Input
-                      size="large"
-                      type="number"
-                      min={activeBundleMinQuantity}
-                      className="mt-1"
-                      value={activeBundleMaxQuantity}
-                      onChange={(e) => {
-                        if (!activeBar) return;
-                        const nextMax = Math.max(
-                          activeBundleMinQuantity,
-                          Math.trunc(Number(e.target.value) || activeBundleMinQuantity),
-                        );
-                        if (updateRuleValues) {
-                          updateRuleValues(getCompleteBundleUnifiedRuleId(activeBar.id), {
-                            count: nextMax,
-                          });
-                        }
-                        updateCompleteBundleBar(activeBar.id, {
-                          maxQuantity: nextMax,
-                          quantity: nextMax,
-                        });
-                      }}
-                    />
-                  </label>
-                </div>
+              <div className="rounded-[10px] border border-[#e3e8ed] bg-white px-4 py-3 text-[12px] text-[#5c6166]">
+                Bundle item selection is defined when this offer is configured. Step 2 only
+                controls which items participate and how the whole bundle is discounted.
+                <span className="ml-1 font-medium text-[#1c1f23]">
+                  {activeBarProductCount} item{activeBarProductCount === 1 ? "" : "s"} configured.
+                </span>
               </div>
 
               <div className="mt-4 rounded-[10px] border border-[#e3e8ed] bg-white p-4">
