@@ -3,7 +3,7 @@ import { Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 
 type OfferRulesSectionProps = {
-  description: string;
+  description?: string;
   children: ReactNode;
 };
 
@@ -13,9 +13,11 @@ export function OfferRulesSection({
 }: OfferRulesSectionProps) {
   return (
     <div className="space-y-4">
-      <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
-        {description}
-      </div>
+      {description ? (
+        <div className="text-[12px] leading-[18px] text-[#6d7175]">
+          {description}
+        </div>
+      ) : null}
       {children}
     </div>
   );
@@ -160,15 +162,19 @@ type OfferRuleAddPanelProps = {
 
 export function OfferRuleAddPanel({
   title = "Add another rule",
-  description = "Choose the next rule type to extend this offer setup.",
+  description,
   children,
 }: OfferRuleAddPanelProps) {
   return (
-    <div className="mt-4 rounded-[12px] bg-[#f6f8f9] p-4">
+    <div className="mt-4 rounded-[8px] border border-[#dfe3e8] bg-[#fcfcfd] p-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <div className="text-[14px] font-medium text-[#1c1f23]">{title}</div>
-          <div className="mt-1 text-[13px] text-[#5c6166]">{description}</div>
+          {description ? (
+            <div className="mt-1 text-[12px] leading-[18px] text-[#6d7175]">
+              {description}
+            </div>
+          ) : null}
         </div>
         {children}
       </div>

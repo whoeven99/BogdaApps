@@ -105,7 +105,7 @@ export default function DifferentProductsLogicEditor({
   };
 
   return (
-    <OfferRulesSection description="Configure quantity-break tiers across different products. Each rule keeps the same card structure as standard quantity breaks, while letting you assign a dedicated eligible product pool.">
+    <OfferRulesSection>
       {differentProductsDiscountRules.map((rule, index) => {
         const normalizedRule = normalizeRule(rule);
         const eligibleProductsInTier = eligibleProductsData.filter((product) =>
@@ -298,7 +298,7 @@ export default function DifferentProductsLogicEditor({
         );
       })}
 
-      <OfferRuleAddPanel description="Add another quantity-break tier and assign a product pool for that combination.">
+      <OfferRuleAddPanel>
         <Button type="dashed" onClick={() => appendTier("simple")}>
           + Add rule
         </Button>

@@ -50,12 +50,8 @@ export default function QuantityBreaksLogicEditor({
       {showPresentation ? (
         <>
           <h3 className="text-[14px] font-medium text-[#1c1f23] mb-3">
-            Logic Block: Card Content
+            Card content
           </h3>
-          <p className="text-[13px] text-[#5c6166] mb-4 font-normal">
-            Titles, subtitles, badges, and default selection control how each tier
-            is presented inside the offer card.
-          </p>
         </>
       ) : null}
       {showPresentation

@@ -3313,8 +3313,8 @@ export function CreateNewOffer({
       />
       <input type="hidden" name="campaignConfigJson" value={campaignConfigJson} />
 
-      <div className="mb-[100px] rounded-[12px] border border-[#dfe3e8] bg-[#ffffff] p-[20px] shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-[24px]">
-        <div className="mb-[12px] rounded-[10px] border border-[#e9edf1] bg-[#fcfcfd] p-[10px] sm:p-[12px]">
+      <div className="mb-[100px] rounded-[12px] border border-[#dfe3e8] bg-[#ffffff] p-[16px] shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:p-[20px]">
+        <div className="mb-[12px] rounded-[10px] border border-[#e9edf1] bg-[#fcfcfd] p-[8px] sm:p-[10px]">
           <div className="grid grid-cols-1 gap-[6px] md:grid-cols-4">
           {steps.map((stepName, index) => {
             const stepNumber = index + 1;
@@ -3325,7 +3325,7 @@ export function CreateNewOffer({
                 key={index}
                 role="button"
                 tabIndex={isClickable ? 0 : -1}
-                className={`rounded-[8px] border px-[10px] py-[9px] text-left transition-all ${
+                className={`rounded-[8px] border px-[10px] py-[8px] text-left transition-all ${
                   isActive
                     ? "border-[#008060] bg-[#f0faf6] shadow-[inset_0_0_0_1px_rgba(0,128,96,0.08)]"
                     : "border-[#e5e7eb] bg-[#ffffff]"
@@ -3390,7 +3390,7 @@ export function CreateNewOffer({
                           placeholder="e.g., Summer Bundle Deal"
                           value={offerName}
                           onChange={(e) => {
-                            setOfferName(e.target.value.replace(/[]+/g, " "));
+                            setOfferName(e.target.value.replace(/\s+/g, " "));
                             if (offerNameError && e.target.value.trim()) {
                               setOfferNameError("");
                             }
@@ -3417,7 +3417,7 @@ export function CreateNewOffer({
                           placeholder="e.g., Bundle Discount"
                           value={cartTitle}
                           onChange={(e) => {
-                            setCartTitle(e.target.value.replace(/[]+/g, " "));
+                            setCartTitle(e.target.value.replace(/\s+/g, " "));
                             if (cartTitleError && e.target.value.trim()) {
                               setCartTitleError("");
                             }
@@ -3427,8 +3427,8 @@ export function CreateNewOffer({
                           showCount
                         />
                       </label>
-                      <div className="text-[13px] text-[#5c6166] mt-1">
-                        This is the discount name shown to customers in their cart and checkout.
+                      <div className="text-[12px] text-[#6d7175] mt-1">
+                        Shown to customers in cart and checkout.
                       </div>
                       {cartTitleError && (
                         <div className="text-red-500 text-xs mt-1">
@@ -3727,26 +3727,29 @@ export function CreateNewOffer({
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 z-[100] border-t border-[#dfe3e8] bg-[rgba(255,255,255,0.96)] px-[16px] py-[14px] backdrop-blur-sm shadow-[0_-8px_24px_rgba(15,23,42,0.08)] sm:px-[24px]">
-        <div className="mx-auto flex max-w-[1280px] flex-col items-center gap-[12px]">
-          <div className="flex items-center justify-center gap-3">
-        {step > 1 && (
+      <div className="fixed bottom-0 left-0 right-0 z-[100] border-t border-[#dfe3e8] bg-[rgba(255,255,255,0.96)] px-[16px] py-[12px] backdrop-blur-sm shadow-[0_-8px_24px_rgba(15,23,42,0.08)] sm:px-[24px]">
+        <div
+          className={`mx-auto flex w-full max-w-[1280px] items-center gap-[12px] ${
+            step > 1 ? "justify-between" : "justify-end"
+          }`}
+        >
+          {step > 1 ? (
+            <Button
+              size="large"
+              disabled={fetcher.state !== "idle"}
+              onClick={(e) => {
+                setStep(step - 1);
+                e.preventDefault();
+              }}
+            >
+              Previous
+            </Button>
+          ) : null}
           <Button
             size="large"
+            style={{ backgroundColor: "#008060", borderColor: "#008060", color: "#fff" }}
             disabled={fetcher.state !== "idle"}
-            onClick={(e) => {
-              setStep(step - 1);
-              e.preventDefault();
-            }}
-          >
-            Previous
-          </Button>
-        )}
-        <Button
-          size="large"
-          style={{ backgroundColor: "#008060", borderColor: "#008060", color: "#fff" }}
-          disabled={fetcher.state !== "idle"}
-          onClick={(e: any) => {
+            onClick={(e: any) => {
             if (step === 1) {
               if (!offerName.trim()) {
                 setOfferNameError("Offer Name is required.");
@@ -3814,18 +3817,17 @@ export function CreateNewOffer({
               }
             }
             // 第 4 步由表单 onSubmit 校验并提交，不在此处校验（避免校验失败仍触发 submit）
-          }}
-          htmlType={step === 4 ? "submit" : "button"}
-        >
-          {fetcher.state !== "idle"
-            ? "Saving…"
-            : step === 4
-              ? initialOffer
-                ? "Update Offer"
-                : "Create Offer"
-              : "Next"}
-        </Button>
-          </div>
+            }}
+            htmlType={step === 4 ? "submit" : "button"}
+          >
+            {fetcher.state !== "idle"
+              ? "Saving…"
+              : step === 4
+                ? initialOffer
+                  ? "Update Offer"
+                  : "Create Offer"
+                : "Next"}
+          </Button>
         </div>
       </div>
     </fetcher.Form>

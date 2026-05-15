@@ -18,7 +18,7 @@ function PreviewRow({
 }) {
   return (
     <div
-      className={`rounded-[10px] border bg-white px-[12px] py-[10px] transition-colors ${
+      className={`rounded-[8px] border bg-white px-[12px] py-[10px] transition-colors ${
         selected
           ? "border-[#008060] shadow-[inset_0_0_0_1px_rgba(0,128,96,0.08)]"
           : "border-[#dfe3e8]"
@@ -72,7 +72,7 @@ function TemplateAction({
 }) {
   return (
     <div
-      className={`mt-auto rounded-[10px] px-[14px] py-[10px] text-center text-[13px] font-semibold transition-colors ${
+      className={`mt-auto rounded-[8px] px-[14px] py-[10px] text-center text-[13px] font-semibold transition-colors ${
         active
           ? "bg-[#e9f9f1] text-[#008060]"
           : "bg-[#008060] text-white group-hover:bg-[#006e52]"
@@ -85,7 +85,7 @@ function TemplateAction({
 
 function QuantityBreakPreview() {
   return (
-    <div className="flex min-h-[260px] flex-col rounded-[16px] border border-[#dfe3e8] bg-[#f6f6f7] p-[14px]">
+    <div className="flex min-h-[260px] flex-col rounded-[12px] border border-[#dfe3e8] bg-[#f6f6f7] p-[12px]">
       <div className="space-y-[8px]">
         <PreviewRow title="Single" subtitle="Standard price" price="EUR65.00" />
         <div className="relative">
@@ -107,7 +107,7 @@ function QuantityBreakPreview() {
 
 function DifferentProductsPreview() {
   return (
-    <div className="flex min-h-[260px] flex-col rounded-[16px] border border-[#dfe3e8] bg-[#f6f6f7] p-[14px]">
+    <div className="flex min-h-[260px] flex-col rounded-[12px] border border-[#dfe3e8] bg-[#f6f6f7] p-[12px]">
       <div className="space-y-[8px]">
         <PreviewRow title="Single" subtitle="Standard price" price="EUR65.00" />
         <div className="relative">
@@ -128,9 +128,6 @@ function DifferentProductsPreview() {
           price="EUR156.00"
           badge="Save EUR39.00"
         />
-        <div className="rounded-[10px] bg-white px-[12px] py-[9px] text-[12px] text-[#5c6166] shadow-[inset_0_0_0_1px_rgba(17,24,39,0.08)]">
-          Each tier can choose its own eligible products while keeping the same quantity-break card style.
-        </div>
       </div>
     </div>
   );
@@ -138,7 +135,7 @@ function DifferentProductsPreview() {
 
 function BxgyPreview() {
   return (
-    <div className="flex min-h-[260px] flex-col rounded-[16px] border border-[#dfe3e8] bg-[#f6f6f7] p-[14px]">
+    <div className="flex min-h-[260px] flex-col rounded-[12px] border border-[#dfe3e8] bg-[#f6f6f7] p-[12px]">
       <div className="space-y-[8px]">
         <PreviewRow
           title="Buy 1, get 1 free"
@@ -158,7 +155,7 @@ function BxgyPreview() {
 
 function CompleteBundlePreview() {
   return (
-    <div className="flex min-h-[260px] flex-col rounded-[16px] border border-[#dfe3e8] bg-[#f6f6f7] p-[14px]">
+    <div className="flex min-h-[260px] flex-col rounded-[12px] border border-[#dfe3e8] bg-[#f6f6f7] p-[12px]">
       <div className="space-y-[8px]">
         <div className="rounded-[10px] border border-[#bfc4c9] bg-[#f3f3f3] px-[12px] py-[10px]">
           <div className="flex items-start gap-[10px]">
@@ -239,7 +236,7 @@ function CompleteBundlePreview() {
 
 function SubscriptionPreview() {
   return (
-    <div className="flex min-h-[260px] flex-col rounded-[16px] border border-[#dfe3e8] bg-[#f6f6f7] p-[14px]">
+    <div className="flex min-h-[260px] flex-col rounded-[12px] border border-[#dfe3e8] bg-[#f6f6f7] p-[12px]">
       <div className="space-y-[8px]">
         <PreviewRow
           title="Buy 1, get 1 free"
@@ -262,7 +259,7 @@ function SubscriptionPreview() {
 
 function FreeGiftPreview() {
   return (
-    <div className="flex min-h-[260px] flex-col rounded-[16px] border border-[#dfe3e8] bg-[#f6f6f7] p-[14px]">
+    <div className="flex min-h-[260px] flex-col rounded-[12px] border border-[#dfe3e8] bg-[#f6f6f7] p-[12px]">
       <div className="space-y-[8px]">
         <PreviewRow
           title="Buy 2 items"
@@ -276,9 +273,6 @@ function FreeGiftPreview() {
           subtitle="Unlock 2 free gifts"
           price="2 FREE"
         />
-        <div className="rounded-[10px] bg-white px-[12px] py-[9px] text-[12px] text-[#5c6166] shadow-[inset_0_0_0_1px_rgba(17,24,39,0.08)]">
-          Gift products are chosen separately from the trigger products.
-        </div>
       </div>
     </div>
   );
@@ -326,18 +320,19 @@ export default function StarterTemplatePicker({
               if (!disabled) onSelect(option.id);
             }}
             disabled={disabled}
-            className={`group flex h-full flex-col rounded-[12px] border bg-white p-[12px] text-left transition-all ${
+            aria-label={`${option.name}. ${option.description}`}
+            className={`group flex h-full flex-col rounded-[12px] border bg-white p-[10px] text-left transition-colors ${
               isSelected
                 ? "border-[#008060] shadow-[0_0_0_1px_rgba(0,128,96,0.08)]"
                 : "border-[#dfe3e8]"
             } ${
               disabled
                 ? "cursor-not-allowed opacity-70"
-                : "hover:border-[#bfd7cd] hover:shadow-[0_4px_12px_rgba(15,23,42,0.06)]"
+                : "hover:border-[#bfd7cd]"
             }`}
           >
             <OfferTypePreview offerType={option.id} />
-            <div className="flex flex-1 flex-col px-[4px] pt-[14px]">
+            <div className="flex flex-1 flex-col px-[4px] pt-[12px]">
               <div className="mb-[8px] flex flex-wrap gap-[6px]">
                 <span className="rounded-full bg-[#f0f9f6] px-[8px] py-[3px] text-[11px] font-semibold text-[#108043]">
                   {option.primaryDiscountScope}
@@ -349,10 +344,7 @@ export default function StarterTemplatePicker({
               <h2 className="m-0 text-[16px] font-semibold leading-[24px] text-[#1c1f23]">
                 {option.name}
               </h2>
-              <p className="mb-0 mt-[6px] text-[12px] leading-[18px] text-[#5c6166]">
-                {option.description}
-              </p>
-              <div className="mt-auto pt-[14px]">
+              <div className="mt-auto pt-[12px]">
                 <TemplateAction
                   label={isSelected ? "Selected Template" : actionLabel}
                   active={isSelected}

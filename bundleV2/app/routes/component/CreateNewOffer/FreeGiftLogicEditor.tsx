@@ -119,7 +119,7 @@ export default function FreeGiftLogicEditor({
         </div>
       </div>
 
-      <OfferRulesSection description="Free gift rules use a fixed discount type. Configure the trigger threshold and how many gift items unlock for each rule.">
+      <OfferRulesSection>
         <OfferRuleNotice title="Trigger vs reward scope" intent="info">
           Trigger products decide when the offer unlocks. Reward products stay separate and can be overridden per rule when a tier needs a different gift selection.
         </OfferRuleNotice>
@@ -377,7 +377,7 @@ export default function FreeGiftLogicEditor({
               })()}
           </OfferRuleCard>
         ))}
-        <OfferRuleAddPanel description="Each free gift rule adds another quantity threshold and reward level.">
+        <OfferRuleAddPanel>
           <Dropdown
             trigger={["click"]}
             menu={{

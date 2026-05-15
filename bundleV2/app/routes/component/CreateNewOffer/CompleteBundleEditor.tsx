@@ -84,7 +84,7 @@ export default function CompleteBundleEditor({
   return (
     <div className="mb-8">
       {showBars ? (
-        <OfferRulesSection description="Each bar represents one whole-bundle offer. The current PDP product is always included, and customers add bundle items from the selected pool.">
+        <OfferRulesSection>
           <div className="mt-3 flex flex-col gap-3">
             {completeBundleBars.map((bar, index) => (
               <OfferRuleCard
@@ -221,7 +221,7 @@ export default function CompleteBundleEditor({
               </OfferRuleCard>
             ))}
           </div>
-          <OfferRuleAddPanel description="Add another bar when the same trigger product needs a different bundle-item pool or a different whole-bundle discount.">
+          <OfferRuleAddPanel>
             <Button type="dashed" onClick={() => addCompleteBundleBar("quantity-break-same")}>
               + Add bar
             </Button>

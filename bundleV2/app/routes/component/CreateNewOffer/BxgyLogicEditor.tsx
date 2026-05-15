@@ -91,7 +91,7 @@ export default function BxgyLogicEditor({
       ) : null}
 
       {showRules ? (
-        <OfferRulesSection description="BXGY rules support same-product free-item and total-item bundles. Configure the buy quantity, target quantity, and labels for each rule.">
+        <OfferRulesSection>
           {bxgyDiscountRules.map((rule, index) => (
             <OfferRuleCard
               key={index}
@@ -308,7 +308,7 @@ export default function BxgyLogicEditor({
                 })()}
             </OfferRuleCard>
           ))}
-          <OfferRuleAddPanel description="BXGY offers use a fixed rule type, so each new rule adds another unlock tier.">
+          <OfferRuleAddPanel>
             <Dropdown
               trigger={["click"]}
               menu={{

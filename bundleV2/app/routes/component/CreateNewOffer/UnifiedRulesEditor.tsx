@@ -312,7 +312,7 @@ export default function UnifiedRulesEditor({
         })}
       </div>
 
-      <OfferRuleAddPanel description="Choose the next rule type that should be available in this offer.">
+      <OfferRuleAddPanel>
         <Dropdown
           trigger={["click"]}
           menu={{
