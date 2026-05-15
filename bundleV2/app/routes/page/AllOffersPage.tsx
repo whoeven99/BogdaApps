@@ -98,10 +98,14 @@ export function AllOffersPage({
   });
 
   const [searchParams] = useSearchParams();
-  const actionData = useActionData() as { toast?: string } | undefined;
+  const actionData = useActionData() as
+    | { toast?: string }
+    | { _offerActionError: true; message: string }
+    | undefined;
   const navigation = useNavigation();
   const [deletingOffer, setDeletingOffer] = useState<AllOffersRow | null>(null);
-  const [togglingIds, setTogglingIds] = useState<string[]>([]);
+  const [pendingToggleStatus, setPendingToggleStatus] = useState<Record<string, boolean>>({});
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(() => new Set());
   const [showThemeExtensionModal, setShowThemeExtensionModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
@@ -127,11 +131,14 @@ export function AllOffersPage({
     );
   };
 
-  const toast = searchParams.get("toast") || actionData?.toast;
+  const toast =
+    searchParams.get("toast") ||
+    (actionData && "toast" in actionData ? actionData.toast : undefined);
   const activeOffersCount = rows.filter((offer) => offer.isActive).length;
   const filteredRows = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
     const nextRows = rows.filter((offer) => {
+      if (pendingDeleteIds.has(offer.id)) return false;
       const matchesSearch =
         !normalizedSearch ||
         offer.name.toLowerCase().includes(normalizedSearch) ||
@@ -155,7 +162,7 @@ export function AllOffersPage({
     });
 
     return nextRows;
-  }, [rows, searchTerm, statusFilter, sortKey]);
+  }, [rows, searchTerm, statusFilter, sortKey, pendingDeleteIds]);
 
   useEffect(() => {
     if (toast?.startsWith("delete-success")) {
@@ -168,19 +175,60 @@ export function AllOffersPage({
       const intent = navigation.formData.get("intent");
       const id = navigation.formData.get("offerId");
       if (intent === "toggle-offer-status" && typeof id === "string" && id) {
-        setTogglingIds((prev) =>
-          prev.includes(id) ? prev : [...prev, id],
-        );
+        const nextStatusRaw = navigation.formData.get("nextStatus");
+        const nextStatus = String(nextStatusRaw || "").trim() === "true";
+        setPendingToggleStatus((prev) => ({ ...prev, [id]: nextStatus }));
       }
-    } else if (navigation.state === "idle" && togglingIds.length > 0) {
-      const timer = setTimeout(() => {
-        setTogglingIds([]);
-      }, 300);
-      return () => clearTimeout(timer);
+      if (intent === "delete-offer" && typeof id === "string" && id) {
+        setPendingDeleteIds((prev) => {
+          const next = new Set(prev);
+          next.add(id);
+          return next;
+        });
+      }
     }
-  }, [navigation.state, navigation.formData, togglingIds.length]);
+  }, [navigation.state, navigation.formData]);
 
-  const getIsToggling = (offerId: string) => togglingIds.includes(offerId);
+  useEffect(() => {
+    if (!actionData) return;
+    if (!("_offerActionError" in actionData) || !actionData._offerActionError) return;
+    setPendingToggleStatus({});
+    setPendingDeleteIds(new Set());
+  }, [actionData]);
+
+  useEffect(() => {
+    setPendingToggleStatus((prev) => {
+      const ids = Object.keys(prev);
+      if (ids.length === 0) return prev;
+      let next: Record<string, boolean> | null = null;
+      for (const id of ids) {
+        const desiredStatus = prev[id];
+        const offer = rows.find((row) => row.id === id);
+        if (!offer || offer.isActive === desiredStatus) {
+          if (!next) next = { ...prev };
+          delete next[id];
+        }
+      }
+      return next ?? prev;
+    });
+
+    setPendingDeleteIds((prev) => {
+      if (prev.size === 0) return prev;
+      let changed = false;
+      const next = new Set<string>();
+      const rowIds = new Set(rows.map((row) => row.id));
+      for (const id of prev) {
+        if (rowIds.has(id)) {
+          next.add(id);
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [rows]);
+
+  const getIsToggling = (offerId: string) => offerId in pendingToggleStatus;
 
   return (
     <div className="max-w-[1280px] mx-auto pb-[24px]">
@@ -318,7 +366,12 @@ export function AllOffersPage({
             ) : (
               filteredRows.map((offer) => {
                 const isToggling = getIsToggling(offer.id);
-                const displayIsActive = themeExtensionBlocksOffers ? false : offer.isActive;
+                const optimisticStatus = pendingToggleStatus[offer.id];
+                const displayIsActive = themeExtensionBlocksOffers
+                  ? false
+                  : typeof optimisticStatus === "boolean"
+                    ? optimisticStatus
+                    : offer.isActive;
                 const statusLabel = displayIsActive ? "Active" : "Inactive";
                 const displayType = getOfferDisplayType(
                   offer.offerType,
@@ -374,7 +427,12 @@ export function AllOffersPage({
                             if (themeExtensionBlocksOffers) {
                               e.preventDefault();
                               setShowThemeExtensionModal(true);
+                              return;
                             }
+                            setPendingToggleStatus((prev) => ({
+                              ...prev,
+                              [offer.id]: offer.isActive ? false : true,
+                            }));
                           }}
                           className={`flex items-center gap-[8px] bg-transparent border-0 p-0 cursor-pointer ${
                             isToggling ? "opacity-70 cursor-default" : ""

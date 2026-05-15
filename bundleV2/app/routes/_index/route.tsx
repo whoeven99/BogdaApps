@@ -2429,29 +2429,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return offerActionErrorResponse("Toggle status failed.", 500);
     }
 
-    // Sync metafield
-    try {
-      const shopNameToSync = updatedOffer?.shopName as string | undefined;
-      if (shopNameToSync) {
-        const themeExtensionDetection = await getCurrentThemeExtensionEnabled(admin);
-        const syncResult = await syncShopOffersMetafield(
-          admin,
-          shopNameToSync,
-          themeExtensionDetection.enabled,
-        );
-        if (!syncResult.ok) {
-          console.error("Failed to sync offers metafield after toggle", {
-            shopNameToSync,
-            message: syncResult.message,
-          });
-        }
-      }
-    } catch (error) {
-      console.error("Failed to sync offers metafield after toggle", error);
-    }
-
-    if (updatedOffer?.shopName) {
-      invalidateShopOffersCache(String(updatedOffer.shopName));
+    const shopNameToSync = updatedOffer?.shopName as string | undefined;
+    if (shopNameToSync) {
+      invalidateShopOffersCache(String(shopNameToSync));
+      void runOfferPostWriteSync(admin, shopNameToSync).catch((error) => {
+        console.error("Offer post-write sync crashed unexpectedly", {
+          shopName: shopNameToSync,
+          error,
+        });
+      });
     }
 
     return Response.json({ success: true, toast: `toggle-success-${Date.now()}` });
@@ -2462,8 +2448,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (!idRaw) {
       return new Response("Missing offer id", { status: 400 });
     }
-
-    const prismaAny: any = prisma;
 
     // Find shopName to sync metafield
     let shopNameToSync: string | undefined;
@@ -2481,28 +2465,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return offerActionErrorResponse("Delete offer failed.", 500);
     }
 
-    // Sync metafield after deleting offer
-    try {
-      if (shopNameToSync) {
-        const themeExtensionDetection = await getCurrentThemeExtensionEnabled(admin);
-        const syncResult = await syncShopOffersMetafield(
-          admin,
-          shopNameToSync,
-          themeExtensionDetection.enabled,
-        );
-        if (!syncResult.ok) {
-          console.error("Failed to sync offers metafield after delete", {
-            shopNameToSync,
-            message: syncResult.message,
-          });
-        }
-      }
-    } catch (error) {
-      console.error("Failed to sync offers metafield after delete", error);
-    }
-
     if (shopNameToSync) {
-      invalidateShopOffersCache(shopNameToSync);
+      invalidateShopOffersCache(String(shopNameToSync));
+      void runOfferPostWriteSync(admin, shopNameToSync).catch((error) => {
+        console.error("Offer post-write sync crashed unexpectedly", {
+          shopName: shopNameToSync,
+          error,
+        });
+      });
     }
 
     return Response.json({ success: true, toast: `delete-success-${Date.now()}` });
@@ -2527,7 +2497,10 @@ export default function Index() {
     billingSubscriptions,
     billingTestMode,
   } = useLoaderData() as IndexLoaderData;
-  const actionData = useActionData() as { toast?: string } | undefined;
+  const actionData = useActionData() as
+    | { toast?: string }
+    | { _offerActionError: true; message: string }
+    | undefined;
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -2550,7 +2523,9 @@ export default function Index() {
     !storeProductsFetcher.data?.storeProducts &&
     storeProductsFetcher.state !== "idle";
 
-  const toast = searchParams.get("toast") || actionData?.toast;
+  const toast =
+    searchParams.get("toast") ||
+    (actionData && "toast" in actionData ? actionData.toast : undefined);
 
   useEffect(() => {
     if (searchParams.get("billing_return") !== "1") return;
@@ -2564,6 +2539,10 @@ export default function Index() {
   }, [searchParams, navigate]);
 
   useEffect(() => {
+    if (actionData && "_offerActionError" in actionData && actionData._offerActionError) {
+      setToastMessage(actionData.message);
+      return;
+    }
     if (toast?.startsWith("create-success")) {
       setToastMessage("Offer created successfully");
       setShowCreateOffer(false);
@@ -2584,20 +2563,23 @@ export default function Index() {
     } else {
       setToastMessage(null);
     }
-  }, [toast]);
+  }, [toast, actionData]);
 
   useEffect(() => {
-    if (!toast || !toastMessage) return;
+    if (!toastMessage) return;
 
     const timer = setTimeout(() => {
-      const next = new URLSearchParams(searchParams);
-      next.delete("toast");
-      navigate(
-        {
-          search: next.toString() ? `?${next.toString()}` : "",
-        },
-        { replace: true },
-      );
+      if (toast) {
+        const next = new URLSearchParams(searchParams);
+        next.delete("toast");
+        navigate(
+          {
+            search: next.toString() ? `?${next.toString()}` : "",
+          },
+          { replace: true },
+        );
+      }
+      setToastMessage(null);
     }, 3000);
 
     return () => clearTimeout(timer);

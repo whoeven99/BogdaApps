@@ -130,14 +130,18 @@ export function DashboardPage({
   themeExtensionError,
 }: DashboardPageProps) {
   const [searchParams] = useSearchParams();
-  const actionData = useActionData() as { toast?: string } | undefined;
+  const actionData = useActionData() as
+    | { toast?: string }
+    | { _offerActionError: true; message: string }
+    | undefined;
   const navigation = useNavigation();
   const [showCreateOffer, setShowCreateOffer] = useState(false);
   const [editingOfferId, setEditingOfferId] = useState<string | null>(null);
   const [deletingOffer, setDeletingOffer] = useState<DashboardOfferRow | null>(
     null,
   );
-  const [togglingIds, setTogglingIds] = useState<string[]>([]);
+  const [pendingToggleStatus, setPendingToggleStatus] = useState<Record<string, boolean>>({});
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(() => new Set());
   const [overviewMetrics, setOverviewMetrics] = useState<GmvOverviewMetrics | null>(
     null,
   );
@@ -187,7 +191,7 @@ export function DashboardPage({
     };
   });
 
-  const visibleOffers = offerRows.slice(0, 4);
+  const visibleOffers = offerRows.filter((offer) => !pendingDeleteIds.has(offer.id)).slice(0, 4);
 
   // 计算真实 Overview 数据
   const fallbackOverview = (() => {
@@ -238,17 +242,60 @@ export function DashboardPage({
       const intent = navigation.formData.get("intent");
       const id = navigation.formData.get("offerId");
       if (intent === "toggle-offer-status" && typeof id === "string" && id) {
-        setTogglingIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+        const nextStatusRaw = navigation.formData.get("nextStatus");
+        const nextStatus = String(nextStatusRaw || "").trim() === "true";
+        setPendingToggleStatus((prev) => ({ ...prev, [id]: nextStatus }));
       }
-    } else if (navigation.state === "idle" && togglingIds.length > 0) {
-      const timer = setTimeout(() => {
-        setTogglingIds([]);
-      }, 300);
-      return () => clearTimeout(timer);
+      if (intent === "delete-offer" && typeof id === "string" && id) {
+        setPendingDeleteIds((prev) => {
+          const next = new Set(prev);
+          next.add(id);
+          return next;
+        });
+      }
     }
-  }, [navigation.state, navigation.formData, togglingIds.length]);
+  }, [navigation.state, navigation.formData]);
 
-  const getIsToggling = (offerId: string) => togglingIds.includes(offerId);
+  useEffect(() => {
+    if (!actionData) return;
+    if (!("_offerActionError" in actionData) || !actionData._offerActionError) return;
+    setPendingToggleStatus({});
+    setPendingDeleteIds(new Set());
+  }, [actionData]);
+
+  useEffect(() => {
+    setPendingToggleStatus((prev) => {
+      const ids = Object.keys(prev);
+      if (ids.length === 0) return prev;
+      let next: Record<string, boolean> | null = null;
+      for (const id of ids) {
+        const desiredStatus = prev[id];
+        const offer = offerRows.find((row) => row.id === id);
+        if (!offer || offer.isActive === desiredStatus) {
+          if (!next) next = { ...prev };
+          delete next[id];
+        }
+      }
+      return next ?? prev;
+    });
+
+    setPendingDeleteIds((prev) => {
+      if (prev.size === 0) return prev;
+      let changed = false;
+      const next = new Set<string>();
+      const rowIds = new Set(offerRows.map((row) => row.id));
+      for (const id of prev) {
+        if (rowIds.has(id)) {
+          next.add(id);
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [offerRows]);
+
+  const getIsToggling = (offerId: string) => offerId in pendingToggleStatus;
 
   const handleViewDetails = () => {
     onViewAnalytics?.();
@@ -276,7 +323,9 @@ export function DashboardPage({
     );
   };
 
-  const toast = searchParams.get("toast") || actionData?.toast;
+  const toast =
+    searchParams.get("toast") ||
+    (actionData && "toast" in actionData ? actionData.toast : undefined);
 
   useEffect(() => {
     if (toast?.startsWith("delete-success")) {
@@ -631,7 +680,12 @@ export function DashboardPage({
             ) : (
               visibleOffers.map((offer) => {
                 const isToggling = getIsToggling(offer.id);
-                const displayIsActive = themeExtensionBlocksOffers ? false : offer.isActive;
+                const optimisticStatus = pendingToggleStatus[offer.id];
+                const displayIsActive = themeExtensionBlocksOffers
+                  ? false
+                  : typeof optimisticStatus === "boolean"
+                    ? optimisticStatus
+                    : offer.isActive;
                 const statusLabel = displayIsActive ? "Active" : "Inactive";
                 const displayType = offer.offerType === "quantity-breaks-same" ? "Quantity breaks" : offer.offerType;
                 
@@ -690,7 +744,12 @@ export function DashboardPage({
                             if (themeExtensionBlocksOffers) {
                               e.preventDefault();
                               setShowThemeExtensionModal(true);
+                              return;
                             }
+                            setPendingToggleStatus((prev) => ({
+                              ...prev,
+                              [offer.id]: offer.isActive ? false : true,
+                            }));
                           }}
                           className={`flex items-center gap-[8px] bg-transparent border-0 p-0 cursor-pointer ${
                             isToggling ? "opacity-70 cursor-default" : ""
@@ -782,7 +841,12 @@ export function DashboardPage({
           ) : (
             visibleOffers.map((offer) => {
               const isToggling = getIsToggling(offer.id);
-              const displayIsActive = themeExtensionBlocksOffers ? false : offer.isActive;
+              const optimisticStatus = pendingToggleStatus[offer.id];
+              const displayIsActive = themeExtensionBlocksOffers
+                ? false
+                : typeof optimisticStatus === "boolean"
+                  ? optimisticStatus
+                  : offer.isActive;
               const statusLabel = displayIsActive ? "Active" : "Inactive";
               const gmvDisplay = `$${offer.gmv.toLocaleString()}`;
               const conversionDisplay = `${offer.conversion.toFixed(1)}%`;
@@ -818,7 +882,12 @@ export function DashboardPage({
                         if (themeExtensionBlocksOffers) {
                           e.preventDefault();
                           setShowThemeExtensionModal(true);
+                          return;
                         }
+                        setPendingToggleStatus((prev) => ({
+                          ...prev,
+                          [offer.id]: offer.isActive ? false : true,
+                        }));
                       }}
                       className={`flex items-center gap-[8px] mb-[12px] bg-transparent border-0 p-0 cursor-pointer ${
                         isToggling ? "opacity-70 cursor-default" : ""
