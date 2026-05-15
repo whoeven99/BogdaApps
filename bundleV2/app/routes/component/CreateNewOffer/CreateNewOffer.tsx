@@ -1086,18 +1086,24 @@ export function CreateNewOffer({
     }
   };
   const handleSelectDifferentProductsEligibleProducts = async () => {
+    const fallbackEligibleProducts =
+      differentProductsEligibleProductsData.length > 0
+        ? differentProductsEligibleProductsData
+        : selectedProductsData;
     const selected = await (window as any).shopify.resourcePicker({
       type: "product",
       action: "select",
       multiple: true,
-      selectionIds: differentProductsEligibleProductsData.map((product) => ({
+      selectionIds: fallbackEligibleProducts.map((product) => ({
         id: product.id,
       })),
     });
 
     if (!selected) return;
     const selectedList = normalizeResourcePickerSelection(selected);
-    const nextProducts = mapPickerSelectionToDraftProducts(selectedList);
+    const nextProducts = selectedList.length > 0
+      ? mapPickerSelectionToDraftProducts(selectedList)
+      : selectedProductsData.map((product) => ({ ...product }));
     const allowedIds = new Set(nextProducts.map((product: any) => String(product.id)));
     setDifferentProductsEligibleProductsData(nextProducts);
     setDifferentProductsDiscountRules((prev) =>
@@ -1567,17 +1573,20 @@ export function CreateNewOffer({
     freeGiftTriggerProducts,
   ]);
   useEffect(() => {
-    const triggerIds = selectedProductsData.map((product) => String(product.id));
-    if (!triggerIds.length) return;
-    const triggerIdSet = new Set(triggerIds);
+    const effectiveEligibleIds =
+      differentProductsEligibleProductsData.length > 0
+        ? differentProductsEligibleProductsData.map((product) => String(product.id))
+        : selectedProductsData.map((product) => String(product.id));
+    if (!effectiveEligibleIds.length) return;
+    const eligibleIdSet = new Set(effectiveEligibleIds);
     setDifferentProductsDiscountRules((prev) => {
       let changed = false;
       const next = prev.map((rule) => {
         const scopedIds = (rule.buyProductIds || []).filter((id) =>
-          triggerIdSet.has(String(id)),
+          eligibleIdSet.has(String(id)),
         );
         const normalizedScopedIds =
-          scopedIds.length > 0 ? scopedIds : triggerIds;
+          scopedIds.length > 0 ? scopedIds : effectiveEligibleIds;
         if (areStringArraysEqual(rule.buyProductIds || [], normalizedScopedIds)) {
           return rule;
         }
@@ -1589,7 +1598,7 @@ export function CreateNewOffer({
       });
       return changed ? next : prev;
     });
-  }, [selectedProductsData]);
+  }, [selectedProductsData, differentProductsEligibleProductsData]);
   useEffect(() => {
     const persistedOrder = initialCampaignConfig?.settings.compositionBarOrder;
     if (Array.isArray(persistedOrder) && persistedOrder.length > 0) {

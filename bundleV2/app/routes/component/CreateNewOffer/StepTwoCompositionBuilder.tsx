@@ -595,23 +595,29 @@ function FreeGiftRuleBarDetail({
 function DifferentProductsRuleBarDetail({
   bar,
   draft,
+  actions,
   rule,
   headerActions,
   onChange,
 }: {
   bar: CampaignBarItem;
   draft: CampaignDraft;
+  actions: CampaignDraftActions;
   rule: CampaignDraft["differentProductsDiscountRules"][number];
   headerActions?: ReactNode;
   onChange: (patch: Partial<CampaignDraft["differentProductsDiscountRules"][number]>) => void;
 }) {
-  const triggerProductIds = draft.selectedProductsData.map((product) => String(product.id));
-  const triggerProductIdSet = new Set(triggerProductIds);
+  const baseEligibleProducts =
+    draft.differentProductsEligibleProductsData.length > 0
+      ? draft.differentProductsEligibleProductsData
+      : draft.selectedProductsData;
+  const eligibleProductIds = baseEligibleProducts.map((product) => String(product.id));
+  const eligibleProductIdSet = new Set(eligibleProductIds);
   const effectiveScopedIds = (rule.buyProductIds || []).filter((id) =>
-    triggerProductIdSet.has(String(id)),
+    eligibleProductIdSet.has(String(id)),
   );
   const scopedCount = effectiveScopedIds.length;
-  const totalTriggerCount = triggerProductIds.length;
+  const totalEligibleCount = eligibleProductIds.length;
   const [isEligiblePoolModalOpen, setIsEligiblePoolModalOpen] = useState(false);
   const [draftScopedIds, setDraftScopedIds] = useState<string[]>(effectiveScopedIds);
 
@@ -622,7 +628,7 @@ function DifferentProductsRuleBarDetail({
 
   const applyEligiblePoolChanges = () => {
     onChange({
-      buyProductIds: draftScopedIds.length > 0 ? draftScopedIds : triggerProductIds,
+      buyProductIds: draftScopedIds.length > 0 ? draftScopedIds : eligibleProductIds,
     });
     setIsEligiblePoolModalOpen(false);
   };
@@ -665,38 +671,54 @@ function DifferentProductsRuleBarDetail({
         </FieldGrid>
       </BuilderSection>
 
+      <BuilderSection title="Base eligible pool">
+        <CompactActionRow
+          title="Storefront chooser products"
+          meta={
+            totalEligibleCount > 0
+              ? `${totalEligibleCount} products available across all quantity-break bars.`
+              : "Choose the products customers can pick from in this offer."
+          }
+          actionLabel={totalEligibleCount > 0 ? "Edit eligible products" : "Select eligible products"}
+          onAction={() => void actions.handleSelectDifferentProductsEligibleProducts()}
+        />
+        <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
+          This shared pool powers the storefront "Choose" list. Each bar below can narrow it to a smaller subset.
+        </div>
+      </BuilderSection>
+
       <BuilderSection title="Eligible product pool">
         <CompactActionRow
-          title="Reduce from Trigger products"
+          title="Reduce from shared eligible pool"
           meta={
-            totalTriggerCount > 0
-              ? `${scopedCount} of ${totalTriggerCount} trigger products are included in this bar.`
-              : "Add Trigger products first. Eligible product pool inherits from that selection."
+            totalEligibleCount > 0
+              ? `${scopedCount} of ${totalEligibleCount} eligible products are included in this bar.`
+              : "Add shared eligible products first, then narrow this bar if needed."
           }
-          actionLabel={totalTriggerCount > 0 ? "Edit eligible products" : "No trigger products"}
+          actionLabel={totalEligibleCount > 0 ? "Edit bar product pool" : "No eligible products"}
           onAction={openEligiblePoolModal}
         />
         <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
-          {totalTriggerCount > 0 ? (
+          {totalEligibleCount > 0 ? (
             <div className="flex flex-wrap items-center justify-between gap-3">
               <span>
-                Eligible product pool is a subset of Trigger products.
+                Eligible product pool is a subset of the shared eligible products.
                 {" "}
-                {scopedCount} of {totalTriggerCount} trigger products are currently included in this bar.
+                {scopedCount} of {totalEligibleCount} products are currently included in this bar.
               </span>
-              {scopedCount !== totalTriggerCount ? (
+              {scopedCount !== totalEligibleCount ? (
                 <Button
                   type="link"
                   size="small"
                   className="px-0"
-                  onClick={() => onChange({ buyProductIds: triggerProductIds })}
+                  onClick={() => onChange({ buyProductIds: eligibleProductIds })}
                 >
-                  Use all trigger products
+                  Use all eligible products
                 </Button>
               ) : null}
             </div>
           ) : (
-            "Add Trigger products first. Eligible product pool inherits from that selection and can then be narrowed for this bar."
+            "Add shared eligible products first. Then narrow this bar without changing the other bars."
           )}
         </div>
         <Modal
@@ -706,28 +728,28 @@ function DifferentProductsRuleBarDetail({
           onOk={applyEligiblePoolChanges}
           okText="Apply"
           cancelText="Cancel"
-          okButtonProps={{ disabled: totalTriggerCount === 0 }}
+          okButtonProps={{ disabled: totalEligibleCount === 0 }}
         >
           <div className="space-y-4">
             <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
-              Eligible product pool inherits from Trigger products. Remove products here to narrow this bar without changing the shared trigger pool.
+              Eligible product pool inherits from the shared eligible pool. Remove products here to narrow this bar without changing the shared chooser products.
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="text-[12px] text-[#5c6166]">
-                {draftScopedIds.length} of {totalTriggerCount} trigger products selected
+                {draftScopedIds.length} of {totalEligibleCount} eligible products selected
               </div>
               <Button
                 type="link"
                 size="small"
                 className="px-0"
-                onClick={() => setDraftScopedIds(triggerProductIds)}
-                disabled={totalTriggerCount === 0}
+                onClick={() => setDraftScopedIds(eligibleProductIds)}
+                disabled={totalEligibleCount === 0}
               >
-                Use all trigger products
+                Use all eligible products
               </Button>
             </div>
             <div className="max-h-[320px] space-y-2 overflow-auto pr-1">
-              {draft.selectedProductsData.map((product) => {
+              {baseEligibleProducts.map((product) => {
                 const productId = String(product.id);
                 const checked = draftScopedIds.includes(productId);
                 return (
@@ -1011,6 +1033,7 @@ export default function StepTwoCompositionBuilder({
           key={bar.id}
           bar={bar}
           draft={draft}
+          actions={actions}
           rule={rule}
           headerActions={renderBarActions(bar, index)}
           onChange={(patch) =>
