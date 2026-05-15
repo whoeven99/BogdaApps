@@ -2108,6 +2108,17 @@ function updateThemeQuantityInput(count) {
         input.disabled = true;
       }
     });
+    console.log("[ciwi] updateThemeQuantityInput", {
+      requestedCount: Number(count),
+      formId: form.getAttribute("id") || "",
+      quantityInputs: allQtyInputs.map((input, index) => ({
+        index,
+        value: String(input.value || ""),
+        disabled: Boolean(input.disabled),
+        tagName: input.tagName,
+        type: input.getAttribute("type") || "",
+      })),
+    });
     } finally {
       __ciwiSuppressBundlePriceSync = false;
     }
@@ -2331,6 +2342,8 @@ function bindBundleInteractions(root) {
   });
 }
 
+let __ciwiNativeAddSubmitPassthrough = false;
+
 window.ciwiHandleBundleAddToCart = function(event) {
   if (event) {
     event.preventDefault();
@@ -2338,7 +2351,14 @@ window.ciwiHandleBundleAddToCart = function(event) {
   }
   const currentOffer = getCurrentOffer(offersConfigCache);
   const count = window.__ciwiBundleState?.selectedCount || 1;
-  updateThemeQuantityInput(getCartQuantityForSelectedOffer(currentOffer, count));
+  const cartQuantity = getCartQuantityForSelectedOffer(currentOffer, count);
+  console.log("[ciwi] handleBundleAddToCart", {
+    offerId: currentOffer?.id || "",
+    offerType: currentOffer?.offerType || "",
+    selectedCount: Number(count),
+    cartQuantity,
+  });
+  updateThemeQuantityInput(cartQuantity);
   syncSubscriptionSelectionToTheme(currentOffer);
   if (currentOffer?.offerType === "quantity-breaks-different") {
     performDifferentProductsCartAdd()
@@ -2362,6 +2382,25 @@ window.ciwiHandleBundleAddToCart = function(event) {
 function submitBundleFormFallback() {
   const form = getAddToCartForm();
   if (form) {
+    const formId = form.getAttribute("id");
+    const quantityInputs = Array.from(
+      new Set([
+        ...Array.from(form.querySelectorAll('[name="quantity"]')),
+        ...(formId
+          ? Array.from(document.querySelectorAll(`[name="quantity"][form="${formId}"]`))
+          : []),
+      ]),
+    );
+    console.log("[ciwi] submitBundleFormFallback", {
+      formId: formId || "",
+      quantityInputs: quantityInputs.map((input, index) => ({
+        index,
+        value: String(input.value || ""),
+        disabled: Boolean(input.disabled),
+        tagName: input.tagName,
+        type: input.getAttribute("type") || "",
+      })),
+    });
     let addBtn = form.querySelector(
       "button[type='submit'], button[name='add'], input[type='submit'], input[name='add'], [name='add']",
     );
@@ -2375,6 +2414,7 @@ function submitBundleFormFallback() {
     }
 
     if (addBtn) {
+      __ciwiNativeAddSubmitPassthrough = true;
       addBtn.click();
     } else {
       form.submit();
@@ -3684,25 +3724,25 @@ function attachBundlePriceSync(offer) {
   }
 
   attachBundleSubmitLinePropsGuard();
-  // complete-bundle：主题原生「添加到购物车」应与绿色 Add to Cart 一致（整档多 SKU 各 1 件）
-  if (offer.offerType === "complete-bundle") {
-    const isThemeAddTrigger = (t, productForm) => {
-      if (!t || typeof t.closest !== "function" || !productForm) return false;
-      if (!productForm.contains(t)) return false;
-      if (t.closest(".ciwi-bundle-wrapper")) return false;
-      if (
-        t.closest(
-          ".shopify-payment-button, shopify-buy-it-now-button, [data-shopify='payment-button']",
-        )
-      ) {
-        return false;
-      }
-      const btn = t.closest(
-        "button[type='submit'],button[name='add'],input[type='submit'][name='add'],input[name='add']",
-      );
-      return !!(btn && productForm.contains(btn));
-    };
+  const isThemeAddTrigger = (t, productForm) => {
+    if (!t || typeof t.closest !== "function" || !productForm) return false;
+    if (!productForm.contains(t)) return false;
+    if (t.closest(".ciwi-bundle-wrapper")) return false;
+    if (
+      t.closest(
+        ".shopify-payment-button, shopify-buy-it-now-button, [data-shopify='payment-button']",
+      )
+    ) {
+      return false;
+    }
+    const btn = t.closest(
+      "button[type='submit'],button[name='add'],input[type='submit'][name='add'],input[name='add']",
+    );
+    return !!(btn && productForm.contains(btn));
+  };
 
+  // 主题原生加购按钮也要与 Ciwi CTA 走同一条链路，避免 BXGY/赠品等逻辑在两套入口下表现不一致。
+  if (offer.offerType === "complete-bundle") {
     document.addEventListener(
       "click",
       (e) => {
@@ -3715,6 +3755,25 @@ function attachBundlePriceSync(offer) {
         void performCompleteBundleCartAdd().then(async (ok) => {
           if (ok) await notifyThemeAfterCartAdd();
         });
+      },
+      { capture: true, signal },
+    );
+  } else {
+    document.addEventListener(
+      "click",
+      (e) => {
+        const productForm = getAddToCartForm();
+        if (!isThemeAddTrigger(e.target, productForm)) return;
+        if (!document.querySelector(".ciwi-bundle-wrapper")) return;
+        if (__ciwiNativeAddSubmitPassthrough) {
+          __ciwiNativeAddSubmitPassthrough = false;
+          console.log("[ciwi] native add passthrough");
+          return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation?.();
+        window.ciwiHandleBundleAddToCart(e);
       },
       { capture: true, signal },
     );
