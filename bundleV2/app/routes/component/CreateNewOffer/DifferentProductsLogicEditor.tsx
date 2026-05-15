@@ -19,7 +19,7 @@ import {
 } from "./ruleCapabilityRegistry";
 
 type Props = {
-  selectedProductsData: DraftSelectedProduct[];
+  eligibleProductsData: DraftSelectedProduct[];
   differentProductsDiscountRules: DifferentProductsDiscountRule[];
   setDifferentProductsDiscountRules: React.Dispatch<
     React.SetStateAction<DifferentProductsDiscountRule[]>
@@ -29,9 +29,9 @@ type Props = {
 };
 
 function buildDefaultTier(
-  selectedProductsData: DraftSelectedProduct[],
+  eligibleProductsData: DraftSelectedProduct[],
 ): DifferentProductsDiscountRule {
-  const sharedProductIds = selectedProductsData.map((product) => String(product.id));
+  const sharedProductIds = eligibleProductsData.map((product) => String(product.id));
   return {
     count: 2,
     discountPercent: 15,
@@ -65,14 +65,14 @@ function normalizeRule(
 }
 
 export default function DifferentProductsLogicEditor({
-  selectedProductsData,
+  eligibleProductsData,
   differentProductsDiscountRules,
   setDifferentProductsDiscountRules,
   updateRuleValues,
   updateRulePresentation,
 }: Props) {
   getDifferentProductsRuleCapability();
-  const productOptions = selectedProductsData.map((product) => ({
+  const productOptions = eligibleProductsData.map((product) => ({
     label: product.title,
     value: String(product.id),
   }));
@@ -84,7 +84,7 @@ export default function DifferentProductsLogicEditor({
     const ruleId = getDifferentProductsUnifiedRuleId(index);
     const currentRule = differentProductsDiscountRules[index];
     const normalizedPatch = normalizeRule({
-      ...(currentRule || buildDefaultTier(selectedProductsData)),
+      ...(currentRule || buildDefaultTier(eligibleProductsData)),
       ...patch,
     });
     if (updateRuleValues) {
@@ -100,7 +100,7 @@ export default function DifferentProductsLogicEditor({
   const appendTier = (_tierType: DifferentProductsRuleTemplateId) => {
     setDifferentProductsDiscountRules((prev) => [
       ...prev,
-      buildDefaultTier(selectedProductsData),
+      buildDefaultTier(eligibleProductsData),
     ]);
   };
 
@@ -108,7 +108,7 @@ export default function DifferentProductsLogicEditor({
     <OfferRulesSection description="Configure quantity-break tiers across different products. Each rule keeps the same card structure as standard quantity breaks, while letting you assign a dedicated eligible product pool.">
       {differentProductsDiscountRules.map((rule, index) => {
         const normalizedRule = normalizeRule(rule);
-        const eligibleProductsData = selectedProductsData.filter((product) =>
+        const eligibleProductsInTier = eligibleProductsData.filter((product) =>
           normalizedRule.buyProductIds.includes(String(product.id)),
         );
 
@@ -231,19 +231,19 @@ export default function DifferentProductsLogicEditor({
                 </label>
               </OfferRuleFormGrid>
 
-              {eligibleProductsData.length > 0 ? (
+              {eligibleProductsInTier.length > 0 ? (
                 <div className="mt-3 rounded-[10px] border border-[#e3e8ed] bg-[#fafbfb] p-3">
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <div className="text-[12px] font-medium text-[#5c6166]">
                       Eligible product pool
                     </div>
                     <div className="text-[12px] text-[#5c6166]">
-                      {eligibleProductsData.length} product
-                      {eligibleProductsData.length === 1 ? "" : "s"}
+                      {eligibleProductsInTier.length} product
+                      {eligibleProductsInTier.length === 1 ? "" : "s"}
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {eligibleProductsData.slice(0, 4).map((product) => (
+                    {eligibleProductsInTier.slice(0, 4).map((product) => (
                       <div
                         key={`pool-${product.id}`}
                         className="flex items-center gap-2 rounded-[8px] border border-[#e5e7eb] bg-white px-2 py-1"

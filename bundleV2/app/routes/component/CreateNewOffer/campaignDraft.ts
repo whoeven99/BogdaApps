@@ -56,6 +56,7 @@ export type DraftSelectedProduct = {
 export type CampaignDraft = {
   offerType: OfferTypeId;
   selectedProductsData: DraftSelectedProduct[];
+  differentProductsEligibleProductsData: DraftSelectedProduct[];
   discountRules: DraftDiscountRule[];
   normalizedDiscountRules: DraftDiscountRule[];
   bxgyDiscountRules: DraftBxgyDiscountRule[];
@@ -102,9 +103,13 @@ export type CampaignDraftActions = {
   setSelectedProductsData: React.Dispatch<
     React.SetStateAction<DraftSelectedProduct[]>
   >;
+  setDifferentProductsEligibleProductsData: React.Dispatch<
+    React.SetStateAction<DraftSelectedProduct[]>
+  >;
   handleSelectProducts: (
     type?: "buy" | "gift" | "normal" | "product_bundle",
   ) => void | Promise<void>;
+  handleSelectDifferentProductsEligibleProducts: () => void | Promise<void>;
   setDiscountRules: React.Dispatch<React.SetStateAction<DraftDiscountRule[]>>;
   setBxgyDiscountRules: React.Dispatch<
     React.SetStateAction<DraftBxgyDiscountRule[]>

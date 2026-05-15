@@ -576,6 +576,38 @@ function parseDifferentProductsDiscountRulesJson(discountRulesJson) {
   }
 }
 
+function parseDifferentProductsDiscountRulesFromOffer(offer) {
+  const parsed = parseDifferentProductsDiscountRulesJson(offer?.discountRulesJson);
+  if (parsed.length) return parsed;
+
+  const basic = parseDiscountRulesJson(offer?.discountRulesJson);
+  if (!basic.length) return [];
+
+  const pool = parseSelectedProductIds(offer?.selectedProductsJson);
+  return basic
+    .map((tier) => {
+      const count = Math.max(1, Math.trunc(Number(tier?.count) || 1));
+      const discountPercent = Number(tier?.discountPercent);
+      if (!Number.isFinite(discountPercent)) return null;
+      return {
+        count,
+        buyQuantity: count,
+        getQuantity: 0,
+        discountPercent: Math.max(0, Math.min(100, discountPercent)),
+        buyProductIds: pool,
+        getProductIds: [],
+        tierType: "simple",
+        title: tier?.title || "",
+        subtitle: tier?.subtitle || "",
+        badge: tier?.badge || "",
+        maxUsesPerOrder: 1,
+        isDefault: !!tier?.isDefault,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.count - b.count);
+}
+
 function parseSelectedProductIds(selectedProductsJson) {
   if (typeof selectedProductsJson !== "string" || !selectedProductsJson.trim()) {
     return [];
@@ -1083,7 +1115,7 @@ async function hydrateFreeGiftOfferInPlace(offer) {
 
 async function hydrateDifferentProductsOfferInPlace(offer) {
   if (!offer || offer.offerType !== "quantity-breaks-different") return false;
-  const rules = parseDifferentProductsDiscountRulesJson(offer.discountRulesJson);
+  const rules = parseDifferentProductsDiscountRulesFromOffer(offer);
   if (!rules.length) return false;
 
   const catalogSeed = parseSelectedProductsCatalog(offer.selectedProductsJson);
@@ -1365,7 +1397,7 @@ function computeSelectedBarIndexForOffer(offer) {
     return idx >= 0 ? idx + 1 : 1;
   }
   if (offer.offerType === "quantity-breaks-different") {
-    const rules = parseDifferentProductsDiscountRulesJson(offer.discountRulesJson);
+    const rules = parseDifferentProductsDiscountRulesFromOffer(offer);
     const idx = rules.findIndex((r) => Number(r.count) === sc);
     return idx >= 0 ? idx + 1 : 1;
   }
@@ -1670,18 +1702,51 @@ function renderDifferentProductsPoolControlHtml(offer, selectedRule, borderColor
   const poolProducts = getDifferentProductsPoolProducts(offer, selectedRule);
 
   if (!poolProducts.length) {
+    const pickerKey = getDifferentProductsPickerKey(offer, selectedRule);
     return `<div style="margin-top:10px;border:1px dashed ${esc(
       borderColor,
     )};border-radius:10px;padding:10px;background:#ffffff;color:#5c6166;font-size:12px;">
-      Included trigger products will appear here after the product pool is loaded.
+      <div>Eligible products will appear here after the product pool is loaded.</div>
+      <button type="button" class="ciwi-different-products-picker__toggle" style="margin-top:10px;background:${esc(
+        accentColor || "#008060",
+      )};" onclick="event.stopPropagation();window.ciwiOpenDifferentProductsModal('${esc(
+        pickerKey,
+      )}')">Choose</button>
     </div>`;
   }
 
   const pickerKey = getDifferentProductsPickerKey(offer, selectedRule);
   const requiredQty = getDifferentProductsRequiredQuantity(selectedRule);
   const selectedIds = getSelectedDifferentProductsIds(offer, selectedRule, poolProducts);
-  const isOpen =
-    String(window.__ciwiBundleState?.openDifferentProductsPickerKey || "") === pickerKey;
+
+  return `<div class="ciwi-different-products-picker" onclick="event.stopPropagation();" onmousedown="event.stopPropagation();">
+    <button
+      type="button"
+      class="ciwi-different-products-picker__toggle"
+      style="background:${esc(accentColor || "#008060")};"
+      onclick="event.stopPropagation();window.ciwiOpenDifferentProductsModal('${esc(
+        pickerKey,
+      )}')"
+    >
+      Choose (${selectedIds.length} / ${requiredQty})
+    </button>
+  </div>`;
+}
+
+function ensureDifferentProductsModalRoot() {
+  let root = document.getElementById("ciwi-different-products-modal-root");
+  if (root) return root;
+  root = document.createElement("div");
+  root.id = "ciwi-different-products-modal-root";
+  document.body.appendChild(root);
+  return root;
+}
+
+function renderDifferentProductsModalHtml(offer, selectedRule, borderColor, accentColor) {
+  const poolProducts = getDifferentProductsPoolProducts(offer, selectedRule);
+  const requiredQty = getDifferentProductsRequiredQuantity(selectedRule);
+  const selectedIds = getSelectedDifferentProductsIds(offer, selectedRule, poolProducts);
+  const errorMessage = String(window.__ciwiBundleState?.differentProductsModalError || "");
   const cardsHtml = poolProducts
     .map((product) =>
       buildDifferentProductsProductCardHtml(
@@ -1697,35 +1762,73 @@ function renderDifferentProductsPoolControlHtml(offer, selectedRule, borderColor
       ),
     )
     .join("");
-
-  return `<div class="ciwi-different-products-picker" onclick="event.stopPropagation();" onmousedown="event.stopPropagation();">
-    <button
-      type="button"
-      class="ciwi-different-products-picker__toggle"
-      style="background:${esc(accentColor || "#008060")};"
-      onclick="event.stopPropagation();window.ciwiToggleDifferentProductsPicker('${esc(
-        pickerKey,
-      )}')"
-    >
-      ${isOpen ? "Hide choices" : "Choose"}
-    </button>
-    ${
-      isOpen
-        ? `<div class="ciwi-different-products-picker__panel" style="border-color:${esc(
-            borderColor || "#dfe3e8",
-          )};">
-            <div class="ciwi-different-products-picker__header">
-              <span>Eligible products</span>
-              <span>${selectedIds.length} / ${requiredQty} selected</span>
-            </div>
-            <div class="ciwi-different-products-picker__list">
-              ${cardsHtml}
-            </div>
-          </div>`
-        : ""
-    }
+  const headerHtml = `<div class="ciwi-different-products-modal__header">
+    <div class="ciwi-different-products-modal__title">Choose products</div>
+    <button type="button" class="ciwi-different-products-modal__close" onclick="window.ciwiCloseDifferentProductsModal()">×</button>
+  </div>`;
+  const metaHtml = `<div class="ciwi-different-products-modal__meta">
+    <span>${selectedIds.length} / ${requiredQty} selected</span>
+  </div>`;
+  const errorHtml = errorMessage
+    ? `<div class="ciwi-different-products-modal__error">${esc(errorMessage)}</div>`
+    : "";
+  const listHtml = poolProducts.length
+    ? `<div class="ciwi-different-products-modal__list">${cardsHtml}</div>`
+    : `<div class="ciwi-different-products-modal__empty">Loading eligible products…</div>`;
+  const footerHtml = `<div class="ciwi-different-products-modal__footer">
+    <button type="button" class="ciwi-different-products-modal__done" style="background:${esc(
+      accentColor || "#008060",
+    )};" onclick="window.ciwiCloseDifferentProductsModal()">Done</button>
+  </div>`;
+  return `<div class="ciwi-different-products-modal__overlay" onclick="window.ciwiCloseDifferentProductsModal()">
+    <div class="ciwi-different-products-modal" onclick="event.stopPropagation();" style="border-color:${esc(
+      borderColor || "#dfe3e8",
+    )};">
+      ${headerHtml}
+      ${metaHtml}
+      ${errorHtml}
+      ${listHtml}
+      ${footerHtml}
+    </div>
   </div>`;
 }
+
+function rerenderDifferentProductsModal() {
+  const key = String(window.__ciwiBundleState?.openDifferentProductsPickerKey || "");
+  if (!key) return;
+  const currentOffer = getCurrentOffer(offersConfigCache);
+  if (!currentOffer || currentOffer.offerType !== "quantity-breaks-different") return;
+  const selectedRule = resolveDifferentProductsSelectedRule(currentOffer);
+  if (!selectedRule) return;
+  let offerSettings = {};
+  try {
+    if (currentOffer?.offerSettingsJson) {
+      offerSettings = JSON.parse(currentOffer.offerSettingsJson);
+    }
+  } catch {}
+  const borderColor = offerSettings.borderColor || "#dfe3e8";
+  const accentColor = offerSettings.accentColor || "#008060";
+  const root = ensureDifferentProductsModalRoot();
+  root.innerHTML = renderDifferentProductsModalHtml(
+    currentOffer,
+    selectedRule,
+    borderColor,
+    accentColor,
+  );
+}
+
+window.ciwiOpenDifferentProductsModal = function(pickerKey, errorMessage) {
+  window.__ciwiBundleState.openDifferentProductsPickerKey = String(pickerKey || "open");
+  window.__ciwiBundleState.differentProductsModalError = String(errorMessage || "");
+  rerenderDifferentProductsModal();
+};
+
+window.ciwiCloseDifferentProductsModal = function() {
+  window.__ciwiBundleState.openDifferentProductsPickerKey = null;
+  window.__ciwiBundleState.differentProductsModalError = "";
+  const root = document.getElementById("ciwi-different-products-modal-root");
+  if (root) root.innerHTML = "";
+};
 
 /** 将档位与 Offer Id 写入加购表单，供 Checkout Function 读取 line item properties */
 function ensureBundleLineProperties(offer) {
@@ -2430,6 +2533,7 @@ window.ciwiToggleDifferentProductsPicker = function(pickerKey) {
   window.__ciwiBundleState.openDifferentProductsPickerKey =
     currentKey === nextKey ? null : nextKey;
   rerenderCurrentBundleWidget();
+  rerenderDifferentProductsModal();
 };
 
 window.ciwiToggleDifferentProductSelection = function(pickerKey, productId, requiredQty) {
@@ -2449,6 +2553,7 @@ window.ciwiToggleDifferentProductSelection = function(pickerKey, productId, requ
       : [...prev, nextId];
   window.__ciwiBundleState.selectedDifferentProducts[key] = next;
   rerenderCurrentBundleWidget();
+  rerenderDifferentProductsModal();
 };
 
 window.ciwiSetDifferentProductsVariant = function(productId, variantId) {
@@ -2459,6 +2564,7 @@ window.ciwiSetDifferentProductsVariant = function(productId, variantId) {
     variantId || "",
   );
   rerenderCurrentBundleWidget();
+  rerenderDifferentProductsModal();
 };
 
 window.ciwiOpenEligibleProduct = function(url, variantId) {
@@ -2494,7 +2600,7 @@ window.ciwiOpenEligibleProductByProduct = function(productId, handle) {
 function resolveDifferentProductsSelectedRule(offer) {
   if (!offer || offer.offerType !== "quantity-breaks-different") return null;
   const selectedCount = Math.max(1, Math.trunc(Number(window.__ciwiBundleState?.selectedCount) || 1));
-  const rules = parseDifferentProductsDiscountRulesJson(offer.discountRulesJson);
+  const rules = parseDifferentProductsDiscountRulesFromOffer(offer);
   return rules.find((rule) => Number(rule.count) === selectedCount) || null;
 }
 
@@ -2513,7 +2619,10 @@ async function performDifferentProductsCartAdd() {
   const requiredQty = getDifferentProductsRequiredQuantity(selectedRule);
   const selectedIds = getSelectedDifferentProductsIds(currentOffer, selectedRule, poolProducts);
   if (selectedIds.length < requiredQty) {
-    window.alert(`Please select ${requiredQty} products for this bundle.`);
+    window.ciwiOpenDifferentProductsModal(
+      getDifferentProductsPickerKey(currentOffer, selectedRule),
+      `Please select ${requiredQty} products for this bundle.`,
+    );
     return false;
   }
 
@@ -2541,7 +2650,10 @@ async function performDifferentProductsCartAdd() {
     .filter(Boolean);
 
   if (items.length < requiredQty) {
-    window.alert("Some selected products are missing variants. Please reselect them.");
+    window.ciwiOpenDifferentProductsModal(
+      getDifferentProductsPickerKey(currentOffer, selectedRule),
+      "Some selected products are missing variants. Please reselect them.",
+    );
     return false;
   }
 
@@ -3176,7 +3288,7 @@ function renderBundlePreviewHtml(offer) {
   }
 
   if (offer.offerType === "quantity-breaks-different") {
-    const differentRules = parseDifferentProductsDiscountRulesJson(offer?.discountRulesJson);
+    const differentRules = parseDifferentProductsDiscountRulesFromOffer(offer);
     if (!differentRules.length) return "";
 
     if (!window.__ciwiBundleState.selectedCount) {

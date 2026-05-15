@@ -436,24 +436,67 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
       {
         id: "scope",
         group: "scope",
-        title: "Campaign Products",
+        title: "Trigger Products",
         description:
-          "Select the shared product pool that participates in these cross-product rules.",
+          "Select which product pages should display this offer card.",
         required: true,
         active: true,
         render: () => renderDefaultScopeEditor(props),
+      },
+      {
+        id: "eligible-products",
+        group: "scope",
+        title: "Eligible Products",
+        description:
+          "Choose which products can be selected inside the bundle (shown in the storefront picker).",
+        required: true,
+        active: true,
+        render: () => (
+          <ScopeEditor
+            selectedProductsData={props.draft.differentProductsEligibleProductsData}
+            onSelectProducts={
+              props.actions.handleSelectDifferentProductsEligibleProducts
+            }
+            onRemoveProduct={(productId) =>
+              props.actions.setDifferentProductsEligibleProductsData(
+                (prevEligible) => {
+                  const nextEligible = prevEligible.filter(
+                    (product) => product.id !== productId,
+                  );
+                  const allowedIds = new Set(
+                    nextEligible.map((product) => String(product.id)),
+                  );
+                  props.actions.setDifferentProductsDiscountRules((prevRules) =>
+                    prevRules.map((rule) => {
+                      const nextBuyProductIds = (rule.buyProductIds || [])
+                        .map((id) => String(id))
+                        .filter((id) => allowedIds.has(id));
+                      return {
+                        ...rule,
+                        buyProductIds: nextBuyProductIds.length
+                          ? nextBuyProductIds
+                          : Array.from(allowedIds),
+                      };
+                    }),
+                  );
+                  return nextEligible;
+                },
+              )
+            }
+          />
+        ),
       },
       {
         id: "different-products-rules",
         group: "rules",
         title: "Offer Rules",
         description:
-          "Mix quantity-break and BXGY rules across the shared pool of selected products.",
+          "Configure tiers and assign which eligible products are included in each tier.",
         required: true,
         active: true,
         render: () => (
           <DifferentProductsLogicEditor
-            selectedProductsData={props.draft.selectedProductsData}
+            eligibleProductsData={props.draft.differentProductsEligibleProductsData}
             differentProductsDiscountRules={
               props.draft.differentProductsDiscountRules
             }

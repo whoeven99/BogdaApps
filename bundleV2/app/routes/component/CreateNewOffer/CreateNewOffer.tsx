@@ -853,6 +853,38 @@ export function CreateNewOffer({
       };
     });
   });
+  const [differentProductsEligibleProductsData, setDifferentProductsEligibleProductsData] =
+    useState<CampaignDraft["selectedProductsData"]>(() => {
+      const selectedProductsJson =
+        initialCampaignLegacy?.selectedProductsJson ??
+        initialOffer?.selectedProductsJson;
+      const rawDiscountRulesJson =
+        initialCampaignLegacy?.discountRulesJson ?? initialOffer?.discountRulesJson;
+      const parsedRules = parseDifferentProductsDiscountRules(rawDiscountRulesJson);
+      const poolIds = Array.from(
+        new Set(
+          parsedRules.flatMap((rule) =>
+            Array.isArray(rule.buyProductIds) ? rule.buyProductIds : [],
+          ),
+        ),
+      );
+      const ids = poolIds.length
+        ? poolIds
+        : selectedProductsJson
+          ? parseSelectedProductIds(selectedProductsJson)
+          : [];
+      return ids.map((id) => {
+        const found = storeProducts.find((p) => String(p.id) === String(id));
+        return {
+          id: String(id),
+          title: found?.name ?? "Unknown product",
+          image: found?.image ?? "https://via.placeholder.com/60",
+          price: found?.price ?? "€0.00",
+          variantsCount: Array.isArray(found?.variants) ? found.variants.length : 1,
+          hasSubscription: found?.hasSubscription === true,
+        };
+      });
+    });
   const selectedProductsJsonForLegacyRewards =
     initialCampaignLegacy?.selectedProductsJson ??
     initialOffer?.selectedProductsJson;
@@ -907,6 +939,26 @@ export function CreateNewOffer({
   const [pendingCollectionIds, setPendingCollectionIds] = useState<string[]>([]);
   const [triggerSelectionMode, setTriggerSelectionMode] = useState<TriggerSelectionMode>(null);
   const [triggerSelectionSummary, setTriggerSelectionSummary] = useState("");
+  useEffect(() => {
+    if (offerType !== "quantity-breaks-different") return;
+    if (differentProductsEligibleProductsData.length > 0) return;
+    if (selectedProductsData.length === 0) return;
+    const nextEligible = selectedProductsData.map((product) => ({ ...product }));
+    const nextIds = nextEligible.map((product) => String(product.id));
+    setDifferentProductsEligibleProductsData(nextEligible);
+    setDifferentProductsDiscountRules((prev) =>
+      prev.map((rule) => {
+        if (Array.isArray(rule.buyProductIds) && rule.buyProductIds.length > 0) {
+          return rule;
+        }
+        return { ...rule, buyProductIds: nextIds };
+      }),
+    );
+  }, [
+    offerType,
+    differentProductsEligibleProductsData.length,
+    selectedProductsData,
+  ]);
   const allStoreProductIds = useMemo(
     () => storeProducts.map((product) => String(product.id || "")).filter(Boolean),
     [storeProducts],
@@ -1014,6 +1066,35 @@ export function CreateNewOffer({
         { method: "post" },
       );
     }
+  };
+  const handleSelectDifferentProductsEligibleProducts = async () => {
+    const selected = await (window as any).shopify.resourcePicker({
+      type: "product",
+      action: "select",
+      multiple: true,
+      selectionIds: differentProductsEligibleProductsData.map((product) => ({
+        id: product.id,
+      })),
+    });
+
+    if (!selected) return;
+    const selectedList = normalizeResourcePickerSelection(selected);
+    const nextProducts = mapPickerSelectionToDraftProducts(selectedList);
+    const allowedIds = new Set(nextProducts.map((product: any) => String(product.id)));
+    setDifferentProductsEligibleProductsData(nextProducts);
+    setDifferentProductsDiscountRules((prev) =>
+      prev.map((rule) => {
+        const nextBuyProductIds = (rule.buyProductIds || [])
+          .map((id) => String(id))
+          .filter((id) => allowedIds.has(id));
+        return {
+          ...rule,
+          buyProductIds: nextBuyProductIds.length
+            ? nextBuyProductIds
+            : Array.from(allowedIds),
+        };
+      }),
+    );
   };
   const applyStepTwoTriggerProducts = (products: ReturnType<typeof mapProductIdsToDraftProducts>) => {
     const nextProducts = offerType === "subscription" ? products.slice(0, 1) : products;
@@ -2312,6 +2393,7 @@ export function CreateNewOffer({
     () => ({
       offerType,
       selectedProductsData,
+      differentProductsEligibleProductsData,
       discountRules,
       buyProducts,
       getProducts: buyProducts,
@@ -2355,6 +2437,7 @@ export function CreateNewOffer({
     [
       offerType,
       selectedProductsData,
+      differentProductsEligibleProductsData,
       discountRules,
       buyProducts,
       activeBundleBarId,
@@ -2623,7 +2706,9 @@ export function CreateNewOffer({
   const campaignDraftActions: CampaignDraftActions = {
     setOfferType,
     setSelectedProductsData,
+    setDifferentProductsEligibleProductsData,
     handleSelectProducts,
+    handleSelectDifferentProductsEligibleProducts,
     setDiscountRules,
     setBxgyDiscountRules,
     setDifferentProductsDiscountRules,
@@ -2697,11 +2782,20 @@ export function CreateNewOffer({
       }
     }
 
-    const previewSelectedProducts = selectedProductsData.map((product) => ({
-      id: product.id,
-      title: product.title,
-      image: product.image,
-    }));
+    const previewSelectedProducts = Array.from(
+      new Map(
+        [...selectedProductsData, ...differentProductsEligibleProductsData].map(
+          (product) => [
+            String(product.id),
+            {
+              id: product.id,
+              title: product.title,
+              image: product.image,
+            },
+          ],
+        ),
+      ).values(),
+    );
 
     const hasMixedCompositionSources = new Set(
       orderedCompositionRulesSnapshot.map((rule) => rule.sourceOfferType),

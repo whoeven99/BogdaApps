@@ -271,6 +271,101 @@
   opacity: 0.6;
 }
 
+.ciwi-different-products-modal__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.ciwi-different-products-modal {
+  width: min(720px, 100%);
+  max-height: min(80vh, 760px);
+  overflow: hidden;
+  border: 1px solid #dfe3e8;
+  border-radius: 12px;
+  background: #ffffff;
+  display: grid;
+  grid-template-rows: auto auto auto 1fr auto;
+}
+
+.ciwi-different-products-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #eef0f2;
+}
+
+.ciwi-different-products-modal__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1c1f23;
+}
+
+.ciwi-different-products-modal__close {
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  color: #5c6166;
+}
+
+.ciwi-different-products-modal__meta {
+  padding: 10px 14px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1c1f23;
+}
+
+.ciwi-different-products-modal__error {
+  margin: 10px 14px 0;
+  padding: 10px 12px;
+  border: 1px solid #e3e8ed;
+  border-radius: 10px;
+  background: #fff4f4;
+  color: #8a1f11;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.ciwi-different-products-modal__list {
+  padding: 12px 14px;
+  overflow: auto;
+  display: grid;
+  gap: 10px;
+}
+
+.ciwi-different-products-modal__empty {
+  padding: 16px 14px;
+  font-size: 12px;
+  color: #5c6166;
+}
+
+.ciwi-different-products-modal__footer {
+  padding: 12px 14px;
+  border-top: 1px solid #eef0f2;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.ciwi-different-products-modal__done {
+  min-height: 36px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 10px;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 /* 阶梯赠品（Progressive gifts）— 与后台预览 class 对齐 */
 .ciwi-progressive-gifts {
   margin-top: 14px;
