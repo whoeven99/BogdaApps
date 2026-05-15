@@ -137,12 +137,6 @@ function applyCompleteBundleProductPricing(mode, value, basePrice) {
   return { final: Math.round(fixed * 100) / 100, original };
 }
 
-function toCents(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return 0;
-  return Math.round(n * 100);
-}
-
 function toAjaxVariantId(value) {
   const raw = String(value || "").trim();
   if (!raw) return "";
@@ -704,7 +698,10 @@ function parseFreeGiftConfig(selectedProductsJson, discountRulesJson) {
         ? parsed.giftProducts.map((id) => String(id || "").trim()).filter(Boolean)
         : [];
     }
-  } catch {}
+  } catch {
+    triggerProducts = [];
+    giftProducts = [];
+  }
 
   let tiers = [];
   try {
@@ -730,7 +727,9 @@ function parseFreeGiftConfig(selectedProductsJson, discountRulesJson) {
         })
         .sort((a, b) => a.count - b.count);
     }
-  } catch {}
+  } catch {
+    tiers = [];
+  }
 
   return { triggerProducts, giftProducts, tiers };
 }
@@ -1241,7 +1240,14 @@ function getCurrentProductSummary() {
           String(config?.productImage || config?.featuredImage || "").trim() ||
           "",
       };
-    } catch {}
+    } catch {
+      return {
+        title:
+          String(window?.ShopifyAnalytics?.meta?.product?.title || "").trim() ||
+          "Current product",
+        image: "",
+      };
+    }
   }
   return {
     title: String(window?.ShopifyAnalytics?.meta?.product?.title || "").trim() || "Current product",
@@ -1351,7 +1357,9 @@ function getCurrentMarketId() {
     try {
       const config = JSON.parse(configEl.textContent || "{}");
       if (config.marketId) return String(config.marketId);
-    } catch (e) {}
+    } catch {
+      return null;
+    }
   }
   return null;
 }
@@ -1831,7 +1839,9 @@ function rerenderDifferentProductsModal() {
     if (currentOffer?.offerSettingsJson) {
       offerSettings = JSON.parse(currentOffer.offerSettingsJson);
     }
-  } catch {}
+  } catch {
+    offerSettings = {};
+  }
   const borderColor = offerSettings.borderColor || "#dfe3e8";
   const accentColor = offerSettings.accentColor || "#008060";
   const root = ensureDifferentProductsModalRoot();
@@ -1999,7 +2009,9 @@ function getCurrentOffer(offersConfig) {
     } else if (offer.offerSettingsJson) {
       try {
         parsedSettings = JSON.parse(offer.offerSettingsJson);
-      } catch (e) {}
+      } catch {
+        parsedSettings = null;
+      }
     }
 
     // 兼容旧版开关：当 quantity bar 显式为 false 时，不渲染 quantity-break offer
@@ -2982,7 +2994,9 @@ function renderBundlePreviewHtml(offer) {
       if (offer?.offerSettingsJson) {
         offerSettings = JSON.parse(offer.offerSettingsJson);
       }
-    } catch (e) {}
+    } catch {
+      offerSettings = {};
+    }
     const accentColor = offerSettings.accentColor || "#008060";
     const cardBackgroundColor = offerSettings.cardBackgroundColor || "#ffffff";
     const borderColor = offerSettings.borderColor || "#dfe3e8";

@@ -585,7 +585,7 @@ export async function ensureCartLinesAutomaticDiscount(admin: any) {
   );
 
   for (const config of expectedConfigs) {
-    let targetDiscount =
+    const targetDiscount =
       existingByTitle.get(config.title) ??
       reusableLegacyDiscounts.find(
         (discount: any) => !assignedNodeIds.has(String(discount.nodeId || "")),
