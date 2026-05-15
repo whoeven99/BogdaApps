@@ -963,6 +963,24 @@ export function CreateNewOffer({
     () => storeProducts.map((product) => String(product.id || "")).filter(Boolean),
     [storeProducts],
   );
+  useEffect(() => {
+    if (triggerSelectionMode !== null) return;
+    if (selectedProductsData.length === 0) return;
+
+    const selectedIds = selectedProductsData.map((product) => String(product.id));
+    if (allStoreProductIds.length > 0 && selectedIds.length === allStoreProductIds.length) {
+      const allSet = new Set(allStoreProductIds);
+      const isAllSelected = selectedIds.every((id) => allSet.has(id));
+      if (isAllSelected) {
+        setTriggerSelectionMode("all");
+        setTriggerSelectionSummary(`All products selected (${selectedIds.length})`);
+        return;
+      }
+    }
+
+    setTriggerSelectionMode("custom");
+    setTriggerSelectionSummary(`Custom selection (${selectedIds.length})`);
+  }, [allStoreProductIds, selectedProductsData, triggerSelectionMode]);
   const collectionOptions = useMemo(
     () =>
       Array.from(
@@ -1550,6 +1568,7 @@ export function CreateNewOffer({
   ]);
   useEffect(() => {
     const triggerIds = selectedProductsData.map((product) => String(product.id));
+    if (!triggerIds.length) return;
     const triggerIdSet = new Set(triggerIds);
     setDifferentProductsDiscountRules((prev) => {
       let changed = false;
@@ -1558,11 +1577,7 @@ export function CreateNewOffer({
           triggerIdSet.has(String(id)),
         );
         const normalizedScopedIds =
-          triggerIds.length > 0
-            ? scopedIds.length > 0
-              ? scopedIds
-              : triggerIds
-            : [];
+          scopedIds.length > 0 ? scopedIds : triggerIds;
         if (areStringArraysEqual(rule.buyProductIds || [], normalizedScopedIds)) {
           return rule;
         }
