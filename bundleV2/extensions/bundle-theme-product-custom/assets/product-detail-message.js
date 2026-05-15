@@ -1539,39 +1539,77 @@ function getDifferentProductsPoolProducts(offer, selectedRule) {
     .filter(Boolean);
 }
 
-function getDefaultDifferentProductsSelectionIds(poolProducts, requiredQty) {
+function buildDifferentProductsSelectionKey(productId, variantId) {
+  return `${String(productId || "")}::${String(variantId || "")}`;
+}
+
+function getDefaultDifferentProductsSelectionEntries(poolProducts, requiredQty) {
   const limit = Math.max(1, Math.trunc(Number(requiredQty) || 1));
   const currentProductGid = getCurrentProductGid();
-  const selectedIds = [];
+  const selectedEntries = [];
   if (currentProductGid) {
     const currentProduct = (poolProducts || []).find((product) =>
       productIdsMatch(currentProductGid, product?.productId),
     );
-    if (currentProduct?.productId) {
-      selectedIds.push(String(currentProduct.productId));
+    const currentVariantId = String(resolveDifferentProductsVariant(currentProduct)?.id || "");
+    if (currentProduct?.productId && currentVariantId) {
+      selectedEntries.push({
+        productId: String(currentProduct.productId),
+        variantId: currentVariantId,
+      });
     }
   }
   for (const product of poolProducts || []) {
     const productId = String(product?.productId || "");
-    if (!productId || selectedIds.includes(productId)) continue;
-    selectedIds.push(productId);
-    if (selectedIds.length >= limit) break;
+    const variantId = String(resolveDifferentProductsVariant(product)?.id || "");
+    if (!productId || !variantId) continue;
+    const nextKey = buildDifferentProductsSelectionKey(productId, variantId);
+    if (
+      selectedEntries.some(
+        (entry) => buildDifferentProductsSelectionKey(entry.productId, entry.variantId) === nextKey,
+      )
+    ) {
+      continue;
+    }
+    selectedEntries.push({ productId, variantId });
+    if (selectedEntries.length >= limit) break;
   }
-  return selectedIds.slice(0, limit);
+  return selectedEntries.slice(0, limit);
 }
 
-function getSelectedDifferentProductsIds(offer, selectedRule, poolProducts) {
+function getSelectedDifferentProductsEntries(offer, selectedRule, poolProducts) {
   const pickerKey = getDifferentProductsPickerKey(offer, selectedRule);
   const limit = getDifferentProductsRequiredQuantity(selectedRule);
-  const allowedIds = new Set((poolProducts || []).map((product) => String(product.productId || "")));
+  const productMap = new Map(
+    (poolProducts || []).map((product) => [String(product.productId || ""), product]),
+  );
   const stored = window.__ciwiBundleState?.selectedDifferentProducts?.[pickerKey];
   if (Array.isArray(stored)) {
-    return stored
-      .map((id) => String(id || ""))
-      .filter((id) => allowedIds.has(id))
-      .slice(0, limit);
+    const normalized = [];
+    const seen = new Set();
+    for (const entry of stored) {
+      let productId = "";
+      let variantId = "";
+      if (typeof entry === "string") {
+        productId = String(entry || "");
+        variantId = String(resolveDifferentProductsVariant(productMap.get(productId))?.id || "");
+      } else if (entry && typeof entry === "object") {
+        productId = String(entry.productId || "");
+        variantId = String(entry.variantId || "");
+        if (!variantId) {
+          variantId = String(resolveDifferentProductsVariant(productMap.get(productId))?.id || "");
+        }
+      }
+      if (!productMap.has(productId) || !variantId) continue;
+      const entryKey = buildDifferentProductsSelectionKey(productId, variantId);
+      if (seen.has(entryKey)) continue;
+      seen.add(entryKey);
+      normalized.push({ productId, variantId });
+      if (normalized.length >= limit) break;
+    }
+    return normalized;
   }
-  return getDefaultDifferentProductsSelectionIds(poolProducts, limit);
+  return getDefaultDifferentProductsSelectionEntries(poolProducts, limit);
 }
 
 function resolveDifferentProductsVariant(product) {
@@ -1634,7 +1672,7 @@ function buildDifferentProductsProductCardHtml(
       : "";
   const variantOptionsHtml =
     variants.length > 0
-      ? `<select class="ciwi-different-products-picker__variant-select" aria-label="Choose variant" onclick="event.stopPropagation();" onmousedown="event.stopPropagation();" onchange="window.ciwiSetDifferentProductsVariant('${esc(
+      ? `<select class="ciwi-different-products-picker__variant-select" aria-label="Choose variant" onchange="window.ciwiSetDifferentProductsVariant('${esc(
           product.productId,
         )}', this.value)"${variants.length === 1 ? " disabled" : ""}>
           ${variants
@@ -1707,7 +1745,7 @@ function buildDifferentProductsProductCardHtml(
         accentColor || "#008060",
       )};" onclick="event.stopPropagation();window.ciwiToggleDifferentProductSelection('${esc(
         pickerKey,
-      )}','${esc(product.productId)}',${requiredQty})" ${selectionLocked || isSoldOut ? "disabled" : ""}>
+      )}','${esc(product.productId)}','${esc(variant?.id || "")}',${requiredQty})" ${selectionLocked || isSoldOut || !variant ? "disabled" : ""}>
         ${
           isSelected
             ? "Selected"
@@ -1751,7 +1789,7 @@ function renderDifferentProductsPoolControlHtml(offer, selectedRule, borderColor
 
   const pickerKey = getDifferentProductsPickerKey(offer, selectedRule);
   const requiredQty = getDifferentProductsRequiredQuantity(selectedRule);
-  const selectedIds = getSelectedDifferentProductsIds(offer, selectedRule, poolProducts);
+  const selectedEntries = getSelectedDifferentProductsEntries(offer, selectedRule, poolProducts);
 
   return `<div class="ciwi-different-products-picker" onclick="event.stopPropagation();" onmousedown="event.stopPropagation();">
     <button
@@ -1762,7 +1800,7 @@ function renderDifferentProductsPoolControlHtml(offer, selectedRule, borderColor
         pickerKey,
       )}')"
     >
-      Choose (${selectedIds.length} / ${requiredQty})
+      Choose (${selectedEntries.length} / ${requiredQty})
     </button>
   </div>`;
 }
@@ -1779,7 +1817,7 @@ function ensureDifferentProductsModalRoot() {
 function renderDifferentProductsModalHtml(offer, selectedRule, borderColor, accentColor) {
   const poolProducts = getDifferentProductsPoolProducts(offer, selectedRule);
   const requiredQty = getDifferentProductsRequiredQuantity(selectedRule);
-  const selectedIds = getSelectedDifferentProductsIds(offer, selectedRule, poolProducts);
+  const selectedEntries = getSelectedDifferentProductsEntries(offer, selectedRule, poolProducts);
   const errorMessage = String(window.__ciwiBundleState?.differentProductsModalError || "");
   const cardsHtml = poolProducts
     .map((product) =>
@@ -1790,8 +1828,12 @@ function renderDifferentProductsModalHtml(offer, selectedRule, borderColor, acce
         borderColor,
         accentColor,
         {
-          isSelected: selectedIds.includes(String(product.productId || "")),
-          selectionCount: selectedIds.length,
+          isSelected: selectedEntries.some(
+            (entry) =>
+              String(entry.productId || "") === String(product.productId || "") &&
+              String(entry.variantId || "") === String(resolveDifferentProductsVariant(product)?.id || ""),
+          ),
+          selectionCount: selectedEntries.length,
         },
       ),
     )
@@ -1801,7 +1843,7 @@ function renderDifferentProductsModalHtml(offer, selectedRule, borderColor, acce
     <button type="button" class="ciwi-different-products-modal__close" onclick="window.ciwiCloseDifferentProductsModal()">×</button>
   </div>`;
   const metaHtml = `<div class="ciwi-different-products-modal__meta">
-    <span>${selectedIds.length} / ${requiredQty} selected</span>
+    <span>${selectedEntries.length} / ${requiredQty} selected</span>
   </div>`;
   const errorHtml = errorMessage
     ? `<div class="ciwi-different-products-modal__error">${esc(errorMessage)}</div>`
@@ -2582,21 +2624,40 @@ window.ciwiToggleDifferentProductsPicker = function(pickerKey) {
   rerenderDifferentProductsModal();
 };
 
-window.ciwiToggleDifferentProductSelection = function(pickerKey, productId, requiredQty) {
+window.ciwiToggleDifferentProductSelection = function(pickerKey, productId, variantId, requiredQty) {
   if (!window.__ciwiBundleState.selectedDifferentProducts) {
     window.__ciwiBundleState.selectedDifferentProducts = {};
   }
   const key = String(pickerKey || "");
-  const nextId = String(productId || "");
+  const nextProductId = String(productId || "");
+  const nextVariantId = String(variantId || "");
   const limit = Math.max(1, Math.trunc(Number(requiredQty) || 1));
+  if (!nextProductId || !nextVariantId) return;
   const prev = Array.isArray(window.__ciwiBundleState.selectedDifferentProducts[key])
-    ? window.__ciwiBundleState.selectedDifferentProducts[key].map((id) => String(id || ""))
+    ? window.__ciwiBundleState.selectedDifferentProducts[key]
+        .map((entry) =>
+          entry && typeof entry === "object"
+            ? {
+                productId: String(entry.productId || ""),
+                variantId: String(entry.variantId || ""),
+              }
+            : {
+                productId: String(entry || ""),
+                variantId: "",
+              },
+        )
+        .filter((entry) => entry.productId)
     : [];
-  const next = prev.includes(nextId)
-    ? prev.filter((id) => id !== nextId)
+  const nextKey = buildDifferentProductsSelectionKey(nextProductId, nextVariantId);
+  const next = prev.some(
+    (entry) => buildDifferentProductsSelectionKey(entry.productId, entry.variantId) === nextKey,
+  )
+    ? prev.filter(
+        (entry) => buildDifferentProductsSelectionKey(entry.productId, entry.variantId) !== nextKey,
+      )
     : prev.length >= limit
       ? prev
-      : [...prev, nextId];
+      : [...prev, { productId: nextProductId, variantId: nextVariantId }];
   window.__ciwiBundleState.selectedDifferentProducts[key] = next;
   rerenderCurrentBundleWidget();
   rerenderDifferentProductsModal();
@@ -2663,8 +2724,8 @@ async function performDifferentProductsCartAdd() {
 
   const poolProducts = getDifferentProductsPoolProducts(currentOffer, selectedRule);
   const requiredQty = getDifferentProductsRequiredQuantity(selectedRule);
-  const selectedIds = getSelectedDifferentProductsIds(currentOffer, selectedRule, poolProducts);
-  if (selectedIds.length < requiredQty) {
+  const selectedEntries = getSelectedDifferentProductsEntries(currentOffer, selectedRule, poolProducts);
+  if (selectedEntries.length < requiredQty) {
     window.ciwiOpenDifferentProductsModal(
       getDifferentProductsPickerKey(currentOffer, selectedRule),
       `Please select ${requiredQty} products for this bundle.`,
@@ -2674,15 +2735,22 @@ async function performDifferentProductsCartAdd() {
 
   const productMap = new Map(poolProducts.map((product) => [String(product.productId || ""), product]));
   const tierValue = computeSelectedBarIndexForOffer(currentOffer);
-  const items = selectedIds
+  const items = selectedEntries
     .slice(0, requiredQty)
-    .map((productId) => {
-      const product = productMap.get(String(productId || ""));
+    .map((entry) => {
+      const product = productMap.get(String(entry?.productId || ""));
       if (!product) return null;
-      const selectedVariant = resolveDifferentProductsVariant(product);
+      const selectedVariant =
+        (product.variants || []).find(
+          (variant) => String(variant.id || "") === String(entry?.variantId || ""),
+        ) || null;
       if (selectedVariant && selectedVariant.available === false) return null;
       const variantId = toAjaxVariantId(
-        selectedVariant?.id || product.selectedVariantId || product.variants?.[0]?.id || "",
+        selectedVariant?.id ||
+          entry?.variantId ||
+          product.selectedVariantId ||
+          product.variants?.[0]?.id ||
+          "",
       );
       if (!variantId) return null;
       return {

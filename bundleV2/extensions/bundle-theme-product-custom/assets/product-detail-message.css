@@ -183,6 +183,7 @@
   display: flex;
   align-items: flex-start;
   gap: 8px;
+  min-width: 0;
 }
 
 .ciwi-different-products-picker__image {
@@ -208,6 +209,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 6px;
+  min-width: 0;
 }
 
 .ciwi-different-products-picker__title {
@@ -215,6 +217,9 @@
   font-weight: 600;
   color: #1c1f23;
   line-height: 1.35;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .ciwi-different-products-picker__pill {
@@ -253,17 +258,21 @@
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 8px;
   margin-top: 8px;
+  min-width: 0;
 }
 
 .ciwi-different-products-picker__select,
 .ciwi-different-products-picker__open {
   min-height: 32px;
+  width: 100%;
+  max-width: 100%;
   border: 1px solid #dfe3e8;
   border-radius: 6px;
   background: #ffffff;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+  box-sizing: border-box;
 }
 
 .ciwi-different-products-picker__select[disabled] {
@@ -283,7 +292,8 @@
 }
 
 .ciwi-different-products-modal {
-  width: min(720px, 100%);
+  width: min(720px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
   max-height: min(86vh, 860px);
   overflow: hidden;
   border: 1px solid #dfe3e8;
@@ -291,6 +301,8 @@
   background: #ffffff;
   display: grid;
   grid-template-rows: auto auto auto 1fr auto;
+  box-sizing: border-box;
+  min-width: 0;
 }
 
 .ciwi-different-products-modal__header {
@@ -340,6 +352,7 @@
   overflow: auto;
   display: grid;
   gap: 10px;
+  min-width: 0;
 }
 
 .ciwi-different-products-modal__empty {
@@ -368,6 +381,9 @@
 
 .ciwi-different-products-modal .ciwi-different-products-picker__card {
   box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .ciwi-different-products-modal .ciwi-different-products-picker__title {
@@ -378,8 +394,10 @@
 }
 
 .ciwi-different-products-modal .ciwi-different-products-picker__variant-select {
+  width: 100%;
   max-width: 100%;
   box-sizing: border-box;
+  min-width: 0;
 }
 
 .ciwi-different-products-modal .ciwi-different-products-picker__title-row {
@@ -398,6 +416,12 @@
 
 .ciwi-different-products-modal .ciwi-different-products-picker__actions {
   grid-template-columns: minmax(0, 1fr);
+}
+
+.ciwi-different-products-modal .ciwi-different-products-picker__meta,
+.ciwi-different-products-modal .ciwi-different-products-picker__card-top,
+.ciwi-different-products-modal .ciwi-different-products-picker__title-row {
+  min-width: 0;
 }
 
 .ciwi-different-products-modal .ciwi-different-products-picker__open {
