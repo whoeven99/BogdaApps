@@ -842,7 +842,7 @@ export function bundleCartDiscountGenerateRun(
     regularCount: regularOffers.length,
   });
 
-  // ① 优先处理 BXGY（买 X 送 Y 等）
+  // ① 处理 BXGY（买 X 送 Y 等）：只负责生成候选，最终由 Shopify 按最大减免选择商品折扣。
   if (hasProductDiscountClass || hasOrderDiscountClass) {
     const bxgyDiscounts = calculateBxgyDiscount(input.cart.lines, bxgyOffers);
     if (hasProductDiscountClass && bxgyDiscounts.productCandidates.length > 0) {
@@ -853,15 +853,16 @@ export function bundleCartDiscountGenerateRun(
     }
   }
 
-  if (hasProductDiscountClass && productCandidates.length === 0) {
+  // ② 过渡期保留 free gift 的旧商品折扣执行路径；S3 会迁移为 order reward。
+  if (hasProductDiscountClass) {
     const freeGiftCandidates = calculateFreeGiftDiscount(input.cart.lines, freeGiftOffers);
     if (freeGiftCandidates.length > 0) {
       productCandidates.push(...freeGiftCandidates);
     }
   }
 
-  // ② 再处理 complete-bundle：主商品 + bundle items 一起走整包订单折扣
-  if (hasOrderDiscountClass && productCandidates.length === 0) {
+  // ③ 处理 complete-bundle：主商品 + bundle items 一起走整包订单折扣，可与商品折扣候选并存。
+  if (hasOrderDiscountClass) {
     log("complete_bundle_evaluation_start", {
       marketId,
       cartLineCount: input.cart.lines.length,
@@ -884,8 +885,8 @@ export function bundleCartDiscountGenerateRun(
     }
   }
 
-  // ③ 最后按行匹配普通 bundle 的 discountRulesJson 数量阶梯
-  if (hasProductDiscountClass && productCandidates.length === 0 && orderCandidates.length === 0) {
+  // ④ 按行匹配普通 bundle 的 discountRulesJson 数量阶梯，与 BXGY 一起参与商品折扣最大减免竞争。
+  if (hasProductDiscountClass) {
     for (const line of input.cart.lines) {
       if (line.merchandise.__typename !== "ProductVariant") {
         log("line_skip", {
@@ -994,7 +995,7 @@ export function bundleCartDiscountGenerateRun(
     operations.push({
       productDiscountsAdd: {
         candidates: productCandidates,
-        selectionStrategy: ProductDiscountSelectionStrategy.All,
+        selectionStrategy: ProductDiscountSelectionStrategy.Maximum,
       },
     });
   }
@@ -1894,6 +1895,7 @@ function getBestProductDiscountPercentValue(
 ): string | null {
   const tiers = parseDiscountRulesJson(discountRulesJson).filter(
     (tier) =>
+      tier.logicType !== "bxgy" &&
       tier.discountClass === "product" &&
       tier.rewardType === "percentage_off" &&
       tier.conditionType === "item_quantity",
