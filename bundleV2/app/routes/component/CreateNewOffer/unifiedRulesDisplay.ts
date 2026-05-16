@@ -8,6 +8,12 @@ import {
 
 function buildPlaceholders(rule: UnifiedRuleNode): DisplayCustomizerItem["placeholders"] {
   switch (rule.type) {
+    case "single_purchase":
+      return {
+        title: "e.g. Single",
+        subtitle: "e.g. Standard price",
+        badge: "e.g. Base option",
+      };
     case "bxgy":
       return {
         title: "e.g. Buy 2, Get 1",

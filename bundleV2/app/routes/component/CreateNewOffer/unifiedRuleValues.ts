@@ -8,24 +8,27 @@ import type {
 import { syncRuleDependencies } from "./unifiedRuleModel";
 
 export type UnifiedRuleValuePatch = Partial<
-  Pick<
-    DiscountRule & BxgyDiscountRule & FreeGiftRule & DifferentProductsDiscountRule,
-    | "count"
-    | "discountPercent"
-    | "conditionType"
-    | "amountThreshold"
-    | "rewardType"
-    | "rewardProductIds"
-    | "giftQuantity"
-    | "logicType"
-    | "buyQuantity"
-    | "getQuantity"
-    | "maxUsesPerOrder"
-    | "discountClass"
-    | "tierType"
-    | "buyProductIds"
-    | "getProductIds"
-  >
+  {
+    count: number;
+    discountPercent: number;
+    conditionType: DiscountRule["conditionType"];
+    amountThreshold: number;
+    rewardType: DiscountRule["rewardType"];
+    rewardProductIds: string[];
+    giftQuantity: number;
+    logicType: DiscountRule["logicType"];
+    buyQuantity: number;
+    getQuantity: number;
+    maxUsesPerOrder: number;
+    discountClass: DiscountRule["discountClass"];
+    tierType:
+      | DiscountRule["tierType"]
+      | BxgyDiscountRule["tierType"]
+      | DifferentProductsDiscountRule["tierType"]
+      | FreeGiftRule["tierType"];
+    buyProductIds: string[];
+    getProductIds: string[];
+  }
 >;
 
 export function getUnifiedDiscountRuleId(
@@ -59,7 +62,7 @@ export function updateUnifiedDiscountRuleValues(
   return rules.map((rule, index) => {
     const currentId = getUnifiedDiscountRuleId(rule, index);
     if (currentId === ruleId) {
-      return syncRuleDependencies({ ...rule, ...patch });
+      return syncRuleDependencies({ ...rule, ...(patch as Partial<DiscountRule>) });
     }
     return syncRuleDependencies(rule);
   });
@@ -73,7 +76,7 @@ export function updateBxgyRuleValues(
   return rules.map((rule, index) => {
     if (getBxgyUnifiedRuleId(index) !== ruleId) return rule;
 
-    const nextRule = { ...rule, ...patch };
+    const nextRule = { ...rule, ...(patch as Partial<BxgyDiscountRule>) };
     const normalizedBuyQuantity =
       typeof patch.buyQuantity === "number"
         ? Math.max(1, Math.trunc(Number(patch.buyQuantity) || 1))
@@ -97,7 +100,9 @@ export function updateFreeGiftRuleValues(
   patch: UnifiedRuleValuePatch,
 ): FreeGiftRule[] {
   return rules.map((rule, index) =>
-    getFreeGiftUnifiedRuleId(index) === ruleId ? { ...rule, ...patch } : rule,
+    getFreeGiftUnifiedRuleId(index) === ruleId
+      ? { ...rule, ...(patch as Partial<FreeGiftRule>) }
+      : rule,
   );
 }
 
@@ -108,7 +113,7 @@ export function updateDifferentProductsRuleValues(
 ): DifferentProductsDiscountRule[] {
   return rules.map((rule, index) =>
     getDifferentProductsUnifiedRuleId(index) === ruleId
-      ? { ...rule, ...patch }
+      ? { ...rule, ...(patch as Partial<DifferentProductsDiscountRule>) }
       : rule,
   );
 }

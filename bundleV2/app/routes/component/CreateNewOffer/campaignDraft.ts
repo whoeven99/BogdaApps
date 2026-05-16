@@ -13,6 +13,7 @@ export type DraftDiscountRule = {
   id?: string;
   count: number;
   discountPercent: number;
+  tierType?: "single" | "standard";
   title?: string;
   subtitle?: string;
   badge?: string;
@@ -38,6 +39,7 @@ export type DraftBxgyDiscountRule = {
   getProductIds: string[];
   discountPercent: number;
   maxUsesPerOrder: number;
+  tierType?: "single" | "bxgy" | "simple";
   title?: string;
   subtitle?: string;
   badge?: string;

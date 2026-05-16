@@ -2,7 +2,13 @@ import type {
   DifferentProductsDiscountRule,
   FreeGiftRule,
 } from "../../../utils/offerParsing";
-import { getBxgyDisplayMeta } from "../../../utils/offerParsing";
+import {
+  getBxgyDisplayMeta,
+  isSingleBxgyRule,
+  isSingleDifferentProductsRule,
+  isSingleDiscountRule,
+  isSingleFreeGiftRule,
+} from "../../../utils/offerParsing";
 import type {
   CampaignDraft,
   CampaignDraftActions,
@@ -62,12 +68,16 @@ const HIDDEN_COMPONENT_MODULE_IDS: StepTwoModuleId[] = [
 ];
 
 function getDraftDiscountRuleType(rule: DraftDiscountRule): CampaignBarType {
+  if (isSingleDiscountRule(rule)) return "quantity_break";
   if (rule.logicType === "bxgy") return "bxgy";
   if (rule.rewardType === "gift_product") return "free_gift";
   return "quantity_break";
 }
 
 function buildQuantityBreakSummary(rule: DraftDiscountRule) {
+  if (isSingleDiscountRule(rule)) {
+    return "Single purchase at standard price";
+  }
   if (rule.logicType === "bxgy") {
     return `Buy ${rule.buyQuantity || 2}, get ${rule.getQuantity || 1}`;
   }
@@ -78,14 +88,23 @@ function buildQuantityBreakSummary(rule: DraftDiscountRule) {
 }
 
 function buildBxgySummary(rule: DraftBxgyDiscountRule) {
+  if (isSingleBxgyRule(rule)) {
+    return "Single purchase at standard price";
+  }
   return getBxgyDisplayMeta(rule).summary;
 }
 
 function buildFreeGiftSummary(rule: FreeGiftRule) {
+  if (isSingleFreeGiftRule(rule)) {
+    return "Single purchase at standard price";
+  }
   return `Trigger at ${Math.max(1, Number(rule.count) || 1)} • ${Math.max(1, Number(rule.giftQuantity) || 1)} free gift${(rule.giftQuantity || 1) > 1 ? "s" : ""}`;
 }
 
 function buildDifferentProductsSummary(rule: DifferentProductsDiscountRule) {
+  if (isSingleDifferentProductsRule(rule)) {
+    return "Single purchase at standard price";
+  }
   return `${Math.max(1, Number(rule.count) || 1)} items • ${Math.max(0, Number(rule.discountPercent) || 0)}% off • ${Array.isArray(rule.buyProductIds) ? rule.buyProductIds.length : 0} products`;
 }
 
@@ -95,7 +114,11 @@ export function getCampaignCompositionBars(
   const differentProductsBars = draft.differentProductsDiscountRules.map((rule, index) => ({
     id: `different-products-rule-${index + 1}`,
     type: "quantity_break" as const,
-    title: rule.title || `Bar #${index + 1} - Quantity break`,
+    title:
+      rule.title ||
+      (isSingleDifferentProductsRule(rule)
+        ? "Single purchase"
+        : `Bar #${index + 1} - Quantity break`),
     summary: rule.subtitle || buildDifferentProductsSummary(rule),
     enabled: true,
     isDefault: !!rule.isDefault,
@@ -113,11 +136,13 @@ export function getCampaignCompositionBars(
       type,
       title:
         rule.title ||
-        (type === "bxgy"
-          ? `Bar #${index + 1} - Buy X, Get Y`
-          : type === "free_gift"
-            ? `Bar #${index + 1} - Free gift`
-            : `Bar #${index + 1} - Quantity break`),
+        (isSingleDiscountRule(rule)
+          ? "Single purchase"
+          : (type === "bxgy"
+              ? `Bar #${index + 1} - Buy X, Get Y`
+              : type === "free_gift"
+                ? `Bar #${index + 1} - Free gift`
+                : `Bar #${index + 1} - Quantity break`)),
       summary: rule.subtitle || buildQuantityBreakSummary(rule),
       enabled: true,
       isDefault: !!rule.isDefault,
@@ -131,8 +156,8 @@ export function getCampaignCompositionBars(
 
   const bxgyBars = draft.bxgyDiscountRules.map((rule, index) => ({
     id: `bxgy-rule-${index + 1}`,
-    type: "bxgy" as const,
-    title: rule.title || `Bar #${index + 1} - Buy X, Get Y`,
+    type: isSingleBxgyRule(rule) ? ("quantity_break" as const) : ("bxgy" as const),
+    title: rule.title || (isSingleBxgyRule(rule) ? "Single purchase" : `Bar #${index + 1} - Buy X, Get Y`),
     summary: rule.subtitle || buildBxgySummary(rule),
     enabled: true,
     isDefault: !!rule.isDefault,
@@ -145,8 +170,8 @@ export function getCampaignCompositionBars(
 
   const freeGiftBars = draft.freeGiftRules.map((rule, index) => ({
     id: `free-gift-rule-${index + 1}`,
-    type: "free_gift" as const,
-    title: rule.title || `Bar #${index + 1} - Free gift`,
+    type: isSingleFreeGiftRule(rule) ? ("quantity_break" as const) : ("free_gift" as const),
+    title: rule.title || (isSingleFreeGiftRule(rule) ? "Single purchase" : `Bar #${index + 1} - Free gift`),
     summary: rule.subtitle || buildFreeGiftSummary(rule),
     enabled: true,
     isDefault: !!rule.isDefault,

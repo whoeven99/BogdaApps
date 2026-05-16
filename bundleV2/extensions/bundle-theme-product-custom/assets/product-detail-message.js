@@ -432,6 +432,17 @@ function parseDiscountRulesJson(discountRulesJson) {
     return parsed
       .map((item) => {
         if (!item || typeof item !== "object") return null;
+        if (String(item.tierType || "") === "single") {
+          return {
+            count: CIWI_SINGLE_OPTION_COUNT,
+            discountPercent: 0,
+            tierType: "single",
+            title: item.title || "Single",
+            subtitle: item.subtitle || "Standard price",
+            badge: item.badge || "",
+            isDefault: !!item.isDefault,
+          };
+        }
         const count = Number(item.count);
         const logicType = item.logicType === "bxgy" ? "bxgy" : "standard";
         const buyQuantity = Number(item.buyQuantity ?? item.count ?? 1);
@@ -444,16 +455,17 @@ function parseDiscountRulesJson(discountRulesJson) {
           if (!Number.isFinite(getQuantity) || getQuantity < 1) return null;
         }
         return {
-        count: logicType === "bxgy" ? Math.trunc(buyQuantity) : Math.trunc(count),
-        discountPercent: Math.max(0, Math.min(100, discountPercent)),
-        logicType: logicType,
-        buyQuantity: logicType === "bxgy" ? Math.trunc(buyQuantity) : undefined,
-        getQuantity: logicType === "bxgy" ? Math.trunc(getQuantity) : undefined,
-        title: item.title || "",
-        subtitle: item.subtitle || "",
-        badge: item.badge || "",
-        isDefault: !!item.isDefault,
-      };
+          count: logicType === "bxgy" ? Math.trunc(buyQuantity) : Math.trunc(count),
+          discountPercent: Math.max(0, Math.min(100, discountPercent)),
+          tierType: "standard",
+          logicType: logicType,
+          buyQuantity: logicType === "bxgy" ? Math.trunc(buyQuantity) : undefined,
+          getQuantity: logicType === "bxgy" ? Math.trunc(getQuantity) : undefined,
+          title: item.title || "",
+          subtitle: item.subtitle || "",
+          badge: item.badge || "",
+          isDefault: !!item.isDefault,
+        };
       })
       .filter(Boolean)
       .sort((a, b) => a.count - b.count);
@@ -473,6 +485,22 @@ function parseBxgyDiscountRulesJson(discountRulesJson) {
     return parsed
       .map((item) => {
         if (!item || typeof item !== "object") return null;
+        if (String(item.tierType || "") === "single") {
+          return {
+            count: CIWI_SINGLE_OPTION_COUNT,
+            buyQuantity: 0,
+            getQuantity: 0,
+            discountPercent: 0,
+            buyProductIds: [],
+            getProductIds: [],
+            tierType: "single",
+            title: item.title || "Single",
+            subtitle: item.subtitle || "Standard price",
+            badge: item.badge || "",
+            maxUsesPerOrder: 1,
+            isDefault: !!item.isDefault,
+          };
+        }
         const count = Number(item.count);
         const buyQuantity = Number(item.buyQuantity);
         const getQuantity = Number(item.getQuantity);
@@ -529,6 +557,22 @@ function parseDifferentProductsDiscountRulesJson(discountRulesJson) {
     return parsed
       .map((item) => {
         if (!item || typeof item !== "object") return null;
+        if (String(item.tierType || "") === "single") {
+          return {
+            count: CIWI_SINGLE_OPTION_COUNT,
+            buyQuantity: 0,
+            getQuantity: 0,
+            discountPercent: 0,
+            buyProductIds: [],
+            getProductIds: [],
+            tierType: "single",
+            title: item.title || "Single",
+            subtitle: item.subtitle || "Standard price",
+            badge: item.badge || "",
+            maxUsesPerOrder: 1,
+            isDefault: !!item.isDefault,
+          };
+        }
         const count = Number(item.count);
         const buyQuantity = Number(item.buyQuantity ?? item.count ?? 1);
         const getQuantity = Number(item.getQuantity ?? 0);
@@ -581,6 +625,22 @@ function parseDifferentProductsDiscountRulesFromOffer(offer) {
   return basic
     .map((tier) => {
       const count = Math.max(1, Math.trunc(Number(tier?.count) || 1));
+      if (String(tier?.tierType || "") === "single") {
+        return {
+          count: CIWI_SINGLE_OPTION_COUNT,
+          buyQuantity: 0,
+          getQuantity: 0,
+          discountPercent: 0,
+          buyProductIds: [],
+          getProductIds: [],
+          tierType: "single",
+          title: tier?.title || "Single",
+          subtitle: tier?.subtitle || "Standard price",
+          badge: tier?.badge || "",
+          maxUsesPerOrder: 1,
+          isDefault: !!tier?.isDefault,
+        };
+      }
       const discountPercent = Number(tier?.discountPercent);
       if (!Number.isFinite(discountPercent)) return null;
       return {
@@ -710,6 +770,18 @@ function parseFreeGiftConfig(selectedProductsJson, discountRulesJson) {
       tiers = parsedRules
         .filter((item) => item && typeof item === "object")
         .map((item) => {
+          if (String(item.tierType || "") === "single") {
+            return {
+              count: CIWI_SINGLE_OPTION_COUNT,
+              giftQuantity: 0,
+              giftProductIds: [],
+              tierType: "single",
+              title: String(item.title || "Single"),
+              subtitle: String(item.subtitle || "Standard price"),
+              badge: String(item.badge || ""),
+              isDefault: !!item.isDefault,
+            };
+          }
           const count = Math.max(1, Math.trunc(Number(item.count) || 1));
           const giftQuantity = Math.max(1, Math.trunc(Number(item.giftQuantity) || 1));
           const perRuleGiftProducts = Array.isArray(item.giftProductIds)
@@ -719,6 +791,7 @@ function parseFreeGiftConfig(selectedProductsJson, discountRulesJson) {
             count,
             giftQuantity,
             giftProductIds: perRuleGiftProducts,
+            tierType: undefined,
             title: String(item.title || ""),
             subtitle: String(item.subtitle || ""),
             badge: String(item.badge || ""),
@@ -748,7 +821,8 @@ function parseCompleteBundleConfig(selectedProductsJson) {
         : [];
     return {
       triggerProductIds,
-      bars: bars
+      bars: normalizeCompleteBundleBarsConfig(
+        bars
         .filter((bar) => bar && typeof bar === "object" && bar.id)
         .map((bar) => {
           const barMode = String(bar?.pricing?.mode || "full_price");
@@ -805,9 +879,16 @@ function parseCompleteBundleConfig(selectedProductsJson) {
           }
           return {
             id: String(bar.id),
-            type: bar.type === "bxgy" ? "bxgy" : "quantity-break-same",
+            type:
+              String(bar.type || "") === "single"
+                ? "single"
+                : bar.type === "bxgy"
+                  ? "bxgy"
+                  : "quantity-break-same",
             title: String(bar.title || ""),
             subtitle: String(bar.subtitle || ""),
+            badge: String(bar.badge || ""),
+            isDefault: !!bar.isDefault,
             minQuantity,
             maxQuantity,
             excludeTriggerProduct: bar?.excludeTriggerProduct !== false,
@@ -816,10 +897,79 @@ function parseCompleteBundleConfig(selectedProductsJson) {
             products,
           };
         }),
+      ),
     };
   } catch {
     return { triggerProductIds: [], bars: [] };
   }
+}
+
+function isCompleteBundleSingleBarConfig(bar) {
+  return String(bar?.type || "") === "single";
+}
+
+function createDefaultCompleteBundleSingleBarConfig(overrides) {
+  const next = overrides && typeof overrides === "object" ? overrides : {};
+  return {
+    id: String(next.id || "complete-bundle-single"),
+    type: "single",
+    title: typeof next.title === "string" ? next.title : "Single",
+    subtitle: typeof next.subtitle === "string" ? next.subtitle : "Standard price",
+    badge: typeof next.badge === "string" ? next.badge : "",
+    isDefault: next.isDefault === true,
+    minQuantity: 1,
+    maxQuantity: 1,
+    excludeTriggerProduct: false,
+    quantity: 1,
+    pricing: { mode: "full_price", value: 0 },
+    products: [],
+  };
+}
+
+function normalizeCompleteBundleBarsConfig(bars) {
+  const safeBars = Array.isArray(bars) ? bars : [];
+  let singleBar = null;
+  const bundleBars = [];
+  for (const bar of safeBars) {
+    if (!bar || typeof bar !== "object" || !String(bar.id || "").trim()) continue;
+    if (isCompleteBundleSingleBarConfig(bar)) {
+      if (!singleBar) {
+        singleBar = createDefaultCompleteBundleSingleBarConfig(bar);
+      }
+      continue;
+    }
+    bundleBars.push({
+      ...bar,
+      type: bar.type === "bxgy" ? "bxgy" : "quantity-break-same",
+      badge: String(bar.badge || ""),
+      isDefault: !!bar.isDefault,
+    });
+  }
+  if (!singleBar) {
+    singleBar = createDefaultCompleteBundleSingleBarConfig();
+  }
+  const orderedBars = [singleBar, ...bundleBars];
+  const explicitDefaultBar = orderedBars.find((bar) => bar.isDefault);
+  const fallbackDefaultBar = bundleBars[0] || singleBar;
+  const defaultBarId = explicitDefaultBar?.id || fallbackDefaultBar.id;
+  return orderedBars.map((bar) =>
+    isCompleteBundleSingleBarConfig(bar)
+      ? createDefaultCompleteBundleSingleBarConfig({
+          ...bar,
+          isDefault: bar.id === defaultBarId,
+        })
+      : {
+          ...bar,
+          badge: String(bar.badge || ""),
+          isDefault: bar.id === defaultBarId,
+        },
+  );
+}
+
+function getDefaultSelectedCompleteBundleBarId(config) {
+  const bars = Array.isArray(config?.bars) ? config.bars : [];
+  const explicit = bars.find((bar) => bar.isDefault);
+  return String(explicit?.id || bars[0]?.id || "");
 }
 
 const __ciwiProductHandleCache = {};
@@ -1226,35 +1376,6 @@ function resolveCompleteBundleVariant(bar, product) {
   return (product.variants || []).find((v) => String(v.id) === String(vid)) || product.variants?.[0] || null;
 }
 
-function getCurrentProductSummary() {
-  const configEl = document.getElementById("ciwi-bundles-config");
-  if (configEl) {
-    try {
-      const config = JSON.parse(configEl.textContent || "{}");
-      return {
-        title:
-          String(config?.productTitle || config?.title || "").trim() ||
-          String(window?.ShopifyAnalytics?.meta?.product?.title || "").trim() ||
-          "Current product",
-        image:
-          String(config?.productImage || config?.featuredImage || "").trim() ||
-          "",
-      };
-    } catch {
-      return {
-        title:
-          String(window?.ShopifyAnalytics?.meta?.product?.title || "").trim() ||
-          "Current product",
-        image: "",
-      };
-    }
-  }
-  return {
-    title: String(window?.ShopifyAnalytics?.meta?.product?.title || "").trim() || "Current product",
-    image: "",
-  };
-}
-
 function getCompleteBundleSelectableItems(config, bar) {
   const currentProductId = getCurrentProductGid();
   return (bar?.products || []).filter((product) => {
@@ -1376,6 +1497,7 @@ function getOfferBundleTitle(offer) {
 /** 与 Admin / Function 对齐的购物车行属性名（勿改，已写入服务端白名单与配送折扣逻辑） */
 const CIWI_PROP_OFFER_ID = "__ciwi_bundle_offer_id";
 const CIWI_PROP_TIER = "__ciwi_bundle_tier";
+const CIWI_SINGLE_OPTION_COUNT = 0;
 
 /**
  * 从 offerSettingsJson 读取 progressiveGifts；未开启则返回 null
@@ -1395,14 +1517,25 @@ function getProgressiveGiftsConfigFromOffer(offer) {
 /**
  * 根据当前选档（与 Bar 序号 1-based 对齐）计算 tier 属性值，规则与后台预览一致
  */
-function computeSelectedBarIndexForOffer(offer) {
+function computeSelectedBarIndexForOffer(offer, options) {
   if (offer.offerType === "complete-bundle") {
     const config = parseCompleteBundleConfig(offer.selectedProductsJson);
-    const selectedBarId = String(window.__ciwiBundleState?.selectedCompleteBundleBarId || "");
+    const selectedBarId = String(
+      window.__ciwiBundleState?.selectedCompleteBundleBarId ||
+        getDefaultSelectedCompleteBundleBarId(config) ||
+        "",
+    );
+    if (!selectedBarId) {
+      return 0;
+    }
     const idx = config.bars.findIndex((bar) => String(bar.id) === selectedBarId);
-    return idx >= 0 ? idx + 1 : 1;
+    if (idx < 0 || isCompleteBundleSingleBarConfig(config.bars[idx])) {
+      return 0;
+    }
+    return idx >= 0 ? idx + 1 : 0;
   }
-  const sc = Number(window.__ciwiBundleState?.selectedCount ?? 1);
+  const sc = getSelectedCountForOffer(offer, options);
+  if (sc == null || sc === CIWI_SINGLE_OPTION_COUNT) return 0;
   if (offer.offerType === "bxgy") {
     const rules = parseBxgyDiscountRulesJson(offer.discountRulesJson);
     const idx = rules.findIndex((r) => Number(r.count) === sc);
@@ -1413,10 +1546,52 @@ function computeSelectedBarIndexForOffer(offer) {
     const idx = rules.findIndex((r) => Number(r.count) === sc);
     return idx >= 0 ? idx + 1 : 1;
   }
-  if (sc === 1) return 1;
   const rules = parseDiscountRulesJson(offer.discountRulesJson);
   const idx = rules.findIndex((r) => Number(r.count) === sc);
   return idx >= 0 ? idx + 2 : 1;
+}
+
+function getDefaultSelectedCountForOffer(offer) {
+  if (!offer) return 1;
+  if (offer.offerType === "free-gift") {
+    const config = parseFreeGiftConfig(offer.selectedProductsJson, offer.discountRulesJson);
+    const defaultRule = config.tiers.find((tier) => tier.isDefault) || config.tiers[0];
+    return Number.isFinite(Number(defaultRule?.count))
+      ? Math.trunc(Number(defaultRule.count))
+      : 1;
+  }
+  if (offer.offerType === "bxgy") {
+    const rules = parseBxgyDiscountRulesJson(offer.discountRulesJson);
+    const defaultRule = rules.find((rule) => rule.isDefault) || rules[0];
+    return Number.isFinite(Number(defaultRule?.count))
+      ? Math.trunc(Number(defaultRule.count))
+      : 1;
+  }
+  if (offer.offerType === "quantity-breaks-different") {
+    const rules = parseDifferentProductsDiscountRulesFromOffer(offer);
+    const defaultRule = rules.find((rule) => rule.isDefault) || rules[0];
+    return Number.isFinite(Number(defaultRule?.count))
+      ? Math.trunc(Number(defaultRule.count))
+      : 1;
+  }
+  const rules = parseDiscountRulesJson(offer.discountRulesJson);
+  const defaultRule = rules.find((rule) => rule.isDefault) || rules[0];
+  return Number.isFinite(Number(defaultRule?.count))
+    ? Math.trunc(Number(defaultRule.count))
+    : 1;
+}
+
+function getSelectedCountForOffer(offer, options) {
+  const fallbackToDefault = options?.fallbackToDefault === true;
+  const raw = window.__ciwiBundleState?.selectedCount;
+  if (raw === null || raw === undefined || raw === "") {
+    return fallbackToDefault ? getDefaultSelectedCountForOffer(offer) : null;
+  }
+  const normalized = Math.trunc(Number(raw));
+  if (!Number.isFinite(normalized)) {
+    return fallbackToDefault ? getDefaultSelectedCountForOffer(offer) : null;
+  }
+  return Math.max(0, normalized);
 }
 
 function isProgressiveGiftUnlockedStorefront(gift, barIndex, lineQty) {
@@ -1781,7 +1956,10 @@ function renderDifferentProductsPoolControlHtml(offer, selectedRule, borderColor
       <div>Eligible products will appear here after the product pool is loaded.</div>
       <button type="button" class="ciwi-different-products-picker__toggle" style="margin-top:10px;background:${esc(
         accentColor || "#008060",
-      )};" onclick="event.stopPropagation();window.ciwiOpenDifferentProductsModal('${esc(
+      )};" onclick="event.stopPropagation();window.ciwiSelectBundleOption(${Math.max(
+        1,
+        Math.trunc(Number(selectedRule.count) || 1),
+      )});window.ciwiOpenDifferentProductsModal('${esc(
         pickerKey,
       )}')">Choose</button>
     </div>`;
@@ -1796,7 +1974,10 @@ function renderDifferentProductsPoolControlHtml(offer, selectedRule, borderColor
       type="button"
       class="ciwi-different-products-picker__toggle"
       style="background:${esc(accentColor || "#008060")};"
-      onclick="event.stopPropagation();window.ciwiOpenDifferentProductsModal('${esc(
+      onclick="event.stopPropagation();window.ciwiSelectBundleOption(${Math.max(
+        1,
+        Math.trunc(Number(selectedRule.count) || 1),
+      )});window.ciwiOpenDifferentProductsModal('${esc(
         pickerKey,
       )}')"
     >
@@ -1917,11 +2098,19 @@ window.ciwiCloseDifferentProductsModal = function() {
 };
 
 /** 将档位与 Offer Id 写入加购表单，供 Checkout Function 读取 line item properties */
-function ensureBundleLineProperties(offer) {
+function ensureBundleLineProperties(offer, options) {
   const form = getAddToCartForm();
   if (!form || !offer || !offer.id) return;
   form.querySelectorAll('input[type="hidden"][data-ciwi-bundle-line-prop="1"]').forEach((n) => n.remove());
-  const bar = computeSelectedBarIndexForOffer(offer);
+  const fallbackToDefault = options?.fallbackToDefault === true;
+  const bar = computeSelectedBarIndexForOffer(offer, { fallbackToDefault });
+  const selectedCount = getSelectedCountForOffer(offer, { fallbackToDefault });
+  if (
+    (offer.offerType === "complete-bundle" && bar <= 0) ||
+    (offer.offerType !== "complete-bundle" && selectedCount === CIWI_SINGLE_OPTION_COUNT)
+  ) {
+    return;
+  }
   const mk = (k, v) => {
     const inp = document.createElement("input");
     inp.type = "hidden";
@@ -2231,7 +2420,16 @@ function getBxgyDisplayMeta(rule) {
 }
 
 function getCartQuantityForSelectedOffer(offer, selectedCount) {
-  const normalizedCount = Math.max(1, Math.trunc(Number(selectedCount) || 1));
+  const rawSelectedCount =
+    selectedCount === null || selectedCount === undefined || selectedCount === ""
+      ? getDefaultSelectedCountForOffer(offer)
+      : Number(selectedCount);
+  const normalizedCount = Number.isFinite(rawSelectedCount)
+    ? Math.max(0, Math.trunc(rawSelectedCount))
+    : getDefaultSelectedCountForOffer(offer);
+  if (normalizedCount === CIWI_SINGLE_OPTION_COUNT) {
+    return 1;
+  }
   if (!offer || offer.offerType !== "bxgy") {
     return normalizedCount;
   }
@@ -2487,7 +2685,7 @@ function bindBundleInteractions(root) {
       event.preventDefault();
       event.stopPropagation();
       const nextCount = Number(option.getAttribute("data-ciwi-bundle-count"));
-      if (Number.isFinite(nextCount) && nextCount > 0) {
+      if (Number.isFinite(nextCount) && nextCount >= 0) {
         window.ciwiSelectBundleOption(nextCount);
       }
     });
@@ -2541,7 +2739,9 @@ window.ciwiHandleBundleAddToCart = function(event) {
     event.stopPropagation();
   }
   const currentOffer = getCurrentOffer(offersConfigCache);
-  const count = window.__ciwiBundleState?.selectedCount || 1;
+  const explicitCount = getSelectedCountForOffer(currentOffer);
+  const count =
+    explicitCount == null ? getDefaultSelectedCountForOffer(currentOffer) : explicitCount;
   const cartQuantity = getCartQuantityForSelectedOffer(currentOffer, count);
   console.log("[ciwi] handleBundleAddToCart", {
     offerId: currentOffer?.id || "",
@@ -2550,8 +2750,12 @@ window.ciwiHandleBundleAddToCart = function(event) {
     cartQuantity,
   });
   updateThemeQuantityInput(cartQuantity);
+  ensureBundleLineProperties(currentOffer, { fallbackToDefault: explicitCount == null });
   syncSubscriptionSelectionToTheme(currentOffer);
-  if (currentOffer?.offerType === "quantity-breaks-different") {
+  if (
+    currentOffer?.offerType === "quantity-breaks-different" &&
+    explicitCount !== CIWI_SINGLE_OPTION_COUNT
+  ) {
     performDifferentProductsCartAdd()
       .then((ok) => (ok ? notifyThemeAfterCartAdd() : false))
       .catch((error) => {
@@ -2559,7 +2763,10 @@ window.ciwiHandleBundleAddToCart = function(event) {
       });
     return;
   }
-  if (currentOffer?.offerType === "free-gift") {
+  if (
+    currentOffer?.offerType === "free-gift" &&
+    explicitCount !== CIWI_SINGLE_OPTION_COUNT
+  ) {
     performFreeGiftCartAdd()
       .then((ok) => (ok ? notifyThemeAfterCartAdd() : false))
       .catch((error) => {
@@ -2704,9 +2911,10 @@ window.ciwiOpenEligibleProductByProduct = function(productId, handle) {
   window.ciwiOpenEligibleProduct(href, variantId);
 };
 
-function resolveDifferentProductsSelectedRule(offer) {
+function resolveDifferentProductsSelectedRule(offer, options) {
   if (!offer || offer.offerType !== "quantity-breaks-different") return null;
-  const selectedCount = Math.max(1, Math.trunc(Number(window.__ciwiBundleState?.selectedCount) || 1));
+  const selectedCount = getSelectedCountForOffer(offer, options);
+  if (selectedCount == null || selectedCount === CIWI_SINGLE_OPTION_COUNT) return null;
   const rules = parseDifferentProductsDiscountRulesFromOffer(offer);
   return rules.find((rule) => Number(rule.count) === selectedCount) || null;
 }
@@ -2716,7 +2924,9 @@ async function performDifferentProductsCartAdd() {
   if (!currentOffer || currentOffer.offerType !== "quantity-breaks-different") return false;
   await hydrateDifferentProductsOfferInPlace(currentOffer);
 
-  const selectedRule = resolveDifferentProductsSelectedRule(currentOffer);
+  const selectedRule = resolveDifferentProductsSelectedRule(currentOffer, {
+    fallbackToDefault: true,
+  });
   if (!selectedRule) {
     submitBundleFormFallback();
     return false;
@@ -2734,7 +2944,9 @@ async function performDifferentProductsCartAdd() {
   }
 
   const productMap = new Map(poolProducts.map((product) => [String(product.productId || ""), product]));
-  const tierValue = computeSelectedBarIndexForOffer(currentOffer);
+  const tierValue = computeSelectedBarIndexForOffer(currentOffer, {
+    fallbackToDefault: true,
+  });
   const items = selectedEntries
     .slice(0, requiredQty)
     .map((entry) => {
@@ -2989,16 +3201,36 @@ async function performCompleteBundleCartAdd() {
     if (!currentOffer || currentOffer.offerType !== "complete-bundle") return false;
     const config = parseCompleteBundleConfig(currentOffer?.selectedProductsJson);
     const items = [];
-    const selId = window.__ciwiBundleState?.selectedCompleteBundleBarId;
-    const barToUse =
-      config.bars.find((b) => String(b.id) === String(selId)) || config.bars[0] || null;
-    if (!barToUse || !Array.isArray(barToUse.products) || !barToUse.products.length) {
-      return false;
-    }
+    const selId =
+      window.__ciwiBundleState?.selectedCompleteBundleBarId ||
+      getDefaultSelectedCompleteBundleBarId(config);
     const mainVariantId = toAjaxVariantId(getSelectedVariantId());
     if (!mainVariantId) return false;
     const quantity = getCurrentQuantityFromThemeForm();
     items.push({ id: Number(mainVariantId), quantity });
+    const barToUse =
+      config.bars.find((b) => String(b.id) === String(selId)) || config.bars[0] || null;
+    if (!barToUse || isCompleteBundleSingleBarConfig(barToUse)) {
+      const res = await fetch("/cart/add.js", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ items }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        console.error(
+          "[ciwi] cart/add.js failed",
+          res.status,
+          body?.description || body?.message || body,
+        );
+        return false;
+      }
+      return true;
+    }
+    if (!Array.isArray(barToUse.products) || !barToUse.products.length) {
+      return false;
+    }
     const selectedItemIds = new Set(getSelectedCompleteBundleItemIds(config, barToUse));
     if (selectedItemIds.size < Math.max(1, Math.trunc(Number(barToUse.minQuantity) || 1))) {
       return false;
@@ -3076,44 +3308,45 @@ function renderBundlePreviewHtml(offer) {
     const showCustomButton = offerSettings.showCustomButton !== false;
     const widgetTitle = offerSettings.title || "Bundle & Save";
 
-    // 默认选中第一档；配置变更后若 id 不存在则回退到第一档
-    if (!window.__ciwiBundleState.selectedCompleteBundleBarId) {
-      window.__ciwiBundleState.selectedCompleteBundleBarId = completeBundle.bars[0].id;
-    }
+    const defaultBarId = getDefaultSelectedCompleteBundleBarId(completeBundle);
+    const currentSelectedBarId = String(window.__ciwiBundleState.selectedCompleteBundleBarId || "");
     if (
-      !completeBundle.bars.some(
-        (b) => String(b.id) === String(window.__ciwiBundleState.selectedCompleteBundleBarId),
-      )
+      !currentSelectedBarId ||
+      !completeBundle.bars.some((b) => String(b.id) === currentSelectedBarId)
     ) {
-      window.__ciwiBundleState.selectedCompleteBundleBarId = completeBundle.bars[0].id;
+      window.__ciwiBundleState.selectedCompleteBundleBarId = defaultBarId || null;
     }
-    const selectedBarId = String(window.__ciwiBundleState.selectedCompleteBundleBarId || "");
-    const currentProduct = getCurrentProductSummary();
+    const selectedBarId = String(
+      window.__ciwiBundleState.selectedCompleteBundleBarId || defaultBarId || "",
+    );
     const currentUnitPrice = getCurrentUnitPrice();
-
-    const singleHtml = `<div class="create-offer-style-preview-item" style="border:1px solid ${esc(
-      borderColor,
-    )};border-radius:8px;padding:10px;background:${esc(cardBackgroundColor)};">
-      <div style="display:flex;align-items:flex-start;gap:8px;">
-        <span style="margin-top:3px;width:16px;height:16px;border:2px solid ${esc(
-          borderColor,
-        )};border-radius:999px;flex-shrink:0;"></span>
-        <span style="flex:1;min-width:0;">
-          <div class="create-offer-style-preview-item-title" style="color:${esc(titleColor)};">${esc(
-            currentProduct.title || "Current product",
-          )}</div>
-          <div class="create-offer-style-preview-item-subtitle" style="font-size:12px;color:#5c6166;margin-top:2px;">Standard price</div>
-        </span>
-        <span style="font-size:13px;font-weight:700;color:#1c1f23;">${esc(
-          formatPrice(currentUnitPrice),
-        )}</span>
-      </div>
-    </div>`;
 
     const barsHtml = completeBundle.bars
       .map((bar) => {
         const isSelected = String(bar.id) === selectedBarId;
         const borderCol = isSelected ? accentColor : borderColor;
+        if (isCompleteBundleSingleBarConfig(bar)) {
+          return `<div class="create-offer-style-preview-item" style="border:2px solid ${esc(
+            borderCol,
+          )};border-radius:8px;padding:10px;background:${esc(cardBackgroundColor)};">
+            <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;margin:0;">
+              <input type="radio" name="ciwi-complete-bundle-bar-pick" style="margin-top:3px;flex-shrink:0;" ${
+                isSelected ? "checked" : ""
+              } onchange="window.ciwiSelectCompleteBundleBar('${esc(bar.id)}')" />
+              <span style="flex:1;min-width:0;">
+                <div class="create-offer-style-preview-item-title" style="color:${esc(titleColor)};">${esc(
+                  bar.title || "Single",
+                )}</div>
+                <div class="create-offer-style-preview-item-subtitle" style="font-size:12px;color:#5c6166;margin-top:2px;">${esc(
+                  bar.subtitle || "Standard price",
+                )}</div>
+              </span>
+              <span style="font-size:13px;font-weight:700;color:#1c1f23;">${esc(
+                formatPrice(currentUnitPrice),
+              )}</span>
+            </label>
+          </div>`;
+        }
         const bundleItems = getCompleteBundleSelectableItems(completeBundle, bar);
         const selectedItemIds = new Set(getSelectedCompleteBundleItemIds(completeBundle, bar));
         let sumOriginal = currentUnitPrice;
@@ -3196,7 +3429,7 @@ function renderBundlePreviewHtml(offer) {
       )} !important; font-size:${esc(titleFontSize)}px !important; font-weight:${esc(
         titleFontWeight,
       )} !important;">${esc(widgetTitle)}</div>
-      <div class="create-offer-style-preview-list create-offer-style-preview-list--vertical">${singleHtml}${barsHtml}</div>
+      <div class="create-offer-style-preview-list create-offer-style-preview-list--vertical">${barsHtml}</div>
       ${
         showCustomButton
           ? `<button type="button" class="create-offer-preview-button" onclick="window.ciwiHandleCompleteBundleAddToCart(event)" style="width:100%;margin-top:12px;padding:12px;background:${esc(
@@ -3216,20 +3449,7 @@ function renderBundlePreviewHtml(offer) {
     );
     if (!freeGiftConfig.tiers.length) return "";
 
-    if (!window.__ciwiBundleState.selectedCount) {
-      const defaultRule = freeGiftConfig.tiers.find((r) => r.isDefault);
-      window.__ciwiBundleState.selectedCount = defaultRule
-        ? defaultRule.count
-        : (freeGiftConfig.tiers[0]?.count || 1);
-      setTimeout(
-        () =>
-          updateThemeQuantityInput(
-            getCartQuantityForSelectedOffer(offer, window.__ciwiBundleState.selectedCount),
-          ),
-        0,
-      );
-    }
-    const selectedCount = window.__ciwiBundleState.selectedCount;
+    const selectedCount = getSelectedCountForOffer(offer);
 
     let offerSettings = {};
     try {
@@ -3252,21 +3472,35 @@ function renderBundlePreviewHtml(offer) {
     const buttonPrimaryColor = offerSettings.buttonPrimaryColor || "#008060";
     const showCustomButton = offerSettings.showCustomButton !== false;
     const widgetTitle = offerSettings.title || "Bundle & Save";
+    const singleRule =
+      freeGiftConfig.tiers.find((rule) => String(rule.tierType || "") === "single") || null;
+    const giftRules = freeGiftConfig.tiers.filter(
+      (rule) => String(rule.tierType || "") !== "single",
+    );
     const hasDefault = freeGiftConfig.tiers.some((r) => r.isDefault);
 
-    const items = freeGiftConfig.tiers.map((rule, index) => {
-      const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
-      return {
-        count: rule.count || 1,
-        title: rule.title || `Buy ${rule.count} item${rule.count > 1 ? "s" : ""}`,
-        subtitle:
-          rule.subtitle ||
-          `Unlock ${rule.giftQuantity} free gift${rule.giftQuantity > 1 ? "s" : ""}`,
-        price: `${rule.giftQuantity} FREE`,
-        badge: rule.badge || (isFeatured ? "Gift included" : ""),
-        saveLabel: `TRIGGER AT ${rule.count}`,
-      };
-    });
+    const items = [
+      {
+        count: CIWI_SINGLE_OPTION_COUNT,
+        title: singleRule?.title || "Single",
+        subtitle: singleRule?.subtitle || "Standard price",
+        price: formatPrice(getCurrentUnitPrice()),
+        badge: singleRule?.badge || "",
+      },
+      ...giftRules.map((rule, index) => {
+        const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
+        return {
+          count: rule.count || 1,
+          title: rule.title || `Buy ${rule.count} item${rule.count > 1 ? "s" : ""}`,
+          subtitle:
+            rule.subtitle ||
+            `Unlock ${rule.giftQuantity} free gift${rule.giftQuantity > 1 ? "s" : ""}`,
+          price: `${rule.giftQuantity} FREE`,
+          badge: rule.badge || (isFeatured ? "Gift included" : ""),
+          saveLabel: `TRIGGER AT ${rule.count}`,
+        };
+      }),
+    ];
 
     const itemsHtml = items
       .map((item) => {
@@ -3312,18 +3546,7 @@ function renderBundlePreviewHtml(offer) {
     const bxgyRules = parseBxgyDiscountRulesJson(offer?.discountRulesJson);
     if (!bxgyRules.length) return "";
 
-    if (!window.__ciwiBundleState.selectedCount) {
-      const defaultRule = bxgyRules.find(r => r.isDefault);
-      window.__ciwiBundleState.selectedCount = defaultRule ? defaultRule.count : (bxgyRules[0]?.count || 1);
-      setTimeout(
-        () =>
-          updateThemeQuantityInput(
-            getCartQuantityForSelectedOffer(offer, window.__ciwiBundleState.selectedCount),
-          ),
-        0,
-      );
-    }
-    const selectedCount = window.__ciwiBundleState.selectedCount;
+    const selectedCount = getSelectedCountForOffer(offer);
 
     let offerSettings = {};
     try {
@@ -3346,21 +3569,33 @@ function renderBundlePreviewHtml(offer) {
     const buttonPrimaryColor = offerSettings.buttonPrimaryColor || "#008060";
     const showCustomButton = offerSettings.showCustomButton !== false;
     const widgetTitle = offerSettings.title || "Bundle & Save";
+    const singleRule =
+      bxgyRules.find((rule) => String(rule.tierType || "") === "single") || null;
+    const offerRules = bxgyRules.filter((rule) => String(rule.tierType || "") !== "single");
     const hasDefault = bxgyRules.some((r) => r.isDefault);
 
-    const items = bxgyRules.map((rule, index) => {
-      const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
-      const displayCount = rule.count || 1;
-      const bxgyDisplay = getBxgyDisplayMeta(rule);
-      return {
-        count: displayCount,
-        title: rule.title || bxgyDisplay.title,
-        subtitle: rule.subtitle || bxgyDisplay.subtitle,
-        price: rule.discountPercent === 100 ? bxgyDisplay.price : `${rule.discountPercent}% OFF`,
-        badge: rule.badge || (isFeatured ? "Most Popular" : ""),
-        saveLabel: bxgyDisplay.saveLabel,
-      };
-    });
+    const items = [
+      {
+        count: CIWI_SINGLE_OPTION_COUNT,
+        title: singleRule?.title || "Single",
+        subtitle: singleRule?.subtitle || "Standard price",
+        price: formatPrice(getCurrentUnitPrice()),
+        badge: singleRule?.badge || "",
+      },
+      ...offerRules.map((rule, index) => {
+        const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
+        const displayCount = rule.count || 1;
+        const bxgyDisplay = getBxgyDisplayMeta(rule);
+        return {
+          count: displayCount,
+          title: rule.title || bxgyDisplay.title,
+          subtitle: rule.subtitle || bxgyDisplay.subtitle,
+          price: rule.discountPercent === 100 ? bxgyDisplay.price : `${rule.discountPercent}% OFF`,
+          badge: rule.badge || (isFeatured ? "Most Popular" : ""),
+          saveLabel: bxgyDisplay.saveLabel,
+        };
+      }),
+    ];
 
     const itemsHtml = items
       .map((item) => {
@@ -3408,20 +3643,7 @@ function renderBundlePreviewHtml(offer) {
     const differentRules = parseDifferentProductsDiscountRulesFromOffer(offer);
     if (!differentRules.length) return "";
 
-    if (!window.__ciwiBundleState.selectedCount) {
-      const defaultRule = differentRules.find((r) => r.isDefault);
-      window.__ciwiBundleState.selectedCount = defaultRule
-        ? defaultRule.count
-        : (differentRules[0]?.count || 1);
-      setTimeout(
-        () =>
-          updateThemeQuantityInput(
-            getCartQuantityForSelectedOffer(offer, window.__ciwiBundleState.selectedCount),
-          ),
-        0,
-      );
-    }
-    const selectedCount = window.__ciwiBundleState.selectedCount;
+    const selectedCount = getSelectedCountForOffer(offer);
 
     let offerSettings = {};
     try {
@@ -3444,6 +3666,11 @@ function renderBundlePreviewHtml(offer) {
     const buttonPrimaryColor = offerSettings.buttonPrimaryColor || "#008060";
     const showCustomButton = offerSettings.showCustomButton !== false;
     const widgetTitle = offerSettings.title || "Bundle & Save";
+    const singleRule =
+      differentRules.find((rule) => String(rule.tierType || "") === "single") || null;
+    const offerRules = differentRules.filter(
+      (rule) => String(rule.tierType || "") !== "single",
+    );
     const hasDefault = differentRules.some((r) => r.isDefault);
 
     const currentPool = parseSelectedProductIds(offer.selectedProductsJson);
@@ -3454,12 +3681,13 @@ function renderBundlePreviewHtml(offer) {
     const unitPrice = getCurrentUnitPrice();
     const items = [
       {
-        count: 1,
-        title: "Single",
-        subtitle: "Standard price",
+        count: CIWI_SINGLE_OPTION_COUNT,
+        title: singleRule?.title || "Single",
+        subtitle: singleRule?.subtitle || "Standard price",
         price: formatPrice(unitPrice),
+        badge: singleRule?.badge || "",
       },
-      ...differentRules.map((rule, index) => {
+      ...offerRules.map((rule, index) => {
       const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
       const amounts = calculateBundleAmounts(unitPrice, rule.count, rule.discountPercent);
       return {
@@ -3539,19 +3767,7 @@ function renderBundlePreviewHtml(offer) {
   // Existing logic for quantity breaks
   const discountRules = parseDiscountRulesJson(offer?.discountRulesJson);
   if (!discountRules.length) return "";
-
-  if (!window.__ciwiBundleState.selectedCount) {
-    const defaultRule = discountRules.find(r => r.isDefault);
-    window.__ciwiBundleState.selectedCount = defaultRule ? defaultRule.count : (discountRules[0]?.count || 1);
-    setTimeout(
-      () =>
-        updateThemeQuantityInput(
-          getCartQuantityForSelectedOffer(offer, window.__ciwiBundleState.selectedCount),
-        ),
-      0,
-    );
-  }
-  const selectedCount = window.__ciwiBundleState.selectedCount;
+  const selectedCount = getSelectedCountForOffer(offer);
 
   // Extract styles from offer settings, use defaults if missing
   let offerSettings = {};
@@ -3577,15 +3793,19 @@ function renderBundlePreviewHtml(offer) {
   const widgetTitle = offerSettings.title || "Bundle & Save";
 
   const unitPrice = getCurrentUnitPrice();
+  const singleRule =
+    discountRules.find((rule) => String(rule.tierType || "") === "single") || null;
+  const offerRules = discountRules.filter((rule) => String(rule.tierType || "") !== "single");
   const hasDefault = discountRules.some((r) => r.isDefault);
   const items = [
     {
-      count: 1,
-      title: "Single",
-      subtitle: "Standard price",
+      count: CIWI_SINGLE_OPTION_COUNT,
+      title: singleRule?.title || "Single",
+      subtitle: singleRule?.subtitle || "Standard price",
       price: formatPrice(unitPrice),
+      badge: singleRule?.badge || "",
     },
-    ...discountRules.map((rule, index) => {
+    ...offerRules.map((rule, index) => {
       if (rule.logicType === "bxgy") {
         const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
         const bxgyDisplay = getBxgyDisplayMeta(rule);

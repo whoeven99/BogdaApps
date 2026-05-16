@@ -5,6 +5,11 @@ import type {
   DiscountRule,
   FreeGiftRule,
 } from "../../../utils/offerParsing";
+import {
+  isSingleBxgyRule,
+  isSingleDifferentProductsRule,
+  isSingleFreeGiftRule,
+} from "../../../utils/offerParsing";
 import type { OfferTypeId } from "./offerTypeOptions";
 import {
   buildDiscountRuleCondition,
@@ -59,27 +64,35 @@ export function adaptBxgyRules(
 ): UnifiedRuleNode[] {
   return rules.map((rule, index) => ({
     id: buildNodeId("bxgy-rule", index),
-    type: "bxgy",
+    type: isSingleBxgyRule(rule) ? "single_purchase" : "bxgy",
     sourceOfferType: "bxgy",
     scope: {
       kind: "buy_get_products",
       buyProductIds,
-      getProductIds: buyProductIds,
+      getProductIds: fallbackGetProductIds.length > 0 ? fallbackGetProductIds : buyProductIds,
     },
-    condition: {
-      kind: "buy_x_get_y",
-      triggerCount: Math.max(1, Math.trunc(Number(rule.count) || 1)),
-      buyQuantity: Math.max(1, Math.trunc(Number(rule.buyQuantity) || 1)),
-      getQuantity: Math.max(1, Math.trunc(Number(rule.getQuantity) || 1)),
-      maxUsesPerOrder: Math.max(1, Math.trunc(Number(rule.maxUsesPerOrder) || 1)),
-    },
-    reward: {
-      kind: "percentage_off",
-      discountClass: "product",
-      discountPercent: Math.max(0, Math.min(100, Number(rule.discountPercent) || 0)),
-    },
+    condition: isSingleBxgyRule(rule)
+      ? {
+          kind: "single_purchase",
+        }
+      : {
+          kind: "buy_x_get_y",
+          triggerCount: Math.max(1, Math.trunc(Number(rule.count) || 1)),
+          buyQuantity: Math.max(1, Math.trunc(Number(rule.buyQuantity) || 1)),
+          getQuantity: Math.max(1, Math.trunc(Number(rule.getQuantity) || 1)),
+          maxUsesPerOrder: Math.max(1, Math.trunc(Number(rule.maxUsesPerOrder) || 1)),
+        },
+    reward: isSingleBxgyRule(rule)
+      ? {
+          kind: "standard_price",
+        }
+      : {
+          kind: "percentage_off",
+          discountClass: "product",
+          discountPercent: Math.max(0, Math.min(100, Number(rule.discountPercent) || 0)),
+        },
     presentation: buildBasePresentation(rule),
-    publishSupport: "supported",
+    publishSupport: isSingleBxgyRule(rule) ? "draft_only" : "supported",
   }));
 }
 
@@ -90,7 +103,7 @@ export function adaptFreeGiftRules(
 ): UnifiedRuleNode[] {
   return rules.map((rule, index) => ({
     id: buildNodeId("free-gift-rule", index),
-    type: "free_gift",
+    type: isSingleFreeGiftRule(rule) ? "single_purchase" : "free_gift",
     sourceOfferType: "free-gift",
     scope: {
       kind: "trigger_gift_products",
@@ -100,16 +113,24 @@ export function adaptFreeGiftRules(
           ? rule.giftProductIds
           : fallbackGiftProductIds,
     },
-    condition: {
-      kind: "item_quantity",
-      count: Math.max(1, Math.trunc(Number(rule.count) || 1)),
-    },
-    reward: {
-      kind: "gift_product",
-      giftQuantity: Math.max(1, Math.trunc(Number(rule.giftQuantity) || 1)),
-    },
+    condition: isSingleFreeGiftRule(rule)
+      ? {
+          kind: "single_purchase",
+        }
+      : {
+          kind: "item_quantity",
+          count: Math.max(1, Math.trunc(Number(rule.count) || 1)),
+        },
+    reward: isSingleFreeGiftRule(rule)
+      ? {
+          kind: "standard_price",
+        }
+      : {
+          kind: "gift_product",
+          giftQuantity: Math.max(1, Math.trunc(Number(rule.giftQuantity) || 1)),
+        },
     presentation: buildBasePresentation(rule),
-    publishSupport: "supported",
+    publishSupport: isSingleFreeGiftRule(rule) ? "draft_only" : "supported",
   }));
 }
 
@@ -118,10 +139,19 @@ export function adaptDifferentProductsRules(
 ): UnifiedRuleNode[] {
   return rules.map((rule, index) => ({
     id: buildNodeId("different-products-rule", index),
-    type: rule.tierType === "bxgy" ? "bxgy" : "quantity_break",
+    type: isSingleDifferentProductsRule(rule)
+      ? "single_purchase"
+      : rule.tierType === "bxgy"
+        ? "bxgy"
+        : "quantity_break",
     sourceOfferType: "quantity-breaks-different",
     scope:
-      rule.tierType === "bxgy"
+      isSingleDifferentProductsRule(rule)
+        ? {
+            kind: "shared_product_pool" as const,
+            productIds: rule.buyProductIds,
+          }
+        : rule.tierType === "bxgy"
         ? {
             kind: "buy_get_products" as const,
             buyProductIds: rule.buyProductIds,
@@ -132,7 +162,11 @@ export function adaptDifferentProductsRules(
             productIds: rule.buyProductIds,
           },
     condition:
-      rule.tierType === "bxgy"
+      isSingleDifferentProductsRule(rule)
+        ? {
+            kind: "single_purchase" as const,
+          }
+        : rule.tierType === "bxgy"
         ? {
             kind: "buy_x_get_y" as const,
             triggerCount: Math.max(1, Math.trunc(Number(rule.count) || 1)),
@@ -144,13 +178,17 @@ export function adaptDifferentProductsRules(
             kind: "item_quantity" as const,
             count: Math.max(1, Math.trunc(Number(rule.count) || 1)),
           },
-    reward: {
-      kind: "percentage_off",
-      discountClass: "product",
-      discountPercent: Math.max(0, Math.min(100, Number(rule.discountPercent) || 0)),
-    },
+    reward: isSingleDifferentProductsRule(rule)
+      ? {
+          kind: "standard_price",
+        }
+      : {
+          kind: "percentage_off",
+          discountClass: "product",
+          discountPercent: Math.max(0, Math.min(100, Number(rule.discountPercent) || 0)),
+        },
     presentation: buildBasePresentation(rule),
-    publishSupport: "supported",
+    publishSupport: isSingleDifferentProductsRule(rule) ? "draft_only" : "supported",
   }));
 }
 

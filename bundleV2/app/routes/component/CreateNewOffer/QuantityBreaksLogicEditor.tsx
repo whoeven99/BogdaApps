@@ -1,5 +1,8 @@
 import { Checkbox, Input } from "antd";
-import type { DiscountRule } from "../../../utils/offerParsing";
+import {
+  isSingleDiscountRule,
+  type DiscountRule,
+} from "../../../utils/offerParsing";
 import type {
   RulePresentationPatch,
 } from "./unifiedRulePresentation";
@@ -35,13 +38,29 @@ export default function QuantityBreaksLogicEditor({
 }: Props) {
   const showTiers = section === "all" || section === "tiers";
   const showPresentation = section === "all" || section === "presentation";
+  const indexedRules = discountRules.map((rule, index) => ({ rule, index }));
+  const singleEntry =
+    indexedRules.find((entry) => isSingleDiscountRule(entry.rule)) || null;
+  const ruleEntries = indexedRules.filter((entry) => !isSingleDiscountRule(entry.rule));
+  const tierRules = ruleEntries.map((entry) => entry.rule);
+  const setTierRules: React.Dispatch<React.SetStateAction<DiscountRule[]>> = (value) => {
+    const nextTierRules = typeof value === "function" ? value(tierRules) : value;
+    setDiscountRules((prev) => {
+      const next = typeof value === "function" ? value(tierRules) : nextTierRules;
+      return [
+        ...(singleEntry ? [singleEntry.rule] : []),
+        ...next,
+      ];
+    });
+  };
+  const presentationEntries = singleEntry ? [singleEntry, ...ruleEntries] : ruleEntries;
 
   return (
     <div>
       {showTiers ? (
         <UnifiedRulesEditor
-          rules={discountRules}
-          setRules={setDiscountRules}
+          rules={tierRules}
+          setRules={setTierRules}
           updateRuleValues={updateRuleValues}
           selectedProductsData={selectedProductsData}
           offerType={offerType}
@@ -55,7 +74,7 @@ export default function QuantityBreaksLogicEditor({
         </>
       ) : null}
       {showPresentation
-        ? discountRules.map((rule, index) => (
+        ? presentationEntries.map(({ rule, index }) => (
             <div className="create-offer-discount-card" key={`${rule.id || rule.count}-${index}`}>
               <div className="create-offer-discount-body">
                 <div

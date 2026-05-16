@@ -137,13 +137,14 @@ type BxgyDiscountRule = {
   getProductIds: string[];
   discountPercent: number;
   maxUsesPerOrder: number;
-  tierType?: "bxgy" | "simple";
+  tierType?: "single" | "bxgy" | "simple";
 };
 
 type FreeGiftRule = {
   count: number;
   giftQuantity: number;
   giftProductIds: string[];
+  tierType?: "single";
 };
 
 type Offer = NonNullable<OfferMetafieldPayload["offers"]>[number];
@@ -162,6 +163,7 @@ type CompleteBundleProductRow = {
 
 type CompleteBundleBarRow = {
   id: string;
+  type?: "single" | "quantity-break-same" | "bxgy";
   minQuantity: number;
   maxQuantity: number;
   excludeTriggerProduct: boolean;
@@ -187,6 +189,7 @@ function parseFreeGiftRulesJson(discountRulesJson?: string | null): FreeGiftRule
     const rules: FreeGiftRule[] = [];
     for (const item of parsed) {
       if (!item || typeof item !== "object") continue;
+      if ((item as { tierType?: unknown }).tierType === "single") continue;
       const count = Number((item as { count?: unknown }).count);
       const giftQuantity = Number((item as { giftQuantity?: unknown }).giftQuantity);
       if (!Number.isFinite(count) || count < 1) continue;
@@ -299,7 +302,11 @@ function parseCompleteBundleBarsJson(
       ? ((parsed as { productIds?: unknown[] }).productIds || [])
           .map((id) => String(id || "").trim())
           .filter(Boolean)
-      : [];
+      : Array.isArray((parsed as { triggerProductIds?: unknown })?.triggerProductIds)
+        ? ((parsed as { triggerProductIds?: unknown[] }).triggerProductIds || [])
+          .map((id) => String(id || "").trim())
+          .filter(Boolean)
+        : [];
     const barsIn = (parsed as { bars?: unknown })?.bars;
     if (!Array.isArray(barsIn)) return { triggerProductIds, bars: [] };
 
@@ -366,6 +373,12 @@ function parseCompleteBundleBarsJson(
 
       out.push({
         id,
+        type:
+          String((rawBar as { type?: unknown }).type || "") === "single"
+            ? "single"
+            : String((rawBar as { type?: unknown }).type || "") === "bxgy"
+              ? "bxgy"
+              : "quantity-break-same",
         minQuantity,
         maxQuantity,
         excludeTriggerProduct,
@@ -504,6 +517,7 @@ function calculateCompleteBundleDiscounts(
     });
 
     for (const bar of bars) {
+      if (bar.type === "single") continue;
       if (!bar.products.length) continue;
       const anchorLine = cartLines.find((line) => {
         if (line.merchandise.__typename !== "ProductVariant") return false;
@@ -1029,6 +1043,7 @@ function parseDiscountRulesJson(
     const tiers: DiscountTier[] = [];
     for (const item of parsed) {
       if (!item || typeof item !== "object") continue;
+      if ((item as { tierType?: unknown }).tierType === "single") continue;
       const count = Number((item as { count?: unknown }).count);
       const logicType =
         (item as { logicType?: unknown }).logicType === "bxgy" ? "bxgy" : "standard";
@@ -1113,7 +1128,9 @@ function parseBxgyDiscountRules(discountRulesJson?: string | null): BxgyDiscount
     const out: BxgyDiscountRule[] = [];
     for (const item of parsed) {
       if (!item || typeof item !== "object") continue;
-      
+      const tierType = (item as { tierType?: unknown }).tierType;
+      if (tierType === "single") continue;
+
       const count = Number((item as { count?: unknown }).count);
       const buyQuantity = Number(
         (item as { buyQuantity?: unknown; count?: unknown }).buyQuantity ??
@@ -1122,33 +1139,40 @@ function parseBxgyDiscountRules(discountRulesJson?: string | null): BxgyDiscount
       const getQuantity = Number((item as { getQuantity?: unknown }).getQuantity);
       const discountPercent = Number((item as { discountPercent?: unknown }).discountPercent);
       const maxUsesPerOrder = Number((item as { maxUsesPerOrder?: unknown }).maxUsesPerOrder) || 1;
-      const tierType = (item as { tierType?: unknown }).tierType;
-      
       const buyProductIds = (item as { buyProductIds?: unknown }).buyProductIds;
       const getProductIds = (item as { getProductIds?: unknown }).getProductIds;
-      
+
+      const normalizedTierType = tierType === "simple" ? "simple" : "bxgy";
       if (!Number.isFinite(buyQuantity) || buyQuantity < 1) continue;
-      if (!Number.isFinite(getQuantity) || getQuantity < 1) continue;
       if (!Number.isFinite(discountPercent)) continue;
       if (!Array.isArray(buyProductIds) || !buyProductIds.length) continue;
       const normalizedBuyProductIds = buyProductIds.filter(id => typeof id === "string") as string[];
-      
+      if (!normalizedBuyProductIds.length) continue;
+      if (normalizedTierType === "bxgy" && (!Number.isFinite(getQuantity) || getQuantity < 1)) {
+        continue;
+      }
+      const normalizedGetProductIds =
+        normalizedTierType === "bxgy" &&
+        Array.isArray(getProductIds) &&
+        getProductIds.length > 0
+          ? (getProductIds.filter(id => typeof id === "string") as string[])
+          : normalizedTierType === "bxgy"
+            ? normalizedBuyProductIds
+            : [];
+
       out.push({
         count: Math.max(1, Math.trunc(buyQuantity)),
         buyQuantity: Math.max(1, Math.trunc(buyQuantity)),
-        getQuantity: Math.trunc(getQuantity),
+        getQuantity: normalizedTierType === "bxgy" ? Math.trunc(getQuantity) : 0,
         buyProductIds: normalizedBuyProductIds,
-        getProductIds:
-          Array.isArray(getProductIds) && getProductIds.length > 0
-            ? getProductIds.filter(id => typeof id === "string") as string[]
-            : normalizedBuyProductIds,
+        getProductIds: normalizedGetProductIds,
         discountPercent: Math.max(0, Math.min(100, discountPercent)),
         maxUsesPerOrder: Math.max(1, Math.trunc(maxUsesPerOrder)),
         // Legacy dedicated BXGY records may not persist tierType; default them to BXGY.
-        tierType: tierType === "simple" ? "simple" : "bxgy",
+        tierType: normalizedTierType,
       });
     }
-    
+
     out.sort((a, b) => a.count - b.count);
     return out;
   } catch {

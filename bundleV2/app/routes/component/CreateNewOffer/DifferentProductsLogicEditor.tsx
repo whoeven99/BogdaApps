@@ -1,5 +1,8 @@
 import { Button, Checkbox, Input, Select } from "antd";
-import type { DifferentProductsDiscountRule } from "../../../utils/offerParsing";
+import {
+  isSingleDifferentProductsRule,
+  type DifferentProductsDiscountRule,
+} from "../../../utils/offerParsing";
 import type { DraftSelectedProduct } from "./campaignDraft";
 import {
   OfferRuleCard,
@@ -72,17 +75,26 @@ export default function DifferentProductsLogicEditor({
   updateRulePresentation,
 }: Props) {
   getDifferentProductsRuleCapability();
+  const indexedRules = differentProductsDiscountRules.map((rule, index) => ({
+    rule,
+    actualIndex: index,
+  }));
+  const singleEntry =
+    indexedRules.find((entry) => isSingleDifferentProductsRule(entry.rule)) || null;
+  const ruleEntries = indexedRules.filter(
+    (entry) => !isSingleDifferentProductsRule(entry.rule),
+  );
   const productOptions = eligibleProductsData.map((product) => ({
     label: product.title,
     value: String(product.id),
   }));
 
   const updateRule = (
-    index: number,
+    actualIndex: number,
     patch: Partial<DifferentProductsDiscountRule>,
   ) => {
-    const ruleId = getDifferentProductsUnifiedRuleId(index);
-    const currentRule = differentProductsDiscountRules[index];
+    const ruleId = getDifferentProductsUnifiedRuleId(actualIndex);
+    const currentRule = differentProductsDiscountRules[actualIndex];
     const normalizedPatch = normalizeRule({
       ...(currentRule || buildDefaultTier(eligibleProductsData)),
       ...patch,
@@ -93,7 +105,7 @@ export default function DifferentProductsLogicEditor({
     }
     setDifferentProductsDiscountRules((prev) =>
       prev.map((rule, ruleIndex) =>
-        ruleIndex === index ? normalizedPatch : rule,
+        ruleIndex === actualIndex ? normalizedPatch : rule,
       ),
     );
   };
@@ -106,7 +118,85 @@ export default function DifferentProductsLogicEditor({
 
   return (
     <OfferRulesSection>
-      {differentProductsDiscountRules.map((rule, index) => {
+      {singleEntry ? (
+        <OfferRuleCard key="single-different-products" index={0} disableRemove onRemove={() => {}}>
+          <OfferRuleFormGrid columns={3}>
+            <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+              Title
+              <Input
+                size="large"
+                className="mt-1"
+                value={singleEntry.rule.title || ""}
+                placeholder="e.g. Single"
+                onChange={(e) => {
+                  const ruleId = getDifferentProductsUnifiedRuleId(singleEntry.actualIndex);
+                  if (updateRulePresentation) {
+                    updateRulePresentation(ruleId, { title: e.target.value });
+                    return;
+                  }
+                  updateRule(singleEntry.actualIndex, { title: e.target.value });
+                }}
+              />
+            </label>
+            <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+              Subtitle
+              <Input
+                size="large"
+                className="mt-1"
+                value={singleEntry.rule.subtitle || ""}
+                placeholder="e.g. Standard price"
+                onChange={(e) => {
+                  const ruleId = getDifferentProductsUnifiedRuleId(singleEntry.actualIndex);
+                  if (updateRulePresentation) {
+                    updateRulePresentation(ruleId, { subtitle: e.target.value });
+                    return;
+                  }
+                  updateRule(singleEntry.actualIndex, { subtitle: e.target.value });
+                }}
+              />
+            </label>
+            <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+              Badge
+              <Input
+                size="large"
+                className="mt-1"
+                value={singleEntry.rule.badge || ""}
+                placeholder="Optional"
+                onChange={(e) => {
+                  const ruleId = getDifferentProductsUnifiedRuleId(singleEntry.actualIndex);
+                  if (updateRulePresentation) {
+                    updateRulePresentation(ruleId, { badge: e.target.value });
+                    return;
+                  }
+                  updateRule(singleEntry.actualIndex, { badge: e.target.value });
+                }}
+              />
+            </label>
+          </OfferRuleFormGrid>
+          <OfferRuleFooterRow>
+            <Checkbox
+              checked={!!singleEntry.rule.isDefault}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                const ruleId = getDifferentProductsUnifiedRuleId(singleEntry.actualIndex);
+                if (updateRulePresentation) {
+                  updateRulePresentation(ruleId, { isDefault: checked });
+                  return;
+                }
+                setDifferentProductsDiscountRules((prev) =>
+                  prev.map((currentRule, currentIndex) => ({
+                    ...currentRule,
+                    isDefault: checked ? currentIndex === singleEntry.actualIndex : false,
+                  })),
+                );
+              }}
+            >
+              Set as Default Selected
+            </Checkbox>
+          </OfferRuleFooterRow>
+        </OfferRuleCard>
+      ) : null}
+      {ruleEntries.map(({ rule, actualIndex }, index) => {
         const normalizedRule = normalizeRule(rule);
         const eligibleProductsInTier = eligibleProductsData.filter((product) =>
           normalizedRule.buyProductIds.includes(String(product.id)),
@@ -116,16 +206,16 @@ export default function DifferentProductsLogicEditor({
           <OfferRuleCard
             key={`${normalizedRule.tierType}-${index}`}
             index={index}
-            disableRemove={differentProductsDiscountRules.length <= 1}
+            disableRemove={ruleEntries.length <= 1}
             onRemove={() => {
               setDifferentProductsDiscountRules((prev) => {
-                if (prev.length <= 1) return prev;
-                return prev.filter((_, currentIndex) => currentIndex !== index);
+                if (ruleEntries.length <= 1) return prev;
+                return prev.filter((_, currentIndex) => currentIndex !== actualIndex);
               });
             }}
           >
               {(() => {
-                const ruleId = getDifferentProductsUnifiedRuleId(index);
+                const ruleId = getDifferentProductsUnifiedRuleId(actualIndex);
                 return (
                   <>
               <OfferRuleFormGrid columns={3}>
@@ -143,7 +233,7 @@ export default function DifferentProductsLogicEditor({
                         1,
                         Math.trunc(Number(e.target.value) || 1),
                       );
-                      updateRule(index, { count: value });
+                      updateRule(actualIndex, { count: value });
                     }}
                   />
                 </label>
@@ -162,7 +252,7 @@ export default function DifferentProductsLogicEditor({
                         0,
                         Math.min(100, Number(e.target.value) || 0),
                       );
-                      updateRule(index, { discountPercent: value });
+                      updateRule(actualIndex, { discountPercent: value });
                     }}
                   />
                 </label>
@@ -174,7 +264,7 @@ export default function DifferentProductsLogicEditor({
                     className="mt-1"
                     value={normalizedRule.buyProductIds}
                     options={productOptions}
-                    onChange={(values) => updateRule(index, { buyProductIds: values })}
+                    onChange={(values) => updateRule(actualIndex, { buyProductIds: values })}
                     placeholder="Select the products included in this tier"
                   />
                 </label>
@@ -193,7 +283,7 @@ export default function DifferentProductsLogicEditor({
                         updateRulePresentation(ruleId, { title: e.target.value });
                         return;
                       }
-                      updateRule(index, { title: e.target.value });
+                      updateRule(actualIndex, { title: e.target.value });
                     }}
                   />
                 </label>
@@ -209,7 +299,7 @@ export default function DifferentProductsLogicEditor({
                         updateRulePresentation(ruleId, { subtitle: e.target.value });
                         return;
                       }
-                      updateRule(index, { subtitle: e.target.value });
+                      updateRule(actualIndex, { subtitle: e.target.value });
                     }}
                   />
                 </label>
@@ -225,7 +315,7 @@ export default function DifferentProductsLogicEditor({
                         updateRulePresentation(ruleId, { badge: e.target.value });
                         return;
                       }
-                      updateRule(index, { badge: e.target.value });
+                      updateRule(actualIndex, { badge: e.target.value });
                     }}
                   />
                 </label>
@@ -283,7 +373,7 @@ export default function DifferentProductsLogicEditor({
                     setDifferentProductsDiscountRules((prev) =>
                       prev.map((currentRule, currentIndex) => ({
                         ...currentRule,
-                        isDefault: checked ? currentIndex === index : false,
+                        isDefault: checked ? currentIndex === actualIndex : false,
                       })),
                     );
                   }}

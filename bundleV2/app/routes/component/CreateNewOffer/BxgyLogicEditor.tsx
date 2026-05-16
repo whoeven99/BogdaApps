@@ -1,5 +1,8 @@
 import { Button, Checkbox, Dropdown, Input, Select } from "antd";
-import type { BxgyDiscountRule } from "../../../utils/offerParsing";
+import {
+  isSingleBxgyRule,
+  type BxgyDiscountRule,
+} from "../../../utils/offerParsing";
 import {
   OfferRuleAddPanel,
   OfferRuleCard,
@@ -38,6 +41,9 @@ export default function BxgyLogicEditor({
   const conditionTypeOptions = [{ label: "Buy X, Get Y", value: "buy_x_get_y" }];
   const showBuyProducts = section === "all" || section === "buy-products";
   const showRules = section === "all" || section === "rules";
+  const indexedRules = bxgyDiscountRules.map((rule, index) => ({ rule, actualIndex: index }));
+  const singleEntry = indexedRules.find((entry) => isSingleBxgyRule(entry.rule)) || null;
+  const ruleEntries = indexedRules.filter((entry) => !isSingleBxgyRule(entry.rule));
   const appendBxgyTier = () => {
     setBxgyDiscountRules((prev) => {
       const maxBuyQuantity = prev.reduce(
@@ -92,20 +98,119 @@ export default function BxgyLogicEditor({
 
       {showRules ? (
         <OfferRulesSection>
-          {bxgyDiscountRules.map((rule, index) => (
+          {singleEntry ? (
+            <OfferRuleCard key="single-bxgy" index={0} disableRemove onRemove={() => {}}>
+              {(() => {
+                const ruleId = getBxgyUnifiedRuleId(singleEntry.actualIndex);
+                return (
+                  <>
+                    <OfferRuleFormGrid columns={3}>
+                      <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                        Title
+                        <Input
+                          size="large"
+                          className="mt-1"
+                          value={singleEntry.rule.title || ""}
+                          placeholder="e.g. Single"
+                          onChange={(e) => {
+                            if (updateRulePresentation) {
+                              updateRulePresentation(ruleId, { title: e.target.value });
+                              return;
+                            }
+                            setBxgyDiscountRules((prev) =>
+                              prev.map((currentRule, currentIndex) =>
+                                currentIndex === singleEntry.actualIndex
+                                  ? { ...currentRule, title: e.target.value }
+                                  : currentRule,
+                              ),
+                            );
+                          }}
+                        />
+                      </label>
+                      <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                        Subtitle
+                        <Input
+                          size="large"
+                          className="mt-1"
+                          value={singleEntry.rule.subtitle || ""}
+                          placeholder="e.g. Standard price"
+                          onChange={(e) => {
+                            if (updateRulePresentation) {
+                              updateRulePresentation(ruleId, { subtitle: e.target.value });
+                              return;
+                            }
+                            setBxgyDiscountRules((prev) =>
+                              prev.map((currentRule, currentIndex) =>
+                                currentIndex === singleEntry.actualIndex
+                                  ? { ...currentRule, subtitle: e.target.value }
+                                  : currentRule,
+                              ),
+                            );
+                          }}
+                        />
+                      </label>
+                      <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
+                        Badge
+                        <Input
+                          size="large"
+                          className="mt-1"
+                          value={singleEntry.rule.badge || ""}
+                          placeholder="Optional"
+                          onChange={(e) => {
+                            if (updateRulePresentation) {
+                              updateRulePresentation(ruleId, { badge: e.target.value });
+                              return;
+                            }
+                            setBxgyDiscountRules((prev) =>
+                              prev.map((currentRule, currentIndex) =>
+                                currentIndex === singleEntry.actualIndex
+                                  ? { ...currentRule, badge: e.target.value }
+                                  : currentRule,
+                              ),
+                            );
+                          }}
+                        />
+                      </label>
+                    </OfferRuleFormGrid>
+                    <OfferRuleFooterRow>
+                      <Checkbox
+                        checked={!!singleEntry.rule.isDefault}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          if (updateRulePresentation) {
+                            updateRulePresentation(ruleId, { isDefault: checked });
+                            return;
+                          }
+                          setBxgyDiscountRules((prev) =>
+                            prev.map((currentRule, currentIndex) => ({
+                              ...currentRule,
+                              isDefault: checked ? currentIndex === singleEntry.actualIndex : false,
+                            })),
+                          );
+                        }}
+                      >
+                        Set as Default Selected
+                      </Checkbox>
+                    </OfferRuleFooterRow>
+                  </>
+                );
+              })()}
+            </OfferRuleCard>
+          ) : null}
+          {ruleEntries.map(({ rule, actualIndex }, index) => (
             <OfferRuleCard
-              key={index}
+              key={actualIndex}
               index={index}
-              disableRemove={bxgyDiscountRules.length <= 1}
+              disableRemove={ruleEntries.length <= 1}
               onRemove={() => {
                 setBxgyDiscountRules((prev) => {
-                  if (prev.length <= 1) return prev;
-                  return prev.filter((_, currentIndex) => currentIndex !== index);
+                  if (ruleEntries.length <= 1) return prev;
+                  return prev.filter((_, currentIndex) => currentIndex !== actualIndex);
                 });
               }}
             >
                 {(() => {
-                  const ruleId = getBxgyUnifiedRuleId(index);
+                  const ruleId = getBxgyUnifiedRuleId(actualIndex);
                   return (
                     <>
                 <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -157,7 +262,7 @@ export default function BxgyLogicEditor({
                         }
                         setBxgyDiscountRules((prev) =>
                           prev.map((currentRule, currentIndex) =>
-                            currentIndex === index
+                            currentIndex === actualIndex
                               ? {
                                   ...currentRule,
                                   buyQuantity: nextCount,
@@ -190,7 +295,7 @@ export default function BxgyLogicEditor({
                         }
                         setBxgyDiscountRules((prev) =>
                           prev.map((currentRule, currentIndex) =>
-                            currentIndex === index
+                            currentIndex === actualIndex
                               ? { ...currentRule, getQuantity: nextCount }
                               : currentRule,
                           ),
@@ -216,7 +321,7 @@ export default function BxgyLogicEditor({
                         }
                         setBxgyDiscountRules((prev) =>
                           prev.map((currentRule, currentIndex) =>
-                            currentIndex === index
+                            currentIndex === actualIndex
                               ? { ...currentRule, title: value }
                               : currentRule,
                           ),
@@ -239,7 +344,7 @@ export default function BxgyLogicEditor({
                         }
                         setBxgyDiscountRules((prev) =>
                           prev.map((currentRule, currentIndex) =>
-                            currentIndex === index
+                            currentIndex === actualIndex
                               ? { ...currentRule, subtitle: value }
                               : currentRule,
                           ),
@@ -262,7 +367,7 @@ export default function BxgyLogicEditor({
                         }
                         setBxgyDiscountRules((prev) =>
                           prev.map((currentRule, currentIndex) =>
-                            currentIndex === index
+                            currentIndex === actualIndex
                               ? { ...currentRule, badge: value }
                               : currentRule,
                           ),
@@ -295,7 +400,7 @@ export default function BxgyLogicEditor({
                       setBxgyDiscountRules((prev) =>
                         prev.map((currentRule, currentIndex) => ({
                           ...currentRule,
-                          isDefault: checked ? currentIndex === index : false,
+                          isDefault: checked ? currentIndex === actualIndex : false,
                         })),
                       );
                     }}

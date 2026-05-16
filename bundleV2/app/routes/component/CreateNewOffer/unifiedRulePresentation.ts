@@ -81,16 +81,29 @@ export function updateCompleteBundleBarPresentation(
   barId: string,
   patch: RulePresentationPatch,
 ): CompleteBundleBar[] {
-  return bars.map((bar) =>
-    bar.id === barId
-      ? {
-          ...bar,
-          ...(typeof patch.title === "string" ? { title: patch.title } : null),
-          ...(typeof patch.subtitle === "string"
-            ? { subtitle: patch.subtitle }
-            : null),
-          ...(typeof patch.badge === "string" ? { badge: patch.badge } : null),
-        }
-      : bar,
-  );
+  return bars.map((bar) => {
+    if (patch.isDefault === true) {
+      return {
+        ...bar,
+        ...(typeof patch.title === "string" && bar.id === barId ? { title: patch.title } : null),
+        ...(typeof patch.subtitle === "string" && bar.id === barId
+          ? { subtitle: patch.subtitle }
+          : null),
+        ...(typeof patch.badge === "string" && bar.id === barId ? { badge: patch.badge } : null),
+        isDefault: bar.id === barId,
+      };
+    }
+
+    if (bar.id !== barId) {
+      return bar;
+    }
+
+    return {
+      ...bar,
+      ...(typeof patch.title === "string" ? { title: patch.title } : null),
+      ...(typeof patch.subtitle === "string" ? { subtitle: patch.subtitle } : null),
+      ...(typeof patch.badge === "string" ? { badge: patch.badge } : null),
+      ...(typeof patch.isDefault === "boolean" ? { isDefault: patch.isDefault } : null),
+    };
+  });
 }

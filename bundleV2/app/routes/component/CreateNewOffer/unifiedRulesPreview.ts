@@ -1,6 +1,7 @@
 import type { PreviewItem, PreviewProduct } from "../BundlePreview/bundlePreviewShared";
 import {
   getBxgyDisplayMeta,
+  isCompleteBundleSingleBar,
   type CompleteBundleBar,
   type CompleteBundlePricingMode,
 } from "../../../utils/offerParsing";
@@ -86,6 +87,31 @@ function getFeaturedState(rules: UnifiedRuleNode[], index: number) {
   return hasDefault ? !!rules[index]?.presentation.isDefault : index === 0;
 }
 
+function buildSinglePurchaseItem(
+  rule: UnifiedRuleNode,
+  index: number,
+  params: BuildPreviewParams,
+): PreviewItem {
+  const featured = getFeaturedState(params.rules, index);
+  return {
+    id: rule.id,
+    title: rule.presentation.title || "Single",
+    subtitle: rule.presentation.subtitle || "Standard price",
+    price: params.formatPrice(params.baseUnitPrice),
+    featured,
+    badge: rule.presentation.badge || undefined,
+    products:
+      params.selectedProducts[0] != null
+        ? [
+            {
+              image: params.selectedProducts[0].image || "https://via.placeholder.com/48",
+              name: params.selectedProducts[0].title || "Current product",
+            },
+          ]
+        : undefined,
+  };
+}
+
 function mapProducts(ids: string[], selectedProducts: SelectedPreviewProduct[]): PreviewProduct[] {
   return ids
     .map((productId) =>
@@ -122,6 +148,9 @@ function buildStandardRuleItem(
   index: number,
   params: BuildPreviewParams,
 ): PreviewItem {
+  if (rule.type === "single_purchase") {
+    return buildSinglePurchaseItem(rule, index, params);
+  }
   const featured = getFeaturedState(params.rules, index);
   const badge = rule.presentation.badge || (featured ? "Most Popular" : "");
   const triggerLabel =
@@ -279,6 +308,9 @@ function buildDifferentProductsItem(
   index: number,
   params: BuildPreviewParams,
 ): PreviewItem {
+  if (rule.type === "single_purchase") {
+    return buildSinglePurchaseItem(rule, index, params);
+  }
   const featured = getFeaturedState(params.rules, index);
   const productPoolIds =
     rule.scope.kind === "shared_product_pool"
@@ -348,21 +380,42 @@ function buildDifferentProductsItem(
 }
 
 function buildCompleteBundleItem(
-  rule: UnifiedRuleNode,
+  bar: CompleteBundleBar,
   index: number,
   params: BuildPreviewParams,
 ): PreviewItem {
-  const barId =
-    rule.scope.kind === "bundle_bar_products" ? rule.scope.barId : undefined;
-  const bar = barId
-    ? params.completeBundleBars.find((entry) => entry.id === barId)
-    : undefined;
-  const productsCount = Array.isArray(bar?.products) ? bar.products.length : 0;
   const anchorProduct = params.selectedProducts[0];
   const anchorBase = Math.max(0, Number(params.baseUnitPrice) || 0);
+  if (isCompleteBundleSingleBar(bar)) {
+    if (!anchorProduct && anchorBase <= 0) {
+      return {
+        id: bar.id,
+        title: bar.title || "Single",
+        subtitle: bar.subtitle || "Standard price",
+        price: params.formatPrice(0),
+      };
+    }
+    return {
+      id: bar.id,
+      title: bar.title || "Single",
+      subtitle: bar.subtitle || "Standard price",
+      price: params.formatPrice(anchorBase),
+      featured: !!bar.isDefault,
+      products: anchorProduct
+        ? [
+            {
+              image: anchorProduct.image || "https://via.placeholder.com/48",
+              name: anchorProduct.title || "Current product",
+            },
+          ]
+        : undefined,
+    };
+  }
+
+  const productsCount = Array.isArray(bar.products) ? bar.products.length : 0;
   let sumOriginal = anchorBase;
 
-  for (const product of bar?.products || []) {
+  for (const product of bar.products || []) {
     const selectedVariant =
       product.variants?.find((variant) => variant.id === product.selectedVariantId) ||
       product.variants?.[0];
@@ -405,80 +458,39 @@ function buildCompleteBundleItem(
   );
 
   return {
-    id: rule.id,
-    title: rule.presentation.title || `Bar #${index + 1}`,
+    id: bar.id,
+    title: bar.title || `Bar #${index + 1}`,
     subtitle:
-      rule.presentation.subtitle ||
+      bar.subtitle ||
       `Current product + ${minQuantity}-${maxQuantity} bundle items from ${productsCount} options`,
     price: params.formatPrice(sumFinal),
     original: sumOriginal > sumFinal ? params.formatPrice(sumOriginal) : undefined,
-    featured: index === 0,
-    badge: rule.presentation.badge || (index === 0 ? "Most Popular" : ""),
+    featured: !!bar.isDefault,
+    badge: bar.badge || (bar.isDefault ? "Most Popular" : ""),
     saveLabel:
       saved > 0
         ? `SAVE ${params.formatPrice(saved)}`
-        : rule.condition.kind === "bundle_completion"
-          ? `SELECT ${Math.max(1, Number(rule.condition.quantity) || 1)} ITEMS`
+        : bar.type !== "bxgy"
+          ? `SELECT ${maxQuantity} ITEMS`
           : undefined,
     products: products.length > 0 ? products : undefined,
   };
 }
 
-function buildCompleteBundleSingleItem(
-  params: BuildPreviewParams,
-): PreviewItem | null {
-  const currentProduct = params.selectedProducts[0];
-  const base = Math.max(0, Number(params.baseUnitPrice) || 0);
-  if (!currentProduct && base <= 0) return null;
-
-  return {
-    id: "complete-bundle-single",
-    title: currentProduct?.title || "Current product",
-    subtitle: "Standard price",
-    price: params.formatPrice(base),
-  };
-}
-
 export function buildUnifiedPreviewItems(params: BuildPreviewParams): PreviewItem[] {
   if (params.offerType === "complete-bundle") {
-    const singleItem = buildCompleteBundleSingleItem(params);
-    const bundleItems = params.rules
-      .filter((rule) => rule.sourceOfferType === "complete-bundle")
-      .map((rule, index) => buildCompleteBundleItem(rule, index, params));
-    return singleItem ? [singleItem, ...bundleItems] : bundleItems;
+    return params.completeBundleBars.map((bar, index) =>
+      buildCompleteBundleItem(bar, index, params),
+    );
   }
 
   if (params.offerType === "quantity-breaks-different") {
-    return [
-      {
-        id: "single",
-        title: "Single",
-        subtitle: "Standard price",
-        price: params.formatPrice(params.baseUnitPrice),
-      },
-      ...params.rules.map((rule, index) =>
-        buildDifferentProductsItem(rule, index, params),
-      ),
-    ];
+    return params.rules.map((rule, index) =>
+      buildDifferentProductsItem(rule, index, params),
+    );
   }
 
-  if (params.offerType === "quantity-breaks-same") {
-    return [
-      {
-        id: "single",
-        title: "Single",
-        subtitle: "Standard price",
-        price: params.formatPrice(params.baseUnitPrice),
-      },
-      ...params.rules.map((rule, index) =>
-        buildStandardRuleItem(rule, index, params),
-      ),
-    ];
-  }
-
-  return params.rules.map((rule, index) =>
-    buildStandardRuleItem(rule, index, params),
-  );
+  return params.rules.map((rule, index) => buildStandardRuleItem(rule, index, params));
 }
 
 export function buildCompositionPreviewItems(
@@ -491,7 +503,13 @@ export function buildCompositionPreviewItems(
 
   return params.rules.map((rule, index) => {
     if (rule.type === "complete_bundle") {
-      return buildCompleteBundleItem(rule, index, mixedParams);
+      const barId = rule.scope.kind === "bundle_bar_products" ? rule.scope.barId : undefined;
+      const bar =
+        params.completeBundleBars.find((entry) => entry.id === barId) ||
+        params.completeBundleBars[index];
+      if (bar) {
+        return buildCompleteBundleItem(bar, index, mixedParams);
+      }
     }
 
     if (rule.sourceOfferType === "quantity-breaks-different") {

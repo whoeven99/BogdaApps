@@ -524,6 +524,7 @@ export type DiscountRule = {
   id?: string;
   count: number;
   discountPercent: number;
+  tierType?: "single" | "standard";
   title?: string;
   subtitle?: string;
   badge?: string;
@@ -560,7 +561,7 @@ export type DifferentProductsDiscountRule = {
   buyProductIds: string[];
   getProductIds: string[];
   maxUsesPerOrder: number;
-  tierType: "bxgy" | "simple";
+  tierType: "single" | "bxgy" | "simple";
   title?: string;
   subtitle?: string;
   badge?: string;
@@ -578,6 +579,7 @@ export type CampaignScope = {
 export type QuantityBreakTier = {
   qty: number;
   discountPercent: number;
+  tierType?: "single" | "standard";
   title?: string;
   subtitle?: string;
   badge?: string;
@@ -676,7 +678,7 @@ export type BxgyDiscountRule = {
   maxUsesPerOrder: number;
   /** Count threshold: promotion triggers when cart has this many items in buyProductIds */
   count: number;
-  tierType?: "bxgy" | "simple";
+  tierType?: "single" | "bxgy" | "simple";
   title?: string;
   subtitle?: string;
   badge?: string;
@@ -743,11 +745,298 @@ export type FreeGiftRule = {
   count: number;
   giftQuantity: number;
   giftProductIds?: string[];
+  tierType?: "single";
   title?: string;
   subtitle?: string;
   badge?: string;
   isDefault?: boolean;
 };
+
+export function isSingleDiscountRule(
+  rule: Pick<DiscountRule, "tierType"> | null | undefined,
+): boolean {
+  return String(rule?.tierType || "") === "single";
+}
+
+export function createDefaultSingleDiscountRule(
+  overrides: Partial<DiscountRule> = {},
+): DiscountRule {
+  const next = { ...overrides };
+  return {
+    id: next.id || "single-rule",
+    count: 0,
+    discountPercent: 0,
+    tierType: "single",
+    title: typeof next.title === "string" ? next.title : "Single",
+    subtitle: typeof next.subtitle === "string" ? next.subtitle : "Standard price",
+    badge: typeof next.badge === "string" ? next.badge : "",
+    isDefault: next.isDefault === true,
+    discountClass: "product",
+    offerKind: "percentage_discount",
+    conditionType: "item_quantity",
+    rewardType: "percentage_off",
+    rewardProductIds: [],
+  };
+}
+
+export function normalizeDiscountRules(rules: DiscountRule[]): DiscountRule[] {
+  let singleRule: DiscountRule | null = null;
+  const offerRules: DiscountRule[] = [];
+  for (const rule of rules) {
+    if (isSingleDiscountRule(rule)) {
+      if (!singleRule) {
+        singleRule = createDefaultSingleDiscountRule(rule);
+      }
+      continue;
+    }
+    offerRules.push({
+      ...rule,
+      id: rule.id || `discount-rule-${offerRules.length + 1}`,
+      count: Math.max(1, Math.trunc(Number(rule.count) || 1)),
+      discountPercent: Math.max(0, Math.min(100, Number(rule.discountPercent) || 0)),
+      tierType: "standard",
+      isDefault: !!rule.isDefault,
+    });
+  }
+  if (!singleRule) singleRule = createDefaultSingleDiscountRule();
+  offerRules.sort((a, b) => a.count - b.count);
+  const ordered = [singleRule, ...offerRules];
+  const explicitDefault = ordered.find((rule) => rule.isDefault);
+  const fallbackDefault = offerRules[0] || singleRule;
+  const defaultKey = explicitDefault?.id || fallbackDefault.id || "__single__";
+  return ordered.map((rule, index) => ({
+    ...rule,
+    id:
+      rule.id ||
+      (isSingleDiscountRule(rule) ? "single-rule" : `discount-rule-${index}`),
+    tierType: isSingleDiscountRule(rule) ? "single" : "standard",
+    isDefault:
+      rule.id && defaultKey !== "__single__"
+        ? rule.id === defaultKey
+        : index === ordered.findIndex((entry) =>
+            defaultKey === "__single__" ? isSingleDiscountRule(entry) : entry.id === defaultKey,
+          ),
+  }));
+}
+
+export function isSingleDifferentProductsRule(
+  rule: Pick<DifferentProductsDiscountRule, "tierType"> | null | undefined,
+): boolean {
+  return String(rule?.tierType || "") === "single";
+}
+
+export function createDefaultSingleDifferentProductsRule(
+  overrides: Partial<DifferentProductsDiscountRule> = {},
+): DifferentProductsDiscountRule {
+  const next = { ...overrides };
+  return {
+    count: 0,
+    discountPercent: 0,
+    buyQuantity: 0,
+    getQuantity: 0,
+    buyProductIds: [],
+    getProductIds: [],
+    maxUsesPerOrder: 1,
+    tierType: "single",
+    title: typeof next.title === "string" ? next.title : "Single",
+    subtitle: typeof next.subtitle === "string" ? next.subtitle : "Standard price",
+    badge: typeof next.badge === "string" ? next.badge : "",
+    isDefault: next.isDefault === true,
+  };
+}
+
+export function normalizeDifferentProductsDiscountRules(
+  rules: DifferentProductsDiscountRule[],
+): DifferentProductsDiscountRule[] {
+  let singleRule: DifferentProductsDiscountRule | null = null;
+  const offerRules: DifferentProductsDiscountRule[] = [];
+  for (const rule of rules) {
+    if (isSingleDifferentProductsRule(rule)) {
+      if (!singleRule) {
+        singleRule = createDefaultSingleDifferentProductsRule(rule);
+      }
+      continue;
+    }
+    offerRules.push({
+      ...rule,
+      count: Math.max(1, Math.trunc(Number(rule.count) || 1)),
+      buyQuantity: Math.max(
+        1,
+        Math.trunc(Number(rule.buyQuantity) || Number(rule.count) || 1),
+      ),
+      getQuantity:
+        rule.tierType === "bxgy"
+          ? Math.max(1, Math.trunc(Number(rule.getQuantity) || 1))
+          : 0,
+      discountPercent:
+        rule.tierType === "bxgy"
+          ? 100
+          : Math.max(0, Math.min(100, Number(rule.discountPercent) || 0)),
+      maxUsesPerOrder: rule.tierType === "bxgy" ? 1 : 1,
+      tierType: rule.tierType === "bxgy" ? "bxgy" : "simple",
+      isDefault: !!rule.isDefault,
+    });
+  }
+  if (!singleRule) singleRule = createDefaultSingleDifferentProductsRule();
+  offerRules.sort((a, b) => a.count - b.count);
+  const ordered = [singleRule, ...offerRules];
+  const explicitDefault = ordered.find((rule) => rule.isDefault);
+  const fallbackDefault = offerRules[0] || singleRule;
+  const defaultIndex = explicitDefault
+    ? ordered.findIndex((rule) =>
+        isSingleDifferentProductsRule(explicitDefault)
+          ? isSingleDifferentProductsRule(rule)
+          : !isSingleDifferentProductsRule(rule) &&
+            rule.count === explicitDefault.count &&
+            rule.tierType === explicitDefault.tierType,
+      )
+    : ordered.findIndex((rule) =>
+        isSingleDifferentProductsRule(fallbackDefault)
+          ? isSingleDifferentProductsRule(rule)
+          : !isSingleDifferentProductsRule(rule) &&
+            rule.count === fallbackDefault.count &&
+            rule.tierType === fallbackDefault.tierType,
+      );
+  return ordered.map((rule, index) => ({
+    ...rule,
+    isDefault: index === Math.max(0, defaultIndex),
+  }));
+}
+
+export function isSingleBxgyRule(
+  rule: Pick<BxgyDiscountRule, "tierType"> | null | undefined,
+): boolean {
+  return String(rule?.tierType || "") === "single";
+}
+
+export function createDefaultSingleBxgyRule(
+  overrides: Partial<BxgyDiscountRule> = {},
+): BxgyDiscountRule {
+  const next = { ...overrides };
+  return {
+    count: 0,
+    buyQuantity: 0,
+    getQuantity: 0,
+    buyProductIds: [],
+    getProductIds: [],
+    discountPercent: 0,
+    maxUsesPerOrder: 1,
+    tierType: "single",
+    title: typeof next.title === "string" ? next.title : "Single",
+    subtitle: typeof next.subtitle === "string" ? next.subtitle : "Standard price",
+    badge: typeof next.badge === "string" ? next.badge : "",
+    isDefault: next.isDefault === true,
+  };
+}
+
+export function normalizeBxgyRules(rules: BxgyDiscountRule[]): BxgyDiscountRule[] {
+  let singleRule: BxgyDiscountRule | null = null;
+  const offerRules: BxgyDiscountRule[] = [];
+  for (const rule of rules) {
+    if (isSingleBxgyRule(rule)) {
+      if (!singleRule) {
+        singleRule = createDefaultSingleBxgyRule(rule);
+      }
+      continue;
+    }
+    const normalizedBuyQuantity = Math.max(
+      1,
+      Math.trunc(Number(rule.buyQuantity) || Number(rule.count) || 1),
+    );
+    offerRules.push({
+      ...rule,
+      count: normalizedBuyQuantity,
+      buyQuantity: normalizedBuyQuantity,
+      getQuantity: Math.max(1, Math.trunc(Number(rule.getQuantity) || 1)),
+      discountPercent: 100,
+      maxUsesPerOrder: 1,
+      tierType: "bxgy",
+      isDefault: !!rule.isDefault,
+    });
+  }
+  if (!singleRule) singleRule = createDefaultSingleBxgyRule();
+  offerRules.sort((a, b) => a.count - b.count);
+  const ordered = [singleRule, ...offerRules];
+  const explicitDefault = ordered.find((rule) => rule.isDefault);
+  const fallbackDefault = offerRules[0] || singleRule;
+  const defaultIndex = explicitDefault
+    ? ordered.findIndex((rule) =>
+        isSingleBxgyRule(explicitDefault)
+          ? isSingleBxgyRule(rule)
+          : !isSingleBxgyRule(rule) && rule.count === explicitDefault.count,
+      )
+    : ordered.findIndex((rule) =>
+        isSingleBxgyRule(fallbackDefault)
+          ? isSingleBxgyRule(rule)
+          : !isSingleBxgyRule(rule) && rule.count === fallbackDefault.count,
+      );
+  return ordered.map((rule, index) => ({
+    ...rule,
+    isDefault: index === Math.max(0, defaultIndex),
+  }));
+}
+
+export function isSingleFreeGiftRule(
+  rule: Pick<FreeGiftRule, "tierType"> | null | undefined,
+): boolean {
+  return String(rule?.tierType || "") === "single";
+}
+
+export function createDefaultSingleFreeGiftRule(
+  overrides: Partial<FreeGiftRule> = {},
+): FreeGiftRule {
+  const next = { ...overrides };
+  return {
+    count: 0,
+    giftQuantity: 0,
+    giftProductIds: [],
+    tierType: "single",
+    title: typeof next.title === "string" ? next.title : "Single",
+    subtitle: typeof next.subtitle === "string" ? next.subtitle : "Standard price",
+    badge: typeof next.badge === "string" ? next.badge : "",
+    isDefault: next.isDefault === true,
+  };
+}
+
+export function normalizeFreeGiftRules(rules: FreeGiftRule[]): FreeGiftRule[] {
+  let singleRule: FreeGiftRule | null = null;
+  const offerRules: FreeGiftRule[] = [];
+  for (const rule of rules) {
+    if (isSingleFreeGiftRule(rule)) {
+      if (!singleRule) {
+        singleRule = createDefaultSingleFreeGiftRule(rule);
+      }
+      continue;
+    }
+    offerRules.push({
+      ...rule,
+      count: Math.max(1, Math.trunc(Number(rule.count) || 1)),
+      giftQuantity: Math.max(1, Math.trunc(Number(rule.giftQuantity) || 1)),
+      tierType: undefined,
+      isDefault: !!rule.isDefault,
+    });
+  }
+  if (!singleRule) singleRule = createDefaultSingleFreeGiftRule();
+  offerRules.sort((a, b) => a.count - b.count);
+  const ordered = [singleRule, ...offerRules];
+  const explicitDefault = ordered.find((rule) => rule.isDefault);
+  const fallbackDefault = offerRules[0] || singleRule;
+  const defaultIndex = explicitDefault
+    ? ordered.findIndex((rule) =>
+        isSingleFreeGiftRule(explicitDefault)
+          ? isSingleFreeGiftRule(rule)
+          : !isSingleFreeGiftRule(rule) && rule.count === explicitDefault.count,
+      )
+    : ordered.findIndex((rule) =>
+        isSingleFreeGiftRule(fallbackDefault)
+          ? isSingleFreeGiftRule(rule)
+          : !isSingleFreeGiftRule(rule) && rule.count === fallbackDefault.count,
+      );
+  return ordered.map((rule, index) => ({
+    ...rule,
+    isDefault: index === Math.max(0, defaultIndex),
+  }));
+}
 
 export type BxgyLogicBlock = {
   id: string;
@@ -798,9 +1087,11 @@ export type CompleteBundleProduct = {
 
 export type CompleteBundleBar = {
   id: string;
-  type: "quantity-break-same" | "bxgy";
+  type: "single" | "quantity-break-same" | "bxgy";
   title?: string;
   subtitle?: string;
+  badge?: string;
+  isDefault?: boolean;
   minQuantity?: number;
   maxQuantity?: number;
   excludeTriggerProduct?: boolean;
@@ -822,6 +1113,99 @@ export type CompleteBundleLogicBlock = {
   type: "complete-bundle";
   config: CompleteBundleConfig;
 };
+
+export function isCompleteBundleSingleBar(
+  bar: Pick<CompleteBundleBar, "type"> | null | undefined,
+): boolean {
+  return bar?.type === "single";
+}
+
+export function createDefaultCompleteBundleSingleBar(
+  overrides: Partial<CompleteBundleBar> = {},
+): CompleteBundleBar {
+  return {
+    id: String(overrides.id || "complete-bundle-single"),
+    type: "single",
+    title: typeof overrides.title === "string" ? overrides.title : "Single",
+    subtitle:
+      typeof overrides.subtitle === "string" ? overrides.subtitle : "Standard price",
+    badge: typeof overrides.badge === "string" ? overrides.badge : "",
+    isDefault: overrides.isDefault === true,
+    minQuantity: 1,
+    maxQuantity: 1,
+    excludeTriggerProduct: false,
+    quantity: 1,
+    products: [],
+    pricing: { mode: "full_price", value: 0 },
+  };
+}
+
+export function normalizeCompleteBundleBars(
+  bars: CompleteBundleBar[],
+): CompleteBundleBar[] {
+  const safeBars = Array.isArray(bars) ? bars : [];
+  let singleBar: CompleteBundleBar | null = null;
+  const bundleBars: CompleteBundleBar[] = [];
+
+  for (const bar of safeBars) {
+    if (!bar || typeof bar !== "object" || !String(bar.id || "").trim()) continue;
+    if (isCompleteBundleSingleBar(bar)) {
+      if (!singleBar) {
+        singleBar = createDefaultCompleteBundleSingleBar(bar);
+      }
+      continue;
+    }
+    bundleBars.push({
+      ...bar,
+      type: bar.type === "bxgy" ? "bxgy" : "quantity-break-same",
+      title: String(bar.title || ""),
+      subtitle: String(bar.subtitle || ""),
+      badge: String(bar.badge || ""),
+      isDefault: !!bar.isDefault,
+      minQuantity: Math.max(1, Math.trunc(Number(bar.minQuantity) || 1)),
+      maxQuantity: Math.max(
+        Math.max(1, Math.trunc(Number(bar.minQuantity) || 1)),
+        Math.trunc(Number(bar.maxQuantity) || Number(bar.quantity) || 1),
+      ),
+      excludeTriggerProduct: bar.excludeTriggerProduct !== false,
+      quantity: Math.max(
+        Math.max(1, Math.trunc(Number(bar.minQuantity) || 1)),
+        Math.trunc(Number(bar.maxQuantity) || Number(bar.quantity) || 1),
+      ),
+      pricing: {
+        mode: (
+          ["full_price", "percentage_off", "amount_off", "fixed_price"] as const
+        ).includes(bar.pricing?.mode as CompleteBundlePricingMode)
+          ? (bar.pricing.mode as CompleteBundlePricingMode)
+          : "full_price",
+        value: Number.isFinite(Number(bar.pricing?.value)) ? Number(bar.pricing?.value) : 0,
+      },
+      products: Array.isArray(bar.products) ? bar.products : [],
+    });
+  }
+
+  if (!singleBar) {
+    singleBar = createDefaultCompleteBundleSingleBar();
+  }
+
+  const orderedBars = [singleBar, ...bundleBars];
+  const explicitDefaultBar = orderedBars.find((bar) => bar.isDefault);
+  const fallbackDefaultBar = bundleBars[0] || singleBar;
+  const defaultBarId = explicitDefaultBar?.id || fallbackDefaultBar.id;
+
+  return orderedBars.map((bar) =>
+    isCompleteBundleSingleBar(bar)
+      ? createDefaultCompleteBundleSingleBar({
+          ...bar,
+          isDefault: bar.id === defaultBarId,
+        })
+      : {
+          ...bar,
+          badge: String(bar.badge || ""),
+          isDefault: bar.id === defaultBarId,
+        },
+  );
+}
 
 export type SubscriptionLogicBlock = {
   id: string;
@@ -870,10 +1254,26 @@ export function parseDiscountRules(discountRulesJson?: string | null): DiscountR
     const out: DiscountRule[] = [];
     for (const item of parsed) {
       if (!item || typeof item !== "object") continue;
+      const isSingleTier = (item as { tierType?: unknown }).tierType === "single";
       const count = Number((item as { count?: unknown }).count);
       const discountPercent = Number(
         (item as { discountPercent?: unknown }).discountPercent,
       );
+      if (isSingleTier) {
+        out.push(
+          createDefaultSingleDiscountRule({
+            id:
+              typeof (item as { id?: unknown }).id === "string"
+                ? (item as { id: string }).id
+                : undefined,
+            title: (item as { title?: string }).title || "",
+            subtitle: (item as { subtitle?: string }).subtitle || "",
+            badge: (item as { badge?: string }).badge || "",
+            isDefault: !!(item as { isDefault?: boolean }).isDefault,
+          }),
+        );
+        continue;
+      }
       if (!Number.isFinite(count) || count < 1) continue;
       if (!Number.isFinite(discountPercent)) continue;
       out.push({
@@ -883,6 +1283,7 @@ export function parseDiscountRules(discountRulesJson?: string | null): DiscountR
             : undefined,
         count: Math.trunc(count),
         discountPercent: Math.max(0, Math.min(100, discountPercent)),
+        tierType: "standard",
         title: (item as { title?: string }).title || "",
         subtitle: (item as { subtitle?: string }).subtitle || "",
         badge: (item as { badge?: string }).badge || "",
@@ -958,8 +1359,7 @@ export function parseDiscountRules(discountRulesJson?: string | null): DiscountR
               : undefined,
       });
     }
-    out.sort((a, b) => a.count - b.count);
-    return out;
+    return normalizeDiscountRules(out);
   } catch {
     return [];
   }
@@ -997,13 +1397,31 @@ function buildDefaultOfferCardConfig(
 function sanitizeQuantityBreakTier(raw: unknown): QuantityBreakTier | null {
   if (!raw || typeof raw !== "object") return null;
   const item = raw as Record<string, unknown>;
+  const tierType = item.tierType === "single" ? "single" : "standard";
   const qty = Math.trunc(Number(item.qty));
   const discountPercent = Number(item.discountPercent);
+  if (tierType === "single") {
+    return {
+      qty: 0,
+      discountPercent: 0,
+      title: typeof item.title === "string" ? item.title : "Single",
+      subtitle: typeof item.subtitle === "string" ? item.subtitle : "Standard price",
+      badge: typeof item.badge === "string" ? item.badge : "",
+      isDefault: !!item.isDefault,
+      tierType: "single",
+      discountClass: "product",
+      offerKind: "percentage_discount",
+      conditionType: "item_quantity",
+      rewardType: "percentage_off",
+      rewardProductIds: [],
+    };
+  }
   if (!Number.isFinite(qty) || qty < 1) return null;
   if (!Number.isFinite(discountPercent)) return null;
   return {
     qty,
     discountPercent: Math.max(0, Math.min(100, discountPercent)),
+    tierType: "standard",
     title: typeof item.title === "string" ? item.title : "",
     subtitle: typeof item.subtitle === "string" ? item.subtitle : "",
     badge: typeof item.badge === "string" ? item.badge : "",
@@ -1046,6 +1464,14 @@ function sanitizeQuantityBreakTier(raw: unknown): QuantityBreakTier | null {
 function sanitizeBxgyTier(raw: unknown): BxgyDiscountRule | null {
   if (!raw || typeof raw !== "object") return null;
   const item = raw as Record<string, unknown>;
+  if (item.tierType === "single") {
+    return createDefaultSingleBxgyRule({
+      title: typeof item.title === "string" ? item.title : "",
+      subtitle: typeof item.subtitle === "string" ? item.subtitle : "",
+      badge: typeof item.badge === "string" ? item.badge : "",
+      isDefault: !!item.isDefault,
+    });
+  }
   const count = Math.trunc(Number(item.count ?? item.buyQuantity));
   const buyQuantity = Math.trunc(Number(item.buyQuantity ?? item.count));
   const getQuantity = Math.trunc(Number(item.getQuantity));
@@ -1076,6 +1502,7 @@ function sanitizeBxgyTier(raw: unknown): BxgyDiscountRule | null {
     subtitle: typeof item.subtitle === "string" ? item.subtitle : "",
     badge: typeof item.badge === "string" ? item.badge : "",
     isDefault: !!item.isDefault,
+    tierType: "bxgy",
   };
 }
 
@@ -1095,7 +1522,21 @@ function sanitizeDifferentProductsTier(
   const getProductIds = Array.isArray(item.getProductIds)
     ? item.getProductIds.map((id) => String(id || "").trim()).filter(Boolean)
     : [];
-  const tierType = item.tierType === "bxgy" ? "bxgy" : "simple";
+  const tierType =
+    item.tierType === "single"
+      ? "single"
+      : item.tierType === "bxgy"
+        ? "bxgy"
+        : "simple";
+
+  if (tierType === "single") {
+    return createDefaultSingleDifferentProductsRule({
+      title: typeof item.title === "string" ? item.title : "",
+      subtitle: typeof item.subtitle === "string" ? item.subtitle : "",
+      badge: typeof item.badge === "string" ? item.badge : "",
+      isDefault: !!item.isDefault,
+    });
+  }
 
   if (!Number.isFinite(count) || count < 1) return null;
   if (!Number.isFinite(buyQuantity) || buyQuantity < 1) return null;
@@ -1128,6 +1569,14 @@ function sanitizeDifferentProductsTier(
 function sanitizeFreeGiftTier(raw: unknown): FreeGiftRule | null {
   if (!raw || typeof raw !== "object") return null;
   const item = raw as Record<string, unknown>;
+  if (item.tierType === "single") {
+    return createDefaultSingleFreeGiftRule({
+      title: typeof item.title === "string" ? item.title : "",
+      subtitle: typeof item.subtitle === "string" ? item.subtitle : "",
+      badge: typeof item.badge === "string" ? item.badge : "",
+      isDefault: !!item.isDefault,
+    });
+  }
   const count = Math.trunc(Number(item.count));
   const giftQuantity = Math.trunc(Number(item.giftQuantity));
   if (!Number.isFinite(count) || count < 1) return null;
@@ -1136,6 +1585,7 @@ function sanitizeFreeGiftTier(raw: unknown): FreeGiftRule | null {
   return {
     count,
     giftQuantity,
+    tierType: undefined,
     title: typeof item.title === "string" ? item.title : "",
     subtitle: typeof item.subtitle === "string" ? item.subtitle : "",
     badge: typeof item.badge === "string" ? item.badge : "",
@@ -2451,6 +2901,17 @@ export function parseBxgyDiscountRules(discountRulesJson?: string | null): BxgyD
     const out: BxgyDiscountRule[] = [];
     for (const item of parsed) {
       if (!item || typeof item !== "object") continue;
+      if ((item as { tierType?: unknown }).tierType === "single") {
+        out.push(
+          createDefaultSingleBxgyRule({
+            title: (item as { title?: string }).title || "",
+            subtitle: (item as { subtitle?: string }).subtitle || "",
+            badge: (item as { badge?: string }).badge || "",
+            isDefault: !!(item as { isDefault?: boolean }).isDefault,
+          }),
+        );
+        continue;
+      }
       
       const buyQuantity = Number(
         (item as { buyQuantity?: unknown; count?: unknown }).buyQuantity ??
@@ -2488,8 +2949,7 @@ export function parseBxgyDiscountRules(discountRulesJson?: string | null): BxgyD
     }
     
     // 按 count 排序，优先匹配数量多的规则
-    out.sort((a, b) => a.count - b.count);
-    return out;
+    return normalizeBxgyRules(out);
   } catch {
     return [];
   }
@@ -2505,6 +2965,17 @@ export function parseFreeGiftRules(discountRulesJson?: string | null): FreeGiftR
     const out: FreeGiftRule[] = [];
     for (const item of parsed) {
       if (!item || typeof item !== "object") continue;
+      if ((item as { tierType?: unknown }).tierType === "single") {
+        out.push(
+          createDefaultSingleFreeGiftRule({
+            title: (item as { title?: string }).title || "",
+            subtitle: (item as { subtitle?: string }).subtitle || "",
+            badge: (item as { badge?: string }).badge || "",
+            isDefault: !!(item as { isDefault?: boolean }).isDefault,
+          }),
+        );
+        continue;
+      }
 
       const count = Number((item as { count?: unknown }).count);
       const giftQuantity = Number((item as { giftQuantity?: unknown }).giftQuantity);
@@ -2526,8 +2997,7 @@ export function parseFreeGiftRules(discountRulesJson?: string | null): FreeGiftR
       });
     }
 
-    out.sort((a, b) => a.count - b.count);
-    return out;
+    return normalizeFreeGiftRules(out);
   } catch {
     return [];
   }
@@ -2535,14 +3005,19 @@ export function parseFreeGiftRules(discountRulesJson?: string | null): FreeGiftR
 
 /** Build BXGY discount rules JSON for DB storage — deduplicates by count, sorts ascending. */
 export function buildBxgyDiscountRulesJson(tiers: BxgyDiscountRule[]): BxgyDiscountRule[] {
-  const dedupedByCount = new Map<number, BxgyDiscountRule>();
-  for (const tier of tiers) {
+  const normalizedTiers = normalizeBxgyRules(tiers);
+  const dedupedByCount = new Map<string, BxgyDiscountRule>();
+  for (const tier of normalizedTiers) {
+    if (isSingleBxgyRule(tier)) {
+      dedupedByCount.set("__single__", createDefaultSingleBxgyRule(tier));
+      continue;
+    }
     const normalizedBuyQuantity = Math.max(
       1,
       Math.trunc(Number(tier.buyQuantity) || Number(tier.count) || 1),
     );
     if (!Number.isFinite(tier.getQuantity) || tier.getQuantity < 1) continue;
-    dedupedByCount.set(normalizedBuyQuantity, {
+    dedupedByCount.set(`bxgy|${normalizedBuyQuantity}`, {
       count: normalizedBuyQuantity,
       buyQuantity: normalizedBuyQuantity,
       getQuantity: Math.trunc(tier.getQuantity),
@@ -2561,7 +3036,7 @@ export function buildBxgyDiscountRulesJson(tiers: BxgyDiscountRule[]): BxgyDisco
       isDefault: !!tier.isDefault,
     });
   }
-  return Array.from(dedupedByCount.values()).sort((a, b) => a.count - b.count);
+  return normalizeBxgyRules(Array.from(dedupedByCount.values()));
 }
 
 export function parseDifferentProductsDiscountRules(
@@ -2578,9 +3053,7 @@ export function parseDifferentProductsDiscountRules(
       const tier = sanitizeDifferentProductsTier(item);
       if (tier) out.push(tier);
     }
-
-    out.sort((a, b) => a.count - b.count);
-    return out;
+    return normalizeDifferentProductsDiscountRules(out);
   } catch {
     return [];
   }
@@ -2589,33 +3062,44 @@ export function parseDifferentProductsDiscountRules(
 export function buildDifferentProductsDiscountRulesJson(
   tiers: DifferentProductsDiscountRule[],
 ): DifferentProductsDiscountRule[] {
-  const dedupedByCount = new Map<number, DifferentProductsDiscountRule>();
-  for (const tier of tiers) {
+  const normalizedTiers = normalizeDifferentProductsDiscountRules(tiers);
+  const dedupedByCount = new Map<string, DifferentProductsDiscountRule>();
+  for (const tier of normalizedTiers) {
+    if (isSingleDifferentProductsRule(tier)) {
+      dedupedByCount.set("__single__", createDefaultSingleDifferentProductsRule(tier));
+      continue;
+    }
     const sanitized = sanitizeDifferentProductsTier(tier);
     if (!sanitized) continue;
-    dedupedByCount.set(sanitized.count, sanitized);
+    dedupedByCount.set(`${sanitized.tierType}|${sanitized.count}`, sanitized);
   }
-  return Array.from(dedupedByCount.values()).sort((a, b) => a.count - b.count);
+  return normalizeDifferentProductsDiscountRules(Array.from(dedupedByCount.values()));
 }
 
 export function buildFreeGiftRulesJson(tiers: FreeGiftRule[]): FreeGiftRule[] {
-  const dedupedByCount = new Map<number, FreeGiftRule>();
-  for (const tier of tiers) {
+  const normalizedTiers = normalizeFreeGiftRules(tiers);
+  const dedupedByCount = new Map<string, FreeGiftRule>();
+  for (const tier of normalizedTiers) {
+    if (isSingleFreeGiftRule(tier)) {
+      dedupedByCount.set("__single__", createDefaultSingleFreeGiftRule(tier));
+      continue;
+    }
     if (!Number.isFinite(tier.count) || tier.count < 1) continue;
     if (!Number.isFinite(tier.giftQuantity) || tier.giftQuantity < 1) continue;
-    dedupedByCount.set(Math.trunc(tier.count), {
+    dedupedByCount.set(`gift|${Math.trunc(tier.count)}`, {
       count: Math.trunc(tier.count),
       giftQuantity: Math.trunc(tier.giftQuantity),
       giftProductIds: Array.isArray(tier.giftProductIds)
         ? tier.giftProductIds.filter((id) => typeof id === "string")
         : [],
+      tierType: undefined,
       title: tier.title || "",
       subtitle: tier.subtitle || "",
       badge: tier.badge || "",
       isDefault: !!tier.isDefault,
     });
   }
-  return Array.from(dedupedByCount.values()).sort((a, b) => a.count - b.count);
+  return normalizeFreeGiftRules(Array.from(dedupedByCount.values()));
 }
 
 /** 主题 / 下拉选项展示：优先用显式 title，否则用 option 值拼接（与瘦 metafield 变体省略 title 兼容） */
@@ -2661,7 +3145,11 @@ export function parseCompleteBundleConfig(
       if (!id) continue;
       const typeRaw = String((rawBar as { type?: unknown }).type || "quantity-break-same");
       const type: CompleteBundleBar["type"] =
-        typeRaw === "bxgy" ? "bxgy" : "quantity-break-same";
+        typeRaw === "single"
+          ? "single"
+          : typeRaw === "bxgy"
+            ? "bxgy"
+            : "quantity-break-same";
       const quantityNum = Number((rawBar as { quantity?: unknown }).quantity);
       const quantity = Number.isFinite(quantityNum) && quantityNum > 0 ? Math.trunc(quantityNum) : 1;
       const minQuantityRaw = Number((rawBar as { minQuantity?: unknown }).minQuantity);
@@ -2757,20 +3245,32 @@ export function parseCompleteBundleConfig(
         products[0] = { ...products[0], pricing: { mode, value } };
       }
 
-      bars.push({
-        id,
-        type,
-        title: String((rawBar as { title?: unknown }).title || ""),
-        subtitle: String((rawBar as { subtitle?: unknown }).subtitle || ""),
-        minQuantity,
-        maxQuantity,
-        excludeTriggerProduct,
-        quantity,
-        pricing: { mode, value },
-        products,
-      });
+      bars.push(
+        type === "single"
+          ? createDefaultCompleteBundleSingleBar({
+              id,
+              title: String((rawBar as { title?: unknown }).title || ""),
+              subtitle: String((rawBar as { subtitle?: unknown }).subtitle || ""),
+              badge: String((rawBar as { badge?: unknown }).badge || ""),
+              isDefault: !!(rawBar as { isDefault?: unknown }).isDefault,
+            })
+          : {
+              id,
+              type,
+              title: String((rawBar as { title?: unknown }).title || ""),
+              subtitle: String((rawBar as { subtitle?: unknown }).subtitle || ""),
+              badge: String((rawBar as { badge?: unknown }).badge || ""),
+              isDefault: !!(rawBar as { isDefault?: unknown }).isDefault,
+              minQuantity,
+              maxQuantity,
+              excludeTriggerProduct,
+              quantity,
+              pricing: { mode, value },
+              products,
+            },
+      );
     }
-    return { triggerProductIds, bars };
+    return { triggerProductIds, bars: normalizeCompleteBundleBars(bars) };
   } catch {
     return { triggerProductIds: [], bars: [] };
   }
@@ -2784,52 +3284,63 @@ export function buildCompleteBundleConfig(
     triggerProductIds: Array.isArray(config?.triggerProductIds)
       ? config.triggerProductIds.map((id) => String(id || "").trim()).filter(Boolean)
       : [],
-    bars: bars
-      .filter((bar) => bar && typeof bar === "object" && String(bar.id || "").trim())
-      .map((bar) => ({
-        id: String(bar.id).trim(),
-        type: bar.type === "bxgy" ? "bxgy" : "quantity-break-same",
-        title: String(bar.title || ""),
-        subtitle: String(bar.subtitle || ""),
-        minQuantity: Math.max(1, Math.trunc(Number(bar.minQuantity) || 1)),
-        maxQuantity: Math.max(
-          Math.max(1, Math.trunc(Number(bar.minQuantity) || 1)),
-          Math.trunc(Number(bar.maxQuantity) || Number(bar.quantity) || 1),
-        ),
-        excludeTriggerProduct: bar.excludeTriggerProduct !== false,
-        quantity: Math.max(
-          Math.max(1, Math.trunc(Number(bar.minQuantity) || 1)),
-          Math.trunc(Number(bar.maxQuantity) || Number(bar.quantity) || 1),
-        ),
-        pricing: {
-          mode: (
-            ["full_price", "percentage_off", "amount_off", "fixed_price"] as const
-          ).includes(bar.pricing?.mode as CompleteBundlePricingMode)
-            ? (bar.pricing.mode as CompleteBundlePricingMode)
-            : "full_price",
-          value: Number.isFinite(Number(bar.pricing?.value)) ? Number(bar.pricing?.value) : 0,
-        },
-        products: Array.isArray(bar.products)
-          ? bar.products
-              .filter((p) => p && typeof p === "object" && String(p.productId || "").trim())
-              .map((p) => ({
-                productId: String(p.productId).trim(),
-                // 保留选中变体 ID，确保 storefront 仍可直接 /cart/add
-                selectedVariantId: String(p.selectedVariantId || ""),
-                // 仅保留运行必需字段，展示数据统一按 productId 动态补全
-                pricing: (() => {
-                  const pmRaw = String(p.pricing?.mode || "full_price");
-                  const pm: CompleteBundlePricingMode = (
-                    ["full_price", "percentage_off", "amount_off", "fixed_price"] as const
-                  ).includes(pmRaw as CompleteBundlePricingMode)
-                    ? (pmRaw as CompleteBundlePricingMode)
-                    : "full_price";
-                  const pv = Number.isFinite(Number(p.pricing?.value)) ? Number(p.pricing?.value) : 0;
-                  return { mode: pm, value: pv };
-                })(),
-              }))
-          : [],
-      })),
+    bars: normalizeCompleteBundleBars(
+      bars
+        .filter((bar) => bar && typeof bar === "object" && String(bar.id || "").trim())
+        .map((bar) => ({
+          id: String(bar.id).trim(),
+          type:
+            bar.type === "single"
+              ? "single"
+              : bar.type === "bxgy"
+                ? "bxgy"
+                : "quantity-break-same",
+          title: String(bar.title || ""),
+          subtitle: String(bar.subtitle || ""),
+          badge: String(bar.badge || ""),
+          isDefault: !!bar.isDefault,
+          minQuantity: Math.max(1, Math.trunc(Number(bar.minQuantity) || 1)),
+          maxQuantity: Math.max(
+            Math.max(1, Math.trunc(Number(bar.minQuantity) || 1)),
+            Math.trunc(Number(bar.maxQuantity) || Number(bar.quantity) || 1),
+          ),
+          excludeTriggerProduct: bar.excludeTriggerProduct !== false,
+          quantity: Math.max(
+            Math.max(1, Math.trunc(Number(bar.minQuantity) || 1)),
+            Math.trunc(Number(bar.maxQuantity) || Number(bar.quantity) || 1),
+          ),
+          pricing: {
+            mode: (
+              ["full_price", "percentage_off", "amount_off", "fixed_price"] as const
+            ).includes(bar.pricing?.mode as CompleteBundlePricingMode)
+              ? (bar.pricing.mode as CompleteBundlePricingMode)
+              : "full_price",
+            value: Number.isFinite(Number(bar.pricing?.value)) ? Number(bar.pricing?.value) : 0,
+          },
+          products: Array.isArray(bar.products)
+            ? bar.products
+                .filter((p) => p && typeof p === "object" && String(p.productId || "").trim())
+                .map((p) => ({
+                  productId: String(p.productId).trim(),
+                  // 保留选中变体 ID，确保 storefront 仍可直接 /cart/add
+                  selectedVariantId: String(p.selectedVariantId || ""),
+                  // 仅保留运行必需字段，展示数据统一按 productId 动态补全
+                  pricing: (() => {
+                    const pmRaw = String(p.pricing?.mode || "full_price");
+                    const pm: CompleteBundlePricingMode = (
+                      ["full_price", "percentage_off", "amount_off", "fixed_price"] as const
+                    ).includes(pmRaw as CompleteBundlePricingMode)
+                      ? (pmRaw as CompleteBundlePricingMode)
+                      : "full_price";
+                    const pv = Number.isFinite(Number(p.pricing?.value))
+                      ? Number(p.pricing?.value)
+                      : 0;
+                    return { mode: pm, value: pv };
+                  })(),
+                }))
+            : [],
+        })),
+    ),
   };
 }
 

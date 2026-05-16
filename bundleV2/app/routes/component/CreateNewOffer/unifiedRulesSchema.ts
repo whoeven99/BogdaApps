@@ -5,9 +5,11 @@ import type {
   FreeGiftRule,
   BxgyDiscountRule,
 } from "../../../utils/offerParsing";
+import { isSingleDiscountRule } from "../../../utils/offerParsing";
 import type { OfferTypeId } from "./offerTypeOptions";
 
 export type UnifiedRuleType =
+  | "single_purchase"
   | "quantity_break"
   | "order_discount"
   | "free_shipping"
@@ -46,6 +48,9 @@ export type UnifiedRuleScope =
 
 export type UnifiedRuleCondition =
   | {
+      kind: "single_purchase";
+    }
+  | {
       kind: "item_quantity";
       count: number;
     }
@@ -69,6 +74,9 @@ export type UnifiedRuleCondition =
     };
 
 export type UnifiedRuleReward =
+  | {
+      kind: "standard_price";
+    }
   | {
       kind: "percentage_off";
       discountClass: "product" | "order";
@@ -181,6 +189,7 @@ export const OFFER_TYPE_RULE_CAPABILITIES: OfferTypeRuleCapability[] = [
 ];
 
 export function getDiscountRuleType(rule: DiscountRule): UnifiedRuleType {
+  if (isSingleDiscountRule(rule)) return "single_purchase";
   if (rule.logicType === "bxgy") return "bxgy";
   if (rule.rewardType === "gift_product") return "free_gift";
   if (rule.rewardType === "free_shipping") return "free_shipping";
@@ -189,6 +198,11 @@ export function getDiscountRuleType(rule: DiscountRule): UnifiedRuleType {
 }
 
 export function buildDiscountRuleCondition(rule: DiscountRule): UnifiedRuleCondition {
+  if (isSingleDiscountRule(rule)) {
+    return {
+      kind: "single_purchase",
+    };
+  }
   if (rule.logicType === "bxgy") {
     const normalizedBuyQuantity = Math.max(
       1,
@@ -217,6 +231,11 @@ export function buildDiscountRuleCondition(rule: DiscountRule): UnifiedRuleCondi
 }
 
 export function buildDiscountRuleReward(rule: DiscountRule): UnifiedRuleReward {
+  if (isSingleDiscountRule(rule)) {
+    return {
+      kind: "standard_price",
+    };
+  }
   if (rule.rewardType === "gift_product") {
     return {
       kind: "gift_product",
@@ -257,6 +276,8 @@ export function getRuleCapability(offerType: OfferTypeId): OfferTypeRuleCapabili
 
 export function getUnifiedRuleTypeLabel(type: UnifiedRuleType): string {
   switch (type) {
+    case "single_purchase":
+      return "Single";
     case "quantity_break":
       return "Quantity Break";
     case "order_discount":
@@ -297,6 +318,8 @@ export function describeUnifiedRuleScope(scope: UnifiedRuleScope): string {
 
 export function describeUnifiedRuleCondition(condition: UnifiedRuleCondition): string {
   switch (condition.kind) {
+    case "single_purchase":
+      return "Single purchase option";
     case "item_quantity":
       return `Item quantity >= ${condition.count}`;
     case "cart_amount":
@@ -314,6 +337,8 @@ export function describeUnifiedRuleCondition(condition: UnifiedRuleCondition): s
 
 export function describeUnifiedRuleReward(reward: UnifiedRuleReward): string {
   switch (reward.kind) {
+    case "standard_price":
+      return "Standard price";
     case "percentage_off":
       return `${reward.discountClass} discount ${reward.discountPercent}%`;
     case "free_shipping":

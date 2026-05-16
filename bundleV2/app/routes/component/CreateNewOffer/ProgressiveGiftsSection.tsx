@@ -5,9 +5,12 @@ import type {
   ProgressiveGiftUnlockMode,
 } from "../../../utils/offerParsing";
 
-type DiscountRuleLite = { count: number };
-type BxgyRuleLite = { count: number };
-type DifferentProductsRuleLite = { count: number; tierType: "bxgy" | "simple" };
+type DiscountRuleLite = { count: number; tierType?: "single" | "standard" };
+type BxgyRuleLite = { count: number; tierType?: "single" | "bxgy" | "simple" };
+type DifferentProductsRuleLite = {
+  count: number;
+  tierType: "single" | "bxgy" | "simple";
+};
 
 type Props = {
   offerType: string;
@@ -27,21 +30,34 @@ function buildBarOptions(
   bxgyDiscountRules: BxgyRuleLite[],
   differentProductsDiscountRules: DifferentProductsRuleLite[],
 ): { value: number; label: string }[] {
+  const standardDiscountRules = normalizedDiscountRules.filter(
+    (rule) => rule.tierType !== "single",
+  );
+  const bxgyOfferRules = bxgyDiscountRules.filter((rule) => rule.tierType !== "single");
+  const differentOfferRules = differentProductsDiscountRules.filter(
+    (rule) => rule.tierType !== "single",
+  );
   if (offerType === "bxgy") {
-    return bxgyDiscountRules.map((r, i) => ({
-      value: i + 1,
-      label: `Bar #${i + 1} (count >= ${r.count})`,
-    }));
+    return [
+      { value: 1, label: "Bar #1 (Single, qty 1)" },
+      ...bxgyOfferRules.map((r, i) => ({
+        value: i + 2,
+        label: `Bar #${i + 2} (count >= ${r.count})`,
+      })),
+    ];
   }
   if (offerType === "quantity-breaks-different") {
-    return differentProductsDiscountRules.map((r, i) => ({
-      value: i + 1,
-      label: `Tier #${i + 1} (qty ${r.count})`,
-    }));
+    return [
+      { value: 1, label: "Tier #1 (Single, qty 1)" },
+      ...differentOfferRules.map((r, i) => ({
+        value: i + 2,
+        label: `Tier #${i + 2} (qty ${r.count})`,
+      })),
+    ];
   }
   return [
     { value: 1, label: "Bar #1 (Single, qty 1)" },
-    ...normalizedDiscountRules.map((r, i) => ({
+    ...standardDiscountRules.map((r, i) => ({
       value: i + 2,
       label: `Bar #${i + 2} (qty ${r.count})`,
     })),

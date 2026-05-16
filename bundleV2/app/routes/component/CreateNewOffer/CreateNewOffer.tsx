@@ -48,6 +48,10 @@ import {
   normalizeCustomerProfileFilters,
   normalizeCustomerSegments,
   normalizeDraftIpCountryCodes,
+  normalizeDiscountRules,
+  normalizeDifferentProductsDiscountRules,
+  normalizeBxgyRules,
+  normalizeFreeGiftRules,
   normalizeIpCountryCodes,
   normalizeTargetMarkets,
   normalizeOfferNameKey,
@@ -66,6 +70,10 @@ import {
   parseCompleteBundleConfig,
   parseFreeGiftSelectedProducts,
   buildCompleteBundleConfig,
+  createDefaultCompleteBundleSingleBar,
+  isCompleteBundleSingleBar,
+  isSingleDiscountRule,
+  normalizeCompleteBundleBars,
   type CompleteBundleBar,
   type CompleteBundleProduct,
   type CompleteBundlePricingMode,
@@ -185,6 +193,7 @@ type DiscountRule = {
   id?: string;
   count: number;
   discountPercent: number;
+  tierType?: "single" | "standard";
   title?: string;
   subtitle?: string;
   badge?: string;
@@ -215,6 +224,7 @@ type BxgyDiscountRule = {
   subtitle?: string;
   badge?: string;
   isDefault?: boolean;
+  tierType?: "single" | "bxgy" | "simple";
 };
 
 type Product = {
@@ -309,6 +319,24 @@ function isOfferActionErrorBody(data: unknown): data is OfferActionErrorBody {
 function buildDiscountRulesJson(tiers: DiscountRule[]): DiscountRule[] {
   const out: DiscountRule[] = [];
   for (const tier of tiers) {
+    if (isSingleDiscountRule(tier)) {
+      out.push({
+        id: tier.id,
+        count: 0,
+        discountPercent: 0,
+        tierType: "single",
+        title: tier.title || "",
+        subtitle: tier.subtitle || "",
+        badge: tier.badge || "",
+        isDefault: !!tier.isDefault,
+        discountClass: "product",
+        offerKind: "percentage_discount",
+        conditionType: "item_quantity",
+        rewardType: "percentage_off",
+        rewardProductIds: [],
+      });
+      continue;
+    }
     if (!Number.isFinite(tier.count) || tier.count < 1) continue;
     if (!Number.isFinite(tier.discountPercent)) continue;
     const isBxgy = tier.logicType === "bxgy";
@@ -319,6 +347,7 @@ function buildDiscountRulesJson(tiers: DiscountRule[]): DiscountRule[] {
       id: tier.id,
       count: isBxgy ? normalizedBuyQuantity! : Math.trunc(tier.count),
       discountPercent: isBxgy ? 100 : Math.max(0, Math.min(100, tier.discountPercent)),
+      tierType: "standard",
       title: tier.title || "",
       subtitle: tier.subtitle || "",
       badge: tier.badge || "",
@@ -352,6 +381,7 @@ function buildDiscountRulesJson(tiers: DiscountRule[]): DiscountRule[] {
     .sort((a, b) => a.count - b.count)
     .filter((tier, index, arr) => {
       const tierKey = [
+        tier.tierType || "standard",
         tier.logicType || "standard",
         tier.count,
         tier.conditionType || "item_quantity",
@@ -363,6 +393,7 @@ function buildDiscountRulesJson(tiers: DiscountRule[]): DiscountRule[] {
         index ===
         arr.findIndex((x) => {
           const key = [
+            x.tierType || "standard",
             x.logicType || "standard",
             x.count,
             x.conditionType || "item_quantity",
@@ -379,6 +410,24 @@ function buildDiscountRulesJson(tiers: DiscountRule[]): DiscountRule[] {
 function sanitizeDiscountRules(tiers: DiscountRule[]): DiscountRule[] {
   const dedupedByKey = new Map<string, DiscountRule>();
   for (const tier of tiers) {
+    if (isSingleDiscountRule(tier)) {
+      dedupedByKey.set("__single__", {
+        id: tier.id,
+        count: 0,
+        discountPercent: 0,
+        tierType: "single",
+        title: tier.title || "",
+        subtitle: tier.subtitle || "",
+        badge: tier.badge || "",
+        isDefault: !!tier.isDefault,
+        discountClass: "product",
+        offerKind: "percentage_discount",
+        conditionType: "item_quantity",
+        rewardType: "percentage_off",
+        rewardProductIds: [],
+      });
+      continue;
+    }
     if (!Number.isFinite(tier.count) || tier.count < 1) continue;
     if (
       tier.rewardType === "percentage_off" &&
@@ -396,6 +445,7 @@ function sanitizeDiscountRules(tiers: DiscountRule[]): DiscountRule[] {
         ? Math.max(0, Number(tier.amountThreshold) || 0)
         : undefined;
     const key = [
+      tier.tierType || "standard",
       tier.logicType || "standard",
       tier.discountClass || "product",
       tier.conditionType || "item_quantity",
@@ -406,6 +456,7 @@ function sanitizeDiscountRules(tiers: DiscountRule[]): DiscountRule[] {
       id: tier.id,
       count: isBxgy ? normalizedBuyQuantity! : normalizedCount,
       discountPercent: isBxgy ? 100 : Math.max(0, Math.min(100, tier.discountPercent)),
+      tierType: "standard",
       title: tier.title || "",
       subtitle: tier.subtitle || "",
       badge: tier.badge || "",
@@ -437,8 +488,31 @@ function sanitizeDiscountRules(tiers: DiscountRule[]): DiscountRule[] {
     });
   }
 
-  return Array.from(dedupedByKey.values())
-    .sort((a, b) => a.count - b.count);
+  return normalizeDiscountRules(Array.from(dedupedByKey.values()));
+}
+
+const SHOPIFY_PRODUCT_GID_PREFIX = "gid://shopify/Product/";
+
+function getShopifyProductLookupKeys(productId: string | null | undefined): string[] {
+  const raw = String(productId || "").trim();
+  if (!raw) return [];
+  const numericTailMatch = raw.match(/(\d+)\s*$/);
+  const numericTail = numericTailMatch?.[1] || "";
+  return Array.from(
+    new Set(
+      [raw, numericTail, numericTail ? `${SHOPIFY_PRODUCT_GID_PREFIX}${numericTail}` : ""].filter(
+        Boolean,
+      ),
+    ),
+  );
+}
+
+function toShopifyProductGid(productId: string | null | undefined): string {
+  const raw = String(productId || "").trim();
+  if (!raw) return "";
+  if (raw.startsWith(SHOPIFY_PRODUCT_GID_PREFIX)) return raw;
+  const numericTailMatch = raw.match(/(\d+)\s*$/);
+  return numericTailMatch?.[1] ? `${SHOPIFY_PRODUCT_GID_PREFIX}${numericTailMatch[1]}` : raw;
 }
 
 export function CreateNewOffer({
@@ -1002,20 +1076,38 @@ export function CreateNewOffer({
   );
   const areStringArraysEqual = (left: string[], right: string[]) =>
     left.length === right.length && left.every((value, index) => value === right[index]);
+  const createCompleteBundleBarId = () =>
+    `bar-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const createDefaultCompleteBundleBar = (
-    type: "quantity-break-same" | "bxgy" = "quantity-break-same",
+    type: "single" | "quantity-break-same" | "bxgy" = "quantity-break-same",
   ): CompleteBundleBar => ({
-    id: `bar-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    type,
-    title: "Complete the bundle",
-    subtitle: "Choose bundle items and apply one discount to the whole bundle",
-    minQuantity: 1,
-    maxQuantity: 3,
-    excludeTriggerProduct: true,
-    quantity: 3,
-    products: [],
-    pricing: { mode: "percentage_off", value: 15 },
+    ...(type === "single"
+      ? createDefaultCompleteBundleSingleBar({
+          id: createCompleteBundleBarId(),
+          isDefault: true,
+        })
+      : {
+          id: createCompleteBundleBarId(),
+          type,
+          title: "Complete the bundle",
+          subtitle: "Choose bundle items and apply one discount to the whole bundle",
+          badge: "",
+          isDefault: false,
+          minQuantity: 1,
+          maxQuantity: 3,
+          excludeTriggerProduct: true,
+          quantity: 3,
+          products: [],
+          pricing: { mode: "percentage_off" as const, value: 15 },
+        }),
   });
+  const createInitialCompleteBundleBars = () =>
+    normalizeCompleteBundleBars([
+      createDefaultCompleteBundleBar("single"),
+      createDefaultCompleteBundleBar("quantity-break-same"),
+    ]);
+  const getPreferredActiveCompleteBundleBarId = (bars: CompleteBundleBar[]) =>
+    bars.find((bar) => !isCompleteBundleSingleBar(bar))?.id || bars[0]?.id || "";
 
   const handleSelectProducts = async (
     type: "buy" | "gift" | "normal" | "product_bundle" = "normal",
@@ -1256,16 +1348,19 @@ export function CreateNewOffer({
       ...nextBar,
       products: [],
     };
-    setCompleteBundleBars((prev) => [...prev, newBar]);
+    setCompleteBundleBars((prev) => normalizeCompleteBundleBars([...prev, newBar]));
     setActiveBundleBarId(newBar.id);
   };
 
   const removeCompleteBundleBar = (barId: string) => {
     setCompleteBundleBars((prev) => {
-      const next = prev.filter((bar) => bar.id !== barId);
+      if (prev.find((bar) => bar.id === barId && isCompleteBundleSingleBar(bar))) {
+        return prev;
+      }
+      const next = normalizeCompleteBundleBars(prev.filter((bar) => bar.id !== barId));
       if (!next.length) return prev;
       if (activeBundleBarId === barId) {
-        setActiveBundleBarId(next[0].id);
+        setActiveBundleBarId(getPreferredActiveCompleteBundleBarId(next));
       }
       return next;
     });
@@ -1276,14 +1371,16 @@ export function CreateNewOffer({
     patch: Partial<CompleteBundleBar>,
   ) => {
     setCompleteBundleBars((prev) =>
-      prev.map((bar) => (bar.id === barId ? { ...bar, ...patch } : bar)),
+      normalizeCompleteBundleBars(
+        prev.map((bar) => (bar.id === barId ? { ...bar, ...patch } : bar)),
+      ),
     );
   };
   const clearCompleteBundleBars = () => {
     if (offerType === "complete-bundle") {
-      const fallbackBar = createDefaultCompleteBundleBar();
-      setCompleteBundleBars([fallbackBar]);
-      setActiveBundleBarId(fallbackBar.id);
+      const fallbackBars = createInitialCompleteBundleBars();
+      setCompleteBundleBars(fallbackBars);
+      setActiveBundleBarId(getPreferredActiveCompleteBundleBarId(fallbackBars));
       return;
     }
     setCompleteBundleBars([]);
@@ -1292,13 +1389,16 @@ export function CreateNewOffer({
 
   const handleSelectProductsForBundleBar = async (barId: string) => {
     const targetBar = completeBundleBars.find((bar) => bar.id === barId);
-    if (!targetBar) return;
+    if (!targetBar || isCompleteBundleSingleBar(targetBar)) return;
     try {
       const selected = await (window as any).shopify.resourcePicker({
         type: "product",
         action: "select",
         multiple: true,
-        selectionIds: targetBar.products.map((p) => ({ id: p.productId })),
+        selectionIds: targetBar.products
+          .map((p) => toShopifyProductGid(p.productId))
+          .filter(Boolean)
+          .map((id) => ({ id })),
       });
       if (!selected) return;
 
@@ -1373,36 +1473,56 @@ export function CreateNewOffer({
     }
   };
 
-  const [discountRules, setDiscountRules] = useState<DiscountRule[]>(() =>
-    starterTemplateDefaults?.discountRules ??
-      parseDiscountRules(
-        initialCampaignLegacy?.discountRulesJson ?? initialOffer?.discountRulesJson,
-      ),
-  );
-  const [bxgyDiscountRules, setBxgyDiscountRules] = useState<BxgyDiscountRule[]>(
-    starterTemplateDefaults?.bxgyDiscountRules ??
-      parseBxgyDiscountRules(
-        initialCampaignLegacy?.discountRulesJson ?? initialOffer?.discountRulesJson,
-      ),
-  );
-  const [freeGiftRules, setFreeGiftRules] = useState<FreeGiftRule[]>(
-    starterTemplateDefaults?.freeGiftRules ??
-      parseFreeGiftRules(
-        initialCampaignLegacy?.discountRulesJson ?? initialOffer?.discountRulesJson,
-      ).map((rule) => ({
-        ...rule,
-        giftProductIds:
-          Array.isArray(rule.giftProductIds) && rule.giftProductIds.length > 0
-            ? rule.giftProductIds
-            : legacyFreeGiftRewardIds,
-      })),
-  );
-  const [differentProductsDiscountRules, setDifferentProductsDiscountRules] =
-    useState<DifferentProductsDiscountRule[]>(
-      starterTemplateDefaults?.differentProductsDiscountRules ??
-        parseDifferentProductsDiscountRules(
+  const [discountRules, setDiscountRulesState] = useState<DiscountRule[]>(() =>
+    normalizeDiscountRules(
+      starterTemplateDefaults?.discountRules ??
+        parseDiscountRules(
           initialCampaignLegacy?.discountRulesJson ?? initialOffer?.discountRulesJson,
         ),
+    ),
+  );
+  const [bxgyDiscountRules, setBxgyDiscountRulesState] = useState<BxgyDiscountRule[]>(
+    normalizeBxgyRules(
+      starterTemplateDefaults?.bxgyDiscountRules ??
+        parseBxgyDiscountRules(
+          initialCampaignLegacy?.discountRulesJson ?? initialOffer?.discountRulesJson,
+        ),
+    ),
+  );
+  const [freeGiftRules, setFreeGiftRulesState] = useState<FreeGiftRule[]>(
+    normalizeFreeGiftRules(
+      (
+        starterTemplateDefaults?.freeGiftRules ??
+        parseFreeGiftRules(
+          initialCampaignLegacy?.discountRulesJson ?? initialOffer?.discountRulesJson,
+        ).map((rule) => ({
+          ...rule,
+          giftProductIds:
+            Array.isArray(rule.giftProductIds) && rule.giftProductIds.length > 0
+              ? rule.giftProductIds
+              : legacyFreeGiftRewardIds,
+        }))
+      ).map((rule) =>
+        rule.tierType === "single"
+          ? rule
+          : {
+              ...rule,
+              giftProductIds:
+                Array.isArray(rule.giftProductIds) && rule.giftProductIds.length > 0
+                  ? rule.giftProductIds
+                  : legacyFreeGiftRewardIds,
+            },
+      ),
+    ),
+  );
+  const [differentProductsDiscountRules, setDifferentProductsDiscountRulesState] =
+    useState<DifferentProductsDiscountRule[]>(
+      normalizeDifferentProductsDiscountRules(
+        starterTemplateDefaults?.differentProductsDiscountRules ??
+          parseDifferentProductsDiscountRules(
+            initialCampaignLegacy?.discountRulesJson ?? initialOffer?.discountRulesJson,
+          ),
+      ),
     );
   const [buyProducts, setBuyProducts] = useState<string[]>(() => {
     const selectedProductsJson =
@@ -1443,29 +1563,67 @@ export function CreateNewOffer({
           : null;
     return parseFreeGiftSelectedProducts(selectedProductsJson).triggerProducts;
   });
+  const setDiscountRules: React.Dispatch<React.SetStateAction<DiscountRule[]>> = (value) => {
+    setDiscountRulesState((prev) =>
+      normalizeDiscountRules(typeof value === "function" ? value(prev) : value),
+    );
+  };
+  const setBxgyDiscountRules: React.Dispatch<React.SetStateAction<BxgyDiscountRule[]>> = (
+    value,
+  ) => {
+    setBxgyDiscountRulesState((prev) =>
+      normalizeBxgyRules(typeof value === "function" ? value(prev) : value),
+    );
+  };
+  const setFreeGiftRules: React.Dispatch<React.SetStateAction<FreeGiftRule[]>> = (value) => {
+    setFreeGiftRulesState((prev) =>
+      normalizeFreeGiftRules(typeof value === "function" ? value(prev) : value),
+    );
+  };
+  const setDifferentProductsDiscountRules: React.Dispatch<
+    React.SetStateAction<DifferentProductsDiscountRule[]>
+  > = (value) => {
+    setDifferentProductsDiscountRulesState((prev) =>
+      normalizeDifferentProductsDiscountRules(
+        typeof value === "function" ? value(prev) : value,
+      ),
+    );
+  };
   const [completeBundleBars, setCompleteBundleBars] = useState<CompleteBundleBar[]>(
     () => {
       if (initialCompleteBundleConfig.bars.length > 0) {
-        return initialCompleteBundleConfig.bars;
+        return normalizeCompleteBundleBars(initialCompleteBundleConfig.bars);
       }
       if (
         (initialCampaignLegacy?.offerType as OfferTypeId | undefined) === "complete-bundle" ||
         initialOffer?.offerType === "complete-bundle"
       ) {
         return starterTemplateDefaults?.completeBundleBars?.length
-          ? starterTemplateDefaults.completeBundleBars
-          : [createDefaultCompleteBundleBar()];
+          ? normalizeCompleteBundleBars(starterTemplateDefaults.completeBundleBars)
+          : createInitialCompleteBundleBars();
       }
       return [];
     },
   );
   const [activeBundleBarId, setActiveBundleBarId] = useState<string>(
-    () =>
-      initialCompleteBundleConfig.bars[0]?.id ||
-      (((initialCampaignLegacy?.offerType as OfferTypeId | undefined) === "complete-bundle" ||
-        initialOffer?.offerType === "complete-bundle") &&
-      starterTemplateDefaults?.completeBundleBars?.[0]?.id) ||
-      "",
+    () => {
+      if (initialCompleteBundleConfig.bars.length > 0) {
+        return getPreferredActiveCompleteBundleBarId(
+          normalizeCompleteBundleBars(initialCompleteBundleConfig.bars),
+        );
+      }
+      if (
+        (initialCampaignLegacy?.offerType as OfferTypeId | undefined) === "complete-bundle" ||
+        initialOffer?.offerType === "complete-bundle"
+      ) {
+        return getPreferredActiveCompleteBundleBarId(
+          starterTemplateDefaults?.completeBundleBars?.length
+            ? normalizeCompleteBundleBars(starterTemplateDefaults.completeBundleBars)
+            : createInitialCompleteBundleBars(),
+        );
+      }
+      return "";
+    },
   );
   const [status, setStatus] = useState<boolean>(
     initialCampaignConfig
@@ -1610,10 +1768,9 @@ export function CreateNewOffer({
   const storeProductMap = useMemo(
     () =>
       new Map(
-        (storeProducts || []).map((p) => [
-          String(p.id || ""),
-          p,
-        ]),
+        (storeProducts || []).flatMap((p) =>
+          getShopifyProductLookupKeys(String(p.id || "")).map((key) => [key, p] as const),
+        ),
       ),
     [storeProducts],
   );
@@ -1630,7 +1787,9 @@ export function CreateNewOffer({
           const noVariants = !Array.isArray(product.variants) || product.variants.length === 0;
           const missingDisplayData = !product.title || !product.image || !product.price;
           if (!noVariants && !missingDisplayData) return product;
-          const hit = storeProductMap.get(String(product.productId || ""));
+          const hit = getShopifyProductLookupKeys(String(product.productId || ""))
+            .map((key) => storeProductMap.get(key))
+            .find(Boolean);
           if (!hit) return product;
           const variants = Array.isArray(hit.variants) ? hit.variants : [];
           if (!variants.length && !missingDisplayData) return product;
@@ -2542,8 +2701,10 @@ export function CreateNewOffer({
   const activeDisplayRules = orderedCompositionRulesSnapshot;
   const getModuleBlockingMessage = () => {
     if (
-      completeBundleBars.length > 0 &&
-      completeBundleBars.every((bar) => bar.products.length === 0)
+      completeBundleBars.some((bar) => !isCompleteBundleSingleBar(bar)) &&
+      completeBundleBars
+        .filter((bar) => !isCompleteBundleSingleBar(bar))
+        .every((bar) => bar.products.length === 0)
     ) {
       return "Complete bundle module requires at least one configured bundle item.";
     }
@@ -2555,6 +2716,9 @@ export function CreateNewOffer({
     setFreeGiftRules((prev) => prev.map((rule) => ({ ...rule, isDefault: false })));
     setDifferentProductsDiscountRules((prev) =>
       prev.map((rule) => ({ ...rule, isDefault: false })),
+    );
+    setCompleteBundleBars((prev) =>
+      normalizeCompleteBundleBars(prev.map((bar) => ({ ...bar, isDefault: false }))),
     );
   };
   const updateUnifiedRulePresentation = (
