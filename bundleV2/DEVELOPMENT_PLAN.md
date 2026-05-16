@@ -9,6 +9,8 @@ Turn `NextTodo.md` into an executable roadmap that can be delivered in batches w
 - Prioritize shared foundations before new template expansion.
 - Each batch must end in a working config -> preview -> save -> reload loop.
 - UI changes follow `DESIGN.md`: compact, admin-first, low-noise.
+- Offer-related changes follow `OFFER_SEMANTICS.md` and the todo workflow in `SEMANTIC_WORKFLOW.md`.
+- Every offer semantics question or behavior change should map to a concrete todo with acceptance criteria.
 - When a task touches `extensions/`, `offerParsing`, and builder UI together, land data-model changes first.
 
 ## Batch 1: Builder Foundation
@@ -22,6 +24,19 @@ Turn `NextTodo.md` into an executable roadmap that can be delivered in batches w
 | B1-5 | Smart product selection | Add bulk selection helpers and filtered selection workflows | `CreateNewOffer.tsx`, product-picker helpers, related shared UI | Merchants can select, reverse, and refine product sets faster | P0 | Planned |
 | B1-6 | Long-running schedule | Default offers to long-term active, with optional end date | `ScheduleTargetingEditor.tsx`, `CreateNewOffer.tsx`, `app/routes/_index/route.tsx` | Offer can be saved without an end date and reload correctly as long-term | P0 | In progress |
 | B1-7 | Unified tips and warnings | Normalize warning, error, and draft-only message styles | `OfferRulesShared.tsx`, `UnifiedRulesAuditPanel.tsx`, builder step surfaces | Alerts share one calm Shopify-aligned language | P1 | Planned |
+
+## Semantic Workstream
+
+These tasks govern offer semantics across the builder, storefront payloads, and
+Shopify Functions. Use `SEMANTIC_WORKFLOW.md` for each task.
+
+| ID | Task | Semantic anchor | Main files | Acceptance | Priority | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| S1 | Product-discount candidate competition | Product discounts compete by maximum actual discount | `extensions/bundle-cart-discount-function/src/bundle_cart_discount_generate_run.ts`, runtime payload helpers | Quantity breaks and BXGY can both produce candidates; the larger product discount wins without hard-coded module priority | P0 | Planned |
+| S2 | Complete bundle as order module | Complete bundle is an order discount module and does not depend on BXGY | `CreateNewOffer.tsx`, `CompleteBundleEditor.tsx`, `offerParsing.ts`, cart Function, theme asset | Complete bundle config and runtime no longer use BXGY semantics; bundle discount remains order-level | P0 | Planned |
+| S3 | Free gift as order reward | Free gift reward is not a normal product discount | `FreeGiftLogicEditor.tsx`, `offerParsing.ts`, cart Function, theme asset | Free gift is modeled as a reward unlocked by order/cart conditions and can combine with the winning product discount | P0 | Planned |
+| S4 | Offer type as template | `offerType` is a starter template / primary module, not the whole campaign | builder registry, `campaignConfigJson` creation, list display, legacy compilation | Campaigns can contain independent modules without being constrained by one `offerType` branch | P1 | Planned |
+| S5 | Campaign runtime compiler | Campaign config compiles to storefront and Function payloads | `offerParsing.ts`, `_index/route.tsx`, metafield sync helpers | Runtime payloads are produced through one compiler path with explicit module outputs | P1 | Planned |
 
 ## Batch 2: Display And Polish
 

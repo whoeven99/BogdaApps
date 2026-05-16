@@ -5,6 +5,8 @@
 This file tells coding agents how to work safely and effectively in this repository.
 Read this file before making code changes.
 For visual and UI decisions, read `DESIGN.md` first and follow it unless the user explicitly asks for something else.
+For offer, campaign, discount, or storefront module semantics, read `OFFER_SEMANTICS.md` first and follow it unless the user explicitly asks for something else.
+For offer-related workflow and todo handling, read `SEMANTIC_WORKFLOW.md` first.
 
 ## Project Summary
 
@@ -39,8 +41,10 @@ For visual and UI decisions, read `DESIGN.md` first and follow it unless the use
 1. Read relevant files before editing.
 2. Reuse existing patterns before adding new abstractions.
 3. Keep UI changes aligned with `DESIGN.md`.
-4. Prefer focused changes over broad refactors unless requested.
-5. After substantive edits, run appropriate checks.
+4. Keep offer logic changes aligned with `OFFER_SEMANTICS.md`.
+5. For offer-related questions or changes, identify or create a semantic todo before implementation.
+6. Prefer focused changes over broad refactors unless requested.
+7. After substantive edits, run appropriate checks.
 
 ## UI Rules
 
