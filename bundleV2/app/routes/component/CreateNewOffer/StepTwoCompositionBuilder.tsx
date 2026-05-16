@@ -2,6 +2,10 @@ import { Button, Checkbox, Dropdown, Input, Modal, Select, Switch } from "antd";
 import { ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { CompleteBundleProduct } from "../../../utils/offerParsing";
+import {
+  getConditionTypeOptionsForRule,
+  getDiscountTypeFromRule,
+} from "./unifiedRuleModel";
 import type {
   CampaignDraft,
   CampaignDraftActions,
@@ -17,6 +21,7 @@ import {
   type StepTwoModuleId,
 } from "./campaignCompositionAdapter";
 import CompleteBundleEditor from "./CompleteBundleEditor";
+import { OfferRuleStatusPill } from "./OfferRulesShared";
 import { ProgressiveGiftsSection } from "./ProgressiveGiftsSection";
 import SubscriptionSettingsEditor from "./SubscriptionSettingsEditor";
 
@@ -24,11 +29,13 @@ type Props = {
   draft: CampaignDraft;
   actions: CampaignDraftActions;
   totalStoreProductsCount: number;
-  activeTriggerSelectionMode: "all" | "collection" | "exclude" | "custom" | null;
+  activeTriggerSelectionMode: "all" | "collection" | "exclude" | "custom" | "inverse" | null;
   activeTriggerSelectionSummary: string;
+  activeTriggerSelectionDetails: string[];
   onSelectAllTriggerProducts: () => void;
   onSelectTriggerProductsByCollection: () => void;
   onExcludeTriggerProducts: () => void;
+  onInvertTriggerProducts: () => void;
   onCustomFilterTriggerProducts: () => void;
   bars: CampaignBarItem[];
   modules: CampaignModuleItem[];
@@ -159,24 +166,28 @@ function ProductPoolManager({
   totalStoreProductsCount,
   activeSelectionMode,
   activeSelectionSummary,
+  activeSelectionDetails,
   onSelectAll,
   onSelectByCollection,
   onExclude,
+  onInvert,
   onCustomFilter,
   allowBulkSelection,
 }: {
   selectedProducts: CampaignDraft["selectedProductsData"];
   totalStoreProductsCount: number;
-  activeSelectionMode: "all" | "collection" | "exclude" | "custom" | null;
+  activeSelectionMode: "all" | "collection" | "exclude" | "custom" | "inverse" | null;
   activeSelectionSummary: string;
+  activeSelectionDetails: string[];
   onSelectAll: () => void;
   onSelectByCollection: () => void;
   onExclude: () => void;
+  onInvert: () => void;
   onCustomFilter: () => void;
   allowBulkSelection: boolean;
 }) {
   const renderModeButton = (
-    mode: "all" | "collection" | "exclude" | "custom",
+    mode: "all" | "collection" | "exclude" | "custom" | "inverse",
     label: string,
     onClick: () => void,
   ) => (
@@ -202,16 +213,17 @@ function ProductPoolManager({
         </div>
         <div className="flex flex-wrap gap-2">
           <Button onClick={onCustomFilter}>
-            {selectedProducts.length ? "Edit in product picker" : "Open product picker"}
+            {selectedProducts.length ? "Refine current pool" : "Open product picker"}
           </Button>
         </div>
       </div>
 
       {allowBulkSelection ? (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
           {renderModeButton("all", "Select all", onSelectAll)}
           {renderModeButton("collection", "Select by collection", onSelectByCollection)}
           {renderModeButton("exclude", "Exclude products", onExclude)}
+          {renderModeButton("inverse", "Invert selection", onInvert)}
           {renderModeButton("custom", "Custom filter", onCustomFilter)}
         </div>
       ) : null}
@@ -221,9 +233,18 @@ function ProductPoolManager({
           ? "Choose a selection shortcut above, then confirm the final set in Shopify's native product picker when needed."
           : "Use Shopify's native product picker to choose the product for this step."}
         {allowBulkSelection && activeSelectionSummary ? (
-          <div className="mt-2 text-[12px] font-medium text-[#1c1f23]">
-            Current selection mode: {activeSelectionSummary}
-          </div>
+          <>
+            <div className="mt-2 text-[12px] font-medium text-[#1c1f23]">
+              Current selection mode: {activeSelectionSummary}
+            </div>
+            {activeSelectionDetails.length > 0 ? (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {activeSelectionDetails.map((detail) => (
+                  <OfferRuleStatusPill key={detail}>{detail}</OfferRuleStatusPill>
+                ))}
+              </div>
+            ) : null}
+          </>
         ) : null}
       </div>
     </div>
@@ -271,14 +292,14 @@ function BuilderBarCard({
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="m-0 text-[15px] font-semibold text-[#1c1f23]">{bar.title}</h3>
               {bar.isDefault ? (
-                <span className="rounded-full bg-[#f0faf6] px-2 py-0.5 text-[11px] font-medium text-[#006e52]">
+                <OfferRuleStatusPill intent="success">
                   Default
-                </span>
+                </OfferRuleStatusPill>
               ) : null}
               {bar.supportState === "draft_only" ? (
-                <span className="rounded-full bg-[#fff8e1] px-2 py-0.5 text-[11px] font-medium text-[#8a6116]">
+                <OfferRuleStatusPill intent="warning">
                   Draft only
-                </span>
+                </OfferRuleStatusPill>
               ) : null}
             </div>
             <div className="mt-2 text-[12px] text-[#5c6166]">{bar.summary}</div>
@@ -310,30 +331,71 @@ function DiscountRuleBarDetail({
     value: String(product.id),
   }));
   const supportsRewardScope = bar.type === "bxgy" || bar.type === "free_gift";
+  const discountType = getDiscountTypeFromRule(rule);
+  const conditionTypeOptions = getConditionTypeOptionsForRule(rule);
+  const currentConditionType = conditionTypeOptions.some(
+    (option) => option.value === (rule.conditionType || "item_quantity"),
+  )
+    ? (rule.conditionType || "item_quantity")
+    : "item_quantity";
+  const usesCartAmount = currentConditionType === "cart_amount";
+  const usesShippingReward = rule.rewardType === "free_shipping";
+  const usesGiftReward = rule.rewardType === "gift_product";
+  const usesPercentageReward = rule.rewardType === "percentage_off";
+  const isBxgy = discountType === "bxgy";
 
   return (
     <BuilderBarCard bar={bar} actions={headerActions}>
       <BuilderSection title="Trigger">
         <FieldGrid>
+          {!isBxgy ? (
+            <label className="block text-[13px] font-medium text-[#1c1f23]">
+              Condition type
+              <Select
+                size="large"
+                className="mt-1"
+                value={currentConditionType}
+                options={conditionTypeOptions}
+                disabled={conditionTypeOptions.length === 1}
+                onChange={(value) =>
+                  onChange({
+                    conditionType: value as "item_quantity" | "cart_amount",
+                  })
+                }
+              />
+            </label>
+          ) : null}
           <label className="block text-[13px] font-medium text-[#1c1f23]">
-            Trigger quantity
+            {usesCartAmount ? "Spend threshold" : "Trigger quantity"}
             <Input
               size="large"
               type="number"
-              min={1}
+              min={usesCartAmount ? 0.01 : 1}
+              step={usesCartAmount ? 0.01 : 1}
               className="mt-1"
-              value={rule.count}
-              onChange={(e) => onChange({ count: parsePositiveInt(e.target.value, rule.count) })}
+              value={usesCartAmount ? rule.amountThreshold || 0 : rule.count}
+              onChange={(e) =>
+                usesCartAmount
+                  ? onChange({
+                      amountThreshold: Math.max(0, Number(e.target.value) || 0),
+                    })
+                  : onChange({ count: parsePositiveInt(e.target.value, rule.count) })
+              }
             />
           </label>
         </FieldGrid>
+        {!isBxgy && conditionTypeOptions.length === 1 ? (
+          <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
+            Cart amount is currently available only for order discount and free shipping rules in this builder path.
+          </div>
+        ) : null}
       </BuilderSection>
 
       <BuilderSection title="Reward">
         <FieldGrid>
-          {bar.type === "quantity_break" ? (
+          {usesPercentageReward && !isBxgy ? (
             <label className="block text-[13px] font-medium text-[#1c1f23]">
-              Discount (%)
+              {rule.discountClass === "order" ? "Order discount (%)" : "Discount (%)"}
               <Input
                 size="large"
                 type="number"
@@ -348,7 +410,7 @@ function DiscountRuleBarDetail({
             </label>
           ) : null}
 
-          {bar.type === "free_gift" ? (
+          {usesGiftReward ? (
             <>
               <label className="block text-[13px] font-medium text-[#1c1f23]">
                 Gift quantity
@@ -381,7 +443,7 @@ function DiscountRuleBarDetail({
             </>
           ) : null}
 
-          {bar.type === "bxgy" ? (
+          {isBxgy ? (
             <>
               <label className="block text-[13px] font-medium text-[#1c1f23]">
                 Buy quantity (X)
@@ -461,9 +523,11 @@ function DiscountRuleBarDetail({
             </>
           ) : null}
         </FieldGrid>
-        {supportsRewardScope ? (
+        {supportsRewardScope || usesShippingReward ? (
           <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
-            {draft.selectedProductsData.length > 0
+            {usesShippingReward
+              ? "Free shipping rules use the delivery discount function target and can unlock from item quantity or cart amount."
+              : draft.selectedProductsData.length > 0
               ? "Reward selection is scoped to the shared product pool in this builder path."
               : "Add products to the shared product pool first, then choose the reward products for this bar."}
           </div>
@@ -549,10 +613,10 @@ function FreeGiftRuleBarDetail({
 }) {
   return (
     <BuilderBarCard bar={bar} actions={headerActions}>
-      <BuilderSection title="Trigger">
+      <BuilderSection title="Mix-and-match trigger">
         <FieldGrid>
           <label className="block text-[13px] font-medium text-[#1c1f23]">
-            Trigger quantity
+            Any-item quantity
             <Input
               size="large"
               type="number"
@@ -635,10 +699,10 @@ function DifferentProductsRuleBarDetail({
 
   return (
     <BuilderBarCard bar={bar} actions={headerActions}>
-      <BuilderSection title="Trigger">
+      <BuilderSection title="Mix-and-match trigger">
         <FieldGrid>
           <label className="block text-[13px] font-medium text-[#1c1f23]">
-            Trigger quantity
+            Any-item quantity
             <Input
               size="large"
               type="number"
@@ -669,42 +733,48 @@ function DifferentProductsRuleBarDetail({
             />
           </label>
         </FieldGrid>
+        <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
+          Shoppers unlock this bar when they add any {Math.max(1, Number(rule.count) || 1)} product
+          {Math.max(1, Number(rule.count) || 1) === 1 ? "" : "s"} from this bar pool.
+        </div>
       </BuilderSection>
 
-      <BuilderSection title="Base eligible pool">
+      <BuilderSection title="Shared chooser pool">
         <CompactActionRow
           title="Storefront chooser products"
           meta={
             totalEligibleCount > 0
-              ? `${totalEligibleCount} products available across all quantity-break bars.`
+              ? `${totalEligibleCount} products available across all mix-and-match bars.`
               : "Choose the products customers can pick from in this offer."
           }
           actionLabel={totalEligibleCount > 0 ? "Edit eligible products" : "Select eligible products"}
           onAction={() => void actions.handleSelectDifferentProductsEligibleProducts()}
         />
         <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
-          This shared pool powers the storefront "Choose" list. Each bar below can narrow it to a smaller subset.
+          This shared pool powers the storefront "Choose" list. Each bar below can narrow it to a smaller subset without changing the shared chooser.
         </div>
       </BuilderSection>
 
-      <BuilderSection title="Eligible product pool">
+      <BuilderSection title="Bar product pool">
         <CompactActionRow
-          title="Reduce from shared eligible pool"
+          title="Products counted in this bar"
           meta={
             totalEligibleCount > 0
-              ? `${scopedCount} of ${totalEligibleCount} eligible products are included in this bar.`
+              ? `${scopedCount} of ${totalEligibleCount} shared products are included in this threshold.`
               : "Add shared eligible products first, then narrow this bar if needed."
           }
-          actionLabel={totalEligibleCount > 0 ? "Edit bar product pool" : "No eligible products"}
+          actionLabel={totalEligibleCount > 0 ? "Edit bar pool" : "No eligible products"}
           onAction={openEligiblePoolModal}
         />
         <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
           {totalEligibleCount > 0 ? (
             <div className="flex flex-wrap items-center justify-between gap-3">
               <span>
-                Eligible product pool is a subset of the shared eligible products.
+                Customers can mix any products in this bar pool to reach the quantity threshold.
                 {" "}
-                {scopedCount} of {totalEligibleCount} products are currently included in this bar.
+                {scopedCount === totalEligibleCount
+                  ? "This bar currently uses the full shared pool."
+                  : `This bar currently uses ${scopedCount} of ${totalEligibleCount} shared products.`}
               </span>
               {scopedCount !== totalEligibleCount ? (
                 <Button
@@ -713,7 +783,7 @@ function DifferentProductsRuleBarDetail({
                   className="px-0"
                   onClick={() => onChange({ buyProductIds: eligibleProductIds })}
                 >
-                  Use all eligible products
+                  Use full shared pool
                 </Button>
               ) : null}
             </div>
@@ -722,7 +792,7 @@ function DifferentProductsRuleBarDetail({
           )}
         </div>
         <Modal
-          title="Edit eligible product pool"
+          title="Edit bar product pool"
           open={isEligiblePoolModalOpen}
           onCancel={() => setIsEligiblePoolModalOpen(false)}
           onOk={applyEligiblePoolChanges}
@@ -732,7 +802,7 @@ function DifferentProductsRuleBarDetail({
         >
           <div className="space-y-4">
             <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
-              Eligible product pool inherits from the shared eligible pool. Remove products here to narrow this bar without changing the shared chooser products.
+              This bar inherits from the shared chooser pool. Remove products here to narrow this threshold without changing the storefront chooser.
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="text-[12px] text-[#5c6166]">
@@ -745,7 +815,7 @@ function DifferentProductsRuleBarDetail({
                 onClick={() => setDraftScopedIds(eligibleProductIds)}
                 disabled={totalEligibleCount === 0}
               >
-                Use all eligible products
+                Use full shared pool
               </Button>
             </div>
             <div className="max-h-[320px] space-y-2 overflow-auto pr-1">
@@ -912,9 +982,11 @@ export default function StepTwoCompositionBuilder({
   totalStoreProductsCount,
   activeTriggerSelectionMode,
   activeTriggerSelectionSummary,
+  activeTriggerSelectionDetails,
   onSelectAllTriggerProducts,
   onSelectTriggerProductsByCollection,
   onExcludeTriggerProducts,
+  onInvertTriggerProducts,
   onCustomFilterTriggerProducts,
   bars,
   modules,
@@ -1328,9 +1400,11 @@ export default function StepTwoCompositionBuilder({
                       totalStoreProductsCount={totalStoreProductsCount}
                       activeSelectionMode={activeTriggerSelectionMode}
                       activeSelectionSummary={activeTriggerSelectionSummary}
+                      activeSelectionDetails={activeTriggerSelectionDetails}
                       onSelectAll={onSelectAllTriggerProducts}
                       onSelectByCollection={onSelectTriggerProductsByCollection}
                       onExclude={onExcludeTriggerProducts}
+                      onInvert={onInvertTriggerProducts}
                       onCustomFilter={onCustomFilterTriggerProducts}
                       allowBulkSelection={draft.offerType !== "subscription"}
                     />

@@ -55,6 +55,7 @@ import {
   normalizeIpCountryCodes,
   normalizeTargetMarkets,
   normalizeOfferNameKey,
+  normalizeOfferEndTimeForUi,
   parseCampaignConfig,
   parseDiscountRules,
   parseBxgyDiscountRules,
@@ -300,7 +301,59 @@ type CollectionOption = {
   value: string;
 };
 
-type TriggerSelectionMode = "all" | "collection" | "exclude" | "custom" | null;
+type TriggerSelectionMode = "all" | "collection" | "exclude" | "custom" | "inverse" | null;
+type TriggerSelectionMeta =
+  | {
+      mode: Exclude<TriggerSelectionMode, null>;
+      collectionIds?: string[];
+    }
+  | null;
+
+function buildTriggerSelectionSummary(params: {
+  selection: TriggerSelectionMeta;
+  selectedCount: number;
+  totalStoreProductsCount: number;
+  collectionOptions: CollectionOption[];
+}) {
+  const {
+    selection,
+    selectedCount,
+    totalStoreProductsCount,
+    collectionOptions,
+  } = params;
+
+  if (!selection) return "";
+
+  if (selection.mode === "all") {
+    return `All products selected (${selectedCount})`;
+  }
+
+  if (selection.mode === "exclude") {
+    const excludedCount = Math.max(0, totalStoreProductsCount - selectedCount);
+    return totalStoreProductsCount > 0
+      ? `All products minus ${excludedCount} exclusion${excludedCount === 1 ? "" : "s"}`
+      : `Exclude mode (${selectedCount} selected)`;
+  }
+
+  if (selection.mode === "collection") {
+    const selectedLabels = collectionOptions
+      .filter((option) => selection.collectionIds?.includes(option.value))
+      .map((option) => option.label);
+    if (selectedLabels.length === 0) {
+      return `Collection selection (${selectedCount} products)`;
+    }
+    const visibleLabels = selectedLabels.slice(0, 2).join(", ");
+    return selectedLabels.length > 2
+      ? `Collection selection: ${visibleLabels} +${selectedLabels.length - 2} more`
+      : `Collection selection: ${visibleLabels}`;
+  }
+
+  if (selection.mode === "inverse") {
+    return `Inverse selection (${selectedCount} product${selectedCount === 1 ? "" : "s"})`;
+  }
+
+  return `Custom picker selection (${selectedCount})`;
+}
 
 /** 与 `_index/route` action 错误响应一致，避免从 route 循环引用 */
 type OfferActionErrorBody = {
@@ -337,15 +390,21 @@ function buildDiscountRulesJson(tiers: DiscountRule[]): DiscountRule[] {
       });
       continue;
     }
-    if (!Number.isFinite(tier.count) || tier.count < 1) continue;
-    if (!Number.isFinite(tier.discountPercent)) continue;
+    const usesCartAmount = tier.conditionType === "cart_amount";
+    if (
+      (usesCartAmount && !Number.isFinite(Number(tier.amountThreshold))) ||
+      (!usesCartAmount && (!Number.isFinite(tier.count) || tier.count < 1))
+    ) {
+      continue;
+    }
+    if (tier.rewardType === "percentage_off" && !Number.isFinite(tier.discountPercent)) continue;
     const isBxgy = tier.logicType === "bxgy";
     const normalizedBuyQuantity = isBxgy
       ? Math.max(1, Math.trunc(Number(tier.buyQuantity) || Number(tier.count) || 2))
       : undefined;
     out.push({
       id: tier.id,
-      count: isBxgy ? normalizedBuyQuantity! : Math.trunc(tier.count),
+      count: isBxgy ? normalizedBuyQuantity! : Math.max(1, Math.trunc(Number(tier.count) || 1)),
       discountPercent: isBxgy ? 100 : Math.max(0, Math.min(100, tier.discountPercent)),
       tierType: "standard",
       title: tier.title || "",
@@ -428,7 +487,13 @@ function sanitizeDiscountRules(tiers: DiscountRule[]): DiscountRule[] {
       });
       continue;
     }
-    if (!Number.isFinite(tier.count) || tier.count < 1) continue;
+    const usesCartAmount = tier.conditionType === "cart_amount";
+    if (
+      (usesCartAmount && !Number.isFinite(Number(tier.amountThreshold))) ||
+      (!usesCartAmount && (!Number.isFinite(tier.count) || tier.count < 1))
+    ) {
+      continue;
+    }
     if (
       tier.rewardType === "percentage_off" &&
       !Number.isFinite(tier.discountPercent)
@@ -655,13 +720,16 @@ export function CreateNewOffer({
         ? new Date(initialOffer.startTime).toISOString()
       : new Date().toISOString(),
   );
-  const [endTime, setEndTime] = useState(
-    initialCampaignConfig?.settings.endTime
-      ? new Date(initialCampaignConfig.settings.endTime).toISOString()
-      : initialOffer && initialOffer.endTime
-        ? new Date(initialOffer.endTime).toISOString()
-        : "",
+  const initialEndTimeValue = normalizeOfferEndTimeForUi(
+    initialCampaignConfig?.settings.endTime || initialOffer?.endTime || "",
   );
+  const [endTime, setEndTime] = useState(() => {
+    if (!initialEndTimeValue) return "";
+    const parsed = new Date(initialEndTimeValue);
+    return Number.isNaN(parsed.getTime())
+      ? initialEndTimeValue
+      : parsed.toISOString();
+  });
   const [startTimeError, setStartTimeError] = useState("");
   const [endTimeError, setEndTimeError] = useState("");
   const [marketsError, setMarketsError] = useState("");
@@ -1011,8 +1079,7 @@ export function CreateNewOffer({
   };
   const [collectionSelectionModalOpen, setCollectionSelectionModalOpen] = useState(false);
   const [pendingCollectionIds, setPendingCollectionIds] = useState<string[]>([]);
-  const [triggerSelectionMode, setTriggerSelectionMode] = useState<TriggerSelectionMode>(null);
-  const [triggerSelectionSummary, setTriggerSelectionSummary] = useState("");
+  const [triggerSelection, setTriggerSelection] = useState<TriggerSelectionMeta>(null);
   useEffect(() => {
     if (offerType !== "quantity-breaks-different") return;
     if (differentProductsEligibleProductsData.length > 0) return;
@@ -1038,7 +1105,7 @@ export function CreateNewOffer({
     [storeProducts],
   );
   useEffect(() => {
-    if (triggerSelectionMode !== null) return;
+    if (triggerSelection !== null) return;
     if (selectedProductsData.length === 0) return;
 
     const selectedIds = selectedProductsData.map((product) => String(product.id));
@@ -1046,15 +1113,13 @@ export function CreateNewOffer({
       const allSet = new Set(allStoreProductIds);
       const isAllSelected = selectedIds.every((id) => allSet.has(id));
       if (isAllSelected) {
-        setTriggerSelectionMode("all");
-        setTriggerSelectionSummary(`All products selected (${selectedIds.length})`);
+        setTriggerSelection({ mode: "all" });
         return;
       }
     }
 
-    setTriggerSelectionMode("custom");
-    setTriggerSelectionSummary(`Custom selection (${selectedIds.length})`);
-  }, [allStoreProductIds, selectedProductsData, triggerSelectionMode]);
+    setTriggerSelection({ mode: "custom" });
+  }, [allStoreProductIds, selectedProductsData, triggerSelection]);
   const collectionOptions = useMemo(
     () =>
       Array.from(
@@ -1074,6 +1139,41 @@ export function CreateNewOffer({
         .sort((left, right) => left.label.localeCompare(right.label)),
     [storeProducts],
   );
+  const triggerSelectionSummary = useMemo(
+    () =>
+      buildTriggerSelectionSummary({
+        selection: triggerSelection,
+        selectedCount: selectedProductsData.length,
+        totalStoreProductsCount: allStoreProductIds.length,
+        collectionOptions,
+      }),
+    [
+      triggerSelection,
+      selectedProductsData.length,
+      allStoreProductIds.length,
+      collectionOptions,
+    ],
+  );
+  const triggerSelectionDetails = useMemo(() => {
+    if (triggerSelection?.mode !== "collection") return [];
+    return collectionOptions
+      .filter((option) => triggerSelection.collectionIds?.includes(option.value))
+      .map((option) => option.label);
+  }, [triggerSelection, collectionOptions]);
+  const pendingCollectionMatchedProductCount = useMemo(() => {
+    if (pendingCollectionIds.length === 0) return 0;
+    const collectionIdSet = new Set(pendingCollectionIds);
+    return new Set(
+      storeProducts
+        .filter((product) =>
+          (product.collections || []).some((collection) =>
+            collectionIdSet.has(String(collection.id || "")),
+          ),
+        )
+        .map((product) => String(product.id || ""))
+        .filter(Boolean),
+    ).size;
+  }, [pendingCollectionIds, storeProducts]);
   const areStringArraysEqual = (left: string[], right: string[]) =>
     left.length === right.length && left.every((value, index) => value === right[index]);
   const createCompleteBundleBarId = () =>
@@ -1110,7 +1210,7 @@ export function CreateNewOffer({
     bars.find((bar) => !isCompleteBundleSingleBar(bar))?.id || bars[0]?.id || "";
 
   const handleSelectProducts = async (
-    type: "buy" | "gift" | "normal" | "product_bundle" = "normal",
+    type: "buy" | "gift" | "normal" = "normal",
   ) => {
     const selected = await (window as any).shopify.resourcePicker({
       type: "product",
@@ -1122,8 +1222,6 @@ export function CreateNewOffer({
           ? buyProducts.map((id) => ({ id }))
           : type === "gift"
             ? aggregatedFreeGiftRewardProductIds.map((id) => ({ id }))
-            : type === "product_bundle"
-              ? productBundleProductIds.map((id) => ({ id }))
               : selectedProductsData.map((p) => ({ id: p.id })),
     });
 
@@ -1143,17 +1241,7 @@ export function CreateNewOffer({
 
     if (type === "gift") {
       const nextIds = newData.map((item: any) => String(item.id));
-      setFreeGiftRules((prev) =>
-        prev.map((rule) => ({
-          ...rule,
-          giftProductIds: nextIds,
-        })),
-      );
-      return;
-    }
-
-    if (type === "product_bundle") {
-      setProductBundleProductIds(newData.map((item: any) => String(item.id)));
+      setFreeGiftSharedGiftProductIds(nextIds);
       return;
     }
 
@@ -1234,7 +1322,7 @@ export function CreateNewOffer({
   };
   const openStepTwoTriggerProductPicker = async (
     selectionProductIds?: string[],
-    meta?: { mode: Exclude<TriggerSelectionMode, null>; summary: string },
+    meta?: TriggerSelectionMeta,
   ) => {
     const selected = await (window as any).shopify.resourcePicker({
       type: "product",
@@ -1248,8 +1336,7 @@ export function CreateNewOffer({
     const selectedList = normalizeResourcePickerSelection(selected);
     applyStepTwoTriggerProducts(mapPickerSelectionToDraftProducts(selectedList));
     if (meta) {
-      setTriggerSelectionMode(meta.mode);
-      setTriggerSelectionSummary(meta.summary);
+      setTriggerSelection(meta);
     }
   };
   const handleSelectAllTriggerProducts = () => {
@@ -1258,8 +1345,7 @@ export function CreateNewOffer({
       return;
     }
     applyStepTwoTriggerProducts(mapProductIdsToDraftProducts(allStoreProductIds));
-    setTriggerSelectionMode("all");
-    setTriggerSelectionSummary(`All products selected (${allStoreProductIds.length})`);
+    setTriggerSelection({ mode: "all" });
   };
   const handleExcludeTriggerProducts = async () => {
     if (allStoreProductIds.length === 0) {
@@ -1268,8 +1354,17 @@ export function CreateNewOffer({
     }
     await openStepTwoTriggerProductPicker(allStoreProductIds, {
       mode: "exclude",
-      summary: "All products selected, with excluded items removed in picker",
     });
+  };
+  const handleInvertTriggerProducts = () => {
+    if (allStoreProductIds.length === 0) {
+      message.warning("Products are still loading. Please try again in a moment.");
+      return;
+    }
+    const selectedIdSet = new Set(selectedProductsData.map((product) => String(product.id)));
+    const invertedIds = allStoreProductIds.filter((id) => !selectedIdSet.has(id));
+    applyStepTwoTriggerProducts(mapProductIdsToDraftProducts(invertedIds));
+    setTriggerSelection({ mode: "inverse" });
   };
   const handleSelectTriggerProductsByCollection = () => {
     if (collectionOptions.length === 0) {
@@ -1301,27 +1396,18 @@ export function CreateNewOffer({
       message.warning("No products were found in the selected collections.");
       return;
     }
-    const summaryLabel = collectionOptions
-      .filter((option) => pendingCollectionIds.includes(option.value))
-      .slice(0, 2)
-      .map((option) => option.label)
-      .join(", ");
     setCollectionSelectionModalOpen(false);
     setPendingCollectionIds([]);
     window.setTimeout(() => {
       void openStepTwoTriggerProductPicker(matchedProductIds, {
         mode: "collection",
-        summary:
-          pendingCollectionIds.length > 2
-            ? `Collection selection: ${summaryLabel} +${pendingCollectionIds.length - 2} more`
-            : `Collection selection: ${summaryLabel}`,
+        collectionIds: pendingCollectionIds,
       });
     }, 0);
   };
   const handleCustomFilterTriggerProducts = async () => {
     await openStepTwoTriggerProductPicker(undefined, {
       mode: "custom",
-      summary: "Custom filter with Shopify product picker",
     });
   };
   const selectFreeGiftRewardProducts = async (ruleIndex: number) => {
@@ -1331,7 +1417,11 @@ export function CreateNewOffer({
       type: "product",
       action: "select",
       multiple: true,
-      selectionIds: (targetRule.giftProductIds || []).map((id) => ({ id })),
+      selectionIds: (
+        Array.isArray(targetRule.giftProductIds) && targetRule.giftProductIds.length > 0
+          ? targetRule.giftProductIds
+          : freeGiftSharedGiftProductIds
+      ).map((id) => ({ id })),
     });
     if (!selected) return;
     const selectedList = normalizeResourcePickerSelection(selected);
@@ -1495,25 +1585,21 @@ export function CreateNewOffer({
         starterTemplateDefaults?.freeGiftRules ??
         parseFreeGiftRules(
           initialCampaignLegacy?.discountRulesJson ?? initialOffer?.discountRulesJson,
-        ).map((rule) => ({
-          ...rule,
-          giftProductIds:
-            Array.isArray(rule.giftProductIds) && rule.giftProductIds.length > 0
-              ? rule.giftProductIds
-              : legacyFreeGiftRewardIds,
-        }))
+        )
       ).map((rule) =>
         rule.tierType === "single"
           ? rule
           : {
               ...rule,
-              giftProductIds:
-                Array.isArray(rule.giftProductIds) && rule.giftProductIds.length > 0
-                  ? rule.giftProductIds
-                  : legacyFreeGiftRewardIds,
+              giftProductIds: Array.isArray(rule.giftProductIds)
+                ? rule.giftProductIds
+                : [],
             },
       ),
     ),
+  );
+  const [freeGiftSharedGiftProductIds, setFreeGiftSharedGiftProductIds] = useState<string[]>(
+    () => legacyFreeGiftRewardIds,
   );
   const [differentProductsDiscountRules, setDifferentProductsDiscountRulesState] =
     useState<DifferentProductsDiscountRule[]>(
@@ -1543,12 +1629,19 @@ export function CreateNewOffer({
     () =>
       Array.from(
         new Set(
-          freeGiftRules.flatMap((rule) =>
-            Array.isArray(rule.giftProductIds) ? rule.giftProductIds : [],
-          ),
+          [
+            ...freeGiftSharedGiftProductIds,
+            ...freeGiftRules.flatMap((rule) =>
+              Array.isArray(rule.giftProductIds) ? rule.giftProductIds : [],
+            ),
+          ],
         ),
       ),
-    [freeGiftRules],
+    [freeGiftSharedGiftProductIds, freeGiftRules],
+  );
+  const freeGiftSharedGiftProductsData = useMemo(
+    () => mapProductIdsToDraftProducts(freeGiftSharedGiftProductIds),
+    [freeGiftSharedGiftProductIds, storeProducts],
   );
   const giftProductsData = useMemo(
     () => mapProductIdsToDraftProducts(aggregatedFreeGiftRewardProductIds),
@@ -1640,21 +1733,6 @@ export function CreateNewOffer({
       ? initialCountdownBlock.config.label
       : starterTemplateDefaults?.countdownLabel || "Limited time offer",
   );
-  const [productBundleEnabled, setProductBundleEnabled] = useState(
-    offerSettings.productBundleEnabled,
-  );
-  const [productBundleTitle, setProductBundleTitle] = useState(
-    offerSettings.productBundleTitle,
-  );
-  const [productBundleSubtitle, setProductBundleSubtitle] = useState(
-    offerSettings.productBundleSubtitle,
-  );
-  const [productBundleMinQuantity, setProductBundleMinQuantity] = useState(
-    offerSettings.productBundleMinQuantity,
-  );
-  const [productBundleProductIds, setProductBundleProductIds] = useState<string[]>(
-    offerSettings.productBundleProductIds,
-  );
   const [checkboxUpsellsEnabled, setCheckboxUpsellsEnabled] = useState(
     offerSettings.checkboxUpsellsEnabled,
   );
@@ -1680,21 +1758,6 @@ export function CreateNewOffer({
     offerSettings.stickyAddToCartButtonText,
   );
   const [compositionBarOrder, setCompositionBarOrder] = useState<string[]>([]);
-  const productBundleProductsData = useMemo(
-    () =>
-      productBundleProductIds.map((id) => {
-        const product = storeProducts.find((entry) => String(entry.id) === String(id));
-        return {
-          id: String(id),
-          title: product?.name || "Selected product",
-          image: product?.image || "https://via.placeholder.com/60",
-          price: product?.price || "€0.00",
-          variantsCount: Array.isArray(product?.variants) ? product.variants.length : 1,
-          hasSubscription: product?.hasSubscription === true,
-        };
-      }),
-    [productBundleProductIds, storeProducts],
-  );
   useEffect(() => {
     if (selectedProductsData.length > 0) return;
     const fallbackIds =
@@ -2089,9 +2152,11 @@ export function CreateNewOffer({
       { value: 1, label: "Bar #1 (Single, qty 1)" },
       ...normalizedDiscountRules.map((r, i) => ({
         value: i + 2,
-          label:
-            r.logicType === "bxgy"
-              ? `Bar #${i + 2} (BXGY, buy ${r.buyQuantity || 2} get ${r.getQuantity || 1})`
+        label:
+          r.logicType === "bxgy"
+            ? `Bar #${i + 2} (BXGY, buy ${r.buyQuantity || 2} get ${r.getQuantity || 1})`
+            : r.conditionType === "cart_amount"
+              ? `Bar #${i + 2} (spend ${r.amountThreshold || 0})`
               : `Bar #${i + 2} (qty ${r.count})`,
       })),
     ];
@@ -2221,7 +2286,7 @@ export function CreateNewOffer({
           type: "free-gift",
           config: {
             triggerProductIds: freeGiftTriggerProducts,
-            giftProductIds: aggregatedFreeGiftRewardProductIds,
+            giftProductIds: freeGiftSharedGiftProductIds,
             tiers: buildFreeGiftRulesJson(freeGiftRules),
           },
         },
@@ -2308,7 +2373,7 @@ export function CreateNewOffer({
         type: "free-gift",
         config: {
           triggerProductIds: freeGiftTriggerProducts,
-          giftProductIds: aggregatedFreeGiftRewardProductIds,
+          giftProductIds: freeGiftSharedGiftProductIds,
           tiers: buildFreeGiftRulesJson(freeGiftRules),
         },
       });
@@ -2456,11 +2521,6 @@ export function CreateNewOffer({
     normalizedDiscountRules,
     oneTimeSubtitle,
     oneTimeTitle,
-    productBundleEnabled,
-    productBundleMinQuantity,
-    productBundleProductIds,
-    productBundleSubtitle,
-    productBundleTitle,
     scheduleTimezone,
     selectedProductsData,
     showCountdownBlock,
@@ -2549,7 +2609,7 @@ export function CreateNewOffer({
         buyProductIds: buyProducts,
         getProductIds: buyProducts,
         freeGiftTriggerProductIds: freeGiftTriggerProducts,
-        freeGiftGiftProductIds: aggregatedFreeGiftRewardProductIds,
+        freeGiftGiftProductIds: freeGiftSharedGiftProductIds,
         discountRules: normalizedDiscountRules,
         bxgyDiscountRules,
         freeGiftRules,
@@ -2563,6 +2623,7 @@ export function CreateNewOffer({
       buyProducts,
       buyProducts,
       freeGiftTriggerProducts,
+      freeGiftSharedGiftProductIds,
       aggregatedFreeGiftRewardProductIds,
       normalizedDiscountRules,
       bxgyDiscountRules,
@@ -2582,12 +2643,6 @@ export function CreateNewOffer({
       getProducts: buyProducts,
       activeBundleBarId,
       completeBundleBars,
-      productBundleEnabled,
-      productBundleTitle,
-      productBundleSubtitle,
-      productBundleMinQuantity,
-      productBundleProductIds,
-      productBundleProductsData,
       subscriptionTitle,
       subscriptionSubtitle,
       oneTimeTitle,
@@ -2600,6 +2655,8 @@ export function CreateNewOffer({
       subscriptionExplanationTitle,
       subscriptionExplanationBody,
       freeGiftTriggerProducts,
+      freeGiftSharedGiftProductIds,
+      freeGiftSharedGiftProductsData,
       giftProductsData,
       progressiveGifts,
       checkboxUpsellsEnabled,
@@ -2625,12 +2682,6 @@ export function CreateNewOffer({
       buyProducts,
       activeBundleBarId,
       completeBundleBars,
-      productBundleEnabled,
-      productBundleTitle,
-      productBundleSubtitle,
-      productBundleMinQuantity,
-      productBundleProductIds,
-      productBundleProductsData,
       subscriptionTitle,
       subscriptionSubtitle,
       oneTimeTitle,
@@ -2643,6 +2694,8 @@ export function CreateNewOffer({
       subscriptionExplanationTitle,
       subscriptionExplanationBody,
       freeGiftTriggerProducts,
+      freeGiftSharedGiftProductIds,
+      freeGiftSharedGiftProductsData,
       giftProductsData,
       progressiveGifts,
       checkboxUpsellsEnabled,
@@ -2907,10 +2960,6 @@ export function CreateNewOffer({
     updateCompleteBundleBar,
     handleSelectProductsForBundleBar,
     appendProductsToBundleBar,
-    setProductBundleEnabled,
-    setProductBundleTitle,
-    setProductBundleSubtitle,
-    setProductBundleMinQuantity,
     setCheckboxUpsellsEnabled,
     setCheckboxUpsellsTitle,
     setCheckboxUpsellsSubtitle,
@@ -3354,6 +3403,14 @@ export function CreateNewOffer({
             product picker with those collection products preselected so you can confirm the final
             discount scope.
           </div>
+          {pendingCollectionIds.length > 0 ? (
+            <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
+              {pendingCollectionIds.length} collection
+              {pendingCollectionIds.length === 1 ? "" : "s"} currently match{" "}
+              {pendingCollectionMatchedProductCount} product
+              {pendingCollectionMatchedProductCount === 1 ? "" : "s"} before refinement.
+            </div>
+          ) : null}
           <label className="block text-[13px] font-medium text-[#1c1f23]">
             Collections
             <Select
@@ -3655,11 +3712,13 @@ export function CreateNewOffer({
                 draft={campaignDraft}
                 actions={campaignDraftActions}
                 totalStoreProductsCount={allStoreProductIds.length}
-                activeTriggerSelectionMode={triggerSelectionMode}
+                activeTriggerSelectionMode={triggerSelection?.mode ?? null}
                 activeTriggerSelectionSummary={triggerSelectionSummary}
+                activeTriggerSelectionDetails={triggerSelectionDetails}
                 onSelectAllTriggerProducts={handleSelectAllTriggerProducts}
                 onSelectTriggerProductsByCollection={handleSelectTriggerProductsByCollection}
                 onExcludeTriggerProducts={() => void handleExcludeTriggerProducts()}
+                onInvertTriggerProducts={handleInvertTriggerProducts}
                 onCustomFilterTriggerProducts={() => void handleCustomFilterTriggerProducts()}
                 bars={orderedCompositionBars}
                 modules={compositionModules}
@@ -3690,6 +3749,11 @@ export function CreateNewOffer({
                 }
                 preview={
                   <PreviewShell meta={previewPanelMeta}>
+                    {showCountdownBlock && countdownPreviewText ? (
+                      <div className="mb-4 rounded-[10px] bg-[#fff7e6] px-3 py-2 text-[12px] text-[#ad6800]">
+                        {countdownPreviewText}
+                      </div>
+                    ) : null}
                     {progressiveGiftPreviewControls}
                     <BundlePreview
                       layoutFormat={layoutFormat}

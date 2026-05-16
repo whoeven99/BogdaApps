@@ -17,13 +17,13 @@ Turn `NextTodo.md` into an executable roadmap that can be delivered in batches w
 
 | ID | Task | Scope | Main files | Acceptance | Priority | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| B1-1 | Audit all Components config loops | Ensure `Components` can configure, preview, save, and reload consistently | `app/routes/component/CreateNewOffer/CreateNewOffer.tsx`, `StepTwoCompositionBuilder.tsx`, `campaignCompositionAdapter.ts`, `offerParsing.ts` | No component silently drops state between preview and saved payload | P0 | In progress |
-| B1-2 | Free gift reward flow | Support explicit reward-product selection per rule and keep trigger/reward pools separate | `FreeGiftLogicEditor.tsx`, `LogicEditorsRenderer.tsx`, `CreateNewOffer.tsx`, `offerParsing.ts` | Merchant can see and edit trigger products and reward products independently | P0 | In progress |
-| B1-3 | Different-products rule UX | Make `quantity-breaks-different` feel distinct from same-product bars and clarify cross-product scope | `DifferentProductsLogicEditor.tsx`, `StepTwoCompositionBuilder.tsx`, preview-related files | Cross-product rules no longer feel like a reused same-product editor | P0 | Planned |
-| B1-4 | Money-based triggers | Extend bars from quantity-only to quantity-or-amount conditions | `UnifiedRulesEditor.tsx`, `unifiedRuleModel.ts`, `offerParsing.ts`, function mapping | Rules can be configured with cart amount where supported | P0 | Planned |
-| B1-5 | Smart product selection | Add bulk selection helpers and filtered selection workflows | `CreateNewOffer.tsx`, product-picker helpers, related shared UI | Merchants can select, reverse, and refine product sets faster | P0 | Planned |
-| B1-6 | Long-running schedule | Default offers to long-term active, with optional end date | `ScheduleTargetingEditor.tsx`, `CreateNewOffer.tsx`, `app/routes/_index/route.tsx` | Offer can be saved without an end date and reload correctly as long-term | P0 | In progress |
-| B1-7 | Unified tips and warnings | Normalize warning, error, and draft-only message styles | `OfferRulesShared.tsx`, `UnifiedRulesAuditPanel.tsx`, builder step surfaces | Alerts share one calm Shopify-aligned language | P1 | Planned |
+| B1-1 | Audit all Components config loops | Ensure `Components` can configure, preview, save, and reload consistently | `app/routes/component/CreateNewOffer/CreateNewOffer.tsx`, `StepTwoCompositionBuilder.tsx`, `campaignCompositionAdapter.ts`, `offerParsing.ts` | No component silently drops state between preview and saved payload | P0 | Done |
+| B1-2 | Free gift reward flow | Support explicit reward-product selection per rule and keep trigger/reward pools separate | `FreeGiftLogicEditor.tsx`, `LogicEditorsRenderer.tsx`, `CreateNewOffer.tsx`, `offerParsing.ts` | Merchant can see and edit trigger products and reward products independently | P0 | Done |
+| B1-3 | Different-products rule UX | Make `quantity-breaks-different` feel distinct from same-product bars and clarify cross-product scope | `DifferentProductsLogicEditor.tsx`, `StepTwoCompositionBuilder.tsx`, preview-related files | Cross-product rules no longer feel like a reused same-product editor | P0 | Done |
+| B1-4 | Money-based triggers | Extend bars from quantity-only to quantity-or-amount conditions | `UnifiedRulesEditor.tsx`, `unifiedRuleModel.ts`, `offerParsing.ts`, function mapping | Rules can be configured with cart amount where supported | P0 | Done |
+| B1-5 | Smart product selection | Add bulk selection helpers and filtered selection workflows | `CreateNewOffer.tsx`, product-picker helpers, related shared UI | Merchants can select, reverse, and refine product sets faster | P0 | Done |
+| B1-6 | Long-running schedule | Default offers to long-term active, with optional end date | `ScheduleTargetingEditor.tsx`, `CreateNewOffer.tsx`, `app/routes/_index/route.tsx` | Offer can be saved without an end date and reload correctly as long-term | P0 | Done |
+| B1-7 | Unified tips and warnings | Normalize warning, error, and draft-only message styles | `OfferRulesShared.tsx`, `UnifiedRulesAuditPanel.tsx`, builder step surfaces | Alerts share one calm Shopify-aligned language | P1 | Done |
 
 ## Semantic Workstream
 
@@ -72,11 +72,9 @@ Shopify Functions. Use `SEMANTIC_WORKFLOW.md` for each task.
 
 ## Current Execution Order
 
-1. Finish `B1-6` long-running schedule.
-2. Finish `B1-2` free gift reward selection loop.
-3. Tighten `B1-3` different-products rule UX.
-4. Start `B1-7` shared warnings/tips.
-5. Reassess `B1-4` money-based triggers after the first three land cleanly.
+1. Revisit semantic tasks `S2` / `S3` now that Batch 1 save-reload loops are stable.
+2. Start Batch 2 display polish after the semantic module boundaries are clarified.
+3. Recheck preview consistency after semantic tasks reshape payload intent.
 
 ## Notes
 

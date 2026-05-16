@@ -22,9 +22,9 @@ export const OFFER_TEXT_LIMITS = {
   buttonText: 30,
 } as const;
 
-const DEFAULT_PRODUCT_BUNDLE_TITLE = "Build your bundle";
-const DEFAULT_PRODUCT_BUNDLE_SUBTITLE =
-  "Choose products to unlock the bundle offer";
+export const LONG_RUNNING_OFFER_END_TIME_ISO = "2999-12-31T23:59:59.000Z";
+const LONG_RUNNING_OFFER_END_TIME_MS = Date.parse(LONG_RUNNING_OFFER_END_TIME_ISO);
+
 const DEFAULT_CHECKBOX_UPSELLS_TITLE = "Add this offer to my order";
 const DEFAULT_CHECKBOX_UPSELLS_SUBTITLE =
   "Customers can opt in before adding the bundle.";
@@ -77,16 +77,29 @@ export function parseNonNegativeNumberOrNull(raw: unknown): number | null {
   return n < 0 ? 0 : n;
 }
 
-function sanitizeProductBundleTitle(raw: unknown): string {
-  return sanitizeSingleLineText(
-    raw,
-    OFFER_TEXT_LIMITS.widgetTitle,
-    DEFAULT_PRODUCT_BUNDLE_TITLE,
-  );
+function normalizeDateLikeValue(raw: unknown): string {
+  if (raw instanceof Date) {
+    return Number.isNaN(raw.getTime()) ? "" : raw.toISOString();
+  }
+  if (typeof raw !== "string") return "";
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  const parsed = new Date(trimmed);
+  return Number.isNaN(parsed.getTime()) ? trimmed : parsed.toISOString();
 }
 
-function sanitizeProductBundleSubtitle(raw: unknown): string {
-  return sanitizeSingleLineText(raw, 120, DEFAULT_PRODUCT_BUNDLE_SUBTITLE);
+export function isLongRunningOfferEndTime(raw: unknown): boolean {
+  const normalized = normalizeDateLikeValue(raw);
+  if (!normalized) return false;
+  const parsedMs = Date.parse(normalized);
+  if (Number.isNaN(parsedMs)) return false;
+  return parsedMs === LONG_RUNNING_OFFER_END_TIME_MS;
+}
+
+export function normalizeOfferEndTimeForUi(raw: unknown): string {
+  const normalized = normalizeDateLikeValue(raw);
+  if (!normalized || isLongRunningOfferEndTime(normalized)) return "";
+  return normalized;
 }
 
 function sanitizeCheckboxUpsellsTitle(raw: unknown): string {
@@ -291,11 +304,6 @@ export type OfferSettings = {
   buttonText: string;
   buttonPrimaryColor: string;
   showCustomButton: boolean;
-  productBundleEnabled: boolean;
-  productBundleTitle: string;
-  productBundleSubtitle: string;
-  productBundleMinQuantity: number;
-  productBundleProductIds: string[];
   subscriptionEnabled: boolean;
   subscriptionPosition: "below-bundle-bars";
   subscriptionTitle: string;
@@ -396,11 +404,6 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
       buttonText: "Add to Cart",
       buttonPrimaryColor: "#008060",
       showCustomButton: true,
-      productBundleEnabled: false,
-      productBundleTitle: DEFAULT_PRODUCT_BUNDLE_TITLE,
-      productBundleSubtitle: DEFAULT_PRODUCT_BUNDLE_SUBTITLE,
-      productBundleMinQuantity: 2,
-      productBundleProductIds: [],
       subscriptionEnabled: false,
       subscriptionPosition: "below-bundle-bars",
       subscriptionTitle: "Subscribe & Save 20%",
@@ -484,17 +487,6 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
             .filter(Boolean)
         : undefined,
       scheduleTimezone: parsed.scheduleTimezone,
-      productBundleEnabled: parsed.productBundleEnabled === true,
-      productBundleTitle: sanitizeProductBundleTitle(parsed.productBundleTitle),
-      productBundleSubtitle: sanitizeProductBundleSubtitle(
-        parsed.productBundleSubtitle,
-      ),
-      productBundleMinQuantity: clampNumber(parsed.productBundleMinQuantity, 1, 20, 2),
-      productBundleProductIds: Array.isArray(parsed.productBundleProductIds)
-        ? parsed.productBundleProductIds
-            .map((id) => String(id || "").trim())
-            .filter(Boolean)
-        : [],
       checkboxUpsellsEnabled: parsed.checkboxUpsellsEnabled === true,
       checkboxUpsellsTitle: sanitizeCheckboxUpsellsTitle(
         parsed.checkboxUpsellsTitle,
@@ -1222,26 +1214,13 @@ export type SubscriptionLogicBlock = {
   };
 };
 
-export type ProductBundleLogicBlock = {
-  id: string;
-  type: "product-bundle";
-  config: {
-    enabled: boolean;
-    title: string;
-    subtitle: string;
-    minQuantity: number;
-    productIds: string[];
-  };
-};
-
 export type LogicBlock =
   | QuantityBreaksLogicBlock
   | QuantityBreaksDifferentLogicBlock
   | BxgyLogicBlock
   | FreeGiftLogicBlock
   | CompleteBundleLogicBlock
-  | SubscriptionLogicBlock
-  | ProductBundleLogicBlock;
+  | SubscriptionLogicBlock;
 export type DisplayBlock = OfferCardDisplayBlock | CountdownDisplayBlock;
 
 export function parseDiscountRules(discountRulesJson?: string | null): DiscountRule[] {
@@ -1255,6 +1234,10 @@ export function parseDiscountRules(discountRulesJson?: string | null): DiscountR
     for (const item of parsed) {
       if (!item || typeof item !== "object") continue;
       const isSingleTier = (item as { tierType?: unknown }).tierType === "single";
+      const conditionType =
+        (item as { conditionType?: unknown }).conditionType === "cart_amount"
+          ? "cart_amount"
+          : "item_quantity";
       const count = Number((item as { count?: unknown }).count);
       const discountPercent = Number(
         (item as { discountPercent?: unknown }).discountPercent,
@@ -1274,15 +1257,31 @@ export function parseDiscountRules(discountRulesJson?: string | null): DiscountR
         );
         continue;
       }
-      if (!Number.isFinite(count) || count < 1) continue;
-      if (!Number.isFinite(discountPercent)) continue;
+      if (conditionType === "item_quantity" && (!Number.isFinite(count) || count < 1)) continue;
+      if (
+        conditionType === "cart_amount" &&
+        !Number.isFinite(Number((item as { amountThreshold?: unknown }).amountThreshold))
+      ) {
+        continue;
+      }
+      if (
+        (item as { rewardType?: unknown }).rewardType !== "free_shipping" &&
+        !Number.isFinite(discountPercent)
+      ) {
+        continue;
+      }
       out.push({
         id:
           typeof (item as { id?: unknown }).id === "string"
             ? (item as { id: string }).id
             : undefined,
-        count: Math.trunc(count),
-        discountPercent: Math.max(0, Math.min(100, discountPercent)),
+        count:
+          conditionType === "cart_amount"
+            ? Math.max(1, Math.trunc(count || 1))
+            : Math.trunc(count),
+        discountPercent: Number.isFinite(discountPercent)
+          ? Math.max(0, Math.min(100, discountPercent))
+          : 0,
         tierType: "standard",
         title: (item as { title?: string }).title || "",
         subtitle: (item as { subtitle?: string }).subtitle || "",
@@ -1298,10 +1297,7 @@ export function parseDiscountRules(discountRulesJson?: string | null): DiscountR
           (item as { offerKind?: unknown }).offerKind === "free_shipping"
             ? ((item as { offerKind: "free_gift" | "free_shipping" }).offerKind)
             : "percentage_discount",
-        conditionType:
-          (item as { conditionType?: unknown }).conditionType === "cart_amount"
-            ? "cart_amount"
-            : "item_quantity",
+        conditionType,
         amountThreshold: Number.isFinite(
           Number((item as { amountThreshold?: unknown }).amountThreshold),
         )
@@ -1611,23 +1607,6 @@ function sanitizeSubscriptionLogicConfig(raw: unknown): SubscriptionLogicBlock["
   };
 }
 
-function sanitizeProductBundleLogicConfig(
-  raw: unknown,
-): ProductBundleLogicBlock["config"] | null {
-  if (!raw || typeof raw !== "object") return null;
-  const item = raw as Record<string, unknown>;
-  const productIds = Array.isArray(item.productIds)
-    ? item.productIds.map((id) => String(id || "").trim()).filter(Boolean)
-    : [];
-  return {
-    enabled: item.enabled !== false,
-    title: sanitizeProductBundleTitle(item.title),
-    subtitle: sanitizeProductBundleSubtitle(item.subtitle),
-    minQuantity: clampNumber(item.minQuantity, 1, 20, 2),
-    productIds,
-  };
-}
-
 function sanitizeLogicBlock(raw: unknown): LogicBlock | null {
   if (!raw || typeof raw !== "object") return null;
   const item = raw as Record<string, unknown>;
@@ -1750,17 +1729,6 @@ function sanitizeLogicBlock(raw: unknown): LogicBlock | null {
       id:
         typeof item.id === "string" && item.id ? item.id : "logic-subscription",
       type: "subscription",
-      config,
-    };
-  }
-
-  if (item.type === "product-bundle") {
-    const config = sanitizeProductBundleLogicConfig(configRecord);
-    if (!config) return null;
-    return {
-      id:
-        typeof item.id === "string" && item.id ? item.id : "logic-product-bundle",
-      type: "product-bundle",
       config,
     };
   }
@@ -1917,7 +1885,7 @@ export function parseCampaignConfig(
         status: settingsRaw.status !== false,
         startTime:
           typeof settingsRaw.startTime === "string" ? settingsRaw.startTime : "",
-        endTime: typeof settingsRaw.endTime === "string" ? settingsRaw.endTime : "",
+        endTime: normalizeOfferEndTimeForUi(settingsRaw.endTime),
         scheduleTimezone:
           typeof settingsRaw.scheduleTimezone === "string"
             ? settingsRaw.scheduleTimezone
@@ -2016,10 +1984,7 @@ export function migrateLegacyOfferToCampaignConfig(params: {
       params.startTime instanceof Date
         ? params.startTime.toISOString()
         : String(params.startTime || ""),
-    endTime:
-      params.endTime instanceof Date
-        ? params.endTime.toISOString()
-        : String(params.endTime || ""),
+    endTime: normalizeOfferEndTimeForUi(params.endTime),
     scheduleTimezone: offerSettings.scheduleTimezone,
     totalBudget: offerSettings.totalBudget,
     dailyBudget: offerSettings.dailyBudget,
@@ -2296,23 +2261,6 @@ export function migrateLegacyOfferToCampaignConfig(params: {
     };
   }
 
-  const productBundleLogicBlock =
-    offerSettings.productBundleEnabled && offerSettings.productBundleProductIds.length > 0
-      ? [
-          {
-            id: "logic-product-bundle",
-            type: "product-bundle" as const,
-            config: {
-              enabled: true,
-              title: offerSettings.productBundleTitle,
-              subtitle: offerSettings.productBundleSubtitle,
-              minQuantity: offerSettings.productBundleMinQuantity,
-              productIds: offerSettings.productBundleProductIds,
-            },
-          },
-        ]
-      : [];
-
   return {
     version: 1,
     scope: {
@@ -2342,7 +2290,6 @@ export function migrateLegacyOfferToCampaignConfig(params: {
                 ],
         },
       },
-      ...productBundleLogicBlock,
     ],
     displayBlocks: [
       {
@@ -2380,9 +2327,6 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
   );
   const subscription = config.logicBlocks.find(
     (block): block is SubscriptionLogicBlock => block.type === "subscription",
-  );
-  const productBundle = config.logicBlocks.find(
-    (block): block is ProductBundleLogicBlock => block.type === "product-bundle",
   );
   const offerCard = config.displayBlocks.find(
     (block): block is OfferCardDisplayBlock => block.type === "offer-card",
@@ -2461,13 +2405,6 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
     titleFontWeight: offerCard?.config.titleFontWeight || "600",
     buttonText: offerCard?.config.buttonText || "Add to Cart",
     showCustomButton: offerCard?.config.showCustomButton !== false,
-    productBundleEnabled: productBundle?.config.enabled ?? false,
-    productBundleTitle: sanitizeProductBundleTitle(productBundle?.config.title),
-    productBundleSubtitle: sanitizeProductBundleSubtitle(
-      productBundle?.config.subtitle,
-    ),
-    productBundleMinQuantity: productBundle?.config.minQuantity ?? 2,
-    productBundleProductIds: productBundle?.config.productIds ?? [],
     subscriptionEnabled: subscription?.config.enabled ?? false,
     subscriptionPosition: subscription?.config.position ?? "below-bundle-bars",
     subscriptionTitle: subscription?.config.title ?? "Subscribe & Save 20%",
@@ -2564,6 +2501,10 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
                 completeBundleConfig.bars.map((bar) => ({
                   id: bar.id,
                   type: bar.type,
+                  title: bar.title || "",
+                  subtitle: bar.subtitle || "",
+                  badge: bar.badge || "",
+                  isDefault: !!bar.isDefault,
                   quantity: bar.quantity,
                   pricing: bar.pricing,
                   products: bar.products.map((product) => ({
@@ -2665,12 +2606,6 @@ export function getOfferRulesText(params: {
       return subscription.config.enabled
         ? `Subscription enabled for ${subscription.config.productIds.length || config.scope.productIds.length} product${(subscription.config.productIds.length || config.scope.productIds.length) > 1 ? "s" : ""}`
         : "Subscription block configured";
-    }
-    const productBundle = config.logicBlocks.find(
-      (block): block is ProductBundleLogicBlock => block.type === "product-bundle",
-    );
-    if (productBundle?.config.enabled) {
-      return `Product bundle module for ${productBundle.config.productIds.length} product${productBundle.config.productIds.length > 1 ? "s" : ""}`;
     }
   }
 
@@ -3026,8 +2961,8 @@ export function buildBxgyDiscountRulesJson(tiers: BxgyDiscountRule[]): BxgyDisco
       buyProductIds: Array.isArray(tier.buyProductIds)
         ? tier.buyProductIds.filter(id => typeof id === "string")
         : [],
-      getProductIds: Array.isArray(tier.buyProductIds)
-        ? tier.buyProductIds.filter(id => typeof id === "string")
+      getProductIds: Array.isArray(tier.getProductIds)
+        ? tier.getProductIds.filter(id => typeof id === "string")
         : [],
       tierType: tier.tierType === "simple" ? "simple" : "bxgy",
       title: tier.title || "",

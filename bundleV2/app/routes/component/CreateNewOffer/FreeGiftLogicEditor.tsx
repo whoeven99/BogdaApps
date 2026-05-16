@@ -21,7 +21,7 @@ import { getFreeGiftRuleCapability } from "./ruleCapabilityRegistry";
 
 type Props = {
   triggerProductsCount: number;
-  giftProductsCount: number;
+  sharedGiftProductsCount: number;
   giftProductsData: DraftSelectedProduct[];
   onSelectTriggerProducts: () => void | Promise<void>;
   onSelectGiftProducts: () => void | Promise<void>;
@@ -34,7 +34,7 @@ type Props = {
 
 export default function FreeGiftLogicEditor({
   triggerProductsCount,
-  giftProductsCount,
+  sharedGiftProductsCount,
   giftProductsData,
   onSelectTriggerProducts,
   onSelectGiftProducts,
@@ -107,7 +107,7 @@ export default function FreeGiftLogicEditor({
             <div>
               <div className="text-[14px] font-medium text-[#1c1f23]">Gift Products</div>
               <div className="mt-1 text-[12px] text-[#5c6166]">
-                {giftProductsCount} selected
+                {sharedGiftProductsCount} selected in the shared reward pool
               </div>
             </div>
             <Button
@@ -117,11 +117,13 @@ export default function FreeGiftLogicEditor({
                 e.preventDefault();
               }}
             >
-              {giftProductsCount === 0 ? "Select gift products" : "Edit gift products"}
+              {sharedGiftProductsCount === 0
+                ? "Select shared gift products"
+                : "Edit shared gift products"}
             </Button>
           </div>
           <div className="mt-2 text-[12px] text-[#5c6166]">
-            This bulk picker updates the default reward pool for every free gift rule.
+            This shared reward pool is the default gift selection for every free gift rule unless a rule overrides it.
           </div>
         </div>
       </div>
@@ -342,22 +344,43 @@ export default function FreeGiftLogicEditor({
                     <div className="mt-1 text-[12px] text-[#5c6166]">
                       {rule.giftProductIds?.length
                         ? `${rule.giftProductIds.length} selected for this rule`
-                        : "Using the shared gift product pool"}
+                        : sharedGiftProductsCount > 0
+                          ? `Using ${sharedGiftProductsCount} shared gift products`
+                          : "Using the shared gift product pool"}
                     </div>
                   </div>
-                  {onSelectRuleGiftProducts ? (
-                    <Button
-                      size="middle"
-                      onClick={(e) => {
-                        void onSelectRuleGiftProducts(actualIndex);
-                        e.preventDefault();
-                      }}
-                    >
-                      {rule.giftProductIds?.length
-                        ? "Edit rule reward products"
-                        : "Override reward products"}
-                    </Button>
-                  ) : null}
+                  <div className="flex flex-wrap gap-2">
+                    {onSelectRuleGiftProducts ? (
+                      <Button
+                        size="middle"
+                        onClick={(e) => {
+                          void onSelectRuleGiftProducts(actualIndex);
+                          e.preventDefault();
+                        }}
+                      >
+                        {rule.giftProductIds?.length
+                          ? "Edit rule reward products"
+                          : "Override reward products"}
+                      </Button>
+                    ) : null}
+                    {rule.giftProductIds?.length ? (
+                      <Button
+                        size="middle"
+                        onClick={(e) => {
+                          setFreeGiftRules((prev) =>
+                            prev.map((currentRule, currentIndex) =>
+                              currentIndex === actualIndex
+                                ? { ...currentRule, giftProductIds: [] }
+                                : currentRule,
+                            ),
+                          );
+                          e.preventDefault();
+                        }}
+                      >
+                        Use shared reward pool
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
                 {rule.giftProductIds?.length ? (
                   <div className="mt-3 flex flex-wrap gap-2">

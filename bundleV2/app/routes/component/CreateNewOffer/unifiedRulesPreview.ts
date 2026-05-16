@@ -335,11 +335,11 @@ function buildDifferentProductsItem(
       title: rule.presentation.title || `Any ${rule.condition.count} items`,
       subtitle:
         rule.presentation.subtitle ||
-        `Choose from ${scopedCount} eligible product${scopedCount === 1 ? "" : "s"}`,
+        `Mix any ${rule.condition.count} from ${scopedCount} eligible product${scopedCount === 1 ? "" : "s"}`,
       price: params.formatPrice(discountedTotal),
       original: params.formatPrice(originalTotal),
       featured,
-      badge: rule.presentation.badge || (featured ? "Most Popular" : ""),
+      badge: rule.presentation.badge || (featured ? "Mix & Match" : ""),
       saveLabel: `SAVE ${params.formatPrice(saved)}`,
       products: scopedProducts.length > 0 ? scopedProducts : undefined,
     };
@@ -357,7 +357,7 @@ function buildDifferentProductsItem(
           ? `${rule.reward.discountPercent}% OFF`
           : "CUSTOM",
       featured,
-      badge: rule.presentation.badge || (featured ? "Recommended" : ""),
+      badge: rule.presentation.badge || (featured ? "Mix & Match" : ""),
       saveLabel: `AT ${rule.condition.triggerCount} ITEMS`,
       products: scopedProducts.length > 0 ? scopedProducts : undefined,
     };
@@ -368,13 +368,13 @@ function buildDifferentProductsItem(
     title: rule.presentation.title || `Rule ${index + 1}`,
     subtitle:
       rule.presentation.subtitle ||
-      `Choose from ${scopedCount} eligible product${scopedCount === 1 ? "" : "s"}`,
+      `Mix across ${scopedCount} eligible product${scopedCount === 1 ? "" : "s"}`,
     price:
       rule.reward.kind === "percentage_off"
         ? `${rule.reward.discountPercent}% OFF`
         : "CUSTOM",
     featured,
-    badge: rule.presentation.badge || (featured ? "Most Popular" : ""),
+    badge: rule.presentation.badge || (featured ? "Mix & Match" : ""),
     products: scopedProducts.length > 0 ? scopedProducts : undefined,
   };
 }

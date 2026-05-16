@@ -62,11 +62,6 @@ export type CampaignModuleItem = {
   toggleable: boolean;
 };
 
-const HIDDEN_COMPONENT_MODULE_IDS: StepTwoModuleId[] = [
-  "checkbox_upsells",
-  "progressive_gifts",
-];
-
 function getDraftDiscountRuleType(rule: DraftDiscountRule): CampaignBarType {
   if (isSingleDiscountRule(rule)) return "quantity_break";
   if (rule.logicType === "bxgy") return "bxgy";
@@ -81,10 +76,20 @@ function buildQuantityBreakSummary(rule: DraftDiscountRule) {
   if (rule.logicType === "bxgy") {
     return `Buy ${rule.buyQuantity || 2}, get ${rule.getQuantity || 1}`;
   }
+  const thresholdLabel =
+    rule.conditionType === "cart_amount"
+      ? `Spend ${Math.max(0, Number(rule.amountThreshold) || 0)}`
+      : `${Math.max(1, Number(rule.count) || 1)} item${Math.max(1, Number(rule.count) || 1) === 1 ? "" : "s"}`;
   if (rule.rewardType === "gift_product") {
-    return `Unlock ${rule.giftQuantity || 1} free gift${(rule.giftQuantity || 1) > 1 ? "s" : ""}`;
+    return `${thresholdLabel} • ${Math.max(1, Number(rule.giftQuantity) || 1)} free gift${(rule.giftQuantity || 1) > 1 ? "s" : ""}`;
   }
-  return `${Math.max(1, Number(rule.count) || 1)} items • ${Math.max(0, Number(rule.discountPercent) || 0)}% off`;
+  if (rule.rewardType === "free_shipping") {
+    return `${thresholdLabel} • Free shipping`;
+  }
+  if (rule.discountClass === "order") {
+    return `${thresholdLabel} • ${Math.max(0, Number(rule.discountPercent) || 0)}% off order`;
+  }
+  return `${thresholdLabel} • ${Math.max(0, Number(rule.discountPercent) || 0)}% off`;
 }
 
 function buildBxgySummary(rule: DraftBxgyDiscountRule) {
@@ -105,7 +110,8 @@ function buildDifferentProductsSummary(rule: DifferentProductsDiscountRule) {
   if (isSingleDifferentProductsRule(rule)) {
     return "Single purchase at standard price";
   }
-  return `${Math.max(1, Number(rule.count) || 1)} items • ${Math.max(0, Number(rule.discountPercent) || 0)}% off • ${Array.isArray(rule.buyProductIds) ? rule.buyProductIds.length : 0} products`;
+  const scopedCount = Array.isArray(rule.buyProductIds) ? rule.buyProductIds.length : 0;
+  return `Any ${Math.max(1, Number(rule.count) || 1)} items • ${Math.max(0, Number(rule.discountPercent) || 0)}% off • ${scopedCount} product${scopedCount === 1 ? "" : "s"} in bar pool`;
 }
 
 export function getCampaignCompositionBars(
@@ -118,7 +124,7 @@ export function getCampaignCompositionBars(
       rule.title ||
       (isSingleDifferentProductsRule(rule)
         ? "Single purchase"
-        : `Bar #${index + 1} - Quantity break`),
+        : `Bar #${index + 1} - Mix & match`),
     summary: rule.subtitle || buildDifferentProductsSummary(rule),
     enabled: true,
     isDefault: !!rule.isDefault,
@@ -228,7 +234,7 @@ export function getCampaignCompositionModules(
     },
   ];
 
-  return modules.filter((module) => !HIDDEN_COMPONENT_MODULE_IDS.includes(module.id));
+  return modules;
 }
 
 export function getCampaignCompositionRulesSnapshot(
@@ -255,7 +261,7 @@ export function getCampaignCompositionRulesSnapshot(
       ...adaptFreeGiftRules(
         draft.freeGiftRules,
         draft.freeGiftTriggerProducts,
-        draft.giftProductsData.map((product) => String(product.id)),
+        draft.freeGiftSharedGiftProductsData.map((product) => String(product.id)),
       ),
     );
   }

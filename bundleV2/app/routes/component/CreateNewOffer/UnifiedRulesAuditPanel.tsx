@@ -1,5 +1,5 @@
 import type { UnifiedRuleAuditIssue } from "./unifiedRulesValidation";
-import { OfferRuleNotice } from "./OfferRulesShared";
+import { OfferRuleNotice, OfferRuleStatusPill } from "./OfferRulesShared";
 
 type Props = {
   rulesCount: number;
@@ -12,8 +12,8 @@ function getStatusTone(issues: UnifiedRuleAuditIssue[]) {
 
   if (hasError) {
     return {
+      intent: "critical" as const,
       badge: "Needs fixes",
-      badgeClasses: "border-[#ffd6d2] bg-[#fff1f0] text-[#b42318]",
       title: "Fix these rule issues before continuing.",
       description:
         "Some configurations in this rules setup are not publishable in the current flow.",
@@ -22,8 +22,8 @@ function getStatusTone(issues: UnifiedRuleAuditIssue[]) {
 
   if (hasWarning) {
     return {
+      intent: "warning" as const,
       badge: "Check setup",
-      badgeClasses: "border-[#ffe58f] bg-[#fffbe6] text-[#ad6800]",
       title: "Review this rules setup before continuing.",
       description:
         "The current rules state is incomplete or needs confirmation before moving on.",
@@ -31,8 +31,8 @@ function getStatusTone(issues: UnifiedRuleAuditIssue[]) {
   }
 
   return {
+    intent: "success" as const,
     badge: "Ready",
-    badgeClasses: "border-[#b7ebc6] bg-[#f6ffed] text-[#237804]",
     title: "Rules are ready for the next step.",
     description:
       "This configuration passes the current unified compatibility and publishability checks.",
@@ -58,40 +58,28 @@ export default function UnifiedRulesAuditPanel({ rulesCount, issues }: Props) {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <div
-            className={`inline-flex w-fit items-center rounded-full border px-3 py-1 text-[12px] font-medium ${status.badgeClasses}`}
-          >
+          <OfferRuleStatusPill intent={status.intent}>
             {status.badge}
-          </div>
-          <div className="inline-flex w-fit items-center rounded-full border border-[#dfe3e8] bg-white px-3 py-1 text-[12px] font-medium text-[#5c6166]">
+          </OfferRuleStatusPill>
+          <OfferRuleStatusPill>
             {rulesCount} rule{rulesCount === 1 ? "" : "s"}
-          </div>
+          </OfferRuleStatusPill>
         </div>
       </div>
 
-      <OfferRuleNotice
-        title="Rule readiness"
-        intent={
-          errorCount > 0
-            ? "critical"
-            : warningCount > 0
-              ? "warning"
-              : "success"
-        }
-      >
-        <div className="text-[14px] font-medium text-[#1c1f23]">{status.title}</div>
-        <div className="mt-1 text-[12px] text-[#5c6166]">{status.description}</div>
+      <OfferRuleNotice title={status.title} intent={status.intent}>
+        <div>{status.description}</div>
         {issues.length > 0 ? (
-          <div className="mt-3 flex flex-wrap gap-2 text-[12px] font-medium">
+          <div className="mt-3 flex flex-wrap gap-2">
             {errorCount > 0 ? (
-              <span className="rounded-full bg-[#fff1f0] px-2 py-1 text-[#b42318]">
+              <OfferRuleStatusPill intent="critical">
                 {errorCount} error{errorCount === 1 ? "" : "s"}
-              </span>
+              </OfferRuleStatusPill>
             ) : null}
             {warningCount > 0 ? (
-              <span className="rounded-full bg-[#fffbe6] px-2 py-1 text-[#ad6800]">
+              <OfferRuleStatusPill intent="warning">
                 {warningCount} warning{warningCount === 1 ? "" : "s"}
-              </span>
+              </OfferRuleStatusPill>
             ) : null}
           </div>
         ) : null}
@@ -102,6 +90,7 @@ export default function UnifiedRulesAuditPanel({ rulesCount, issues }: Props) {
           {issues.map((issue, index) => (
             <OfferRuleNotice
               key={`${issue.severity}-${index}`}
+              title={issue.severity === "error" ? "Error" : "Warning"}
               intent={issue.severity === "error" ? "critical" : "warning"}
             >
               {issue.message}

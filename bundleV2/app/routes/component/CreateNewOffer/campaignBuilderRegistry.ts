@@ -21,15 +21,21 @@ type CampaignBuilderMeta = {
 
 function getFreeGiftRewardBarCount(ctx: CampaignBuilderRegistryContext) {
   return ctx.freeGiftRules.filter(
-    (rule) => Array.isArray(rule.giftProductIds) && rule.giftProductIds.length > 0,
+    (rule) =>
+      Array.isArray(rule.giftProductIds) && rule.giftProductIds.length > 0
+        ? true
+        : ctx.freeGiftSharedGiftProductIds.length > 0,
   ).length;
 }
 
 function getFreeGiftRewardProductCount(ctx: CampaignBuilderRegistryContext) {
   return new Set(
-    ctx.freeGiftRules.flatMap((rule) =>
-      Array.isArray(rule.giftProductIds) ? rule.giftProductIds : [],
-    ),
+    [
+      ...ctx.freeGiftSharedGiftProductIds,
+      ...ctx.freeGiftRules.flatMap((rule) =>
+        Array.isArray(rule.giftProductIds) ? rule.giftProductIds : [],
+      ),
+    ],
   ).size;
 }
 
@@ -215,13 +221,7 @@ export function buildSelectedProductsPayload(
     case "free-gift":
       return {
         triggerProducts: ctx.freeGiftTriggerProducts,
-        giftProducts: Array.from(
-          new Set(
-            ctx.freeGiftRules.flatMap((rule) =>
-              Array.isArray(rule.giftProductIds) ? rule.giftProductIds : [],
-            ),
-          ),
-        ),
+        giftProducts: ctx.freeGiftSharedGiftProductIds,
       };
     default:
       return ctx.selectedProductsData;
@@ -280,11 +280,9 @@ export function validateScopeAndLogicStep(
     }
     case "free-gift":
       return ctx.freeGiftTriggerProducts.length === 0 ||
-        ctx.freeGiftRules.some(
-          (rule) => !Array.isArray(rule.giftProductIds) || rule.giftProductIds.length === 0,
-        ) ||
+        ctx.freeGiftSharedGiftProductIds.length === 0 ||
         ctx.freeGiftRules.length === 0
-        ? "Please configure the global trigger pool, gift products inside every free-gift bar, and at least one free-gift bar."
+        ? "Please configure the global trigger pool, the shared gift product pool, and at least one free-gift bar."
         : null;
     default:
       return ctx.selectedProductsData.length === 0
@@ -325,11 +323,9 @@ export function validateFinalSubmitScopeAndLogic(
     }
     case "free-gift":
       return ctx.freeGiftTriggerProducts.length === 0 ||
-        ctx.freeGiftRules.some(
-          (rule) => !Array.isArray(rule.giftProductIds) || rule.giftProductIds.length === 0,
-        ) ||
+        ctx.freeGiftSharedGiftProductIds.length === 0 ||
         ctx.freeGiftRules.length === 0
-        ? "Free gift offers require a global trigger pool, gift products inside every free-gift bar, and at least one bar."
+        ? "Free gift offers require a global trigger pool, a shared gift product pool, and at least one bar."
         : null;
     default:
       return null;

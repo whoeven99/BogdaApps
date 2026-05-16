@@ -47,10 +47,12 @@ import {
   normalizeCustomerSegments,
   normalizeIpCountryCodes,
   normalizeTargetMarkets,
+  LONG_RUNNING_OFFER_END_TIME_ISO,
   parseProgressiveGiftsConfig,
   progressiveGiftsConfigToStorableJson,
   parseCompleteBundleConfig,
   parseDifferentProductsDiscountRules,
+  parseFreeGiftRules,
   parseFreeGiftSelectedProducts,
   parseSelectedProductIds,
   migrateLegacyOfferToCampaignConfig,
@@ -59,6 +61,7 @@ import {
   sanitizeSingleLineText,
   trimSelectedProductsJsonForFunction,
   isOfferPublishedForBundleMetafieldSync,
+  normalizeOfferEndTimeForUi,
 } from "../../utils/offerParsing";
 import { sanitizeEnvLikeValue, sanitizeUrlLikeEnvValue } from "../../utils/env";
 import {
@@ -138,7 +141,7 @@ type ShopOffersMetafieldSyncResult =
   | { ok: true }
   | { ok: false; message: string };
 
-const LONG_RUNNING_OFFER_END_TIME = new Date("2999-12-31T23:59:59.000Z");
+const LONG_RUNNING_OFFER_END_TIME = new Date(LONG_RUNNING_OFFER_END_TIME_ISO);
 
 /**
  * 主题与购物车 Function 仅需变体 id/价/option；写入 shop metafield 时去掉冗余 title 与重复字段以控制体积。
@@ -921,6 +924,9 @@ function collectReferencedProductIds(offers: OfferListItem[]): string[] {
           ? [
               ...parseFreeGiftSelectedProducts(offer.selectedProductsJson).triggerProducts,
               ...parseFreeGiftSelectedProducts(offer.selectedProductsJson).giftProducts,
+              ...parseFreeGiftRules(offer.discountRulesJson).flatMap((rule) =>
+                Array.isArray(rule.giftProductIds) ? rule.giftProductIds : [],
+              ),
             ]
         : parseSelectedProductIds(offer.selectedProductsJson);
     for (const productId of selectedIds) {
@@ -1904,6 +1910,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       : "vertical";
     let startTimeRaw = String(formData.get("startTime") || "").trim();
     let endTimeRaw = String(formData.get("endTime") || "").trim();
+    endTimeRaw = normalizeOfferEndTimeForUi(endTimeRaw);
     let selectedProductsJson = String(
       formData.get("selectedProductsJson") || "",
     );
@@ -2166,7 +2173,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         selectedProductsJson = derivedLegacyFields.selectedProductsJson || "";
       }
       discountRulesJson = derivedLegacyFields.discountRulesJson || discountRulesJson;
-      offerSettingsJson = derivedLegacyFields.offerSettingsJson;
+      try {
+        const derivedOfferSettings = JSON.parse(
+          derivedLegacyFields.offerSettingsJson,
+        ) as Record<string, unknown>;
+        offerSettingsJson = JSON.stringify({
+          ...derivedOfferSettings,
+          progressiveGifts: progressiveGiftsConfigToStorableJson(progressiveGiftsSanitized),
+        });
+      } catch {
+        offerSettingsJson = JSON.stringify({
+          progressiveGifts: progressiveGiftsConfigToStorableJson(progressiveGiftsSanitized),
+        });
+      }
       status = parsedCampaignConfig.settings.status;
       startTimeRaw = parsedCampaignConfig.settings.startTime || startTimeRaw;
       endTimeRaw = parsedCampaignConfig.settings.endTime || endTimeRaw;

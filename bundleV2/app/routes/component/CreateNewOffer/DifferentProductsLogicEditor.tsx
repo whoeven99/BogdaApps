@@ -9,6 +9,7 @@ import {
   OfferRuleFooterRow,
   OfferRuleFormGrid,
   OfferRuleAddPanel,
+  OfferRuleNotice,
   OfferRulesSection,
 } from "./OfferRulesShared";
 import type { RulePresentationPatch } from "./unifiedRulePresentation";
@@ -88,6 +89,7 @@ export default function DifferentProductsLogicEditor({
     label: product.title,
     value: String(product.id),
   }));
+  const sharedPoolCount = eligibleProductsData.length;
 
   const updateRule = (
     actualIndex: number,
@@ -118,6 +120,9 @@ export default function DifferentProductsLogicEditor({
 
   return (
     <OfferRulesSection>
+      <OfferRuleNotice title="Cross-product rule scope" intent="info">
+        Each bar is a mix-and-match threshold. Shoppers can combine any products from the shared eligible pool, and each bar can narrow that pool to a smaller subset.
+      </OfferRuleNotice>
       {singleEntry ? (
         <OfferRuleCard key="single-different-products" index={0} disableRemove onRemove={() => {}}>
           <OfferRuleFormGrid columns={3}>
@@ -220,7 +225,7 @@ export default function DifferentProductsLogicEditor({
                   <>
               <OfferRuleFormGrid columns={3}>
                 <label className="block text-[14px] font-medium text-[#1c1f23]">
-                  Item Quantity
+                  Mix-and-match quantity
                   <Input
                     size="large"
                     type="number"
@@ -257,7 +262,7 @@ export default function DifferentProductsLogicEditor({
                   />
                 </label>
                 <label className="block text-[14px] font-medium text-[#1c1f23]">
-                  Eligible Products
+                  Bar product pool
                   <Select
                     mode="multiple"
                     size="large"
@@ -265,10 +270,19 @@ export default function DifferentProductsLogicEditor({
                     value={normalizedRule.buyProductIds}
                     options={productOptions}
                     onChange={(values) => updateRule(actualIndex, { buyProductIds: values })}
-                    placeholder="Select the products included in this tier"
+                    placeholder="Choose the subset that counts for this bar"
                   />
                 </label>
               </OfferRuleFormGrid>
+
+              <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
+                Shoppers unlock this bar when they add any {normalizedRule.count} product
+                {normalizedRule.count === 1 ? "" : "s"} from this pool.
+                {" "}
+                {normalizedRule.buyProductIds.length === sharedPoolCount
+                  ? "This bar currently uses the full shared eligible pool."
+                  : "This bar currently uses a narrower subset than the shared pool."}
+              </div>
 
               <OfferRuleFormGrid columns={3}>
                 <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
@@ -325,10 +339,10 @@ export default function DifferentProductsLogicEditor({
                 <div className="mt-3 rounded-[10px] border border-[#e3e8ed] bg-[#fafbfb] p-3">
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <div className="text-[12px] font-medium text-[#5c6166]">
-                      Eligible product pool
+                      Current bar pool
                     </div>
                     <div className="text-[12px] text-[#5c6166]">
-                      {eligibleProductsInTier.length} product
+                      {eligibleProductsInTier.length} of {sharedPoolCount} product
                       {eligibleProductsInTier.length === 1 ? "" : "s"}
                     </div>
                   </div>
@@ -348,16 +362,16 @@ export default function DifferentProductsLogicEditor({
                         </span>
                       </div>
                     ))}
-                    {eligibleProductsData.length > 4 ? (
+                    {eligibleProductsInTier.length > 4 ? (
                       <div className="flex items-center rounded-[8px] border border-dashed border-[#dfe3e8] bg-white px-2 py-1 text-[12px] text-[#5c6166]">
-                        +{eligibleProductsData.length - 4} more
+                        +{eligibleProductsInTier.length - 4} more
                       </div>
                     ) : null}
                   </div>
                 </div>
               ) : (
                 <div className="mt-3 rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[13px] text-[#5c6166]">
-                  Select the products that should participate in this tier.
+                  Select the products shoppers can mix together in this bar.
                 </div>
               )}
 

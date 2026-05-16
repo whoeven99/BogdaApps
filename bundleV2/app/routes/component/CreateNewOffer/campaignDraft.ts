@@ -67,12 +67,6 @@ export type CampaignDraft = {
   getProducts: string[];
   completeBundleBars: CompleteBundleBar[];
   activeBundleBarId: string;
-  productBundleEnabled: boolean;
-  productBundleTitle: string;
-  productBundleSubtitle: string;
-  productBundleMinQuantity: number;
-  productBundleProductIds: string[];
-  productBundleProductsData: DraftSelectedProduct[];
   subscriptionEnabled: boolean;
   subscriptionTitle: string;
   subscriptionSubtitle: string;
@@ -86,6 +80,8 @@ export type CampaignDraft = {
   subscriptionExplanationTitle: string;
   subscriptionExplanationBody: string;
   freeGiftTriggerProducts: string[];
+  freeGiftSharedGiftProductIds: string[];
+  freeGiftSharedGiftProductsData: DraftSelectedProduct[];
   giftProductsData: DraftSelectedProduct[];
   freeGiftRules: FreeGiftRule[];
   progressiveGifts: ProgressiveGiftsConfig;
@@ -109,7 +105,7 @@ export type CampaignDraftActions = {
     React.SetStateAction<DraftSelectedProduct[]>
   >;
   handleSelectProducts: (
-    type?: "buy" | "gift" | "normal" | "product_bundle",
+    type?: "buy" | "gift" | "normal",
   ) => void | Promise<void>;
   handleSelectDifferentProductsEligibleProducts: () => void | Promise<void>;
   setDiscountRules: React.Dispatch<React.SetStateAction<DraftDiscountRule[]>>;
@@ -129,10 +125,6 @@ export type CampaignDraftActions = {
   ) => void;
   handleSelectProductsForBundleBar: (barId: string) => void | Promise<void>;
   appendProductsToBundleBar: (barId: string) => void | Promise<void>;
-  setProductBundleEnabled: (value: boolean) => void;
-  setProductBundleTitle: (value: string) => void;
-  setProductBundleSubtitle: (value: string) => void;
-  setProductBundleMinQuantity: (value: number) => void;
   setCheckboxUpsellsEnabled: (value: boolean) => void;
   setCheckboxUpsellsTitle: (value: string) => void;
   setCheckboxUpsellsSubtitle: (value: string) => void;

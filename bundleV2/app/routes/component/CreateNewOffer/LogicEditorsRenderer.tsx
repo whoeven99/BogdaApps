@@ -200,7 +200,7 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
         render: () => (
           <FreeGiftLogicEditor
             triggerProductsCount={props.draft.freeGiftTriggerProducts.length}
-            giftProductsCount={props.draft.giftProductsData.length}
+            sharedGiftProductsCount={props.draft.freeGiftSharedGiftProductsData.length}
             giftProductsData={props.draft.giftProductsData}
             onSelectTriggerProducts={() => props.actions.handleSelectProducts("normal")}
             onSelectGiftProducts={() => props.actions.handleSelectProducts("gift")}
