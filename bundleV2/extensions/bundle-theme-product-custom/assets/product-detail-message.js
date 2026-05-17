@@ -1,3 +1,8 @@
+if (window.__ciwiBundleThemeRuntimeInitialized) {
+  console.debug("[ciwi] bundle theme runtime already initialized");
+} else {
+  window.__ciwiBundleThemeRuntimeInitialized = true;
+
 const DEFAULT_SELECTORS = [
   ".product__info-container",
   ".product__info-wrapper",
@@ -13,12 +18,67 @@ let offersConfigCache = null;
 let priceSyncController = null;
 let bundlePriceDebounceT = null;
 let currentMainForm = null;
+let activeMountSource = null;
 const CIWI_SUBSCRIPTION_MODE_NAME = "ciwi-subscription-mode";
+const MOUNT_SOURCE_SELECTOR = ".ciwi-product-message-src";
+const SOURCE_SCRIPT_SELECTOR = "script[data-ciwi-script]";
+const SOURCE_SCRIPT_LEGACY_IDS = {
+  "bundles-config": "ciwi-bundles-config",
+  "bundle-enabled": "ciwi-bundle-enabled",
+  "bundle-offers": "ciwi-bundle-offers",
+};
 
 // 中文注释：程序化写入 quantity / selling_plan 时会 synthetic dispatch change，否则会冒泡到
 // document 上 attachBundlePriceSync 的 capture 监听器 → scheduleBundlePriceRefresh →
 // 全量重绘 innerHTML → 再次 sync… 形成 F12 日志刷屏的死循环
 let __ciwiSuppressBundlePriceSync = false;
+
+function getMountSources() {
+  return Array.from(document.querySelectorAll(MOUNT_SOURCE_SELECTOR));
+}
+
+function getMountSourcePriority(source) {
+  const sourceType = String(source?.dataset?.ciwiSourceType || "").trim();
+  if (sourceType === "app-block") return 0;
+  if (sourceType === "app-embed") return 1;
+  return 9;
+}
+
+function getPreferredMountSource() {
+  if (activeMountSource && document.body.contains(activeMountSource)) {
+    return activeMountSource;
+  }
+  const sources = getMountSources();
+  if (sources.length === 0) {
+    activeMountSource = null;
+    return null;
+  }
+  const sortedSources = sources
+    .map((source, index) => ({ source, index }))
+    .sort((left, right) => {
+      const priorityDiff =
+        getMountSourcePriority(left.source) - getMountSourcePriority(right.source);
+      if (priorityDiff !== 0) return priorityDiff;
+      return left.index - right.index;
+    });
+  activeMountSource = sortedSources[0]?.source || null;
+  return activeMountSource;
+}
+
+function getSourceScriptElement(scriptName, source = getPreferredMountSource()) {
+  const normalizedName = String(scriptName || "").trim();
+  if (!normalizedName) return null;
+  const scopedElement = source?.querySelector(
+    `${SOURCE_SCRIPT_SELECTOR}[data-ciwi-script="${normalizedName}"]`,
+  );
+  if (scopedElement) return scopedElement;
+  const legacyId = SOURCE_SCRIPT_LEGACY_IDS[normalizedName];
+  return legacyId ? document.getElementById(legacyId) : null;
+}
+
+function getBundleConfigElement() {
+  return getSourceScriptElement("bundles-config");
+}
 
 function esc(value) {
   return String(value ?? "")
@@ -82,7 +142,7 @@ function formatWithSpaceAndPeriod(integerPart, decimalPart) {
 }
 
 function formatPrice(value) {
-  const configEl = document.getElementById("ciwi-bundles-config");
+  const configEl = getBundleConfigElement();
   let currencySymbol = "€";
   let moneyFormat = "amount_with_comma_separator";
 
@@ -247,7 +307,7 @@ function getSelectedVariantId() {
 }
 
 function getCurrentProductHasSubscription() {
-  const configEl = document.getElementById("ciwi-bundles-config");
+  const configEl = getBundleConfigElement();
   if (!configEl) return false;
   try {
     const config = JSON.parse(configEl.textContent || "{}");
@@ -258,7 +318,7 @@ function getCurrentProductHasSubscription() {
 }
 
 function getCurrentProductSubscriptionData() {
-  const configEl = document.getElementById("ciwi-bundles-config");
+  const configEl = getBundleConfigElement();
   if (!configEl) return { hasSubscription: false, sellingPlanGroups: [] };
   try {
     const config = JSON.parse(configEl.textContent || "{}");
@@ -294,7 +354,7 @@ function getDefaultSellingPlanId() {
 
 function isCurrentVariantAvailable() {
   const selectedVariantId = getSelectedVariantId();
-  const configEl = document.getElementById("ciwi-bundles-config");
+  const configEl = getBundleConfigElement();
   if (configEl) {
     try {
       const config = JSON.parse(configEl.textContent || "{}");
@@ -374,7 +434,7 @@ function getCurrentUnitPrice() {
   const domPrice = getUnitPriceFromProductDom();
   if (domPrice != null) return domPrice;
 
-  const configEl = document.getElementById("ciwi-bundles-config");
+  const configEl = getBundleConfigElement();
   if (configEl) {
     try {
       const config = JSON.parse(configEl.textContent || "{}");
@@ -1535,7 +1595,7 @@ function getCurrentProductGid() {
 }
 
 function getCurrentMarketId() {
-  const configEl = document.getElementById("ciwi-bundles-config");
+  const configEl = getBundleConfigElement();
   if (configEl) {
     try {
       const config = JSON.parse(configEl.textContent || "{}");
@@ -4059,7 +4119,7 @@ function renderBundlePreviewHtml(offer) {
 }
 
 function parseCiwiMetafieldScript(scriptId) {
-  const metaEl = document.getElementById(scriptId);
+  const metaEl = getSourceScriptElement(scriptId);
   if (!metaEl) return null;
 
   let raw = (metaEl.innerText || metaEl.textContent || "").trim();
@@ -4075,8 +4135,12 @@ function parseCiwiMetafieldScript(scriptId) {
 
 function readOffersConfigFromMetafield() {
   try {
-    if (document.getElementById("ciwi-bundle-enabled")) {
-      const enabledPayload = parseCiwiMetafieldScript("ciwi-bundle-enabled");
+    const source = getPreferredMountSource();
+    if (!source) {
+      return null;
+    }
+    if (getSourceScriptElement("bundle-enabled", source)) {
+      const enabledPayload = parseCiwiMetafieldScript("bundle-enabled");
       if (
         enabledPayload &&
         typeof enabledPayload === "object" &&
@@ -4086,11 +4150,11 @@ function readOffersConfigFromMetafield() {
         return null;
       }
     }
-    const mergedEl = document.getElementById("ciwi-bundle-offers");
+    const mergedEl = getSourceScriptElement("bundle-offers", source);
     if (!mergedEl) {
       return null;
     }
-    return parseCiwiMetafieldScript("ciwi-bundle-offers");
+    return parseCiwiMetafieldScript("bundle-offers");
   } catch (e) {
     console.error("[ciwi] Failed to parse bundle offers metafield", e);
     return null;
@@ -4332,15 +4396,23 @@ function attachBundlePriceSync(offer) {
 function tryMount(offer) {
   if (document.querySelector(".ciwi-bundle-wrapper")) return "done";
 
-  const src = document.getElementById("ciwi-product-message-root");
+  const src = getPreferredMountSource();
   if (!src) return "done";
 
+  activeMountSource = src;
+  const sourceType = String(src.dataset.ciwiSourceType || "app-embed").trim();
   const selectors = parseSelectors(src.dataset.ciwiSelectors);
   const section = buildBundleUi(offer);
   if (!section) return "done";
 
+  if (sourceType === "app-block") {
+    src.insertAdjacentElement("afterend", section);
+    attachBundlePriceSync(offer);
+    hideThemeQuantitySelectors();
+    return "done";
+  }
+
   if (insertNearAddToCart(section, selectors)) {
-    src.remove();
     attachBundlePriceSync(offer);
     hideThemeQuantitySelectors();
     return "done";
@@ -4350,14 +4422,20 @@ function tryMount(offer) {
 
 function fallbackMount(offer) {
   if (document.querySelector(".ciwi-bundle-wrapper")) return;
-  const src = document.getElementById("ciwi-product-message-root");
+  const src = getPreferredMountSource();
   if (!src) return;
 
+  activeMountSource = src;
   const section = buildBundleUi(offer);
   if (!section) return;
-  const main = document.querySelector("main") || document.body;
-  main.appendChild(section);
-  src.remove();
+  const sourceType = String(src.dataset.ciwiSourceType || "app-embed").trim();
+
+  if (sourceType === "app-block") {
+    src.insertAdjacentElement("afterend", section);
+  } else {
+    const main = document.querySelector("main") || document.body;
+    main.appendChild(section);
+  }
 
   if (!currentMainForm) {
     currentMainForm = document.querySelector("form[action*='/cart/add']");
@@ -4472,4 +4550,5 @@ if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", run);
 } else {
   run();
+}
 }

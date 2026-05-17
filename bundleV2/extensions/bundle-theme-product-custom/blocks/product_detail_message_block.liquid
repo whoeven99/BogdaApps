@@ -1,11 +1,11 @@
-{% render 'product_detail_message_source', source_type: 'app-embed' %}
+{% render 'product_detail_message_source', source_type: 'app-block' %}
 
 <script src="{{ 'product-detail-message.js' | asset_url }}" defer></script>
 
 {% schema %}
 {
-  "name": "Ciwi Bundle & Discount",
-  "target": "body",
+  "name": "Ciwi Bundle Block",
+  "target": "section",
   "enabled_on": {
     "templates": ["product"]
   },

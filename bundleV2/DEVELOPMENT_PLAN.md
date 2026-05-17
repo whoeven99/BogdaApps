@@ -49,10 +49,10 @@ Shopify Functions. Use `SEMANTIC_WORKFLOW.md` for each task.
 
 | ID | Task | Scope | Main files | Acceptance | Priority | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| B3-1 | App block support | Make the theme extension addable as a theme block | `extensions/bundle-theme-product-custom/blocks/product_detail_message.liquid`, theme assets | Merchant can add the block directly in theme editor | P0 | Planned |
-| B3-2 | Draft-theme activation | Stop limiting activation checks to online theme only | `app/routes/_index/route.tsx` and theme status helpers | Draft themes can be configured and treated as valid targets | P0 | Planned |
-| B3-3 | Draft-theme config view | Allow config page to target draft themes | route loader/action + theme settings flows | Merchant can choose and configure a draft theme | P0 | Planned |
-| B3-4 | Theme-aware preview | Reuse current theme CSS/structure where possible | theme assets + app preview surfaces | Preview looks closer to storefront with less custom CSS drift | P1 | Planned |
+| B3-1 | App block support | Make the theme extension addable as a theme block | `extensions/bundle-theme-product-custom/blocks/product_detail_message.liquid`, theme assets | Merchant can add the block directly in theme editor | P0 | Done |
+| B3-2 | Draft-theme activation | Stop limiting activation checks to online theme only | `app/routes/_index/route.tsx` and theme status helpers | Draft themes can be configured and treated as valid targets | P0 | Done |
+| B3-3 | Draft-theme config view | Allow config page to target draft themes | route loader/action + theme settings flows | Merchant can choose and configure a draft theme | P0 | Done |
+| B3-4 | Theme-aware preview | Reuse current theme CSS/structure where possible | theme assets + app preview surfaces | Preview looks closer to storefront with less custom CSS drift | P1 | Done |
 
 ## Batch 4: Template Expansion
 

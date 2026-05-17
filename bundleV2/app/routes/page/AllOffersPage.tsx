@@ -3,14 +3,13 @@ import { useEffect, useMemo, useState } from "react";
 import "../../styles/tailwind.css";
 import { Trash2, Pencil } from "lucide-react";
 import { Form, useNavigation, useSearchParams, useActionData } from "react-router";
-import type { IndexLoaderData } from "../_index/route";
+import type { IndexLoaderData, ThemeEditorTarget } from "../_index/route";
 import {
   getOfferDisplayType,
   getOfferRulesText,
   getOfferScheduleTimezone,
 } from "../../utils/offerParsing";
-import { openThemeEditorAppEmbed } from "../../utils/themeEditor";
-import { BUNDLE_THEME_PRODUCT_PLUGIN } from "../../utils/themePlugins";
+import { openThemeEditor } from "../../utils/themeEditor";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -50,6 +49,21 @@ interface AllOffersPageProps {
   themeExtensionDetectionFailed?: boolean;
   shop?: string;
   apiKey?: string;
+  themeTargets?: IndexLoaderData["themeTargets"];
+  themeExtensionMatchedThemeId?: string;
+}
+
+function formatThemeTargetLabel(theme: ThemeEditorTarget): string {
+  if (theme.role === "MAIN") {
+    return `${theme.name} (Live)`;
+  }
+  if (theme.role === "UNPUBLISHED") {
+    return `${theme.name} (Draft)`;
+  }
+  if (theme.role === "DEVELOPMENT") {
+    return `${theme.name} (Development)`;
+  }
+  return `${theme.name} (${theme.role || "Theme"})`;
 }
 
 export function AllOffersPage({
@@ -62,6 +76,8 @@ export function AllOffersPage({
   themeExtensionDetectionFailed = false,
   shop = "",
   apiKey = "",
+  themeTargets = [],
+  themeExtensionMatchedThemeId,
 }: AllOffersPageProps) {
   const themeExtensionStatus = themeExtensionDetectionFailed
     ? "unknown"
@@ -107,6 +123,18 @@ export function AllOffersPage({
   const [pendingToggleStatus, setPendingToggleStatus] = useState<Record<string, boolean>>({});
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(() => new Set());
   const [showThemeExtensionModal, setShowThemeExtensionModal] = useState(false);
+  const preferredThemeTarget = useMemo(
+    () =>
+      themeTargets.find((theme) => theme.id === themeExtensionMatchedThemeId) ||
+      themeTargets.find((theme) => theme.role === "MAIN") ||
+      themeTargets.find((theme) => theme.role === "UNPUBLISHED") ||
+      themeTargets[0] ||
+      null,
+    [themeExtensionMatchedThemeId, themeTargets],
+  );
+  const [selectedThemeId, setSelectedThemeId] = useState(
+    preferredThemeTarget?.id || "",
+  );
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [sortKey, setSortKey] = useState<"updated-desc" | "created-desc" | "name-asc">("updated-desc");
@@ -124,11 +152,21 @@ export function AllOffersPage({
 
   const handleThemeExtensionToggle = () => {
     if (!shop || !apiKey) return;
-    openThemeEditorAppEmbed(
-      shop,
-      apiKey,
-      BUNDLE_THEME_PRODUCT_PLUGIN,
-    );
+    if (themeTargets.length > 1) {
+      setShowThemeExtensionModal(true);
+      return;
+    }
+    openThemeEditor(shop, apiKey, {
+      themeId: preferredThemeTarget?.id,
+    });
+  };
+
+  const handleOpenSelectedTheme = () => {
+    if (!shop || !apiKey) return;
+    setShowThemeExtensionModal(false);
+    openThemeEditor(shop, apiKey, {
+      themeId: selectedThemeId || preferredThemeTarget?.id,
+    });
   };
 
   const toast =
@@ -188,6 +226,15 @@ export function AllOffersPage({
       setDeletingOffer(null);
     }
   }, [toast]);
+
+  useEffect(() => {
+    setSelectedThemeId((previous) => {
+      if (previous && themeTargets.some((theme) => theme.id === previous)) {
+        return previous;
+      }
+      return preferredThemeTarget?.id || "";
+    });
+  }, [preferredThemeTarget?.id, themeTargets]);
 
   useEffect(() => {
     if (navigation.state === "submitting" && navigation.formData) {
@@ -547,8 +594,34 @@ export function AllOffersPage({
 
       {showThemeExtensionModal && (
         <AdminModal
-          title="Activate Theme Extension"
-          description="You need to activate the theme extension on an online or draft theme before you can turn on any offers."
+          title="Open Theme Editor"
+          description={
+            <div className="space-y-3">
+              <p className="m-0">
+                Choose the live or draft theme you want to configure. In Shopify
+                Theme Editor, you can enable the app embed or add the app block
+                from the Apps panel on a product template.
+              </p>
+              {themeTargets.length > 0 ? (
+                <label className="block">
+                  <div className="mb-2 text-[12px] font-medium text-[#1c1f23]">
+                    Theme
+                  </div>
+                  <select
+                    value={selectedThemeId}
+                    onChange={(event) => setSelectedThemeId(event.target.value)}
+                    className="w-full rounded-[8px] border border-[#d0d5dd] bg-white px-3 py-2 text-[14px] text-[#1c1f23]"
+                  >
+                    {themeTargets.map((theme) => (
+                      <option key={theme.id} value={theme.id}>
+                        {formatThemeTargetLabel(theme)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+            </div>
+          }
           actions={
             <>
               <button
@@ -561,12 +634,11 @@ export function AllOffersPage({
               <button
                 type="button"
                 onClick={() => {
-                  setShowThemeExtensionModal(false);
-                  handleThemeExtensionToggle();
+                  handleOpenSelectedTheme();
                 }}
                 className="rounded-[6px] bg-[#008060] px-[12px] py-[6px] text-[14px] text-white hover:bg-[#006e52]"
               >
-                Activate Now
+                Open Theme Editor
               </button>
             </>
           }

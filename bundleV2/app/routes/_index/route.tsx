@@ -832,14 +832,22 @@ export type IndexLoaderData = {
   offers?: OfferListItem[];
   storeProducts?: StoreProductItem[];
   markets: MarketItem[];
+  themeTargets: ThemeEditorTarget[];
   shop: string;
   apiKey: string;
   ianaTimezone: string;
   themeExtensionEnabled: boolean;
   themeExtensionDetectionFailed: boolean;
   themeExtensionDebug?: ThemeExtensionDetectionDebug;
+  themeExtensionMatchedThemeId?: string;
   billingSubscriptions: Array<{ name: string; status: string }>;
   billingTestMode: boolean;
+};
+
+export type ThemeEditorTarget = {
+  id: string;
+  name: string;
+  role: string;
 };
 
 type ThemeExtensionDebugEntry = {
@@ -889,6 +897,54 @@ export type ThemeExtensionDetectionDebug = {
   };
   error?: string;
 };
+
+async function fetchThemeEditorTargets(admin: any): Promise<ThemeEditorTarget[]> {
+  try {
+    const response = await admin.graphql(
+      `#graphql
+        query ThemeEditorTargets {
+          themes(first: 20) {
+            edges {
+              node {
+                id
+                name
+                role
+              }
+            }
+          }
+        }
+      `,
+    );
+    const json = await response.json();
+    const themeNodes =
+      json?.data?.themes?.edges
+        ?.map((edge: { node?: Record<string, any> | null }) => edge?.node)
+        .filter(Boolean) ?? [];
+    const priorityByRole: Record<string, number> = {
+      MAIN: 0,
+      UNPUBLISHED: 1,
+      DEVELOPMENT: 2,
+      DEMO: 3,
+    };
+
+    return themeNodes
+      .map((theme: any) => ({
+        id: String(theme?.id || ""),
+        name: String(theme?.name || "").trim(),
+        role: String(theme?.role || "").trim(),
+      }))
+      .filter((theme: ThemeEditorTarget) => theme.id && theme.name)
+      .sort((left: ThemeEditorTarget, right: ThemeEditorTarget) => {
+        const leftPriority = priorityByRole[left.role] ?? 99;
+        const rightPriority = priorityByRole[right.role] ?? 99;
+        if (leftPriority !== rightPriority) return leftPriority - rightPriority;
+        return left.name.localeCompare(right.name);
+      });
+  } catch (error) {
+    console.error("[theme-extension] failed to fetch theme editor targets", error);
+    return [];
+  }
+}
 
 async function fetchShopOffers(shop: string): Promise<OfferListItem[]> {
   try {
@@ -1298,8 +1354,8 @@ const getThemeExtensionEnabledAcrossThemes = async (
   admin: any,
   pluginKey: string,
   extensionHandle: string,
-  /** Liquid filename base, e.g. product_detail_message for product_detail_message.liquid */
-  blockHandle: string,
+  /** Liquid filename bases, e.g. product_detail_message for product_detail_message.liquid */
+  blockHandles: string[],
   extensionUid: string,
   /** SHOPIFY_API_KEY / app client id - required to match real storefront block types */
   appClientId: string,
@@ -1313,7 +1369,7 @@ const getThemeExtensionEnabledAcrossThemes = async (
     pluginKey,
     extensionHandle,
     extensionUid,
-    embedHandle: blockHandle,
+    embedHandle: blockHandles[0] || "",
     appClientId,
     appName: String(appName || ""),
     appNameSlug: "",
@@ -1326,7 +1382,7 @@ const getThemeExtensionEnabledAcrossThemes = async (
     const response = await admin.graphql(
       `#graphql
         query ThemeSettingsDataAcrossThemes {
-          themes(first: 1, roles: [MAIN]) {
+          themes(first: 20) {
             edges {
               node {
                 id
@@ -1366,10 +1422,13 @@ const getThemeExtensionEnabledAcrossThemes = async (
         ?.map((edge: { node?: Record<string, any> | null }) => edge?.node)
         .filter(Boolean) ?? [];
     debug.scannedThemeCount = themeNodes.length;
+    const normalizedBlockHandles = Array.from(
+      new Set(blockHandles.map((handle) => String(handle || "").trim()).filter(Boolean)),
+    );
     console.error("[theme-extension] scanning themes", {
       pluginKey,
       extensionHandle,
-      blockHandle,
+      blockHandles: normalizedBlockHandles,
       extensionUid,
       appClientId,
       appName,
@@ -1382,19 +1441,23 @@ const getThemeExtensionEnabledAcrossThemes = async (
       })),
     });
 
-    const handleKebab = blockHandle.replace(/_/g, "-");
+    const handleKebabs = normalizedBlockHandles.map((handle) => handle.replace(/_/g, "-"));
     const embedHandleCandidates = [
-      `${appClientId}/${blockHandle}`,
-      `${appClientId}/${handleKebab}`,
+      ...normalizedBlockHandles.map((handle) => `${appClientId}/${handle}`),
+      ...handleKebabs.map((handle) => `${appClientId}/${handle}`),
     ].filter(Boolean);
     const blockPathSegments = [
-      `/blocks/${blockHandle}/`,
-      `/blocks/${handleKebab}/`,
+      ...normalizedBlockHandles.map((handle) => `/blocks/${handle}/`),
+      ...handleKebabs.map((handle) => `/blocks/${handle}/`),
     ];
     const embedUidSegments = [
       extensionUid ? `/blocks/app-embed/${extensionUid}` : "",
-      extensionUid ? `/blocks/${blockHandle}/${extensionUid}` : "",
-      extensionUid ? `/blocks/${handleKebab}/${extensionUid}` : "",
+      ...normalizedBlockHandles.map((handle) =>
+        extensionUid ? `/blocks/${handle}/${extensionUid}` : "",
+      ),
+      ...handleKebabs.map((handle) =>
+        extensionUid ? `/blocks/${handle}/${extensionUid}` : "",
+      ),
     ].filter(Boolean);
 
     const appNameSlug = String(appName || "")
@@ -1429,8 +1492,12 @@ const getThemeExtensionEnabledAcrossThemes = async (
       }
       if (!appClientId) return false;
       if (
-        blockType.includes(`/apps/${appClientId}/${blockHandle}/`) ||
-        blockType.includes(`/apps/${appClientId}/${handleKebab}/`)
+        normalizedBlockHandles.some((handle) =>
+          blockType.includes(`/apps/${appClientId}/${handle}/`),
+        ) ||
+        handleKebabs.some((handle) =>
+          blockType.includes(`/apps/${appClientId}/${handle}/`),
+        )
       ) {
         return true;
       }
@@ -1545,7 +1612,7 @@ const getThemeExtensionEnabledAcrossThemes = async (
         });
         console.error("[theme-extension] matched embed block", {
           extensionHandle,
-          blockHandle,
+          blockHandles: normalizedBlockHandles,
           extensionUid,
           appClientId,
           appNameSlug,
@@ -1593,7 +1660,7 @@ const getThemeExtensionEnabledAcrossThemes = async (
 
     console.error("[theme-extension] no matched embed block", {
       extensionHandle,
-      blockHandle,
+      blockHandles: normalizedBlockHandles,
       extensionUid,
       appClientId,
       appNameSlug,
@@ -1629,7 +1696,8 @@ async function getCurrentThemeExtensionEnabled(admin: any): Promise<{
       admin,
       BUNDLE_THEME_PRODUCT_PLUGIN.key,
       BUNDLE_THEME_PRODUCT_PLUGIN.extensionHandle,
-      BUNDLE_THEME_PRODUCT_PLUGIN.embedHandle,
+      BUNDLE_THEME_PRODUCT_PLUGIN.blockHandles ??
+        [BUNDLE_THEME_PRODUCT_PLUGIN.embedHandle],
       BUNDLE_THEME_PRODUCT_PLUGIN.extensionUid,
       apiKey,
       appDisplayName,
@@ -1703,6 +1771,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const themeExtensionDetection = await getCurrentThemeExtensionEnabled(admin);
   const themeExtensionEnabled = themeExtensionDetection.enabled;
   const themeExtensionDetectionFailed = Boolean(themeExtensionDetection.debug?.error);
+  const themeTargets = await fetchThemeEditorTargets(admin);
 
   const syncResult = await syncShopOffersMetafield(
     admin,
@@ -1762,12 +1831,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   return Response.json({
     markets,
+    themeTargets,
     shop: session.shop,
     apiKey,
     ianaTimezone,
     themeExtensionEnabled,
     themeExtensionDetectionFailed,
     themeExtensionDebug: themeExtensionDetection.debug,
+    themeExtensionMatchedThemeId: themeExtensionDetection.debug?.matchedTheme?.id,
     billingSubscriptions,
     billingTestMode: billingIsTestCharge(),
   } satisfies IndexLoaderData);
@@ -2588,12 +2659,14 @@ type HomeTabKey = "dashboard" | "offers" | "analytics" | "pricing";
 export default function Index() {
   const {
     markets,
+    themeTargets,
     shop,
     apiKey,
     ianaTimezone,
     themeExtensionEnabled,
     themeExtensionDetectionFailed,
     themeExtensionDebug,
+    themeExtensionMatchedThemeId,
     billingSubscriptions,
     billingTestMode,
   } = useLoaderData() as IndexLoaderData;
@@ -2824,6 +2897,8 @@ export default function Index() {
             markets={markets}
             shop={shop}
             apiKey={apiKey}
+            themeTargets={themeTargets}
+            themeExtensionMatchedThemeId={themeExtensionMatchedThemeId}
             ianaTimezone={ianaTimezone}
             themeExtensionEnabled={themeExtensionEnabled}
             themeExtensionDetectionFailed={themeExtensionDetectionFailed}
@@ -2854,6 +2929,8 @@ export default function Index() {
             themeExtensionDetectionFailed={themeExtensionDetectionFailed}
             shop={shop}
             apiKey={apiKey}
+            themeTargets={themeTargets}
+            themeExtensionMatchedThemeId={themeExtensionMatchedThemeId}
             onCreateOffer={() => {
               setShowCreateOffer(true);
               setCreateOfferType(null);

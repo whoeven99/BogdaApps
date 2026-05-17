@@ -17,10 +17,9 @@ import {
 } from "lucide-react";
 import "../../styles/tailwind.css";
 import { CreateNewOffer } from "../component/CreateNewOffer/CreateNewOffer";
-import type { IndexLoaderData } from "../_index/route";
+import type { IndexLoaderData, ThemeEditorTarget } from "../_index/route";
 import { parseDiscountRules } from "../../utils/offerParsing";
-import { openThemeEditorAppEmbed } from "../../utils/themeEditor";
-import { BUNDLE_THEME_PRODUCT_PLUGIN } from "../../utils/themePlugins";
+import { openThemeEditor } from "../../utils/themeEditor";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -42,6 +41,15 @@ interface DashboardPageProps {
   themeExtensionEnabled: boolean;
   themeExtensionDetectionFailed?: boolean;
   themeExtensionError?: string;
+  themeTargets?: IndexLoaderData["themeTargets"];
+  themeExtensionMatchedThemeId?: string;
+}
+
+function formatThemeTargetLabel(theme: ThemeEditorTarget): string {
+  if (theme.role === "MAIN") return `${theme.name} (Live)`;
+  if (theme.role === "UNPUBLISHED") return `${theme.name} (Draft)`;
+  if (theme.role === "DEVELOPMENT") return `${theme.name} (Development)`;
+  return `${theme.name} (${theme.role || "Theme"})`;
 }
 
 type DashboardOfferRow = {
@@ -128,6 +136,8 @@ export function DashboardPage({
   themeExtensionEnabled,
   themeExtensionDetectionFailed = false,
   themeExtensionError,
+  themeTargets = [],
+  themeExtensionMatchedThemeId,
 }: DashboardPageProps) {
   const [searchParams] = useSearchParams();
   const actionData = useActionData() as
@@ -147,6 +157,16 @@ export function DashboardPage({
   );
 
   const [showThemeExtensionModal, setShowThemeExtensionModal] = useState(false);
+  const preferredThemeTarget = themeTargets.find(
+    (theme) => theme.id === themeExtensionMatchedThemeId,
+  ) ||
+    themeTargets.find((theme) => theme.role === "MAIN") ||
+    themeTargets.find((theme) => theme.role === "UNPUBLISHED") ||
+    themeTargets[0] ||
+    null;
+  const [selectedThemeId, setSelectedThemeId] = useState(
+    preferredThemeTarget?.id || "",
+  );
   const [hideBanner, setHideBanner] = useState(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("hideThemeExtensionBanner") === "true";
@@ -316,11 +336,22 @@ export function DashboardPage({
   };
   const handleViewAllAbTests = () => {}; // mock
   const handleThemeExtensionToggle = () => {
-    openThemeEditorAppEmbed(
-      shop,
-      apiKey,
-      BUNDLE_THEME_PRODUCT_PLUGIN,
-    );
+    if (!shop || !apiKey) return;
+    if (themeTargets.length > 1) {
+      setShowThemeExtensionModal(true);
+      return;
+    }
+    openThemeEditor(shop, apiKey, {
+      themeId: preferredThemeTarget?.id,
+    });
+  };
+
+  const handleOpenSelectedTheme = () => {
+    if (!shop || !apiKey) return;
+    setShowThemeExtensionModal(false);
+    openThemeEditor(shop, apiKey, {
+      themeId: selectedThemeId || preferredThemeTarget?.id,
+    });
   };
 
   const toast =
@@ -332,6 +363,15 @@ export function DashboardPage({
       setDeletingOffer(null);
     }
   }, [toast]);
+
+  useEffect(() => {
+    setSelectedThemeId((previous) => {
+      if (previous && themeTargets.some((theme) => theme.id === previous)) {
+        return previous;
+      }
+      return preferredThemeTarget?.id || "";
+    });
+  }, [preferredThemeTarget?.id, themeTargets]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -581,8 +621,8 @@ export function DashboardPage({
                 : "Bundles widget is currently disabled."}
           </p>
           <p className="font-sans font-normal text-[13px] leading-[20px] text-[#5c6166] tracking-[-0.1px] mb-[12px]">
-            This opens Theme Editor App Embeds. Toggle the extension there and
-            click Save in Shopify.
+            This opens Theme Editor. Enable the app embed or add the app block
+            from the Apps panel on the live or draft theme you choose.
           </p>
           {themeExtensionStatus === "unknown" && themeExtensionError ? (
             <div className="mb-[12px] rounded-[8px] border border-[#ffe0b2] bg-[#fff8e1] px-[12px] py-[10px]">
@@ -1294,11 +1334,33 @@ export function DashboardPage({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.4)]">
           <div className="bg-white rounded-[16px] shadow-[0_8px_24px_rgba(0,0,0,0.12)] max-w-[400px] w-[90%] p-[24px]">
             <h2 className="font-sans font-semibold text-[18px] leading-[27px] text-[#1c1f23] mb-[8px]">
-              Activate Theme Extension
+              Open Theme Editor
             </h2>
-            <p className="font-sans text-[14px] leading-[21px] text-[#5c6166] mb-[16px]">
-              You need to activate the theme extension on an online or draft theme before you can turn on any offers.
-            </p>
+            <div className="font-sans text-[14px] leading-[21px] text-[#5c6166] mb-[16px]">
+              <p className="m-0">
+                Choose the live or draft theme you want to configure. In Shopify
+                Theme Editor, you can enable the app embed or add the app block
+                from the Apps panel on a product template.
+              </p>
+              {themeTargets.length > 0 ? (
+                <label className="mt-[12px] block">
+                  <div className="mb-[6px] text-[12px] font-medium text-[#1c1f23]">
+                    Theme
+                  </div>
+                  <select
+                    value={selectedThemeId}
+                    onChange={(event) => setSelectedThemeId(event.target.value)}
+                    className="w-full rounded-[8px] border border-[#d0d5dd] bg-white px-[12px] py-[8px] text-[14px] text-[#1c1f23]"
+                  >
+                    {themeTargets.map((theme) => (
+                      <option key={theme.id} value={theme.id}>
+                        {formatThemeTargetLabel(theme)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+            </div>
             <div className="flex justify-end gap-[8px]">
               <button
                 type="button"
@@ -1310,12 +1372,11 @@ export function DashboardPage({
               <button
                 type="button"
                 onClick={() => {
-                  setShowThemeExtensionModal(false);
-                  handleThemeExtensionToggle();
+                  handleOpenSelectedTheme();
                 }}
                 className="px-[12px] py-[6px] rounded-[6px] bg-[#008060] !text-white text-[14px] font-sans hover:bg-[#006e52]"
               >
-                Activate Now
+                Open Theme Editor
               </button>
             </div>
           </div>
