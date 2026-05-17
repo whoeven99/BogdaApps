@@ -124,12 +124,6 @@ export default function BundlePreview({
             {prog ? <div dangerouslySetInnerHTML={{ __html: prog }} /> : null}
           </div>
         </div>
-        <div className="ciwi-theme-preview__actions">
-          <button type="button" className="ciwi-theme-preview__primary-button">
-            Add to cart
-          </button>
-          <div className="ciwi-theme-preview__secondary-button">Buy it now</div>
-        </div>
       </div>
     </div>
   );

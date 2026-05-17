@@ -1,5 +1,6 @@
 import {
   buildDraftRuleId,
+  getBxgyDisplayMeta,
   isCompleteBundleSingleBar,
 } from "../../../utils/offerParsing";
 import type {
@@ -83,7 +84,7 @@ function getThresholdSummary(rule: UnifiedRuleNode): string {
     case "cart_amount":
       return `Spend ${Math.max(0, Number(rule.condition.amountThreshold) || 0)}`;
     case "buy_x_get_y":
-      return `Buy ${Math.max(1, Number(rule.condition.buyQuantity) || 1)}, get ${Math.max(1, Number(rule.condition.getQuantity) || 1)}`;
+      return getBxgyDisplayMeta(rule.condition).summary;
     case "item_quantity":
       return `${Math.max(1, Number(rule.condition.count) || 1)} item${Math.max(1, Number(rule.condition.count) || 1) === 1 ? "" : "s"}`;
     default:

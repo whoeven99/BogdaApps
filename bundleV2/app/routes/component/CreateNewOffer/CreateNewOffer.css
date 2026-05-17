@@ -198,35 +198,6 @@
   margin: 0;
 }
 
-.ciwi-theme-preview__actions {
-  display: grid;
-  gap: 8px;
-  margin-top: 14px;
-}
-
-.ciwi-theme-preview__primary-button,
-.ciwi-theme-preview__secondary-button {
-  min-height: 42px;
-  border-radius: 10px;
-  font-size: 14px;
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.ciwi-theme-preview__primary-button {
-  border: none;
-  background: #111111;
-  color: #ffffff;
-}
-
-.ciwi-theme-preview__secondary-button {
-  border: 1px solid #111111;
-  background: #ffffff;
-  color: #111111;
-}
-
 /* Typography & form controls */
 .create-offer-section-title {
   margin-bottom: 16px;

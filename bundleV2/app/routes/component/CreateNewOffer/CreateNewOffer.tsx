@@ -75,6 +75,7 @@ import {
   createDefaultCompleteBundleSingleBar,
   isCompleteBundleSingleBar,
   normalizeCompleteBundleBars,
+  getBxgyDisplayMeta,
   type CompleteBundleBar,
   type CompleteBundleProduct,
   type CompleteBundlePricingMode,
@@ -2004,7 +2005,7 @@ export function CreateNewOffer({
     if (offerType === "bxgy") {
       return bxgyDiscountRules.map((r, i) => ({
         value: i + 1,
-        label: `Bar #${i + 1} (buy ${r.buyQuantity}, get ${r.getQuantity})`,
+        label: `Bar #${i + 1} (${getBxgyDisplayMeta(r).summary})`,
       }));
     }
     if (offerType === "quantity-breaks-different") {
@@ -2028,7 +2029,10 @@ export function CreateNewOffer({
         value: i + 2,
         label:
           r.logicType === "bxgy"
-            ? `Bar #${i + 2} (BXGY, buy ${r.buyQuantity || 2} get ${r.getQuantity || 1})`
+            ? `Bar #${i + 2} (BXGY, ${getBxgyDisplayMeta({
+                buyQuantity: r.buyQuantity || 2,
+                getQuantity: r.getQuantity || 1,
+              }).summary})`
             : r.conditionType === "cart_amount"
               ? `Bar #${i + 2} (spend ${r.amountThreshold || 0})`
               : `Bar #${i + 2} (qty ${r.count})`,

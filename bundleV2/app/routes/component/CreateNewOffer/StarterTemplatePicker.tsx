@@ -224,12 +224,12 @@ function BxgyPreview() {
       <div className="space-y-[8px]">
         <PreviewRow
           title="Buy 1, get 1 free"
-          price="EUR65.00"
+          price="Get 1 Free"
           badge="Save 50%"
           selected
         />
-        <PreviewRow title="Buy 2, get 3 free" price="EUR130.00" badge="Save 60%" />
-        <PreviewRow title="Buy 3, get 6 free" price="EUR195.00" badge="Save 67%" />
+        <PreviewRow title="Buy 2, get 3 total" price="Pay for 2" badge="Save 60%" />
+        <PreviewRow title="Buy 3, get 6 total" price="Pay for 3" badge="Save 67%" />
         <div className="rounded-[10px] bg-[#f6f6f7] px-[12px] py-[8px] text-[12px] font-semibold text-[#1c1f23]">
           + Free special gift!
         </div>
