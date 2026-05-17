@@ -38,16 +38,25 @@ export function getUnifiedDiscountRuleId(
   return rule.id || `discount-rule-${index + 1}`;
 }
 
-export function getBxgyUnifiedRuleId(index: number): string {
-  return `bxgy-rule-${index + 1}`;
+export function getBxgyUnifiedRuleId(
+  rule: Pick<BxgyDiscountRule, "id">,
+  index: number,
+): string {
+  return rule.id || `bxgy-rule-${index + 1}`;
 }
 
-export function getFreeGiftUnifiedRuleId(index: number): string {
-  return `free-gift-rule-${index + 1}`;
+export function getFreeGiftUnifiedRuleId(
+  rule: Pick<FreeGiftRule, "id">,
+  index: number,
+): string {
+  return rule.id || `free-gift-rule-${index + 1}`;
 }
 
-export function getDifferentProductsUnifiedRuleId(index: number): string {
-  return `different-products-rule-${index + 1}`;
+export function getDifferentProductsUnifiedRuleId(
+  rule: Pick<DifferentProductsDiscountRule, "id">,
+  index: number,
+): string {
+  return rule.id || `different-products-rule-${index + 1}`;
 }
 
 export function getCompleteBundleUnifiedRuleId(barId: string): string {
@@ -74,7 +83,7 @@ export function updateBxgyRuleValues(
   patch: UnifiedRuleValuePatch,
 ): BxgyDiscountRule[] {
   return rules.map((rule, index) => {
-    if (getBxgyUnifiedRuleId(index) !== ruleId) return rule;
+    if (getBxgyUnifiedRuleId(rule, index) !== ruleId) return rule;
 
     const nextRule = { ...rule, ...(patch as Partial<BxgyDiscountRule>) };
     const normalizedBuyQuantity =
@@ -100,7 +109,7 @@ export function updateFreeGiftRuleValues(
   patch: UnifiedRuleValuePatch,
 ): FreeGiftRule[] {
   return rules.map((rule, index) =>
-    getFreeGiftUnifiedRuleId(index) === ruleId
+    getFreeGiftUnifiedRuleId(rule, index) === ruleId
       ? { ...rule, ...(patch as Partial<FreeGiftRule>) }
       : rule,
   );
@@ -112,7 +121,7 @@ export function updateDifferentProductsRuleValues(
   patch: UnifiedRuleValuePatch,
 ): DifferentProductsDiscountRule[] {
   return rules.map((rule, index) =>
-    getDifferentProductsUnifiedRuleId(index) === ruleId
+    getDifferentProductsUnifiedRuleId(rule, index) === ruleId
       ? { ...rule, ...(patch as Partial<DifferentProductsDiscountRule>) }
       : rule,
   );

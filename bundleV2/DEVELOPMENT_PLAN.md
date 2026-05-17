@@ -38,6 +38,107 @@ Shopify Functions. Use `SEMANTIC_WORKFLOW.md` for each task.
 | S4 | Offer type as template | `offerType` is a starter template / primary module, not the whole campaign | builder registry, `campaignConfigJson` creation, list display, legacy compilation | Campaigns can contain independent modules without being constrained by one `offerType` branch | P1 | Done |
 | S5 | Campaign runtime compiler | Campaign config compiles to storefront and Function payloads | `offerParsing.ts`, `_index/route.tsx`, metafield sync helpers | Runtime payloads are produced through one compiler path with explicit module outputs | P1 | Done |
 
+## Semantic Reset: Builder De-Legacy
+
+### S6 - Remove legacy builder gate
+
+Status: Done
+
+Semantic anchor:
+- `OFFER_SEMANTICS.md` Campaign
+- `OFFER_SEMANTICS.md` Runtime Compilation
+
+Question or change:
+- Step 2 -> Step 3 and final submit must validate against the current campaign/unified model only.
+- The builder must stop calling legacy selected-product discount gate logic after the campaign rewrite.
+
+Affected modules:
+- quantity breaks
+- order discount
+- shipping discount
+- coupon
+- mixed composition validation
+
+Affected code paths:
+- Builder: `CreateNewOffer.tsx`, `unifiedRulesValidation.ts`
+- Campaign/legacy compilation: none
+- Storefront/theme: none
+- Shopify Functions: none
+- Metafields: none
+
+Acceptance:
+- Step 2 -> Step 3 no longer fails because of `getLegacyUnifiedRuleBlockingMessage()`
+- Final submit uses the same unified validation path as Step 2 -> Step 3
+
+Validation:
+- `npm run typecheck`
+- Manual check of Step 2 -> Step 3 on a newly created offer with a single placeholder
+
+### S7 - Stop seeding legacy single discount rules
+
+Status: Done
+
+Semantic anchor:
+- `OFFER_SEMANTICS.md` Campaign
+- `OFFER_SEMANTICS.md` Module Semantics
+
+Question or change:
+- New-offer starter seeds and builder normalizers must stop manufacturing legacy `single` discount rules that pretend to be `percentage_off: 0`.
+- `single` should remain a current-model placeholder/presentation concept, not an executable legacy reward rule.
+
+Affected modules:
+- quantity breaks
+- bxgy
+- free gift
+- quantity-breaks-different
+
+Affected code paths:
+- Builder: `starterTemplateDefaults.ts`, `CreateNewOffer.tsx`, rule editors
+- Campaign/legacy compilation: `offerParsing.ts`
+- Storefront/theme: preview only
+- Shopify Functions: none
+- Metafields: payload shape derived from current campaign state only
+
+Acceptance:
+- New offers no longer initialize fake legacy `single` reward rows
+- Builder preview can still show a single-purchase baseline without relying on a 0% legacy reward rule
+
+Validation:
+- `npm run typecheck`
+- New-offer create -> Step 2 -> Step 3 loop on quantity-breaks / BXGY / free-gift / different-products
+
+### S8 - Collapse builder state onto current campaign semantics
+
+Status: In progress
+
+Semantic anchor:
+- `OFFER_SEMANTICS.md` Campaign
+- `OFFER_SEMANTICS.md` Runtime Compilation
+
+Question or change:
+- Builder state should stop mixing current campaign config with legacy rule arrays as co-equal sources of truth.
+- Legacy fields should remain a compile target only, not a live editing model.
+
+Affected modules:
+- all Step 2 logic modules
+- preview composition
+- save/reload loop
+
+Affected code paths:
+- Builder: `CreateNewOffer.tsx`, `campaignDraft.ts`, composition adapters/editors
+- Campaign/legacy compilation: `offerParsing.ts`
+- Storefront/theme: preview sync
+- Shopify Functions: compiled payload only
+- Metafields: compiled payload only
+
+Acceptance:
+- Builder reload/edit flow reads current campaign semantics first, with legacy fields only as a compile target
+- Step 2 state and preview no longer depend on legacy-only placeholder logic
+
+Validation:
+- `npm run typecheck`
+- create -> preview -> save -> reload on the main offer types
+
 ## Batch 2: Display And Polish
 
 | ID | Task | Scope | Main files | Acceptance | Priority | Status |

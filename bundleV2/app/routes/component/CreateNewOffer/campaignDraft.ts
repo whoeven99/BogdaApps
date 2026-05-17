@@ -32,6 +32,7 @@ export type DraftDiscountRule = {
 };
 
 export type DraftBxgyDiscountRule = {
+  id?: string;
   count: number;
   buyQuantity: number;
   getQuantity: number;
@@ -60,7 +61,6 @@ export type CampaignDraft = {
   selectedProductsData: DraftSelectedProduct[];
   differentProductsEligibleProductsData: DraftSelectedProduct[];
   discountRules: DraftDiscountRule[];
-  normalizedDiscountRules: DraftDiscountRule[];
   bxgyDiscountRules: DraftBxgyDiscountRule[];
   differentProductsDiscountRules: DifferentProductsDiscountRule[];
   buyProducts: string[];

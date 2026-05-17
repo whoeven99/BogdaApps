@@ -1,8 +1,5 @@
 import { Checkbox, Input } from "antd";
-import {
-  isSingleDiscountRule,
-  type DiscountRule,
-} from "../../../utils/offerParsing";
+import { type DiscountRule } from "../../../utils/offerParsing";
 import type {
   RulePresentationPatch,
 } from "./unifiedRulePresentation";
@@ -38,29 +35,14 @@ export default function QuantityBreaksLogicEditor({
 }: Props) {
   const showTiers = section === "all" || section === "tiers";
   const showPresentation = section === "all" || section === "presentation";
-  const indexedRules = discountRules.map((rule, index) => ({ rule, index }));
-  const singleEntry =
-    indexedRules.find((entry) => isSingleDiscountRule(entry.rule)) || null;
-  const ruleEntries = indexedRules.filter((entry) => !isSingleDiscountRule(entry.rule));
-  const tierRules = ruleEntries.map((entry) => entry.rule);
-  const setTierRules: React.Dispatch<React.SetStateAction<DiscountRule[]>> = (value) => {
-    const nextTierRules = typeof value === "function" ? value(tierRules) : value;
-    setDiscountRules((prev) => {
-      const next = typeof value === "function" ? value(tierRules) : nextTierRules;
-      return [
-        ...(singleEntry ? [singleEntry.rule] : []),
-        ...next,
-      ];
-    });
-  };
-  const presentationEntries = singleEntry ? [singleEntry, ...ruleEntries] : ruleEntries;
+  const presentationEntries = discountRules.map((rule, index) => ({ rule, index }));
 
   return (
     <div>
       {showTiers ? (
         <UnifiedRulesEditor
-          rules={tierRules}
-          setRules={setTierRules}
+          rules={discountRules}
+          setRules={setDiscountRules}
           updateRuleValues={updateRuleValues}
           selectedProductsData={selectedProductsData}
           offerType={offerType}

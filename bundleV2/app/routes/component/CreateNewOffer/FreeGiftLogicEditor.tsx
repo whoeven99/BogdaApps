@@ -1,6 +1,6 @@
 import { Button, Checkbox, Dropdown, Input, Select } from "antd";
 import {
-  isSingleFreeGiftRule,
+  buildDraftRuleId,
   type FreeGiftRule,
 } from "../../../utils/offerParsing";
 import type { DraftSelectedProduct } from "./campaignDraft";
@@ -48,10 +48,7 @@ export default function FreeGiftLogicEditor({
   const conditionTypeOptions = [
     { label: "Quantity threshold", value: "quantity_threshold" },
   ];
-  const indexedRules = freeGiftRules.map((rule, index) => ({ rule, actualIndex: index }));
-  const singleEntry =
-    indexedRules.find((entry) => isSingleFreeGiftRule(entry.rule)) || null;
-  const ruleEntries = indexedRules.filter((entry) => !isSingleFreeGiftRule(entry.rule));
+  const ruleEntries = freeGiftRules.map((rule, index) => ({ rule, actualIndex: index }));
   const appendFreeGiftTier = () => {
     setFreeGiftRules((prev) => {
       const maxCount = prev.reduce(
@@ -61,6 +58,7 @@ export default function FreeGiftLogicEditor({
       return [
         ...prev,
         {
+          id: buildDraftRuleId("free_gift_rule"),
           count: maxCount + 1,
           giftQuantity: 1,
           title: "",
@@ -132,108 +130,6 @@ export default function FreeGiftLogicEditor({
         <OfferRuleNotice title="Trigger vs reward scope" intent="info">
           Trigger products decide when the offer unlocks. Reward products stay separate and can be overridden per rule when a tier needs a different gift selection.
         </OfferRuleNotice>
-        {singleEntry ? (
-          <OfferRuleCard key="single-free-gift" index={0} disableRemove onRemove={() => {}}>
-            {(() => {
-              const ruleId = getFreeGiftUnifiedRuleId(singleEntry.actualIndex);
-              return (
-                <>
-                  <OfferRuleFormGrid columns={3}>
-                    <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                      Title
-                      <Input
-                        size="large"
-                        className="mt-1"
-                        value={singleEntry.rule.title || ""}
-                        placeholder="e.g. Single"
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          if (updateRulePresentation) {
-                            updateRulePresentation(ruleId, { title: value });
-                            return;
-                          }
-                          setFreeGiftRules((prev) =>
-                            prev.map((currentRule, currentIndex) =>
-                              currentIndex === singleEntry.actualIndex
-                                ? { ...currentRule, title: value }
-                                : currentRule,
-                            ),
-                          );
-                        }}
-                      />
-                    </label>
-                    <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                      Subtitle
-                      <Input
-                        size="large"
-                        className="mt-1"
-                        value={singleEntry.rule.subtitle || ""}
-                        placeholder="e.g. Standard price"
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          if (updateRulePresentation) {
-                            updateRulePresentation(ruleId, { subtitle: value });
-                            return;
-                          }
-                          setFreeGiftRules((prev) =>
-                            prev.map((currentRule, currentIndex) =>
-                              currentIndex === singleEntry.actualIndex
-                                ? { ...currentRule, subtitle: value }
-                                : currentRule,
-                            ),
-                          );
-                        }}
-                      />
-                    </label>
-                    <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-                      Badge
-                      <Input
-                        size="large"
-                        className="mt-1"
-                        value={singleEntry.rule.badge || ""}
-                        placeholder="Optional"
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          if (updateRulePresentation) {
-                            updateRulePresentation(ruleId, { badge: value });
-                            return;
-                          }
-                          setFreeGiftRules((prev) =>
-                            prev.map((currentRule, currentIndex) =>
-                              currentIndex === singleEntry.actualIndex
-                                ? { ...currentRule, badge: value }
-                                : currentRule,
-                            ),
-                          );
-                        }}
-                      />
-                    </label>
-                  </OfferRuleFormGrid>
-                  <OfferRuleFooterRow>
-                    <Checkbox
-                      checked={!!singleEntry.rule.isDefault}
-                      onChange={(e) => {
-                        const checked = e.target.checked;
-                        if (updateRulePresentation) {
-                          updateRulePresentation(ruleId, { isDefault: checked });
-                          return;
-                        }
-                        setFreeGiftRules((prev) =>
-                          prev.map((currentRule, currentIndex) => ({
-                            ...currentRule,
-                            isDefault: checked ? currentIndex === singleEntry.actualIndex : false,
-                          })),
-                        );
-                      }}
-                    >
-                      Set as Default Selected
-                    </Checkbox>
-                  </OfferRuleFooterRow>
-                </>
-              );
-            })()}
-          </OfferRuleCard>
-        ) : null}
         {ruleEntries.map(({ rule, actualIndex }, index) => (
           <OfferRuleCard
             key={actualIndex}
@@ -247,7 +143,7 @@ export default function FreeGiftLogicEditor({
             }}
           >
               {(() => {
-                const ruleId = getFreeGiftUnifiedRuleId(actualIndex);
+                const ruleId = getFreeGiftUnifiedRuleId(rule, actualIndex);
                 return (
                   <>
               <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">

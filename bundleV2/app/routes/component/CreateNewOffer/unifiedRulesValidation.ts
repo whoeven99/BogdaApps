@@ -1,5 +1,4 @@
 import type { CampaignDraft } from "./campaignDraft";
-import { getUnifiedRuleBlockingMessage as getLegacyUnifiedRuleBlockingMessage } from "./unifiedRuleModel";
 import {
   describeUnifiedRuleCondition,
   describeUnifiedRuleReward,
@@ -52,21 +51,6 @@ export function getUnifiedRuleAuditIssuesForRules(
         message: `${description} is not publishable in the current flow yet.`,
       });
     });
-  }
-
-  if (
-    draft.offerType === "quantity-breaks-same" ||
-    draft.offerType === "shipping-discount" ||
-    draft.offerType === "order-discount" ||
-    draft.offerType === "coupon"
-  ) {
-    const legacyBlockingMessage = getLegacyUnifiedRuleBlockingMessage(draft.discountRules);
-    if (legacyBlockingMessage) {
-      issues.push({
-        severity: "error",
-        message: legacyBlockingMessage,
-      });
-    }
   }
 
   const hasSelectedProductsGap = rules.some(

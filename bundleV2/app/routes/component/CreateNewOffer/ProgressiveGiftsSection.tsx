@@ -4,62 +4,76 @@ import type {
   ProgressiveGiftsConfig,
   ProgressiveGiftUnlockMode,
 } from "../../../utils/offerParsing";
-
-type DiscountRuleLite = { count: number; tierType?: "single" | "standard" };
-type BxgyRuleLite = { count: number; tierType?: "single" | "bxgy" | "simple" };
-type DifferentProductsRuleLite = {
-  count: number;
-  tierType: "single" | "bxgy" | "simple";
-};
+import type { UnifiedRuleNode } from "./unifiedRulesSchema";
 
 type Props = {
   offerType: string;
-  normalizedDiscountRules: DiscountRuleLite[];
-  bxgyDiscountRules: BxgyRuleLite[];
-  differentProductsDiscountRules: DifferentProductsRuleLite[];
+  unifiedRulesSnapshot: UnifiedRuleNode[];
   value: ProgressiveGiftsConfig;
   onChange: (next: ProgressiveGiftsConfig) => void;
   showToggle?: boolean;
   embedded?: boolean;
 };
 
-/** 生成「Bar #N」下拉选项，与店面前台档位顺序一致 */
-function buildBarOptions(
+function getProgressiveGiftRuleThresholdLabel(rule: UnifiedRuleNode): string {
+  switch (rule.condition.kind) {
+    case "cart_amount":
+      return `spend >= ${Math.max(0, Number(rule.condition.amountThreshold) || 0)}`;
+    case "buy_x_get_y":
+      return `count >= ${Math.max(1, Number(rule.condition.triggerCount) || 1)}`;
+    case "item_quantity":
+      return `qty ${Math.max(1, Number(rule.condition.count) || 1)}`;
+    default:
+      return "configured";
+  }
+}
+
+function getProgressiveGiftRelevantRules(
   offerType: string,
-  normalizedDiscountRules: DiscountRuleLite[],
-  bxgyDiscountRules: BxgyRuleLite[],
-  differentProductsDiscountRules: DifferentProductsRuleLite[],
+  unifiedRulesSnapshot: UnifiedRuleNode[],
+): UnifiedRuleNode[] {
+  return unifiedRulesSnapshot.filter(
+    (rule) =>
+      rule.sourceOfferType === offerType &&
+      rule.type !== "single_purchase" &&
+      rule.type !== "complete_bundle" &&
+      rule.type !== "subscription",
+  );
+}
+
+/** 生成「Bar #N」下拉选项，与店面前台档位顺序一致 */
+export function buildProgressiveGiftBarOptions(
+  offerType: string,
+  unifiedRulesSnapshot: UnifiedRuleNode[],
 ): { value: number; label: string }[] {
-  const standardDiscountRules = normalizedDiscountRules.filter(
-    (rule) => rule.tierType !== "single",
+  const relevantRules = getProgressiveGiftRelevantRules(
+    offerType,
+    unifiedRulesSnapshot,
   );
-  const bxgyOfferRules = bxgyDiscountRules.filter((rule) => rule.tierType !== "single");
-  const differentOfferRules = differentProductsDiscountRules.filter(
-    (rule) => rule.tierType !== "single",
-  );
+
   if (offerType === "bxgy") {
     return [
       { value: 1, label: "Bar #1 (Single, qty 1)" },
-      ...bxgyOfferRules.map((r, i) => ({
+      ...relevantRules.map((rule, i) => ({
         value: i + 2,
-        label: `Bar #${i + 2} (count >= ${r.count})`,
+        label: `Bar #${i + 2} (${getProgressiveGiftRuleThresholdLabel(rule)})`,
       })),
     ];
   }
   if (offerType === "quantity-breaks-different") {
     return [
       { value: 1, label: "Tier #1 (Single, qty 1)" },
-      ...differentOfferRules.map((r, i) => ({
+      ...relevantRules.map((rule, i) => ({
         value: i + 2,
-        label: `Tier #${i + 2} (qty ${r.count})`,
+        label: `Tier #${i + 2} (${getProgressiveGiftRuleThresholdLabel(rule)})`,
       })),
     ];
   }
   return [
     { value: 1, label: "Bar #1 (Single, qty 1)" },
-    ...standardDiscountRules.map((r, i) => ({
+    ...relevantRules.map((rule, i) => ({
       value: i + 2,
-      label: `Bar #${i + 2} (qty ${r.count})`,
+      label: `Bar #${i + 2} (${getProgressiveGiftRuleThresholdLabel(rule)})`,
     })),
   ];
 }
@@ -70,19 +84,15 @@ function newGiftId(): string {
 
 export function ProgressiveGiftsSection({
   offerType,
-  normalizedDiscountRules,
-  bxgyDiscountRules,
-  differentProductsDiscountRules,
+  unifiedRulesSnapshot,
   value,
   onChange,
   showToggle = true,
   embedded = false,
 }: Props) {
-  const barOptions = buildBarOptions(
+  const barOptions = buildProgressiveGiftBarOptions(
     offerType,
-    normalizedDiscountRules,
-    bxgyDiscountRules,
-    differentProductsDiscountRules,
+    unifiedRulesSnapshot,
   );
 
   const patch = (partial: Partial<ProgressiveGiftsConfig>) => {

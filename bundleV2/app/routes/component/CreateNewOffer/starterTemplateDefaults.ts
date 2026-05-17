@@ -152,20 +152,6 @@ export function getStarterTemplateDefaults(
         discountRules: [],
         bxgyDiscountRules: [
           {
-            count: 0,
-            buyQuantity: 0,
-            getQuantity: 0,
-            buyProductIds: [],
-            getProductIds: [],
-            discountPercent: 0,
-            maxUsesPerOrder: 1,
-            tierType: "single",
-            title: "Single",
-            subtitle: "Standard price",
-            badge: "",
-            isDefault: false,
-          },
-          {
             count: 1,
             buyQuantity: 1,
             getQuantity: 1,
@@ -271,15 +257,6 @@ export function getStarterTemplateDefaults(
         }),
         discountRules: [
           {
-            count: 0,
-            discountPercent: 0,
-            tierType: "single",
-            title: "Single",
-            subtitle: "Standard shipping applies",
-            badge: "",
-            isDefault: false,
-          },
-          {
             count: 2,
             discountPercent: 0,
             discountClass: "shipping",
@@ -320,15 +297,6 @@ export function getStarterTemplateDefaults(
           layoutFormat: "vertical",
         }),
         discountRules: [
-          {
-            count: 0,
-            discountPercent: 0,
-            tierType: "single",
-            title: "Single",
-            subtitle: "Standard price",
-            badge: "",
-            isDefault: false,
-          },
           {
             count: 2,
             discountPercent: 10,
@@ -372,15 +340,6 @@ export function getStarterTemplateDefaults(
           couponCode: "SAVE15",
         }),
         discountRules: [
-          {
-            count: 0,
-            discountPercent: 0,
-            tierType: "single",
-            title: "Single",
-            subtitle: "Standard price",
-            badge: "",
-            isDefault: false,
-          },
           {
             count: 2,
             discountPercent: 15,
@@ -457,16 +416,6 @@ export function getStarterTemplateDefaults(
         bxgyDiscountRules: [],
         freeGiftRules: [
           {
-            count: 0,
-            giftQuantity: 0,
-            giftProductIds: [],
-            tierType: "single",
-            title: "Single",
-            subtitle: "Standard price",
-            badge: "",
-            isDefault: false,
-          },
-          {
             count: 2,
             giftQuantity: 1,
             title: "Buy 2 items",
@@ -498,20 +447,6 @@ export function getStarterTemplateDefaults(
         bxgyDiscountRules: [],
         freeGiftRules: [],
         differentProductsDiscountRules: [
-          {
-            count: 0,
-            discountPercent: 0,
-            buyQuantity: 0,
-            getQuantity: 0,
-            buyProductIds: [],
-            getProductIds: [],
-            maxUsesPerOrder: 1,
-            tierType: "single",
-            title: "Single",
-            subtitle: "Standard price",
-            badge: "",
-            isDefault: false,
-          },
           {
             count: 2,
             discountPercent: 15,
@@ -553,15 +488,6 @@ export function getStarterTemplateDefaults(
           layoutFormat: "vertical",
         }),
         discountRules: [
-          {
-            count: 0,
-            discountPercent: 0,
-            tierType: "single",
-            title: "Single",
-            subtitle: "Standard price",
-            badge: "",
-            isDefault: false,
-          },
           {
             count: 2,
             discountPercent: 15,

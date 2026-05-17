@@ -151,11 +151,7 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
         render: () => (
           <ProgressiveGiftsSection
             offerType={props.draft.offerType}
-            normalizedDiscountRules={props.draft.normalizedDiscountRules}
-            bxgyDiscountRules={props.draft.bxgyDiscountRules}
-            differentProductsDiscountRules={
-              props.draft.differentProductsDiscountRules
-            }
+            unifiedRulesSnapshot={props.draft.unifiedRulesSnapshot}
             value={props.draft.progressiveGifts}
             onChange={props.actions.setProgressiveGifts}
             showToggle={false}
@@ -234,11 +230,7 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
         render: () => (
           <ProgressiveGiftsSection
             offerType={props.draft.offerType}
-            normalizedDiscountRules={props.draft.normalizedDiscountRules}
-            bxgyDiscountRules={props.draft.bxgyDiscountRules}
-            differentProductsDiscountRules={
-              props.draft.differentProductsDiscountRules
-            }
+            unifiedRulesSnapshot={props.draft.unifiedRulesSnapshot}
             value={props.draft.progressiveGifts}
             onChange={props.actions.setProgressiveGifts}
             showToggle={false}
@@ -418,11 +410,7 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
         render: () => (
           <ProgressiveGiftsSection
             offerType={props.draft.offerType}
-            normalizedDiscountRules={props.draft.normalizedDiscountRules}
-            bxgyDiscountRules={props.draft.bxgyDiscountRules}
-            differentProductsDiscountRules={
-              props.draft.differentProductsDiscountRules
-            }
+            unifiedRulesSnapshot={props.draft.unifiedRulesSnapshot}
             value={props.draft.progressiveGifts}
             onChange={props.actions.setProgressiveGifts}
             showToggle={false}
@@ -485,11 +473,7 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
         render: () => (
           <ProgressiveGiftsSection
             offerType={props.draft.offerType}
-            normalizedDiscountRules={props.draft.normalizedDiscountRules}
-            bxgyDiscountRules={props.draft.bxgyDiscountRules}
-            differentProductsDiscountRules={
-              props.draft.differentProductsDiscountRules
-            }
+            unifiedRulesSnapshot={props.draft.unifiedRulesSnapshot}
             value={props.draft.progressiveGifts}
             onChange={props.actions.setProgressiveGifts}
             showToggle={false}
@@ -552,11 +536,7 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
         render: () => (
           <ProgressiveGiftsSection
             offerType={props.draft.offerType}
-            normalizedDiscountRules={props.draft.normalizedDiscountRules}
-            bxgyDiscountRules={props.draft.bxgyDiscountRules}
-            differentProductsDiscountRules={
-              props.draft.differentProductsDiscountRules
-            }
+            unifiedRulesSnapshot={props.draft.unifiedRulesSnapshot}
             value={props.draft.progressiveGifts}
             onChange={props.actions.setProgressiveGifts}
             showToggle={false}
@@ -619,11 +599,7 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
         render: () => (
           <ProgressiveGiftsSection
             offerType={props.draft.offerType}
-            normalizedDiscountRules={props.draft.normalizedDiscountRules}
-            bxgyDiscountRules={props.draft.bxgyDiscountRules}
-            differentProductsDiscountRules={
-              props.draft.differentProductsDiscountRules
-            }
+            unifiedRulesSnapshot={props.draft.unifiedRulesSnapshot}
             value={props.draft.progressiveGifts}
             onChange={props.actions.setProgressiveGifts}
             showToggle={false}
@@ -731,11 +707,7 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
         render: () => (
           <ProgressiveGiftsSection
             offerType={props.draft.offerType}
-            normalizedDiscountRules={props.draft.normalizedDiscountRules}
-            bxgyDiscountRules={props.draft.bxgyDiscountRules}
-            differentProductsDiscountRules={
-              props.draft.differentProductsDiscountRules
-            }
+            unifiedRulesSnapshot={props.draft.unifiedRulesSnapshot}
             value={props.draft.progressiveGifts}
             onChange={props.actions.setProgressiveGifts}
             showToggle={false}
@@ -798,11 +770,7 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
         render: () => (
           <ProgressiveGiftsSection
             offerType={props.draft.offerType}
-            normalizedDiscountRules={props.draft.normalizedDiscountRules}
-            bxgyDiscountRules={props.draft.bxgyDiscountRules}
-            differentProductsDiscountRules={
-              props.draft.differentProductsDiscountRules
-            }
+            unifiedRulesSnapshot={props.draft.unifiedRulesSnapshot}
             value={props.draft.progressiveGifts}
             onChange={props.actions.setProgressiveGifts}
             showToggle={false}

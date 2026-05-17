@@ -161,6 +161,51 @@ function QuietEmptyState({ children }: { children: ReactNode }) {
   );
 }
 
+function matchesBarRuleId(
+  value: { id?: string },
+  index: number,
+  fallbackPrefix: string,
+  ruleId: string,
+) {
+  return (value.id || `${fallbackPrefix}-${index + 1}`) === ruleId;
+}
+
+function findDiscountRuleIndex(
+  rules: CampaignDraft["discountRules"],
+  ruleId: string,
+) {
+  return rules.findIndex((entry, index) =>
+    matchesBarRuleId(entry, index, "discount-rule", ruleId),
+  );
+}
+
+function findBxgyRuleIndex(
+  rules: CampaignDraft["bxgyDiscountRules"],
+  ruleId: string,
+) {
+  return rules.findIndex((entry, index) =>
+    matchesBarRuleId(entry, index, "bxgy-rule", ruleId),
+  );
+}
+
+function findFreeGiftRuleIndex(
+  rules: CampaignDraft["freeGiftRules"],
+  ruleId: string,
+) {
+  return rules.findIndex((entry, index) =>
+    matchesBarRuleId(entry, index, "free-gift-rule", ruleId),
+  );
+}
+
+function findDifferentProductsRuleIndex(
+  rules: CampaignDraft["differentProductsDiscountRules"],
+  ruleId: string,
+) {
+  return rules.findIndex((entry, index) =>
+    matchesBarRuleId(entry, index, "different-products-rule", ruleId),
+  );
+}
+
 function ProductPoolManager({
   selectedProducts,
   totalStoreProductsCount,
@@ -602,12 +647,14 @@ function FreeGiftRuleBarDetail({
   bar,
   rule,
   actions,
+  ruleIndex,
   headerActions,
   onChange,
 }: {
   bar: CampaignBarItem;
   rule: CampaignDraft["freeGiftRules"][number];
   actions: CampaignDraftActions;
+  ruleIndex: number;
   headerActions?: ReactNode;
   onChange: (patch: Partial<CampaignDraft["freeGiftRules"][number]>) => void;
 }) {
@@ -636,7 +683,7 @@ function FreeGiftRuleBarDetail({
           title="Gift products"
           meta={`${(rule.giftProductIds || []).length} selected for this bar`}
           actionLabel="Edit gift products"
-          onAction={() => void actions.selectFreeGiftRewardProducts(bar.sourceRef.index)}
+          onAction={() => void actions.selectFreeGiftRewardProducts(ruleIndex)}
         />
         <label className="block text-[13px] font-medium text-[#1c1f23]">
           Gift quantity
@@ -1097,8 +1144,18 @@ export default function StepTwoCompositionBuilder({
   );
 
   const renderBarDetail = (bar: CampaignBarItem, index: number) => {
-    if (bar.sourceRef.collection === "differentProductsDiscountRules") {
-      const rule = draft.differentProductsDiscountRules[bar.sourceRef.index];
+    const unifiedRule = draft.unifiedRulesSnapshot.find((rule) => rule.id === bar.id);
+    if (!unifiedRule) return null;
+
+    if (unifiedRule.sourceOfferType === "quantity-breaks-different") {
+      const targetRuleIndex = findDifferentProductsRuleIndex(
+        draft.differentProductsDiscountRules,
+        unifiedRule.id,
+      );
+      const rule =
+        targetRuleIndex >= 0
+          ? draft.differentProductsDiscountRules[targetRuleIndex]
+          : null;
       if (!rule) return null;
       return (
         <DifferentProductsRuleBarDetail
@@ -1115,7 +1172,7 @@ export default function StepTwoCompositionBuilder({
               }
               actions.setDifferentProductsDiscountRules((prev) =>
                 prev.map((entry, ruleIndex) =>
-                  ruleIndex === bar.sourceRef.index
+                  ruleIndex === targetRuleIndex
                     ? {
                         ...entry,
                         ...patch,
@@ -1141,8 +1198,17 @@ export default function StepTwoCompositionBuilder({
       );
     }
 
-    if (bar.sourceRef.collection === "discountRules") {
-      const rule = draft.discountRules[bar.sourceRef.index];
+    if (
+      unifiedRule.sourceOfferType === "quantity-breaks-same" ||
+      unifiedRule.sourceOfferType === "shipping-discount" ||
+      unifiedRule.sourceOfferType === "order-discount" ||
+      unifiedRule.sourceOfferType === "coupon"
+    ) {
+      const targetRuleIndex = findDiscountRuleIndex(
+        draft.discountRules,
+        unifiedRule.id,
+      );
+      const rule = targetRuleIndex >= 0 ? draft.discountRules[targetRuleIndex] : null;
       if (!rule) return null;
       return (
         <DiscountRuleBarDetail
@@ -1158,7 +1224,7 @@ export default function StepTwoCompositionBuilder({
               }
               actions.setDiscountRules((prev) =>
                 prev.map((entry, ruleIndex) =>
-                  ruleIndex === bar.sourceRef.index ? { ...entry, ...patch } : entry,
+                  ruleIndex === targetRuleIndex ? { ...entry, ...patch } : entry,
                 ),
               );
             })()
@@ -1167,8 +1233,10 @@ export default function StepTwoCompositionBuilder({
       );
     }
 
-    if (bar.sourceRef.collection === "bxgyDiscountRules") {
-      const rule = draft.bxgyDiscountRules[bar.sourceRef.index];
+    if (unifiedRule.sourceOfferType === "bxgy") {
+      const targetRuleIndex = findBxgyRuleIndex(draft.bxgyDiscountRules, unifiedRule.id);
+      const rule =
+        targetRuleIndex >= 0 ? draft.bxgyDiscountRules[targetRuleIndex] : null;
       if (!rule) return null;
       return (
         <BxgyRuleBarDetail
@@ -1184,7 +1252,7 @@ export default function StepTwoCompositionBuilder({
               }
               actions.setBxgyDiscountRules((prev) =>
                 prev.map((entry, ruleIndex) =>
-                  ruleIndex === bar.sourceRef.index ? { ...entry, ...patch } : entry,
+                  ruleIndex === targetRuleIndex ? { ...entry, ...patch } : entry,
                 ),
               );
             })()
@@ -1193,8 +1261,13 @@ export default function StepTwoCompositionBuilder({
       );
     }
 
-    if (bar.sourceRef.collection === "freeGiftRules") {
-      const rule = draft.freeGiftRules[bar.sourceRef.index];
+    if (unifiedRule.sourceOfferType === "free-gift") {
+      const targetRuleIndex = findFreeGiftRuleIndex(
+        draft.freeGiftRules,
+        unifiedRule.id,
+      );
+      const rule =
+        targetRuleIndex >= 0 ? draft.freeGiftRules[targetRuleIndex] : null;
       if (!rule) return null;
       return (
         <FreeGiftRuleBarDetail
@@ -1202,6 +1275,7 @@ export default function StepTwoCompositionBuilder({
           bar={bar}
           rule={rule}
           actions={actions}
+          ruleIndex={targetRuleIndex}
           headerActions={renderBarActions(bar, index)}
           onChange={(patch) =>
             (() => {
@@ -1210,7 +1284,7 @@ export default function StepTwoCompositionBuilder({
               }
               actions.setFreeGiftRules((prev) =>
                 prev.map((entry, ruleIndex) =>
-                  ruleIndex === bar.sourceRef.index ? { ...entry, ...patch } : entry,
+                  ruleIndex === targetRuleIndex ? { ...entry, ...patch } : entry,
                 ),
               );
             })()
@@ -1263,9 +1337,7 @@ export default function StepTwoCompositionBuilder({
           <DetailSection title="Progressive gifts">
             <ProgressiveGiftsSection
               offerType={draft.offerType}
-              normalizedDiscountRules={draft.normalizedDiscountRules}
-              bxgyDiscountRules={draft.bxgyDiscountRules}
-              differentProductsDiscountRules={draft.differentProductsDiscountRules}
+              unifiedRulesSnapshot={draft.unifiedRulesSnapshot}
               value={draft.progressiveGifts}
               onChange={actions.setProgressiveGifts}
               showToggle={false}

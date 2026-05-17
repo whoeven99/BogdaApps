@@ -7,6 +7,12 @@ import type {
   DraftBxgyDiscountRule,
   DraftDiscountRule,
 } from "./campaignDraft";
+import {
+  getBxgyUnifiedRuleId,
+  getDifferentProductsUnifiedRuleId,
+  getFreeGiftUnifiedRuleId,
+  getUnifiedDiscountRuleId,
+} from "./unifiedRuleValues";
 
 export type RulePresentationPatch = Partial<{
   title: string;
@@ -22,21 +28,23 @@ type PresentationRule = {
   isDefault?: boolean;
 };
 
-function applyIndexedPresentationPatch<T extends PresentationRule>(
+function applyPresentationPatchByRuleId<T extends PresentationRule>(
   rules: T[],
-  index: number,
+  matchesRuleId: (rule: T, index: number) => boolean,
   patch: RulePresentationPatch,
 ): T[] {
   return rules.map((rule, ruleIndex) => {
+    const isTarget = matchesRuleId(rule, ruleIndex);
+
     if (patch.isDefault === true) {
-      return { ...rule, isDefault: ruleIndex === index };
+      return { ...rule, isDefault: isTarget };
     }
 
-    if (patch.isDefault === false && ruleIndex === index) {
+    if (patch.isDefault === false && isTarget) {
       return { ...rule, ...patch, isDefault: false };
     }
 
-    if (ruleIndex !== index) {
+    if (!isTarget) {
       return rule;
     }
 
@@ -46,34 +54,50 @@ function applyIndexedPresentationPatch<T extends PresentationRule>(
 
 export function updateDiscountRulePresentation(
   rules: DraftDiscountRule[],
-  index: number,
+  ruleId: string,
   patch: RulePresentationPatch,
 ): DraftDiscountRule[] {
-  return applyIndexedPresentationPatch(rules, index, patch);
+  return applyPresentationPatchByRuleId(
+    rules,
+    (rule, index) => getUnifiedDiscountRuleId(rule, index) === ruleId,
+    patch,
+  );
 }
 
 export function updateBxgyRulePresentation(
   rules: DraftBxgyDiscountRule[],
-  index: number,
+  ruleId: string,
   patch: RulePresentationPatch,
 ): DraftBxgyDiscountRule[] {
-  return applyIndexedPresentationPatch(rules, index, patch);
+  return applyPresentationPatchByRuleId(
+    rules,
+    (rule, index) => getBxgyUnifiedRuleId(rule, index) === ruleId,
+    patch,
+  );
 }
 
 export function updateFreeGiftRulePresentation(
   rules: FreeGiftRule[],
-  index: number,
+  ruleId: string,
   patch: RulePresentationPatch,
 ): FreeGiftRule[] {
-  return applyIndexedPresentationPatch(rules, index, patch);
+  return applyPresentationPatchByRuleId(
+    rules,
+    (rule, index) => getFreeGiftUnifiedRuleId(rule, index) === ruleId,
+    patch,
+  );
 }
 
 export function updateDifferentProductsRulePresentation(
   rules: DifferentProductsDiscountRule[],
-  index: number,
+  ruleId: string,
   patch: RulePresentationPatch,
 ): DifferentProductsDiscountRule[] {
-  return applyIndexedPresentationPatch(rules, index, patch);
+  return applyPresentationPatchByRuleId(
+    rules,
+    (rule, index) => getDifferentProductsUnifiedRuleId(rule, index) === ruleId,
+    patch,
+  );
 }
 
 export function updateCompleteBundleBarPresentation(

@@ -128,6 +128,33 @@ function buildSinglePurchaseItem(
   };
 }
 
+function buildSyntheticSingleBaselineItem(params: BuildPreviewParams): PreviewItem {
+  return {
+    id: "preview-single-baseline",
+    title: "Single",
+    subtitle: "Standard price",
+    price: params.formatPrice(params.baseUnitPrice),
+    featured: false,
+    products:
+      params.selectedProducts[0] != null
+        ? [
+            {
+              image: params.selectedProducts[0].image || "https://via.placeholder.com/48",
+              name: params.selectedProducts[0].title || "Current product",
+            },
+          ]
+        : undefined,
+  };
+}
+
+function getRenderablePreviewRules(rules: UnifiedRuleNode[]): UnifiedRuleNode[] {
+  const realRules = rules.filter((rule) => rule.type !== "single_purchase");
+  if (realRules.length > 0) {
+    return realRules;
+  }
+  return rules.slice(0, 1);
+}
+
 function mapProducts(ids: string[], selectedProducts: SelectedPreviewProduct[]): PreviewProduct[] {
   return ids
     .map((productId) =>
@@ -498,38 +525,71 @@ export function buildUnifiedPreviewItems(params: BuildPreviewParams): PreviewIte
     );
   }
 
+  const hasExplicitSingle = params.rules.some((rule) => rule.type === "single_purchase");
+  const renderableRules = getRenderablePreviewRules(params.rules);
+  const renderableParams = {
+    ...params,
+    rules: renderableRules,
+  };
+
+  const baselineItems =
+    !hasExplicitSingle && renderableRules.length > 0
+      ? [buildSyntheticSingleBaselineItem(params)]
+      : [];
+
   if (params.offerType === "quantity-breaks-different") {
-    return params.rules.map((rule, index) =>
-      buildDifferentProductsItem(rule, index, params),
-    );
+    return [
+      ...baselineItems,
+      ...renderableRules.map((rule, index) =>
+        buildDifferentProductsItem(rule, index, renderableParams),
+      ),
+    ];
   }
 
-  return params.rules.map((rule, index) => buildStandardRuleItem(rule, index, params));
+  return [
+    ...baselineItems,
+    ...renderableRules.map((rule, index) =>
+      buildStandardRuleItem(rule, index, renderableParams),
+    ),
+  ];
 }
 
 export function buildCompositionPreviewItems(
   params: Omit<BuildPreviewParams, "offerType">,
 ): PreviewItem[] {
+  const hasExplicitSingle = params.rules.some((rule) => rule.type === "single_purchase");
+  const renderableRules = getRenderablePreviewRules(params.rules);
   const mixedParams: BuildPreviewParams = {
     ...params,
+    rules: renderableRules,
     offerType: "quantity-breaks-same",
   };
 
-  return params.rules.map((rule, index) => {
-    if (rule.type === "complete_bundle") {
-      const barId = rule.scope.kind === "bundle_bar_products" ? rule.scope.barId : undefined;
-      const bar =
-        params.completeBundleBars.find((entry) => entry.id === barId) ||
-        params.completeBundleBars[index];
-      if (bar) {
-        return buildCompleteBundleItem(bar, index, mixedParams);
+  const baselineItems =
+    !hasExplicitSingle &&
+    renderableRules.some((rule) => rule.type !== "complete_bundle") &&
+    renderableRules.length > 0
+      ? [buildSyntheticSingleBaselineItem(mixedParams)]
+      : [];
+
+  return [
+    ...baselineItems,
+    ...renderableRules.map((rule, index) => {
+      if (rule.type === "complete_bundle") {
+        const barId = rule.scope.kind === "bundle_bar_products" ? rule.scope.barId : undefined;
+        const bar =
+          params.completeBundleBars.find((entry) => entry.id === barId) ||
+          params.completeBundleBars[index];
+        if (bar) {
+          return buildCompleteBundleItem(bar, index, mixedParams);
+        }
       }
-    }
 
-    if (rule.sourceOfferType === "quantity-breaks-different") {
-      return buildDifferentProductsItem(rule, index, mixedParams);
-    }
+      if (rule.sourceOfferType === "quantity-breaks-different") {
+        return buildDifferentProductsItem(rule, index, mixedParams);
+      }
 
-    return buildStandardRuleItem(rule, index, mixedParams);
-  });
+      return buildStandardRuleItem(rule, index, mixedParams);
+    }),
+  ];
 }

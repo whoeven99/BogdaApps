@@ -552,6 +552,7 @@ export type PerProductDiscountRule = {
 };
 
 export type DifferentProductsDiscountRule = {
+  id?: string;
   count: number;
   discountPercent: number;
   buyQuantity: number;
@@ -575,6 +576,7 @@ export type CampaignScope = {
 };
 
 export type QuantityBreakTier = {
+  id?: string;
   qty: number;
   discountPercent: number;
   tierType?: "single" | "standard";
@@ -670,6 +672,7 @@ export type CampaignConfig = {
 };
 
 export type BxgyDiscountRule = {
+  id?: string;
   buyQuantity: number;
   getQuantity: number;
   buyProductIds: string[];
@@ -742,6 +745,7 @@ export function getBxgyDisplayMeta(rule: {
 }
 
 export type FreeGiftRule = {
+  id?: string;
   count: number;
   giftQuantity: number;
   giftProductIds?: string[];
@@ -756,6 +760,10 @@ export function isSingleDiscountRule(
   rule: Pick<DiscountRule, "tierType"> | null | undefined,
 ): boolean {
   return String(rule?.tierType || "") === "single";
+}
+
+export function buildDraftRuleId(prefix: string): string {
+  return `${prefix}_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
 }
 
 export function createDefaultSingleDiscountRule(
@@ -780,13 +788,9 @@ export function createDefaultSingleDiscountRule(
 }
 
 export function normalizeDiscountRules(rules: DiscountRule[]): DiscountRule[] {
-  let singleRule: DiscountRule | null = null;
   const offerRules: DiscountRule[] = [];
   for (const rule of rules) {
     if (isSingleDiscountRule(rule)) {
-      if (!singleRule) {
-        singleRule = createDefaultSingleDiscountRule(rule);
-      }
       continue;
     }
     const rewardType =
@@ -817,24 +821,16 @@ export function normalizeDiscountRules(rules: DiscountRule[]): DiscountRule[] {
             : "percentage_discount",
     });
   }
-  if (!singleRule) singleRule = createDefaultSingleDiscountRule();
   offerRules.sort((a, b) => a.count - b.count);
-  const ordered = [singleRule, ...offerRules];
-  const explicitDefault = ordered.find((rule) => rule.isDefault);
-  const fallbackDefault = offerRules[0] || singleRule;
-  const defaultKey = explicitDefault?.id || fallbackDefault.id || "__single__";
-  return ordered.map((rule, index) => ({
+  const explicitDefault = offerRules.find((rule) => rule.isDefault);
+  const fallbackDefault = offerRules[0];
+  const defaultKey = explicitDefault?.id || fallbackDefault?.id || "";
+  return offerRules.map((rule, index) => ({
     ...rule,
     id:
-      rule.id ||
-      (isSingleDiscountRule(rule) ? "single-rule" : `discount-rule-${index}`),
-    tierType: isSingleDiscountRule(rule) ? "single" : "standard",
-    isDefault:
-      rule.id && defaultKey !== "__single__"
-        ? rule.id === defaultKey
-        : index === ordered.findIndex((entry) =>
-            defaultKey === "__single__" ? isSingleDiscountRule(entry) : entry.id === defaultKey,
-          ),
+      rule.id || `discount-rule-${index}`,
+    tierType: "standard",
+    isDefault: defaultKey ? rule.id === defaultKey : index === 0,
   }));
 }
 
@@ -867,17 +863,14 @@ export function createDefaultSingleDifferentProductsRule(
 export function normalizeDifferentProductsDiscountRules(
   rules: DifferentProductsDiscountRule[],
 ): DifferentProductsDiscountRule[] {
-  let singleRule: DifferentProductsDiscountRule | null = null;
   const offerRules: DifferentProductsDiscountRule[] = [];
   for (const rule of rules) {
     if (isSingleDifferentProductsRule(rule)) {
-      if (!singleRule) {
-        singleRule = createDefaultSingleDifferentProductsRule(rule);
-      }
       continue;
     }
     offerRules.push({
       ...rule,
+      id: rule.id || buildDraftRuleId("different_products_rule"),
       count: Math.max(1, Math.trunc(Number(rule.count) || 1)),
       buyQuantity: Math.max(
         1,
@@ -896,27 +889,21 @@ export function normalizeDifferentProductsDiscountRules(
       isDefault: !!rule.isDefault,
     });
   }
-  if (!singleRule) singleRule = createDefaultSingleDifferentProductsRule();
   offerRules.sort((a, b) => a.count - b.count);
-  const ordered = [singleRule, ...offerRules];
-  const explicitDefault = ordered.find((rule) => rule.isDefault);
-  const fallbackDefault = offerRules[0] || singleRule;
+  const explicitDefault = offerRules.find((rule) => rule.isDefault);
+  const fallbackDefault = offerRules[0];
   const defaultIndex = explicitDefault
-    ? ordered.findIndex((rule) =>
-        isSingleDifferentProductsRule(explicitDefault)
-          ? isSingleDifferentProductsRule(rule)
-          : !isSingleDifferentProductsRule(rule) &&
-            rule.count === explicitDefault.count &&
-            rule.tierType === explicitDefault.tierType,
+    ? offerRules.findIndex(
+        (rule) =>
+          rule.count === explicitDefault.count &&
+          rule.tierType === explicitDefault.tierType,
       )
-    : ordered.findIndex((rule) =>
-        isSingleDifferentProductsRule(fallbackDefault)
-          ? isSingleDifferentProductsRule(rule)
-          : !isSingleDifferentProductsRule(rule) &&
-            rule.count === fallbackDefault.count &&
-            rule.tierType === fallbackDefault.tierType,
+    : offerRules.findIndex(
+        (rule) =>
+          rule.count === fallbackDefault?.count &&
+          rule.tierType === fallbackDefault?.tierType,
       );
-  return ordered.map((rule, index) => ({
+  return offerRules.map((rule, index) => ({
     ...rule,
     isDefault: index === Math.max(0, defaultIndex),
   }));
@@ -949,13 +936,9 @@ export function createDefaultSingleBxgyRule(
 }
 
 export function normalizeBxgyRules(rules: BxgyDiscountRule[]): BxgyDiscountRule[] {
-  let singleRule: BxgyDiscountRule | null = null;
   const offerRules: BxgyDiscountRule[] = [];
   for (const rule of rules) {
     if (isSingleBxgyRule(rule)) {
-      if (!singleRule) {
-        singleRule = createDefaultSingleBxgyRule(rule);
-      }
       continue;
     }
     const normalizedBuyQuantity = Math.max(
@@ -964,6 +947,7 @@ export function normalizeBxgyRules(rules: BxgyDiscountRule[]): BxgyDiscountRule[
     );
     offerRules.push({
       ...rule,
+      id: rule.id || buildDraftRuleId("bxgy_rule"),
       count: normalizedBuyQuantity,
       buyQuantity: normalizedBuyQuantity,
       getQuantity: Math.max(1, Math.trunc(Number(rule.getQuantity) || 1)),
@@ -973,23 +957,13 @@ export function normalizeBxgyRules(rules: BxgyDiscountRule[]): BxgyDiscountRule[
       isDefault: !!rule.isDefault,
     });
   }
-  if (!singleRule) singleRule = createDefaultSingleBxgyRule();
   offerRules.sort((a, b) => a.count - b.count);
-  const ordered = [singleRule, ...offerRules];
-  const explicitDefault = ordered.find((rule) => rule.isDefault);
-  const fallbackDefault = offerRules[0] || singleRule;
+  const explicitDefault = offerRules.find((rule) => rule.isDefault);
+  const fallbackDefault = offerRules[0];
   const defaultIndex = explicitDefault
-    ? ordered.findIndex((rule) =>
-        isSingleBxgyRule(explicitDefault)
-          ? isSingleBxgyRule(rule)
-          : !isSingleBxgyRule(rule) && rule.count === explicitDefault.count,
-      )
-    : ordered.findIndex((rule) =>
-        isSingleBxgyRule(fallbackDefault)
-          ? isSingleBxgyRule(rule)
-          : !isSingleBxgyRule(rule) && rule.count === fallbackDefault.count,
-      );
-  return ordered.map((rule, index) => ({
+    ? offerRules.findIndex((rule) => rule.count === explicitDefault.count)
+    : offerRules.findIndex((rule) => rule.count === fallbackDefault?.count);
+  return offerRules.map((rule, index) => ({
     ...rule,
     isDefault: index === Math.max(0, defaultIndex),
   }));
@@ -1018,40 +992,27 @@ export function createDefaultSingleFreeGiftRule(
 }
 
 export function normalizeFreeGiftRules(rules: FreeGiftRule[]): FreeGiftRule[] {
-  let singleRule: FreeGiftRule | null = null;
   const offerRules: FreeGiftRule[] = [];
   for (const rule of rules) {
     if (isSingleFreeGiftRule(rule)) {
-      if (!singleRule) {
-        singleRule = createDefaultSingleFreeGiftRule(rule);
-      }
       continue;
     }
     offerRules.push({
       ...rule,
+      id: rule.id || buildDraftRuleId("free_gift_rule"),
       count: Math.max(1, Math.trunc(Number(rule.count) || 1)),
       giftQuantity: Math.max(1, Math.trunc(Number(rule.giftQuantity) || 1)),
       tierType: undefined,
       isDefault: !!rule.isDefault,
     });
   }
-  if (!singleRule) singleRule = createDefaultSingleFreeGiftRule();
   offerRules.sort((a, b) => a.count - b.count);
-  const ordered = [singleRule, ...offerRules];
-  const explicitDefault = ordered.find((rule) => rule.isDefault);
-  const fallbackDefault = offerRules[0] || singleRule;
+  const explicitDefault = offerRules.find((rule) => rule.isDefault);
+  const fallbackDefault = offerRules[0];
   const defaultIndex = explicitDefault
-    ? ordered.findIndex((rule) =>
-        isSingleFreeGiftRule(explicitDefault)
-          ? isSingleFreeGiftRule(rule)
-          : !isSingleFreeGiftRule(rule) && rule.count === explicitDefault.count,
-      )
-    : ordered.findIndex((rule) =>
-        isSingleFreeGiftRule(fallbackDefault)
-          ? isSingleFreeGiftRule(rule)
-          : !isSingleFreeGiftRule(rule) && rule.count === fallbackDefault.count,
-      );
-  return ordered.map((rule, index) => ({
+    ? offerRules.findIndex((rule) => rule.count === explicitDefault.count)
+    : offerRules.findIndex((rule) => rule.count === fallbackDefault?.count);
+  return offerRules.map((rule, index) => ({
     ...rule,
     isDefault: index === Math.max(0, defaultIndex),
   }));
@@ -1272,18 +1233,6 @@ export function parseDiscountRules(discountRulesJson?: string | null): DiscountR
         (item as { discountPercent?: unknown }).discountPercent,
       );
       if (isSingleTier) {
-        out.push(
-          createDefaultSingleDiscountRule({
-            id:
-              typeof (item as { id?: unknown }).id === "string"
-                ? (item as { id: string }).id
-                : undefined,
-            title: (item as { title?: string }).title || "",
-            subtitle: (item as { subtitle?: string }).subtitle || "",
-            badge: (item as { badge?: string }).badge || "",
-            isDefault: !!(item as { isDefault?: boolean }).isDefault,
-          }),
-        );
         continue;
       }
       if (conditionType === "item_quantity" && (!Number.isFinite(count) || count < 1)) continue;
@@ -1426,24 +1375,12 @@ function sanitizeQuantityBreakTier(raw: unknown): QuantityBreakTier | null {
   const qty = Math.trunc(Number(item.qty));
   const discountPercent = Number(item.discountPercent);
   if (tierType === "single") {
-    return {
-      qty: 0,
-      discountPercent: 0,
-      title: typeof item.title === "string" ? item.title : "Single",
-      subtitle: typeof item.subtitle === "string" ? item.subtitle : "Standard price",
-      badge: typeof item.badge === "string" ? item.badge : "",
-      isDefault: !!item.isDefault,
-      tierType: "single",
-      discountClass: "product",
-      offerKind: "percentage_discount",
-      conditionType: "item_quantity",
-      rewardType: "percentage_off",
-      rewardProductIds: [],
-    };
+    return null;
   }
   if (!Number.isFinite(qty) || qty < 1) return null;
   if (!Number.isFinite(discountPercent)) return null;
   return {
+    id: typeof item.id === "string" && item.id ? item.id : undefined,
     qty,
     discountPercent: Math.max(0, Math.min(100, discountPercent)),
     tierType: "standard",
@@ -1490,12 +1427,7 @@ function sanitizeBxgyTier(raw: unknown): BxgyDiscountRule | null {
   if (!raw || typeof raw !== "object") return null;
   const item = raw as Record<string, unknown>;
   if (item.tierType === "single") {
-    return createDefaultSingleBxgyRule({
-      title: typeof item.title === "string" ? item.title : "",
-      subtitle: typeof item.subtitle === "string" ? item.subtitle : "",
-      badge: typeof item.badge === "string" ? item.badge : "",
-      isDefault: !!item.isDefault,
-    });
+    return null;
   }
   const count = Math.trunc(Number(item.count ?? item.buyQuantity));
   const buyQuantity = Math.trunc(Number(item.buyQuantity ?? item.count));
@@ -1555,12 +1487,7 @@ function sanitizeDifferentProductsTier(
         : "simple";
 
   if (tierType === "single") {
-    return createDefaultSingleDifferentProductsRule({
-      title: typeof item.title === "string" ? item.title : "",
-      subtitle: typeof item.subtitle === "string" ? item.subtitle : "",
-      badge: typeof item.badge === "string" ? item.badge : "",
-      isDefault: !!item.isDefault,
-    });
+    return null;
   }
 
   if (!Number.isFinite(count) || count < 1) return null;
@@ -1595,12 +1522,7 @@ function sanitizeFreeGiftTier(raw: unknown): FreeGiftRule | null {
   if (!raw || typeof raw !== "object") return null;
   const item = raw as Record<string, unknown>;
   if (item.tierType === "single") {
-    return createDefaultSingleFreeGiftRule({
-      title: typeof item.title === "string" ? item.title : "",
-      subtitle: typeof item.subtitle === "string" ? item.subtitle : "",
-      badge: typeof item.badge === "string" ? item.badge : "",
-      isDefault: !!item.isDefault,
-    });
+    return null;
   }
   const count = Math.trunc(Number(item.count));
   const giftQuantity = Math.trunc(Number(item.giftQuantity));
@@ -2000,6 +1922,7 @@ export function migrateLegacyOfferToCampaignConfig(params: {
 }): CampaignConfig {
   const offerSettings = parseOfferSettings(params.offerSettingsJson);
   const tiers = parseDiscountRules(params.discountRulesJson).map((rule) => ({
+    id: rule.id,
     qty: rule.count,
     discountPercent: rule.discountPercent,
     title: rule.title || "",
@@ -2393,6 +2316,7 @@ function buildLegacyQuantityBreakDiscountRules(
   tiers: QuantityBreakTier[],
 ): DiscountRule[] {
   return tiers.map((tier) => ({
+    id: tier.id,
     count: tier.qty,
     discountPercent: tier.discountPercent,
     title: tier.title || "",
@@ -2803,6 +2727,59 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
   };
 }
 
+export function buildOfferSettingsJsonFromCampaignConfig(
+  config: CampaignConfig,
+  existingOfferSettingsJson?: string | null,
+): string {
+  const baseOfferSettings = parseOfferSettings(
+    buildLegacyFieldsFromCampaignConfig(config).offerSettingsJson,
+  );
+  return JSON.stringify({
+    ...baseOfferSettings,
+    // Progressive gifts still live only in legacy offerSettingsJson for now.
+    progressiveGifts: progressiveGiftsConfigToStorableJson(
+      parseProgressiveGiftsFromOfferSettingsJson(existingOfferSettingsJson),
+    ),
+  } satisfies OfferSettings);
+}
+
+export function buildPersistedOfferFieldsFromCampaignConfig(
+  config: CampaignConfig,
+  existingOfferSettingsJson?: string | null,
+): {
+  offerType: string;
+  selectedProductsJson: string | null;
+  selectedProductsJsonForFunction: string | null;
+  discountRulesJson: string | null;
+  offerSettingsJson: string;
+  referencedProductIds: string[];
+  storefrontHydration: "none" | "complete-bundle" | "quantity-breaks-different";
+} {
+  const runtimeOutputs = compileCampaignRuntimeOutputs(config);
+  const legacyFields = buildLegacyFieldsFromCampaignConfig(config);
+
+  return {
+    offerType: legacyFields.offerType,
+    selectedProductsJson: legacyFields.selectedProductsJson ?? null,
+    selectedProductsJsonForFunction:
+      runtimeOutputs.primaryModule?.selectedProductsJsonForFunction ??
+      (legacyFields.selectedProductsJson
+        ? trimSelectedProductsJsonForFunction(
+            legacyFields.offerType,
+            legacyFields.selectedProductsJson,
+          )
+        : null),
+    discountRulesJson:
+      runtimeOutputs.primaryModule?.discountRulesJson ?? legacyFields.discountRulesJson,
+    offerSettingsJson: buildOfferSettingsJsonFromCampaignConfig(
+      config,
+      existingOfferSettingsJson,
+    ),
+    referencedProductIds: runtimeOutputs.referencedProductIds,
+    storefrontHydration: runtimeOutputs.primaryModule?.storefrontHydration ?? "none",
+  };
+}
+
 function getOfferTypeFromLogicBlockType(type: string | undefined): string | null {
   if (type === "quantity-breaks") return "quantity-breaks-same";
   if (type === "quantity-breaks-different") return "quantity-breaks-different";
@@ -3203,14 +3180,6 @@ export function parseBxgyDiscountRules(discountRulesJson?: string | null): BxgyD
     for (const item of parsed) {
       if (!item || typeof item !== "object") continue;
       if ((item as { tierType?: unknown }).tierType === "single") {
-        out.push(
-          createDefaultSingleBxgyRule({
-            title: (item as { title?: string }).title || "",
-            subtitle: (item as { subtitle?: string }).subtitle || "",
-            badge: (item as { badge?: string }).badge || "",
-            isDefault: !!(item as { isDefault?: boolean }).isDefault,
-          }),
-        );
         continue;
       }
       
@@ -3231,6 +3200,10 @@ export function parseBxgyDiscountRules(discountRulesJson?: string | null): BxgyD
       const normalizedBuyQuantity = Math.trunc(buyQuantity);
       
       out.push({
+        id:
+          typeof (item as { id?: unknown }).id === "string"
+            ? (item as { id: string }).id
+            : undefined,
         count: normalizedBuyQuantity,
         buyQuantity: normalizedBuyQuantity,
         getQuantity: Math.trunc(getQuantity),
@@ -3267,14 +3240,6 @@ export function parseFreeGiftRules(discountRulesJson?: string | null): FreeGiftR
     for (const item of parsed) {
       if (!item || typeof item !== "object") continue;
       if ((item as { tierType?: unknown }).tierType === "single") {
-        out.push(
-          createDefaultSingleFreeGiftRule({
-            title: (item as { title?: string }).title || "",
-            subtitle: (item as { subtitle?: string }).subtitle || "",
-            badge: (item as { badge?: string }).badge || "",
-            isDefault: !!(item as { isDefault?: boolean }).isDefault,
-          }),
-        );
         continue;
       }
 
@@ -3284,6 +3249,10 @@ export function parseFreeGiftRules(discountRulesJson?: string | null): FreeGiftR
       if (!Number.isFinite(giftQuantity) || giftQuantity < 1) continue;
 
       out.push({
+        id:
+          typeof (item as { id?: unknown }).id === "string"
+            ? (item as { id: string }).id
+            : undefined,
         count: Math.trunc(count),
         giftQuantity: Math.trunc(giftQuantity),
         giftProductIds: Array.isArray((item as { giftProductIds?: unknown }).giftProductIds)
@@ -3310,7 +3279,6 @@ export function buildBxgyDiscountRulesJson(tiers: BxgyDiscountRule[]): BxgyDisco
   const dedupedByCount = new Map<string, BxgyDiscountRule>();
   for (const tier of normalizedTiers) {
     if (isSingleBxgyRule(tier)) {
-      dedupedByCount.set("__single__", createDefaultSingleBxgyRule(tier));
       continue;
     }
     const normalizedBuyQuantity = Math.max(
@@ -3319,6 +3287,7 @@ export function buildBxgyDiscountRulesJson(tiers: BxgyDiscountRule[]): BxgyDisco
     );
     if (!Number.isFinite(tier.getQuantity) || tier.getQuantity < 1) continue;
     dedupedByCount.set(`bxgy|${normalizedBuyQuantity}`, {
+      id: tier.id || buildDraftRuleId("bxgy_rule"),
       count: normalizedBuyQuantity,
       buyQuantity: normalizedBuyQuantity,
       getQuantity: Math.trunc(tier.getQuantity),
@@ -3367,7 +3336,6 @@ export function buildDifferentProductsDiscountRulesJson(
   const dedupedByCount = new Map<string, DifferentProductsDiscountRule>();
   for (const tier of normalizedTiers) {
     if (isSingleDifferentProductsRule(tier)) {
-      dedupedByCount.set("__single__", createDefaultSingleDifferentProductsRule(tier));
       continue;
     }
     const sanitized = sanitizeDifferentProductsTier(tier);
@@ -3382,12 +3350,12 @@ export function buildFreeGiftRulesJson(tiers: FreeGiftRule[]): FreeGiftRule[] {
   const dedupedByCount = new Map<string, FreeGiftRule>();
   for (const tier of normalizedTiers) {
     if (isSingleFreeGiftRule(tier)) {
-      dedupedByCount.set("__single__", createDefaultSingleFreeGiftRule(tier));
       continue;
     }
     if (!Number.isFinite(tier.count) || tier.count < 1) continue;
     if (!Number.isFinite(tier.giftQuantity) || tier.giftQuantity < 1) continue;
     dedupedByCount.set(`gift|${Math.trunc(tier.count)}`, {
+      id: tier.id || buildDraftRuleId("free_gift_rule"),
       count: Math.trunc(tier.count),
       giftQuantity: Math.trunc(tier.giftQuantity),
       giftProductIds: Array.isArray(tier.giftProductIds)

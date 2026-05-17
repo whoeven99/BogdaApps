@@ -1,11 +1,15 @@
 import type {
+  CampaignConfig,
   BxgyDiscountRule,
   CompleteBundleBar,
   DifferentProductsDiscountRule,
   DiscountRule,
   FreeGiftRule,
+  QuantityBreakTier,
 } from "../../../utils/offerParsing";
 import {
+  getPrimaryOfferTypeFromCampaignConfig,
+  isCompleteBundleSingleBar,
   isSingleBxgyRule,
   isSingleDifferentProductsRule,
   isSingleFreeGiftRule,
@@ -16,7 +20,6 @@ import {
   buildDiscountRulePresentation,
   buildDiscountRuleReward,
   getDiscountRuleType,
-  type ExistingRuleSets,
   type UnifiedRuleNode,
 } from "./unifiedRulesSchema";
 import { isExecutableDiscountRule } from "./unifiedRuleModel";
@@ -39,6 +42,55 @@ function buildBasePresentation(rule: {
   };
 }
 
+function buildDiscountRuleFromTier(
+  tier: QuantityBreakTier,
+  index: number,
+): DiscountRule {
+  return {
+    id: tier.id || `discount-rule-${index + 1}`,
+    count: Math.max(1, Math.trunc(Number(tier.qty) || 1)),
+    discountPercent: Math.max(0, Math.min(100, Number(tier.discountPercent) || 0)),
+    tierType: "standard",
+    title: tier.title || "",
+    subtitle: tier.subtitle || "",
+    badge: tier.badge || "",
+    isDefault: !!tier.isDefault,
+    discountClass:
+      tier.discountClass === "order" || tier.discountClass === "shipping"
+        ? tier.discountClass
+        : "product",
+    offerKind:
+      tier.offerKind === "free_gift" || tier.offerKind === "free_shipping"
+        ? tier.offerKind
+        : "percentage_discount",
+    conditionType: tier.conditionType === "cart_amount" ? "cart_amount" : "item_quantity",
+    amountThreshold: tier.amountThreshold,
+    rewardType:
+      tier.rewardType === "gift_product" || tier.rewardType === "free_shipping"
+        ? tier.rewardType
+        : "percentage_off",
+    rewardProductIds: Array.isArray(tier.rewardProductIds) ? tier.rewardProductIds : [],
+    giftQuantity: tier.giftQuantity,
+    logicType: tier.logicType === "bxgy" ? "bxgy" : "standard",
+    buyQuantity: tier.buyQuantity,
+    getQuantity: tier.getQuantity,
+    maxUsesPerOrder: tier.maxUsesPerOrder,
+  };
+}
+
+function resolveQuantityBreakSourceOfferType(config: CampaignConfig): OfferTypeId {
+  const primaryOfferType = getPrimaryOfferTypeFromCampaignConfig(config);
+  if (
+    primaryOfferType === "quantity-breaks-same" ||
+    primaryOfferType === "shipping-discount" ||
+    primaryOfferType === "order-discount" ||
+    primaryOfferType === "coupon"
+  ) {
+    return primaryOfferType;
+  }
+  return "quantity-breaks-same";
+}
+
 export function adaptDiscountRules(
   offerType: OfferTypeId,
   rules: DiscountRule[],
@@ -59,17 +111,25 @@ export function adaptDiscountRules(
 
 export function adaptBxgyRules(
   rules: BxgyDiscountRule[],
-  buyProductIds: string[],
+  fallbackBuyProductIds: string[],
   fallbackGetProductIds: string[],
 ): UnifiedRuleNode[] {
   return rules.map((rule, index) => ({
-    id: buildNodeId("bxgy-rule", index),
+    id: buildNodeId("bxgy-rule", index, rule.id),
     type: isSingleBxgyRule(rule) ? "single_purchase" : "bxgy",
     sourceOfferType: "bxgy",
     scope: {
       kind: "buy_get_products",
-      buyProductIds,
-      getProductIds: fallbackGetProductIds.length > 0 ? fallbackGetProductIds : buyProductIds,
+      buyProductIds:
+        rule.buyProductIds.length > 0 ? rule.buyProductIds : fallbackBuyProductIds,
+      getProductIds:
+        rule.getProductIds.length > 0
+          ? rule.getProductIds
+          : fallbackGetProductIds.length > 0
+            ? fallbackGetProductIds
+            : rule.buyProductIds.length > 0
+              ? rule.buyProductIds
+              : fallbackBuyProductIds,
     },
     condition: isSingleBxgyRule(rule)
       ? {
@@ -102,7 +162,7 @@ export function adaptFreeGiftRules(
   fallbackGiftProductIds: string[],
 ): UnifiedRuleNode[] {
   return rules.map((rule, index) => ({
-    id: buildNodeId("free-gift-rule", index),
+    id: buildNodeId("free-gift-rule", index, rule.id),
     type: isSingleFreeGiftRule(rule) ? "single_purchase" : "free_gift",
     sourceOfferType: "free-gift",
     scope: {
@@ -138,7 +198,7 @@ export function adaptDifferentProductsRules(
   rules: DifferentProductsDiscountRule[],
 ): UnifiedRuleNode[] {
   return rules.map((rule, index) => ({
-    id: buildNodeId("different-products-rule", index),
+    id: buildNodeId("different-products-rule", index, rule.id),
     type: isSingleDifferentProductsRule(rule)
       ? "single_purchase"
       : rule.tierType === "bxgy"
@@ -195,8 +255,10 @@ export function adaptDifferentProductsRules(
 export function adaptCompleteBundleBars(
   bars: CompleteBundleBar[],
 ): UnifiedRuleNode[] {
-  return bars.map((bar, index) => ({
-    id: buildNodeId("complete-bundle-bar", index, bar.id),
+  return bars
+    .filter((bar) => !isCompleteBundleSingleBar(bar))
+    .map((bar, index) => ({
+      id: buildNodeId("complete-bundle-bar", index, bar.id),
     type: "complete_bundle",
     sourceOfferType: "complete-bundle",
     scope: {
@@ -215,7 +277,7 @@ export function adaptCompleteBundleBars(
     },
     presentation: buildBasePresentation(bar),
     publishSupport: "supported",
-  }));
+    }));
 }
 
 export function adaptSubscriptionRule(
@@ -249,36 +311,55 @@ export function adaptSubscriptionRule(
   ];
 }
 
-export function buildUnifiedRulesSnapshot(
-  input: ExistingRuleSets,
+export function buildUnifiedRulesSnapshotFromCampaignConfig(
+  config: CampaignConfig | null,
 ): UnifiedRuleNode[] {
-  switch (input.offerType) {
-    case "bxgy":
-      return adaptBxgyRules(
-        input.bxgyDiscountRules,
-        input.buyProductIds,
-        input.getProductIds,
-      );
-    case "free-gift":
-      return adaptFreeGiftRules(
-        input.freeGiftRules,
-        input.freeGiftTriggerProductIds,
-        input.freeGiftGiftProductIds,
-      );
-    case "quantity-breaks-different":
-      return adaptDifferentProductsRules(input.differentProductsDiscountRules);
-    case "complete-bundle":
-      return adaptCompleteBundleBars(input.completeBundleBars);
-    case "subscription":
-      return adaptSubscriptionRule(
-        input.selectedProductIds,
-        input.subscriptionEnabled,
-      );
-    case "coupon":
-    case "order-discount":
-    case "shipping-discount":
-    case "quantity-breaks-same":
-    default:
-      return adaptDiscountRules(input.offerType, input.discountRules);
-  }
+  if (!config) return [];
+
+  const quantityBreakOfferType = resolveQuantityBreakSourceOfferType(config);
+
+  return config.logicBlocks.flatMap((block) => {
+    switch (block.type) {
+      case "quantity-breaks":
+        return adaptDiscountRules(
+          quantityBreakOfferType,
+          block.config.tiers.map((tier, index) => buildDiscountRuleFromTier(tier, index)),
+        );
+      case "quantity-breaks-different":
+        return adaptDifferentProductsRules(block.config.tiers);
+      case "bxgy": {
+        const fallbackBuyProductIds = Array.from(
+          new Set(
+            block.config.tiers.flatMap((rule) =>
+              Array.isArray(rule.buyProductIds) ? rule.buyProductIds : [],
+            ),
+          ),
+        );
+        const fallbackGetProductIds = Array.from(
+          new Set(
+            block.config.tiers.flatMap((rule) =>
+              Array.isArray(rule.getProductIds) ? rule.getProductIds : [],
+            ),
+          ),
+        );
+        return adaptBxgyRules(
+          block.config.tiers,
+          fallbackBuyProductIds,
+          fallbackGetProductIds,
+        );
+      }
+      case "free-gift":
+        return adaptFreeGiftRules(
+          block.config.tiers,
+          block.config.triggerProductIds,
+          block.config.giftProductIds,
+        );
+      case "complete-bundle":
+        return adaptCompleteBundleBars(block.config.bars);
+      case "subscription":
+        return adaptSubscriptionRule(block.config.productIds, block.config.enabled);
+      default:
+        return [];
+    }
+  });
 }

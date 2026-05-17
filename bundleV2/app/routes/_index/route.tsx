@@ -39,9 +39,8 @@ import {
   fetchActiveSubscriptions,
 } from "../../billing.server";
 import {
-  compileCampaignRuntimeOutputs,
   OFFER_TEXT_LIMITS,
-  buildLegacyFieldsFromCampaignConfig,
+  buildPersistedOfferFieldsFromCampaignConfig,
   clampNumber,
   getInvalidIpCountryCodes,
   normalizeCustomerProfileFilters,
@@ -324,24 +323,17 @@ function compileOfferRuntimeSyncData(offer: OfferListItem): {
 } {
   const parsedCampaignConfig = parseCampaignConfig(offer.campaignConfigJson);
   if (parsedCampaignConfig) {
-    const runtimeOutputs = compileCampaignRuntimeOutputs(parsedCampaignConfig);
-    const legacyFields = buildLegacyFieldsFromCampaignConfig(parsedCampaignConfig);
+    const persistedFields = buildPersistedOfferFieldsFromCampaignConfig(
+      parsedCampaignConfig,
+      offer.offerSettingsJson,
+    );
     return {
-      offerType: legacyFields.offerType,
-      selectedProductsJson:
-        runtimeOutputs.primaryModule?.selectedProductsJsonForFunction ??
-        (legacyFields.selectedProductsJson
-          ? trimSelectedProductsJsonForFunction(
-              legacyFields.offerType,
-              legacyFields.selectedProductsJson,
-            )
-          : null),
-      discountRulesJson:
-        runtimeOutputs.primaryModule?.discountRulesJson ?? legacyFields.discountRulesJson,
-      offerSettingsJson: legacyFields.offerSettingsJson,
-      referencedProductIds: runtimeOutputs.referencedProductIds,
-      storefrontHydration:
-        runtimeOutputs.primaryModule?.storefrontHydration ?? "none",
+      offerType: persistedFields.offerType,
+      selectedProductsJson: persistedFields.selectedProductsJsonForFunction,
+      discountRulesJson: persistedFields.discountRulesJson,
+      offerSettingsJson: persistedFields.offerSettingsJson,
+      referencedProductIds: persistedFields.referencedProductIds,
+      storefrontHydration: persistedFields.storefrontHydration,
     };
   }
 
@@ -2335,27 +2327,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       ) {
         return offerActionErrorResponse("Coupon offers require a shared coupon code.", 400);
       }
-      const derivedLegacyFields =
-        buildLegacyFieldsFromCampaignConfig(parsedCampaignConfig);
+      const persistedFields = buildPersistedOfferFieldsFromCampaignConfig(
+        parsedCampaignConfig,
+        JSON.stringify({
+          progressiveGifts: progressiveGiftsConfigToStorableJson(progressiveGiftsSanitized),
+        }),
+      );
       campaignConfigJson = JSON.stringify(parsedCampaignConfig);
-      offerType = derivedLegacyFields.offerType;
+      offerType = persistedFields.offerType;
       if (!selectedProductsJson) {
-        selectedProductsJson = derivedLegacyFields.selectedProductsJson || "";
+        selectedProductsJson = persistedFields.selectedProductsJson || "";
       }
-      discountRulesJson = derivedLegacyFields.discountRulesJson || discountRulesJson;
-      try {
-        const derivedOfferSettings = JSON.parse(
-          derivedLegacyFields.offerSettingsJson,
-        ) as Record<string, unknown>;
-        offerSettingsJson = JSON.stringify({
-          ...derivedOfferSettings,
-          progressiveGifts: progressiveGiftsConfigToStorableJson(progressiveGiftsSanitized),
-        });
-      } catch {
-        offerSettingsJson = JSON.stringify({
-          progressiveGifts: progressiveGiftsConfigToStorableJson(progressiveGiftsSanitized),
-        });
-      }
+      discountRulesJson = persistedFields.discountRulesJson || discountRulesJson;
+      offerSettingsJson = persistedFields.offerSettingsJson;
       status = parsedCampaignConfig.settings.status;
       startTimeRaw = parsedCampaignConfig.settings.startTime || startTimeRaw;
       endTimeRaw = parsedCampaignConfig.settings.endTime || endTimeRaw;

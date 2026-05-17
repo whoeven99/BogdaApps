@@ -388,18 +388,3 @@ export function getPublishSupportLabel(support: UnifiedRulePublishSupport): stri
       return "Support";
   }
 }
-
-export type ExistingRuleSets = {
-  offerType: OfferTypeId;
-  selectedProductIds: string[];
-  buyProductIds: string[];
-  getProductIds: string[];
-  freeGiftTriggerProductIds: string[];
-  freeGiftGiftProductIds: string[];
-  discountRules: DiscountRule[];
-  bxgyDiscountRules: BxgyDiscountRule[];
-  freeGiftRules: FreeGiftRule[];
-  differentProductsDiscountRules: DifferentProductsDiscountRule[];
-  completeBundleBars: CompleteBundleBar[];
-  subscriptionEnabled: boolean;
-};

@@ -1,6 +1,6 @@
 import { Button, Checkbox, Input, Select } from "antd";
 import {
-  isSingleDifferentProductsRule,
+  buildDraftRuleId,
   type DifferentProductsDiscountRule,
 } from "../../../utils/offerParsing";
 import type { DraftSelectedProduct } from "./campaignDraft";
@@ -37,6 +37,7 @@ function buildDefaultTier(
 ): DifferentProductsDiscountRule {
   const sharedProductIds = eligibleProductsData.map((product) => String(product.id));
   return {
+    id: buildDraftRuleId("different_products_rule"),
     count: 2,
     discountPercent: 15,
     buyQuantity: 2,
@@ -76,15 +77,10 @@ export default function DifferentProductsLogicEditor({
   updateRulePresentation,
 }: Props) {
   getDifferentProductsRuleCapability();
-  const indexedRules = differentProductsDiscountRules.map((rule, index) => ({
+  const ruleEntries = differentProductsDiscountRules.map((rule, index) => ({
     rule,
     actualIndex: index,
   }));
-  const singleEntry =
-    indexedRules.find((entry) => isSingleDifferentProductsRule(entry.rule)) || null;
-  const ruleEntries = indexedRules.filter(
-    (entry) => !isSingleDifferentProductsRule(entry.rule),
-  );
   const productOptions = eligibleProductsData.map((product) => ({
     label: product.title,
     value: String(product.id),
@@ -95,8 +91,11 @@ export default function DifferentProductsLogicEditor({
     actualIndex: number,
     patch: Partial<DifferentProductsDiscountRule>,
   ) => {
-    const ruleId = getDifferentProductsUnifiedRuleId(actualIndex);
     const currentRule = differentProductsDiscountRules[actualIndex];
+    const ruleId = getDifferentProductsUnifiedRuleId(
+      currentRule || buildDefaultTier(eligibleProductsData),
+      actualIndex,
+    );
     const normalizedPatch = normalizeRule({
       ...(currentRule || buildDefaultTier(eligibleProductsData)),
       ...patch,
@@ -123,84 +122,6 @@ export default function DifferentProductsLogicEditor({
       <OfferRuleNotice title="Cross-product rule scope" intent="info">
         Each bar is a mix-and-match threshold. Shoppers can combine any products from the shared eligible pool, and each bar can narrow that pool to a smaller subset.
       </OfferRuleNotice>
-      {singleEntry ? (
-        <OfferRuleCard key="single-different-products" index={0} disableRemove onRemove={() => {}}>
-          <OfferRuleFormGrid columns={3}>
-            <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-              Title
-              <Input
-                size="large"
-                className="mt-1"
-                value={singleEntry.rule.title || ""}
-                placeholder="e.g. Single"
-                onChange={(e) => {
-                  const ruleId = getDifferentProductsUnifiedRuleId(singleEntry.actualIndex);
-                  if (updateRulePresentation) {
-                    updateRulePresentation(ruleId, { title: e.target.value });
-                    return;
-                  }
-                  updateRule(singleEntry.actualIndex, { title: e.target.value });
-                }}
-              />
-            </label>
-            <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-              Subtitle
-              <Input
-                size="large"
-                className="mt-1"
-                value={singleEntry.rule.subtitle || ""}
-                placeholder="e.g. Standard price"
-                onChange={(e) => {
-                  const ruleId = getDifferentProductsUnifiedRuleId(singleEntry.actualIndex);
-                  if (updateRulePresentation) {
-                    updateRulePresentation(ruleId, { subtitle: e.target.value });
-                    return;
-                  }
-                  updateRule(singleEntry.actualIndex, { subtitle: e.target.value });
-                }}
-              />
-            </label>
-            <label className="block text-[14px] font-medium text-[#1c1f23] mb-1">
-              Badge
-              <Input
-                size="large"
-                className="mt-1"
-                value={singleEntry.rule.badge || ""}
-                placeholder="Optional"
-                onChange={(e) => {
-                  const ruleId = getDifferentProductsUnifiedRuleId(singleEntry.actualIndex);
-                  if (updateRulePresentation) {
-                    updateRulePresentation(ruleId, { badge: e.target.value });
-                    return;
-                  }
-                  updateRule(singleEntry.actualIndex, { badge: e.target.value });
-                }}
-              />
-            </label>
-          </OfferRuleFormGrid>
-          <OfferRuleFooterRow>
-            <Checkbox
-              checked={!!singleEntry.rule.isDefault}
-              onChange={(e) => {
-                const checked = e.target.checked;
-                const ruleId = getDifferentProductsUnifiedRuleId(singleEntry.actualIndex);
-                if (updateRulePresentation) {
-                  updateRulePresentation(ruleId, { isDefault: checked });
-                  return;
-                }
-                setDifferentProductsDiscountRules((prev) =>
-                  prev.map((currentRule, currentIndex) => ({
-                    ...currentRule,
-                    isDefault: checked ? currentIndex === singleEntry.actualIndex : false,
-                  })),
-                );
-              }}
-            >
-              Set as Default Selected
-            </Checkbox>
-          </OfferRuleFooterRow>
-        </OfferRuleCard>
-      ) : null}
       {ruleEntries.map(({ rule, actualIndex }, index) => {
         const normalizedRule = normalizeRule(rule);
         const eligibleProductsInTier = eligibleProductsData.filter((product) =>
@@ -220,7 +141,7 @@ export default function DifferentProductsLogicEditor({
             }}
           >
               {(() => {
-                const ruleId = getDifferentProductsUnifiedRuleId(actualIndex);
+                const ruleId = getDifferentProductsUnifiedRuleId(rule, actualIndex);
                 return (
                   <>
               <OfferRuleFormGrid columns={3}>

@@ -1,4 +1,7 @@
-import type { DiscountRule } from "../../../utils/offerParsing";
+import {
+  isSingleDiscountRule,
+  type DiscountRule,
+} from "../../../utils/offerParsing";
 
 export type DiscountTypeId =
   | "quantity_break"
@@ -60,6 +63,7 @@ export function normalizeUnifiedRule(rule: DiscountRule): DiscountRule {
 
   return {
     id: rule.id || buildRuleId(),
+    tierType: isSingleDiscountRule(rule) ? "single" : undefined,
     count: isBxgy
       ? normalizedBuyQuantity
       : Math.max(1, Math.trunc(Number(rule.count) || 1)),
@@ -423,7 +427,11 @@ export function getUnifiedRuleIssues(rules: DiscountRule[]): UnifiedRuleIssue[] 
       });
     }
 
-    if (rule.rewardType === "percentage_off" && rule.discountPercent <= 0) {
+    if (
+      !isSingleDiscountRule(rule) &&
+      rule.rewardType === "percentage_off" &&
+      rule.discountPercent <= 0
+    ) {
       issues.push({
         ruleIndex: index,
         severity: "error",
