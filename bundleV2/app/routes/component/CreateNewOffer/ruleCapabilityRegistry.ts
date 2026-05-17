@@ -13,7 +13,7 @@ export type UnifiedRuleTemplateId =
 
 export type DifferentProductsRuleTemplateId = "simple";
 
-export type CompleteBundleRuleTemplateId = "quantity-break-same" | "bxgy";
+export type CompleteBundleRuleTemplateId = "quantity-break-same";
 
 type RuleOption<T extends string> = {
   label: string;
@@ -120,11 +120,9 @@ export function getFreeGiftRuleCapability() {
 const COMPLETE_BUNDLE_RULE_CAPABILITY = {
   barTypeOptions: [
     { label: "Complete Bundle", value: "quantity-break-same" },
-    { label: "BXGY", value: "bxgy" },
   ] as RuleOption<CompleteBundleRuleTemplateId>[],
   addMenuItems: [
     { key: "quantity-break-same", label: "Add Complete Bundle Rule" },
-    { key: "bxgy", label: "Add BXGY Rule" },
   ] as AddMenuItem<CompleteBundleRuleTemplateId>[],
 };
 

@@ -116,7 +116,7 @@ export type CampaignDraftActions = {
     React.SetStateAction<DifferentProductsDiscountRule[]>
   >;
   setActiveBundleBarId: (barId: string) => void;
-  addCompleteBundleBar: (type: "quantity-break-same" | "bxgy") => void;
+  addCompleteBundleBar: (type: "quantity-break-same") => void;
   removeCompleteBundleBar: (barId: string) => void;
   clearCompleteBundleBars: () => void;
   updateCompleteBundleBar: (

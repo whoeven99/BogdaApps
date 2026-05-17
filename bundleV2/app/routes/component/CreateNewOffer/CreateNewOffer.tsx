@@ -399,6 +399,13 @@ function buildDiscountRulesJson(tiers: DiscountRule[]): DiscountRule[] {
     }
     if (tier.rewardType === "percentage_off" && !Number.isFinite(tier.discountPercent)) continue;
     const isBxgy = tier.logicType === "bxgy";
+    const rewardType = tier.rewardType || "percentage_off";
+    const discountClass =
+      rewardType === "gift_product"
+        ? "order"
+        : rewardType === "free_shipping"
+          ? "shipping"
+          : tier.discountClass || "product";
     const normalizedBuyQuantity = isBxgy
       ? Math.max(1, Math.trunc(Number(tier.buyQuantity) || Number(tier.count) || 2))
       : undefined;
@@ -411,14 +418,19 @@ function buildDiscountRulesJson(tiers: DiscountRule[]): DiscountRule[] {
       subtitle: tier.subtitle || "",
       badge: tier.badge || "",
       isDefault: !!tier.isDefault,
-      discountClass: tier.discountClass || "product",
-      offerKind: tier.offerKind || "percentage_discount",
+      discountClass,
+      offerKind:
+        rewardType === "gift_product"
+          ? "free_gift"
+          : rewardType === "free_shipping"
+            ? "free_shipping"
+            : tier.offerKind || "percentage_discount",
       conditionType: tier.conditionType || "item_quantity",
       amountThreshold:
         tier.conditionType === "cart_amount"
           ? Math.max(0, Number(tier.amountThreshold) || 0)
           : undefined,
-      rewardType: tier.rewardType || "percentage_off",
+      rewardType,
       rewardProductIds: Array.isArray(tier.rewardProductIds)
         ? tier.rewardProductIds
         : [],
@@ -502,6 +514,13 @@ function sanitizeDiscountRules(tiers: DiscountRule[]): DiscountRule[] {
     }
     const normalizedCount = Math.trunc(tier.count);
     const isBxgy = tier.logicType === "bxgy";
+    const rewardType = tier.rewardType || "percentage_off";
+    const discountClass =
+      rewardType === "gift_product"
+        ? "order"
+        : rewardType === "free_shipping"
+          ? "shipping"
+          : tier.discountClass || "product";
     const normalizedBuyQuantity = isBxgy
       ? Math.max(1, Math.trunc(Number(tier.buyQuantity) || normalizedCount || 2))
       : undefined;
@@ -512,10 +531,10 @@ function sanitizeDiscountRules(tiers: DiscountRule[]): DiscountRule[] {
     const key = [
       tier.tierType || "standard",
       tier.logicType || "standard",
-      tier.discountClass || "product",
+      discountClass,
       tier.conditionType || "item_quantity",
       normalizedThreshold ?? normalizedCount,
-      tier.rewardType || "percentage_off",
+      rewardType,
     ].join("|");
     dedupedByKey.set(key, {
       id: tier.id,
@@ -526,16 +545,16 @@ function sanitizeDiscountRules(tiers: DiscountRule[]): DiscountRule[] {
       subtitle: tier.subtitle || "",
       badge: tier.badge || "",
       isDefault: !!tier.isDefault,
-      discountClass: tier.discountClass || "product",
+      discountClass,
       offerKind:
-        tier.rewardType === "free_shipping"
+        rewardType === "free_shipping"
           ? "free_shipping"
-          : tier.rewardType === "gift_product"
+          : rewardType === "gift_product"
             ? "free_gift"
             : "percentage_discount",
       conditionType: tier.conditionType || "item_quantity",
       amountThreshold: normalizedThreshold,
-      rewardType: tier.rewardType || "percentage_off",
+      rewardType,
       rewardProductIds: Array.isArray(tier.rewardProductIds)
         ? tier.rewardProductIds
         : [],
@@ -1179,7 +1198,7 @@ export function CreateNewOffer({
   const createCompleteBundleBarId = () =>
     `bar-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const createDefaultCompleteBundleBar = (
-    type: "single" | "quantity-break-same" | "bxgy" = "quantity-break-same",
+    type: "single" | "quantity-break-same" = "quantity-break-same",
   ): CompleteBundleBar => ({
     ...(type === "single"
       ? createDefaultCompleteBundleSingleBar({
@@ -1432,7 +1451,7 @@ export function CreateNewOffer({
       ),
     );
   };
-  const addCompleteBundleBar = (type: "quantity-break-same" | "bxgy") => {
+  const addCompleteBundleBar = (type: "quantity-break-same") => {
     const nextBar = createDefaultCompleteBundleBar(type);
     const newBar: CompleteBundleBar = {
       ...nextBar,
@@ -2182,245 +2201,165 @@ export function CreateNewOffer({
       showCustomButton,
     });
 
-    let logicBlockId = "logic-campaign";
-    let scopeProductIds: string[] = [];
-    let logicBlocks: CampaignConfig["logicBlocks"] = [];
+    const selectedScopeProductIds = selectedProductsData.map((product) => String(product.id));
+    const quantityBreaksLogicBlock: CampaignConfig["logicBlocks"][number] = {
+      id: "logic-quantity-breaks",
+      type: "quantity-breaks",
+      config: {
+        tiers: normalizedDiscountRules.map((rule) => ({
+          qty: rule.count,
+          discountPercent: rule.discountPercent,
+          title: rule.title || "",
+          subtitle: rule.subtitle || "",
+          badge: rule.badge || "",
+          isDefault: !!rule.isDefault,
+          discountClass: rule.discountClass || "product",
+          offerKind: rule.offerKind || "percentage_discount",
+          conditionType: rule.conditionType || "item_quantity",
+          amountThreshold: rule.amountThreshold,
+          rewardType: rule.rewardType || "percentage_off",
+          rewardProductIds: Array.isArray(rule.rewardProductIds)
+            ? rule.rewardProductIds
+            : [],
+          giftQuantity: rule.giftQuantity,
+          logicType: rule.logicType === "bxgy" ? "bxgy" : "standard",
+          buyQuantity: rule.buyQuantity,
+          getQuantity: rule.getQuantity,
+          maxUsesPerOrder: rule.maxUsesPerOrder,
+        })),
+      },
+    };
+    const differentProductsLogicBlock: CampaignConfig["logicBlocks"][number] = {
+      id: "logic-quantity-breaks-different",
+      type: "quantity-breaks-different",
+      config: {
+        tiers: buildDifferentProductsDiscountRulesJson(
+          differentProductsDiscountRules,
+        ),
+      },
+    };
+    const bxgyLogicBlock: CampaignConfig["logicBlocks"][number] = {
+      id: "logic-bxgy",
+      type: "bxgy",
+      config: {
+        tiers: buildBxgyDiscountRulesJson(bxgyDiscountRules),
+      },
+    };
+    const freeGiftLogicBlock: CampaignConfig["logicBlocks"][number] = {
+      id: "logic-free-gift",
+      type: "free-gift",
+      config: {
+        triggerProductIds: freeGiftTriggerProducts,
+        giftProductIds: freeGiftSharedGiftProductIds,
+        tiers: buildFreeGiftRulesJson(freeGiftRules),
+      },
+    };
+    const completeBundleConfig = buildCompleteBundleConfig({
+      triggerProductIds: selectedScopeProductIds,
+      bars: completeBundleBars,
+    });
+    const completeBundleLogicBlock: CampaignConfig["logicBlocks"][number] = {
+      id: "logic-complete-bundle",
+      type: "complete-bundle",
+      config: completeBundleConfig,
+    };
+    const subscriptionLogicBlock: CampaignConfig["logicBlocks"][number] = {
+      id: "logic-subscription",
+      type: "subscription",
+      config: {
+        enabled: subscriptionEnabled,
+        position: subscriptionPosition,
+        title: subscriptionTitle,
+        subtitle: subscriptionSubtitle,
+        oneTimeTitle,
+        oneTimeSubtitle,
+        defaultSelected: subscriptionDefaultSelected,
+        productIds: selectedScopeProductIds,
+      },
+    };
+
+    const moduleDescriptors: Record<
+      OfferTypeId,
+      {
+        logicBlockId: string;
+        logicBlock: CampaignConfig["logicBlocks"][number];
+        scopeIds: string[];
+        includeAsAdditional: boolean;
+      }
+    > = {
+      "quantity-breaks-same": {
+        logicBlockId: "logic-quantity-breaks",
+        logicBlock: quantityBreaksLogicBlock,
+        scopeIds: selectedScopeProductIds,
+        includeAsAdditional: normalizedDiscountRules.length > 0,
+      },
+      "quantity-breaks-different": {
+        logicBlockId: "logic-quantity-breaks-different",
+        logicBlock: differentProductsLogicBlock,
+        scopeIds: selectedScopeProductIds,
+        includeAsAdditional: differentProductsDiscountRules.length > 0,
+      },
+      bxgy: {
+        logicBlockId: "logic-bxgy",
+        logicBlock: bxgyLogicBlock,
+        scopeIds: Array.from(new Set(buyProducts)),
+        includeAsAdditional: bxgyDiscountRules.length > 0,
+      },
+      "free-gift": {
+        logicBlockId: "logic-free-gift",
+        logicBlock: freeGiftLogicBlock,
+        scopeIds: Array.from(
+          new Set([
+            ...freeGiftTriggerProducts,
+            ...aggregatedFreeGiftRewardProductIds,
+          ]),
+        ),
+        includeAsAdditional: freeGiftRules.length > 0,
+      },
+      "complete-bundle": {
+        logicBlockId: "logic-complete-bundle",
+        logicBlock: completeBundleLogicBlock,
+        scopeIds: Array.from(
+          new Set([
+            ...selectedScopeProductIds,
+            ...completeBundleConfig.bars.flatMap((bar) =>
+              bar.products.map((product) => String(product.productId)),
+            ),
+          ]),
+        ),
+        includeAsAdditional: completeBundleBars.length > 0,
+      },
+      subscription: {
+        logicBlockId: "logic-subscription",
+        logicBlock: subscriptionLogicBlock,
+        scopeIds: selectedScopeProductIds,
+        includeAsAdditional: subscriptionEnabled,
+      },
+    };
+
+    const primaryModule = moduleDescriptors[offerType];
+    if (!primaryModule) {
+      return null;
+    }
+
+    const logicBlockId = primaryModule.logicBlockId;
+    let scopeProductIds = Array.from(new Set(primaryModule.scopeIds));
+    const logicBlocks: CampaignConfig["logicBlocks"] = [primaryModule.logicBlock];
     const addScopeProducts = (ids: string[]) => {
       scopeProductIds = Array.from(
         new Set([...scopeProductIds, ...ids.map((id) => String(id)).filter(Boolean)]),
       );
     };
 
-    if (offerType === "quantity-breaks-same") {
-      logicBlockId = "logic-quantity-breaks";
-      scopeProductIds = selectedProductsData.map((product) => String(product.id));
-      logicBlocks = [
-        {
-          id: logicBlockId,
-          type: "quantity-breaks",
-          config: {
-            tiers: normalizedDiscountRules.map((rule) => ({
-              qty: rule.count,
-              discountPercent: rule.discountPercent,
-              title: rule.title || "",
-              subtitle: rule.subtitle || "",
-              badge: rule.badge || "",
-              isDefault: !!rule.isDefault,
-              discountClass: rule.discountClass || "product",
-              offerKind: rule.offerKind || "percentage_discount",
-              conditionType: rule.conditionType || "item_quantity",
-              amountThreshold: rule.amountThreshold,
-              rewardType: rule.rewardType || "percentage_off",
-              rewardProductIds: Array.isArray(rule.rewardProductIds)
-                ? rule.rewardProductIds
-                : [],
-              giftQuantity: rule.giftQuantity,
-              logicType: rule.logicType === "bxgy" ? "bxgy" : "standard",
-              buyQuantity: rule.buyQuantity,
-              getQuantity: rule.getQuantity,
-              maxUsesPerOrder: rule.maxUsesPerOrder,
-            })),
-          },
-        },
-      ];
-    } else if (offerType === "quantity-breaks-different") {
-      logicBlockId = "logic-quantity-breaks-different";
-      scopeProductIds = selectedProductsData.map((product) => String(product.id));
-      logicBlocks = [
-        {
-          id: logicBlockId,
-          type: "quantity-breaks-different",
-          config: {
-            tiers: buildDifferentProductsDiscountRulesJson(
-              differentProductsDiscountRules,
-            ),
-          },
-        },
-      ];
-    } else if (offerType === "bxgy") {
-      logicBlockId = "logic-bxgy";
-      scopeProductIds = Array.from(new Set(buyProducts));
-      logicBlocks = [
-        {
-          id: logicBlockId,
-          type: "bxgy",
-          config: {
-            tiers: buildBxgyDiscountRulesJson(bxgyDiscountRules),
-          },
-        },
-      ];
-    } else if (offerType === "complete-bundle") {
-      logicBlockId = "logic-complete-bundle";
-      const completeBundleConfig = buildCompleteBundleConfig({
-        triggerProductIds: selectedProductsData.map((product) => String(product.id)),
-        bars: completeBundleBars,
-      });
-      scopeProductIds = Array.from(
-        new Set(
-          [
-            ...selectedProductsData.map((product) => String(product.id)),
-            ...completeBundleConfig.bars.flatMap((bar) =>
-              bar.products.map((product) => String(product.productId)),
-            ),
-          ],
-        ),
-      );
-      logicBlocks = [
-        {
-          id: logicBlockId,
-          type: "complete-bundle",
-          config: completeBundleConfig,
-        },
-      ];
-    } else if (offerType === "free-gift") {
-      logicBlockId = "logic-free-gift";
-      scopeProductIds = Array.from(
-        new Set([
-          ...freeGiftTriggerProducts,
-          ...aggregatedFreeGiftRewardProductIds,
-        ]),
-      );
-      logicBlocks = [
-        {
-          id: logicBlockId,
-          type: "free-gift",
-          config: {
-            triggerProductIds: freeGiftTriggerProducts,
-            giftProductIds: freeGiftSharedGiftProductIds,
-            tiers: buildFreeGiftRulesJson(freeGiftRules),
-          },
-        },
-      ];
-    } else if (offerType === "subscription") {
-      logicBlockId = "logic-subscription";
-      scopeProductIds = selectedProductsData.map((product) => String(product.id));
-      logicBlocks = [
-        {
-          id: logicBlockId,
-          type: "subscription",
-          config: {
-            enabled: subscriptionEnabled,
-            position: subscriptionPosition,
-            title: subscriptionTitle,
-            subtitle: subscriptionSubtitle,
-            oneTimeTitle,
-            oneTimeSubtitle,
-            defaultSelected: subscriptionDefaultSelected,
-            productIds: scopeProductIds,
-          },
-        },
-      ];
-    } else {
-      return null;
-    }
-
-    if (offerType !== "quantity-breaks-same" && normalizedDiscountRules.length > 0) {
-      logicBlocks.push({
-        id: "logic-quantity-breaks",
-        type: "quantity-breaks",
-        config: {
-          tiers: normalizedDiscountRules.map((rule) => ({
-            qty: rule.count,
-            discountPercent: rule.discountPercent,
-            title: rule.title || "",
-            subtitle: rule.subtitle || "",
-            badge: rule.badge || "",
-            isDefault: !!rule.isDefault,
-            discountClass: rule.discountClass || "product",
-            offerKind: rule.offerKind || "percentage_discount",
-            conditionType: rule.conditionType || "item_quantity",
-            amountThreshold: rule.amountThreshold,
-            rewardType: rule.rewardType || "percentage_off",
-            rewardProductIds: Array.isArray(rule.rewardProductIds)
-              ? rule.rewardProductIds
-              : [],
-            giftQuantity: rule.giftQuantity,
-            logicType: rule.logicType === "bxgy" ? "bxgy" : "standard",
-            buyQuantity: rule.buyQuantity,
-            getQuantity: rule.getQuantity,
-            maxUsesPerOrder: rule.maxUsesPerOrder,
-          })),
-        },
-      });
-      addScopeProducts(selectedProductsData.map((product) => String(product.id)));
-    }
-
-    if (offerType !== "quantity-breaks-different" && differentProductsDiscountRules.length > 0) {
-      logicBlocks.push({
-        id: "logic-quantity-breaks-different",
-        type: "quantity-breaks-different",
-        config: {
-          tiers: buildDifferentProductsDiscountRulesJson(differentProductsDiscountRules),
-        },
-      });
-      addScopeProducts(selectedProductsData.map((product) => String(product.id)));
-    }
-
-    if (offerType !== "bxgy" && bxgyDiscountRules.length > 0) {
-      logicBlocks.push({
-        id: "logic-bxgy",
-        type: "bxgy",
-        config: {
-          tiers: buildBxgyDiscountRulesJson(bxgyDiscountRules),
-        },
-      });
-      addScopeProducts(buyProducts);
-    }
-
-    if (offerType !== "free-gift" && freeGiftRules.length > 0) {
-      logicBlocks.push({
-        id: "logic-free-gift",
-        type: "free-gift",
-        config: {
-          triggerProductIds: freeGiftTriggerProducts,
-          giftProductIds: freeGiftSharedGiftProductIds,
-          tiers: buildFreeGiftRulesJson(freeGiftRules),
-        },
-      });
-      addScopeProducts([
-        ...freeGiftTriggerProducts,
-        ...aggregatedFreeGiftRewardProductIds,
-      ]);
-    }
-
-    if (offerType !== "complete-bundle" && completeBundleBars.length > 0) {
-      const completeBundleConfig = buildCompleteBundleConfig({
-        triggerProductIds: selectedProductsData.map((product) => String(product.id)),
-        bars: completeBundleBars,
-      });
-      logicBlocks.push({
-        id: "logic-complete-bundle",
-        type: "complete-bundle",
-        config: completeBundleConfig,
-      });
-      addScopeProducts(
-        [
-          ...(completeBundleConfig.triggerProductIds ?? []),
-          ...completeBundleConfig.bars.flatMap((bar) =>
-            bar.products.map((product) => String(product.productId)),
-          ),
-        ],
-      );
-    }
-
-    if (subscriptionEnabled && offerType !== "subscription") {
-      const subscriptionProductIds = selectedProductsData.map((product) => String(product.id));
-      logicBlocks.push({
-        id: "logic-subscription",
-        type: "subscription",
-        config: {
-          enabled: true,
-          position: subscriptionPosition,
-          title: subscriptionTitle,
-          subtitle: subscriptionSubtitle,
-          oneTimeTitle,
-          oneTimeSubtitle,
-          defaultSelected: subscriptionDefaultSelected,
-          productIds: subscriptionProductIds,
-        },
-      });
-      addScopeProducts(subscriptionProductIds);
-    }
+    (Object.entries(moduleDescriptors) as Array<
+      [OfferTypeId, (typeof moduleDescriptors)[OfferTypeId]]
+    >).forEach(([type, descriptor]) => {
+      if (type === offerType || !descriptor.includeAsAdditional) {
+        return;
+      }
+      logicBlocks.push(descriptor.logicBlock);
+      addScopeProducts(descriptor.scopeIds);
+    });
 
     return {
       version: 1,

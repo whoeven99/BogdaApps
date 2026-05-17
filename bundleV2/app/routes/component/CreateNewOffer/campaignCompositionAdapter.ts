@@ -337,7 +337,7 @@ function buildDefaultDiscountRule(type: CampaignBarType): DraftDiscountRule {
       rewardType: "gift_product",
       rewardProductIds: [],
       giftQuantity: 1,
-      discountClass: "product",
+      discountClass: "order",
     };
   }
 

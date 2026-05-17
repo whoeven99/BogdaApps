@@ -140,13 +140,6 @@ type BxgyDiscountRule = {
   tierType?: "single" | "bxgy" | "simple";
 };
 
-type FreeGiftRule = {
-  count: number;
-  giftQuantity: number;
-  giftProductIds: string[];
-  tierType?: "single";
-};
-
 type Offer = NonNullable<OfferMetafieldPayload["offers"]>[number];
 
 /** complete-bundle：整包计价方式（与主题端 offerParsing 对齐） */
@@ -163,7 +156,7 @@ type CompleteBundleProductRow = {
 
 type CompleteBundleBarRow = {
   id: string;
-  type?: "single" | "quantity-break-same" | "bxgy";
+  type?: "single" | "quantity-break-same";
   minQuantity: number;
   maxQuantity: number;
   excludeTriggerProduct: boolean;
@@ -177,40 +170,6 @@ function parseMoneyAmount(raw: unknown): number {
   if (raw == null) return 0;
   const n = typeof raw === "number" ? raw : Number(String(raw));
   return Number.isFinite(n) ? n : 0;
-}
-
-function parseFreeGiftRulesJson(discountRulesJson?: string | null): FreeGiftRule[] {
-  if (!discountRulesJson) return [];
-
-  try {
-    const parsed = JSON.parse(discountRulesJson) as unknown;
-    if (!Array.isArray(parsed)) return [];
-
-    const rules: FreeGiftRule[] = [];
-    for (const item of parsed) {
-      if (!item || typeof item !== "object") continue;
-      if ((item as { tierType?: unknown }).tierType === "single") continue;
-      const count = Number((item as { count?: unknown }).count);
-      const giftQuantity = Number((item as { giftQuantity?: unknown }).giftQuantity);
-      if (!Number.isFinite(count) || count < 1) continue;
-      if (!Number.isFinite(giftQuantity) || giftQuantity < 1) continue;
-
-      rules.push({
-        count: Math.max(1, Math.trunc(count)),
-        giftQuantity: Math.max(1, Math.trunc(giftQuantity)),
-        giftProductIds: Array.isArray((item as { giftProductIds?: unknown }).giftProductIds)
-          ? ((item as { giftProductIds: unknown[] }).giftProductIds)
-              .map((id) => String(id || "").trim())
-              .filter(Boolean)
-          : [],
-      });
-    }
-
-    rules.sort((a, b) => a.count - b.count);
-    return rules;
-  } catch {
-    return [];
-  }
 }
 
 /**
@@ -376,9 +335,7 @@ function parseCompleteBundleBarsJson(
         type:
           String((rawBar as { type?: unknown }).type || "") === "single"
             ? "single"
-            : String((rawBar as { type?: unknown }).type || "") === "bxgy"
-              ? "bxgy"
-              : "quantity-break-same",
+            : "quantity-break-same",
         minQuantity,
         maxQuantity,
         excludeTriggerProduct,
@@ -853,11 +810,11 @@ export function bundleCartDiscountGenerateRun(
     }
   }
 
-  // ② 过渡期保留 free gift 的旧商品折扣执行路径；S3 会迁移为 order reward。
-  if (hasProductDiscountClass) {
+  // ② free gift 作为 order reward 生成订单级 fixed-amount 候选。
+  if (hasOrderDiscountClass) {
     const freeGiftCandidates = calculateFreeGiftDiscount(input.cart.lines, freeGiftOffers);
     if (freeGiftCandidates.length > 0) {
-      productCandidates.push(...freeGiftCandidates);
+      orderCandidates.push(...freeGiftCandidates);
     }
   }
 
@@ -1025,6 +982,7 @@ type DiscountTier = {
   conditionType: "item_quantity" | "cart_amount";
   amountThreshold?: number;
   rewardType: "percentage_off" | "gift_product" | "free_shipping";
+  giftQuantity?: number;
   logicType: "standard" | "bxgy";
   buyQuantity?: number;
   getQuantity?: number;
@@ -1061,14 +1019,23 @@ function parseDiscountRulesJson(
               Math.trunc(Number((item as { buyQuantity?: unknown }).buyQuantity)),
             )
           : undefined;
+      const rewardType =
+        (item as { rewardType?: unknown }).rewardType === "gift_product" ||
+        (item as { rewardType?: unknown }).rewardType === "free_shipping"
+          ? ((item as { rewardType: "gift_product" | "free_shipping" }).rewardType)
+          : "percentage_off";
       tiers.push({
         count: logicType === "bxgy" ? normalizedBuyQuantity || Math.trunc(count) : Math.trunc(count),
         discountPercent: logicType === "bxgy" ? 100 : discountPercent,
         discountClass:
-          (item as { discountClass?: unknown }).discountClass === "order" ||
-          (item as { discountClass?: unknown }).discountClass === "shipping"
-            ? ((item as { discountClass: "order" | "shipping" }).discountClass)
-            : "product",
+          rewardType === "gift_product"
+            ? "order"
+            : rewardType === "free_shipping"
+              ? "shipping"
+              : (item as { discountClass?: unknown }).discountClass === "order" ||
+                  (item as { discountClass?: unknown }).discountClass === "shipping"
+                ? ((item as { discountClass: "order" | "shipping" }).discountClass)
+                : "product",
         conditionType:
           (item as { conditionType?: unknown }).conditionType === "cart_amount"
             ? "cart_amount"
@@ -1078,11 +1045,12 @@ function parseDiscountRulesJson(
         )
           ? Math.max(0, Number((item as { amountThreshold?: unknown }).amountThreshold))
           : undefined,
-        rewardType:
-          (item as { rewardType?: unknown }).rewardType === "gift_product" ||
-          (item as { rewardType?: unknown }).rewardType === "free_shipping"
-            ? ((item as { rewardType: "gift_product" | "free_shipping" }).rewardType)
-            : "percentage_off",
+        rewardType,
+        giftQuantity: Number.isFinite(
+          Number((item as { giftQuantity?: unknown }).giftQuantity),
+        )
+          ? Math.max(1, Math.trunc(Number((item as { giftQuantity?: unknown }).giftQuantity)))
+          : undefined,
         logicType,
         buyQuantity: normalizedBuyQuantity,
         getQuantity: Number.isFinite(
@@ -1746,14 +1714,17 @@ function calculateBxgyDiscount(
 function calculateFreeGiftDiscount(
   cartLines: CartInput["cart"]["lines"],
   offers: Offer[],
-): ProductDiscountCandidate[] {
-  const allCandidates: ProductDiscountCandidate[] = [];
+): OrderDiscountCandidate[] {
+  const allCartLineIds = cartLines.map((line) => line.id);
+  const allCandidates: OrderDiscountCandidate[] = [];
 
   for (const offer of offers) {
     const selection = parseFreeGiftSelection(offer.selectedProductsJson);
     const triggerProductIds = selection.triggerProductIds;
     const fallbackGiftProductIds = selection.giftProductIds;
-    const freeGiftRules = parseFreeGiftRulesJson(offer.discountRulesJson);
+    const freeGiftRules = parseDiscountRulesJson(offer.discountRulesJson).filter(
+      (rule) => rule.rewardType === "gift_product" && rule.discountClass === "order",
+    );
 
     if (!triggerProductIds.length || !freeGiftRules.length) {
       log("free_gift_skip_missing_configuration", {
@@ -1765,16 +1736,20 @@ function calculateFreeGiftDiscount(
     }
 
     let triggerQuantity = 0;
+    let triggerSubtotalAmount = 0;
     for (const line of cartLines) {
       if (line.merchandise.__typename !== "ProductVariant") continue;
       const productId = line.merchandise.product?.id;
       const variantId = line.merchandise.id;
       if (matchesAnyConfiguredId(triggerProductIds, productId, variantId)) {
-        triggerQuantity += Math.max(1, Math.trunc(Number(line.quantity) || 1));
+        const quantity = Math.max(1, Math.trunc(Number(line.quantity) || 1));
+        triggerQuantity += quantity;
+        triggerSubtotalAmount +=
+          parseMoneyAmount(line.cost?.amountPerQuantity?.amount) * quantity;
       }
     }
 
-    if (triggerQuantity <= 0) {
+    if (triggerQuantity <= 0 && triggerSubtotalAmount <= 0) {
       log("free_gift_skip_no_trigger_quantity", {
         offerId: offer.id,
         triggerProductIds,
@@ -1782,25 +1757,50 @@ function calculateFreeGiftDiscount(
       continue;
     }
 
-    let bestRule: FreeGiftRule | null = null;
-    for (const rule of freeGiftRules) {
-      if (triggerQuantity >= rule.count) {
-        bestRule = rule;
+    const eligibleRules = freeGiftRules.filter((rule) =>
+      evaluateRuleCondition(rule, {
+        totalQuantity: triggerQuantity,
+        subtotalAmount: triggerSubtotalAmount,
+      }),
+    );
+    const bestRule = eligibleRules.reduce<DiscountTier | null>((best, current) => {
+      if (!best) return current;
+      const currentGiftQuantity = Math.max(
+        1,
+        Math.trunc(Number(current.giftQuantity) || 1),
+      );
+      const bestGiftQuantity = Math.max(1, Math.trunc(Number(best.giftQuantity) || 1));
+      if (currentGiftQuantity !== bestGiftQuantity) {
+        return currentGiftQuantity > bestGiftQuantity ? current : best;
       }
-    }
+      const currentThreshold =
+        current.conditionType === "cart_amount"
+          ? Math.max(0, Number(current.amountThreshold) || 0)
+          : Math.max(1, Math.trunc(Number(current.count) || 1));
+      const bestThreshold =
+        best.conditionType === "cart_amount"
+          ? Math.max(0, Number(best.amountThreshold) || 0)
+          : Math.max(1, Math.trunc(Number(best.count) || 1));
+      return currentThreshold >= bestThreshold ? current : best;
+    }, null);
 
     if (!bestRule) {
       log("free_gift_skip_threshold_not_met", {
         offerId: offer.id,
         triggerQuantity,
-        thresholds: freeGiftRules.map((rule) => rule.count),
+        triggerSubtotalAmount,
+        thresholds: freeGiftRules.map((rule) =>
+          rule.conditionType === "cart_amount"
+            ? Math.max(0, Number(rule.amountThreshold) || 0)
+            : rule.count,
+        ),
       });
       continue;
     }
 
     const eligibleGiftProductIds =
-      bestRule.giftProductIds.length > 0
-        ? bestRule.giftProductIds
+      bestRule.rewardProductIds.length > 0
+        ? bestRule.rewardProductIds
         : fallbackGiftProductIds;
     if (!eligibleGiftProductIds.length) {
       log("free_gift_skip_no_reward_products", {
@@ -1811,7 +1811,9 @@ function calculateFreeGiftDiscount(
       continue;
     }
 
-    let remainingGiftQuantity = bestRule.giftQuantity;
+    let remainingGiftQuantity = Math.max(1, Math.trunc(Number(bestRule.giftQuantity) || 1));
+    let totalGiftDiscountAmount = 0;
+    const discountedGiftLineIds = new Set<string>();
     for (const line of cartLines) {
       if (remainingGiftQuantity <= 0) break;
       if (line.merchandise.__typename !== "ProductVariant") continue;
@@ -1827,15 +1829,9 @@ function calculateFreeGiftDiscount(
       );
       if (discountQuantity <= 0) continue;
 
-      allCandidates.push({
-        message: offer.cartTitle || "Free gift",
-        targets: [{ cartLine: { id: line.id, quantity: discountQuantity } }],
-        value: {
-          percentage: {
-            value: "100.0",
-          },
-        },
-      });
+      totalGiftDiscountAmount +=
+        parseMoneyAmount(line.cost?.amountPerQuantity?.amount) * discountQuantity;
+      discountedGiftLineIds.add(line.id);
 
       remainingGiftQuantity -= discountQuantity;
       log("free_gift_candidate_added", {
@@ -1843,8 +1839,32 @@ function calculateFreeGiftDiscount(
         cartLineId: line.id,
         quantity: discountQuantity,
         selectedRuleCount: bestRule.count,
+        selectedRuleAmountThreshold: bestRule.amountThreshold,
       });
     }
+
+    if (totalGiftDiscountAmount <= 0 || discountedGiftLineIds.size === 0) {
+      continue;
+    }
+
+    const excludedCartLineIds = allCartLineIds.filter(
+      (id) => !discountedGiftLineIds.has(id),
+    );
+    allCandidates.push({
+      message: offer.cartTitle || "Free gift",
+      targets: [
+        {
+          orderSubtotal: {
+            excludedCartLineIds,
+          },
+        },
+      ],
+      value: {
+        fixedAmount: {
+          amount: totalGiftDiscountAmount.toFixed(2),
+        },
+      },
+    });
   }
 
   return allCandidates;

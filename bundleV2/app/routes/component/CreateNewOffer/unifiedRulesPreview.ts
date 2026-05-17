@@ -470,9 +470,7 @@ function buildCompleteBundleItem(
     saveLabel:
       saved > 0
         ? `SAVE ${params.formatPrice(saved)}`
-        : bar.type !== "bxgy"
-          ? `SELECT ${maxQuantity} ITEMS`
-          : undefined,
+        : `SELECT ${maxQuantity} ITEMS`,
     products: products.length > 0 ? products : undefined,
   };
 }

@@ -386,7 +386,7 @@ function DiscountRuleBarDetail({
         </FieldGrid>
         {!isBxgy && conditionTypeOptions.length === 1 ? (
           <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
-            Cart amount is currently available only for order discount and free shipping rules in this builder path.
+            Cart amount is currently available only for order discount, free gift, and free shipping rules in this builder path.
           </div>
         ) : null}
       </BuilderSection>

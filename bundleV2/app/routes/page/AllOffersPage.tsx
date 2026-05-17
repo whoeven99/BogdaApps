@@ -135,15 +135,28 @@ export function AllOffersPage({
     searchParams.get("toast") ||
     (actionData && "toast" in actionData ? actionData.toast : undefined);
   const activeOffersCount = rows.filter((offer) => offer.isActive).length;
+  const displayRows = useMemo(
+    () =>
+      rows.map((offer) => ({
+        offer,
+        displayType: getOfferDisplayType(offer.offerType, offer.campaignConfigJson),
+        rulesText: getOfferRulesText({
+          campaignConfigJson: offer.campaignConfigJson,
+          discountRulesJson: offer.discountRulesJson,
+        }),
+      })),
+    [rows],
+  );
   const filteredRows = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
-    const nextRows = rows.filter((offer) => {
+    const nextRows = displayRows.filter(({ offer, displayType, rulesText }) => {
       if (pendingDeleteIds.has(offer.id)) return false;
       const matchesSearch =
         !normalizedSearch ||
         offer.name.toLowerCase().includes(normalizedSearch) ||
         offer.cartTitle.toLowerCase().includes(normalizedSearch) ||
-        offer.offerType.toLowerCase().includes(normalizedSearch);
+        displayType.toLowerCase().includes(normalizedSearch) ||
+        rulesText.toLowerCase().includes(normalizedSearch);
       const matchesStatus =
         statusFilter === "all" ||
         (statusFilter === "active" && offer.isActive) ||
@@ -153,16 +166,22 @@ export function AllOffersPage({
 
     nextRows.sort((a, b) => {
       if (sortKey === "name-asc") {
-        return a.name.localeCompare(b.name);
+        return a.offer.name.localeCompare(b.offer.name);
       }
       if (sortKey === "created-desc") {
-        return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+        return (
+          new Date(b.offer.createdAt || 0).getTime() -
+          new Date(a.offer.createdAt || 0).getTime()
+        );
       }
-      return new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime();
+      return (
+        new Date(b.offer.updatedAt || 0).getTime() -
+        new Date(a.offer.updatedAt || 0).getTime()
+      );
     });
 
     return nextRows;
-  }, [rows, searchTerm, statusFilter, sortKey, pendingDeleteIds]);
+  }, [displayRows, searchTerm, statusFilter, sortKey, pendingDeleteIds]);
 
   useEffect(() => {
     if (toast?.startsWith("delete-success")) {
@@ -290,7 +309,7 @@ export function AllOffersPage({
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search by offer name, display name, or type"
+                placeholder="Search by offer name, display name, type, or rule summary"
                 className="mt-[6px] w-full rounded-[8px] border border-[#dfe3e8] px-[12px] py-[9px] text-[14px] text-[#1c1f23] outline-none transition-colors placeholder:text-[#8c9196] focus:border-[#008060]"
               />
             </label>
@@ -364,7 +383,7 @@ export function AllOffersPage({
                 </td>
               </tr>
             ) : (
-              filteredRows.map((offer) => {
+              filteredRows.map(({ offer, displayType, rulesText }) => {
                 const isToggling = getIsToggling(offer.id);
                 const optimisticStatus = pendingToggleStatus[offer.id];
                 const displayIsActive = themeExtensionBlocksOffers
@@ -373,16 +392,7 @@ export function AllOffersPage({
                     ? optimisticStatus
                     : offer.isActive;
                 const statusLabel = displayIsActive ? "Active" : "Inactive";
-                const displayType = getOfferDisplayType(
-                  offer.offerType,
-                  offer.campaignConfigJson,
-                );
 
-                const rulesText = getOfferRulesText({
-                  campaignConfigJson: offer.campaignConfigJson,
-                  discountRulesJson: offer.discountRulesJson,
-                });
-                  
                 const formatTime = (timeStr: string | Date | undefined) => {
                   if (!timeStr) return "-";
                   const d = dayjs(timeStr);

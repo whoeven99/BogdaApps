@@ -151,8 +151,8 @@ export default function UnifiedRulesEditor({
               </div>
               {!usesBxgy && conditionTypeOptions.length === 1 ? (
                 <div className="mt-3 rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[13px] text-[#5c6166]">
-                  Cart amount is currently available only for order discount and free
-                  shipping rules.
+                  Cart amount is currently available only for order discount, free
+                  gift, and free shipping rules.
                 </div>
               ) : null}
 
@@ -166,12 +166,14 @@ export default function UnifiedRulesEditor({
                   <Input
                     size="large"
                     type="number"
-                    min={1}
-                    step={1}
+                    min={usesCartAmount ? 0.01 : 1}
+                    step={usesCartAmount ? 0.01 : 1}
                     className="mt-1"
                     value={usesCartAmount ? rule.amountThreshold || 0 : rule.count}
                     onChange={(e) => {
-                      const value = Math.max(1, Number(e.target.value) || 0);
+                      const value = usesCartAmount
+                        ? Math.max(0, Number(e.target.value) || 0)
+                        : Math.max(1, Number(e.target.value) || 0);
                       updateRule(
                         index,
                         usesCartAmount

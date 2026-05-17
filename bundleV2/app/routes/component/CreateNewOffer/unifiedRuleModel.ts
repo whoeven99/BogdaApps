@@ -40,16 +40,20 @@ function buildRuleId() {
 }
 
 export function normalizeUnifiedRule(rule: DiscountRule): DiscountRule {
-  const discountClass =
-    rule.discountClass === "order" || rule.discountClass === "shipping"
-      ? rule.discountClass
-      : "product";
   const conditionType =
     rule.conditionType === "cart_amount" ? "cart_amount" : "item_quantity";
   const rewardType =
     rule.rewardType === "gift_product" || rule.rewardType === "free_shipping"
       ? rule.rewardType
       : "percentage_off";
+  const discountClass =
+    rewardType === "gift_product"
+      ? "order"
+      : rewardType === "free_shipping"
+        ? "shipping"
+        : rule.discountClass === "order" || rule.discountClass === "shipping"
+          ? rule.discountClass
+          : "product";
   const normalizedBuyQuantity = Math.max(1, Math.trunc(Number(rule.buyQuantity) || 2));
   const normalizedGetQuantity = Math.max(1, Math.trunc(Number(rule.getQuantity) || 1));
   const isBxgy = rule.logicType === "bxgy";
@@ -68,9 +72,11 @@ export function normalizeUnifiedRule(rule: DiscountRule): DiscountRule {
     isDefault: !!rule.isDefault,
     discountClass,
     offerKind:
-      rule.offerKind === "free_gift" || rule.offerKind === "free_shipping"
-        ? rule.offerKind
-        : "percentage_discount",
+      rewardType === "gift_product"
+        ? "free_gift"
+        : rewardType === "free_shipping"
+          ? "free_shipping"
+          : "percentage_discount",
     conditionType,
     amountThreshold:
       conditionType === "cart_amount"
@@ -120,7 +126,7 @@ export function createRuleFromTemplate(
       id: buildRuleId(),
       count: 2,
       discountPercent: 0,
-      discountClass: "product",
+      discountClass: "order",
       offerKind: "free_gift",
       conditionType: "item_quantity",
       rewardType: "gift_product",
@@ -183,7 +189,7 @@ export function applyDiscountType(rule: DiscountRule, discountType: DiscountType
     return syncRuleDependencies({
       ...normalized,
       logicType: "standard",
-      discountClass: "product",
+      discountClass: "order",
       offerKind: "free_gift",
       rewardType: "gift_product",
       giftQuantity: Math.max(1, Math.trunc(Number(normalized.giftQuantity) || 1)),
@@ -258,10 +264,8 @@ export function syncRuleDependencies(rule: DiscountRule): DiscountRule {
   if (normalized.rewardType === "gift_product") {
     return {
       ...normalized,
-      discountClass: "product",
+      discountClass: "order",
       offerKind: "free_gift",
-      conditionType: "item_quantity",
-      amountThreshold: undefined,
       discountPercent: 0,
       giftQuantity: Math.max(1, Math.trunc(Number(normalized.giftQuantity) || 1)),
       logicType: "standard",
@@ -316,7 +320,8 @@ export function supportsCartAmountCondition(rule: DiscountRule): boolean {
   if (normalized.logicType === "bxgy") return false;
   if (
     normalized.discountClass === "order" &&
-    normalized.rewardType === "percentage_off"
+    (normalized.rewardType === "percentage_off" ||
+      normalized.rewardType === "gift_product")
   ) {
     return true;
   }
@@ -398,7 +403,7 @@ export function getUnifiedRuleIssues(rules: DiscountRule[]): UnifiedRuleIssue[] 
         ruleIndex: index,
         severity: "error",
         message:
-          "Cart amount triggers are currently supported only for order discounts and free shipping rules.",
+          "Cart amount triggers are currently supported only for order discounts, free gift rules, and free shipping rules.",
       });
     }
 
@@ -424,16 +429,6 @@ export function getUnifiedRuleIssues(rules: DiscountRule[]): UnifiedRuleIssue[] 
         severity: "error",
         message: "Percentage rewards must use a discount greater than 0%.",
       });
-    }
-
-    if (rule.rewardType === "gift_product") {
-      if (rule.discountClass !== "product") {
-        issues.push({
-          ruleIndex: index,
-          severity: "error",
-          message: "Gift product rewards must use the Product discount class.",
-        });
-      }
     }
 
     if (rule.rewardType === "free_shipping" && rule.discountClass !== "shipping") {

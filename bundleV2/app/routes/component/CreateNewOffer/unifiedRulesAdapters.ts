@@ -197,26 +197,17 @@ export function adaptCompleteBundleBars(
 ): UnifiedRuleNode[] {
   return bars.map((bar, index) => ({
     id: buildNodeId("complete-bundle-bar", index, bar.id),
-    type: bar.type === "bxgy" ? "bxgy" : "complete_bundle",
+    type: "complete_bundle",
     sourceOfferType: "complete-bundle",
     scope: {
       kind: "bundle_bar_products",
       barId: bar.id,
       productIds: bar.products.map((product) => String(product.productId)),
     },
-    condition:
-      bar.type === "bxgy"
-        ? {
-            kind: "buy_x_get_y",
-            triggerCount: Math.max(1, Math.trunc(Number(bar.maxQuantity) || Number(bar.quantity) || 1)),
-            buyQuantity: Math.max(1, Math.trunc(Number(bar.maxQuantity) || Number(bar.quantity) || 1)),
-            getQuantity: 1,
-            maxUsesPerOrder: 1,
-          }
-        : {
-            kind: "bundle_completion",
-            quantity: Math.max(1, Math.trunc(Number(bar.maxQuantity) || Number(bar.quantity) || 1)),
-          },
+    condition: {
+      kind: "bundle_completion",
+      quantity: Math.max(1, Math.trunc(Number(bar.maxQuantity) || Number(bar.quantity) || 1)),
+    },
     reward: {
       kind: "bundle_pricing",
       pricingMode: bar.pricing.mode,

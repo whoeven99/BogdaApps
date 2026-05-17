@@ -773,6 +773,8 @@ function parseFreeGiftConfig(selectedProductsJson, discountRulesJson) {
           if (String(item.tierType || "") === "single") {
             return {
               count: CIWI_SINGLE_OPTION_COUNT,
+              conditionType: "item_quantity",
+              amountThreshold: undefined,
               giftQuantity: 0,
               giftProductIds: [],
               tierType: "single",
@@ -783,12 +785,22 @@ function parseFreeGiftConfig(selectedProductsJson, discountRulesJson) {
             };
           }
           const count = Math.max(1, Math.trunc(Number(item.count) || 1));
+          const conditionType =
+            String(item.conditionType || "") === "cart_amount"
+              ? "cart_amount"
+              : "item_quantity";
+          const amountThreshold =
+            conditionType === "cart_amount"
+              ? Math.max(0, Number(item.amountThreshold) || 0)
+              : undefined;
           const giftQuantity = Math.max(1, Math.trunc(Number(item.giftQuantity) || 1));
           const perRuleGiftProducts = Array.isArray(item.giftProductIds)
             ? item.giftProductIds.map((id) => String(id || "").trim()).filter(Boolean)
             : [];
           return {
             count,
+            conditionType,
+            amountThreshold,
             giftQuantity,
             giftProductIds: perRuleGiftProducts,
             tierType: undefined,
@@ -798,13 +810,68 @@ function parseFreeGiftConfig(selectedProductsJson, discountRulesJson) {
             isDefault: !!item.isDefault,
           };
         })
-        .sort((a, b) => a.count - b.count);
+        .sort((a, b) => {
+          const left =
+            a.conditionType === "cart_amount"
+              ? Math.max(0, Number(a.amountThreshold) || 0)
+              : Math.max(0, Number(a.count) || 0);
+          const right =
+            b.conditionType === "cart_amount"
+              ? Math.max(0, Number(b.amountThreshold) || 0)
+              : Math.max(0, Number(b.count) || 0);
+          return left - right;
+        });
     }
   } catch {
     tiers = [];
   }
 
   return { triggerProducts, giftProducts, tiers };
+}
+
+function getFreeGiftRuleTriggerValue(rule) {
+  if (!rule || String(rule.tierType || "") === "single") {
+    return CIWI_SINGLE_OPTION_COUNT;
+  }
+  if (rule.conditionType === "cart_amount") {
+    return Math.max(0, Number(rule.amountThreshold) || 0);
+  }
+  return Math.max(1, Math.trunc(Number(rule.count) || 1));
+}
+
+function getFreeGiftTriggerMetrics(quantityOverride) {
+  const quantity =
+    quantityOverride == null
+      ? getCurrentQuantityFromThemeForm()
+      : Math.max(1, Math.trunc(Number(quantityOverride) || 1));
+  const unitPrice = Math.max(0, Number(getCurrentUnitPrice()) || 0);
+  return {
+    totalQuantity: quantity,
+    subtotalAmount: Math.round(unitPrice * quantity * 100) / 100,
+  };
+}
+
+function isFreeGiftRuleUnlocked(rule, metrics) {
+  if (!rule || String(rule.tierType || "") === "single") return false;
+  if (rule.conditionType === "cart_amount") {
+    const threshold = Math.max(0, Number(rule.amountThreshold) || 0);
+    return threshold > 0 && Number(metrics?.subtotalAmount || 0) >= threshold;
+  }
+  return Number(metrics?.totalQuantity || 0) >= Math.max(1, Math.trunc(Number(rule.count) || 1));
+}
+
+function resolveActiveFreeGiftRule(offer, options) {
+  const config = parseFreeGiftConfig(offer?.selectedProductsJson, offer?.discountRulesJson);
+  const giftRules = config.tiers.filter((rule) => String(rule.tierType || "") !== "single");
+  if (!giftRules.length) return null;
+  const metrics = getFreeGiftTriggerMetrics(options?.quantity);
+  const eligibleRules = giftRules.filter((rule) => isFreeGiftRuleUnlocked(rule, metrics));
+  if (!eligibleRules.length) {
+    return options?.fallbackToDefault
+      ? giftRules.find((rule) => rule.isDefault) || giftRules[0] || null
+      : null;
+  }
+  return eligibleRules[eligibleRules.length - 1] || null;
 }
 
 function parseCompleteBundleConfig(selectedProductsJson) {
@@ -879,12 +946,7 @@ function parseCompleteBundleConfig(selectedProductsJson) {
           }
           return {
             id: String(bar.id),
-            type:
-              String(bar.type || "") === "single"
-                ? "single"
-                : bar.type === "bxgy"
-                  ? "bxgy"
-                  : "quantity-break-same",
+            type: String(bar.type || "") === "single" ? "single" : "quantity-break-same",
             title: String(bar.title || ""),
             subtitle: String(bar.subtitle || ""),
             badge: String(bar.badge || ""),
@@ -940,7 +1002,7 @@ function normalizeCompleteBundleBarsConfig(bars) {
     }
     bundleBars.push({
       ...bar,
-      type: bar.type === "bxgy" ? "bxgy" : "quantity-break-same",
+      type: "quantity-break-same",
       badge: String(bar.badge || ""),
       isDefault: !!bar.isDefault,
     });
@@ -1534,6 +1596,16 @@ function computeSelectedBarIndexForOffer(offer, options) {
     }
     return idx >= 0 ? idx + 1 : 0;
   }
+  if (offer.offerType === "free-gift") {
+    const config = parseFreeGiftConfig(offer.selectedProductsJson, offer.discountRulesJson);
+    const activeRule = resolveActiveFreeGiftRule(offer, options);
+    if (!activeRule) return 0;
+    const giftRules = config.tiers.filter((rule) => String(rule.tierType || "") !== "single");
+    const idx = giftRules.findIndex(
+      (rule) => getFreeGiftRuleTriggerValue(rule) === getFreeGiftRuleTriggerValue(activeRule),
+    );
+    return idx >= 0 ? idx + 1 : 1;
+  }
   const sc = getSelectedCountForOffer(offer, options);
   if (sc == null || sc === CIWI_SINGLE_OPTION_COUNT) return 0;
   if (offer.offerType === "bxgy") {
@@ -1554,11 +1626,8 @@ function computeSelectedBarIndexForOffer(offer, options) {
 function getDefaultSelectedCountForOffer(offer) {
   if (!offer) return 1;
   if (offer.offerType === "free-gift") {
-    const config = parseFreeGiftConfig(offer.selectedProductsJson, offer.discountRulesJson);
-    const defaultRule = config.tiers.find((tier) => tier.isDefault) || config.tiers[0];
-    return Number.isFinite(Number(defaultRule?.count))
-      ? Math.trunc(Number(defaultRule.count))
-      : 1;
+    const defaultRule = resolveActiveFreeGiftRule(offer, { fallbackToDefault: true });
+    return defaultRule ? getFreeGiftRuleTriggerValue(defaultRule) : 1;
   }
   if (offer.offerType === "bxgy") {
     const rules = parseBxgyDiscountRulesJson(offer.discountRulesJson);
@@ -2107,6 +2176,7 @@ function ensureBundleLineProperties(offer, options) {
   const selectedCount = getSelectedCountForOffer(offer, { fallbackToDefault });
   if (
     (offer.offerType === "complete-bundle" && bar <= 0) ||
+    (offer.offerType === "free-gift" && bar <= 0) ||
     (offer.offerType !== "complete-bundle" && selectedCount === CIWI_SINGLE_OPTION_COUNT)
   ) {
     return;
@@ -2420,6 +2490,16 @@ function getBxgyDisplayMeta(rule) {
 }
 
 function getCartQuantityForSelectedOffer(offer, selectedCount) {
+  if (offer?.offerType === "free-gift") {
+    const config = parseFreeGiftConfig(offer.selectedProductsJson, offer.discountRulesJson);
+    const hasCartAmountRule = config.tiers.some(
+      (rule) =>
+        String(rule.tierType || "") !== "single" && rule.conditionType === "cart_amount",
+    );
+    if (hasCartAmountRule) {
+      return getCurrentQuantityFromThemeForm();
+    }
+  }
   const rawSelectedCount =
     selectedCount === null || selectedCount === undefined || selectedCount === ""
       ? getDefaultSelectedCountForOffer(offer)
@@ -2768,9 +2848,14 @@ window.ciwiHandleBundleAddToCart = function(event) {
     explicitCount !== CIWI_SINGLE_OPTION_COUNT
   ) {
     performFreeGiftCartAdd()
-      .then((ok) => (ok ? notifyThemeAfterCartAdd() : false))
+      .then((ok) => {
+        if (ok) return notifyThemeAfterCartAdd();
+        submitBundleFormFallback();
+        return false;
+      })
       .catch((error) => {
         console.error("[ciwi] performFreeGiftCartAdd failed", error);
+        submitBundleFormFallback();
       });
     return;
   }
@@ -3122,12 +3207,7 @@ async function performFreeGiftCartAdd() {
   );
   if (!config.tiers.length) return false;
 
-  let selectedRule = null;
-  for (const tier of config.tiers) {
-    if (quantity >= tier.count) {
-      selectedRule = tier;
-    }
-  }
+  const selectedRule = resolveActiveFreeGiftRule(currentOffer, { quantity });
   if (!selectedRule) return false;
 
   const giftVariantId = resolveFreeGiftVariantId(currentOffer, selectedRule);
@@ -3449,7 +3529,10 @@ function renderBundlePreviewHtml(offer) {
     );
     if (!freeGiftConfig.tiers.length) return "";
 
-    const selectedCount = getSelectedCountForOffer(offer);
+    const activeRule = resolveActiveFreeGiftRule(offer);
+    const selectedTriggerValue = activeRule
+      ? getFreeGiftRuleTriggerValue(activeRule)
+      : CIWI_SINGLE_OPTION_COUNT;
 
     let offerSettings = {};
     try {
@@ -3481,7 +3564,8 @@ function renderBundlePreviewHtml(offer) {
 
     const items = [
       {
-        count: CIWI_SINGLE_OPTION_COUNT,
+        triggerValue: CIWI_SINGLE_OPTION_COUNT,
+        interactive: true,
         title: singleRule?.title || "Single",
         subtitle: singleRule?.subtitle || "Standard price",
         price: formatPrice(getCurrentUnitPrice()),
@@ -3489,30 +3573,44 @@ function renderBundlePreviewHtml(offer) {
       },
       ...giftRules.map((rule, index) => {
         const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
+        const triggerValue = getFreeGiftRuleTriggerValue(rule);
+        const triggerLabel =
+          rule.conditionType === "cart_amount"
+            ? formatPrice(Math.max(0, Number(rule.amountThreshold) || 0))
+            : String(Math.max(1, Math.trunc(Number(rule.count) || 1)));
         return {
-          count: rule.count || 1,
-          title: rule.title || `Buy ${rule.count} item${rule.count > 1 ? "s" : ""}`,
+          triggerValue,
+          interactive: rule.conditionType !== "cart_amount",
+          title:
+            rule.title ||
+            (rule.conditionType === "cart_amount"
+              ? `Spend ${triggerLabel}`
+              : `Buy ${rule.count} item${rule.count > 1 ? "s" : ""}`),
           subtitle:
             rule.subtitle ||
             `Unlock ${rule.giftQuantity} free gift${rule.giftQuantity > 1 ? "s" : ""}`,
           price: `${rule.giftQuantity} FREE`,
           badge: rule.badge || (isFeatured ? "Gift included" : ""),
-          saveLabel: `TRIGGER AT ${rule.count}`,
+          saveLabel: `TRIGGER AT ${triggerLabel}`,
         };
       }),
     ];
 
     const itemsHtml = items
       .map((item) => {
-        const isSelected = item.count === selectedCount;
+        const isSelected = item.triggerValue === selectedTriggerValue;
         const featuredClass = isSelected
           ? " create-offer-style-preview-item--featured"
           : "";
+        const cursorStyle = item.interactive ? "pointer" : "default";
         const featuredStyle = isSelected
-          ? `border-color: ${esc(accentColor)} !important; background: ${esc(cardBackgroundColor)} !important; box-shadow: 0 8px 18px ${esc(accentColor)}25 !important; cursor: pointer;`
-          : `border-color: ${esc(borderColor)} !important; background: ${esc(cardBackgroundColor)} !important; cursor: pointer;`;
+          ? `border-color: ${esc(accentColor)} !important; background: ${esc(cardBackgroundColor)} !important; box-shadow: 0 8px 18px ${esc(accentColor)}25 !important; cursor: ${esc(cursorStyle)};`
+          : `border-color: ${esc(borderColor)} !important; background: ${esc(cardBackgroundColor)} !important; cursor: ${esc(cursorStyle)};`;
+        const triggerAttr = item.interactive
+          ? ` data-ciwi-bundle-count="${esc(item.triggerValue)}"`
+          : "";
 
-        return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}" data-ciwi-bundle-count="${esc(item.count)}">
+        return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}"${triggerAttr}>
         ${
           item.badge
             ? `<div class="create-offer-style-preview-badge" style="background:${esc(accentColor)} !important; color:${esc(labelColor)} !important;">${esc(item.badge)}</div>`

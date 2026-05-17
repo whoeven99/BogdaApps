@@ -39,6 +39,7 @@ import {
   fetchActiveSubscriptions,
 } from "../../billing.server";
 import {
+  compileCampaignRuntimeOutputs,
   OFFER_TEXT_LIMITS,
   buildLegacyFieldsFromCampaignConfig,
   clampNumber,
@@ -62,6 +63,7 @@ import {
   trimSelectedProductsJsonForFunction,
   isOfferPublishedForBundleMetafieldSync,
   normalizeOfferEndTimeForUi,
+  resolveOfferTypeFromCampaignConfig,
 } from "../../utils/offerParsing";
 import { sanitizeEnvLikeValue, sanitizeUrlLikeEnvValue } from "../../utils/env";
 import {
@@ -312,6 +314,60 @@ function buildHydratedDifferentProductsSelectedProductsJson(
     : selectedProductsJson ?? null;
 }
 
+function compileOfferRuntimeSyncData(offer: OfferListItem): {
+  offerType: string;
+  selectedProductsJson: string | null;
+  discountRulesJson: string | null;
+  offerSettingsJson: string | null;
+  referencedProductIds: string[];
+  storefrontHydration: "none" | "complete-bundle" | "quantity-breaks-different";
+} {
+  const parsedCampaignConfig = parseCampaignConfig(offer.campaignConfigJson);
+  if (parsedCampaignConfig) {
+    const runtimeOutputs = compileCampaignRuntimeOutputs(parsedCampaignConfig);
+    const legacyFields = buildLegacyFieldsFromCampaignConfig(parsedCampaignConfig);
+    return {
+      offerType: legacyFields.offerType,
+      selectedProductsJson:
+        runtimeOutputs.primaryModule?.selectedProductsJsonForFunction ??
+        (legacyFields.selectedProductsJson
+          ? trimSelectedProductsJsonForFunction(
+              legacyFields.offerType,
+              legacyFields.selectedProductsJson,
+            )
+          : null),
+      discountRulesJson:
+        runtimeOutputs.primaryModule?.discountRulesJson ?? legacyFields.discountRulesJson,
+      offerSettingsJson: legacyFields.offerSettingsJson,
+      referencedProductIds: runtimeOutputs.referencedProductIds,
+      storefrontHydration:
+        runtimeOutputs.primaryModule?.storefrontHydration ?? "none",
+    };
+  }
+
+  const effectiveOfferType = resolveOfferTypeFromCampaignConfig({
+    offerType: offer.offerType,
+    campaignConfigJson: offer.campaignConfigJson,
+  });
+
+  return {
+    offerType: effectiveOfferType,
+    selectedProductsJson: trimSelectedProductsJsonForFunction(
+      effectiveOfferType,
+      offer.selectedProductsJson,
+    ),
+    discountRulesJson: offer.discountRulesJson ?? null,
+    offerSettingsJson: offer.offerSettingsJson ?? null,
+    referencedProductIds: collectLegacyReferencedProductIds(offer),
+    storefrontHydration:
+      effectiveOfferType === "complete-bundle"
+        ? "complete-bundle"
+        : effectiveOfferType === "quantity-breaks-different"
+          ? "quantity-breaks-different"
+          : "none",
+  };
+}
+
 async function buildCompactOffersPayload(
   shopOffers: OfferListItem[],
   themeExtensionEnabled = true,
@@ -319,21 +375,21 @@ async function buildCompactOffersPayload(
   // 仅同步后台仍「启用」的活动，避免无效活动占用 payload 体积并干扰函数计算
   const activeOffers = shopOffers.filter(isOfferPublishedForBundleMetafieldSync);
   // 先生成 Function 可安全消费的瘦 payload，避免 complete-bundle 展示字段把 metafield 撑爆。
-  const compactOffers = activeOffers.map((offer) => ({
-    id: offer.id,
-    name: offer.name,
-    cartTitle: offer.cartTitle,
-    status: offer.status,
-    startTime: offer.startTime,
-    endTime: offer.endTime,
-    selectedProductsJson: trimSelectedProductsJsonForFunction(
-      offer.offerType,
-      offer.selectedProductsJson,
-    ),
-    discountRulesJson: offer.discountRulesJson ?? null,
-    offerSettingsJson: offer.offerSettingsJson ?? null,
-    offerType: offer.offerType,
-  }));
+  const compactOffers = activeOffers.map((offer) => {
+    const runtimeSyncData = compileOfferRuntimeSyncData(offer);
+    return {
+      id: offer.id,
+      name: offer.name,
+      cartTitle: offer.cartTitle,
+      status: offer.status,
+      startTime: offer.startTime,
+      endTime: offer.endTime,
+      selectedProductsJson: runtimeSyncData.selectedProductsJson,
+      discountRulesJson: runtimeSyncData.discountRulesJson,
+      offerSettingsJson: runtimeSyncData.offerSettingsJson,
+      offerType: runtimeSyncData.offerType,
+    };
+  });
   return JSON.stringify({
     updatedAt: new Date().toISOString(),
     themeExtensionEnabled: Boolean(themeExtensionEnabled),
@@ -361,6 +417,10 @@ async function buildStorefrontOffersStructured(
   }>;
 }> {
   const activeOffers = shopOffers.filter(isOfferPublishedForBundleMetafieldSync);
+  const compiledActiveOffers = activeOffers.map((offer) => ({
+    offer,
+    runtimeSyncData: compileOfferRuntimeSyncData(offer),
+  }));
   const compactPayload = await buildCompactOffersPayload(shopOffers, themeExtensionEnabled);
   const compactPayloadParsed = JSON.parse(compactPayload) as {
     updatedAt?: string;
@@ -381,11 +441,13 @@ async function buildStorefrontOffersStructured(
 
   // storefront 需要补齐前台直接渲染所需的商品展示字段，避免主题脚本首次渲染时缺少 title/handle/image。
   const storefrontCatalogProductIds = collectReferencedProductIds(
-    activeOffers.filter(
-      (offer) =>
-        offer.offerType === "complete-bundle" ||
-        offer.offerType === "quantity-breaks-different",
-    ),
+    compiledActiveOffers
+      .filter(
+        ({ runtimeSyncData }) =>
+          runtimeSyncData.storefrontHydration === "complete-bundle" ||
+          runtimeSyncData.storefrontHydration === "quantity-breaks-different",
+      )
+      .map(({ offer }) => offer),
   );
   const storeProducts =
     storefrontCatalogProductIds.length > 0
@@ -395,22 +457,34 @@ async function buildStorefrontOffersStructured(
     storeProducts.map((product) => [String(product.id || ""), product]),
   );
 
-  const storefrontOffers = (compactPayloadParsed.offers || []).map((offer) => ({
-    ...offer,
-    selectedProductsJson:
-      offer.offerType === "complete-bundle"
-        ? buildHydratedCompleteBundleSelectedProductsJson(
-            offer.selectedProductsJson,
-            storeProductMap,
-          )
-        : offer.offerType === "quantity-breaks-different"
-          ? buildHydratedDifferentProductsSelectedProductsJson(
+  const storefrontOffers = (compactPayloadParsed.offers || []).map((offer) => {
+    const matchedCompiledOffer = compiledActiveOffers.find(
+      ({ offer: activeOffer }) => String(activeOffer.id) === String(offer.id || ""),
+    );
+    const hydrationMode = matchedCompiledOffer?.runtimeSyncData.storefrontHydration || "none";
+    const effectiveOfferType =
+      matchedCompiledOffer?.runtimeSyncData.offerType ||
+      resolveOfferTypeFromCampaignConfig({
+        offerType: offer.offerType,
+      });
+    return {
+      ...offer,
+      offerType: effectiveOfferType,
+      selectedProductsJson:
+        hydrationMode === "complete-bundle"
+          ? buildHydratedCompleteBundleSelectedProductsJson(
               offer.selectedProductsJson,
-              offer.discountRulesJson,
               storeProductMap,
             )
-          : offer.selectedProductsJson ?? null,
-  }));
+          : hydrationMode === "quantity-breaks-different"
+            ? buildHydratedDifferentProductsSelectedProductsJson(
+                offer.selectedProductsJson,
+                offer.discountRulesJson,
+                storeProductMap,
+              )
+            : offer.selectedProductsJson ?? null,
+    };
+  });
 
   const updatedAt = compactPayloadParsed.updatedAt || new Date().toISOString();
   const offers = storefrontOffers
@@ -888,39 +962,38 @@ function parseBxgySelectedProductIds(selectedProductsJson?: string | null): stri
   }
 }
 
-function collectReferencedProductIds(offers: OfferListItem[]): string[] {
-  const ids = new Set<string>();
-  for (const offer of offers) {
-    if (offer.offerType === "complete-bundle") {
-      const config = parseCompleteBundleConfig(offer.selectedProductsJson);
-      for (const bar of config.bars) {
-        for (const product of bar.products || []) {
-          const productId = String(product.productId || "").trim();
-          if (productId) ids.add(productId);
-        }
-      }
-      continue;
-    }
+function collectLegacyReferencedProductIds(offer: OfferListItem): string[] {
+  const effectiveOfferType = resolveOfferTypeFromCampaignConfig({
+    offerType: offer.offerType,
+    campaignConfigJson: offer.campaignConfigJson,
+  });
+  if (effectiveOfferType === "complete-bundle") {
+    const config = parseCompleteBundleConfig(offer.selectedProductsJson);
+    return Array.from(
+      new Set(
+        config.bars.flatMap((bar) =>
+          (bar.products || []).map((product) => String(product.productId || "").trim()),
+        ),
+      ),
+    ).filter(Boolean);
+  }
 
-    if (offer.offerType === "quantity-breaks-different") {
-      const selectedIds = parseSelectedProductIds(offer.selectedProductsJson);
-      const ruleIds = parseDifferentProductsDiscountRules(
-        offer.discountRulesJson,
-      ).flatMap((rule) => [
-        ...(Array.isArray(rule.buyProductIds) ? rule.buyProductIds : []),
-        ...(Array.isArray(rule.getProductIds) ? rule.getProductIds : []),
-      ]);
-      for (const productId of [...selectedIds, ...ruleIds]) {
-        const normalized = String(productId || "").trim();
-        if (normalized) ids.add(normalized);
-      }
-      continue;
-    }
+  if (effectiveOfferType === "quantity-breaks-different") {
+    const selectedIds = parseSelectedProductIds(offer.selectedProductsJson);
+    const ruleIds = parseDifferentProductsDiscountRules(
+      offer.discountRulesJson,
+    ).flatMap((rule) => [
+      ...(Array.isArray(rule.buyProductIds) ? rule.buyProductIds : []),
+      ...(Array.isArray(rule.getProductIds) ? rule.getProductIds : []),
+    ]);
+    return Array.from(new Set([...selectedIds, ...ruleIds])).filter(Boolean);
+  }
 
-    const selectedIds =
-      offer.offerType === "bxgy"
+  return Array.from(
+    new Set(
+      effectiveOfferType === "bxgy"
         ? parseBxgySelectedProductIds(offer.selectedProductsJson)
-        : offer.offerType === "free-gift"
+        : effectiveOfferType === "free-gift"
           ? [
               ...parseFreeGiftSelectedProducts(offer.selectedProductsJson).triggerProducts,
               ...parseFreeGiftSelectedProducts(offer.selectedProductsJson).giftProducts,
@@ -928,8 +1001,16 @@ function collectReferencedProductIds(offers: OfferListItem[]): string[] {
                 Array.isArray(rule.giftProductIds) ? rule.giftProductIds : [],
               ),
             ]
-        : parseSelectedProductIds(offer.selectedProductsJson);
-    for (const productId of selectedIds) {
+          : parseSelectedProductIds(offer.selectedProductsJson),
+    ),
+  ).filter(Boolean);
+}
+
+function collectReferencedProductIds(offers: OfferListItem[]): string[] {
+  const ids = new Set<string>();
+  for (const offer of offers) {
+    const runtimeSyncData = compileOfferRuntimeSyncData(offer);
+    for (const productId of runtimeSyncData.referencedProductIds) {
       const normalized = String(productId || "").trim();
       if (normalized) ids.add(normalized);
     }

@@ -1,8 +1,9 @@
 import {
   buildBxgyDiscountRulesJson,
-  buildCompleteBundleConfig,
+  buildDiscountRulesPayloadForOfferType,
   buildDifferentProductsDiscountRulesJson,
   buildFreeGiftRulesJson,
+  buildSelectedProductsPayloadForOfferType,
   getBxgyDisplayMeta,
 } from "../../../utils/offerParsing";
 import type { CampaignDraft, DraftDiscountRule } from "./campaignDraft";
@@ -18,6 +19,74 @@ type CampaignBuilderMeta = {
   logicBlockDescription: string;
   stepTwoDescription: string;
 };
+
+type CampaignBuilderBehavior = {
+  getScopeSummary?: (ctx: CampaignBuilderRegistryContext) => string;
+  getLogicSummary?: (ctx: CampaignBuilderRegistryContext) => string;
+  validateScopeAndLogicStep?: (
+    ctx: CampaignBuilderRegistryContext,
+  ) => string | null;
+  validateFinalSubmitScopeAndLogic?: (
+    ctx: CampaignBuilderRegistryContext,
+  ) => string | null;
+};
+
+function getDefaultScopeSummary(ctx: CampaignBuilderRegistryContext): string {
+  return `${ctx.selectedProductsData.length} selected products`;
+}
+
+function getDefaultLogicSummary(ctx: CampaignBuilderRegistryContext): string {
+  const bxgyTierCount = ctx.normalizedDiscountRules.filter(
+    (rule) => rule.logicType === "bxgy",
+  ).length;
+  const standardRuleCount = ctx.normalizedDiscountRules.length - bxgyTierCount;
+  const amountRuleCount = ctx.normalizedDiscountRules.filter(
+    (rule) =>
+      rule.logicType !== "bxgy" && rule.conditionType === "cart_amount",
+  ).length;
+  const quantityRuleCount = standardRuleCount - amountRuleCount;
+  const bestDiscount = ctx.normalizedDiscountRules.reduce(
+    (max, rule) => Math.max(max, rule.discountPercent),
+    0,
+  );
+  const standardSummary =
+    amountRuleCount > 0
+      ? `${quantityRuleCount} quantity rules, ${amountRuleCount} amount rules`
+      : `${standardRuleCount} standard rules`;
+  return bxgyTierCount > 0
+    ? `${standardSummary}, ${bxgyTierCount} BXGY tiers, up to ${bestDiscount}% off`
+    : `${standardSummary}, up to ${bestDiscount}% off`;
+}
+
+function getDefaultScopeAndLogicValidation(
+  ctx: CampaignBuilderRegistryContext,
+): string | null {
+  return ctx.selectedProductsData.length === 0
+    ? "Please select at least one product."
+    : null;
+}
+
+function getCompleteBundleValidationState(ctx: CampaignBuilderRegistryContext) {
+  const hasNoTriggerProducts = ctx.selectedProductsData.length === 0;
+  const triggerIds = new Set(
+    ctx.selectedProductsData.map((product) => String(product.id || "")),
+  );
+  const hasInvalidBar = ctx.completeBundleBars.some((bar) => {
+    const min = Math.max(1, Math.trunc(Number(bar.minQuantity) || 1));
+    const max = Math.max(
+      min,
+      Math.trunc(Number(bar.maxQuantity) || Number(bar.quantity) || 1),
+    );
+    const overlapsTrigger = bar.products.some((product) =>
+      triggerIds.has(String(product.productId || "")),
+    );
+    return !bar.products?.length || bar.products.length < min || max < min || overlapsTrigger;
+  });
+  return {
+    hasNoTriggerProducts,
+    hasInvalidBar,
+  };
+}
 
 function getFreeGiftRewardBarCount(ctx: CampaignBuilderRegistryContext) {
   return ctx.freeGiftRules.filter(
@@ -84,6 +153,114 @@ const META_BY_OFFER_TYPE: Record<OfferTypeId, CampaignBuilderMeta> = {
   },
 };
 
+const BEHAVIOR_BY_OFFER_TYPE: Record<OfferTypeId, CampaignBuilderBehavior> = {
+  "quantity-breaks-same": {},
+  "quantity-breaks-different": {
+    getScopeSummary: (ctx) =>
+      `${ctx.selectedProductsData.length} products available for tier product pools`,
+    getLogicSummary: (ctx) => {
+      const uniqueScopedProducts = new Set(
+        ctx.differentProductsDiscountRules.flatMap((rule) => rule.buyProductIds),
+      ).size;
+      return `${ctx.differentProductsDiscountRules.length} quantity-break tiers across ${uniqueScopedProducts} scoped products`;
+    },
+    validateScopeAndLogicStep: (ctx) =>
+      ctx.selectedProductsData.length === 0 ||
+      ctx.differentProductsDiscountRules.length === 0
+        ? "Please select campaign products and configure at least one quantity-break tier."
+        : null,
+    validateFinalSubmitScopeAndLogic: (ctx) =>
+      ctx.selectedProductsData.length === 0 ||
+      ctx.differentProductsDiscountRules.length === 0
+        ? "Quantity breaks for different products require campaign products and at least one configured tier."
+        : null,
+  },
+  bxgy: {
+    getScopeSummary: (ctx) => `${ctx.buyProducts.length} products in the BXGY pool`,
+    getLogicSummary: (ctx) => {
+      const bestBundleQty = ctx.bxgyDiscountRules.reduce(
+        (max, rule) => Math.max(max, getBxgyDisplayMeta(rule).bundleQuantity),
+        0,
+      );
+      return `${ctx.bxgyDiscountRules.length} BXGY bars, up to ${bestBundleQty} items in one bundle`;
+    },
+    validateScopeAndLogicStep: (ctx) =>
+      ctx.buyProducts.length === 0 || ctx.bxgyDiscountRules.length === 0
+        ? "Please select the BXGY product pool and configure at least one BXGY bar."
+        : null,
+    validateFinalSubmitScopeAndLogic: (ctx) =>
+      ctx.buyProducts.length === 0 || ctx.bxgyDiscountRules.length === 0
+        ? "For BXGY offers, you must configure the BXGY product pool and at least one BXGY bar."
+        : null,
+  },
+  "complete-bundle": {
+    getScopeSummary: (ctx) => {
+      const uniqueProductCount = new Set(
+        ctx.completeBundleBars.flatMap((bar) =>
+          bar.products.map((product) => String(product.productId)),
+        ),
+      ).size;
+      return `${ctx.selectedProductsData.length} trigger products, ${uniqueProductCount} bundle items`;
+    },
+    getLogicSummary: (ctx) =>
+      `${ctx.completeBundleBars.length} complete-bundle bar${ctx.completeBundleBars.length === 1 ? "" : "s"} with trigger + whole-bundle pricing`,
+    validateScopeAndLogicStep: (ctx) => {
+      const { hasNoTriggerProducts, hasInvalidBar } =
+        getCompleteBundleValidationState(ctx);
+      return hasNoTriggerProducts ||
+        hasInvalidBar ||
+        ctx.completeBundleBars.length === 0
+        ? "Please select trigger products, keep bundle-item pools different from the trigger product, and make sure every bar has enough items for its min/max rule."
+        : null;
+    },
+    validateFinalSubmitScopeAndLogic: (ctx) => {
+      const { hasNoTriggerProducts, hasInvalidBar } =
+        getCompleteBundleValidationState(ctx);
+      return hasNoTriggerProducts ||
+        ctx.completeBundleBars.length === 0 ||
+        hasInvalidBar
+        ? "Complete bundle offers require trigger products, bundle-item pools that exclude the trigger product, and valid min/max item limits in every bar."
+        : null;
+    },
+  },
+  subscription: {
+    getLogicSummary: (ctx) =>
+      ctx.subscriptionEnabled
+        ? `Subscription enabled for ${ctx.selectedProductsData.length} products`
+        : "Subscription block configured but disabled",
+    validateFinalSubmitScopeAndLogic: () => null,
+  },
+  "free-gift": {
+    getScopeSummary: (ctx) =>
+      `${ctx.freeGiftTriggerProducts.length} products in the global trigger pool, ${getFreeGiftRewardBarCount(ctx)} bars with gift products`,
+    getLogicSummary: (ctx) => {
+      const bestGiftQty = ctx.freeGiftRules.reduce(
+        (max, rule) => Math.max(max, rule.giftQuantity),
+        0,
+      );
+      return `${ctx.freeGiftRules.length} gift bars, ${getFreeGiftRewardProductCount(ctx)} reward products, up to ${bestGiftQty} free gift${bestGiftQty > 1 ? "s" : ""}`;
+    },
+    validateScopeAndLogicStep: (ctx) =>
+      ctx.freeGiftTriggerProducts.length === 0 ||
+      ctx.freeGiftSharedGiftProductIds.length === 0 ||
+      ctx.freeGiftRules.length === 0
+        ? "Please configure the global trigger pool, the shared gift product pool, and at least one free-gift bar."
+        : null,
+    validateFinalSubmitScopeAndLogic: (ctx) =>
+      ctx.freeGiftTriggerProducts.length === 0 ||
+      ctx.freeGiftSharedGiftProductIds.length === 0 ||
+      ctx.freeGiftRules.length === 0
+        ? "Free gift offers require a global trigger pool, a shared gift product pool, and at least one bar."
+        : null,
+  },
+};
+
+function getCampaignBuilderBehavior(
+  offerType: OfferTypeId,
+): CampaignBuilderBehavior {
+  return BEHAVIOR_BY_OFFER_TYPE[offerType];
+}
+
 export function getCampaignBuilderMeta(
   offerType: OfferTypeId,
 ): CampaignBuilderMeta {
@@ -93,80 +270,19 @@ export function getCampaignBuilderMeta(
 export function getCampaignScopeSummary(
   ctx: CampaignBuilderRegistryContext,
 ): string {
-  switch (ctx.offerType) {
-    case "quantity-breaks-different":
-      return `${ctx.selectedProductsData.length} products available for tier product pools`;
-    case "bxgy":
-      return `${ctx.buyProducts.length} products in the BXGY pool`;
-    case "complete-bundle": {
-      const uniqueProductCount = new Set(
-        ctx.completeBundleBars.flatMap((bar) =>
-          bar.products.map((product) => String(product.productId)),
-        ),
-      ).size;
-      return `${ctx.selectedProductsData.length} trigger products, ${uniqueProductCount} bundle items`;
-    }
-    case "free-gift":
-      return `${ctx.freeGiftTriggerProducts.length} products in the global trigger pool, ${getFreeGiftRewardBarCount(ctx)} bars with gift products`;
-    default:
-      return `${ctx.selectedProductsData.length} selected products`;
-  }
+  return (
+    getCampaignBuilderBehavior(ctx.offerType).getScopeSummary?.(ctx) ||
+    getDefaultScopeSummary(ctx)
+  );
 }
 
 export function getCampaignLogicSummary(
   ctx: CampaignBuilderRegistryContext,
 ): string {
-  switch (ctx.offerType) {
-    case "quantity-breaks-different": {
-      const uniqueScopedProducts = new Set(
-        ctx.differentProductsDiscountRules.flatMap((rule) => rule.buyProductIds),
-      ).size;
-      return `${ctx.differentProductsDiscountRules.length} quantity-break tiers across ${uniqueScopedProducts} scoped products`;
-    }
-    case "bxgy": {
-      const bestBundleQty = ctx.bxgyDiscountRules.reduce(
-        (max, rule) => Math.max(max, getBxgyDisplayMeta(rule).bundleQuantity),
-        0,
-      );
-      return `${ctx.bxgyDiscountRules.length} BXGY bars, up to ${bestBundleQty} items in one bundle`;
-    }
-    case "complete-bundle": {
-      return `${ctx.completeBundleBars.length} complete-bundle bar${ctx.completeBundleBars.length > 1 ? "s" : ""} with trigger + whole-bundle pricing`;
-    }
-    case "subscription":
-      return ctx.subscriptionEnabled
-        ? `Subscription enabled for ${ctx.selectedProductsData.length} products`
-        : "Subscription block configured but disabled";
-    case "free-gift": {
-      const bestGiftQty = ctx.freeGiftRules.reduce(
-        (max, rule) => Math.max(max, rule.giftQuantity),
-        0,
-      );
-      return `${ctx.freeGiftRules.length} gift bars, ${getFreeGiftRewardProductCount(ctx)} reward products, up to ${bestGiftQty} free gift${bestGiftQty > 1 ? "s" : ""}`;
-    }
-    default: {
-      const bxgyTierCount = ctx.normalizedDiscountRules.filter(
-        (rule) => rule.logicType === "bxgy",
-      ).length;
-      const standardRuleCount = ctx.normalizedDiscountRules.length - bxgyTierCount;
-      const amountRuleCount = ctx.normalizedDiscountRules.filter(
-        (rule) =>
-          rule.logicType !== "bxgy" && rule.conditionType === "cart_amount",
-      ).length;
-      const quantityRuleCount = standardRuleCount - amountRuleCount;
-      const bestDiscount = ctx.normalizedDiscountRules.reduce(
-        (max, rule) => Math.max(max, rule.discountPercent),
-        0,
-      );
-      const standardSummary =
-        amountRuleCount > 0
-          ? `${quantityRuleCount} quantity rules, ${amountRuleCount} amount rules`
-          : `${standardRuleCount} standard rules`;
-      return bxgyTierCount > 0
-        ? `${standardSummary}, ${bxgyTierCount} BXGY tiers, up to ${bestDiscount}% off`
-        : `${standardSummary}, up to ${bestDiscount}% off`;
-    }
-  }
+  return (
+    getCampaignBuilderBehavior(ctx.offerType).getLogicSummary?.(ctx) ||
+    getDefaultLogicSummary(ctx)
+  );
 }
 
 export function getCampaignRuleTypeSummary(
@@ -204,130 +320,47 @@ export function getCampaignPublishSupportSummary(
 export function buildSelectedProductsPayload(
   ctx: CampaignBuilderRegistryContext,
 ): unknown {
-  switch (ctx.offerType) {
-    case "quantity-breaks-different":
-      return {
-        productIds: ctx.selectedProductsData.map((product) => String(product.id)),
-      };
-    case "bxgy":
-      return {
-        buyProducts: ctx.buyProducts,
-      };
-    case "complete-bundle":
-      return {
-        productIds: ctx.selectedProductsData.map((product) => String(product.id)),
-        bars: ctx.completeBundleBars,
-      };
-    case "free-gift":
-      return {
-        triggerProducts: ctx.freeGiftTriggerProducts,
-        giftProducts: ctx.freeGiftSharedGiftProductIds,
-      };
-    default:
-      return ctx.selectedProductsData;
-  }
+  return buildSelectedProductsPayloadForOfferType({
+    offerType: ctx.offerType,
+    selectedProductsData: ctx.selectedProductsData,
+    selectedProductIds: ctx.selectedProductsData.map((product) => String(product.id)),
+    buyProducts: ctx.buyProducts,
+    completeBundleBars: ctx.completeBundleBars,
+    freeGiftTriggerProducts: ctx.freeGiftTriggerProducts,
+    freeGiftSharedGiftProductIds: ctx.freeGiftSharedGiftProductIds,
+  });
 }
 
 export function buildDiscountRulesPayload(
   ctx: CampaignBuilderRegistryContext,
   buildQuantityRulesJson: (rules: DraftDiscountRule[]) => unknown,
 ): unknown {
-  switch (ctx.offerType) {
-    case "quantity-breaks-different":
-      return buildDifferentProductsDiscountRulesJson(
-        ctx.differentProductsDiscountRules,
-      );
-    case "bxgy":
-      return buildBxgyDiscountRulesJson(ctx.bxgyDiscountRules);
-    case "complete-bundle":
-      return buildQuantityRulesJson(ctx.normalizedDiscountRules);
-    case "free-gift":
-      return buildFreeGiftRulesJson(ctx.freeGiftRules);
-    default:
-      return buildQuantityRulesJson(ctx.normalizedDiscountRules);
-  }
+  return buildDiscountRulesPayloadForOfferType({
+    offerType: ctx.offerType,
+    quantityRulesPayload: buildQuantityRulesJson(ctx.normalizedDiscountRules),
+    differentProductsRulesPayload: buildDifferentProductsDiscountRulesJson(
+      ctx.differentProductsDiscountRules,
+    ),
+    bxgyRulesPayload: buildBxgyDiscountRulesJson(ctx.bxgyDiscountRules),
+    freeGiftRulesPayload: buildFreeGiftRulesJson(ctx.freeGiftRules),
+  });
 }
 
 export function validateScopeAndLogicStep(
   ctx: CampaignBuilderRegistryContext,
 ): string | null {
-  switch (ctx.offerType) {
-    case "quantity-breaks-different":
-      return ctx.selectedProductsData.length === 0 ||
-        ctx.differentProductsDiscountRules.length === 0
-        ? "Please select campaign products and configure at least one quantity-break tier."
-        : null;
-    case "bxgy":
-      return ctx.buyProducts.length === 0 || ctx.bxgyDiscountRules.length === 0
-        ? "Please select the BXGY product pool and configure at least one BXGY bar."
-        : null;
-    case "complete-bundle": {
-      const hasNoTriggerProducts = ctx.selectedProductsData.length === 0;
-      const triggerIds = new Set(
-        ctx.selectedProductsData.map((product) => String(product.id || "")),
-      );
-      const hasInvalidBar = ctx.completeBundleBars.some((bar) => {
-        const min = Math.max(1, Math.trunc(Number(bar.minQuantity) || 1));
-        const max = Math.max(min, Math.trunc(Number(bar.maxQuantity) || Number(bar.quantity) || 1));
-        const overlapsTrigger = bar.products.some((product) =>
-          triggerIds.has(String(product.productId || "")),
-        );
-        return bar.products.length < min || max < min || overlapsTrigger;
-      });
-      return hasNoTriggerProducts || hasInvalidBar || ctx.completeBundleBars.length === 0
-        ? "Please select trigger products, keep bundle-item pools different from the trigger product, and make sure every bar has enough items for its min/max rule."
-        : null;
-    }
-    case "free-gift":
-      return ctx.freeGiftTriggerProducts.length === 0 ||
-        ctx.freeGiftSharedGiftProductIds.length === 0 ||
-        ctx.freeGiftRules.length === 0
-        ? "Please configure the global trigger pool, the shared gift product pool, and at least one free-gift bar."
-        : null;
-    default:
-      return ctx.selectedProductsData.length === 0
-        ? "Please select at least one product."
-        : null;
-  }
+  return (
+    getCampaignBuilderBehavior(ctx.offerType).validateScopeAndLogicStep?.(ctx) ||
+    getDefaultScopeAndLogicValidation(ctx)
+  );
 }
 
 export function validateFinalSubmitScopeAndLogic(
   ctx: CampaignBuilderRegistryContext,
 ): string | null {
-  switch (ctx.offerType) {
-    case "quantity-breaks-different":
-      return ctx.selectedProductsData.length === 0 ||
-        ctx.differentProductsDiscountRules.length === 0
-        ? "Quantity breaks for different products require campaign products and at least one configured tier."
-        : null;
-    case "bxgy":
-      return ctx.buyProducts.length === 0 || ctx.bxgyDiscountRules.length === 0
-        ? "For BXGY offers, you must configure the BXGY product pool and at least one BXGY bar."
-        : null;
-    case "complete-bundle": {
-      const hasNoTriggerProducts = ctx.selectedProductsData.length === 0;
-      const triggerIds = new Set(
-        ctx.selectedProductsData.map((product) => String(product.id || "")),
-      );
-      const hasInvalidBar = ctx.completeBundleBars.some((bar) => {
-        const min = Math.max(1, Math.trunc(Number(bar.minQuantity) || 1));
-        const max = Math.max(min, Math.trunc(Number(bar.maxQuantity) || Number(bar.quantity) || 1));
-        const overlapsTrigger = bar.products.some((product) =>
-          triggerIds.has(String(product.productId || "")),
-        );
-        return !bar.products?.length || bar.products.length < min || max < min || overlapsTrigger;
-      });
-      return hasNoTriggerProducts || ctx.completeBundleBars.length === 0 || hasInvalidBar
-        ? "Complete bundle offers require trigger products, bundle-item pools that exclude the trigger product, and valid min/max item limits in every bar."
-        : null;
-    }
-    case "free-gift":
-      return ctx.freeGiftTriggerProducts.length === 0 ||
-        ctx.freeGiftSharedGiftProductIds.length === 0 ||
-        ctx.freeGiftRules.length === 0
-        ? "Free gift offers require a global trigger pool, a shared gift product pool, and at least one bar."
-        : null;
-    default:
-      return null;
-  }
+  return (
+    getCampaignBuilderBehavior(ctx.offerType).validateFinalSubmitScopeAndLogic?.(
+      ctx,
+    ) || null
+  );
 }
