@@ -1400,6 +1400,10 @@ const getThemeExtensionEnabledAcrossThemes = async (
     );
     const json = await response.json();
     const graphqlErrors = Array.isArray(json?.errors) ? json.errors : [];
+    const themeNodes =
+      json?.data?.themes?.edges
+        ?.map((edge: { node?: Record<string, any> | null }) => edge?.node)
+        .filter(Boolean) ?? [];
     if (graphqlErrors.length > 0) {
       debug.error = graphqlErrors
         .map((item: { message?: string }) => String(item?.message || "").trim())
@@ -1407,13 +1411,12 @@ const getThemeExtensionEnabledAcrossThemes = async (
         .join(" | ");
       console.error("[theme-extension] graphql errors while scanning themes", {
         errors: graphqlErrors,
+        recoveredThemeCount: themeNodes.length,
       });
-      return { enabled: false, debug };
+      if (themeNodes.length === 0) {
+        return { enabled: false, debug };
+      }
     }
-    const themeNodes =
-      json?.data?.themes?.edges
-        ?.map((edge: { node?: Record<string, any> | null }) => edge?.node)
-        .filter(Boolean) ?? [];
     debug.scannedThemeCount = themeNodes.length;
     const normalizedBlockHandles = Array.from(
       new Set(blockHandles.map((handle) => String(handle || "").trim()).filter(Boolean)),
