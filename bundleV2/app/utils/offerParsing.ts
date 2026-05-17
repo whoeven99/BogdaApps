@@ -1790,7 +1790,13 @@ export function parseCampaignConfig(
 
     const logicBlocks = logicBlocksRaw
       .map((block) => sanitizeLogicBlock(block))
-      .filter((block): block is LogicBlock => block !== null);
+      .filter((block): block is LogicBlock => block !== null)
+      .filter((block, index, blocks) => {
+        // Historical campaign payloads may contain the same module repeated
+        // multiple times with the same logic block id. Keep the first copy so
+        // preview/runtime compilation does not duplicate rules.
+        return index === blocks.findIndex((candidate) => candidate.id === block.id);
+      });
     if (logicBlocks.length === 0) return null;
 
     const logicIds = new Set(logicBlocks.map((block) => block.id));

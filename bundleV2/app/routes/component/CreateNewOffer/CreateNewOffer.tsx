@@ -2124,7 +2124,6 @@ export function CreateNewOffer({
         productIds: selectedScopeProductIds,
       },
     };
-    const hasConfiguredDiscountRules = discountRules.length > 0;
     const hasConfiguredDifferentProductsRules =
       differentProductsDiscountRules.length > 0;
     const hasConfiguredBxgyRules = bxgyDiscountRules.length > 0;
@@ -2146,25 +2145,28 @@ export function CreateNewOffer({
         logicBlockId: "logic-quantity-breaks",
         logicBlock: quantityBreaksLogicBlock,
         scopeIds: selectedScopeProductIds,
-        includeAsAdditional: hasConfiguredDiscountRules,
+        // These offer types are alternate templates over the same quantity-break
+        // logic block, not independent add-on modules. Re-adding them as
+        // "additional" modules duplicates preview and runtime rules.
+        includeAsAdditional: false,
       },
       "shipping-discount": {
         logicBlockId: "logic-quantity-breaks",
         logicBlock: quantityBreaksLogicBlock,
         scopeIds: selectedScopeProductIds,
-        includeAsAdditional: hasConfiguredDiscountRules,
+        includeAsAdditional: false,
       },
       "order-discount": {
         logicBlockId: "logic-quantity-breaks",
         logicBlock: quantityBreaksLogicBlock,
         scopeIds: selectedScopeProductIds,
-        includeAsAdditional: hasConfiguredDiscountRules,
+        includeAsAdditional: false,
       },
       coupon: {
         logicBlockId: "logic-quantity-breaks",
         logicBlock: quantityBreaksLogicBlock,
         scopeIds: selectedScopeProductIds,
-        includeAsAdditional: hasConfiguredDiscountRules,
+        includeAsAdditional: false,
       },
       "quantity-breaks-different": {
         logicBlockId: "logic-quantity-breaks-different",
