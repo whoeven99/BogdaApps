@@ -106,6 +106,26 @@ function buildUnifiedBarSummary(rule: UnifiedRuleNode): string {
   }
 }
 
+function getDifferentProductsSharedPoolIds(draft: CampaignDraft): string[] {
+  const sharedPool =
+    draft.differentProductsEligibleProductsData.length > 0
+      ? draft.differentProductsEligibleProductsData
+      : draft.selectedProductsData;
+  return sharedPool.map((product) => String(product.id));
+}
+
+function getNextDifferentProductsCount(
+  rules: CampaignDraft["differentProductsDiscountRules"],
+  tierType: "simple" | "bxgy",
+): number {
+  const relevantRules = rules.filter((rule) => rule.tierType === tierType);
+  const maxCount = relevantRules.reduce(
+    (highest, rule) => Math.max(highest, Math.max(1, Math.trunc(Number(rule.count) || 1))),
+    1,
+  );
+  return Math.max(2, maxCount + 1);
+}
+
 function buildUnifiedBarTitle(
   rule: UnifiedRuleNode,
   indexWithinCollection: number,
@@ -358,19 +378,54 @@ export function appendCampaignCompositionBar(
   draft: CampaignDraft,
   actions: CampaignDraftActions,
 ) {
+  // #region debug-point A:append-bar
+  fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"step2-add-bar",runId:"pre-fix",hypothesisId:"A",location:"campaignCompositionAdapter.ts:356",msg:"[DEBUG] appendCampaignCompositionBar invoked",data:{offerType:draft.offerType,barType:type,discountRules:draft.discountRules.length,differentProductsRules:draft.differentProductsDiscountRules.length,bxgyRules:draft.bxgyDiscountRules.length,freeGiftRules:draft.freeGiftRules.length,completeBundleBars:draft.completeBundleBars.length},ts:Date.now()})}).catch(()=>{});
+  // #endregion
   if (draft.offerType === "quantity-breaks-different" && type === "quantity_break") {
+    const nextCount = getNextDifferentProductsCount(
+      draft.differentProductsDiscountRules,
+      "simple",
+    );
+    const sharedProductIds = getDifferentProductsSharedPoolIds(draft);
     actions.setDifferentProductsDiscountRules((prev) => [
       ...prev,
       {
         id: buildDraftRuleId("different_products_rule"),
-        count: 2,
+        count: nextCount,
         discountPercent: 10,
-        buyQuantity: 2,
+        buyQuantity: nextCount,
         getQuantity: 0,
-        buyProductIds: draft.selectedProductsData.map((product) => String(product.id)),
+        buyProductIds: sharedProductIds,
         getProductIds: [],
         maxUsesPerOrder: 1,
         tierType: "simple",
+        title: "",
+        subtitle: "",
+        badge: "",
+        isDefault: false,
+      },
+    ]);
+    return;
+  }
+
+  if (draft.offerType === "quantity-breaks-different" && type === "bxgy") {
+    const nextCount = getNextDifferentProductsCount(
+      draft.differentProductsDiscountRules,
+      "bxgy",
+    );
+    const sharedProductIds = getDifferentProductsSharedPoolIds(draft);
+    actions.setDifferentProductsDiscountRules((prev) => [
+      ...prev,
+      {
+        id: buildDraftRuleId("different_products_rule"),
+        count: nextCount,
+        discountPercent: 100,
+        buyQuantity: nextCount,
+        getQuantity: 1,
+        buyProductIds: sharedProductIds,
+        getProductIds: sharedProductIds,
+        maxUsesPerOrder: 1,
+        tierType: "bxgy",
         title: "",
         subtitle: "",
         badge: "",

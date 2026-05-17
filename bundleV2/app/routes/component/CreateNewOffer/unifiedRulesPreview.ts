@@ -391,17 +391,19 @@ function buildDifferentProductsItem(
   if (rule.type === "bxgy" && rule.condition.kind === "buy_x_get_y") {
     return {
       id: rule.id,
-      title: rule.presentation.title || `Any ${rule.condition.triggerCount} items`,
+      title:
+        rule.presentation.title ||
+        `Buy ${rule.condition.buyQuantity}, get ${rule.condition.getQuantity}`,
       subtitle:
         rule.presentation.subtitle ||
-        `Legacy mix-and-match reward across ${scopedCount} eligible product${scopedCount === 1 ? "" : "s"}`,
+        `Mix any ${rule.condition.triggerCount} from ${scopedCount} eligible product${scopedCount === 1 ? "" : "s"}`,
       price:
         rule.reward.kind === "percentage_off"
           ? `${rule.reward.discountPercent}% OFF`
           : "CUSTOM",
       featured,
       badge: rule.presentation.badge || undefined,
-      saveLabel: `AT ${rule.condition.triggerCount} ITEMS`,
+      saveLabel: `GET ${rule.condition.getQuantity} FREE`,
       products: scopedProducts.length > 0 ? scopedProducts : undefined,
     };
   }
