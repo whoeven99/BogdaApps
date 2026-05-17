@@ -509,6 +509,7 @@ export function CreateNewOffer({
     wasSubmittingRef.current = false;
     const data = fetcher.data as any;
     if (data?.success && data?.toast) {
+      message.success(initialOffer ? "Offer updated successfully" : "Offer created successfully");
       const next = new URLSearchParams(searchParams);
       next.set("toast", data.toast);
       const qs = next.toString();
@@ -522,7 +523,7 @@ export function CreateNewOffer({
     next.delete("toast");
     const qs = next.toString();
     navigate({ search: qs ? `?${qs}` : "" }, { replace: true });
-  }, [fetcher.state, fetcher.data, navigate, searchParams]);
+  }, [fetcher.state, fetcher.data, initialOffer, navigate, searchParams]);
 
   const baseUnitPrice = 100;
   const formatPreviewPrice = (value: number) =>

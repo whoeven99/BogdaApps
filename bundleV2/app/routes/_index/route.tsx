@@ -2571,9 +2571,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     }
 
-    await runOfferPostWriteSync(admin, shopName);
-
     invalidateShopOffersCache(shopName);
+    void runOfferPostWriteSync(admin, shopName).catch((error) => {
+      console.error("Offer post-write sync crashed unexpectedly", {
+        shopName,
+        error,
+      });
+    });
 
     return Response.json({
       success: true,
@@ -2727,11 +2731,13 @@ export default function Index() {
     }
     if (toast?.startsWith("create-success")) {
       setToastMessage("Offer created successfully");
+      setActiveTab("offers");
       setShowCreateOffer(false);
       setCreateOfferType(null);
       setEditingOfferId(null);
     } else if (toast?.startsWith("update-success")) {
       setToastMessage("Offer updated successfully");
+      setActiveTab("offers");
       setShowCreateOffer(false);
       setCreateOfferType(null);
       setEditingOfferId(null);
