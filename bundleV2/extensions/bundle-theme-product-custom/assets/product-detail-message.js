@@ -2,7 +2,10 @@ if (window.__ciwiBundleThemeRuntimeInitialized) {
   console.debug("[ciwi] bundle theme runtime already initialized");
 } else {
   window.__ciwiBundleThemeRuntimeInitialized = true;
+  initCiwiBundleThemeRuntime();
+}
 
+function initCiwiBundleThemeRuntime() {
 const DEFAULT_SELECTORS = [
   ".product__info-container",
   ".product__info-wrapper",
