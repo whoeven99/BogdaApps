@@ -822,6 +822,7 @@ export type IndexLoaderData = {
 
 export type ThemeEditorTarget = {
   id: string;
+  editorId: string;
   name: string;
   role: string;
 };
@@ -884,6 +885,7 @@ async function fetchThemeEditorTargets(admin: any): Promise<ThemeEditorTarget[]>
             edges {
               node {
                 id
+                themeStoreId
                 name
                 role
               }
@@ -907,6 +909,7 @@ async function fetchThemeEditorTargets(admin: any): Promise<ThemeEditorTarget[]>
     return themeNodes
       .map((theme: any) => ({
         id: String(theme?.id || ""),
+        editorId: String(theme?.themeStoreId || "").trim(),
         name: String(theme?.name || "").trim(),
         role: String(theme?.role || "").trim(),
       }))

@@ -158,7 +158,7 @@ export function AllOffersPage({
       return;
     }
     openThemeEditor(shop, apiKey, {
-      themeId: preferredThemeTarget?.id,
+      themeId: preferredThemeTarget?.editorId || preferredThemeTarget?.id,
     });
   };
 
@@ -166,7 +166,7 @@ export function AllOffersPage({
     if (!shop || !apiKey) return;
     setShowThemeExtensionModal(false);
     openThemeEditor(shop, apiKey, {
-      themeId: selectedThemeId || preferredThemeTarget?.id,
+      themeId: selectedThemeId || preferredThemeTarget?.editorId || preferredThemeTarget?.id,
     });
   };
 

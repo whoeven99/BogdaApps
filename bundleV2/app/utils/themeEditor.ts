@@ -36,6 +36,16 @@ function normalizeShopAdminHandle(shop: string): string {
   return withoutProtocol.replace(/^\/+|\/+$/g, "").trim();
 }
 
+function normalizeThemeEditorThemeId(themeId: string | null | undefined): string {
+  const raw = String(themeId || "").trim();
+  if (!raw) return "";
+  if (raw === "current") return raw;
+  if (/^\d+$/.test(raw)) return raw;
+  const gidMatch = raw.match(/\/(\d+)(?:\?.*)?$/);
+  if (gidMatch?.[1]) return gidMatch[1];
+  return raw;
+}
+
 export function buildThemeEditorUrl(
   shop: string,
   apiKey: string,
@@ -48,7 +58,7 @@ export function buildThemeEditorUrl(
   } = options;
   const storeHandle = normalizeShopAdminHandle(shop);
   const normalizedApiKey = String(apiKey || "").trim();
-  const normalizedThemeId = String(themeId || "").trim();
+  const normalizedThemeId = normalizeThemeEditorThemeId(themeId);
   const url = new URL(
     `https://admin.shopify.com/store/${storeHandle}/themes/${normalizedThemeId || "current"}/editor`,
   );
