@@ -2643,11 +2643,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     try {
       const offerToDelete = await prismaAny.offer.findUnique({
         where: { id: idRaw },
+        select: {
+          id: true,
+          shopName: true,
+        },
       });
       shopNameToSync = offerToDelete?.shopName as string | undefined;
 
       await prismaAny.offer.delete({
         where: { id: idRaw },
+        select: {
+          id: true,
+        },
       });
     } catch (error) {
       console.error("delete-offer failed", error);
