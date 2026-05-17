@@ -3900,7 +3900,12 @@ function renderBundlePreviewHtml(offer) {
     const hasDefault = differentRules.some((r) => r.isDefault);
 
     const currentPool = parseSelectedProductIds(offer.selectedProductsJson);
-    if (currentPool.length > 0 && getCurrentProductGid() && !currentPool.includes(getCurrentProductGid())) {
+    const currentProductGid = getCurrentProductGid();
+    if (
+      currentPool.length > 0 &&
+      currentProductGid &&
+      !productIdListIncludes(currentPool, currentProductGid)
+    ) {
       return "";
     }
 

@@ -67,7 +67,6 @@ import {
 } from "../../utils/offerParsing";
 import { sanitizeEnvLikeValue, sanitizeUrlLikeEnvValue } from "../../utils/env";
 import {
-  BUNDLE_METAFIELD_ENABLED_KEY,
   BUNDLE_METAFIELD_FUNCTION_OFFERS_KEY,
   BUNDLE_STOREFRONT_OFFERS_KEY,
 } from "../../utils/bundleShopMetafieldKeys";
@@ -363,7 +362,7 @@ function compileOfferRuntimeSyncData(offer: OfferListItem): {
 
 async function buildCompactOffersPayload(
   shopOffers: OfferListItem[],
-  themeExtensionEnabled = true,
+  themeExtensionEnabled: boolean | null = true,
 ): Promise<string> {
   // 仅同步后台仍「启用」的活动，避免无效活动占用 payload 体积并干扰函数计算
   const activeOffers = shopOffers.filter(isOfferPublishedForBundleMetafieldSync);
@@ -383,17 +382,24 @@ async function buildCompactOffersPayload(
       offerType: runtimeSyncData.offerType,
     };
   });
-  return JSON.stringify({
+  const payload: {
+    updatedAt: string;
+    offers: typeof compactOffers;
+    themeExtensionEnabled?: boolean;
+  } = {
     updatedAt: new Date().toISOString(),
-    themeExtensionEnabled: Boolean(themeExtensionEnabled),
     offers: compactOffers,
-  });
+  };
+  if (typeof themeExtensionEnabled === "boolean") {
+    payload.themeExtensionEnabled = themeExtensionEnabled;
+  }
+  return JSON.stringify(payload);
 }
 
 async function buildStorefrontOffersStructured(
   admin: any,
   shopOffers: OfferListItem[],
-  themeExtensionEnabled: boolean,
+  themeExtensionEnabled: boolean | null,
 ): Promise<{
   updatedAt: string;
   offers: Array<{
@@ -584,7 +590,7 @@ async function syncShopOffersMetafield(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   admin: any,
   shopNameToSync: string,
-  themeExtensionEnabled: boolean,
+  themeExtensionEnabled: boolean | null,
 ): Promise<ShopOffersMetafieldSyncResult> {
   try {
     console.log("[offers-sync] start syncShopOffersMetafield", {
@@ -732,7 +738,9 @@ async function runOfferPostWriteSync(admin: any, shopName: string): Promise<void
     const syncResult = await syncShopOffersMetafield(
       admin,
       shopName,
-      themeExtensionDetection.enabled,
+      themeExtensionDetection.debug?.error && !themeExtensionDetection.enabled
+        ? null
+        : themeExtensionDetection.enabled,
     );
     if (!syncResult.ok) {
       console.error("syncShopOffersMetafield failed after offer write", {
@@ -844,6 +852,7 @@ export type ThemeEditorTarget = {
 };
 
 type ThemeExtensionDebugEntry = {
+  fileName?: string;
   entryKey: string | null;
   blockType: string;
   disabled?: boolean;
@@ -1307,41 +1316,51 @@ const ensureWebPixel = async (admin: any, shop: string) => {
 
 /**
  * Collect objects that look like theme JSON blocks (have string `type`).
- * App embeds may live under `current.blocks` or nested elsewhere in settings_data.
+ * App embeds may live under `current.blocks` in settings_data, while app blocks may
+ * live in product template / section JSON files.
  */
 type ThemeBlockEntry = {
   block: Record<string, any>;
+  fileName: string;
   entryKey: string | null;
 };
 
 const collectThemeBlockEntries = (
   node: unknown,
   out: ThemeBlockEntry[],
+  fileName: string,
   entryKey: string | null = null,
 ): void => {
   if (node === null || typeof node !== "object") return;
   if (Array.isArray(node)) {
-    for (const item of node) collectThemeBlockEntries(item, out, entryKey);
+    for (const item of node) collectThemeBlockEntries(item, out, fileName, entryKey);
     return;
   }
   const rec = node as Record<string, unknown>;
   if (typeof rec.type === "string" || entryKey) {
     out.push({
       block: rec as Record<string, any>,
+      fileName,
       entryKey,
     });
   }
   for (const [key, value] of Object.entries(rec)) {
-    collectThemeBlockEntries(value, out, key);
+    collectThemeBlockEntries(value, out, fileName, key);
   }
 };
 
+function normalizeThemeJsonFileContent(content: string): string {
+  return String(content || "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "");
+}
+
 /**
- * App embed status for a single theme extension block (e.g. product_detail_message -> product-detail-message.js).
- * Defaults to the MAIN theme to avoid broader theme-scan access regressions.
+ * App extension status for a single theme extension block (app embed or app block).
  * Matches editor deep-link form: `appEmbed={client_id}/{blockHandle}` e.g. `1cdf.../product_detail_message`.
- * In settings_data, Shopify may persist app embeds as generic block types like
- * `shopify://apps/{app-slug}/blocks/app-embed/{extensionUid}` rather than the liquid block filename.
+ * In theme JSON, Shopify may persist entries as generic block types like
+ * `shopify://apps/{app-slug}/blocks/app-embed/{extensionUid}` or
+ * `shopify://apps/{app-slug}/blocks/product_detail_message_block/{extensionUid}`.
  */
 const getThemeExtensionEnabledAcrossThemes = async (
   admin: any,
@@ -1381,9 +1400,18 @@ const getThemeExtensionEnabledAcrossThemes = async (
                 id
                 name
                 role
-                files(filenames: ["config/settings_data.json"], first: 1) {
+                files(
+                  filenames: [
+                    "config/settings_data.json"
+                    "templates/*.json"
+                    "sections/*.json"
+                    "section_groups/*.json"
+                  ]
+                  first: 250
+                ) {
                   nodes {
                     ... on OnlineStoreThemeFile {
+                      filename
                       body {
                         ... on OnlineStoreThemeFileBodyText {
                           content
@@ -1433,7 +1461,14 @@ const getThemeExtensionEnabledAcrossThemes = async (
         id: theme?.id,
         name: theme?.name,
         role: theme?.role,
-        hasSettingsData: Boolean(theme?.files?.nodes?.[0]?.body?.content),
+          hasSettingsData: Boolean(
+            (theme?.files?.nodes || []).some(
+              (node: any) =>
+                String(node?.filename || "") === "config/settings_data.json" &&
+                typeof node?.body?.content === "string" &&
+                node.body.content.trim() !== "",
+            ),
+          ),
       })),
     });
 
@@ -1512,49 +1547,65 @@ const getThemeExtensionEnabledAcrossThemes = async (
     let scannedBlockCount = 0;
 
     for (const theme of themeNodes) {
-      const content = theme?.files?.nodes?.[0]?.body?.content;
+      const themeFiles = Array.isArray(theme?.files?.nodes)
+        ? theme.files.nodes
+        : [];
+      const jsonFiles = themeFiles
+        .map((node: any) => ({
+          fileName: String(node?.filename || "").trim(),
+          content: node?.body?.content,
+        }))
+        .filter(
+          (file: { fileName: string; content?: unknown }) =>
+            Boolean(file.fileName) &&
+            file.fileName.endsWith(".json") &&
+            typeof file.content === "string" &&
+            file.content.trim() !== "",
+        );
       const themeDebug: ThemeExtensionThemeDebug = {
         id: String(theme?.id || ""),
         name: String(theme?.name || ""),
         role: String(theme?.role || ""),
-        hasSettingsData: Boolean(content && typeof content === "string"),
+        hasSettingsData: jsonFiles.some(
+          (file: { fileName: string }) =>
+            file.fileName === "config/settings_data.json",
+        ),
         matchedEntries: [],
       };
       debug.themes.push(themeDebug);
-      if (!content || typeof content !== "string") {
-        themeDebug.result = "missing-settings-data";
-        console.error("[theme-extension] theme missing settings_data", {
+      if (!jsonFiles.length) {
+        themeDebug.result = "missing-theme-json-files";
+        console.error("[theme-extension] theme missing relevant json files", {
           themeId: theme?.id,
           themeName: theme?.name,
           themeRole: theme?.role,
         });
         continue;
       }
-
-      // Some themes may include comments in settings_data content.
-      // Strip JS-style comments before JSON.parse for compatibility.
-      const normalizedContent = content
-        .replace(/\/\*[\s\S]*?\*\//g, "")
-        .replace(/^\s*\/\/.*$/gm, "");
-
-      let settingsData;
-      try {
-        settingsData = JSON.parse(normalizedContent);
-        themeDebug.parseOk = true;
-      } catch (e) {
-        themeDebug.parseOk = false;
-        themeDebug.result = "parse-failed";
-        console.error("[theme-extension] failed to parse settings_data.json", {
-          themeId: theme?.id,
-          themeName: theme?.name,
-          themeRole: theme?.role,
-          error: e,
-        });
-        continue;
-      }
-
       const blockEntries: ThemeBlockEntry[] = [];
-      collectThemeBlockEntries(settingsData, blockEntries);
+      let parsedFileCount = 0;
+      let parseFailedCount = 0;
+      for (const file of jsonFiles) {
+        try {
+          const parsed = JSON.parse(normalizeThemeJsonFileContent(file.content));
+          parsedFileCount += 1;
+          collectThemeBlockEntries(parsed, blockEntries, file.fileName);
+        } catch (error) {
+          parseFailedCount += 1;
+          console.error("[theme-extension] failed to parse theme json file", {
+            themeId: theme?.id,
+            themeName: theme?.name,
+            themeRole: theme?.role,
+            fileName: file.fileName,
+            error,
+          });
+        }
+      }
+      themeDebug.parseOk = parsedFileCount > 0 && parseFailedCount === 0;
+      if (parsedFileCount === 0) {
+        themeDebug.result = "parse-failed";
+        continue;
+      }
       scannedBlockCount += blockEntries.length;
       debug.scannedBlockCount = scannedBlockCount;
       themeDebug.totalBlockEntries = blockEntries.length;
@@ -1569,7 +1620,8 @@ const getThemeExtensionEnabledAcrossThemes = async (
           );
         })
         .slice(0, 12)
-        .map(({ block, entryKey }) => ({
+        .map(({ block, entryKey, fileName }) => ({
+          fileName,
           entryKey,
           blockType: String(block?.type || ""),
           disabled: block?.disabled,
@@ -1580,12 +1632,13 @@ const getThemeExtensionEnabledAcrossThemes = async (
         themeId: theme?.id,
         themeName: theme?.name,
         themeRole: theme?.role,
+        files: jsonFiles.map((file: { fileName: string }) => file.fileName),
         totalBlockEntries: blockEntries.length,
         appRelatedEntryCount: appRelatedEntries.length,
         appRelatedEntries,
       });
 
-      for (const { block, entryKey } of blockEntries) {
+      for (const { block, entryKey, fileName } of blockEntries) {
         const blockType = String(block?.type || "");
         const matchesBlock = matchesEmbedFromEditorUrl(blockType, entryKey);
         if (!matchesBlock) continue;
@@ -1597,6 +1650,7 @@ const getThemeExtensionEnabledAcrossThemes = async (
           !matchedByApp && !matchedByUid && isLikelyThemeEmbedBlock(block);
         const enabled = block?.disabled !== true;
         themeDebug.matchedEntries?.push({
+          fileName,
           entryKey,
           blockType,
           disabled: block?.disabled,
@@ -1615,6 +1669,7 @@ const getThemeExtensionEnabledAcrossThemes = async (
           themeId: theme?.id,
           themeName: theme?.name,
           themeRole: theme?.role,
+          fileName,
           entryKey,
           blockType,
           matchedByApp,
@@ -1637,6 +1692,7 @@ const getThemeExtensionEnabledAcrossThemes = async (
             themeId: theme?.id,
             themeName: theme?.name,
             themeRole: theme?.role,
+            fileName,
             entryKey,
             blockType,
           });
@@ -1767,12 +1823,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const themeExtensionDetection = await getCurrentThemeExtensionEnabled(admin);
   const themeExtensionEnabled = themeExtensionDetection.enabled;
   const themeExtensionDetectionFailed = Boolean(themeExtensionDetection.debug?.error);
+  const themeExtensionEnabledForSync =
+    themeExtensionDetectionFailed && !themeExtensionEnabled
+      ? null
+      : themeExtensionEnabled;
   const themeTargets = await fetchThemeEditorTargets(admin);
 
   const syncResult = await syncShopOffersMetafield(
     admin,
     session.shop,
-    themeExtensionEnabled,
+    themeExtensionEnabledForSync,
   );
   if (!syncResult.ok) {
     console.error("Failed to sync shop offers metafield in loader", {
