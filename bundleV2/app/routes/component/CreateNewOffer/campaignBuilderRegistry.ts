@@ -41,6 +41,15 @@ function getRulesBySource(
   );
 }
 
+function getExecutableRulesBySource(
+  ctx: CampaignBuilderRegistryContext,
+  sourceOfferType: OfferTypeId,
+): UnifiedRuleNode[] {
+  return getRulesBySource(ctx, sourceOfferType).filter(
+    (rule) => rule.type !== "single_purchase",
+  );
+}
+
 function countRulesByConditionKind(
   rules: UnifiedRuleNode[],
   kind: UnifiedRuleNode["condition"]["kind"],
@@ -305,7 +314,7 @@ const BEHAVIOR_BY_OFFER_TYPE: Record<OfferTypeId, CampaignBuilderBehavior> = {
   "quantity-breaks-same": {},
   "shipping-discount": {
     getLogicSummary: (ctx) => {
-      const shippingRules = getRulesBySource(ctx, "shipping-discount").filter(
+      const shippingRules = getExecutableRulesBySource(ctx, "shipping-discount").filter(
         (rule) => rule.reward.kind === "free_shipping",
       );
       const amountRules = countRulesByConditionKind(shippingRules, "cart_amount");
@@ -314,18 +323,18 @@ const BEHAVIOR_BY_OFFER_TYPE: Record<OfferTypeId, CampaignBuilderBehavior> = {
     },
     validateScopeAndLogicStep: (ctx) =>
       ctx.selectedProductsData.length === 0 ||
-      getRulesBySource(ctx, "shipping-discount").length === 0
+      getExecutableRulesBySource(ctx, "shipping-discount").length === 0
         ? "Please select campaign products and configure at least one free-shipping tier."
         : null,
     validateFinalSubmitScopeAndLogic: (ctx) =>
       ctx.selectedProductsData.length === 0 ||
-      getRulesBySource(ctx, "shipping-discount").length === 0
+      getExecutableRulesBySource(ctx, "shipping-discount").length === 0
         ? "Shipping discount offers require selected products and at least one free-shipping tier."
         : null,
   },
   "order-discount": {
     getLogicSummary: (ctx) => {
-      const orderRules = getRulesBySource(ctx, "order-discount").filter(
+      const orderRules = getExecutableRulesBySource(ctx, "order-discount").filter(
         (rule) =>
           rule.reward.kind === "percentage_off" &&
           rule.reward.discountClass === "order",
@@ -337,18 +346,18 @@ const BEHAVIOR_BY_OFFER_TYPE: Record<OfferTypeId, CampaignBuilderBehavior> = {
     },
     validateScopeAndLogicStep: (ctx) =>
       ctx.selectedProductsData.length === 0 ||
-      getRulesBySource(ctx, "order-discount").length === 0
+      getExecutableRulesBySource(ctx, "order-discount").length === 0
         ? "Please select campaign products and configure at least one order-discount tier."
         : null,
     validateFinalSubmitScopeAndLogic: (ctx) =>
       ctx.selectedProductsData.length === 0 ||
-      getRulesBySource(ctx, "order-discount").length === 0
+      getExecutableRulesBySource(ctx, "order-discount").length === 0
         ? "Order discount offers require selected products and at least one order-discount tier."
         : null,
   },
   coupon: {
     getLogicSummary: (ctx) => {
-      const orderRules = getRulesBySource(ctx, "coupon").filter(
+      const orderRules = getExecutableRulesBySource(ctx, "coupon").filter(
         (rule) =>
           rule.reward.kind === "percentage_off" &&
           rule.reward.discountClass === "order",
@@ -358,12 +367,12 @@ const BEHAVIOR_BY_OFFER_TYPE: Record<OfferTypeId, CampaignBuilderBehavior> = {
     },
     validateScopeAndLogicStep: (ctx) =>
       ctx.selectedProductsData.length === 0 ||
-      getRulesBySource(ctx, "coupon").length === 0
+      getExecutableRulesBySource(ctx, "coupon").length === 0
         ? "Please select campaign products and configure at least one coupon discount tier."
         : null,
     validateFinalSubmitScopeAndLogic: (ctx) =>
       ctx.selectedProductsData.length === 0 ||
-      getRulesBySource(ctx, "coupon").length === 0
+      getExecutableRulesBySource(ctx, "coupon").length === 0
         ? "Coupon offers require selected products and at least one coupon discount tier."
         : null,
   },
@@ -371,26 +380,26 @@ const BEHAVIOR_BY_OFFER_TYPE: Record<OfferTypeId, CampaignBuilderBehavior> = {
     getScopeSummary: (ctx) =>
       `${ctx.selectedProductsData.length} products available for tier product pools`,
     getLogicSummary: (ctx) => {
-      const rules = getRulesBySource(ctx, "quantity-breaks-different");
+      const rules = getExecutableRulesBySource(ctx, "quantity-breaks-different");
       const uniqueScopedProducts = getUniqueScopeProductCount(rules);
       return `${rules.length} quantity-break tiers across ${uniqueScopedProducts} scoped products`;
     },
     validateScopeAndLogicStep: (ctx) =>
       ctx.selectedProductsData.length === 0 ||
-      getRulesBySource(ctx, "quantity-breaks-different").length === 0
+      getExecutableRulesBySource(ctx, "quantity-breaks-different").length === 0
         ? "Please select campaign products and configure at least one quantity-break tier."
         : null,
     validateFinalSubmitScopeAndLogic: (ctx) =>
       ctx.selectedProductsData.length === 0 ||
-      getRulesBySource(ctx, "quantity-breaks-different").length === 0
+      getExecutableRulesBySource(ctx, "quantity-breaks-different").length === 0
         ? "Quantity breaks for different products require campaign products and at least one configured tier."
         : null,
   },
   bxgy: {
     getScopeSummary: (ctx) =>
-      `${getUniqueScopeProductCount(getRulesBySource(ctx, "bxgy"))} products in the BXGY pool`,
+      `${getUniqueScopeProductCount(getExecutableRulesBySource(ctx, "bxgy"))} products in the BXGY pool`,
     getLogicSummary: (ctx) => {
-      const rules = getRulesBySource(ctx, "bxgy");
+      const rules = getExecutableRulesBySource(ctx, "bxgy");
       const bestBundleQty = rules.reduce(
         (max, rule) =>
           rule.condition.kind === "buy_x_get_y"
@@ -401,11 +410,11 @@ const BEHAVIOR_BY_OFFER_TYPE: Record<OfferTypeId, CampaignBuilderBehavior> = {
       return `${rules.length} BXGY bars, up to ${bestBundleQty} items in one bundle`;
     },
     validateScopeAndLogicStep: (ctx) =>
-      ctx.buyProducts.length === 0 || getRulesBySource(ctx, "bxgy").length === 0
+      ctx.buyProducts.length === 0 || getExecutableRulesBySource(ctx, "bxgy").length === 0
         ? "Please select the BXGY product pool and configure at least one BXGY bar."
         : null,
     validateFinalSubmitScopeAndLogic: (ctx) =>
-      ctx.buyProducts.length === 0 || getRulesBySource(ctx, "bxgy").length === 0
+      ctx.buyProducts.length === 0 || getExecutableRulesBySource(ctx, "bxgy").length === 0
         ? "For BXGY offers, you must configure the BXGY product pool and at least one BXGY bar."
         : null,
   },

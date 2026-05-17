@@ -357,6 +357,81 @@ function BuilderBarCard({
   );
 }
 
+function SinglePurchaseBarDetail({
+  bar,
+  rule,
+  headerActions,
+  onChange,
+}: {
+  bar: CampaignBarItem;
+  rule: {
+    title?: string;
+    subtitle?: string;
+    badge?: string;
+    isDefault?: boolean;
+  };
+  headerActions?: ReactNode;
+  onChange: (patch: {
+    title?: string;
+    subtitle?: string;
+    badge?: string;
+    isDefault?: boolean;
+  }) => void;
+}) {
+  return (
+    <BuilderBarCard bar={bar} actions={headerActions}>
+      <BuilderSection
+        title="Single purchase option"
+        description="Keeps the standalone one-item purchase path when the storefront selector is replaced."
+      >
+        <FieldGrid>
+          <label className="block text-[13px] font-medium text-[#1c1f23]">
+            Title
+            <Input
+              size="large"
+              className="mt-1"
+              value={rule.title || ""}
+              onChange={(e) => onChange({ title: e.target.value })}
+              placeholder="Single"
+            />
+          </label>
+          <label className="block text-[13px] font-medium text-[#1c1f23]">
+            Subtitle
+            <Input
+              size="large"
+              className="mt-1"
+              value={rule.subtitle || ""}
+              onChange={(e) => onChange({ subtitle: e.target.value })}
+              placeholder="Standard price"
+            />
+          </label>
+          <label className="block text-[13px] font-medium text-[#1c1f23] xl:col-span-2">
+            Badge
+            <Input
+              size="large"
+              className="mt-1"
+              value={rule.badge || ""}
+              onChange={(e) => onChange({ badge: e.target.value })}
+              placeholder="Optional label"
+            />
+          </label>
+        </FieldGrid>
+        <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
+          This bar is display-only. It keeps the standard single-item purchase option visible and
+          never applies any discount logic.
+        </div>
+        <label className="flex items-center justify-between gap-3 rounded-[10px] border border-[#e3e8ed] bg-white px-4 py-3">
+          <span className="text-[13px] font-medium text-[#1c1f23]">Default selected</span>
+          <Switch
+            checked={!!rule.isDefault}
+            onChange={(checked) => onChange({ isDefault: checked })}
+          />
+        </label>
+      </BuilderSection>
+    </BuilderBarCard>
+  );
+}
+
 function DiscountRuleBarDetail({
   bar,
   draft,
@@ -1129,25 +1204,23 @@ export default function StepTwoCompositionBuilder({
   useEffect(() => {
     if (
       activeModuleId &&
-      visibleModules.some((module) => module.id === activeModuleId)
+      visibleModules.some(
+        (module) =>
+          module.id === activeModuleId &&
+          (!module.toggleable || module.enabled),
+      )
     ) {
       return;
     }
-    if (visibleModules.length > 0) {
-      const firstEnabledModule = visibleModules.find((module) => module.enabled);
-      setActiveModuleId((firstEnabledModule || visibleModules[0]).id);
+    const firstOpenModule = visibleModules.find(
+      (module) => !module.toggleable || module.enabled,
+    );
+    if (firstOpenModule) {
+      setActiveModuleId(firstOpenModule.id);
       return;
     }
     setActiveModuleId(null);
   }, [activeModuleId, visibleModules]);
-
-  const activeModule = useMemo(
-    () =>
-      visibleModules.find((module) => module.id === activeModuleId) ||
-      visibleModules.find((module) => module.enabled) ||
-      visibleModules[0],
-    [activeModuleId, visibleModules],
-  );
   useEffect(() => {
     // #region debug-point B:bars-snapshot
     fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"step2-add-bar",runId:"pre-fix",hypothesisId:"B",location:"StepTwoCompositionBuilder.tsx:1093",msg:"[DEBUG] StepTwo bars/snapshot changed",data:{offerType:draft.offerType,barsCount:bars.length,barIds:bars.map((bar)=>bar.id),snapshotCount:draft.unifiedRulesSnapshot.length,snapshotIds:draft.unifiedRulesSnapshot.map((rule)=>rule.id),discountRules:draft.discountRules.length,differentProductsRules:draft.differentProductsDiscountRules.length,bxgyRules:draft.bxgyDiscountRules.length,freeGiftRules:draft.freeGiftRules.length},ts:Date.now()})}).catch(()=>{});
@@ -1185,7 +1258,11 @@ export default function StepTwoCompositionBuilder({
         type="text"
         size="small"
         className="flex items-center justify-center"
-        disabled={index === 0}
+        disabled={
+          bar.type === "single_purchase" ||
+          index === 0 ||
+          (bars[0]?.type === "single_purchase" && index === 1)
+        }
         icon={<ChevronUp size={14} aria-hidden />}
         aria-label={`Move ${bar.title} up`}
         title="Move up"
@@ -1195,7 +1272,7 @@ export default function StepTwoCompositionBuilder({
         type="text"
         size="small"
         className="flex items-center justify-center"
-        disabled={index === bars.length - 1}
+        disabled={bar.type === "single_purchase" || index === bars.length - 1}
         icon={<ChevronDown size={14} aria-hidden />}
         aria-label={`Move ${bar.title} down`}
         title="Move down"
@@ -1206,6 +1283,7 @@ export default function StepTwoCompositionBuilder({
         danger
         size="small"
         className="flex items-center justify-center"
+        disabled={bar.type === "single_purchase"}
         icon={<Trash2 size={14} aria-hidden />}
         aria-label={`Remove ${bar.title}`}
         title="Remove"
@@ -1233,6 +1311,28 @@ export default function StepTwoCompositionBuilder({
           ? draft.differentProductsDiscountRules[targetRuleIndex]
           : null;
       if (!rule) return null;
+      if (unifiedRule.type === "single_purchase") {
+        return (
+          <SinglePurchaseBarDetail
+            key={bar.id}
+            bar={bar}
+            rule={rule}
+            headerActions={renderBarActions(bar, index)}
+            onChange={(patch) =>
+              (() => {
+                if (patch.isDefault === true) {
+                  clearBarDefaults();
+                }
+                actions.setDifferentProductsDiscountRules((prev) =>
+                  prev.map((entry, ruleIndex) =>
+                    ruleIndex === targetRuleIndex ? { ...entry, ...patch } : entry,
+                  ),
+                );
+              })()
+            }
+          />
+        );
+      }
       return (
         <DifferentProductsRuleBarDetail
           key={bar.id}
@@ -1324,6 +1424,28 @@ export default function StepTwoCompositionBuilder({
         // #endregion
         return null;
       }
+      if (unifiedRule.type === "single_purchase") {
+        return (
+          <SinglePurchaseBarDetail
+            key={bar.id}
+            bar={bar}
+            rule={rule}
+            headerActions={renderBarActions(bar, index)}
+            onChange={(patch) =>
+              (() => {
+                if (patch.isDefault === true) {
+                  clearBarDefaults();
+                }
+                actions.setDiscountRules((prev) =>
+                  prev.map((entry, ruleIndex) =>
+                    ruleIndex === targetRuleIndex ? { ...entry, ...patch } : entry,
+                  ),
+                );
+              })()
+            }
+          />
+        );
+      }
       return (
         <DiscountRuleBarDetail
           key={bar.id}
@@ -1352,6 +1474,28 @@ export default function StepTwoCompositionBuilder({
       const rule =
         targetRuleIndex >= 0 ? draft.bxgyDiscountRules[targetRuleIndex] : null;
       if (!rule) return null;
+      if (unifiedRule.type === "single_purchase") {
+        return (
+          <SinglePurchaseBarDetail
+            key={bar.id}
+            bar={bar}
+            rule={rule}
+            headerActions={renderBarActions(bar, index)}
+            onChange={(patch) =>
+              (() => {
+                if (patch.isDefault === true) {
+                  clearBarDefaults();
+                }
+                actions.setBxgyDiscountRules((prev) =>
+                  prev.map((entry, ruleIndex) =>
+                    ruleIndex === targetRuleIndex ? { ...entry, ...patch } : entry,
+                  ),
+                );
+              })()
+            }
+          />
+        );
+      }
       return (
         <BxgyRuleBarDetail
           key={bar.id}
@@ -1383,6 +1527,28 @@ export default function StepTwoCompositionBuilder({
       const rule =
         targetRuleIndex >= 0 ? draft.freeGiftRules[targetRuleIndex] : null;
       if (!rule) return null;
+      if (unifiedRule.type === "single_purchase") {
+        return (
+          <SinglePurchaseBarDetail
+            key={bar.id}
+            bar={bar}
+            rule={rule}
+            headerActions={renderBarActions(bar, index)}
+            onChange={(patch) =>
+              (() => {
+                if (patch.isDefault === true) {
+                  clearBarDefaults();
+                }
+                actions.setFreeGiftRules((prev) =>
+                  prev.map((entry, ruleIndex) =>
+                    ruleIndex === targetRuleIndex ? { ...entry, ...patch } : entry,
+                  ),
+                );
+              })()
+            }
+          />
+        );
+      }
       return (
         <FreeGiftRuleBarDetail
           key={bar.id}
@@ -1410,8 +1576,8 @@ export default function StepTwoCompositionBuilder({
     return null;
   };
 
-  const renderModuleDetail = () => {
-    if (!activeModule) {
+  const renderModuleDetail = (module: CampaignModuleItem | undefined) => {
+    if (!module) {
       return (
         <QuietEmptyState>
           No components available for this template yet.
@@ -1419,7 +1585,7 @@ export default function StepTwoCompositionBuilder({
       );
     }
 
-    switch (activeModule.id) {
+    switch (module.id) {
       case "subscription":
         return (
           <DetailSection title="Subscriptions">
@@ -1549,9 +1715,49 @@ export default function StepTwoCompositionBuilder({
       default:
         return (
           <PlaceholderModuleDetail
-            title={activeModule.label}
+            title={module.label}
           />
         );
+    }
+  };
+
+  const handleModuleToggle = (module: CampaignModuleItem, checked: boolean) => {
+    if (module.id === "subscription") {
+      actions.setSubscriptionEnabled(Boolean(checked));
+    }
+    if (module.id === "progressive_gifts") {
+      actions.setProgressiveGifts({
+        ...draft.progressiveGifts,
+        enabled: Boolean(checked),
+      });
+    }
+    if (module.id === "countdown") {
+      setShowCountdownBlock(Boolean(checked));
+    }
+    if (module.id === "complete_bundle" && !checked) {
+      actions.clearCompleteBundleBars();
+    }
+    if (
+      module.id === "complete_bundle" &&
+      checked &&
+      draft.completeBundleBars.length === 0
+    ) {
+      actions.addCompleteBundleBar("quantity-break-same");
+    }
+    if (module.id === "checkbox_upsells") {
+      actions.setCheckboxUpsellsEnabled(Boolean(checked));
+    }
+
+    if (checked) {
+      setActiveModuleId(module.id);
+      return;
+    }
+
+    if (activeModuleId === module.id) {
+      const fallbackModule = visibleModules.find(
+        (entry) => entry.id !== module.id && (!entry.toggleable || entry.enabled),
+      );
+      setActiveModuleId(fallbackModule?.id ?? null);
     }
   };
 
@@ -1637,17 +1843,25 @@ export default function StepTwoCompositionBuilder({
             <div className="flex flex-col gap-2">
               {visibleModules.map((module) => (
                 (() => {
-                  const isActive = activeModule?.id === module.id;
-                  const tone = getModuleStatusTone(module, isActive);
+                  const isExpanded =
+                    activeModuleId === module.id &&
+                    (!module.toggleable || module.enabled);
+                  const tone = getModuleStatusTone(module, isExpanded);
                   return (
-                    <button
+                    <div
                       key={module.id}
-                      type="button"
-                      onClick={() => setActiveModuleId(module.id)}
-                      className={`w-full rounded-[10px] border px-3 py-3 text-left transition ${tone.container}`}
+                      className={`rounded-[10px] border px-3 py-3 transition ${tone.container}`}
                     >
                       <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!module.toggleable || module.enabled) {
+                              setActiveModuleId(module.id);
+                            }
+                          }}
+                          className="min-w-0 flex-1 bg-transparent p-0 text-left"
+                        >
                           <div className="flex flex-wrap items-center gap-2">
                             <div className="text-[13px] font-medium text-[#1c1f23]">
                               {module.label}
@@ -1663,47 +1877,35 @@ export default function StepTwoCompositionBuilder({
                               </span>
                             ) : null}
                           </div>
+                        </button>
+                        <div className="flex items-center gap-2">
+                          {isExpanded ? (
+                            <ChevronUp size={16} aria-hidden className="text-[#5c6166]" />
+                          ) : (
+                            <ChevronDown size={16} aria-hidden className="text-[#5c6166]" />
+                          )}
+                          {module.toggleable ? (
+                            <Switch
+                              checked={module.enabled}
+                              onClick={(checked, event) => {
+                                event?.stopPropagation();
+                                handleModuleToggle(module, Boolean(checked));
+                              }}
+                            />
+                          ) : null}
                         </div>
-                        {module.toggleable ? (
-                          <Switch
-                            checked={module.enabled}
-                            onClick={(checked, event) => {
-                              event?.stopPropagation();
-                              if (module.id === "subscription") {
-                                actions.setSubscriptionEnabled(Boolean(checked));
-                              }
-                              if (module.id === "progressive_gifts") {
-                                actions.setProgressiveGifts({
-                                  ...draft.progressiveGifts,
-                                  enabled: Boolean(checked),
-                                });
-                              }
-                              if (module.id === "countdown") {
-                                setShowCountdownBlock(Boolean(checked));
-                              }
-                              if (module.id === "complete_bundle" && !checked) {
-                                actions.clearCompleteBundleBars();
-                              }
-                              if (
-                                module.id === "complete_bundle" &&
-                                checked &&
-                                draft.completeBundleBars.length === 0
-                              ) {
-                                actions.addCompleteBundleBar("quantity-break-same");
-                              }
-                              if (module.id === "checkbox_upsells") {
-                                actions.setCheckboxUpsellsEnabled(Boolean(checked));
-                              }
-                            }}
-                          />
-                        ) : null}
                       </div>
-                    </button>
+
+                      {isExpanded ? (
+                        <div className="mt-4 border-t border-[#e8ebee] pt-4">
+                          {renderModuleDetail(module)}
+                        </div>
+                      ) : null}
+                    </div>
                   );
                 })()
               ))}
             </div>
-            <div className="mt-4">{renderModuleDetail()}</div>
           </DetailSection>
         </div>
 

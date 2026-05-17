@@ -13,6 +13,7 @@ import {
 } from "./unifiedRulesSchema";
 
 export type CampaignBarType =
+  | "single_purchase"
   | "quantity_break"
   | "bxgy"
   | "free_gift";
@@ -59,6 +60,7 @@ function hasConfiguredCompleteBundleBars(bars: CampaignDraft["completeBundleBars
 }
 
 function getCampaignBarTypeFromUnifiedRule(rule: UnifiedRuleNode): CampaignBarType {
+  if (rule.type === "single_purchase") return "single_purchase";
   if (rule.type === "bxgy") return "bxgy";
   if (rule.type === "free_gift") return "free_gift";
   return "quantity_break";
@@ -93,6 +95,9 @@ function getThresholdSummary(rule: UnifiedRuleNode): string {
 }
 
 function buildUnifiedBarSummary(rule: UnifiedRuleNode): string {
+  if (rule.type === "single_purchase") {
+    return "Standalone purchase • Standard price";
+  }
   const thresholdLabel = getThresholdSummary(rule);
 
   switch (rule.reward.kind) {
@@ -133,6 +138,8 @@ function buildUnifiedBarTitle(
 ): string {
   const displayIndex = indexWithinCollection + 1;
   switch (rule.type) {
+    case "single_purchase":
+      return `Bar #${displayIndex} - Single`;
     case "bxgy":
       return `Bar #${displayIndex} - Buy X, Get Y`;
     case "free_gift":
@@ -150,12 +157,25 @@ function buildUnifiedBarTitle(
   }
 }
 
-function isBarRule(rule: UnifiedRuleNode): boolean {
-  return (
-    rule.type !== "single_purchase" &&
-    rule.type !== "complete_bundle" &&
-    rule.type !== "subscription"
-  );
+function isPrimarySingleRuleSource(
+  offerType: CampaignDraft["offerType"],
+  sourceOfferType: UnifiedRuleNode["sourceOfferType"],
+): boolean {
+  if (offerType === "subscription") {
+    return sourceOfferType === "quantity-breaks-same";
+  }
+  return sourceOfferType === offerType;
+}
+
+function isBarRule(rule: UnifiedRuleNode, draft: CampaignDraft): boolean {
+  if (rule.type === "complete_bundle" || rule.type === "subscription") {
+    return false;
+  }
+  if (rule.type === "single_purchase") {
+    return draft.offerType !== "complete-bundle" &&
+      isPrimarySingleRuleSource(draft.offerType, rule.sourceOfferType);
+  }
+  return true;
 }
 
 function buildCampaignCompositionBarCounters(rules: UnifiedRuleNode[]) {
@@ -177,7 +197,7 @@ export function getCampaignCompositionBars(
   draft: CampaignDraft,
 ): CampaignBarItem[] {
   return buildCampaignCompositionBarCounters(
-    draft.unifiedRulesSnapshot.filter(isBarRule),
+    draft.unifiedRulesSnapshot.filter((rule) => isBarRule(rule, draft)),
   ).map(({ rule, collection, indexWithinCollection }) => ({
     id: rule.id,
     type: getCampaignBarTypeFromUnifiedRule(rule),

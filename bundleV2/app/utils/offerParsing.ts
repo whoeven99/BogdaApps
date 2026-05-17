@@ -788,9 +788,14 @@ export function createDefaultSingleDiscountRule(
 }
 
 export function normalizeDiscountRules(rules: DiscountRule[]): DiscountRule[] {
+  if (!rules.length) return [];
+  let singleRule: DiscountRule | null = null;
   const offerRules: DiscountRule[] = [];
   for (const rule of rules) {
     if (isSingleDiscountRule(rule)) {
+      if (!singleRule) {
+        singleRule = createDefaultSingleDiscountRule(rule);
+      }
       continue;
     }
     const rewardType =
@@ -821,17 +826,27 @@ export function normalizeDiscountRules(rules: DiscountRule[]): DiscountRule[] {
             : "percentage_discount",
     });
   }
+  if (!singleRule) {
+    singleRule = createDefaultSingleDiscountRule();
+  }
   offerRules.sort((a, b) => a.count - b.count);
-  const explicitDefault = offerRules.find((rule) => rule.isDefault);
-  const fallbackDefault = offerRules[0];
+  const orderedRules = [singleRule, ...offerRules];
+  const explicitDefault = orderedRules.find((rule) => rule.isDefault);
+  const fallbackDefault = offerRules[0] || singleRule;
   const defaultKey = explicitDefault?.id || fallbackDefault?.id || "";
-  return offerRules.map((rule, index) => ({
-    ...rule,
-    id:
-      rule.id || `discount-rule-${index}`,
-    tierType: "standard",
-    isDefault: defaultKey ? rule.id === defaultKey : index === 0,
-  }));
+  return orderedRules.map((rule, index) =>
+    isSingleDiscountRule(rule)
+      ? createDefaultSingleDiscountRule({
+          ...rule,
+          isDefault: defaultKey ? rule.id === defaultKey : false,
+        })
+      : {
+          ...rule,
+          id: rule.id || `discount-rule-${index}`,
+          tierType: "standard",
+          isDefault: defaultKey ? rule.id === defaultKey : index === 1,
+        },
+  );
 }
 
 export function isSingleDifferentProductsRule(
@@ -863,9 +878,14 @@ export function createDefaultSingleDifferentProductsRule(
 export function normalizeDifferentProductsDiscountRules(
   rules: DifferentProductsDiscountRule[],
 ): DifferentProductsDiscountRule[] {
+  if (!rules.length) return [];
+  let singleRule: DifferentProductsDiscountRule | null = null;
   const offerRules: DifferentProductsDiscountRule[] = [];
   for (const rule of rules) {
     if (isSingleDifferentProductsRule(rule)) {
+      if (!singleRule) {
+        singleRule = createDefaultSingleDifferentProductsRule(rule);
+      }
       continue;
     }
     offerRules.push({
@@ -889,21 +909,25 @@ export function normalizeDifferentProductsDiscountRules(
       isDefault: !!rule.isDefault,
     });
   }
+  if (!singleRule) {
+    singleRule = createDefaultSingleDifferentProductsRule();
+  }
   offerRules.sort((a, b) => a.count - b.count);
-  const explicitDefault = offerRules.find((rule) => rule.isDefault);
-  const fallbackDefault = offerRules[0];
+  const orderedRules = [singleRule, ...offerRules];
+  const explicitDefault = orderedRules.find((rule) => rule.isDefault);
+  const fallbackDefault = offerRules[0] || singleRule;
   const defaultIndex = explicitDefault
-    ? offerRules.findIndex(
+    ? orderedRules.findIndex(
         (rule) =>
           rule.count === explicitDefault.count &&
           rule.tierType === explicitDefault.tierType,
       )
-    : offerRules.findIndex(
+    : orderedRules.findIndex(
         (rule) =>
           rule.count === fallbackDefault?.count &&
           rule.tierType === fallbackDefault?.tierType,
       );
-  return offerRules.map((rule, index) => ({
+  return orderedRules.map((rule, index) => ({
     ...rule,
     isDefault: index === Math.max(0, defaultIndex),
   }));
@@ -936,9 +960,14 @@ export function createDefaultSingleBxgyRule(
 }
 
 export function normalizeBxgyRules(rules: BxgyDiscountRule[]): BxgyDiscountRule[] {
+  if (!rules.length) return [];
+  let singleRule: BxgyDiscountRule | null = null;
   const offerRules: BxgyDiscountRule[] = [];
   for (const rule of rules) {
     if (isSingleBxgyRule(rule)) {
+      if (!singleRule) {
+        singleRule = createDefaultSingleBxgyRule(rule);
+      }
       continue;
     }
     const normalizedBuyQuantity = Math.max(
@@ -957,13 +986,17 @@ export function normalizeBxgyRules(rules: BxgyDiscountRule[]): BxgyDiscountRule[
       isDefault: !!rule.isDefault,
     });
   }
+  if (!singleRule) {
+    singleRule = createDefaultSingleBxgyRule();
+  }
   offerRules.sort((a, b) => a.count - b.count);
-  const explicitDefault = offerRules.find((rule) => rule.isDefault);
-  const fallbackDefault = offerRules[0];
+  const orderedRules = [singleRule, ...offerRules];
+  const explicitDefault = orderedRules.find((rule) => rule.isDefault);
+  const fallbackDefault = offerRules[0] || singleRule;
   const defaultIndex = explicitDefault
-    ? offerRules.findIndex((rule) => rule.count === explicitDefault.count)
-    : offerRules.findIndex((rule) => rule.count === fallbackDefault?.count);
-  return offerRules.map((rule, index) => ({
+    ? orderedRules.findIndex((rule) => rule.count === explicitDefault.count)
+    : orderedRules.findIndex((rule) => rule.count === fallbackDefault?.count);
+  return orderedRules.map((rule, index) => ({
     ...rule,
     isDefault: index === Math.max(0, defaultIndex),
   }));
@@ -992,9 +1025,14 @@ export function createDefaultSingleFreeGiftRule(
 }
 
 export function normalizeFreeGiftRules(rules: FreeGiftRule[]): FreeGiftRule[] {
+  if (!rules.length) return [];
+  let singleRule: FreeGiftRule | null = null;
   const offerRules: FreeGiftRule[] = [];
   for (const rule of rules) {
     if (isSingleFreeGiftRule(rule)) {
+      if (!singleRule) {
+        singleRule = createDefaultSingleFreeGiftRule(rule);
+      }
       continue;
     }
     offerRules.push({
@@ -1006,13 +1044,17 @@ export function normalizeFreeGiftRules(rules: FreeGiftRule[]): FreeGiftRule[] {
       isDefault: !!rule.isDefault,
     });
   }
+  if (!singleRule) {
+    singleRule = createDefaultSingleFreeGiftRule();
+  }
   offerRules.sort((a, b) => a.count - b.count);
-  const explicitDefault = offerRules.find((rule) => rule.isDefault);
-  const fallbackDefault = offerRules[0];
+  const orderedRules = [singleRule, ...offerRules];
+  const explicitDefault = orderedRules.find((rule) => rule.isDefault);
+  const fallbackDefault = offerRules[0] || singleRule;
   const defaultIndex = explicitDefault
-    ? offerRules.findIndex((rule) => rule.count === explicitDefault.count)
-    : offerRules.findIndex((rule) => rule.count === fallbackDefault?.count);
-  return offerRules.map((rule, index) => ({
+    ? orderedRules.findIndex((rule) => rule.count === explicitDefault.count)
+    : orderedRules.findIndex((rule) => rule.count === fallbackDefault?.count);
+  return orderedRules.map((rule, index) => ({
     ...rule,
     isDefault: index === Math.max(0, defaultIndex),
   }));
@@ -1233,6 +1275,18 @@ export function parseDiscountRules(discountRulesJson?: string | null): DiscountR
         (item as { discountPercent?: unknown }).discountPercent,
       );
       if (isSingleTier) {
+        out.push(
+          createDefaultSingleDiscountRule({
+            id:
+              typeof (item as { id?: unknown }).id === "string"
+                ? (item as { id: string }).id
+                : undefined,
+            title: (item as { title?: string }).title || "",
+            subtitle: (item as { subtitle?: string }).subtitle || "",
+            badge: (item as { badge?: string }).badge || "",
+            isDefault: !!(item as { isDefault?: boolean }).isDefault,
+          }),
+        );
         continue;
       }
       if (conditionType === "item_quantity" && (!Number.isFinite(count) || count < 1)) continue;
@@ -3186,6 +3240,18 @@ export function parseBxgyDiscountRules(discountRulesJson?: string | null): BxgyD
     for (const item of parsed) {
       if (!item || typeof item !== "object") continue;
       if ((item as { tierType?: unknown }).tierType === "single") {
+        out.push(
+          createDefaultSingleBxgyRule({
+            id:
+              typeof (item as { id?: unknown }).id === "string"
+                ? (item as { id: string }).id
+                : undefined,
+            title: (item as { title?: string }).title || "",
+            subtitle: (item as { subtitle?: string }).subtitle || "",
+            badge: (item as { badge?: string }).badge || "",
+            isDefault: !!(item as { isDefault?: boolean }).isDefault,
+          }),
+        );
         continue;
       }
       
@@ -3246,6 +3312,18 @@ export function parseFreeGiftRules(discountRulesJson?: string | null): FreeGiftR
     for (const item of parsed) {
       if (!item || typeof item !== "object") continue;
       if ((item as { tierType?: unknown }).tierType === "single") {
+        out.push(
+          createDefaultSingleFreeGiftRule({
+            id:
+              typeof (item as { id?: unknown }).id === "string"
+                ? (item as { id: string }).id
+                : undefined,
+            title: (item as { title?: string }).title || "",
+            subtitle: (item as { subtitle?: string }).subtitle || "",
+            badge: (item as { badge?: string }).badge || "",
+            isDefault: !!(item as { isDefault?: boolean }).isDefault,
+          }),
+        );
         continue;
       }
 
@@ -3282,6 +3360,7 @@ export function parseFreeGiftRules(discountRulesJson?: string | null): FreeGiftR
 /** Build BXGY discount rules JSON for DB storage — deduplicates by count, sorts ascending. */
 export function buildBxgyDiscountRulesJson(tiers: BxgyDiscountRule[]): BxgyDiscountRule[] {
   const normalizedTiers = normalizeBxgyRules(tiers);
+  const singleRule = normalizedTiers.find((tier) => isSingleBxgyRule(tier));
   const dedupedByCount = new Map<string, BxgyDiscountRule>();
   for (const tier of normalizedTiers) {
     if (isSingleBxgyRule(tier)) {
@@ -3312,7 +3391,10 @@ export function buildBxgyDiscountRulesJson(tiers: BxgyDiscountRule[]): BxgyDisco
       isDefault: !!tier.isDefault,
     });
   }
-  return normalizeBxgyRules(Array.from(dedupedByCount.values()));
+  return normalizeBxgyRules([
+    ...(singleRule ? [singleRule] : []),
+    ...Array.from(dedupedByCount.values()),
+  ]);
 }
 
 export function parseDifferentProductsDiscountRules(
@@ -3339,6 +3421,7 @@ export function buildDifferentProductsDiscountRulesJson(
   tiers: DifferentProductsDiscountRule[],
 ): DifferentProductsDiscountRule[] {
   const normalizedTiers = normalizeDifferentProductsDiscountRules(tiers);
+  const singleRule = normalizedTiers.find((tier) => isSingleDifferentProductsRule(tier));
   const dedupedByCount = new Map<string, DifferentProductsDiscountRule>();
   for (const tier of normalizedTiers) {
     if (isSingleDifferentProductsRule(tier)) {
@@ -3348,11 +3431,15 @@ export function buildDifferentProductsDiscountRulesJson(
     if (!sanitized) continue;
     dedupedByCount.set(`${sanitized.tierType}|${sanitized.count}`, sanitized);
   }
-  return normalizeDifferentProductsDiscountRules(Array.from(dedupedByCount.values()));
+  return normalizeDifferentProductsDiscountRules([
+    ...(singleRule ? [singleRule] : []),
+    ...Array.from(dedupedByCount.values()),
+  ]);
 }
 
 export function buildFreeGiftRulesJson(tiers: FreeGiftRule[]): FreeGiftRule[] {
   const normalizedTiers = normalizeFreeGiftRules(tiers);
+  const singleRule = normalizedTiers.find((tier) => isSingleFreeGiftRule(tier));
   const dedupedByCount = new Map<string, FreeGiftRule>();
   for (const tier of normalizedTiers) {
     if (isSingleFreeGiftRule(tier)) {
@@ -3374,7 +3461,10 @@ export function buildFreeGiftRulesJson(tiers: FreeGiftRule[]): FreeGiftRule[] {
       isDefault: !!tier.isDefault,
     });
   }
-  return normalizeFreeGiftRules(Array.from(dedupedByCount.values()));
+  return normalizeFreeGiftRules([
+    ...(singleRule ? [singleRule] : []),
+    ...Array.from(dedupedByCount.values()),
+  ]);
 }
 
 /** 主题 / 下拉选项展示：优先用显式 title，否则用 option 值拼接（与瘦 metafield 变体省略 title 兼容） */

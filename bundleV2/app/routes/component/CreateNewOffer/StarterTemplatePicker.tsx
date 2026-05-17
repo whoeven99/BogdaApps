@@ -138,6 +138,11 @@ function ShippingDiscountPreview() {
     <div className="flex min-h-[260px] flex-col rounded-[12px] border border-[#dfe3e8] bg-[#f6f6f7] p-[12px]">
       <div className="space-y-[8px]">
         <PreviewRow
+          title="Single"
+          subtitle="Standard shipping applies"
+          price="Shipping calculated at checkout"
+        />
+        <PreviewRow
           title="Buy 2 items"
           subtitle="Unlock free shipping"
           price="FREE SHIPPING"
@@ -198,6 +203,11 @@ function CouponPreview() {
   return (
     <div className="flex min-h-[260px] flex-col rounded-[12px] border border-[#dfe3e8] bg-[#f6f6f7] p-[12px]">
       <div className="space-y-[8px]">
+        <PreviewRow
+          title="Single"
+          subtitle="Standard price"
+          price="EUR65.00"
+        />
         <div className="rounded-[10px] bg-white px-[12px] py-[9px] shadow-[inset_0_0_0_1px_rgba(17,24,39,0.06)]">
           <div className="text-[13px] font-semibold text-[#1c1f23]">
             Coupon code: SAVE15
@@ -222,6 +232,7 @@ function BxgyPreview() {
   return (
     <div className="flex min-h-[260px] flex-col rounded-[12px] border border-[#dfe3e8] bg-[#f6f6f7] p-[12px]">
       <div className="space-y-[8px]">
+        <PreviewRow title="Single" subtitle="Standard price" price="EUR65.00" />
         <PreviewRow
           title="Buy 1, get 1 free"
           price="Get 1 Free"
@@ -324,6 +335,11 @@ function SubscriptionPreview() {
     <div className="flex min-h-[260px] flex-col rounded-[12px] border border-[#dfe3e8] bg-[#f6f6f7] p-[12px]">
       <div className="space-y-[8px]">
         <PreviewRow
+          title="Single"
+          subtitle="One-time purchase"
+          price="EUR65.00"
+        />
+        <PreviewRow
           title="Buy 1, get 1 free"
           price="EUR52.00"
           badge="Save 60%"
@@ -346,6 +362,7 @@ function FreeGiftPreview() {
   return (
     <div className="flex min-h-[260px] flex-col rounded-[12px] border border-[#dfe3e8] bg-[#f6f6f7] p-[12px]">
       <div className="space-y-[8px]">
+        <PreviewRow title="Single" subtitle="Standard price" price="EUR65.00" />
         <PreviewRow
           title="Buy 2 items"
           subtitle="Unlock 1 free mini gift"

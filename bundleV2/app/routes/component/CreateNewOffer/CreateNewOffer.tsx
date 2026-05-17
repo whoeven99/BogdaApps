@@ -36,7 +36,6 @@ import { ProgressiveGiftsSection } from "./ProgressiveGiftsSection";
 import ScheduleTargetingEditor from "./ScheduleTargetingEditor";
 import StepTwoCompositionBuilder from "./StepTwoCompositionBuilder";
 import {
-  COMPLETE_BUNDLE_TEMPLATE_PREVIEW_ITEMS,
   getStarterTemplateDefaults,
 } from "./starterTemplateDefaults";
 import {
@@ -2656,7 +2655,24 @@ export function CreateNewOffer({
         .size > 1,
     [orderedCompositionRulesSnapshot],
   );
-  const activeDisplayRules = orderedCompositionRulesSnapshot;
+  const activeDisplayRules = useMemo(() => {
+    if (offerType === "complete-bundle") {
+      return orderedCompositionRulesSnapshot.filter(
+        (rule) => rule.sourceOfferType === "complete-bundle",
+      );
+    }
+    const primarySingleSource =
+      offerType === "subscription" ? "quantity-breaks-same" : offerType;
+    const primarySingleRule = orderedCompositionRulesSnapshot.find(
+      (rule) =>
+        rule.type === "single_purchase" &&
+        rule.sourceOfferType === primarySingleSource,
+    );
+    return [
+      ...(primarySingleRule ? [primarySingleRule] : []),
+      ...orderedCompositionRulesSnapshot.filter((rule) => rule.type !== "single_purchase"),
+    ];
+  }, [offerType, orderedCompositionRulesSnapshot]);
   const getModuleBlockingMessage = () => {
     if (
       completeBundleBars.some((bar) => !isCompleteBundleSingleBar(bar)) &&
@@ -2829,36 +2845,11 @@ export function CreateNewOffer({
       .tz(scheduleTimezone)
       .format("YYYY-MM-DD HH:mm")}`;
   }, [countdownLabel, endTime, scheduleTimezone, showCountdownBlock]);
-  const completeBundlePreviewFallbackItems = useMemo(() => {
-    const source =
-      starterTemplateDefaults?.previewFallbackItems?.length
-        ? starterTemplateDefaults.previewFallbackItems
-        : COMPLETE_BUNDLE_TEMPLATE_PREVIEW_ITEMS;
-    const starterBar = completeBundleBars[0];
-    return source.map((item, index, items) => {
-      const shouldMirrorBundleCard =
-        item.id === "starter-complete-bundle-offer" ||
-        (index === items.length - 1 && item.featured);
-      if (!shouldMirrorBundleCard) return item;
-      return {
-        ...item,
-        id: starterBar?.id || item.id,
-        title: starterBar?.title || item.title,
-        subtitle: starterBar?.subtitle || item.subtitle,
-      };
-    });
-  }, [starterTemplateDefaults, completeBundleBars]);
   const previewItems: PreviewItem[] = useMemo(() => {
     if (offerType === "complete-bundle") {
-      const hasConfiguredProducts = completeBundleBars.some(
-        (bar) => Array.isArray(bar.products) && bar.products.length > 0,
-      );
-      if (!hasConfiguredProducts) {
-        return completeBundlePreviewFallbackItems;
-      }
       return buildUnifiedPreviewItems({
         offerType,
-        rules: orderedCompositionRulesSnapshot.filter(
+        rules: activeDisplayRules.filter(
           (rule) => rule.sourceOfferType === "complete-bundle",
         ),
         selectedProducts: Array.from(
@@ -2897,12 +2888,12 @@ export function CreateNewOffer({
     );
 
     const hasMixedCompositionSources = new Set(
-      orderedCompositionRulesSnapshot.map((rule) => rule.sourceOfferType),
+      activeDisplayRules.map((rule) => rule.sourceOfferType),
     ).size > 1;
 
     const computedItems = hasMixedCompositionSources
       ? buildCompositionPreviewItems({
-          rules: orderedCompositionRulesSnapshot,
+          rules: activeDisplayRules,
           selectedProducts: previewSelectedProducts,
           completeBundleBars,
           baseUnitPrice,
@@ -2910,7 +2901,7 @@ export function CreateNewOffer({
         })
       : buildUnifiedPreviewItems({
           offerType,
-          rules: orderedCompositionRulesSnapshot,
+          rules: activeDisplayRules,
           selectedProducts: previewSelectedProducts,
           completeBundleBars,
           baseUnitPrice,
@@ -2919,12 +2910,11 @@ export function CreateNewOffer({
     return computedItems;
   }, [
     offerType,
-    orderedCompositionRulesSnapshot,
+    activeDisplayRules,
     completeBundleBars,
     selectedProductsData,
     baseUnitPrice,
     formatPreviewPrice,
-    completeBundlePreviewFallbackItems,
   ]);
 
   const steps = [

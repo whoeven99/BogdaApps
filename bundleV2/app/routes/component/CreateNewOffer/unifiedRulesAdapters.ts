@@ -255,29 +255,46 @@ export function adaptDifferentProductsRules(
 export function adaptCompleteBundleBars(
   bars: CompleteBundleBar[],
 ): UnifiedRuleNode[] {
-  return bars
-    .filter((bar) => !isCompleteBundleSingleBar(bar))
-    .map((bar, index) => ({
-      id: buildNodeId("complete-bundle-bar", index, bar.id),
-    type: "complete_bundle",
-    sourceOfferType: "complete-bundle",
-    scope: {
-      kind: "bundle_bar_products",
-      barId: bar.id,
-      productIds: bar.products.map((product) => String(product.productId)),
-    },
-    condition: {
-      kind: "bundle_completion",
-      quantity: Math.max(1, Math.trunc(Number(bar.maxQuantity) || Number(bar.quantity) || 1)),
-    },
-    reward: {
-      kind: "bundle_pricing",
-      pricingMode: bar.pricing.mode,
-      pricingValue: Number(bar.pricing.value) || 0,
-    },
-    presentation: buildBasePresentation(bar),
-    publishSupport: "supported",
-    }));
+  return bars.map((bar, index) =>
+    isCompleteBundleSingleBar(bar)
+      ? {
+          id: buildNodeId("complete-bundle-bar", index, bar.id),
+          type: "single_purchase",
+          sourceOfferType: "complete-bundle",
+          scope: {
+            kind: "selected_products",
+          },
+          condition: {
+            kind: "single_purchase",
+          },
+          reward: {
+            kind: "standard_price",
+          },
+          presentation: buildBasePresentation(bar),
+          publishSupport: "supported",
+        }
+      : {
+          id: buildNodeId("complete-bundle-bar", index, bar.id),
+          type: "complete_bundle",
+          sourceOfferType: "complete-bundle",
+          scope: {
+            kind: "bundle_bar_products",
+            barId: bar.id,
+            productIds: bar.products.map((product) => String(product.productId)),
+          },
+          condition: {
+            kind: "bundle_completion",
+            quantity: Math.max(1, Math.trunc(Number(bar.maxQuantity) || Number(bar.quantity) || 1)),
+          },
+          reward: {
+            kind: "bundle_pricing",
+            pricingMode: bar.pricing.mode,
+            pricingValue: Number(bar.pricing.value) || 0,
+          },
+          presentation: buildBasePresentation(bar),
+          publishSupport: "supported",
+        },
+  );
 }
 
 export function adaptSubscriptionRule(

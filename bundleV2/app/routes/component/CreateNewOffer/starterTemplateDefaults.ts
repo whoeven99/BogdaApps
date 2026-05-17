@@ -1,5 +1,9 @@
 import type { PreviewItem } from "../BundlePreview/bundlePreviewShared";
 import {
+  createDefaultSingleBxgyRule,
+  createDefaultSingleDifferentProductsRule,
+  createDefaultSingleDiscountRule,
+  createDefaultSingleFreeGiftRule,
   parseOfferSettings,
   type BxgyDiscountRule,
   type CompleteBundleBar,
@@ -151,6 +155,11 @@ export function getStarterTemplateDefaults(
         }),
         discountRules: [],
         bxgyDiscountRules: [
+          createDefaultSingleBxgyRule({
+            title: "Single",
+            subtitle: "Standard price",
+            isDefault: false,
+          }),
           {
             count: 1,
             buyQuantity: 1,
@@ -204,6 +213,11 @@ export function getStarterTemplateDefaults(
           layoutFormat: "card",
         }),
         discountRules: [
+          createDefaultSingleDiscountRule({
+            title: "Single",
+            subtitle: "Standard price",
+            isDefault: false,
+          }),
           {
             count: 2,
             discountPercent: 20,
@@ -256,6 +270,14 @@ export function getStarterTemplateDefaults(
           layoutFormat: "vertical",
         }),
         discountRules: [
+          createDefaultSingleDiscountRule({
+            title: "Single",
+            subtitle: "Standard shipping applies",
+            isDefault: false,
+            discountClass: "shipping",
+            offerKind: "free_shipping",
+            rewardType: "free_shipping",
+          }),
           {
             count: 2,
             discountPercent: 0,
@@ -297,6 +319,12 @@ export function getStarterTemplateDefaults(
           layoutFormat: "vertical",
         }),
         discountRules: [
+          createDefaultSingleDiscountRule({
+            title: "Single",
+            subtitle: "Standard price",
+            isDefault: false,
+            discountClass: "order",
+          }),
           {
             count: 2,
             discountPercent: 10,
@@ -340,6 +368,12 @@ export function getStarterTemplateDefaults(
           couponCode: "SAVE15",
         }),
         discountRules: [
+          createDefaultSingleDiscountRule({
+            title: "Single",
+            subtitle: "Standard price",
+            isDefault: false,
+            discountClass: "order",
+          }),
           {
             count: 2,
             discountPercent: 15,
@@ -374,6 +408,11 @@ export function getStarterTemplateDefaults(
           subscriptionDefaultSelected: true,
         }),
         discountRules: [
+          createDefaultSingleDiscountRule({
+            title: "Single",
+            subtitle: "One-time price",
+            isDefault: false,
+          }),
           {
             count: 2,
             discountPercent: 60,
@@ -415,6 +454,11 @@ export function getStarterTemplateDefaults(
         discountRules: [],
         bxgyDiscountRules: [],
         freeGiftRules: [
+          createDefaultSingleFreeGiftRule({
+            title: "Single",
+            subtitle: "Standard price",
+            isDefault: false,
+          }),
           {
             count: 2,
             giftQuantity: 1,
@@ -447,6 +491,11 @@ export function getStarterTemplateDefaults(
         bxgyDiscountRules: [],
         freeGiftRules: [],
         differentProductsDiscountRules: [
+          createDefaultSingleDifferentProductsRule({
+            title: "Single",
+            subtitle: "Standard price",
+            isDefault: false,
+          }),
           {
             count: 2,
             discountPercent: 15,
@@ -488,6 +537,11 @@ export function getStarterTemplateDefaults(
           layoutFormat: "vertical",
         }),
         discountRules: [
+          createDefaultSingleDiscountRule({
+            title: "Single",
+            subtitle: "Standard price",
+            isDefault: false,
+          }),
           {
             count: 2,
             discountPercent: 15,
