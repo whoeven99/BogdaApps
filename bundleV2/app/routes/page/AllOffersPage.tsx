@@ -121,6 +121,7 @@ export function AllOffersPage({
   const navigation = useNavigation();
   const [deletingOffer, setDeletingOffer] = useState<AllOffersRow | null>(null);
   const [pendingToggleStatus, setPendingToggleStatus] = useState<Record<string, boolean>>({});
+  const [submittingToggleIds, setSubmittingToggleIds] = useState<Set<string>>(() => new Set());
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(() => new Set());
   const [showThemeExtensionModal, setShowThemeExtensionModal] = useState(false);
   const preferredThemeTarget = useMemo(
@@ -225,6 +226,9 @@ export function AllOffersPage({
     if (toast?.startsWith("delete-success")) {
       setDeletingOffer(null);
     }
+    if (toast?.startsWith("toggle-success")) {
+      setSubmittingToggleIds(new Set());
+    }
   }, [toast]);
 
   useEffect(() => {
@@ -244,6 +248,11 @@ export function AllOffersPage({
         const nextStatusRaw = navigation.formData.get("nextStatus");
         const nextStatus = String(nextStatusRaw || "").trim() === "true";
         setPendingToggleStatus((prev) => ({ ...prev, [id]: nextStatus }));
+        setSubmittingToggleIds((prev) => {
+          const next = new Set(prev);
+          next.add(id);
+          return next;
+        });
       }
       if (intent === "delete-offer" && typeof id === "string" && id) {
         setPendingDeleteIds((prev) => {
@@ -259,6 +268,7 @@ export function AllOffersPage({
     if (!actionData) return;
     if (!("_offerActionError" in actionData) || !actionData._offerActionError) return;
     setPendingToggleStatus({});
+    setSubmittingToggleIds(new Set());
     setPendingDeleteIds(new Set());
   }, [actionData]);
 
@@ -294,7 +304,7 @@ export function AllOffersPage({
     });
   }, [rows]);
 
-  const getIsToggling = (offerId: string) => offerId in pendingToggleStatus;
+  const getIsToggling = (offerId: string) => submittingToggleIds.has(offerId);
 
   return (
     <div className="max-w-[1280px] mx-auto pb-[24px]">

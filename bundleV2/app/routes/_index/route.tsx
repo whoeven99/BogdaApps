@@ -8,6 +8,7 @@ import {
   type ActionFunctionArgs,
   type HeadersFunction,
   type LoaderFunctionArgs,
+  type ShouldRevalidateFunctionArgs,
 } from "react-router";
 import {
   authenticate,
@@ -1834,6 +1835,27 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     billingSubscriptions,
     billingTestMode: billingIsTestCharge(),
   } satisfies IndexLoaderData);
+};
+
+const SKIP_INDEX_REVALIDATE_INTENTS = new Set([
+  "create-offer",
+  "update-offer",
+  "toggle-offer-status",
+  "delete-offer",
+  "load-offers",
+  "load-store-products",
+  "get-product-subscription-status",
+]);
+
+export const shouldRevalidate = ({
+  formData,
+  defaultShouldRevalidate,
+}: ShouldRevalidateFunctionArgs) => {
+  const intent = String(formData?.get("intent") || "").trim();
+  if (SKIP_INDEX_REVALIDATE_INTENTS.has(intent)) {
+    return false;
+  }
+  return defaultShouldRevalidate;
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {

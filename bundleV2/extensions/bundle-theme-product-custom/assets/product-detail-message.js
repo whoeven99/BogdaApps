@@ -1130,6 +1130,12 @@ function productIdsMatch(aLike, bLike) {
   return String(aLike || "").trim() === String(bLike || "").trim();
 }
 
+function productIdListIncludes(productIds, targetProductId) {
+  return Array.isArray(productIds)
+    ? productIds.some((productId) => productIdsMatch(productId, targetProductId))
+    : false;
+}
+
 function toVariantGid(idLike) {
   const raw = String(idLike || "").trim();
   if (!raw) return "";
@@ -1969,7 +1975,7 @@ function buildDifferentProductsProductCardHtml(
   const variant = resolveDifferentProductsVariant(product);
   const currentProductGid = getCurrentProductGid();
   const isCurrent =
-    currentProductGid && String(currentProductGid) === String(product?.productId || "");
+    currentProductGid && productIdsMatch(currentProductGid, product?.productId);
   const variants = Array.isArray(product?.variants) ? product.variants : [];
   const pickerKey = getDifferentProductsPickerKey(offer, selectedRule);
   const requiredQty = getDifferentProductsRequiredQuantity(selectedRule);
@@ -2464,7 +2470,7 @@ function getCurrentOffer(offersConfig) {
         console.log("[ciwi] bxgy offer skipped: current product GID is null", offer.id);
         continue;
       }
-      if (!rule.buyProductIds.includes(currentProductGid)) {
+      if (!productIdListIncludes(rule.buyProductIds, currentProductGid)) {
         console.log("[ciwi] bxgy offer skipped: current product not in buy list", offer.id, currentProductGid);
         continue;
       }
@@ -2480,7 +2486,10 @@ function getCurrentOffer(offersConfig) {
       const triggerProductIds = Array.isArray(completeBundle.triggerProductIds)
         ? completeBundle.triggerProductIds
         : [];
-      if (triggerProductIds.length > 0 && !triggerProductIds.includes(currentProductGid)) {
+      if (
+        triggerProductIds.length > 0 &&
+        !productIdListIncludes(triggerProductIds, currentProductGid)
+      ) {
         console.log(
           "[ciwi] complete bundle skipped: current product not in trigger list",
           offer.id,
@@ -2505,7 +2514,7 @@ function getCurrentOffer(offersConfig) {
             console.log("[ciwi] free-gift offer skipped: current product GID is null", offer.id);
             continue;
           }
-          if (!freeGiftConfig.triggerProducts.includes(currentProductGid)) {
+          if (!productIdListIncludes(freeGiftConfig.triggerProducts, currentProductGid)) {
             console.log(
               "[ciwi] free-gift offer skipped: current product not in trigger list",
               offer.id,
@@ -2532,7 +2541,7 @@ function getCurrentOffer(offersConfig) {
           console.log("[ciwi] offer skipped: requires specific products but current product GID is null", offer.id);
           continue;
         }
-        if (!selectedIds.includes(currentProductGid)) {
+        if (!productIdListIncludes(selectedIds, currentProductGid)) {
           console.log("[ciwi] offer skipped: current product not in selected list", offer.id, currentProductGid, selectedIds);
           continue;
         }

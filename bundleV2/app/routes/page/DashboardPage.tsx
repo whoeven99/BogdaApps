@@ -151,6 +151,7 @@ export function DashboardPage({
     null,
   );
   const [pendingToggleStatus, setPendingToggleStatus] = useState<Record<string, boolean>>({});
+  const [submittingToggleIds, setSubmittingToggleIds] = useState<Set<string>>(() => new Set());
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(() => new Set());
   const [overviewMetrics, setOverviewMetrics] = useState<GmvOverviewMetrics | null>(
     null,
@@ -265,6 +266,11 @@ export function DashboardPage({
         const nextStatusRaw = navigation.formData.get("nextStatus");
         const nextStatus = String(nextStatusRaw || "").trim() === "true";
         setPendingToggleStatus((prev) => ({ ...prev, [id]: nextStatus }));
+        setSubmittingToggleIds((prev) => {
+          const next = new Set(prev);
+          next.add(id);
+          return next;
+        });
       }
       if (intent === "delete-offer" && typeof id === "string" && id) {
         setPendingDeleteIds((prev) => {
@@ -280,6 +286,7 @@ export function DashboardPage({
     if (!actionData) return;
     if (!("_offerActionError" in actionData) || !actionData._offerActionError) return;
     setPendingToggleStatus({});
+    setSubmittingToggleIds(new Set());
     setPendingDeleteIds(new Set());
   }, [actionData]);
 
@@ -315,7 +322,7 @@ export function DashboardPage({
     });
   }, [offerRows]);
 
-  const getIsToggling = (offerId: string) => offerId in pendingToggleStatus;
+  const getIsToggling = (offerId: string) => submittingToggleIds.has(offerId);
 
   const handleViewDetails = () => {
     onViewAnalytics?.();
@@ -361,6 +368,9 @@ export function DashboardPage({
   useEffect(() => {
     if (toast?.startsWith("delete-success")) {
       setDeletingOffer(null);
+    }
+    if (toast?.startsWith("toggle-success")) {
+      setSubmittingToggleIds(new Set());
     }
   }, [toast]);
 
