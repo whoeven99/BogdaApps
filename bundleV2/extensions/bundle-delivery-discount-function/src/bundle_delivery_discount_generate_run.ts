@@ -750,16 +750,6 @@ function extractOffersListFromJson(v: unknown): OfferRow[] {
   return Array.isArray(o.offers) ? (o.offers as OfferRow[]) : [];
 }
 
-/** 见购物车 Function：shop `ciwi-bundle-enabled.enabled === false` 时停运。 */
-function isBundleGloballyDisabledByShopMetafield(bundleEnabledShop: {
-  jsonValue?: unknown;
-} | null | undefined): boolean {
-  const raw = bundleEnabledShop?.jsonValue;
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
-  const enabled = (raw as { enabled?: unknown }).enabled;
-  return typeof enabled === "boolean" && enabled === false;
-}
-
 function pickDeliveryOffersFromInput(input: CartDeliveryDiscountInput): {
   offers: OfferRow[];
   source: string;
@@ -834,12 +824,6 @@ export function bundleDeliveryDiscountGenerateRun(
     bundleEnabledShop?: { jsonValue?: unknown } | null;
     offersFn?: { jsonValue?: unknown } | null;
   };
-
-  if (isBundleGloballyDisabledByShopMetafield(shop.bundleEnabledShop)) {
-    log("early_exit", { reason: "bundle_globally_disabled" });
-    logZh("提前退出：ciwi-bundle-enabled 关闭", {});
-    return { operations: [] };
-  }
 
   const { offers, source: offersSource } = pickDeliveryOffersFromInput(input);
   if (!offers.length) {

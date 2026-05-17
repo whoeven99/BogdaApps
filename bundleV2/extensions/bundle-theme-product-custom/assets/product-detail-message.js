@@ -27,7 +27,6 @@ const MOUNT_SOURCE_SELECTOR = ".ciwi-product-message-src";
 const SOURCE_SCRIPT_SELECTOR = "script[data-ciwi-script]";
 const SOURCE_SCRIPT_LEGACY_IDS = {
   "bundles-config": "ciwi-bundles-config",
-  "bundle-enabled": "ciwi-bundle-enabled",
   "bundle-offers": "ciwi-bundle-offers",
 };
 
@@ -4211,17 +4210,6 @@ function readOffersConfigFromMetafield() {
     const source = getPreferredMountSource();
     if (!source) {
       return null;
-    }
-    if (getSourceScriptElement("bundle-enabled", source)) {
-      const enabledPayload = parseCiwiMetafieldScript("bundle-enabled");
-      if (
-        enabledPayload &&
-        typeof enabledPayload === "object" &&
-        typeof enabledPayload.enabled === "boolean" &&
-        !enabledPayload.enabled
-      ) {
-        return null;
-      }
     }
     const mergedEl = getSourceScriptElement("bundle-offers", source);
     if (!mergedEl) {

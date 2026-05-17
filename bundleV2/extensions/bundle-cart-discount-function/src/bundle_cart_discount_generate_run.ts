@@ -63,8 +63,6 @@ function summarizeMetafield(
 
 type OfferMetafieldPayload = {
   updatedAt?: string;
-  /** 与 shop `ciwi-bundle-enabled` 同步；为降低 Function GraphQL 复杂度不再单独查询该 metafield */
-  themeExtensionEnabled?: boolean;
   offers?: Array<{
     id?: string;
     name?: string;
@@ -576,19 +574,6 @@ function offersJsonHasList(v: unknown): v is OfferMetafieldPayload {
   return Array.isArray(o.offers) && o.offers.length > 0;
 }
 
-/**
- * 与主题端一致：shop `ciwi-bundle-enabled` 中 `enabled === false` 时整站关停（结账 Function 不生效）。
- * 缺失或非对象、或非布尔 `enabled` 时不据此退出。
- */
-function isBundleGloballyDisabledByShopMetafield(bundleEnabledShop: {
-  jsonValue?: unknown;
-} | null | undefined): boolean {
-  const raw = bundleEnabledShop?.jsonValue;
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
-  const enabled = (raw as { enabled?: unknown }).enabled;
-  return typeof enabled === "boolean" && enabled === false;
-}
-
 type ShopMetafieldsForLog = {
   bundleEnabledShop?: { jsonValue?: unknown; type?: string } | null;
   offersShop?: { jsonValue?: unknown; type?: string } | null;
@@ -687,29 +672,13 @@ export function bundleCartDiscountGenerateRun(
     discountOwnerOffersMetafield,
   } = resolveCartOffersPayload(input);
 
-  const globallyOff = isBundleGloballyDisabledByShopMetafield(shopAny.bundleEnabledShop);
-  const themeFlag = resolvedPayload?.themeExtensionEnabled;
-
-  let offersPayload: OfferMetafieldPayload | null | undefined = null;
-  let offersSource: string | null = null;
-  if (globallyOff) {
-    offersPayload = null;
-    offersSource = "shop_bundle_enabled_metafield_off";
-  } else if (themeFlag === false) {
-    offersPayload = null;
-    offersSource = "shop_embed_disabled";
-  } else {
-    offersPayload = resolvedPayload ?? null;
-    offersSource = resolvedSource;
-  }
-
-  const embedDisabled =
-    globallyOff || themeFlag === false;
+  const offersPayload = resolvedPayload ?? null;
+  const offersSource = resolvedSource;
 
   logCiwiBundleOffersDiagnostics(
     discountOwnerOffersMetafield,
     shopAny.offersShop as MetafieldSnapshot,
-    embedDisabled ? null : offersPayload,
+    offersPayload,
     {
       resolvedSource: offersSource ?? "",
     },
@@ -719,16 +688,12 @@ export function bundleCartDiscountGenerateRun(
     bundleEnabledShop: summarizeMetafield(shopAny.bundleEnabledShop as MetafieldSnapshot),
     offersShop: summarizeMetafield(shopAny.offersShop as MetafieldSnapshot),
     discountOwnerOffersMetafield: summarizeMetafield(discountOwnerOffersMetafield),
-    globallyDisabledMetafield: globallyOff,
-    embedDisabled,
     activeSource: offersSource,
   });
 
   log("run_start", {
     cartLineCount: input.cart.lines.length,
     discountClasses: input.discount.discountClasses,
-    globallyDisabledMetafield: globallyOff,
-    embedDisabled,
     hasOffers: Boolean(offersPayload),
     offersSource,
   });

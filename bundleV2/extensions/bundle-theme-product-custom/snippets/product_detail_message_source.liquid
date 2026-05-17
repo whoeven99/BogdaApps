@@ -54,12 +54,6 @@
 </script>
 
 {% if shop.metafields.ciwi_bundle %}
-  {% if shop.metafields.ciwi_bundle["ciwi-bundle-enabled"] %}
-    <script type="application/json" data-ciwi-script="bundle-enabled">
-      {{ shop.metafields.ciwi_bundle["ciwi-bundle-enabled"].value }}
-    </script>
-  {% endif %}
-
   {% if shop.metafields.ciwi_bundle["ciwi-bundle-offers"] %}
     <script type="application/json" data-ciwi-script="bundle-offers">
       {{ shop.metafields.ciwi_bundle["ciwi-bundle-offers"].value | json }}

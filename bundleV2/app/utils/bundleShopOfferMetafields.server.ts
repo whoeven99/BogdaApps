@@ -1,5 +1,4 @@
 import {
-  BUNDLE_METAFIELD_ENABLED_KEY,
   BUNDLE_METAFIELD_FUNCTION_OFFERS_KEY,
   BUNDLE_OFFER_SYNC_AT_KEY,
   BUNDLE_SHOP_METAFIELD_NAMESPACE,
@@ -169,7 +168,6 @@ export async function reconcileShopOfferShardedMetafields(
     /** `ciwi-bundle-offers`：JSON 字符串 `{ updatedAt, offers }`（含 hydrated storefront） */
     storefrontOffersPayload: string;
     functionOffersCompactPayload: string;
-    themeExtensionEnabled: boolean | null;
   },
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   try {
@@ -188,12 +186,7 @@ export async function reconcileShopOfferShardedMetafields(
         keysToDelete.push(key);
       }
     }
-    if (
-      typeof params.themeExtensionEnabled !== "boolean" &&
-      existingKeys.includes(BUNDLE_METAFIELD_ENABLED_KEY)
-    ) {
-      keysToDelete.push(BUNDLE_METAFIELD_ENABLED_KEY);
-    }
+    if (existingKeys.includes("ciwi-bundle-enabled")) keysToDelete.push("ciwi-bundle-enabled");
 
     if (keysToDelete.length) {
       await metafieldsDeleteByOwnerKeys(admin, shopId, keysToDelete);
@@ -224,20 +217,6 @@ export async function reconcileShopOfferShardedMetafields(
         value: params.functionOffersCompactPayload,
       },
     ];
-    if (typeof params.themeExtensionEnabled === "boolean") {
-      const enabledPayload = JSON.stringify({
-        enabled: params.themeExtensionEnabled,
-        updatedAt,
-      });
-      metafields.push({
-        ownerId: shopId,
-        namespace: BUNDLE_SHOP_METAFIELD_NAMESPACE,
-        key: BUNDLE_METAFIELD_ENABLED_KEY,
-        type: "json",
-        value: enabledPayload,
-      });
-    }
-
     await metafieldsSetChunked(admin, metafields);
     return { ok: true };
   } catch (error) {

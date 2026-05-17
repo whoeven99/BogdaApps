@@ -362,7 +362,6 @@ function compileOfferRuntimeSyncData(offer: OfferListItem): {
 
 async function buildCompactOffersPayload(
   shopOffers: OfferListItem[],
-  themeExtensionEnabled: boolean | null = true,
 ): Promise<string> {
   // 仅同步后台仍「启用」的活动，避免无效活动占用 payload 体积并干扰函数计算
   const activeOffers = shopOffers.filter(isOfferPublishedForBundleMetafieldSync);
@@ -385,21 +384,16 @@ async function buildCompactOffersPayload(
   const payload: {
     updatedAt: string;
     offers: typeof compactOffers;
-    themeExtensionEnabled?: boolean;
   } = {
     updatedAt: new Date().toISOString(),
     offers: compactOffers,
   };
-  if (typeof themeExtensionEnabled === "boolean") {
-    payload.themeExtensionEnabled = themeExtensionEnabled;
-  }
   return JSON.stringify(payload);
 }
 
 async function buildStorefrontOffersStructured(
   admin: any,
   shopOffers: OfferListItem[],
-  themeExtensionEnabled: boolean | null,
 ): Promise<{
   updatedAt: string;
   offers: Array<{
@@ -420,10 +414,9 @@ async function buildStorefrontOffersStructured(
     offer,
     runtimeSyncData: compileOfferRuntimeSyncData(offer),
   }));
-  const compactPayload = await buildCompactOffersPayload(shopOffers, themeExtensionEnabled);
+  const compactPayload = await buildCompactOffersPayload(shopOffers);
   const compactPayloadParsed = JSON.parse(compactPayload) as {
     updatedAt?: string;
-    themeExtensionEnabled?: boolean;
     offers?: Array<{
       id?: string;
       name?: string;
@@ -548,11 +541,7 @@ async function syncFunctionOwnerOffersMetafield(
 ): Promise<ShopOffersMetafieldSyncResult> {
   try {
     const shopOffers = await loadShopOffersForSync(shopNameToSync);
-    const themeExtensionDetection = await getCurrentThemeExtensionEnabled(admin);
-    const functionMetafieldValue = await buildCompactOffersPayload(
-      shopOffers,
-      themeExtensionDetection.enabled,
-    );
+    const functionMetafieldValue = await buildCompactOffersPayload(shopOffers);
     console.log("[offers-sync][function-owner] syncing payload", {
       shopName: shopNameToSync,
       offerCount: shopOffers.length,
@@ -590,12 +579,10 @@ async function syncShopOffersMetafield(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   admin: any,
   shopNameToSync: string,
-  themeExtensionEnabled: boolean | null,
 ): Promise<ShopOffersMetafieldSyncResult> {
   try {
     console.log("[offers-sync] start syncShopOffersMetafield", {
       shopName: shopNameToSync,
-      themeExtensionEnabled,
     });
     const shopOffers = await loadShopOffersForSync(shopNameToSync);
     console.log("[offers-sync] loaded offers from db", {
@@ -604,16 +591,9 @@ async function syncShopOffersMetafield(
       offerIds: shopOffers.map((o) => o.id),
     });
 
-    const functionMetafieldValue = await buildCompactOffersPayload(
-      shopOffers,
-      themeExtensionEnabled,
-    );
+    const functionMetafieldValue = await buildCompactOffersPayload(shopOffers);
 
-    const storefrontStructured = await buildStorefrontOffersStructured(
-      admin,
-      shopOffers,
-      themeExtensionEnabled,
-    );
+    const storefrontStructured = await buildStorefrontOffersStructured(admin, shopOffers);
     const mergedStorefrontPreview = JSON.stringify({
       updatedAt: storefrontStructured.updatedAt,
       offers: storefrontStructured.offers,
@@ -685,7 +665,6 @@ async function syncShopOffersMetafield(
       syncAtIso: storefrontStructured.updatedAt,
       storefrontOffersPayload: mergedStorefrontPreview,
       functionOffersCompactPayload: functionMetafieldValue,
-      themeExtensionEnabled,
     });
     if (!shardSync.ok) {
       console.error("[offers-sync] sharded metafield sync failed", {
@@ -734,13 +713,9 @@ async function runOfferPostWriteSync(admin: any, shopName: string): Promise<void
       });
     }
 
-    const themeExtensionDetection = await getCurrentThemeExtensionEnabled(admin);
     const syncResult = await syncShopOffersMetafield(
       admin,
       shopName,
-      themeExtensionDetection.debug?.error && !themeExtensionDetection.enabled
-        ? null
-        : themeExtensionDetection.enabled,
     );
     if (!syncResult.ok) {
       console.error("syncShopOffersMetafield failed after offer write", {
@@ -1823,16 +1798,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const themeExtensionDetection = await getCurrentThemeExtensionEnabled(admin);
   const themeExtensionEnabled = themeExtensionDetection.enabled;
   const themeExtensionDetectionFailed = Boolean(themeExtensionDetection.debug?.error);
-  const themeExtensionEnabledForSync =
-    themeExtensionDetectionFailed && !themeExtensionEnabled
-      ? null
-      : themeExtensionEnabled;
   const themeTargets = await fetchThemeEditorTargets(admin);
 
   const syncResult = await syncShopOffersMetafield(
     admin,
     session.shop,
-    themeExtensionEnabledForSync,
   );
   if (!syncResult.ok) {
     console.error("Failed to sync shop offers metafield in loader", {
