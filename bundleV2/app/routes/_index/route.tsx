@@ -2622,9 +2622,58 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     let updatedOffer;
     try {
+      const existingOffer = await prismaAny.offer.findUnique({
+        where: { id: idRaw },
+        select: {
+          id: true,
+          shopName: true,
+          campaignConfigJson: true,
+        },
+      });
+
+      if (!existingOffer) {
+        return new Response("Offer not found", { status: 404 });
+      }
+
+      let nextCampaignConfigJson = existingOffer.campaignConfigJson ?? null;
+      const parsedCampaignConfig = parseCampaignConfig(existingOffer.campaignConfigJson);
+      if (parsedCampaignConfig) {
+        nextCampaignConfigJson = JSON.stringify({
+          ...parsedCampaignConfig,
+          settings: {
+            ...parsedCampaignConfig.settings,
+            status: nextStatus,
+          },
+        });
+      } else if (existingOffer.campaignConfigJson) {
+        try {
+          const shallowConfig = JSON.parse(String(existingOffer.campaignConfigJson)) as {
+            settings?: Record<string, unknown>;
+            [key: string]: unknown;
+          };
+          nextCampaignConfigJson = JSON.stringify({
+            ...shallowConfig,
+            settings: {
+              ...(shallowConfig.settings && typeof shallowConfig.settings === "object"
+                ? shallowConfig.settings
+                : {}),
+              status: nextStatus,
+            },
+          });
+        } catch (error) {
+          console.error("toggle-offer-status campaignConfigJson parse failed", {
+            offerId: idRaw,
+            error,
+          });
+        }
+      }
+
       updatedOffer = await prismaAny.offer.update({
         where: { id: idRaw },
-        data: { status: nextStatus },
+        data: {
+          status: nextStatus,
+          campaignConfigJson: nextCampaignConfigJson,
+        },
       });
     } catch (error) {
       console.error("toggle-offer-status update failed", error);
