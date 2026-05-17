@@ -2096,6 +2096,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const usageLimitPerCustomer = String(
       formData.get("usageLimitPerCustomer") || "unlimited",
     );
+    const couponEnabled = String(formData.get("couponEnabled") || "") === "true";
+    const couponCode = sanitizeSingleLineText(
+      formData.get("couponCode"),
+      64,
+      "",
+    ).toUpperCase();
 
     const accentColor = sanitizeHexColorParam(
       String(formData.get("accentColor") || ""),
@@ -2260,8 +2266,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       oneTimeSubtitle,
       subscriptionDefaultSelected,
       scheduleTimezone: scheduleTimezoneRaw || undefined,
+      couponEnabled,
+      couponCode,
       progressiveGifts: progressiveGiftsConfigToStorableJson(progressiveGiftsSanitized),
     });
+
+    if (couponEnabled && !couponCode) {
+      return offerActionErrorResponse("Coupon offers require a shared coupon code.", 400);
+    }
 
     let campaignConfigJson: string | null = null;
 
@@ -2316,6 +2328,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
       if (parsedCampaignConfig.logicBlocks.length === 0) {
         return offerActionErrorResponse("Please add at least one promotion rule.", 400);
+      }
+      if (
+        parsedCampaignConfig.settings.couponEnabled === true &&
+        !String(parsedCampaignConfig.settings.couponCode || "").trim()
+      ) {
+        return offerActionErrorResponse("Coupon offers require a shared coupon code.", 400);
       }
       const derivedLegacyFields =
         buildLegacyFieldsFromCampaignConfig(parsedCampaignConfig);

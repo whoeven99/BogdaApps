@@ -947,6 +947,11 @@ export function CreateNewOffer({
       setEndTimeError("");
     }
 
+    if (offerType === "coupon" && couponEnabled && !couponCode.trim()) {
+      message.error("Coupon offers require a shared coupon code.");
+      hasError = true;
+    }
+
     return !hasError;
   };
   const [selectedProductsData, setSelectedProductsData] = useState<{
@@ -1776,6 +1781,8 @@ export function CreateNewOffer({
   const [stickyAddToCartButtonText, setStickyAddToCartButtonText] = useState(
     offerSettings.stickyAddToCartButtonText,
   );
+  const [couponEnabled, setCouponEnabled] = useState(offerSettings.couponEnabled);
+  const [couponCode, setCouponCode] = useState(offerSettings.couponCode);
   const [compositionBarOrder, setCompositionBarOrder] = useState<string[]>([]);
   useEffect(() => {
     if (selectedProductsData.length > 0) return;
@@ -2293,6 +2300,24 @@ export function CreateNewOffer({
         scopeIds: selectedScopeProductIds,
         includeAsAdditional: normalizedDiscountRules.length > 0,
       },
+      "shipping-discount": {
+        logicBlockId: "logic-quantity-breaks",
+        logicBlock: quantityBreaksLogicBlock,
+        scopeIds: selectedScopeProductIds,
+        includeAsAdditional: normalizedDiscountRules.length > 0,
+      },
+      "order-discount": {
+        logicBlockId: "logic-quantity-breaks",
+        logicBlock: quantityBreaksLogicBlock,
+        scopeIds: selectedScopeProductIds,
+        includeAsAdditional: normalizedDiscountRules.length > 0,
+      },
+      coupon: {
+        logicBlockId: "logic-quantity-breaks",
+        logicBlock: quantityBreaksLogicBlock,
+        scopeIds: selectedScopeProductIds,
+        includeAsAdditional: normalizedDiscountRules.length > 0,
+      },
       "quantity-breaks-different": {
         logicBlockId: "logic-quantity-breaks-different",
         logicBlock: differentProductsLogicBlock,
@@ -2428,6 +2453,8 @@ export function CreateNewOffer({
           OFFER_TEXT_LIMITS.buttonText,
           "Add bundle",
         ),
+        couponEnabled,
+        couponCode: sanitizeSingleLineText(couponCode, 64, ""),
       },
     };
   }, [
@@ -2475,6 +2502,8 @@ export function CreateNewOffer({
     stickyAddToCartTitle,
     stickyAddToCartSubtitle,
     stickyAddToCartButtonText,
+    couponEnabled,
+    couponCode,
     titleColor,
     titleFontSize,
     titleFontWeight,
@@ -2748,6 +2777,45 @@ export function CreateNewOffer({
           }
           return;
         }
+        case "shipping-discount": {
+          const index = compositionRule.id
+            ? orderedCompositionRulesSnapshot
+                .filter((rule) => rule.sourceOfferType === "shipping-discount")
+                .findIndex((rule) => rule.id === id)
+            : -1;
+          if (index >= 0) {
+            setDiscountRules((prev) =>
+              updateDiscountRulePresentation(prev, index, patch),
+            );
+          }
+          return;
+        }
+        case "order-discount": {
+          const index = compositionRule.id
+            ? orderedCompositionRulesSnapshot
+                .filter((rule) => rule.sourceOfferType === "order-discount")
+                .findIndex((rule) => rule.id === id)
+            : -1;
+          if (index >= 0) {
+            setDiscountRules((prev) =>
+              updateDiscountRulePresentation(prev, index, patch),
+            );
+          }
+          return;
+        }
+        case "coupon": {
+          const index = compositionRule.id
+            ? orderedCompositionRulesSnapshot
+                .filter((rule) => rule.sourceOfferType === "coupon")
+                .findIndex((rule) => rule.id === id)
+            : -1;
+          if (index >= 0) {
+            setDiscountRules((prev) =>
+              updateDiscountRulePresentation(prev, index, patch),
+            );
+          }
+          return;
+        }
         case "bxgy": {
           const index = orderedCompositionRulesSnapshot
             .filter((rule) => rule.sourceOfferType === "bxgy")
@@ -2796,6 +2864,9 @@ export function CreateNewOffer({
 
     switch (offerType) {
       case "quantity-breaks-same":
+      case "shipping-discount":
+      case "order-discount":
+      case "coupon":
         setDiscountRules((prev) =>
           updateDiscountRulePresentation(prev, index, patch),
         );
@@ -2832,6 +2903,9 @@ export function CreateNewOffer({
     if (compositionRule) {
       switch (compositionRule.sourceOfferType) {
         case "quantity-breaks-same":
+        case "shipping-discount":
+        case "order-discount":
+        case "coupon":
           setDiscountRules((prev) => updateUnifiedDiscountRuleValues(prev, id, patch));
           return;
         case "bxgy":
@@ -2857,6 +2931,9 @@ export function CreateNewOffer({
 
     switch (offerType) {
       case "quantity-breaks-same":
+      case "shipping-discount":
+      case "order-discount":
+      case "coupon":
         setDiscountRules((prev) => updateUnifiedDiscountRuleValues(prev, id, patch));
         return;
       case "bxgy":
@@ -3089,10 +3166,23 @@ export function CreateNewOffer({
       : [];
   const renderDisplayCustomizer = () => {
 
-    if (offerType === "quantity-breaks-same") {
+    if (
+      offerType === "quantity-breaks-same" ||
+      offerType === "shipping-discount" ||
+      offerType === "order-discount" ||
+      offerType === "coupon"
+    ) {
       return (
         <OfferComponentsDisplayCustomizer
-          itemGroupTitle="Tier Components"
+          itemGroupTitle={
+            offerType === "shipping-discount"
+              ? "Shipping Components"
+              : offerType === "order-discount"
+                ? "Order Discount Components"
+                : offerType === "coupon"
+                  ? "Coupon Components"
+              : "Tier Components"
+          }
           extraSections={progressiveGiftDisplaySections}
           items={unifiedDisplayItems}
           onUpdateItem={campaignDraftActions.updateUnifiedRulePresentation}
@@ -3444,6 +3534,12 @@ export function CreateNewOffer({
         name="usageLimitPerCustomer"
         value={usageLimitPerCustomer}
       />
+      <input
+        type="hidden"
+        name="couponEnabled"
+        value={couponEnabled ? "true" : "false"}
+      />
+      <input type="hidden" name="couponCode" value={couponCode} />
       {normalizedCustomerSegments.map((segment) => (
         <input key={segment} type="hidden" name="customerSegments" value={segment} />
       ))}
@@ -3825,6 +3921,37 @@ export function CreateNewOffer({
                   <Switch checked={status} onChange={setStatus} />
                 </div>
               </div>
+
+              {offerType === "coupon" ? (
+                <div className="mb-8 flex flex-col gap-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="m-0 text-[14px] font-medium text-[#1c1f23]">
+                      Coupon Access
+                    </h3>
+                    <div className="text-[12px] text-[#5c6166]">
+                      Shared code required
+                    </div>
+                  </div>
+                  <div className="rounded-[12px] border border-[#e3e8ed] bg-white p-4">
+                    <div className="text-[14px] font-medium text-[#1c1f23]">
+                      Shared coupon code
+                    </div>
+                    <div className="mt-1 text-[12px] text-[#5c6166]">
+                      Customers must enter this code before the coupon offer can apply.
+                    </div>
+                    <Input
+                      size="large"
+                      className="mt-3"
+                      placeholder="SAVE15"
+                      value={couponCode}
+                      onChange={(e) => {
+                        setCouponEnabled(true);
+                        setCouponCode(e.target.value.toUpperCase());
+                      }}
+                    />
+                  </div>
+                </div>
+              ) : null}
 
               {/* Hidden Budget Module */}
               {false && <div className="mb-8">

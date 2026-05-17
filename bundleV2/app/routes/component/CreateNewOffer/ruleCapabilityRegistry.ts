@@ -63,6 +63,18 @@ const DEFAULT_UNIFIED_RULE_CAPABILITY: UnifiedRuleCapability = {
 const UNIFIED_RULE_CAPABILITY_BY_OFFER_TYPE: Partial<
   Record<OfferTypeId, UnifiedRuleCapability>
 > = {
+  "shipping-discount": {
+    discountTypeOptions: [{ label: "Free shipping", value: "free_shipping" }],
+    addMenuItems: [{ key: "shipping_discount", label: "Add Free Shipping Rule" }],
+  },
+  "order-discount": {
+    discountTypeOptions: [{ label: "Order discount", value: "order_discount" }],
+    addMenuItems: [{ key: "order_discount", label: "Add Order Discount Rule" }],
+  },
+  coupon: {
+    discountTypeOptions: [{ label: "Order discount", value: "order_discount" }],
+    addMenuItems: [{ key: "order_discount", label: "Add Order Discount Rule" }],
+  },
   bxgy: {
     discountTypeOptions: [{ label: "BXGY", value: "bxgy" }],
     addMenuItems: [{ key: "bxgy", label: "Add BXGY Rule" }],

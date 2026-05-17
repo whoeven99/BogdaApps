@@ -431,6 +431,207 @@ const LOGIC_EDITOR_REGISTRY: Record<OfferTypeId, LogicEditorRegistryEntry> = {
       },
     ],
   },
+  "shipping-discount": {
+    components: (props) => [
+      {
+        id: "scope",
+        group: "scope",
+        title: "Campaign Products",
+        description:
+          "Select the products that should trigger the free-shipping rules.",
+        required: true,
+        active: true,
+        render: () => renderDefaultScopeEditor(props),
+      },
+      {
+        id: "shipping-rules",
+        group: "rules",
+        title: "Shipping Rules",
+        description:
+          "Define the quantity or cart-amount thresholds that unlock free shipping at checkout.",
+        required: true,
+        active: true,
+        render: () => (
+          <QuantityBreaksLogicEditor
+            discountRules={props.draft.discountRules}
+            setDiscountRules={props.actions.setDiscountRules}
+            selectedProductsData={props.draft.selectedProductsData}
+            offerType={props.draft.offerType}
+            section="tiers"
+            updateRuleValues={props.actions.updateUnifiedRuleValues}
+            updateRulePresentation={props.actions.updateUnifiedRulePresentation}
+          />
+        ),
+      },
+      {
+        id: "progressive-gifts",
+        group: "optional",
+        title: "Progressive Gifts",
+        description:
+          "Optionally add an extra free-shipping unlock block that follows the bar progression on storefront.",
+        required: false,
+        active: props.draft.progressiveGifts.enabled,
+        addLabel: "Add Progressive Gifts",
+        onAdd: () =>
+          props.actions.setProgressiveGifts({
+            ...props.draft.progressiveGifts,
+            enabled: true,
+          }),
+        onRemove: () =>
+          props.actions.setProgressiveGifts({
+            ...props.draft.progressiveGifts,
+            enabled: false,
+          }),
+        render: () => (
+          <ProgressiveGiftsSection
+            offerType={props.draft.offerType}
+            normalizedDiscountRules={props.draft.normalizedDiscountRules}
+            bxgyDiscountRules={props.draft.bxgyDiscountRules}
+            differentProductsDiscountRules={
+              props.draft.differentProductsDiscountRules
+            }
+            value={props.draft.progressiveGifts}
+            onChange={props.actions.setProgressiveGifts}
+            showToggle={false}
+          />
+        ),
+      },
+    ],
+  },
+  "order-discount": {
+    components: (props) => [
+      {
+        id: "scope",
+        group: "scope",
+        title: "Campaign Products",
+        description:
+          "Select the products that should trigger the order-discount rules.",
+        required: true,
+        active: true,
+        render: () => renderDefaultScopeEditor(props),
+      },
+      {
+        id: "order-rules",
+        group: "rules",
+        title: "Order Discount Rules",
+        description:
+          "Define the quantity or cart-amount thresholds that unlock order-level percentage discounts.",
+        required: true,
+        active: true,
+        render: () => (
+          <QuantityBreaksLogicEditor
+            discountRules={props.draft.discountRules}
+            setDiscountRules={props.actions.setDiscountRules}
+            selectedProductsData={props.draft.selectedProductsData}
+            offerType={props.draft.offerType}
+            section="tiers"
+            updateRuleValues={props.actions.updateUnifiedRuleValues}
+            updateRulePresentation={props.actions.updateUnifiedRulePresentation}
+          />
+        ),
+      },
+      {
+        id: "progressive-gifts",
+        group: "optional",
+        title: "Progressive Gifts",
+        description:
+          "Optionally add a follow-up free-shipping reward block beside the main order-discount tiers.",
+        required: false,
+        active: props.draft.progressiveGifts.enabled,
+        addLabel: "Add Progressive Gifts",
+        onAdd: () =>
+          props.actions.setProgressiveGifts({
+            ...props.draft.progressiveGifts,
+            enabled: true,
+          }),
+        onRemove: () =>
+          props.actions.setProgressiveGifts({
+            ...props.draft.progressiveGifts,
+            enabled: false,
+          }),
+        render: () => (
+          <ProgressiveGiftsSection
+            offerType={props.draft.offerType}
+            normalizedDiscountRules={props.draft.normalizedDiscountRules}
+            bxgyDiscountRules={props.draft.bxgyDiscountRules}
+            differentProductsDiscountRules={
+              props.draft.differentProductsDiscountRules
+            }
+            value={props.draft.progressiveGifts}
+            onChange={props.actions.setProgressiveGifts}
+            showToggle={false}
+          />
+        ),
+      },
+    ],
+  },
+  coupon: {
+    components: (props) => [
+      {
+        id: "scope",
+        group: "scope",
+        title: "Campaign Products",
+        description:
+          "Select the products that should trigger the coupon-gated order-discount rules.",
+        required: true,
+        active: true,
+        render: () => renderDefaultScopeEditor(props),
+      },
+      {
+        id: "coupon-rules",
+        group: "rules",
+        title: "Coupon Rules",
+        description:
+          "Define the order-discount tiers that become eligible once customers enter the shared coupon code.",
+        required: true,
+        active: true,
+        render: () => (
+          <QuantityBreaksLogicEditor
+            discountRules={props.draft.discountRules}
+            setDiscountRules={props.actions.setDiscountRules}
+            selectedProductsData={props.draft.selectedProductsData}
+            offerType={props.draft.offerType}
+            section="tiers"
+            updateRuleValues={props.actions.updateUnifiedRuleValues}
+            updateRulePresentation={props.actions.updateUnifiedRulePresentation}
+          />
+        ),
+      },
+      {
+        id: "progressive-gifts",
+        group: "optional",
+        title: "Progressive Gifts",
+        description:
+          "Optionally add a follow-up free-shipping reward block beside the coupon-gated discount tiers.",
+        required: false,
+        active: props.draft.progressiveGifts.enabled,
+        addLabel: "Add Progressive Gifts",
+        onAdd: () =>
+          props.actions.setProgressiveGifts({
+            ...props.draft.progressiveGifts,
+            enabled: true,
+          }),
+        onRemove: () =>
+          props.actions.setProgressiveGifts({
+            ...props.draft.progressiveGifts,
+            enabled: false,
+          }),
+        render: () => (
+          <ProgressiveGiftsSection
+            offerType={props.draft.offerType}
+            normalizedDiscountRules={props.draft.normalizedDiscountRules}
+            bxgyDiscountRules={props.draft.bxgyDiscountRules}
+            differentProductsDiscountRules={
+              props.draft.differentProductsDiscountRules
+            }
+            value={props.draft.progressiveGifts}
+            onChange={props.actions.setProgressiveGifts}
+            showToggle={false}
+          />
+        ),
+      },
+    ],
+  },
   "quantity-breaks-different": {
     components: (props) => [
       {

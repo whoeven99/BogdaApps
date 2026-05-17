@@ -58,10 +58,10 @@ Shopify Functions. Use `SEMANTIC_WORKFLOW.md` for each task.
 
 | ID | Task | Scope | Main files | Acceptance | Priority | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| B4-1 | Shipping discount templates | Add delivery discount template entry and mapping | builder template registry + `bundle-delivery-discount-function` | Merchant can create shipping-offer flows from templates | P0 | Planned |
-| B4-2 | Order discount templates | Add order-level template path in unified rules and persistence | builder + rule capability files + parsing | Merchant can create order-discount offers | P0 | Planned |
-| B4-3 | Coupon templates | Introduce coupon issuance/config templates | new server flow + template picker | Coupon-based campaigns are configurable as first-class templates | P1 | Planned |
-| B4-4 | Advanced targeting | Expand targeting with customer segment first, then profile/IP criteria | targeting UI + persistence + storefront/runtime checks | Segment-based targeting is configurable and persists | P1 | Planned |
+| B4-1 | Shipping discount templates | Add delivery discount template entry and mapping | builder template registry + `bundle-delivery-discount-function` | Merchant can create shipping-offer flows from templates | P0 | Done |
+| B4-2 | Order discount templates | Add order-level template path in unified rules and persistence | builder + rule capability files + parsing | Merchant can create order-discount offers | P0 | Done |
+| B4-3 | Coupon templates | Introduce shared coupon-code templates and runtime gating | builder + parsing + discount functions | Coupon-based campaigns are configurable as first-class templates and preserve shared code gating across save/reload/runtime | P1 | Done |
+| B4-4 | Advanced targeting | Expand targeting with customer segment first, then profile/IP criteria | targeting UI + persistence + storefront/runtime checks | Customer segment, profile, and country targeting persist and apply in storefront/runtime checks where context is available | P1 | Done |
 
 ## Batch 5: Cart, Checkout, Retention
 

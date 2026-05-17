@@ -1607,6 +1607,19 @@ function getCurrentMarketId() {
   return null;
 }
 
+function getCurrentCountryIsoCode() {
+  const configEl = getBundleConfigElement();
+  if (configEl) {
+    try {
+      const config = JSON.parse(configEl.textContent || "{}");
+      if (config.countryIsoCode) return String(config.countryIsoCode).trim().toUpperCase();
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 function getOfferBundleTitle(offer) {
   if (!offer || typeof offer !== "object") return "NO_BUNDLE_TITLE";
   const offerId = offer.offerId || offer.id || "";
@@ -2315,6 +2328,7 @@ function getCurrentOffer(offersConfig) {
   const offers = Array.isArray(offersConfig?.offers) ? offersConfig.offers : [];
   const currentProductGid = getCurrentProductGid();
   const currentMarketId = getCurrentMarketId();
+  const currentCountryIsoCode = getCurrentCountryIsoCode();
   const now = Date.now();
 
   console.log("[ciwi] offers total:", offers.length, "currentProductGid:", currentProductGid, "currentMarketId:", currentMarketId);
@@ -2349,7 +2363,7 @@ function getCurrentOffer(offersConfig) {
       }
     }
 
-    // Check settings / market filter
+    // Check settings / market / country filter
     let parsedSettings = null;
     if (currentMarketId && offer.offerSettingsJson) {
       try {
@@ -2364,12 +2378,54 @@ function getCurrentOffer(offersConfig) {
             continue;
           }
         }
+        const offerCountries = settings.ipCountryCodes;
+        if (
+          typeof offerCountries === "string" &&
+          offerCountries.trim() !== ""
+        ) {
+          const allowedCountries = offerCountries
+            .split(",")
+            .map((code) => String(code || "").trim().toUpperCase())
+            .filter(Boolean);
+          if (!currentCountryIsoCode || !allowedCountries.includes(currentCountryIsoCode)) {
+            console.log(
+              "[ciwi] offer skipped: country mismatch",
+              offer.id,
+              "allowed:",
+              allowedCountries,
+              "current:",
+              currentCountryIsoCode,
+            );
+            continue;
+          }
+        }
       } catch (e) {
         // ignore parse error
       }
     } else if (offer.offerSettingsJson) {
       try {
         parsedSettings = JSON.parse(offer.offerSettingsJson);
+        const offerCountries = parsedSettings && parsedSettings.ipCountryCodes;
+        if (
+          typeof offerCountries === "string" &&
+          offerCountries.trim() !== ""
+        ) {
+          const allowedCountries = offerCountries
+            .split(",")
+            .map((code) => String(code || "").trim().toUpperCase())
+            .filter(Boolean);
+          if (!currentCountryIsoCode || !allowedCountries.includes(currentCountryIsoCode)) {
+            console.log(
+              "[ciwi] offer skipped: country mismatch",
+              offer.id,
+              "allowed:",
+              allowedCountries,
+              "current:",
+              currentCountryIsoCode,
+            );
+            continue;
+          }
+        }
       } catch {
         parsedSettings = null;
       }

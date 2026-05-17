@@ -1,5 +1,8 @@
 export type OfferTypeId =
   | "quantity-breaks-same"
+  | "shipping-discount"
+  | "order-discount"
+  | "coupon"
   | "quantity-breaks-different"
   | "bxgy"
   | "complete-bundle"
@@ -22,6 +25,30 @@ export const OFFER_TYPE_OPTIONS: OfferTypeOption[] = [
       "Offer discounts when customers buy multiple quantities of the same product",
     primaryDiscountScope: "Product and order discounts",
     primaryRuleType: "Quantity break",
+  },
+  {
+    id: "shipping-discount",
+    name: "Free shipping tiers",
+    description:
+      "Unlock free shipping with item-quantity or cart-amount tiers while keeping the same selected product scope",
+    primaryDiscountScope: "Shipping discounts",
+    primaryRuleType: "Free shipping",
+  },
+  {
+    id: "order-discount",
+    name: "Order discount tiers",
+    description:
+      "Unlock order-level percentage discounts with item-quantity or cart-amount tiers across the selected product scope",
+    primaryDiscountScope: "Order discounts",
+    primaryRuleType: "Order discount",
+  },
+  {
+    id: "coupon",
+    name: "Coupon offer",
+    description:
+      "Require a shared coupon code before applying an order-level percentage discount across the selected product scope",
+    primaryDiscountScope: "Coupon-triggered order discounts",
+    primaryRuleType: "Shared code",
   },
   {
     id: "quantity-breaks-different",

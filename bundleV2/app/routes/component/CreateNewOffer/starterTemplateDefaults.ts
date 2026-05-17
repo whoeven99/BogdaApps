@@ -50,6 +50,76 @@ export const COMPLETE_BUNDLE_TEMPLATE_PREVIEW_ITEMS: PreviewItem[] = [
   },
 ];
 
+export const SHIPPING_DISCOUNT_TEMPLATE_PREVIEW_ITEMS: PreviewItem[] = [
+  {
+    id: "starter-shipping-single",
+    title: "Single",
+    subtitle: "Standard shipping applies",
+    price: "Shipping calculated at checkout",
+  },
+  {
+    id: "starter-shipping-duo",
+    title: "Buy 2 items",
+    subtitle: "Unlock free shipping",
+    price: "FREE SHIPPING",
+    featured: true,
+    badge: "Shipping perk",
+    saveLabel: "TRIGGER AT 2",
+  },
+  {
+    id: "starter-shipping-threshold",
+    title: "Spend €120",
+    subtitle: "Cart threshold unlock",
+    price: "FREE SHIPPING",
+    badge: "Cart amount",
+    saveLabel: "AT €120",
+  },
+];
+
+export const ORDER_DISCOUNT_TEMPLATE_PREVIEW_ITEMS: PreviewItem[] = [
+  {
+    id: "starter-order-single",
+    title: "Single",
+    subtitle: "Standard price",
+    price: "EUR65.00",
+  },
+  {
+    id: "starter-order-duo",
+    title: "Buy 2 items",
+    subtitle: "Unlock 10% off your order",
+    price: "EUR58.50",
+    featured: true,
+    badge: "Order-wide",
+    saveLabel: "SAVE 10%",
+  },
+  {
+    id: "starter-order-threshold",
+    title: "Spend EUR120",
+    subtitle: "Unlock 15% off your order",
+    price: "15% OFF",
+    badge: "Cart amount",
+    saveLabel: "SAVE 15%",
+  },
+];
+
+export const COUPON_TEMPLATE_PREVIEW_ITEMS: PreviewItem[] = [
+  {
+    id: "starter-coupon-single",
+    title: "Enter code SAVE15",
+    subtitle: "Coupon required at checkout",
+    price: "15% OFF",
+  },
+  {
+    id: "starter-coupon-duo",
+    title: "Buy 2 items",
+    subtitle: "Unlock 15% off your order with SAVE15",
+    price: "15% OFF",
+    featured: true,
+    badge: "Coupon code",
+    saveLabel: "CODE SAVE15",
+  },
+];
+
 function buildOfferSettings(
   overrides: Partial<OfferSettings> = {},
 ): OfferSettings {
@@ -192,6 +262,145 @@ export function getStarterTemplateDefaults(
         showCountdownBlock: false,
         countdownLabel: "Limited time offer",
         previewFallbackItems: COMPLETE_BUNDLE_TEMPLATE_PREVIEW_ITEMS,
+      };
+    case "shipping-discount":
+      return {
+        offerSettings: buildOfferSettings({
+          title: "Free Shipping Unlock",
+          layoutFormat: "vertical",
+        }),
+        discountRules: [
+          {
+            count: 0,
+            discountPercent: 0,
+            tierType: "single",
+            title: "Single",
+            subtitle: "Standard shipping applies",
+            badge: "",
+            isDefault: false,
+          },
+          {
+            count: 2,
+            discountPercent: 0,
+            discountClass: "shipping",
+            offerKind: "free_shipping",
+            conditionType: "item_quantity",
+            rewardType: "free_shipping",
+            title: "Buy 2 items",
+            subtitle: "Unlock free shipping",
+            badge: "Shipping perk",
+            isDefault: true,
+          },
+          {
+            count: 1,
+            discountPercent: 0,
+            discountClass: "shipping",
+            offerKind: "free_shipping",
+            conditionType: "cart_amount",
+            amountThreshold: 120,
+            rewardType: "free_shipping",
+            title: "Spend €120",
+            subtitle: "Cart threshold unlock",
+            badge: "Cart amount",
+            isDefault: false,
+          },
+        ],
+        bxgyDiscountRules: [],
+        freeGiftRules: [],
+        differentProductsDiscountRules: [],
+        completeBundleBars: [],
+        showCountdownBlock: false,
+        countdownLabel: "Limited time shipping offer",
+        previewFallbackItems: SHIPPING_DISCOUNT_TEMPLATE_PREVIEW_ITEMS,
+      };
+    case "order-discount":
+      return {
+        offerSettings: buildOfferSettings({
+          title: "Order Discount Unlock",
+          layoutFormat: "vertical",
+        }),
+        discountRules: [
+          {
+            count: 0,
+            discountPercent: 0,
+            tierType: "single",
+            title: "Single",
+            subtitle: "Standard price",
+            badge: "",
+            isDefault: false,
+          },
+          {
+            count: 2,
+            discountPercent: 10,
+            discountClass: "order",
+            offerKind: "percentage_discount",
+            conditionType: "item_quantity",
+            rewardType: "percentage_off",
+            title: "Buy 2 items",
+            subtitle: "Unlock 10% off your order",
+            badge: "Order-wide",
+            isDefault: true,
+          },
+          {
+            count: 1,
+            discountPercent: 15,
+            discountClass: "order",
+            offerKind: "percentage_discount",
+            conditionType: "cart_amount",
+            amountThreshold: 120,
+            rewardType: "percentage_off",
+            title: "Spend EUR120",
+            subtitle: "Unlock 15% off your order",
+            badge: "Cart amount",
+            isDefault: false,
+          },
+        ],
+        bxgyDiscountRules: [],
+        freeGiftRules: [],
+        differentProductsDiscountRules: [],
+        completeBundleBars: [],
+        showCountdownBlock: false,
+        countdownLabel: "Limited time order offer",
+        previewFallbackItems: ORDER_DISCOUNT_TEMPLATE_PREVIEW_ITEMS,
+      };
+    case "coupon":
+      return {
+        offerSettings: buildOfferSettings({
+          title: "Coupon Unlock",
+          layoutFormat: "vertical",
+          couponEnabled: true,
+          couponCode: "SAVE15",
+        }),
+        discountRules: [
+          {
+            count: 0,
+            discountPercent: 0,
+            tierType: "single",
+            title: "Single",
+            subtitle: "Standard price",
+            badge: "",
+            isDefault: false,
+          },
+          {
+            count: 2,
+            discountPercent: 15,
+            discountClass: "order",
+            offerKind: "percentage_discount",
+            conditionType: "item_quantity",
+            rewardType: "percentage_off",
+            title: "Buy 2 items",
+            subtitle: "Unlock 15% off your order with SAVE15",
+            badge: "Coupon code",
+            isDefault: true,
+          },
+        ],
+        bxgyDiscountRules: [],
+        freeGiftRules: [],
+        differentProductsDiscountRules: [],
+        completeBundleBars: [],
+        showCountdownBlock: false,
+        countdownLabel: "Limited time coupon offer",
+        previewFallbackItems: COUPON_TEMPLATE_PREVIEW_ITEMS,
       };
     case "subscription":
       return {

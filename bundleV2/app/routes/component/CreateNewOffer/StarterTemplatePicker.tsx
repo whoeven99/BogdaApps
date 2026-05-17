@@ -133,6 +133,91 @@ function DifferentProductsPreview() {
   );
 }
 
+function ShippingDiscountPreview() {
+  return (
+    <div className="flex min-h-[260px] flex-col rounded-[12px] border border-[#dfe3e8] bg-[#f6f6f7] p-[12px]">
+      <div className="space-y-[8px]">
+        <PreviewRow
+          title="Buy 2 items"
+          subtitle="Unlock free shipping"
+          price="FREE SHIPPING"
+          badge="Shipping perk"
+          selected
+        />
+        <PreviewRow
+          title="Spend EUR120"
+          subtitle="Cart threshold unlock"
+          price="FREE SHIPPING"
+          badge="Cart amount"
+        />
+        <div className="rounded-[10px] bg-white px-[12px] py-[9px] shadow-[inset_0_0_0_1px_rgba(17,24,39,0.06)]">
+          <div className="text-[13px] font-semibold text-[#1c1f23]">
+            Delivery discount function
+          </div>
+          <div className="mt-[2px] text-[12px] text-[#6d7175]">
+            Applies on checkout shipping options
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OrderDiscountPreview() {
+  return (
+    <div className="flex min-h-[260px] flex-col rounded-[12px] border border-[#dfe3e8] bg-[#f6f6f7] p-[12px]">
+      <div className="space-y-[8px]">
+        <PreviewRow title="Single" subtitle="Standard price" price="EUR65.00" />
+        <PreviewRow
+          title="Buy 2 items"
+          subtitle="Unlock 10% off your order"
+          price="10% OFF"
+          badge="Order-wide"
+          selected
+        />
+        <PreviewRow
+          title="Spend EUR120"
+          subtitle="Unlock 15% off your order"
+          price="15% OFF"
+          badge="Cart amount"
+        />
+        <div className="rounded-[10px] bg-white px-[12px] py-[9px] shadow-[inset_0_0_0_1px_rgba(17,24,39,0.06)]">
+          <div className="text-[13px] font-semibold text-[#1c1f23]">
+            Order subtotal discount
+          </div>
+          <div className="mt-[2px] text-[12px] text-[#6d7175]">
+            Applies after scoped products unlock the tier
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CouponPreview() {
+  return (
+    <div className="flex min-h-[260px] flex-col rounded-[12px] border border-[#dfe3e8] bg-[#f6f6f7] p-[12px]">
+      <div className="space-y-[8px]">
+        <div className="rounded-[10px] bg-white px-[12px] py-[9px] shadow-[inset_0_0_0_1px_rgba(17,24,39,0.06)]">
+          <div className="text-[13px] font-semibold text-[#1c1f23]">
+            Coupon code: SAVE15
+          </div>
+          <div className="mt-[2px] text-[12px] text-[#6d7175]">
+            Customers must enter the shared code first
+          </div>
+        </div>
+        <PreviewRow
+          title="Buy 2 items"
+          subtitle="Unlock 15% off your order"
+          price="15% OFF"
+          badge="Coupon code"
+          selected
+        />
+      </div>
+    </div>
+  );
+}
+
 function BxgyPreview() {
   return (
     <div className="flex min-h-[260px] flex-col rounded-[12px] border border-[#dfe3e8] bg-[#f6f6f7] p-[12px]">
@@ -280,6 +365,9 @@ function FreeGiftPreview() {
 
 function OfferTypePreview({ offerType }: { offerType: OfferTypeId }) {
   if (offerType === "bxgy") return <BxgyPreview />;
+  if (offerType === "shipping-discount") return <ShippingDiscountPreview />;
+  if (offerType === "order-discount") return <OrderDiscountPreview />;
+  if (offerType === "coupon") return <CouponPreview />;
   if (offerType === "quantity-breaks-different") return <DifferentProductsPreview />;
   if (offerType === "complete-bundle") return <CompleteBundlePreview />;
   if (offerType === "subscription") return <SubscriptionPreview />;

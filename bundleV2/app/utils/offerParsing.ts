@@ -321,6 +321,8 @@ export type OfferSettings = {
   stickyAddToCartTitle: string;
   stickyAddToCartSubtitle: string;
   stickyAddToCartButtonText: string;
+  couponEnabled: boolean;
+  couponCode: string;
   progressiveGifts: ProgressiveGiftsConfig;
 };
 
@@ -420,6 +422,8 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
       stickyAddToCartTitle: DEFAULT_STICKY_ADD_TO_CART_TITLE,
       stickyAddToCartSubtitle: DEFAULT_STICKY_ADD_TO_CART_SUBTITLE,
       stickyAddToCartButtonText: DEFAULT_STICKY_ADD_TO_CART_BUTTON_TEXT,
+      couponEnabled: false,
+      couponCode: "",
       progressiveGifts: { ...DEFAULT_PROGRESSIVE_GIFTS },
     };
   }
@@ -505,6 +509,8 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
       stickyAddToCartButtonText: sanitizeStickyAddToCartButtonText(
         parsed.stickyAddToCartButtonText,
       ),
+      couponEnabled: parsed.couponEnabled === true,
+      couponCode: sanitizeSingleLineText(parsed.couponCode, 64, ""),
       progressiveGifts: parseProgressiveGiftsConfig(parsed.progressiveGifts),
     };
   } catch {
@@ -651,6 +657,8 @@ export type CampaignSettings = {
   stickyAddToCartTitle: string;
   stickyAddToCartSubtitle: string;
   stickyAddToCartButtonText: string;
+  couponEnabled: boolean;
+  couponCode: string;
 };
 
 export type CampaignConfig = {
@@ -1947,6 +1955,8 @@ export function parseCampaignConfig(
         stickyAddToCartButtonText: sanitizeStickyAddToCartButtonText(
           settingsRaw.stickyAddToCartButtonText,
         ),
+        couponEnabled: settingsRaw.couponEnabled === true,
+        couponCode: sanitizeSingleLineText(settingsRaw.couponCode, 64, ""),
       },
     };
   } catch {
@@ -2019,6 +2029,8 @@ export function migrateLegacyOfferToCampaignConfig(params: {
     stickyAddToCartTitle: offerSettings.stickyAddToCartTitle,
     stickyAddToCartSubtitle: offerSettings.stickyAddToCartSubtitle,
     stickyAddToCartButtonText: offerSettings.stickyAddToCartButtonText,
+    couponEnabled: offerSettings.couponEnabled,
+    couponCode: offerSettings.couponCode,
   };
   const targetingMarkets = normalizeTargetMarkets(
     offerSettings.markets ? offerSettings.markets.split(",") : ["all"],
@@ -2412,6 +2424,59 @@ function buildLegacyQuantityBreakDiscountRules(
   }));
 }
 
+function isShippingDiscountRuleLike(rule: DiscountRule): boolean {
+  return (
+    rule.tierType !== "single" &&
+    rule.rewardType === "free_shipping" &&
+    rule.discountClass === "shipping"
+  );
+}
+
+function isOrderDiscountRuleLike(rule: DiscountRule): boolean {
+  return (
+    rule.tierType !== "single" &&
+    rule.rewardType === "percentage_off" &&
+    rule.discountClass === "order"
+  );
+}
+
+function isCouponConfigEnabled(
+  config: CampaignConfig | null | undefined,
+): boolean {
+  return (
+    config?.settings?.couponEnabled === true &&
+    String(config.settings.couponCode || "").trim().length > 0
+  );
+}
+
+function isShippingDiscountLikeRules(rules: DiscountRule[]): boolean {
+  const configuredRules = rules.filter((rule) => rule.tierType !== "single");
+  return configuredRules.length > 0 && configuredRules.every(isShippingDiscountRuleLike);
+}
+
+function isOrderDiscountLikeRules(rules: DiscountRule[]): boolean {
+  const configuredRules = rules.filter((rule) => rule.tierType !== "single");
+  return configuredRules.length > 0 && configuredRules.every(isOrderDiscountRuleLike);
+}
+
+function isShippingDiscountLikeQuantityBreaksBlock(
+  block: QuantityBreaksLogicBlock | null | undefined,
+): boolean {
+  if (!block) return false;
+  return isShippingDiscountLikeRules(
+    buildLegacyQuantityBreakDiscountRules(block.config.tiers),
+  );
+}
+
+function isOrderDiscountLikeQuantityBreaksBlock(
+  block: QuantityBreaksLogicBlock | null | undefined,
+): boolean {
+  if (!block) return false;
+  return isOrderDiscountLikeRules(
+    buildLegacyQuantityBreakDiscountRules(block.config.tiers),
+  );
+}
+
 function pickLegacySelectedProductsModuleOutput(
   modules: CampaignRuntimeOutputs["modules"],
 ): CampaignRuntimeModuleOutput | null {
@@ -2606,7 +2671,10 @@ export function compileCampaignRuntimeOutputs(
   };
   const primaryOfferType = getPrimaryOfferTypeFromCampaignConfig(config);
   const primaryModule =
-    primaryOfferType === "quantity-breaks-same"
+    primaryOfferType === "quantity-breaks-same" ||
+    primaryOfferType === "shipping-discount" ||
+    primaryOfferType === "order-discount" ||
+    primaryOfferType === "coupon"
       ? modules.quantityBreaks
       : primaryOfferType === "quantity-breaks-different"
         ? modules.quantityBreaksDifferent
@@ -2704,6 +2772,8 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
     stickyAddToCartButtonText: sanitizeStickyAddToCartButtonText(
       config.settings.stickyAddToCartButtonText,
     ),
+    couponEnabled: config.settings.couponEnabled === true,
+    couponCode: sanitizeSingleLineText(config.settings.couponCode, 64, ""),
   } satisfies OfferSettings;
   const inferredPrimaryOfferType = runtimeOutputs.primaryOfferType;
   const selectedProductsModuleOutput =
@@ -2746,7 +2816,27 @@ function getOfferTypeFromLogicBlockType(type: string | undefined): string | null
 export function getPrimaryOfferTypeFromCampaignConfig(
   config: CampaignConfig | null | undefined,
 ): string | null {
-  return getOfferTypeFromLogicBlockType(config?.logicBlocks[0]?.type);
+  const primaryBlock = config?.logicBlocks[0];
+  if (
+    primaryBlock?.type === "quantity-breaks" &&
+    isCouponConfigEnabled(config) &&
+    isOrderDiscountLikeQuantityBreaksBlock(primaryBlock)
+  ) {
+    return "coupon";
+  }
+  if (
+    primaryBlock?.type === "quantity-breaks" &&
+    isShippingDiscountLikeQuantityBreaksBlock(primaryBlock)
+  ) {
+    return "shipping-discount";
+  }
+  if (
+    primaryBlock?.type === "quantity-breaks" &&
+    isOrderDiscountLikeQuantityBreaksBlock(primaryBlock)
+  ) {
+    return "order-discount";
+  }
+  return getOfferTypeFromLogicBlockType(primaryBlock?.type);
 }
 
 export function resolveOfferTypeFromCampaignConfig(params: {
@@ -2777,7 +2867,18 @@ export function getOfferDisplayType(
 ): string {
   const config = parseCampaignConfig(campaignConfigJson);
   const primaryBlock = config?.logicBlocks[0];
-  const primaryLabel = getLogicBlockDisplayType(primaryBlock?.type);
+  const primaryLabel =
+    primaryBlock?.type === "quantity-breaks" &&
+    isCouponConfigEnabled(config) &&
+    isOrderDiscountLikeQuantityBreaksBlock(primaryBlock)
+      ? "Coupon"
+      : primaryBlock?.type === "quantity-breaks" &&
+          isShippingDiscountLikeQuantityBreaksBlock(primaryBlock)
+        ? "Shipping discount"
+        : primaryBlock?.type === "quantity-breaks" &&
+            isOrderDiscountLikeQuantityBreaksBlock(primaryBlock)
+          ? "Order discount"
+          : getLogicBlockDisplayType(primaryBlock?.type);
   if (primaryLabel) {
     const extraModuleCount = Math.max(0, (config?.logicBlocks.length || 0) - 1);
     return extraModuleCount > 0
@@ -2785,6 +2886,9 @@ export function getOfferDisplayType(
       : primaryLabel;
   }
   if (offerType === "quantity-breaks-same") return "Quantity breaks";
+  if (offerType === "shipping-discount") return "Shipping discount";
+  if (offerType === "order-discount") return "Order discount";
+  if (offerType === "coupon") return "Coupon";
   if (offerType === "quantity-breaks-different") {
     return "Quantity breaks (different products)";
   }
@@ -2807,7 +2911,17 @@ export function getOfferRulesText(params: {
     const tiers = quantityBreaks?.config.tiers ?? [];
     if (tiers.length > 0) {
       return tiers
-        .map((tier) => `Buy ${tier.qty} Get ${tier.discountPercent}% Off`)
+        .map((tier) =>
+          tier.rewardType === "free_shipping"
+            ? tier.conditionType === "cart_amount"
+              ? `Spend ${tier.amountThreshold} Unlock Free Shipping`
+              : `Buy ${tier.qty} Unlock Free Shipping`
+            : tier.discountClass === "order"
+              ? tier.conditionType === "cart_amount"
+                ? `Spend ${tier.amountThreshold} Get ${tier.discountPercent}% Off Order`
+                : `Buy ${tier.qty} Get ${tier.discountPercent}% Off Order`
+            : `Buy ${tier.qty} Get ${tier.discountPercent}% Off`,
+        )
         .join(", ");
     }
     const bxgy = config.logicBlocks.find(

@@ -1,8 +1,27 @@
 query CartInput {
+  triggeringDiscountCode
   cart {
+    buyerIdentity {
+      isAuthenticated
+      customer {
+        numberOfOrders
+        amountSpent {
+          amount
+        }
+        hasTags(tags: ["vip", "high_aov", "subscription_active", "bundle_buyer", "repeat_buyer", "high_intent"]) {
+          tag
+          hasTag
+        }
+      }
+    }
     lines {
       id
       quantity
+      sellingPlanAllocation {
+        sellingPlan {
+          id
+        }
+      }
       cost {
         amountPerQuantity {
           amount
@@ -28,6 +47,9 @@ query CartInput {
     }
   }
   localization {
+    country {
+      isoCode
+    }
     market {
       id
     }

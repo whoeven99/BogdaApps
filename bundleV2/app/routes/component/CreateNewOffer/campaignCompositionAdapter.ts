@@ -243,7 +243,18 @@ export function getCampaignCompositionRulesSnapshot(
   const rules: UnifiedRuleNode[] = [];
 
   if (draft.discountRules.length > 0) {
-    rules.push(...adaptDiscountRules("quantity-breaks-same", draft.discountRules));
+    rules.push(
+      ...adaptDiscountRules(
+        draft.offerType === "shipping-discount"
+          ? "shipping-discount"
+          : draft.offerType === "order-discount"
+            ? "order-discount"
+            : draft.offerType === "coupon"
+              ? "coupon"
+          : "quantity-breaks-same",
+        draft.discountRules,
+      ),
+    );
   }
 
   if (draft.bxgyDiscountRules.length > 0) {
@@ -307,7 +318,10 @@ export function orderCampaignCompositionRules(
   });
 }
 
-function buildDefaultDiscountRule(type: CampaignBarType): DraftDiscountRule {
+function buildDefaultDiscountRule(
+  type: CampaignBarType,
+  offerType?: CampaignDraft["offerType"],
+): DraftDiscountRule {
   if (type === "bxgy") {
     return {
       count: 2,
@@ -338,6 +352,51 @@ function buildDefaultDiscountRule(type: CampaignBarType): DraftDiscountRule {
       rewardProductIds: [],
       giftQuantity: 1,
       discountClass: "order",
+    };
+  }
+
+  if (offerType === "shipping-discount") {
+    return {
+      count: 2,
+      discountPercent: 0,
+      title: "",
+      subtitle: "",
+      badge: "",
+      isDefault: false,
+      rewardType: "free_shipping",
+      offerKind: "free_shipping",
+      discountClass: "shipping",
+      conditionType: "item_quantity",
+    };
+  }
+
+  if (offerType === "order-discount") {
+    return {
+      count: 2,
+      discountPercent: 10,
+      title: "",
+      subtitle: "",
+      badge: "",
+      isDefault: false,
+      rewardType: "percentage_off",
+      offerKind: "percentage_discount",
+      discountClass: "order",
+      conditionType: "item_quantity",
+    };
+  }
+
+  if (offerType === "coupon") {
+    return {
+      count: 2,
+      discountPercent: 15,
+      title: "",
+      subtitle: "",
+      badge: "",
+      isDefault: false,
+      rewardType: "percentage_off",
+      offerKind: "percentage_discount",
+      discountClass: "order",
+      conditionType: "item_quantity",
     };
   }
 
@@ -380,7 +439,22 @@ export function appendCampaignCompositionBar(
   }
 
   if (draft.offerType === "quantity-breaks-same") {
-    actions.setDiscountRules((prev) => [...prev, buildDefaultDiscountRule(type)]);
+    actions.setDiscountRules((prev) => [...prev, buildDefaultDiscountRule(type, draft.offerType)]);
+    return;
+  }
+
+  if (draft.offerType === "shipping-discount") {
+    actions.setDiscountRules((prev) => [...prev, buildDefaultDiscountRule(type, draft.offerType)]);
+    return;
+  }
+
+  if (draft.offerType === "order-discount") {
+    actions.setDiscountRules((prev) => [...prev, buildDefaultDiscountRule(type, draft.offerType)]);
+    return;
+  }
+
+  if (draft.offerType === "coupon") {
+    actions.setDiscountRules((prev) => [...prev, buildDefaultDiscountRule(type, draft.offerType)]);
     return;
   }
 
@@ -419,7 +493,10 @@ export function appendCampaignCompositionBar(
     return;
   }
 
-  actions.setDiscountRules((prev) => [...prev, buildDefaultDiscountRule("quantity_break")]);
+  actions.setDiscountRules((prev) => [
+    ...prev,
+    buildDefaultDiscountRule("quantity_break", draft.offerType),
+  ]);
 }
 
 export function removeCampaignCompositionBar(

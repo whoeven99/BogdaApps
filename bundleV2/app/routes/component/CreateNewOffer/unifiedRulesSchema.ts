@@ -151,6 +151,30 @@ export const OFFER_TYPE_RULE_CAPABILITIES: OfferTypeRuleCapability[] = [
       "Supports standard quantity/order/shipping rules and unified BXGY tiers within the selected product pool.",
   },
   {
+    offerType: "shipping-discount",
+    primaryRuleTypes: ["free_shipping"],
+    scopeModel: "selected_products",
+    publishSupport: "supported",
+    notes:
+      "Uses selected campaign products as triggers and unlocks delivery discounts through free-shipping rules.",
+  },
+  {
+    offerType: "order-discount",
+    primaryRuleTypes: ["order_discount"],
+    scopeModel: "selected_products",
+    publishSupport: "supported",
+    notes:
+      "Uses selected campaign products as triggers and unlocks order-level percentage discounts through unified quantity tiers.",
+  },
+  {
+    offerType: "coupon",
+    primaryRuleTypes: ["order_discount"],
+    scopeModel: "selected_products",
+    publishSupport: "supported",
+    notes:
+      "Uses shared coupon-code gating plus selected campaign products to unlock order-level percentage discounts.",
+  },
+  {
     offerType: "quantity-breaks-different",
     primaryRuleTypes: ["quantity_break"],
     scopeModel: "shared_product_pool",

@@ -116,6 +116,27 @@ const META_BY_OFFER_TYPE: Record<OfferTypeId, CampaignBuilderMeta> = {
     stepTwoDescription:
       "Select the products in scope and define the pricing, order, shipping, or gift rules that drive the promotion.",
   },
+  "shipping-discount": {
+    logicBlockLabel: "Shipping Discount",
+    logicBlockDescription:
+      "Unlock free shipping with item-quantity or cart-amount rules across the selected product scope.",
+    stepTwoDescription:
+      "Select the trigger products, then configure the free-shipping tiers customers can unlock at checkout.",
+  },
+  "order-discount": {
+    logicBlockLabel: "Order Discount",
+    logicBlockDescription:
+      "Unlock order-level percentage discounts with item-quantity or cart-amount rules across the selected product scope.",
+    stepTwoDescription:
+      "Select the trigger products, then configure the order-discount tiers customers can unlock once the scoped items qualify.",
+  },
+  coupon: {
+    logicBlockLabel: "Coupon Offer",
+    logicBlockDescription:
+      "Require a shared coupon code before shoppers can unlock an order-level percentage discount.",
+    stepTwoDescription:
+      "Select the trigger products, then configure the order-discount tiers that become eligible after the shared coupon code is entered.",
+  },
   "quantity-breaks-different": {
     logicBlockLabel: "Quantity Breaks",
     logicBlockDescription:
@@ -155,6 +176,70 @@ const META_BY_OFFER_TYPE: Record<OfferTypeId, CampaignBuilderMeta> = {
 
 const BEHAVIOR_BY_OFFER_TYPE: Record<OfferTypeId, CampaignBuilderBehavior> = {
   "quantity-breaks-same": {},
+  "shipping-discount": {
+    getLogicSummary: (ctx) => {
+      const shippingRules = ctx.normalizedDiscountRules.filter(
+        (rule) => rule.rewardType === "free_shipping",
+      );
+      const amountRules = shippingRules.filter(
+        (rule) => rule.conditionType === "cart_amount",
+      ).length;
+      const quantityRules = shippingRules.length - amountRules;
+      return `${shippingRules.length} shipping tier${shippingRules.length === 1 ? "" : "s"}, ${quantityRules} quantity, ${amountRules} amount`;
+    },
+    validateScopeAndLogicStep: (ctx) =>
+      ctx.selectedProductsData.length === 0 || ctx.normalizedDiscountRules.length === 0
+        ? "Please select campaign products and configure at least one free-shipping tier."
+        : null,
+    validateFinalSubmitScopeAndLogic: (ctx) =>
+      ctx.selectedProductsData.length === 0 || ctx.normalizedDiscountRules.length === 0
+        ? "Shipping discount offers require selected products and at least one free-shipping tier."
+        : null,
+  },
+  "order-discount": {
+    getLogicSummary: (ctx) => {
+      const orderRules = ctx.normalizedDiscountRules.filter(
+        (rule) => rule.discountClass === "order" && rule.rewardType === "percentage_off",
+      );
+      const amountRules = orderRules.filter(
+        (rule) => rule.conditionType === "cart_amount",
+      ).length;
+      const quantityRules = orderRules.length - amountRules;
+      const bestDiscount = orderRules.reduce(
+        (max, rule) => Math.max(max, Number(rule.discountPercent) || 0),
+        0,
+      );
+      return `${orderRules.length} order tier${orderRules.length === 1 ? "" : "s"}, ${quantityRules} quantity, ${amountRules} amount, up to ${bestDiscount}% off`;
+    },
+    validateScopeAndLogicStep: (ctx) =>
+      ctx.selectedProductsData.length === 0 || ctx.normalizedDiscountRules.length === 0
+        ? "Please select campaign products and configure at least one order-discount tier."
+        : null,
+    validateFinalSubmitScopeAndLogic: (ctx) =>
+      ctx.selectedProductsData.length === 0 || ctx.normalizedDiscountRules.length === 0
+        ? "Order discount offers require selected products and at least one order-discount tier."
+        : null,
+  },
+  coupon: {
+    getLogicSummary: (ctx) => {
+      const orderRules = ctx.normalizedDiscountRules.filter(
+        (rule) => rule.discountClass === "order" && rule.rewardType === "percentage_off",
+      );
+      const bestDiscount = orderRules.reduce(
+        (max, rule) => Math.max(max, Number(rule.discountPercent) || 0),
+        0,
+      );
+      return `${orderRules.length} coupon tier${orderRules.length === 1 ? "" : "s"}, shared code gating, up to ${bestDiscount}% off`;
+    },
+    validateScopeAndLogicStep: (ctx) =>
+      ctx.selectedProductsData.length === 0 || ctx.normalizedDiscountRules.length === 0
+        ? "Please select campaign products and configure at least one coupon discount tier."
+        : null,
+    validateFinalSubmitScopeAndLogic: (ctx) =>
+      ctx.selectedProductsData.length === 0 || ctx.normalizedDiscountRules.length === 0
+        ? "Coupon offers require selected products and at least one coupon discount tier."
+        : null,
+  },
   "quantity-breaks-different": {
     getScopeSummary: (ctx) =>
       `${ctx.selectedProductsData.length} products available for tier product pools`,

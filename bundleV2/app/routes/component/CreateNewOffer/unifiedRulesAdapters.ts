@@ -274,6 +274,9 @@ export function buildUnifiedRulesSnapshot(
         input.selectedProductIds,
         input.subscriptionEnabled,
       );
+    case "coupon":
+    case "order-discount":
+    case "shipping-discount":
     case "quantity-breaks-same":
     default:
       return adaptDiscountRules(input.offerType, input.discountRules);

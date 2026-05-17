@@ -47,7 +47,12 @@ export function getUnifiedRuleAuditIssuesForRules(
     });
   }
 
-  if (draft.offerType === "quantity-breaks-same") {
+  if (
+    draft.offerType === "quantity-breaks-same" ||
+    draft.offerType === "shipping-discount" ||
+    draft.offerType === "order-discount" ||
+    draft.offerType === "coupon"
+  ) {
     const legacyBlockingMessage = getLegacyUnifiedRuleBlockingMessage(draft.discountRules);
     if (legacyBlockingMessage) {
       issues.push({

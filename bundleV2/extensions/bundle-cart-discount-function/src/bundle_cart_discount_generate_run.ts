@@ -142,6 +142,11 @@ type BxgyDiscountRule = {
 
 type Offer = NonNullable<OfferMetafieldPayload["offers"]>[number];
 
+type CouponAccess = {
+  enabled: boolean;
+  code: string;
+};
+
 /** complete-bundle：整包计价方式（与主题端 offerParsing 对齐） */
 type CompleteBundlePricingMode =
   | "full_price"
@@ -733,6 +738,12 @@ export function bundleCartDiscountGenerateRun(
     return { operations: [] };
   }
   const offers = offersPayload?.offers ?? [];
+  const enteredCodes = new Set(
+    [normalizeCouponCode(input.triggeringDiscountCode)].filter(Boolean),
+  );
+  const buyerTargetingContext = buildBuyerTargetingContext(input);
+  const acceptedCouponCodes = new Set<string>();
+  const acceptedCouponCodeByOfferId = new Map<string, string>();
 
   log("metafield_offers", {
     updatedAt: offersPayload?.updatedAt ?? null,
@@ -766,13 +777,56 @@ export function bundleCartDiscountGenerateRun(
   const hasOrderDiscountClass = input.discount.discountClasses.includes(
     DiscountClass.Order,
   );
+  const localizationCountryCode = normalizeCountryCode(
+    input.localization?.country?.isoCode,
+  );
+  const eligibleOffers = offers.filter((offer) => {
+    if (!offerMatchesCustomerSegments(offer, buyerTargetingContext)) {
+      log("offer_skip_customer_segment", {
+        offerId: offer.id,
+        name: offer.name,
+      });
+      return false;
+    }
+    if (!offerMatchesCustomerProfileFilters(offer, buyerTargetingContext)) {
+      log("offer_skip_customer_profile_filter", {
+        offerId: offer.id,
+        name: offer.name,
+      });
+      return false;
+    }
+    if (!offerMatchesIpCountryCodes(offer, localizationCountryCode)) {
+      log("offer_skip_ip_country_code", {
+        offerId: offer.id,
+        name: offer.name,
+        localizationCountryCode,
+      });
+      return false;
+    }
+    const couponAccess = parseCouponAccess(offer.offerSettingsJson);
+    if (!couponAccess.enabled) {
+      return true;
+    }
+    const acceptedCode = resolveAcceptedCouponCode(offer, enteredCodes);
+    if (!acceptedCode) {
+      log("offer_skip_coupon_code_mismatch", {
+        offerId: offer.id,
+        name: offer.name,
+        configuredCode: couponAccess.code,
+      });
+      return false;
+    }
+    acceptedCouponCodes.add(acceptedCode);
+    acceptedCouponCodeByOfferId.set(String(offer.id || ""), acceptedCode);
+    return true;
+  });
 
   const productCandidates: ProductDiscountCandidate[] = [];
   const orderCandidates: OrderDiscountCandidate[] = [];
 
   const marketId = input.localization?.market?.id;
   const nowMs = resolveNowMs();
-  const bxgyOffers = offers.filter(
+  const bxgyOffers = eligibleOffers.filter(
     (o) =>
       (o.offerType === "bxgy" ||
         o.offerType === "quantity-breaks-different" ||
@@ -780,11 +834,11 @@ export function bundleCartDiscountGenerateRun(
           hasUnifiedBxgyTier(o.discountRulesJson))) &&
       offerPassesScheduleAndMarket(o, marketId, nowMs),
   );
-  const freeGiftOffers = offers.filter(
+  const freeGiftOffers = eligibleOffers.filter(
     (o) => o.offerType === "free-gift" && offerPassesScheduleAndMarket(o, marketId, nowMs),
   );
   /** 普通数量阶梯：不含 BXGY 与 complete-bundle（后两者有独立分支） */
-  const regularOffers = offers.filter(
+  const regularOffers = eligibleOffers.filter(
     (o) =>
       o.offerType !== "bxgy" &&
       o.offerType !== "quantity-breaks-different" &&
@@ -793,6 +847,7 @@ export function bundleCartDiscountGenerateRun(
   );
   log("offer_groups_resolved", {
     totalOffers: offers.length,
+    eligibleOffers: eligibleOffers.length,
     bxgyCount: bxgyOffers.length,
     freeGiftCount: freeGiftOffers.length,
     completeBundleCount: offers.filter((o) => isCompleteBundleOfferType(o.offerType)).length,
@@ -826,7 +881,7 @@ export function bundleCartDiscountGenerateRun(
     });
     const completeBundleCandidates = calculateCompleteBundleDiscounts(
       input.cart.lines,
-      offers,
+      eligibleOffers,
       marketId,
       nowMs,
     );
@@ -922,6 +977,11 @@ export function bundleCartDiscountGenerateRun(
             value: discountPercentValue,
           },
         },
+        associatedDiscountCode: acceptedCouponCodeByOfferId.get(String(suitOffer.id || ""))
+          ? {
+              code: acceptedCouponCodeByOfferId.get(String(suitOffer.id || ""))!,
+            }
+          : undefined,
       };
 
       productCandidates.push(candidate);
@@ -934,11 +994,17 @@ export function bundleCartDiscountGenerateRun(
 
   if (hasOrderDiscountClass) {
     orderCandidates.push(
-      ...buildOrderDiscountCandidates(input, regularOffers, marketId, nowMs),
+      ...buildOrderDiscountCandidates(
+        input,
+        regularOffers,
+        marketId,
+        nowMs,
+        acceptedCouponCodeByOfferId,
+      ),
     );
   }
 
-  if (!productCandidates.length && !orderCandidates.length) {
+  if (!productCandidates.length && !orderCandidates.length && acceptedCouponCodes.size === 0) {
     log("early_exit", {
       reason: "no_discount_candidates_after_evaluation",
       linesProcessed: input.cart.lines.length,
@@ -947,6 +1013,14 @@ export function bundleCartDiscountGenerateRun(
   }
 
   const operations: CartLinesDiscountsGenerateRunResult["operations"] = [];
+
+  if (acceptedCouponCodes.size > 0) {
+    operations.push({
+      enteredDiscountCodesAccept: {
+        codes: Array.from(acceptedCouponCodes).map((code) => ({ code })),
+      },
+    });
+  }
 
   if (productCandidates.length > 0) {
     operations.push({
@@ -989,6 +1063,253 @@ type DiscountTier = {
   maxUsesPerOrder?: number;
   rewardProductIds: string[];
 };
+
+const RECOGNIZED_CUSTOMER_SEGMENTS = new Set([
+  "all",
+  "new_customers",
+  "returning_customers",
+  "vip",
+  "high_aov",
+]);
+
+const RECOGNIZED_CUSTOMER_PROFILE_FILTERS = new Set([
+  "subscription_active",
+  "bundle_buyer",
+  "repeat_buyer",
+  "high_intent",
+]);
+
+type BuyerTargetingContext = {
+  isAuthenticated: boolean;
+  numberOfOrders: number;
+  amountSpent: number;
+  tags: Set<string>;
+  hasSubscriptionLine: boolean;
+};
+
+function normalizeCouponCode(value: unknown): string {
+  return String(value || "").trim().toUpperCase();
+}
+
+function normalizeCustomerSegmentHandle(value: unknown): string {
+  return String(value || "").trim().toLowerCase();
+}
+
+function parseCustomerSegments(offerSettingsJson?: string | null): string[] {
+  if (!offerSettingsJson) return ["all"];
+  try {
+    const parsed = JSON.parse(offerSettingsJson) as {
+      customerSegments?: unknown;
+    };
+    const rawValue = parsed.customerSegments;
+    if (typeof rawValue !== "string" || !rawValue.trim()) {
+      return ["all"];
+    }
+    const normalized = rawValue
+      .split(",")
+      .map((segment) => normalizeCustomerSegmentHandle(segment))
+      .filter(Boolean);
+    return normalized.length ? Array.from(new Set(normalized)) : ["all"];
+  } catch {
+    return ["all"];
+  }
+}
+
+function parseCustomerProfileFilters(offerSettingsJson?: string | null): string[] {
+  if (!offerSettingsJson) return [];
+  try {
+    const parsed = JSON.parse(offerSettingsJson) as {
+      customerProfileFilters?: unknown;
+    };
+    const rawValue = parsed.customerProfileFilters;
+    if (typeof rawValue !== "string" || !rawValue.trim()) {
+      return [];
+    }
+    const normalized = rawValue
+      .split(",")
+      .map((value) => normalizeCustomerSegmentHandle(value))
+      .filter(Boolean);
+    return normalized.length ? Array.from(new Set(normalized)) : [];
+  } catch {
+    return [];
+  }
+}
+
+function normalizeCountryCode(value: unknown): string {
+  return String(value || "").trim().toUpperCase();
+}
+
+function parseIpCountryCodes(offerSettingsJson?: string | null): string[] {
+  if (!offerSettingsJson) return [];
+  try {
+    const parsed = JSON.parse(offerSettingsJson) as {
+      ipCountryCodes?: unknown;
+    };
+    const rawValue = parsed.ipCountryCodes;
+    if (typeof rawValue !== "string" || !rawValue.trim()) {
+      return [];
+    }
+    const normalized = rawValue
+      .split(",")
+      .map((value) => normalizeCountryCode(value))
+      .filter(Boolean);
+    return normalized.length ? Array.from(new Set(normalized)) : [];
+  } catch {
+    return [];
+  }
+}
+
+function buildBuyerTargetingContext(input: CartInput): BuyerTargetingContext {
+  const buyerIdentity = input.cart.buyerIdentity;
+  const customer = buyerIdentity?.customer;
+  const tags = new Set(
+    (customer?.hasTags || [])
+      .filter((entry) => entry.hasTag)
+      .map((entry) => normalizeCustomerSegmentHandle(entry.tag)),
+  );
+
+  return {
+    isAuthenticated: buyerIdentity?.isAuthenticated === true,
+    numberOfOrders: Math.max(0, Math.trunc(Number(customer?.numberOfOrders) || 0)),
+    amountSpent: Math.max(
+      0,
+      parseMoneyAmount(customer?.amountSpent?.amount),
+    ),
+    tags,
+    hasSubscriptionLine: input.cart.lines.some((line) => Boolean(line.sellingPlanAllocation?.sellingPlan?.id)),
+  };
+}
+
+function offerMatchesCustomerSegments(
+  offer: Offer,
+  buyerContext: BuyerTargetingContext,
+): boolean {
+  const configuredSegments = parseCustomerSegments(offer.offerSettingsJson);
+  if (
+    configuredSegments.length === 0 ||
+    configuredSegments.includes("all")
+  ) {
+    return true;
+  }
+
+  const recognizedSegments = configuredSegments.filter((segment) =>
+    RECOGNIZED_CUSTOMER_SEGMENTS.has(segment),
+  );
+  if (!recognizedSegments.length) {
+    log("offer_customer_segment_skip_runtime_restriction", {
+      offerId: offer.id,
+      segments: configuredSegments,
+    });
+    return true;
+  }
+
+  return recognizedSegments.some((segment) => {
+    switch (segment) {
+      case "new_customers":
+        return !buyerContext.isAuthenticated || buyerContext.numberOfOrders === 0;
+      case "returning_customers":
+        return buyerContext.isAuthenticated && buyerContext.numberOfOrders > 0;
+      case "vip":
+        return buyerContext.tags.has("vip");
+      case "high_aov":
+        return (
+          buyerContext.tags.has("high_aov") ||
+          buyerContext.amountSpent >= 500
+        );
+      default:
+        return false;
+    }
+  });
+}
+
+function offerMatchesCustomerProfileFilters(
+  offer: Offer,
+  buyerContext: BuyerTargetingContext,
+): boolean {
+  const configuredFilters = parseCustomerProfileFilters(offer.offerSettingsJson);
+  if (!configuredFilters.length) {
+    return true;
+  }
+
+  const recognizedFilters = configuredFilters.filter((filter) =>
+    RECOGNIZED_CUSTOMER_PROFILE_FILTERS.has(filter),
+  );
+  if (!recognizedFilters.length) {
+    log("offer_customer_profile_skip_runtime_restriction", {
+      offerId: offer.id,
+      filters: configuredFilters,
+    });
+    return true;
+  }
+
+  return recognizedFilters.every((filter) => {
+    switch (filter) {
+      case "subscription_active":
+        return (
+          buyerContext.hasSubscriptionLine ||
+          buyerContext.tags.has("subscription_active")
+        );
+      case "bundle_buyer":
+        return buyerContext.tags.has("bundle_buyer");
+      case "repeat_buyer":
+        return (
+          buyerContext.tags.has("repeat_buyer") ||
+          buyerContext.numberOfOrders > 1
+        );
+      case "high_intent":
+        return buyerContext.tags.has("high_intent");
+      default:
+        return true;
+    }
+  });
+}
+
+function offerMatchesIpCountryCodes(
+  offer: Offer,
+  countryCode: string,
+): boolean {
+  const configuredCodes = parseIpCountryCodes(offer.offerSettingsJson);
+  if (!configuredCodes.length) {
+    return true;
+  }
+  if (!countryCode) {
+    log("offer_ip_country_runtime_unavailable", {
+      offerId: offer.id,
+      configuredCodes,
+    });
+    return false;
+  }
+  return configuredCodes.includes(countryCode);
+}
+
+function parseCouponAccess(offerSettingsJson?: string | null): CouponAccess {
+  if (!offerSettingsJson) {
+    return { enabled: false, code: "" };
+  }
+  try {
+    const parsed = JSON.parse(offerSettingsJson) as {
+      couponEnabled?: unknown;
+      couponCode?: unknown;
+    };
+    return {
+      enabled: parsed.couponEnabled === true,
+      code: normalizeCouponCode(parsed.couponCode),
+    };
+  } catch {
+    return { enabled: false, code: "" };
+  }
+}
+
+function resolveAcceptedCouponCode(
+  offer: Offer,
+  enteredCodes: Set<string>,
+): string | null {
+  const couponAccess = parseCouponAccess(offer.offerSettingsJson);
+  if (!couponAccess.enabled) return null;
+  return couponAccess.code && enteredCodes.has(couponAccess.code)
+    ? couponAccess.code
+    : null;
+}
 
 function parseDiscountRulesJson(
   discountRulesJson?: string | null,
@@ -1946,6 +2267,7 @@ function buildOrderDiscountCandidates(
   offers: Offer[],
   marketId: string | undefined,
   nowMs: number | null,
+  acceptedCouponCodeByOfferId: Map<string, string>,
 ): OrderDiscountCandidate[] {
   const candidates: OrderDiscountCandidate[] = [];
   const allCartLineIds = input.cart.lines.map((line) => line.id);
@@ -1994,6 +2316,11 @@ function buildOrderDiscountCandidates(
           value: formatDiscountPercentValue(bestRule.discountPercent),
         },
       },
+      associatedDiscountCode: acceptedCouponCodeByOfferId.get(String(offer.id || ""))
+        ? {
+            code: acceptedCouponCodeByOfferId.get(String(offer.id || ""))!,
+          }
+        : undefined,
     });
   }
 
