@@ -5,6 +5,7 @@ import type {
 import {
   getBxgyDisplayMeta,
   isSingleBxgyRule,
+  isCompleteBundleSingleBar,
   isSingleDifferentProductsRule,
   isSingleDiscountRule,
   isSingleFreeGiftRule,
@@ -62,6 +63,28 @@ export type CampaignModuleItem = {
   toggleable: boolean;
 };
 
+function hasConfiguredDiscountRules(rules: DraftDiscountRule[]): boolean {
+  return rules.some((rule) => !isSingleDiscountRule(rule));
+}
+
+function hasConfiguredBxgyRules(rules: DraftBxgyDiscountRule[]): boolean {
+  return rules.some((rule) => !isSingleBxgyRule(rule));
+}
+
+function hasConfiguredFreeGiftRules(rules: FreeGiftRule[]): boolean {
+  return rules.some((rule) => !isSingleFreeGiftRule(rule));
+}
+
+function hasConfiguredDifferentProductsRules(
+  rules: DifferentProductsDiscountRule[],
+): boolean {
+  return rules.some((rule) => !isSingleDifferentProductsRule(rule));
+}
+
+function hasConfiguredCompleteBundleBars(bars: CampaignDraft["completeBundleBars"]): boolean {
+  return bars.some((bar) => !isCompleteBundleSingleBar(bar));
+}
+
 function getDraftDiscountRuleType(rule: DraftDiscountRule): CampaignBarType {
   if (isSingleDiscountRule(rule)) return "quantity_break";
   if (rule.logicType === "bxgy") return "bxgy";
@@ -117,7 +140,22 @@ function buildDifferentProductsSummary(rule: DifferentProductsDiscountRule) {
 export function getCampaignCompositionBars(
   draft: CampaignDraft,
 ): CampaignBarItem[] {
-  const differentProductsBars = draft.differentProductsDiscountRules.map((rule, index) => ({
+  const shouldIncludeDifferentProducts =
+    draft.offerType === "quantity-breaks-different" ||
+    hasConfiguredDifferentProductsRules(draft.differentProductsDiscountRules);
+  const shouldIncludeDiscountRules =
+    draft.offerType === "quantity-breaks-same" ||
+    draft.offerType === "shipping-discount" ||
+    draft.offerType === "order-discount" ||
+    draft.offerType === "coupon" ||
+    hasConfiguredDiscountRules(draft.discountRules);
+  const shouldIncludeBxgy =
+    draft.offerType === "bxgy" || hasConfiguredBxgyRules(draft.bxgyDiscountRules);
+  const shouldIncludeFreeGift =
+    draft.offerType === "free-gift" || hasConfiguredFreeGiftRules(draft.freeGiftRules);
+
+  const differentProductsBars = shouldIncludeDifferentProducts
+    ? draft.differentProductsDiscountRules.map((rule, index) => ({
     id: `different-products-rule-${index + 1}`,
     type: "quantity_break" as const,
     title:
@@ -133,9 +171,11 @@ export function getCampaignCompositionBars(
       index,
     },
     supportState: "supported" as const,
-  }));
+  }))
+    : [];
 
-  const draftRuleBars = draft.discountRules.map((rule, index) => {
+  const draftRuleBars = shouldIncludeDiscountRules
+    ? draft.discountRules.map((rule, index) => {
     const type = getDraftDiscountRuleType(rule);
     return {
       id: rule.id || `discount-rule-${index + 1}`,
@@ -158,9 +198,11 @@ export function getCampaignCompositionBars(
       },
       supportState: "supported" as const,
     };
-  });
+  })
+    : [];
 
-  const bxgyBars = draft.bxgyDiscountRules.map((rule, index) => ({
+  const bxgyBars = shouldIncludeBxgy
+    ? draft.bxgyDiscountRules.map((rule, index) => ({
     id: `bxgy-rule-${index + 1}`,
     type: isSingleBxgyRule(rule) ? ("quantity_break" as const) : ("bxgy" as const),
     title: rule.title || (isSingleBxgyRule(rule) ? "Single purchase" : `Bar #${index + 1} - Buy X, Get Y`),
@@ -172,9 +214,11 @@ export function getCampaignCompositionBars(
       index,
     },
     supportState: "supported" as const,
-  }));
+  }))
+    : [];
 
-  const freeGiftBars = draft.freeGiftRules.map((rule, index) => ({
+  const freeGiftBars = shouldIncludeFreeGift
+    ? draft.freeGiftRules.map((rule, index) => ({
     id: `free-gift-rule-${index + 1}`,
     type: isSingleFreeGiftRule(rule) ? ("quantity_break" as const) : ("free_gift" as const),
     title: rule.title || (isSingleFreeGiftRule(rule) ? "Single purchase" : `Bar #${index + 1} - Free gift`),
@@ -186,7 +230,8 @@ export function getCampaignCompositionBars(
       index,
     },
     supportState: "supported" as const,
-  }));
+  }))
+    : [];
 
   return [...differentProductsBars, ...draftRuleBars, ...bxgyBars, ...freeGiftBars];
 }
@@ -201,7 +246,8 @@ export function getCampaignCompositionModules(
       label: "Complete bundle",
       description: "Optional component for adding and editing bundled products.",
       enabled:
-        draft.offerType === "complete-bundle" || draft.completeBundleBars.length > 0,
+        draft.offerType === "complete-bundle" ||
+        hasConfiguredCompleteBundleBars(draft.completeBundleBars),
       toggleable: draft.offerType !== "complete-bundle",
     },
     {
@@ -242,7 +288,13 @@ export function getCampaignCompositionRulesSnapshot(
 ): UnifiedRuleNode[] {
   const rules: UnifiedRuleNode[] = [];
 
-  if (draft.discountRules.length > 0) {
+  if (
+    draft.offerType === "quantity-breaks-same" ||
+    draft.offerType === "shipping-discount" ||
+    draft.offerType === "order-discount" ||
+    draft.offerType === "coupon" ||
+    hasConfiguredDiscountRules(draft.discountRules)
+  ) {
     rules.push(
       ...adaptDiscountRules(
         draft.offerType === "shipping-discount"
@@ -257,7 +309,7 @@ export function getCampaignCompositionRulesSnapshot(
     );
   }
 
-  if (draft.bxgyDiscountRules.length > 0) {
+  if (draft.offerType === "bxgy" || hasConfiguredBxgyRules(draft.bxgyDiscountRules)) {
     rules.push(
       ...adaptBxgyRules(
         draft.bxgyDiscountRules,
@@ -267,7 +319,10 @@ export function getCampaignCompositionRulesSnapshot(
     );
   }
 
-  if (draft.freeGiftRules.length > 0) {
+  if (
+    draft.offerType === "free-gift" ||
+    hasConfiguredFreeGiftRules(draft.freeGiftRules)
+  ) {
     rules.push(
       ...adaptFreeGiftRules(
         draft.freeGiftRules,
@@ -277,11 +332,17 @@ export function getCampaignCompositionRulesSnapshot(
     );
   }
 
-  if (draft.differentProductsDiscountRules.length > 0) {
+  if (
+    draft.offerType === "quantity-breaks-different" ||
+    hasConfiguredDifferentProductsRules(draft.differentProductsDiscountRules)
+  ) {
     rules.push(...adaptDifferentProductsRules(draft.differentProductsDiscountRules));
   }
 
-  if (draft.completeBundleBars.length > 0) {
+  if (
+    draft.offerType === "complete-bundle" ||
+    hasConfiguredCompleteBundleBars(draft.completeBundleBars)
+  ) {
     rules.push(...adaptCompleteBundleBars(draft.completeBundleBars));
   }
 

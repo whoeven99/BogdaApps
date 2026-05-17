@@ -83,8 +83,24 @@ function calculatePreviewBundleAmounts(
 }
 
 function getFeaturedState(rules: UnifiedRuleNode[], index: number) {
-  const hasDefault = rules.some((rule) => !!rule.presentation.isDefault);
-  return hasDefault ? !!rules[index]?.presentation.isDefault : index === 0;
+  const explicitDefaultIndex = rules.findIndex(
+    (rule) => rule.presentation.isDefault === true,
+  );
+  if (explicitDefaultIndex >= 0) {
+    return index === explicitDefaultIndex;
+  }
+  return index === 0;
+}
+
+function getCompleteBundleFeaturedState(
+  bars: CompleteBundleBar[],
+  index: number,
+): boolean {
+  const explicitDefaultIndex = bars.findIndex((bar) => bar.isDefault === true);
+  if (explicitDefaultIndex >= 0) {
+    return index === explicitDefaultIndex;
+  }
+  return index === 0;
 }
 
 function buildSinglePurchaseItem(
@@ -400,7 +416,7 @@ function buildCompleteBundleItem(
       title: bar.title || "Single",
       subtitle: bar.subtitle || "Standard price",
       price: params.formatPrice(anchorBase),
-      featured: !!bar.isDefault,
+      featured: getCompleteBundleFeaturedState(params.completeBundleBars, index),
       products: anchorProduct
         ? [
             {
@@ -465,7 +481,7 @@ function buildCompleteBundleItem(
       `Current product + ${minQuantity}-${maxQuantity} bundle items from ${productsCount} options`,
     price: params.formatPrice(sumFinal),
     original: sumOriginal > sumFinal ? params.formatPrice(sumOriginal) : undefined,
-    featured: !!bar.isDefault,
+    featured: getCompleteBundleFeaturedState(params.completeBundleBars, index),
     badge: bar.badge || undefined,
     saveLabel:
       saved > 0

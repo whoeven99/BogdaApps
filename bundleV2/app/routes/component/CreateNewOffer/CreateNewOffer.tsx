@@ -43,6 +43,7 @@ import {
   OFFER_TEXT_LIMITS,
   buildLegacyFieldsFromCampaignConfig,
   buildDifferentProductsDiscountRulesJson,
+  compileCampaignRuntimeOutputs,
   getInvalidIpCountryCodes,
   migrateLegacyOfferToCampaignConfig,
   normalizeCustomerProfileFilters,
@@ -73,7 +74,10 @@ import {
   buildCompleteBundleConfig,
   createDefaultCompleteBundleSingleBar,
   isCompleteBundleSingleBar,
+  isSingleBxgyRule,
   isSingleDiscountRule,
+  isSingleDifferentProductsRule,
+  isSingleFreeGiftRule,
   normalizeCompleteBundleBars,
   type CompleteBundleBar,
   type CompleteBundleProduct,
@@ -675,6 +679,49 @@ export function CreateNewOffer({
       ) ?? null
     );
   }, [initialCampaignConfig]);
+  const initialCampaignRuntimeOutputs = useMemo(
+    () =>
+      initialCampaignConfig
+        ? compileCampaignRuntimeOutputs(initialCampaignConfig)
+        : null,
+    [initialCampaignConfig],
+  );
+  const initialBuilderOfferType = useMemo(
+    () =>
+      (initialCampaignRuntimeOutputs?.primaryOfferType as OfferTypeId | undefined) ??
+      (initialCampaignLegacy?.offerType as OfferTypeId | undefined) ??
+      (initialOffer?.offerType as OfferTypeId | undefined),
+    [initialCampaignLegacy?.offerType, initialCampaignRuntimeOutputs?.primaryOfferType, initialOffer?.offerType],
+  );
+  const initialPrimarySelectedProductsJson = useMemo(() => {
+    switch (initialBuilderOfferType) {
+      case "bxgy":
+        return initialCampaignRuntimeOutputs?.modules.bxgy?.selectedProductsJson ?? null;
+      case "free-gift":
+        return initialCampaignRuntimeOutputs?.modules.freeGift?.selectedProductsJson ?? null;
+      case "quantity-breaks-different":
+        return (
+          initialCampaignRuntimeOutputs?.modules.quantityBreaksDifferent
+            ?.selectedProductsJson ?? null
+        );
+      case "complete-bundle":
+        return initialCampaignRuntimeOutputs?.modules.completeBundle?.selectedProductsJson ?? null;
+      case "subscription":
+        return initialCampaignRuntimeOutputs?.modules.subscription?.selectedProductsJson ?? null;
+      case "quantity-breaks-same":
+      case "shipping-discount":
+      case "order-discount":
+      case "coupon":
+      default:
+        return initialCampaignRuntimeOutputs?.modules.quantityBreaks?.selectedProductsJson ?? null;
+    }
+  }, [initialBuilderOfferType, initialCampaignRuntimeOutputs]);
+  const initialBxgySelectedProductsJson =
+    initialCampaignRuntimeOutputs?.modules.bxgy?.selectedProductsJson ?? null;
+  const initialFreeGiftSelectedProductsJson =
+    initialCampaignRuntimeOutputs?.modules.freeGift?.selectedProductsJson ?? null;
+  const initialCompleteBundleSelectedProductsJson =
+    initialCampaignRuntimeOutputs?.modules.completeBundle?.selectedProductsJson ?? null;
   const starterTemplateDefaults = useMemo(() => {
     if (initialOffer || !initialOfferType) return null;
     return getStarterTemplateDefaults(initialOfferType);
@@ -718,9 +765,15 @@ export function CreateNewOffer({
   const initialCompleteBundleConfig = useMemo(
     () =>
       parseCompleteBundleConfig(
-        initialCampaignLegacy?.selectedProductsJson ?? initialOffer?.selectedProductsJson,
+        initialCompleteBundleSelectedProductsJson ??
+          initialCampaignLegacy?.selectedProductsJson ??
+          initialOffer?.selectedProductsJson,
       ),
-    [initialCampaignLegacy?.selectedProductsJson, initialOffer?.selectedProductsJson],
+    [
+      initialCampaignLegacy?.selectedProductsJson,
+      initialCompleteBundleSelectedProductsJson,
+      initialOffer?.selectedProductsJson,
+    ],
   );
   const [offerName, setOfferName] = useState(initialOffer?.name ?? "");
   
@@ -963,18 +1016,33 @@ export function CreateNewOffer({
     hasSubscription: boolean;
   }[]>(() => {
     const selectedProductsJson =
+      initialPrimarySelectedProductsJson ??
       initialCampaignLegacy?.selectedProductsJson ??
       initialOffer?.selectedProductsJson;
     const selectedSourceOfferType =
+      initialBuilderOfferType ??
       (initialCampaignLegacy?.offerType as OfferTypeId | undefined) ??
       (initialOffer?.offerType as OfferTypeId | undefined);
     const freeGiftSelectedProducts =
       selectedSourceOfferType === "free-gift"
         ? parseFreeGiftSelectedProducts(selectedProductsJson)
         : { triggerProducts: [], giftProducts: [] };
+    const bxgyBuyProducts =
+      selectedSourceOfferType === "bxgy" && selectedProductsJson
+        ? (() => {
+            try {
+              const parsed = JSON.parse(selectedProductsJson);
+              return Array.isArray(parsed?.buyProducts) ? parsed.buyProducts.map(String) : [];
+            } catch {
+              return [];
+            }
+          })()
+        : [];
     const ids =
       selectedSourceOfferType === "free-gift"
         ? freeGiftSelectedProducts.triggerProducts
+        : selectedSourceOfferType === "bxgy"
+          ? bxgyBuyProducts
         : selectedProductsJson
           ? parseSelectedProductIds(selectedProductsJson)
           : [];
@@ -1022,10 +1090,15 @@ export function CreateNewOffer({
   const [differentProductsEligibleProductsData, setDifferentProductsEligibleProductsData] =
     useState<CampaignDraft["selectedProductsData"]>(() => {
       const selectedProductsJson =
+        initialCampaignRuntimeOutputs?.modules.quantityBreaksDifferent
+          ?.selectedProductsJson ??
         initialCampaignLegacy?.selectedProductsJson ??
         initialOffer?.selectedProductsJson;
       const rawDiscountRulesJson =
-        initialCampaignLegacy?.discountRulesJson ?? initialOffer?.discountRulesJson;
+        initialCampaignRuntimeOutputs?.modules.quantityBreaksDifferent
+          ?.discountRulesJson ??
+        initialCampaignLegacy?.discountRulesJson ??
+        initialOffer?.discountRulesJson;
       const parsedRules = parseDifferentProductsDiscountRules(rawDiscountRulesJson);
       const poolIds = Array.from(
         new Set(
@@ -1052,9 +1125,11 @@ export function CreateNewOffer({
       });
     });
   const selectedProductsJsonForLegacyRewards =
+    initialFreeGiftSelectedProductsJson ??
     initialCampaignLegacy?.selectedProductsJson ??
     initialOffer?.selectedProductsJson;
   const selectedSourceOfferTypeForLegacyRewards =
+    (initialBuilderOfferType as OfferTypeId | undefined) ??
     (initialCampaignLegacy?.offerType as OfferTypeId | undefined) ??
     (initialOffer?.offerType as OfferTypeId | undefined);
   const legacyFreeGiftRewardIds =
@@ -1591,53 +1666,66 @@ export function CreateNewOffer({
     normalizeDiscountRules(
       starterTemplateDefaults?.discountRules ??
         parseDiscountRules(
-          initialCampaignLegacy?.discountRulesJson ?? initialOffer?.discountRulesJson,
+          initialCampaignRuntimeOutputs?.modules.quantityBreaks?.discountRulesJson ??
+            initialCampaignLegacy?.discountRulesJson ??
+            initialOffer?.discountRulesJson,
         ),
     ),
   );
   const [bxgyDiscountRules, setBxgyDiscountRulesState] = useState<BxgyDiscountRule[]>(
-    normalizeBxgyRules(
-      starterTemplateDefaults?.bxgyDiscountRules ??
-        parseBxgyDiscountRules(
-          initialCampaignLegacy?.discountRulesJson ?? initialOffer?.discountRulesJson,
-        ),
-    ),
+    () =>
+      normalizeBxgyRules(
+        starterTemplateDefaults?.bxgyDiscountRules ??
+          parseBxgyDiscountRules(
+            initialCampaignRuntimeOutputs?.modules.bxgy?.discountRulesJson ??
+              initialCampaignLegacy?.discountRulesJson ??
+              initialOffer?.discountRulesJson,
+          ),
+      ),
   );
   const [freeGiftRules, setFreeGiftRulesState] = useState<FreeGiftRule[]>(
-    normalizeFreeGiftRules(
-      (
-        starterTemplateDefaults?.freeGiftRules ??
-        parseFreeGiftRules(
-          initialCampaignLegacy?.discountRulesJson ?? initialOffer?.discountRulesJson,
-        )
-      ).map((rule) =>
-        rule.tierType === "single"
-          ? rule
-          : {
-              ...rule,
-              giftProductIds: Array.isArray(rule.giftProductIds)
-                ? rule.giftProductIds
-                : [],
-            },
+    () =>
+      normalizeFreeGiftRules(
+        (
+          starterTemplateDefaults?.freeGiftRules ??
+          parseFreeGiftRules(
+            initialCampaignRuntimeOutputs?.modules.freeGift?.discountRulesJson ??
+              initialCampaignLegacy?.discountRulesJson ??
+              initialOffer?.discountRulesJson,
+          )
+        ).map((rule) =>
+          rule.tierType === "single"
+            ? rule
+            : {
+                ...rule,
+                giftProductIds: Array.isArray(rule.giftProductIds)
+                  ? rule.giftProductIds
+                  : [],
+              },
+        ),
       ),
-    ),
   );
   const [freeGiftSharedGiftProductIds, setFreeGiftSharedGiftProductIds] = useState<string[]>(
     () => legacyFreeGiftRewardIds,
   );
   const [differentProductsDiscountRules, setDifferentProductsDiscountRulesState] =
     useState<DifferentProductsDiscountRule[]>(
-      normalizeDifferentProductsDiscountRules(
-        starterTemplateDefaults?.differentProductsDiscountRules ??
-          parseDifferentProductsDiscountRules(
-            initialCampaignLegacy?.discountRulesJson ?? initialOffer?.discountRulesJson,
-          ),
-      ),
+      () =>
+        normalizeDifferentProductsDiscountRules(
+          starterTemplateDefaults?.differentProductsDiscountRules ??
+            parseDifferentProductsDiscountRules(
+              initialCampaignRuntimeOutputs?.modules.quantityBreaksDifferent
+                ?.discountRulesJson ??
+                initialCampaignLegacy?.discountRulesJson ??
+                initialOffer?.discountRulesJson,
+            ),
+        ),
     );
   const [buyProducts, setBuyProducts] = useState<string[]>(() => {
     const selectedProductsJson =
-      initialCampaignLegacy?.offerType === "bxgy"
-        ? initialCampaignLegacy.selectedProductsJson
+      initialBuilderOfferType === "bxgy"
+        ? initialBxgySelectedProductsJson ??
+          initialCampaignLegacy?.selectedProductsJson
         : initialOffer?.offerType === "bxgy"
           ? initialOffer.selectedProductsJson
           : null;
@@ -1673,8 +1761,9 @@ export function CreateNewOffer({
   );
   const [freeGiftTriggerProducts, setFreeGiftTriggerProducts] = useState<string[]>(() => {
     const selectedProductsJson =
-      initialCampaignLegacy?.offerType === "free-gift"
-        ? initialCampaignLegacy.selectedProductsJson
+      initialBuilderOfferType === "free-gift"
+        ? initialFreeGiftSelectedProductsJson ??
+          initialCampaignLegacy?.selectedProductsJson
         : initialOffer?.offerType === "free-gift"
           ? initialOffer.selectedProductsJson
           : null;
@@ -2284,6 +2373,21 @@ export function CreateNewOffer({
         productIds: selectedScopeProductIds,
       },
     };
+    const hasConfiguredDiscountRules = normalizedDiscountRules.some(
+      (rule) => !isSingleDiscountRule(rule),
+    );
+    const hasConfiguredDifferentProductsRules = differentProductsDiscountRules.some(
+      (rule) => !isSingleDifferentProductsRule(rule),
+    );
+    const hasConfiguredBxgyRules = bxgyDiscountRules.some(
+      (rule) => !isSingleBxgyRule(rule),
+    );
+    const hasConfiguredFreeGiftRules = freeGiftRules.some(
+      (rule) => !isSingleFreeGiftRule(rule),
+    );
+    const hasConfiguredCompleteBundleBars = completeBundleBars.some(
+      (bar) => !isCompleteBundleSingleBar(bar),
+    );
 
     const moduleDescriptors: Record<
       OfferTypeId,
@@ -2298,37 +2402,37 @@ export function CreateNewOffer({
         logicBlockId: "logic-quantity-breaks",
         logicBlock: quantityBreaksLogicBlock,
         scopeIds: selectedScopeProductIds,
-        includeAsAdditional: normalizedDiscountRules.length > 0,
+        includeAsAdditional: hasConfiguredDiscountRules,
       },
       "shipping-discount": {
         logicBlockId: "logic-quantity-breaks",
         logicBlock: quantityBreaksLogicBlock,
         scopeIds: selectedScopeProductIds,
-        includeAsAdditional: normalizedDiscountRules.length > 0,
+        includeAsAdditional: hasConfiguredDiscountRules,
       },
       "order-discount": {
         logicBlockId: "logic-quantity-breaks",
         logicBlock: quantityBreaksLogicBlock,
         scopeIds: selectedScopeProductIds,
-        includeAsAdditional: normalizedDiscountRules.length > 0,
+        includeAsAdditional: hasConfiguredDiscountRules,
       },
       coupon: {
         logicBlockId: "logic-quantity-breaks",
         logicBlock: quantityBreaksLogicBlock,
         scopeIds: selectedScopeProductIds,
-        includeAsAdditional: normalizedDiscountRules.length > 0,
+        includeAsAdditional: hasConfiguredDiscountRules,
       },
       "quantity-breaks-different": {
         logicBlockId: "logic-quantity-breaks-different",
         logicBlock: differentProductsLogicBlock,
         scopeIds: selectedScopeProductIds,
-        includeAsAdditional: differentProductsDiscountRules.length > 0,
+        includeAsAdditional: hasConfiguredDifferentProductsRules,
       },
       bxgy: {
         logicBlockId: "logic-bxgy",
         logicBlock: bxgyLogicBlock,
         scopeIds: Array.from(new Set(buyProducts)),
-        includeAsAdditional: bxgyDiscountRules.length > 0,
+        includeAsAdditional: hasConfiguredBxgyRules,
       },
       "free-gift": {
         logicBlockId: "logic-free-gift",
@@ -2339,7 +2443,7 @@ export function CreateNewOffer({
             ...aggregatedFreeGiftRewardProductIds,
           ]),
         ),
-        includeAsAdditional: freeGiftRules.length > 0,
+        includeAsAdditional: hasConfiguredFreeGiftRules,
       },
       "complete-bundle": {
         logicBlockId: "logic-complete-bundle",
@@ -2352,7 +2456,7 @@ export function CreateNewOffer({
             ),
           ]),
         ),
-        includeAsAdditional: completeBundleBars.length > 0,
+        includeAsAdditional: hasConfiguredCompleteBundleBars,
       },
       subscription: {
         logicBlockId: "logic-subscription",
@@ -3029,6 +3133,29 @@ export function CreateNewOffer({
       if (!hasConfiguredProducts) {
         return completeBundlePreviewFallbackItems;
       }
+      return buildUnifiedPreviewItems({
+        offerType,
+        rules: orderedCompositionRulesSnapshot.filter(
+          (rule) => rule.sourceOfferType === "complete-bundle",
+        ),
+        selectedProducts: Array.from(
+          new Map(
+            [...selectedProductsData, ...differentProductsEligibleProductsData].map(
+              (product) => [
+                String(product.id),
+                {
+                  id: product.id,
+                  title: product.title,
+                  image: product.image,
+                },
+              ],
+            ),
+          ).values(),
+        ),
+        completeBundleBars,
+        baseUnitPrice,
+        formatPrice: formatPreviewPrice,
+      });
     }
 
     const previewSelectedProducts = Array.from(
@@ -3066,9 +3193,6 @@ export function CreateNewOffer({
           baseUnitPrice,
           formatPrice: formatPreviewPrice,
         });
-    if (offerType === "complete-bundle" && computedItems.length === 0) {
-      return completeBundlePreviewFallbackItems;
-    }
     return computedItems;
   }, [
     offerType,

@@ -18,6 +18,10 @@ function describeDraftOnlyRule(rule: UnifiedRuleNode): string {
   )} with ${describeUnifiedRuleReward(rule.reward)}`;
 }
 
+function isNonBlockingDraftOnlyRule(rule: UnifiedRuleNode): boolean {
+  return rule.type === "single_purchase";
+}
+
 export function getUnifiedRuleAuditIssuesForRules(
   draft: CampaignDraft,
   rules: UnifiedRuleNode[],
@@ -32,7 +36,10 @@ export function getUnifiedRuleAuditIssuesForRules(
     return issues;
   }
 
-  const draftOnlyRules = rules.filter((rule) => rule.publishSupport === "draft_only");
+  const draftOnlyRules = rules.filter(
+    (rule) =>
+      rule.publishSupport === "draft_only" && !isNonBlockingDraftOnlyRule(rule),
+  );
   if (draftOnlyRules.length > 0) {
     issues.push({
       severity: "error",

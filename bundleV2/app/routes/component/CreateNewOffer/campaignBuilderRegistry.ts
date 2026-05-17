@@ -388,7 +388,11 @@ export function getCampaignPublishSupportSummary(
   ctx: CampaignBuilderRegistryContext,
 ): string {
   const publishStates = Array.from(
-    new Set(ctx.unifiedRulesSnapshot.map((rule) => rule.publishSupport)),
+    new Set(
+      ctx.unifiedRulesSnapshot
+        .filter((rule) => rule.type !== "single_purchase")
+        .map((rule) => rule.publishSupport),
+    ),
   );
 
   if (publishStates.length === 0) {
