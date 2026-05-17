@@ -61,6 +61,14 @@ function esc(value: unknown) {
     .replace(/'/g, "&#39;");
 }
 
+function renderOptionalTextHtml(
+  value: unknown,
+  template: (text: string) => string,
+): string {
+  const text = String(value ?? "").trim();
+  return text ? template(text) : "";
+}
+
 /**
  * 管理端预览：阶梯赠品（免邮）区域 HTML
  * @param selectedBarIndex 当前模拟选中的 Bar 序号（1-based，与 __ciwi_bundle_tier 一致）
@@ -93,9 +101,11 @@ export function renderProgressiveGiftsPreviewHtml(
 
       const sub =
         gift.type === "free_shipping"
-          ? `<div class="create-offer-style-preview-item-subtitle">${esc(
-              gift.subtitle || "结账页对符合条件的运费 100% 折扣（以 Checkout 为准）",
-            )}</div>`
+          ? gift.subtitle?.trim()
+            ? `<div class="create-offer-style-preview-item-subtitle">${esc(
+                gift.subtitle,
+              )}</div>`
+            : ""
           : "";
 
       return `<div class="ciwi-progressive-gift create-offer-style-preview-item${
@@ -238,7 +248,11 @@ export function renderBundlePreviewHtml({
       }
       ${galleryHtml}
       <div class="create-offer-style-preview-item-title">${esc(item.title)}</div>
-      <div class="create-offer-style-preview-item-subtitle">${esc(item.subtitle)}</div>
+      ${renderOptionalTextHtml(
+        item.subtitle,
+        (text) =>
+          `<div class="create-offer-style-preview-item-subtitle">${esc(text)}</div>`,
+      )}
       ${
         item.saveLabel
           ? `<div class="create-offer-style-preview-item-subtitle">${esc(item.saveLabel)}</div>`
@@ -284,9 +298,11 @@ export function renderBundlePreviewHtml({
             <span style="display:block; font-size:14px; font-weight:600; color:#1c1f23;">
               ${esc(subscriptionTitle)}
             </span>
-            <span style="display:block; font-size:12px; color:#8c9196; margin-top:2px;">
-              ${esc(subscriptionSubtitle)}
-            </span>
+            ${renderOptionalTextHtml(
+              subscriptionSubtitle,
+              (text) =>
+                `<span style="display:block; font-size:12px; color:#8c9196; margin-top:2px;">${esc(text)}</span>`,
+            )}
           </span>
         </div>
         ${
@@ -323,7 +339,11 @@ export function renderBundlePreviewHtml({
             <span style="width:18px; height:18px; border:2px solid ${esc(accentColor)}; border-radius:4px; display:inline-flex; align-items:center; justify-content:center; margin-top:2px; background:${checkboxUpsellPreview.defaultChecked ? esc(accentColor) : "#ffffff"}; color:${esc(labelColor)}; font-size:12px;">${checkboxUpsellPreview.defaultChecked ? "✓" : ""}</span>
             <span>
               <span style="display:block; font-size:14px; font-weight:600; color:#1c1f23;">${esc(checkboxUpsellPreview.title)}</span>
-              <span style="display:block; font-size:12px; color:#8c9196; margin-top:2px;">${esc(checkboxUpsellPreview.subtitle)}</span>
+              ${renderOptionalTextHtml(
+                checkboxUpsellPreview.subtitle,
+                (text) =>
+                  `<span style="display:block; font-size:12px; color:#8c9196; margin-top:2px;">${esc(text)}</span>`,
+              )}
             </span>
           </div>
         </div>
@@ -336,7 +356,11 @@ export function renderBundlePreviewHtml({
         <div style="margin-top: 12px;">
           <div style="border:1px solid ${esc(borderColor)}; border-radius:12px; padding:14px 16px; background:#ffffff;">
             <div style="font-size:14px; font-weight:600; color:#1c1f23;">${esc(stickyAddToCartPreview.title)}</div>
-            <div style="font-size:12px; color:#8c9196; margin-top:2px;">${esc(stickyAddToCartPreview.subtitle)}</div>
+            ${renderOptionalTextHtml(
+              stickyAddToCartPreview.subtitle,
+              (text) =>
+                `<div style="font-size:12px; color:#8c9196; margin-top:2px;">${esc(text)}</div>`,
+            )}
             <button style="width:100%; margin-top:12px; padding:10px 12px; background:${esc(buttonPrimaryColor)}; color:#ffffff; border:none; border-radius:8px; font-weight:600;">${esc(stickyAddToCartPreview.buttonText)}</button>
           </div>
         </div>

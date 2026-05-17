@@ -152,7 +152,7 @@ function buildStandardRuleItem(
     return buildSinglePurchaseItem(rule, index, params);
   }
   const featured = getFeaturedState(params.rules, index);
-  const badge = rule.presentation.badge || (featured ? "Most Popular" : "");
+  const badge = rule.presentation.badge || undefined;
   const triggerLabel =
     rule.condition.kind === "cart_amount"
       ? params.formatPrice(rule.condition.amountThreshold)
@@ -183,7 +183,7 @@ function buildStandardRuleItem(
         `Unlock ${rule.reward.giftQuantity} free gift${rule.reward.giftQuantity > 1 ? "s" : ""}`,
       price: `${rule.reward.giftQuantity} FREE`,
       featured,
-      badge: rule.presentation.badge || (featured ? "Gift included" : ""),
+      badge: rule.presentation.badge || undefined,
       saveLabel: `TRIGGER AT ${rule.condition.count}`,
     };
   }
@@ -197,7 +197,7 @@ function buildStandardRuleItem(
         `Unlock ${rule.reward.giftQuantity} free gift${rule.reward.giftQuantity > 1 ? "s" : ""}`,
       price: `${rule.reward.giftQuantity} FREE`,
       featured,
-      badge: rule.presentation.badge || (featured ? "Gift included" : ""),
+      badge: rule.presentation.badge || undefined,
       saveLabel: `UNLOCK AT ${triggerLabel}`,
     };
   }
@@ -260,7 +260,7 @@ function buildStandardRuleItem(
         } selected products`,
       price: bxgyDisplay.price,
       featured,
-      badge: rule.presentation.badge || (featured ? "Best Reward" : ""),
+      badge: rule.presentation.badge || undefined,
       saveLabel: bxgyDisplay.saveLabel,
       products:
         rule.scope.kind === "buy_get_products"
@@ -339,7 +339,7 @@ function buildDifferentProductsItem(
       price: params.formatPrice(discountedTotal),
       original: params.formatPrice(originalTotal),
       featured,
-      badge: rule.presentation.badge || (featured ? "Mix & Match" : ""),
+      badge: rule.presentation.badge || undefined,
       saveLabel: `SAVE ${params.formatPrice(saved)}`,
       products: scopedProducts.length > 0 ? scopedProducts : undefined,
     };
@@ -357,7 +357,7 @@ function buildDifferentProductsItem(
           ? `${rule.reward.discountPercent}% OFF`
           : "CUSTOM",
       featured,
-      badge: rule.presentation.badge || (featured ? "Mix & Match" : ""),
+      badge: rule.presentation.badge || undefined,
       saveLabel: `AT ${rule.condition.triggerCount} ITEMS`,
       products: scopedProducts.length > 0 ? scopedProducts : undefined,
     };
@@ -374,7 +374,7 @@ function buildDifferentProductsItem(
         ? `${rule.reward.discountPercent}% OFF`
         : "CUSTOM",
     featured,
-    badge: rule.presentation.badge || (featured ? "Mix & Match" : ""),
+    badge: rule.presentation.badge || undefined,
     products: scopedProducts.length > 0 ? scopedProducts : undefined,
   };
 }
@@ -466,7 +466,7 @@ function buildCompleteBundleItem(
     price: params.formatPrice(sumFinal),
     original: sumOriginal > sumFinal ? params.formatPrice(sumOriginal) : undefined,
     featured: !!bar.isDefault,
-    badge: bar.badge || (bar.isDefault ? "Most Popular" : ""),
+    badge: bar.badge || undefined,
     saveLabel:
       saved > 0
         ? `SAVE ${params.formatPrice(saved)}`

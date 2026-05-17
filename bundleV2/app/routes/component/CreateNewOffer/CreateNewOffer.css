@@ -689,26 +689,26 @@
 .create-offer-style-preview-list--horizontal .create-offer-style-preview-item {
   border-radius: 8px;
   padding: 8px 10px;
-  background: #fcfcfd;
+  background: #ffffff;
 }
 
 .create-offer-style-preview-list--horizontal .create-offer-style-preview-item--featured {
   border-color: #008060;
-  background: #f0faf6;
+  background: #f5fbf8;
 }
 
 .create-offer-style-preview-list--card .create-offer-style-preview-item {
-  border-radius: 12px;
+  border-radius: 10px;
   padding: 12px;
   border: 1px solid #dfe3e8;
-  box-shadow: 0 2px 6px rgba(16, 24, 40, 0.05);
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.04);
 }
 
 .create-offer-style-preview-list--card .create-offer-style-preview-item--featured {
   grid-column: 1 / -1;
-  border: 2px solid #008060;
-  background: #f5fff9;
-  box-shadow: 0 2px 8px rgba(0, 128, 96, 0.08);
+  border: 1px solid #008060;
+  background: #f5fbf8;
+  box-shadow: 0 1px 4px rgba(0, 128, 96, 0.08);
 }
 
 .create-offer-style-preview-list--compact {
@@ -735,7 +735,7 @@
 
 .create-offer-style-preview-item--featured {
   border-color: #008060;
-  background: #f0faf6;
+  background: #f5fbf8;
 }
 
 .create-offer-style-preview-list--compact .create-offer-style-preview-item {

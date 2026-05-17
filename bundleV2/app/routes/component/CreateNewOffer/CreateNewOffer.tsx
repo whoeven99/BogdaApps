@@ -2511,10 +2511,8 @@ export function CreateNewOffer({
   const checkboxUpsellPreview = useMemo(
     () => ({
       enabled: checkboxUpsellsEnabled,
-      title: checkboxUpsellsTitle.trim() || "Add this offer to my order",
-      subtitle:
-        checkboxUpsellsSubtitle.trim() ||
-        "Customers can opt in before adding the bundle.",
+      title: checkboxUpsellsTitle.trim(),
+      subtitle: checkboxUpsellsSubtitle.trim(),
       defaultChecked: checkboxUpsellsDefaultChecked,
     }),
     [
@@ -2527,11 +2525,9 @@ export function CreateNewOffer({
   const stickyAddToCartPreview = useMemo(
     () => ({
       enabled: stickyAddToCartEnabled,
-      title: stickyAddToCartTitle.trim() || "Ready to add this offer?",
-      subtitle:
-        stickyAddToCartSubtitle.trim() ||
-        "Keep the bundle CTA visible while customers compare options.",
-      buttonText: stickyAddToCartButtonText.trim() || "Add bundle",
+      title: stickyAddToCartTitle.trim(),
+      subtitle: stickyAddToCartSubtitle.trim(),
+      buttonText: stickyAddToCartButtonText.trim(),
     }),
     [
       stickyAddToCartEnabled,

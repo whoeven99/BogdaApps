@@ -131,10 +131,10 @@ function CustomizationGroup({
   children,
 }: CustomizationGroupProps) {
   return (
-    <section className="rounded-[12px] border border-[#dfe3e8] bg-[#fcfcfd] p-4">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <div className="text-[15px] font-semibold text-[#1c1f23]">{title}</div>
-        <div className="text-[12px] text-[#5c6166]">{meta}</div>
+    <section className="rounded-[12px] border border-[#dfe3e8] bg-white p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="text-[14px] font-semibold text-[#1c1f23]">{title}</div>
+        <div className="text-[12px] text-[#6d7175]">{meta}</div>
       </div>
       <div className="flex flex-col gap-3">{children}</div>
     </section>
@@ -149,23 +149,23 @@ function SectionCard({
   children,
 }: SectionCardProps) {
   return (
-    <div className="rounded-[12px] border border-[#e3e8ed] bg-white px-4 py-4">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+    <div className="rounded-[10px] border border-[#dfe3e8] bg-[#fbfcfc] px-4 py-3">
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <div className="text-[14px] font-semibold text-[#1c1f23]">{title}</div>
             {meta ? (
-              <span className="rounded-full bg-[#f4f6f8] px-2 py-[2px] text-[11px] font-medium text-[#5c6166]">
+              <span className="text-[12px] text-[#6d7175]">
                 {meta}
               </span>
             ) : null}
           </div>
         </div>
-        <Button size="small" onClick={onToggle}>
-          {open ? "Collapse" : "Edit"}
+        <Button size="small" type="text" onClick={onToggle}>
+          {open ? "Hide" : "Edit"}
         </Button>
       </div>
-      {open ? <div className="mt-4">{children}</div> : null}
+      {open ? <div className="mt-3 border-t border-[#e8ebee] pt-3">{children}</div> : null}
     </div>
   );
 }
@@ -300,12 +300,12 @@ export default function OfferComponentsDisplayCustomizer({
       meta: showCustomButton ? "Enabled" : "Optional",
       content: (
         <>
-          <div className="mb-4 flex items-center justify-between rounded-[10px] bg-[#f6f8f9] px-4 py-3">
-            <div>
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-[10px] border border-[#dfe3e8] bg-white px-4 py-3">
+            <div className="min-w-0">
               <div className="text-[14px] font-medium text-[#1c1f23]">
                 Show App&apos;s Add to Cart Button
               </div>
-              <div className="text-[13px] text-[#5c6166]">
+              <div className="text-[12px] text-[#6d7175]">
                 If disabled, customers keep using your theme&apos;s native add to cart button.
               </div>
             </div>
@@ -384,9 +384,9 @@ export default function OfferComponentsDisplayCustomizer({
             return (
               <div
                 key={item.id}
-                className="rounded-[10px] border border-[#e8ebee] bg-[#ffffff] px-4 py-4"
+                className="rounded-[10px] border border-[#dfe3e8] bg-white px-4 py-3"
               >
-                <div className="mb-1 flex flex-wrap items-center gap-2">
+                <div className="mb-3 flex flex-wrap items-center gap-2">
                   <div className="text-[14px] font-semibold text-[#1c1f23]">
                     {item.displayTitle || item.title}
                   </div>
@@ -395,9 +395,9 @@ export default function OfferComponentsDisplayCustomizer({
                       Default
                     </span>
                   ) : null}
-                </div>
-                <div className="mb-4 text-[12px] text-[#5c6166]">
-                  {item.description}
+                  <span className="text-[12px] text-[#6d7175]">
+                    {item.description}
+                  </span>
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -446,16 +446,16 @@ export default function OfferComponentsDisplayCustomizer({
                 </div>
 
                 {fields.isDefault ? (
-                  <div className="mt-4 rounded-[10px] bg-[#f6f8f9] px-4 py-3">
+                  <div className="mt-4 flex items-center justify-between gap-3 rounded-[10px] border border-[#dfe3e8] bg-[#f6f6f7] px-4 py-3">
+                    <div className="text-[13px] text-[#1c1f23]">
+                      Set this component as default selected
+                    </div>
                     <Switch
                       checked={!!item.isDefault}
                       onChange={(checked) =>
                         onUpdateItem(item.id, { isDefault: checked })
                       }
                     />
-                    <span className="ml-3 text-[13px] text-[#1c1f23]">
-                      Set this component as default selected
-                    </span>
                   </div>
                 ) : null}
               </div>
@@ -469,7 +469,7 @@ export default function OfferComponentsDisplayCustomizer({
   return (
     <div className="mb-6 flex flex-col gap-4">
       <CustomizationGroup
-        title="Style Customization"
+        title="Style"
         meta={`${styleSections.length} sections`}
       >
         {styleSections.map((section) => (
@@ -486,7 +486,7 @@ export default function OfferComponentsDisplayCustomizer({
       </CustomizationGroup>
 
       <CustomizationGroup
-        title="Content Customization"
+        title="Content"
         meta={`${contentSections.length} sections`}
       >
         {contentSections.map((section) => (

@@ -118,11 +118,13 @@ export default function SubscriptionSettingsEditor({
                 }`}
               >
                 <div className="text-[14px] font-semibold text-[#1c1f23]">
-                  {subscriptionTitle || "Subscribe & Save 20%"}
+                  {subscriptionTitle}
                 </div>
-                <div className="text-[13px] text-[#8c9196] mt-1">
-                  {subscriptionSubtitle || "Delivered weekly"}
-                </div>
+                {subscriptionSubtitle ? (
+                  <div className="text-[13px] text-[#8c9196] mt-1">
+                    {subscriptionSubtitle}
+                  </div>
+                ) : null}
               </div>
               {shouldShowSubscriptionExplanation && (
                 <div className="mt-3 rounded-[10px] bg-[#f6f8f9] p-3">

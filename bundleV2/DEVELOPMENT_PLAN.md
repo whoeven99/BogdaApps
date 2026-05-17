@@ -42,8 +42,8 @@ Shopify Functions. Use `SEMANTIC_WORKFLOW.md` for each task.
 
 | ID | Task | Scope | Main files | Acceptance | Priority | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| B2-1 | Step 3 UI pass | Tighten layout, spacing, and grouping in `Display` | `OfferComponentsDisplayCustomizer.tsx`, `CreateNewOffer.css`, `ProgressiveGiftsSection.tsx` | Display step is visually consistent with Step 2 and preview | P1 | Planned |
-| B2-2 | Preview consistency | Reduce fallback or hardcoded preview copy when state exists | preview builders and display mappers | Preview reflects saved state more faithfully | P1 | Planned |
+| B2-1 | Step 3 UI pass | Tighten layout, spacing, and grouping in `Display` | `OfferComponentsDisplayCustomizer.tsx`, `CreateNewOffer.css`, `ProgressiveGiftsSection.tsx` | Display step is visually consistent with Step 2 and preview | P1 | Done |
+| B2-2 | Preview consistency | Reduce fallback or hardcoded preview copy when state exists | preview builders and display mappers | Preview reflects saved state more faithfully | P1 | Done |
 
 ## Batch 3: Theme Extension Core
 
