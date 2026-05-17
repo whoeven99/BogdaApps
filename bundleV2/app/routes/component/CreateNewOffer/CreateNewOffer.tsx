@@ -83,7 +83,15 @@ import {
   type FreeGiftRule,
 } from "../../../utils/offerParsing";
 import { type OfferTypeId } from "./offerTypeOptions";
-import { buildUnifiedRulesSnapshotFromCampaignConfig } from "./unifiedRulesAdapters";
+import {
+  adaptBxgyRules,
+  adaptCompleteBundleBars,
+  adaptDifferentProductsRules,
+  adaptDiscountRules,
+  adaptFreeGiftRules,
+  adaptSubscriptionRule,
+} from "./unifiedRulesAdapters";
+import type { UnifiedRuleNode } from "./unifiedRulesSchema";
 import {
   buildSubscriptionDisplayCustomizerItems,
   buildUnifiedDisplayCustomizerItems,
@@ -2415,10 +2423,118 @@ export function CreateNewOffer({
       stickyAddToCartButtonText,
     ],
   );
-  const unifiedRulesSnapshot = useMemo(
-    () => buildUnifiedRulesSnapshotFromCampaignConfig(currentCampaignConfig),
-    [currentCampaignConfig],
-  );
+  const unifiedRulesSnapshot = useMemo(() => {
+    const selectedScopeProductIds = selectedProductsData.map((product) => String(product.id));
+    const sharedQuantityBreakOfferType: OfferTypeId =
+      offerType === "quantity-breaks-same" ||
+      offerType === "shipping-discount" ||
+      offerType === "order-discount" ||
+      offerType === "coupon"
+        ? offerType
+        : "quantity-breaks-same";
+
+    const sharedQuantityBreakRules = adaptDiscountRules(
+      sharedQuantityBreakOfferType,
+      discountRules,
+    );
+    const differentProductsRules = adaptDifferentProductsRules(differentProductsDiscountRules);
+    const bxgyRules = adaptBxgyRules(
+      bxgyDiscountRules,
+      Array.from(new Set(buyProducts)),
+      Array.from(new Set(buyProducts)),
+    );
+    const freeGiftRulesSnapshot = adaptFreeGiftRules(
+      freeGiftRules,
+      freeGiftTriggerProducts,
+      Array.from(
+        new Set([
+          ...freeGiftSharedGiftProductIds,
+          ...aggregatedFreeGiftRewardProductIds,
+        ]),
+      ),
+    );
+    const completeBundleRules = adaptCompleteBundleBars(completeBundleBars);
+    const subscriptionRules = adaptSubscriptionRule(
+      selectedScopeProductIds,
+      subscriptionEnabled,
+    );
+
+    const moduleDescriptors: Record<
+      OfferTypeId,
+      {
+        rules: UnifiedRuleNode[];
+        includeAsAdditional: boolean;
+      }
+    > = {
+      "quantity-breaks-same": {
+        rules: sharedQuantityBreakRules,
+        includeAsAdditional: false,
+      },
+      "shipping-discount": {
+        rules: sharedQuantityBreakRules,
+        includeAsAdditional: false,
+      },
+      "order-discount": {
+        rules: sharedQuantityBreakRules,
+        includeAsAdditional: false,
+      },
+      coupon: {
+        rules: sharedQuantityBreakRules,
+        includeAsAdditional: false,
+      },
+      "quantity-breaks-different": {
+        rules: differentProductsRules,
+        includeAsAdditional: differentProductsRules.length > 0,
+      },
+      bxgy: {
+        rules: bxgyRules,
+        includeAsAdditional: bxgyRules.length > 0,
+      },
+      "free-gift": {
+        rules: freeGiftRulesSnapshot,
+        includeAsAdditional: freeGiftRulesSnapshot.length > 0,
+      },
+      "complete-bundle": {
+        rules: completeBundleRules,
+        includeAsAdditional: completeBundleRules.length > 0,
+      },
+      subscription: {
+        rules: subscriptionRules,
+        includeAsAdditional: subscriptionEnabled,
+      },
+    };
+
+    const primaryModule = moduleDescriptors[offerType];
+    if (!primaryModule) return [];
+
+    const nextRules =
+      offerType === "subscription" && sharedQuantityBreakRules.length > 0
+        ? [...sharedQuantityBreakRules, ...primaryModule.rules]
+        : [...primaryModule.rules];
+
+    (Object.entries(moduleDescriptors) as Array<
+      [OfferTypeId, (typeof moduleDescriptors)[OfferTypeId]]
+    >).forEach(([type, descriptor]) => {
+      if (type === offerType || !descriptor.includeAsAdditional) return;
+
+      nextRules.push(...descriptor.rules);
+    });
+
+    return nextRules;
+  }, [
+    offerType,
+    selectedProductsData,
+    discountRules,
+    differentProductsDiscountRules,
+    bxgyDiscountRules,
+    buyProducts,
+    freeGiftRules,
+    freeGiftTriggerProducts,
+    freeGiftSharedGiftProductIds,
+    aggregatedFreeGiftRewardProductIds,
+    completeBundleBars,
+    subscriptionEnabled,
+  ]);
   const campaignDraft = useMemo<CampaignDraft>(
     () => ({
       offerType,
