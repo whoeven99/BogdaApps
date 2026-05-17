@@ -92,7 +92,12 @@ export const OFFER_TYPE_OPTIONS: OfferTypeOption[] = [
   },
 ];
 
-const HIDDEN_OFFER_TYPE_IDS: OfferTypeId[] = ["free-gift"];
+const HIDDEN_OFFER_TYPE_IDS: OfferTypeId[] = [
+  "shipping-discount",
+  "order-discount",
+  "coupon",
+  "free-gift",
+];
 
 export function getVisibleOfferTypeOptions(
   selectedOfferType?: OfferTypeId,
