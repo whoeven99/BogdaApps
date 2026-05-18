@@ -1,4 +1,5 @@
 import type { DisplayCustomizerItem } from "./OfferComponentsDisplayCustomizer";
+import { resolveBxgyDisplayTitle } from "../../../utils/offerParsing";
 import {
   describeUnifiedRuleCondition,
   describeUnifiedRuleReward,
@@ -16,8 +17,8 @@ function buildPlaceholders(rule: UnifiedRuleNode): DisplayCustomizerItem["placeh
       };
     case "bxgy":
       return {
-        title: "e.g. Buy 2, Get 1",
-        subtitle: "e.g. Buy 2 and get 1 reward item",
+        title: "e.g. Buy 2, Get 3",
+        subtitle: "",
         badge: "e.g. Best reward",
       };
     case "free_gift":
@@ -77,6 +78,9 @@ function buildEditableFields(rule: UnifiedRuleNode): DisplayCustomizerItem["fiel
 }
 
 function buildDisplayTitle(rule: UnifiedRuleNode, index: number): string {
+  if (rule.type === "bxgy" && rule.condition.kind === "buy_x_get_y") {
+    return resolveBxgyDisplayTitle(rule.condition, rule.presentation.title);
+  }
   return (
     rule.presentation.title ||
     `${getUnifiedRuleTypeLabel(rule.type)} Rule ${index + 1}`
@@ -88,7 +92,10 @@ export function buildUnifiedDisplayCustomizerItems(
 ): DisplayCustomizerItem[] {
   return rules.map((rule, index) => ({
     id: rule.id,
-    title: rule.presentation.title || "",
+    title:
+      rule.type === "bxgy" && rule.condition.kind === "buy_x_get_y"
+        ? resolveBxgyDisplayTitle(rule.condition, rule.presentation.title)
+        : rule.presentation.title || "",
     displayTitle: buildDisplayTitle(rule, index),
     description: `${describeUnifiedRuleCondition(rule.condition)} • ${describeUnifiedRuleReward(rule.reward)}`,
     subtitle: rule.presentation.subtitle || "",

@@ -288,7 +288,7 @@ const META_BY_OFFER_TYPE: Record<OfferTypeId, CampaignBuilderMeta> = {
     logicBlockDescription:
       "Promote a same-product BXGY mechanic across the selected product pool with clear free-item tiers.",
     stepTwoDescription:
-      "Choose the BXGY product pool, then configure each bar as a simple Buy X, Get Y free-item offer.",
+      "Choose the BXGY product pool, then configure each bar with a clear Buy X, Get Y quantity expression.",
   },
   "complete-bundle": {
     logicBlockLabel: "Complete Bundle",

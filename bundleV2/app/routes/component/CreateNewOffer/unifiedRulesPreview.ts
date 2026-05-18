@@ -2,6 +2,8 @@ import type { PreviewItem, PreviewProduct } from "../BundlePreview/bundlePreview
 import {
   getBxgyDisplayMeta,
   isCompleteBundleSingleBar,
+  resolveBxgyDisplaySubtitle,
+  resolveBxgyDisplayTitle,
   type CompleteBundleBar,
   type CompleteBundlePricingMode,
 } from "../../../utils/offerParsing";
@@ -180,8 +182,8 @@ function buildStandardRuleItem(
     const bxgyDisplay = getBxgyDisplayMeta(rule.condition);
     return {
       id: rule.id,
-      title: rule.presentation.title || bxgyDisplay.title,
-      subtitle: rule.presentation.subtitle || bxgyDisplay.subtitle,
+      title: resolveBxgyDisplayTitle(rule.condition, rule.presentation.title),
+      subtitle: resolveBxgyDisplaySubtitle(rule.presentation.subtitle),
       price:
         percentOff === 100 ? bxgyDisplay.price : `${percentOff}% OFF`,
       featured,
@@ -266,14 +268,8 @@ function buildStandardRuleItem(
     const bxgyDisplay = getBxgyDisplayMeta(rule.condition);
     return {
       id: rule.id,
-      title: rule.presentation.title || bxgyDisplay.title,
-      subtitle:
-        rule.presentation.subtitle ||
-        `${bxgyDisplay.subtitle} across ${
-          rule.scope.kind === "buy_get_products"
-            ? rule.scope.buyProductIds.length
-            : 0
-        } selected products`,
+      title: resolveBxgyDisplayTitle(rule.condition, rule.presentation.title),
+      subtitle: resolveBxgyDisplaySubtitle(rule.presentation.subtitle),
       price: bxgyDisplay.price,
       featured,
       badge: rule.presentation.badge || undefined,

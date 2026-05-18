@@ -134,6 +134,24 @@ type CouponAccess = {
   code: string;
 };
 
+type ParsedOfferSettings = {
+  markets: string;
+  customerSegments: string[];
+  customerProfileFilters: string[];
+  ipCountryCodes: string[];
+  couponAccess: CouponAccess;
+  quantityEnabled: boolean;
+};
+
+type CompiledOfferRuntime = {
+  offer: Offer;
+  settings: ParsedOfferSettings;
+  selectedIds: string[];
+  standardRules: DiscountTier[];
+  bxgyRules: BxgyDiscountRule[];
+  hasUnifiedBxgyTier: boolean;
+};
+
 /** complete-bundle：整包计价方式（与主题端 offerParsing 对齐） */
 type CompleteBundlePricingMode =
   | "full_price"
@@ -346,6 +364,7 @@ function offerPassesScheduleAndMarket(
   offer: Offer,
   marketId: string | undefined,
   nowMs: number | null,
+  parsedSettings?: ParsedOfferSettings,
 ): boolean {
   if (offer.status === false) {
     log("offer_skip_disabled", { offerId: offer.id, name: offer.name });
@@ -388,18 +407,18 @@ function offerPassesScheduleAndMarket(
     }
   }
 
-  if (marketId && offer.offerSettingsJson) {
+  const offerMarkets = parsedSettings?.markets;
+  if (marketId && (offerMarkets || offer.offerSettingsJson)) {
     try {
-      const settings = JSON.parse(offer.offerSettingsJson) as {
-        markets?: string;
-      };
-      const offerMarkets = settings.markets;
+      const resolvedMarkets =
+        offerMarkets ??
+        (JSON.parse(offer.offerSettingsJson || "{}") as { markets?: string }).markets;
       if (
-        typeof offerMarkets === "string" &&
-        offerMarkets !== "all" &&
-        offerMarkets.trim() !== ""
+        typeof resolvedMarkets === "string" &&
+        resolvedMarkets !== "all" &&
+        resolvedMarkets.trim() !== ""
       ) {
-        const allowedMarkets = offerMarkets.split(",").map((m) => m.trim());
+        const allowedMarkets = resolvedMarkets.split(",").map((m) => m.trim());
         const matchMarket = allowedMarkets.some(
           (m) => m === marketId || m.endsWith(`/${marketId}`),
         );
@@ -697,6 +716,7 @@ export function bundleCartDiscountGenerateRun(
     return { operations: [] };
   }
   const offers = offersPayload?.offers ?? [];
+  const compiledOffers = offers.map((offer) => compileOfferRuntime(offer));
   const enteredCodes = new Set(
     [normalizeCouponCode(input.triggeringDiscountCode)].filter(Boolean),
   );
@@ -706,13 +726,14 @@ export function bundleCartDiscountGenerateRun(
 
   log("metafield_offers", {
     updatedAt: offersPayload?.updatedAt ?? null,
-    offerCount: offers.length,
-    offersSummary: offers.map((o) => ({
-      id: o.id,
-      name: o.name,
-      status: o.status,
-      selectedProductsJsonLength: o.selectedProductsJson?.length ?? 0,
-      discountRulesJsonLength: o.discountRulesJson?.length ?? 0,
+    offerCount: compiledOffers.length,
+    offersSummary: compiledOffers.map(({ offer, selectedIds, standardRules, bxgyRules }) => ({
+      id: offer.id,
+      name: offer.name,
+      status: offer.status,
+      selectedIdCount: selectedIds.length,
+      standardRuleCount: standardRules.length,
+      bxgyRuleCount: bxgyRules.length,
     })),
   });
 
@@ -739,22 +760,23 @@ export function bundleCartDiscountGenerateRun(
   const localizationCountryCode = normalizeCountryCode(
     input.localization?.country?.isoCode,
   );
-  const eligibleOffers = offers.filter((offer) => {
-    if (!offerMatchesCustomerSegments(offer, buyerTargetingContext)) {
+  const eligibleOffers = compiledOffers.filter((compiledOffer) => {
+    const { offer, settings } = compiledOffer;
+    if (!offerMatchesCustomerSegments(offer, buyerTargetingContext, settings)) {
       log("offer_skip_customer_segment", {
         offerId: offer.id,
         name: offer.name,
       });
       return false;
     }
-    if (!offerMatchesCustomerProfileFilters(offer, buyerTargetingContext)) {
+    if (!offerMatchesCustomerProfileFilters(offer, buyerTargetingContext, settings)) {
       log("offer_skip_customer_profile_filter", {
         offerId: offer.id,
         name: offer.name,
       });
       return false;
     }
-    if (!offerMatchesIpCountryCodes(offer, localizationCountryCode)) {
+    if (!offerMatchesIpCountryCodes(offer, localizationCountryCode, settings)) {
       log("offer_skip_ip_country_code", {
         offerId: offer.id,
         name: offer.name,
@@ -762,11 +784,11 @@ export function bundleCartDiscountGenerateRun(
       });
       return false;
     }
-    const couponAccess = parseCouponAccess(offer.offerSettingsJson);
+    const couponAccess = settings.couponAccess;
     if (!couponAccess.enabled) {
       return true;
     }
-    const acceptedCode = resolveAcceptedCouponCode(offer, enteredCodes);
+    const acceptedCode = resolveAcceptedCouponCode(offer, enteredCodes, settings);
     if (!acceptedCode) {
       log("offer_skip_coupon_code_mismatch", {
         offerId: offer.id,
@@ -786,45 +808,52 @@ export function bundleCartDiscountGenerateRun(
   const marketId = input.localization?.market?.id;
   const nowMs = resolveNowMs();
   const bxgyOffers = eligibleOffers.filter(
-    (o) =>
-      (o.offerType === "bxgy" ||
-        o.offerType === "quantity-breaks-different" ||
-        (o.offerType === "quantity-breaks-same" &&
-          hasUnifiedBxgyTier(o.discountRulesJson))) &&
-      offerPassesScheduleAndMarket(o, marketId, nowMs),
+    (compiledOffer) =>
+      (compiledOffer.offer.offerType === "bxgy" ||
+        compiledOffer.offer.offerType === "quantity-breaks-different" ||
+        (compiledOffer.offer.offerType === "quantity-breaks-same" &&
+          compiledOffer.hasUnifiedBxgyTier)) &&
+      offerPassesScheduleAndMarket(compiledOffer.offer, marketId, nowMs, compiledOffer.settings),
   );
-  const cartRelevantBxgyOffers = bxgyOffers.filter((offer) =>
-    offerIntersectsCartForBxgyEvaluation(offer, input.cart.lines),
+  const cartRelevantBxgyOffers = bxgyOffers.filter((compiledOffer) =>
+    offerIntersectsCartForBxgyEvaluation(compiledOffer, input.cart.lines),
   );
   const bxgyOffersForEvaluation =
     hasProductDiscountClass || !hasOrderDiscountClass
       ? cartRelevantBxgyOffers
-      : cartRelevantBxgyOffers.filter((offer) => offerRequiresOrderBxgyEvaluation(offer));
+      : cartRelevantBxgyOffers.filter((compiledOffer) => offerRequiresOrderBxgyEvaluation(compiledOffer));
   const freeGiftOffers = eligibleOffers.filter(
-    (o) => o.offerType === "free-gift" && offerPassesScheduleAndMarket(o, marketId, nowMs),
+    (compiledOffer) =>
+      compiledOffer.offer.offerType === "free-gift" &&
+      offerPassesScheduleAndMarket(compiledOffer.offer, marketId, nowMs, compiledOffer.settings),
   );
   /** 普通数量阶梯：不含 BXGY 与 complete-bundle（后两者有独立分支） */
   const regularOffers = eligibleOffers.filter(
-    (o) =>
-      o.offerType !== "bxgy" &&
-      o.offerType !== "quantity-breaks-different" &&
-      o.offerType !== "free-gift" &&
-      !isCompleteBundleOfferType(o.offerType),
+    (compiledOffer) =>
+      compiledOffer.offer.offerType !== "bxgy" &&
+      compiledOffer.offer.offerType !== "quantity-breaks-different" &&
+      compiledOffer.offer.offerType !== "free-gift" &&
+      !isCompleteBundleOfferType(compiledOffer.offer.offerType) &&
+      offerPassesScheduleAndMarket(compiledOffer.offer, marketId, nowMs, compiledOffer.settings),
   );
+  const regularOfferIndex = buildRegularOfferIndex(regularOffers);
   log("offer_groups_resolved", {
-    totalOffers: offers.length,
+    totalOffers: compiledOffers.length,
     eligibleOffers: eligibleOffers.length,
     bxgyCount: bxgyOffers.length,
     bxgyCartRelevantCount: cartRelevantBxgyOffers.length,
     bxgyEvalCount: bxgyOffersForEvaluation.length,
     freeGiftCount: freeGiftOffers.length,
-    completeBundleCount: offers.filter((o) => isCompleteBundleOfferType(o.offerType)).length,
+    completeBundleCount: compiledOffers.filter((o) => isCompleteBundleOfferType(o.offer.offerType)).length,
     regularCount: regularOffers.length,
   });
 
   // ① 处理 BXGY（买 X 送 Y 等）：只负责生成候选，最终由 Shopify 按最大减免选择商品折扣。
   if (bxgyOffersForEvaluation.length > 0) {
-    const bxgyDiscounts = calculateBxgyDiscount(input.cart.lines, bxgyOffersForEvaluation);
+    const bxgyDiscounts = calculateBxgyDiscount(
+      input.cart.lines,
+      bxgyOffersForEvaluation,
+    );
     if (hasProductDiscountClass && bxgyDiscounts.productCandidates.length > 0) {
       productCandidates.push(...bxgyDiscounts.productCandidates);
     }
@@ -835,7 +864,10 @@ export function bundleCartDiscountGenerateRun(
 
   // ② free gift 作为 order reward 生成订单级 fixed-amount 候选。
   if (hasOrderDiscountClass) {
-    const freeGiftCandidates = calculateFreeGiftDiscount(input.cart.lines, freeGiftOffers);
+    const freeGiftCandidates = calculateFreeGiftDiscount(
+      input.cart.lines,
+      freeGiftOffers.map((compiledOffer) => compiledOffer.offer),
+    );
     if (freeGiftCandidates.length > 0) {
       orderCandidates.push(...freeGiftCandidates);
     }
@@ -849,7 +881,7 @@ export function bundleCartDiscountGenerateRun(
     });
     const completeBundleCandidates = calculateCompleteBundleDiscounts(
       input.cart.lines,
-      eligibleOffers,
+      eligibleOffers.map((compiledOffer) => compiledOffer.offer),
       marketId,
       nowMs,
     );
@@ -896,7 +928,7 @@ export function bundleCartDiscountGenerateRun(
         continue;
       }
 
-      const suitOffer = findOffer(productId, variantId, marketId, regularOffers);
+      const suitOffer = findOffer(productId, variantId, regularOfferIndex);
       if (!suitOffer) {
         log("line_no_matching_offer", {
           cartLineId: lineId,
@@ -908,12 +940,12 @@ export function bundleCartDiscountGenerateRun(
 
       log("line_matched_offer", {
         cartLineId: lineId,
-        offerId: suitOffer.id,
-        offerName: suitOffer.name,
+        offerId: suitOffer.offer.id,
+        offerName: suitOffer.offer.name,
       });
 
-      const discountPercentValue = getDiscountPercentValue(
-        suitOffer.discountRulesJson,
+      const discountPercentValue = getBestProductDiscountPercentValueFromTiers(
+        suitOffer.standardRules,
         quantity,
       );
       log("line_discount_percent", {
@@ -931,7 +963,7 @@ export function bundleCartDiscountGenerateRun(
       }
 
       const candidate: ProductDiscountCandidate = {
-        message: suitOffer.cartTitle || "Bundle Discount",
+        message: suitOffer.offer.cartTitle || "Bundle Discount",
         targets: [
           {
             cartLine: {
@@ -945,9 +977,9 @@ export function bundleCartDiscountGenerateRun(
             value: discountPercentValue,
           },
         },
-        associatedDiscountCode: acceptedCouponCodeByOfferId.get(String(suitOffer.id || ""))
+        associatedDiscountCode: acceptedCouponCodeByOfferId.get(String(suitOffer.offer.id || ""))
           ? {
-              code: acceptedCouponCodeByOfferId.get(String(suitOffer.id || ""))!,
+              code: acceptedCouponCodeByOfferId.get(String(suitOffer.offer.id || ""))!,
             }
           : undefined,
       };
@@ -962,7 +994,7 @@ export function bundleCartDiscountGenerateRun(
 
   if (hasOrderDiscountClass) {
     orderCandidates.push(
-      ...buildOrderDiscountCandidates(
+      ...buildOrderDiscountCandidatesFromCompiledOffers(
         input,
         regularOffers,
         marketId,
@@ -991,12 +1023,16 @@ export function bundleCartDiscountGenerateRun(
   }
 
   if (productCandidates.length > 0) {
-    operations.push({
-      productDiscountsAdd: {
-        candidates: productCandidates,
-        selectionStrategy: ProductDiscountSelectionStrategy.Maximum,
-      },
-    });
+    const groupedProductCandidates =
+      groupProductCandidatesByOverlappingTargets(productCandidates);
+    for (const groupedCandidates of groupedProductCandidates) {
+      operations.push({
+        productDiscountsAdd: {
+          candidates: groupedCandidates,
+          selectionStrategy: ProductDiscountSelectionStrategy.Maximum,
+        },
+      });
+    }
   }
 
   if (orderCandidates.length > 0) {
@@ -1151,8 +1187,10 @@ function buildBuyerTargetingContext(input: CartInput): BuyerTargetingContext {
 function offerMatchesCustomerSegments(
   offer: Offer,
   buyerContext: BuyerTargetingContext,
+  parsedSettings?: ParsedOfferSettings,
 ): boolean {
-  const configuredSegments = parseCustomerSegments(offer.offerSettingsJson);
+  const configuredSegments =
+    parsedSettings?.customerSegments ?? parseCustomerSegments(offer.offerSettingsJson);
   if (
     configuredSegments.length === 0 ||
     configuredSegments.includes("all")
@@ -1193,8 +1231,11 @@ function offerMatchesCustomerSegments(
 function offerMatchesCustomerProfileFilters(
   offer: Offer,
   buyerContext: BuyerTargetingContext,
+  parsedSettings?: ParsedOfferSettings,
 ): boolean {
-  const configuredFilters = parseCustomerProfileFilters(offer.offerSettingsJson);
+  const configuredFilters =
+    parsedSettings?.customerProfileFilters ??
+    parseCustomerProfileFilters(offer.offerSettingsJson);
   if (!configuredFilters.length) {
     return true;
   }
@@ -1235,8 +1276,10 @@ function offerMatchesCustomerProfileFilters(
 function offerMatchesIpCountryCodes(
   offer: Offer,
   countryCode: string,
+  parsedSettings?: ParsedOfferSettings,
 ): boolean {
-  const configuredCodes = parseIpCountryCodes(offer.offerSettingsJson);
+  const configuredCodes =
+    parsedSettings?.ipCountryCodes ?? parseIpCountryCodes(offer.offerSettingsJson);
   if (!configuredCodes.length) {
     return true;
   }
@@ -1271,12 +1314,99 @@ function parseCouponAccess(offerSettingsJson?: string | null): CouponAccess {
 function resolveAcceptedCouponCode(
   offer: Offer,
   enteredCodes: Set<string>,
+  parsedSettings?: ParsedOfferSettings,
 ): string | null {
-  const couponAccess = parseCouponAccess(offer.offerSettingsJson);
+  const couponAccess = parsedSettings?.couponAccess ?? parseCouponAccess(offer.offerSettingsJson);
   if (!couponAccess.enabled) return null;
   return couponAccess.code && enteredCodes.has(couponAccess.code)
     ? couponAccess.code
     : null;
+}
+
+function compileOfferSettings(offerSettingsJson?: string | null): ParsedOfferSettings {
+  if (!offerSettingsJson) {
+    return {
+      markets: "all",
+      customerSegments: ["all"],
+      customerProfileFilters: [],
+      ipCountryCodes: [],
+      couponAccess: { enabled: false, code: "" },
+      quantityEnabled: true,
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(offerSettingsJson) as {
+      markets?: unknown;
+      customerSegments?: unknown;
+      customerProfileFilters?: unknown;
+      ipCountryCodes?: unknown;
+      couponEnabled?: unknown;
+      couponCode?: unknown;
+      quantity?: unknown;
+      showQuantityBar?: unknown;
+    };
+
+    const customerSegments =
+      typeof parsed.customerSegments === "string" && parsed.customerSegments.trim()
+        ? Array.from(
+            new Set(
+              parsed.customerSegments
+                .split(",")
+                .map((segment) => normalizeCustomerSegmentHandle(segment))
+                .filter(Boolean),
+            ),
+          )
+        : ["all"];
+
+    const customerProfileFilters =
+      typeof parsed.customerProfileFilters === "string" && parsed.customerProfileFilters.trim()
+        ? Array.from(
+            new Set(
+              parsed.customerProfileFilters
+                .split(",")
+                .map((value) => normalizeCustomerSegmentHandle(value))
+                .filter(Boolean),
+            ),
+          )
+        : [];
+
+    const ipCountryCodes =
+      typeof parsed.ipCountryCodes === "string" && parsed.ipCountryCodes.trim()
+        ? Array.from(
+            new Set(
+              parsed.ipCountryCodes
+                .split(",")
+                .map((value) => normalizeCountryCode(value))
+                .filter(Boolean),
+            ),
+          )
+        : [];
+
+    return {
+      markets:
+        typeof parsed.markets === "string" && parsed.markets.trim()
+          ? parsed.markets.trim()
+          : "all",
+      customerSegments: customerSegments.length ? customerSegments : ["all"],
+      customerProfileFilters,
+      ipCountryCodes,
+      couponAccess: {
+        enabled: parsed.couponEnabled === true,
+        code: normalizeCouponCode(parsed.couponCode),
+      },
+      quantityEnabled: !(parsed.quantity === false || parsed.showQuantityBar === false),
+    };
+  } catch {
+    return {
+      markets: "all",
+      customerSegments: ["all"],
+      customerProfileFilters: [],
+      ipCountryCodes: [],
+      couponAccess: { enabled: false, code: "" },
+      quantityEnabled: true,
+    };
+  }
 }
 
 function parseDiscountRulesJson(
@@ -1438,8 +1568,11 @@ function parseBxgyDiscountRules(discountRulesJson?: string | null): BxgyDiscount
   }
 }
 
-function hasUnifiedBxgyTier(discountRulesJson?: string | null): boolean {
-  return parseDiscountRulesJson(discountRulesJson).some(
+function hasUnifiedBxgyTier(
+  discountRulesJson?: string | null,
+  parsedRules?: DiscountTier[],
+): boolean {
+  return (parsedRules ?? parseDiscountRulesJson(discountRulesJson)).some(
     (tier) =>
       tier.logicType === "bxgy" &&
       tier.discountClass === "product" &&
@@ -1448,11 +1581,15 @@ function hasUnifiedBxgyTier(discountRulesJson?: string | null): boolean {
   );
 }
 
-function buildBxgyRulesFromUnifiedDiscountRules(offer: Offer): BxgyDiscountRule[] {
-  const productPool = parseSelectedIds(offer.selectedProductsJson);
+function buildBxgyRulesFromUnifiedDiscountRules(
+  offer: Offer,
+  selectedIds?: string[],
+  parsedRules?: DiscountTier[],
+): BxgyDiscountRule[] {
+  const productPool = selectedIds ?? parseSelectedIds(offer.selectedProductsJson);
   if (!productPool.length) return [];
 
-  const tiers = parseDiscountRulesJson(offer.discountRulesJson).filter(
+  const tiers = (parsedRules ?? parseDiscountRulesJson(offer.discountRulesJson)).filter(
     (tier) =>
       tier.logicType === "bxgy" &&
       tier.discountClass === "product" &&
@@ -1473,6 +1610,29 @@ function buildBxgyRulesFromUnifiedDiscountRules(offer: Offer): BxgyDiscountRule[
       tierType: "bxgy",
     };
   });
+}
+
+function compileOfferRuntime(offer: Offer): CompiledOfferRuntime {
+  const settings = compileOfferSettings(offer.offerSettingsJson);
+  const selectedIds = parseSelectedIds(offer.selectedProductsJson);
+  const standardRules = parseDiscountRulesJson(offer.discountRulesJson);
+  const dedicatedBxgyRules = parseBxgyDiscountRules(offer.discountRulesJson);
+  const hasUnifiedBxgy = hasUnifiedBxgyTier(offer.discountRulesJson, standardRules);
+  const bxgyRules =
+    dedicatedBxgyRules.length > 0
+      ? dedicatedBxgyRules
+      : hasUnifiedBxgy
+        ? buildBxgyRulesFromUnifiedDiscountRules(offer, selectedIds, standardRules)
+        : [];
+
+  return {
+    offer,
+    settings,
+    selectedIds,
+    standardRules,
+    bxgyRules,
+    hasUnifiedBxgyTier: hasUnifiedBxgy,
+  };
 }
 
 function matchesAnyConfiguredId(
@@ -1516,15 +1676,12 @@ function resolveSameProductBxgyQuantities(rule: Pick<BxgyDiscountRule, "buyQuant
   };
 }
 
-function getEffectiveBxgyRules(offer: Offer): BxgyDiscountRule[] {
-  const dedicatedBxgyRules = parseBxgyDiscountRules(offer.discountRulesJson);
-  return dedicatedBxgyRules.length > 0
-    ? dedicatedBxgyRules
-    : buildBxgyRulesFromUnifiedDiscountRules(offer);
+function getEffectiveBxgyRules(compiledOffer: CompiledOfferRuntime): BxgyDiscountRule[] {
+  return compiledOffer.bxgyRules;
 }
 
-function offerRequiresOrderBxgyEvaluation(offer: Offer): boolean {
-  return getEffectiveBxgyRules(offer).some(
+function offerRequiresOrderBxgyEvaluation(compiledOffer: CompiledOfferRuntime): boolean {
+  return getEffectiveBxgyRules(compiledOffer).some(
     (rule) => resolveSameProductBxgyQuantities(rule).semantics === "total_items",
   );
 }
@@ -1548,13 +1705,13 @@ function cartContainsConfiguredIds(
 }
 
 function offerIntersectsCartForBxgyEvaluation(
-  offer: Offer,
+  compiledOffer: CompiledOfferRuntime,
   cartLines: CartInput["cart"]["lines"],
 ): boolean {
-  const selectedIds = parseSelectedIds(offer.selectedProductsJson);
+  const selectedIds = compiledOffer.selectedIds;
   if (cartContainsConfiguredIds(cartLines, selectedIds)) return true;
 
-  const bxgyRules = getEffectiveBxgyRules(offer);
+  const bxgyRules = getEffectiveBxgyRules(compiledOffer);
   const ruleScopedIds = Array.from(
     new Set(
       bxgyRules.flatMap((rule) => [
@@ -1578,7 +1735,7 @@ type BxgyDiscountComputation = {
  */
 function calculateBxgyDiscount(
   cartLines: any[],
-  offers: Offer[],
+  offers: CompiledOfferRuntime[],
 ): BxgyDiscountComputation {
   const allProductCandidates: ProductDiscountCandidate[] = [];
   const allOrderCandidates: OrderDiscountCandidate[] = [];
@@ -1631,16 +1788,13 @@ function calculateBxgyDiscount(
     };
   };
 
-  for (const offer of offers) {
+  for (const compiledOffer of offers) {
+    const offer = compiledOffer.offer;
     if (offer.offerType === "bxgy") {
-      const dedicatedBxgyRules = parseBxgyDiscountRules(offer.discountRulesJson);
-      const bxgyRules =
-        dedicatedBxgyRules.length > 0
-          ? dedicatedBxgyRules
-          : buildBxgyRulesFromUnifiedDiscountRules(offer);
+      const bxgyRules = compiledOffer.bxgyRules;
       if (!bxgyRules.length) continue;
 
-      const selectedProductIds = parseSelectedIds(offer.selectedProductsJson);
+      const selectedProductIds = compiledOffer.selectedIds;
       if (!selectedProductIds.length) {
         log("bxgy_same_product_skip_missing_pool", { offerId: offer.id });
         continue;
@@ -1773,11 +1927,7 @@ function calculateBxgyDiscount(
       continue;
     }
 
-    const dedicatedBxgyRules = parseBxgyDiscountRules(offer.discountRulesJson);
-    const bxgyRules =
-      dedicatedBxgyRules.length > 0
-        ? dedicatedBxgyRules
-        : buildBxgyRulesFromUnifiedDiscountRules(offer);
+    const bxgyRules = compiledOffer.bxgyRules;
     if (!bxgyRules.length) continue;
 
     if (offer.offerType !== "quantity-breaks-different") {
@@ -2216,11 +2366,10 @@ function formatDiscountPercentValue(percent: number): string {
   return percent.toFixed(1);
 }
 
-function getScopedLinesForOffer(
+function getScopedLinesForSelectedIds(
   cartLines: CartInput["cart"]["lines"],
-  offer: Offer,
+  selectedIds: string[],
 ): CartInput["cart"]["lines"] {
-  const selectedIds = parseSelectedIds(offer.selectedProductsJson);
   if (!selectedIds.length) {
     return cartLines.filter(
       (line) => line.merchandise.__typename === "ProductVariant",
@@ -2282,6 +2431,39 @@ function getBestProductDiscountPercentValue(
   return formatDiscountPercentValue(best.discountPercent);
 }
 
+function getBestProductDiscountPercentValueFromTiers(
+  tiers: DiscountTier[],
+  quantity: number,
+): string | null {
+  const eligibleTiers = tiers.filter(
+    (tier) =>
+      tier.logicType !== "bxgy" &&
+      tier.discountClass === "product" &&
+      tier.rewardType === "percentage_off" &&
+      tier.conditionType === "item_quantity",
+  );
+
+  if (eligibleTiers.length === 0) {
+    log("discount_rules_fallback_default", { quantity });
+    return DEFAULT_DISCOUNT_PERCENTAGE;
+  }
+
+  let best: DiscountTier | null = null;
+  for (const tier of eligibleTiers) {
+    if (quantity >= tier.count) best = tier;
+  }
+
+  if (!best) {
+    log("discount_rules_no_tier_met", {
+      quantity,
+      tierCounts: eligibleTiers.map((t) => t.count),
+    });
+    return null;
+  }
+
+  return formatDiscountPercentValue(best.discountPercent);
+}
+
 function buildOrderDiscountCandidates(
   input: CartInput,
   offers: Offer[],
@@ -2294,7 +2476,10 @@ function buildOrderDiscountCandidates(
 
   for (const offer of offers) {
     if (!offerPassesScheduleAndMarket(offer, marketId, nowMs)) continue;
-    const scopedLines = getScopedLinesForOffer(input.cart.lines, offer);
+    const scopedLines = getScopedLinesForSelectedIds(
+      input.cart.lines,
+      parseSelectedIds(offer.selectedProductsJson),
+    );
     if (!scopedLines.length) continue;
 
     const metrics = scopedLines.reduce(
@@ -2309,6 +2494,72 @@ function buildOrderDiscountCandidates(
     );
 
     const eligibleRules = parseDiscountRulesJson(offer.discountRulesJson).filter(
+      (rule) =>
+        rule.discountClass === "order" &&
+        rule.rewardType === "percentage_off" &&
+        evaluateRuleCondition(rule, metrics),
+    );
+    if (!eligibleRules.length) continue;
+
+    const bestRule = eligibleRules.reduce((best, current) =>
+      current.discountPercent > best.discountPercent ? current : best,
+    );
+    const scopedIds = new Set(scopedLines.map((line) => line.id));
+    const excludedCartLineIds = allCartLineIds.filter((id) => !scopedIds.has(id));
+
+    candidates.push({
+      message: offer.cartTitle || "Bundle order discount",
+      targets: [
+        {
+          orderSubtotal: {
+            excludedCartLineIds,
+          },
+        },
+      ],
+      value: {
+        percentage: {
+          value: formatDiscountPercentValue(bestRule.discountPercent),
+        },
+      },
+      associatedDiscountCode: acceptedCouponCodeByOfferId.get(String(offer.id || ""))
+        ? {
+            code: acceptedCouponCodeByOfferId.get(String(offer.id || ""))!,
+          }
+        : undefined,
+    });
+  }
+
+  return candidates;
+}
+
+function buildOrderDiscountCandidatesFromCompiledOffers(
+  input: CartInput,
+  offers: CompiledOfferRuntime[],
+  marketId: string | undefined,
+  nowMs: number | null,
+  acceptedCouponCodeByOfferId: Map<string, string>,
+): OrderDiscountCandidate[] {
+  const candidates: OrderDiscountCandidate[] = [];
+  const allCartLineIds = input.cart.lines.map((line) => line.id);
+
+  for (const compiledOffer of offers) {
+    const offer = compiledOffer.offer;
+    if (!offerPassesScheduleAndMarket(offer, marketId, nowMs, compiledOffer.settings)) continue;
+    const scopedLines = getScopedLinesForSelectedIds(input.cart.lines, compiledOffer.selectedIds);
+    if (!scopedLines.length) continue;
+
+    const metrics = scopedLines.reduce(
+      (acc, line) => ({
+        totalQuantity: acc.totalQuantity + Math.max(1, Math.trunc(Number(line.quantity) || 1)),
+        subtotalAmount:
+          acc.subtotalAmount +
+          parseMoneyAmount(line.cost?.amountPerQuantity?.amount) *
+            Math.max(1, Math.trunc(Number(line.quantity) || 1)),
+      }),
+      { totalQuantity: 0, subtotalAmount: 0 },
+    );
+
+    const eligibleRules = compiledOffer.standardRules.filter(
       (rule) =>
         rule.discountClass === "order" &&
         rule.rewardType === "percentage_off" &&
@@ -2480,108 +2731,159 @@ function resolveNowMs(): number | null {
   return null;
 }
 
-/**
- * selectedProductsJson 存的是 Product GID（与主题端、后台一致），需用购物车行的 product.id / variant.id 匹配，不能用 CartLine.id。
- */
-const findOffer = (
-  productId: string | undefined,
-  variantId: string | undefined,
-  marketId: string | undefined,
-  offers: Offer[],
-): Offer | null => {
-  const nowMs = resolveNowMs();
-  const nowIso = nowMs ? new Date(nowMs).toISOString() : null;
 
-  for (const offer of offers) {
-    if (offer.offerType === 'bxgy') continue; // Skip BXGY offers
+function getCandidateTargetCartLineIds(
+  candidate: ProductDiscountCandidate,
+): string[] {
+  return Array.from(
+    new Set(
+      (candidate.targets ?? [])
+        .flatMap((target) => {
+          const cartLineId = target.cartLine?.id;
+          return cartLineId ? [cartLineId] : [];
+        })
+        .filter(Boolean),
+    ),
+  );
+}
 
-    if (offer.status === false) {
-      log("offer_skip_disabled", { offerId: offer.id, name: offer.name });
+function groupProductCandidatesByOverlappingTargets(
+  candidates: ProductDiscountCandidate[],
+): ProductDiscountCandidate[][] {
+  const groups: Array<{
+    candidates: ProductDiscountCandidate[];
+    targetLineIds: Set<string>;
+  }> = [];
+
+  for (const candidate of candidates) {
+    const targetLineIds = getCandidateTargetCartLineIds(candidate);
+    if (!targetLineIds.length) {
+      groups.push({
+        candidates: [candidate],
+        targetLineIds: new Set<string>(),
+      });
       continue;
     }
 
-    if (offer.startTime) {
-      const startTimeMs = Date.parse(offer.startTime);
-      log("offer_start_time_check", {
-        offerId: offer.id,
-        name: offer.name,
-        startTime: offer.startTime,
-        nowIso,
-        nowMs,
-        startTimeMs: Number.isFinite(startTimeMs) ? startTimeMs : null,
-        isBeforeStart:
-          Number.isFinite(startTimeMs) && nowMs !== null ? nowMs < startTimeMs : null,
+    const overlappingGroupIndexes = groups
+      .map((group, index) =>
+        targetLineIds.some((lineId) => group.targetLineIds.has(lineId)) ? index : -1,
+      )
+      .filter((index) => index >= 0);
+
+    if (!overlappingGroupIndexes.length) {
+      groups.push({
+        candidates: [candidate],
+        targetLineIds: new Set(targetLineIds),
       });
-      if (nowMs === null) {
-        log("offer_time_unavailable_skip_start_check", {
-          offerId: offer.id,
-          name: offer.name,
-          startTime: offer.startTime,
-        });
-      } else if (Number.isFinite(startTimeMs) && nowMs < startTimeMs) {
-        log("offer_skip_before_start", { offerId: offer.id, name: offer.name, startTime: offer.startTime });
-        continue;
-      }
+      continue;
     }
 
-    if (offer.endTime) {
-      const endTimeMs = Date.parse(offer.endTime);
-      if (nowMs === null) {
-        log("offer_time_unavailable_skip_end_check", {
-          offerId: offer.id,
-          name: offer.name,
-          endTime: offer.endTime,
-        });
-      } else if (Number.isFinite(endTimeMs) && nowMs > endTimeMs) {
-        log("offer_skip_after_end", { offerId: offer.id, name: offer.name, endTime: offer.endTime });
-        continue;
-      }
+    const primaryGroupIndex = overlappingGroupIndexes[0];
+    const primaryGroup = groups[primaryGroupIndex];
+    primaryGroup.candidates.push(candidate);
+    for (const lineId of targetLineIds) {
+      primaryGroup.targetLineIds.add(lineId);
     }
 
-    if (marketId && offer.offerSettingsJson) {
-      try {
-        const settings = JSON.parse(offer.offerSettingsJson);
-        const offerMarkets = settings.markets;
-        if (typeof offerMarkets === "string" && offerMarkets !== "all" && offerMarkets.trim() !== "") {
-          const allowedMarkets = offerMarkets.split(",").map((m: string) => m.trim());
-          const matchMarket = allowedMarkets.some(m => m === marketId || m.endsWith(`/${marketId}`));
-          if (!matchMarket) {
-            log("offer_skip_market_mismatch", { offerId: offer.id, name: offer.name, marketId, allowedMarkets });
-            continue;
-          }
-        }
-      } catch (e) {
-        // ignore parse error
+    for (let i = overlappingGroupIndexes.length - 1; i >= 1; i -= 1) {
+      const mergeIndex = overlappingGroupIndexes[i];
+      const groupToMerge = groups[mergeIndex];
+      primaryGroup.candidates.push(...groupToMerge.candidates);
+      for (const lineId of groupToMerge.targetLineIds) {
+        primaryGroup.targetLineIds.add(lineId);
       }
+      groups.splice(mergeIndex, 1);
+    }
+  }
+
+  return groups.map((group) => group.candidates);
+}
+/**
+ * selectedProductsJson 存的是 Product GID（与主题端、后台一致），需用购物车行的 product.id / variant.id 匹配，不能用 CartLine.id。
+ */
+type RegularOfferIndex = {
+  matchAllOffers: CompiledOfferRuntime[];
+  byLookupKey: Map<string, CompiledOfferRuntime[]>;
+};
+
+function buildOfferLookupKey(raw: string | undefined | null): string {
+  return extractShopifyProductNumericId(raw);
+}
+
+function appendOfferToLookupIndex(
+  index: Map<string, CompiledOfferRuntime[]>,
+  lookupKey: string,
+  compiledOffer: CompiledOfferRuntime,
+): void {
+  if (!lookupKey) return;
+  const existing = index.get(lookupKey);
+  if (existing) {
+    existing.push(compiledOffer);
+    return;
+  }
+  index.set(lookupKey, [compiledOffer]);
+}
+
+function buildRegularOfferIndex(offers: CompiledOfferRuntime[]): RegularOfferIndex {
+  const byLookupKey = new Map<string, CompiledOfferRuntime[]>();
+  const matchAllOffers: CompiledOfferRuntime[] = [];
+
+  for (const compiledOffer of offers) {
+    if (!compiledOffer.settings.quantityEnabled) continue;
+    if (!compiledOffer.selectedIds.length) {
+      matchAllOffers.push(compiledOffer);
+      continue;
     }
 
-    // 兼容旧版开关：当 quantity bar 显式为 false 时，不参与普通 quantity-break 折扣计算
-    if (
-      offer.offerType !== "bxgy" &&
-      !isCompleteBundleOfferType(offer.offerType) &&
-      offer.offerSettingsJson
-    ) {
-      try {
-        const settings = JSON.parse(offer.offerSettingsJson) as {
-          quantity?: boolean;
-          showQuantityBar?: boolean;
-        };
-        if (settings.quantity === false || settings.showQuantityBar === false) {
-          log("offer_skip_quantity_bar_disabled", { offerId: offer.id, name: offer.name });
-          continue;
-        }
-      } catch {
-        // ignore parse error
-      }
+    const seenKeys = new Set<string>();
+    for (const selectedId of compiledOffer.selectedIds) {
+      const lookupKey = buildOfferLookupKey(selectedId);
+      if (!lookupKey || seenKeys.has(lookupKey)) continue;
+      seenKeys.add(lookupKey);
+      appendOfferToLookupIndex(byLookupKey, lookupKey, compiledOffer);
     }
+  }
 
-    const selectedIds = parseSelectedIds(offer.selectedProductsJson);
+  return {
+    matchAllOffers,
+    byLookupKey,
+  };
+}
+
+const findOffer = (
+  productId: string | undefined,
+  variantId: string | undefined,
+  offerIndex: RegularOfferIndex,
+): CompiledOfferRuntime | null => {
+  const candidateOffers: CompiledOfferRuntime[] = [];
+  const seenOfferIds = new Set<string>();
+  const lookupKeys = [buildOfferLookupKey(productId), buildOfferLookupKey(variantId)].filter(Boolean);
+
+  for (const compiledOffer of offerIndex.matchAllOffers) {
+    const offerId = String(compiledOffer.offer.id || "");
+    if (seenOfferIds.has(offerId)) continue;
+    seenOfferIds.add(offerId);
+    candidateOffers.push(compiledOffer);
+  }
+
+  for (const lookupKey of lookupKeys) {
+    for (const compiledOffer of offerIndex.byLookupKey.get(lookupKey) ?? []) {
+      const offerId = String(compiledOffer.offer.id || "");
+      if (seenOfferIds.has(offerId)) continue;
+      seenOfferIds.add(offerId);
+      candidateOffers.push(compiledOffer);
+    }
+  }
+
+  for (const compiledOffer of candidateOffers) {
+    const offer = compiledOffer.offer;
+    const selectedIds = compiledOffer.selectedIds;
     if (!selectedIds.length) {
       log("offer_match_all_products", { offerId: offer.id, name: offer.name });
-      return offer;
+      return compiledOffer;
     }
 
-    // 配置中的 id 可能是纯数字，购物车行侧为 GID，需归一化后比较
     let hit = false;
     for (const sid of selectedIds) {
       if (productId && productIdsMatch(productId, sid)) {
@@ -2603,7 +2905,7 @@ const findOffer = (
       hit,
     });
 
-    if (hit) return offer;
+    if (hit) return compiledOffer;
   }
 
   return null;

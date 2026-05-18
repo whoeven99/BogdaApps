@@ -744,6 +744,32 @@ export function getBxgyDisplayMeta(rule: {
   };
 }
 
+const BXGY_AUTO_TITLE_PATTERN = /^buy\s*\d+\s*,\s*get\s*\d+(?:\s+(?:free|total))?$/i;
+const BXGY_AUTO_SUBTITLE_PATTERN =
+  /same product|reward item|cheapest eligible|bundle tier|paying for|total items/i;
+
+export function resolveBxgyDisplayTitle(
+  rule: {
+    buyQuantity?: unknown;
+    getQuantity?: unknown;
+  },
+  explicitTitle?: unknown,
+): string {
+  const normalizedTitle = String(explicitTitle ?? "").trim();
+  if (normalizedTitle && !BXGY_AUTO_TITLE_PATTERN.test(normalizedTitle)) {
+    return normalizedTitle;
+  }
+  return getBxgyDisplayMeta(rule).title;
+}
+
+export function resolveBxgyDisplaySubtitle(explicitSubtitle?: unknown): string {
+  const normalizedSubtitle = String(explicitSubtitle ?? "").trim();
+  if (!normalizedSubtitle || BXGY_AUTO_SUBTITLE_PATTERN.test(normalizedSubtitle)) {
+    return "";
+  }
+  return normalizedSubtitle;
+}
+
 export type FreeGiftRule = {
   id?: string;
   count: number;

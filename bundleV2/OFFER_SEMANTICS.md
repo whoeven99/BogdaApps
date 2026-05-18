@@ -81,6 +81,11 @@ Rule:
 
 - If multiple product discount modules qualify, the discount that reduces the
   order by the largest amount should win.
+- Product discount competition is scoped by overlapping cart-line targets, not
+  by the entire cart. Candidates that touch the same cart line belong to the
+  same competition group; candidates that target different cart lines should be
+  emitted in separate product-discount operations so they do not block each
+  other.
 - Implementation should avoid hard-coded module priority such as "BXGY before
   quantity breaks" when both are valid product discount candidates.
 
@@ -266,4 +271,3 @@ Target migration:
 - Do not model free gift as a normal product discount in new work.
 - Before changing Shopify Function logic, confirm which discount class the module
   should produce.
-

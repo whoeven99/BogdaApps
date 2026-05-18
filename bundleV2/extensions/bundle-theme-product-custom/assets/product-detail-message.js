@@ -2695,6 +2695,26 @@ function getBxgyDisplayMeta(rule) {
   };
 }
 
+const BXGY_AUTO_TITLE_PATTERN = /^buy\s*\d+\s*,\s*get\s*\d+(?:\s+(?:free|total))?$/i;
+const BXGY_AUTO_SUBTITLE_PATTERN =
+  /same product|reward item|cheapest eligible|bundle tier|paying for|total items/i;
+
+function resolveBxgyDisplayTitle(rule, explicitTitle) {
+  const normalizedTitle = String(explicitTitle || "").trim();
+  if (normalizedTitle && !BXGY_AUTO_TITLE_PATTERN.test(normalizedTitle)) {
+    return normalizedTitle;
+  }
+  return getBxgyDisplayMeta(rule).title;
+}
+
+function resolveBxgyDisplaySubtitle(explicitSubtitle) {
+  const normalizedSubtitle = String(explicitSubtitle || "").trim();
+  if (!normalizedSubtitle || BXGY_AUTO_SUBTITLE_PATTERN.test(normalizedSubtitle)) {
+    return "";
+  }
+  return normalizedSubtitle;
+}
+
 function getCartQuantityForSelectedOffer(offer, selectedCount) {
   if (offer?.offerType === "free-gift") {
     const config = parseFreeGiftConfig(offer.selectedProductsJson, offer.discountRulesJson);
@@ -3893,8 +3913,8 @@ function renderBundlePreviewHtml(offer) {
         const bxgyDisplay = getBxgyDisplayMeta(rule);
         return {
           count: displayCount,
-          title: rule.title || bxgyDisplay.title,
-          subtitle: rule.subtitle || bxgyDisplay.subtitle,
+          title: resolveBxgyDisplayTitle(rule, rule.title),
+          subtitle: resolveBxgyDisplaySubtitle(rule.subtitle),
           price: rule.discountPercent === 100 ? bxgyDisplay.price : `${rule.discountPercent}% OFF`,
           badge: rule.badge || (isFeatured ? "Most Popular" : ""),
           saveLabel: bxgyDisplay.saveLabel,
@@ -4121,8 +4141,8 @@ function renderBundlePreviewHtml(offer) {
         const bxgyDisplay = getBxgyDisplayMeta(rule);
         return {
           count: rule.count,
-          title: rule.title || bxgyDisplay.title,
-          subtitle: rule.subtitle || bxgyDisplay.subtitle,
+          title: resolveBxgyDisplayTitle(rule, rule.title),
+          subtitle: resolveBxgyDisplaySubtitle(rule.subtitle),
           price: bxgyDisplay.price,
           badge: rule.badge || (isFeatured ? "Most Popular" : ""),
           saveLabel: bxgyDisplay.saveLabel,
