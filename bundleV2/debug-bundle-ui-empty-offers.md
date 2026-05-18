@@ -44,3 +44,4 @@
 - Fix applied: `getSourceScriptElement()` now falls back to adjacent sibling scripts and then a global `script[data-ciwi-script=...]` lookup.
 - Secondary root cause confirmed: BXGY now includes a real `single` tier for storefront display, but `getCurrentOffer()` still assumes the first BXGY rule is actionable. When the first rule is `single`, validation sees `count=0` and skips the whole offer.
 - Fix applied: BXGY availability checks now skip `single` and validate the first real BXGY tier.
+- Hardening applied: BXGY runtime now uses a shared actionable-tier selector for validation and cart quantity calculation, so future `single` display tiers cannot accidentally become executable rules.

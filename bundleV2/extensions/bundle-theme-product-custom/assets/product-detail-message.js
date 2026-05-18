@@ -643,6 +643,26 @@ function parseBxgyDiscountRulesJson(discountRulesJson) {
   }
 }
 
+function isSingleTierRule(rule) {
+  return String(rule?.tierType || "") === "single";
+}
+
+function getActionableBxgyRules(discountRulesJson) {
+  return parseBxgyDiscountRulesJson(discountRulesJson).filter((rule) => !isSingleTierRule(rule));
+}
+
+function getPreferredActionableBxgyRule(discountRulesJson, preferredCount) {
+  const actionableRules = getActionableBxgyRules(discountRulesJson);
+  if (!actionableRules.length) return null;
+  if (Number.isFinite(Number(preferredCount))) {
+    const matchedRule = actionableRules.find(
+      (rule) => Number(rule.count) === Math.trunc(Number(preferredCount)),
+    );
+    if (matchedRule) return matchedRule;
+  }
+  return actionableRules.find((rule) => rule.isDefault) || actionableRules[0] || null;
+}
+
 function parseDifferentProductsDiscountRulesJson(discountRulesJson) {
   try {
     let parsed = discountRulesJson;
@@ -2511,15 +2531,9 @@ function getCurrentOffer(offersConfig) {
     }
 
     if (offer.offerType === 'bxgy') {
-      const bxgyRules = parseBxgyDiscountRulesJson(offer.discountRulesJson);
-      if (!bxgyRules.length) {
-        console.log("[ciwi] offer skipped: no valid bxgy discount rules", offer.id);
-        continue;
-      }
-      const rule =
-        bxgyRules.find((candidate) => String(candidate?.tierType || "") !== "single") || null;
+      const rule = getPreferredActionableBxgyRule(offer.discountRulesJson);
       if (!rule) {
-        console.log("[ciwi] bxgy offer skipped: only single tier found", offer.id);
+        console.log("[ciwi] offer skipped: no valid bxgy discount rules", offer.id);
         continue;
       }
       if (!rule.count) {
@@ -2705,9 +2719,10 @@ function getCartQuantityForSelectedOffer(offer, selectedCount) {
   if (!offer || offer.offerType !== "bxgy") {
     return normalizedCount;
   }
-  const rules = parseBxgyDiscountRulesJson(offer.discountRulesJson);
-  const selectedRule =
-    rules.find((rule) => Number(rule.count) === normalizedCount) || rules[0] || null;
+  const selectedRule = getPreferredActionableBxgyRule(
+    offer.discountRulesJson,
+    normalizedCount,
+  );
   if (!selectedRule) return normalizedCount;
   const buyQuantity = Math.max(
     1,

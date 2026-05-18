@@ -83,9 +83,6 @@ type MetafieldSnapshot = {
   type?: string;
 } | null | undefined;
 
-/** 便于在 Function 日志里排查 offers 注入：discount owner / shop 两处 metafield */
-const CIWI_BUNDLE_OFFERS_LOG_MAX_CHARS = 12_000;
-
 function logCiwiBundleOffersDiagnostics(
   discountOwnerMf: MetafieldSnapshot,
   shopOffersFnMf: MetafieldSnapshot,
@@ -94,19 +91,6 @@ function logCiwiBundleOffersDiagnostics(
     resolvedSource: string;
   },
 ): void {
-  let payloadJson: string;
-  try {
-    if (effectiveParsedPayload === undefined) payloadJson = "undefined";
-    else if (effectiveParsedPayload === null) payloadJson = "null";
-    else payloadJson = JSON.stringify(effectiveParsedPayload);
-  } catch {
-    payloadJson = "(payload JSON.stringify failed)";
-  }
-  const truncated =
-    payloadJson.length > CIWI_BUNDLE_OFFERS_LOG_MAX_CHARS
-      ? `${payloadJson.slice(0, CIWI_BUNDLE_OFFERS_LOG_MAX_CHARS)}...(truncated total=${payloadJson.length})`
-      : payloadJson;
-
   log("ciwi_bundle_offers_resolve", {
     resolvedSource: extra.resolvedSource,
     discountOwner: {
@@ -123,7 +107,12 @@ function logCiwiBundleOffersDiagnostics(
       ? effectiveParsedPayload!.offers!.length
       : null,
     parsedUpdatedAt: effectiveParsedPayload?.updatedAt ?? null,
-    payloadJson: truncated,
+    parsedOfferIds: Array.isArray(effectiveParsedPayload?.offers)
+      ? effectiveParsedPayload!.offers!
+          .map((offer) => String(offer?.id || "").trim())
+          .filter(Boolean)
+          .slice(0, 10)
+      : [],
   });
 }
 
@@ -804,6 +793,13 @@ export function bundleCartDiscountGenerateRun(
           hasUnifiedBxgyTier(o.discountRulesJson))) &&
       offerPassesScheduleAndMarket(o, marketId, nowMs),
   );
+  const cartRelevantBxgyOffers = bxgyOffers.filter((offer) =>
+    offerIntersectsCartForBxgyEvaluation(offer, input.cart.lines),
+  );
+  const bxgyOffersForEvaluation =
+    hasProductDiscountClass || !hasOrderDiscountClass
+      ? cartRelevantBxgyOffers
+      : cartRelevantBxgyOffers.filter((offer) => offerRequiresOrderBxgyEvaluation(offer));
   const freeGiftOffers = eligibleOffers.filter(
     (o) => o.offerType === "free-gift" && offerPassesScheduleAndMarket(o, marketId, nowMs),
   );
@@ -819,14 +815,16 @@ export function bundleCartDiscountGenerateRun(
     totalOffers: offers.length,
     eligibleOffers: eligibleOffers.length,
     bxgyCount: bxgyOffers.length,
+    bxgyCartRelevantCount: cartRelevantBxgyOffers.length,
+    bxgyEvalCount: bxgyOffersForEvaluation.length,
     freeGiftCount: freeGiftOffers.length,
     completeBundleCount: offers.filter((o) => isCompleteBundleOfferType(o.offerType)).length,
     regularCount: regularOffers.length,
   });
 
   // ① 处理 BXGY（买 X 送 Y 等）：只负责生成候选，最终由 Shopify 按最大减免选择商品折扣。
-  if (hasProductDiscountClass || hasOrderDiscountClass) {
-    const bxgyDiscounts = calculateBxgyDiscount(input.cart.lines, bxgyOffers);
+  if (bxgyOffersForEvaluation.length > 0) {
+    const bxgyDiscounts = calculateBxgyDiscount(input.cart.lines, bxgyOffersForEvaluation);
     if (hasProductDiscountClass && bxgyDiscounts.productCandidates.length > 0) {
       productCandidates.push(...bxgyDiscounts.productCandidates);
     }
@@ -1516,6 +1514,58 @@ function resolveSameProductBxgyQuantities(rule: Pick<BxgyDiscountRule, "buyQuant
     freeQuantity: getQuantity,
     semantics: "free_items",
   };
+}
+
+function getEffectiveBxgyRules(offer: Offer): BxgyDiscountRule[] {
+  const dedicatedBxgyRules = parseBxgyDiscountRules(offer.discountRulesJson);
+  return dedicatedBxgyRules.length > 0
+    ? dedicatedBxgyRules
+    : buildBxgyRulesFromUnifiedDiscountRules(offer);
+}
+
+function offerRequiresOrderBxgyEvaluation(offer: Offer): boolean {
+  return getEffectiveBxgyRules(offer).some(
+    (rule) => resolveSameProductBxgyQuantities(rule).semantics === "total_items",
+  );
+}
+
+function cartContainsConfiguredIds(
+  cartLines: CartInput["cart"]["lines"],
+  configuredIds: string[],
+): boolean {
+  if (!configuredIds.length) return false;
+
+  return cartLines.some((line) => {
+    if (line.merchandise?.__typename !== "ProductVariant") return false;
+    const productId = line.merchandise?.product?.id;
+    const variantId = line.merchandise?.id;
+    return configuredIds.some(
+      (configuredId) =>
+        (productId && productIdsMatch(productId, configuredId)) ||
+        (variantId && productIdsMatch(variantId, configuredId)),
+    );
+  });
+}
+
+function offerIntersectsCartForBxgyEvaluation(
+  offer: Offer,
+  cartLines: CartInput["cart"]["lines"],
+): boolean {
+  const selectedIds = parseSelectedIds(offer.selectedProductsJson);
+  if (cartContainsConfiguredIds(cartLines, selectedIds)) return true;
+
+  const bxgyRules = getEffectiveBxgyRules(offer);
+  const ruleScopedIds = Array.from(
+    new Set(
+      bxgyRules.flatMap((rule) => [
+        ...(Array.isArray(rule.buyProductIds) ? rule.buyProductIds : []),
+        ...(Array.isArray(rule.getProductIds) ? rule.getProductIds : []),
+      ]),
+    ),
+  );
+  if (cartContainsConfiguredIds(cartLines, ruleScopedIds)) return true;
+
+  return selectedIds.length === 0 && ruleScopedIds.length === 0;
 }
 
 type BxgyDiscountComputation = {
