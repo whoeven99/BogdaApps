@@ -722,11 +722,11 @@ export function getBxgyDisplayMeta(rule: {
       bundleQuantity,
       freeQuantity,
       semantics: "total_items",
-      title: `Buy ${buyQuantity}, Get ${bundleQuantity} Total`,
-      subtitle: `Same product scope, pay for ${buyQuantity} and receive ${bundleQuantity} total items`,
-      price: `Pay for ${buyQuantity}`,
-      saveLabel: `GET ${bundleQuantity} TOTAL`,
-      summary: `Buy ${buyQuantity}, get ${bundleQuantity} total`,
+      title: `Buy ${buyQuantity}, Get ${bundleQuantity}`,
+      subtitle: "",
+      price: "",
+      saveLabel: "",
+      summary: `Buy ${buyQuantity}, get ${bundleQuantity}`,
     };
   }
 
@@ -736,11 +736,11 @@ export function getBxgyDisplayMeta(rule: {
     bundleQuantity,
     freeQuantity,
     semantics: "free_items",
-    title: `Buy ${buyQuantity}, Get ${configuredGetQuantity} Free`,
-    subtitle: `Same product scope, cheapest eligible variant becomes free`,
-    price: `Get ${configuredGetQuantity} Free`,
-    saveLabel: `BUY ${buyQuantity}, GET ${configuredGetQuantity} FREE`,
-    summary: `Buy ${buyQuantity}, get ${configuredGetQuantity} free`,
+    title: `Buy ${buyQuantity}, Get ${bundleQuantity}`,
+    subtitle: "",
+    price: "",
+    saveLabel: "",
+    summary: `Buy ${buyQuantity}, get ${bundleQuantity}`,
   };
 }
 

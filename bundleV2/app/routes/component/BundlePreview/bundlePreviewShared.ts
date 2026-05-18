@@ -259,7 +259,10 @@ export function renderBundlePreviewHtml({
           : ""
       }
       ${chooserHtml}
-      <div class="create-offer-style-preview-item-price">${esc(item.price)}</div>
+      ${renderOptionalTextHtml(
+        item.price,
+        (text) => `<div class="create-offer-style-preview-item-price">${esc(text)}</div>`,
+      )}
       ${
         item.original
           ? `<div class="create-offer-style-preview-item-original">${esc(item.original)}</div>`

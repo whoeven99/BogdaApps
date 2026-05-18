@@ -2649,18 +2649,18 @@ function getBxgyDisplayMeta(rule) {
 
   if (usesTotalItemsSemantics) {
     return {
-      title: `Buy ${buyQuantity}, Get ${bundleQuantity} Total`,
-      subtitle: `Same product scope, pay for ${buyQuantity} and receive ${bundleQuantity} total items`,
-      price: `Pay for ${buyQuantity}`,
-      saveLabel: `GET ${bundleQuantity} TOTAL`,
+      title: `Buy ${buyQuantity}, Get ${bundleQuantity}`,
+      subtitle: "",
+      price: "",
+      saveLabel: "",
     };
   }
 
   return {
-    title: `Buy ${buyQuantity}, Get ${configuredGetQuantity} Free`,
-    subtitle: "Same product, cheapest eligible variant becomes free",
-    price: `Get ${configuredGetQuantity} Free`,
-    saveLabel: `BUY ${buyQuantity}, GET ${configuredGetQuantity} FREE`,
+    title: `Buy ${buyQuantity}, Get ${bundleQuantity}`,
+    subtitle: "",
+    price: "",
+    saveLabel: "",
   };
 }
 
@@ -3792,13 +3792,13 @@ function renderBundlePreviewHtml(offer) {
             : ""
         }
         <div class="create-offer-style-preview-item-title">${esc(item.title)}</div>
-        <div class="create-offer-style-preview-item-subtitle">${esc(item.subtitle)}</div>
+        ${item.subtitle ? `<div class="create-offer-style-preview-item-subtitle">${esc(item.subtitle)}</div>` : ""}
         ${
           item.saveLabel
             ? `<div class="create-offer-style-preview-item-subtitle">${esc(item.saveLabel)}</div>`
             : ""
         }
-        <div class="create-offer-style-preview-item-price">${esc(item.price)}</div>
+        ${item.price ? `<div class="create-offer-style-preview-item-price">${esc(item.price)}</div>` : ""}
       </div>`;
       })
       .join("");

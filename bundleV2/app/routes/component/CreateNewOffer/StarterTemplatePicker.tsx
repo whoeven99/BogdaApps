@@ -48,9 +48,11 @@ function PreviewRow({
                 </div>
               ) : null}
             </div>
-            <div className="shrink-0 text-[14px] font-semibold leading-[18px] text-[#1c1f23]">
-              {price}
-            </div>
+            {price.trim() ? (
+              <div className="shrink-0 text-[14px] font-semibold leading-[18px] text-[#1c1f23]">
+                {price}
+              </div>
+            ) : null}
           </div>
           {badge ? (
             <div className="mt-[6px] inline-flex rounded-full bg-[#f6f6f7] px-[8px] py-[2px] text-[11px] font-semibold uppercase tracking-[0.04em] text-[#5c6166]">
@@ -265,13 +267,13 @@ function BxgyPreview() {
       <div className="space-y-[8px]">
         <PreviewRow title="Single" subtitle="Standard price" price="EUR65.00" />
         <PreviewRow
-          title="Buy 1, get 1 free"
-          price="Get 1 Free"
-          badge="Save 50%"
+          title="Buy 2, get 3"
+          price=""
+          badge="Save 33%"
           selected
         />
-        <PreviewRow title="Buy 2, get 2 free" price="Get 2 Free" badge="Save 50%" />
-        <PreviewRow title="Buy 3, get 3 free" price="Get 3 Free" badge="Save 50%" />
+        <PreviewRow title="Buy 3, get 5" price="" badge="Save 40%" />
+        <PreviewRow title="Buy 4, get 8" price="" badge="Save 50%" />
         <div className="rounded-[10px] bg-[#f6f6f7] px-[12px] py-[8px] text-[12px] font-semibold text-[#1c1f23]">
           + Free special gift!
         </div>
