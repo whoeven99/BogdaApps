@@ -525,6 +525,8 @@ export type DiscountRule = {
   tierType?: "single" | "standard";
   title?: string;
   subtitle?: string;
+  titleSource?: "auto" | "custom";
+  subtitleSource?: "auto" | "custom";
   badge?: string;
   isDefault?: boolean;
   discountClass?: "product" | "order" | "shipping";
@@ -563,6 +565,8 @@ export type DifferentProductsDiscountRule = {
   tierType: "single" | "bxgy" | "simple";
   title?: string;
   subtitle?: string;
+  titleSource?: "auto" | "custom";
+  subtitleSource?: "auto" | "custom";
   badge?: string;
   isDefault?: boolean;
 };
@@ -684,6 +688,8 @@ export type BxgyDiscountRule = {
   tierType?: "single" | "bxgy" | "simple";
   title?: string;
   subtitle?: string;
+  titleSource?: "auto" | "custom";
+  subtitleSource?: "auto" | "custom";
   badge?: string;
   isDefault?: boolean;
 };
@@ -747,6 +753,53 @@ export function getBxgyDisplayMeta(rule: {
 const BXGY_AUTO_TITLE_PATTERN = /^buy\s*\d+\s*,\s*get\s*\d+(?:\s+(?:free|total))?$/i;
 const BXGY_AUTO_SUBTITLE_PATTERN =
   /same product|reward item|cheapest eligible|bundle tier|paying for|total items/i;
+const DIFFERENT_PRODUCTS_AUTO_TITLE_PATTERN = /^(any\s+\d+\s+items|rule)$/i;
+const DIFFERENT_PRODUCTS_AUTO_SUBTITLE_PATTERN =
+  /includes .* trigger product|mix any \d+ from \d+ eligible products|mix across \d+ eligible products/i;
+const COMPLETE_BUNDLE_AUTO_TITLE_PATTERN = /^(single|bar #\d+|complete the bundle)$/i;
+const COMPLETE_BUNDLE_AUTO_SUBTITLE_PATTERN =
+  /standard price|pick \d+-\d+ bundle items|current product \+ \d+-\d+ bundle items from \d+ options/i;
+
+function inferDisplayTextSource(
+  explicitValue: unknown,
+  autoPattern: RegExp,
+): "auto" | "custom" {
+  const normalizedValue = String(explicitValue ?? "").trim();
+  if (!normalizedValue) return "auto";
+  return autoPattern.test(normalizedValue) ? "auto" : "custom";
+}
+
+export function inferBxgyTitleSource(explicitTitle?: unknown): "auto" | "custom" {
+  return inferDisplayTextSource(explicitTitle, BXGY_AUTO_TITLE_PATTERN);
+}
+
+export function inferBxgySubtitleSource(explicitSubtitle?: unknown): "auto" | "custom" {
+  return inferDisplayTextSource(explicitSubtitle, BXGY_AUTO_SUBTITLE_PATTERN);
+}
+
+export function inferDifferentProductsTitleSource(
+  explicitTitle?: unknown,
+): "auto" | "custom" {
+  return inferDisplayTextSource(explicitTitle, DIFFERENT_PRODUCTS_AUTO_TITLE_PATTERN);
+}
+
+export function inferDifferentProductsSubtitleSource(
+  explicitSubtitle?: unknown,
+): "auto" | "custom" {
+  return inferDisplayTextSource(explicitSubtitle, DIFFERENT_PRODUCTS_AUTO_SUBTITLE_PATTERN);
+}
+
+export function inferCompleteBundleTitleSource(
+  explicitTitle?: unknown,
+): "auto" | "custom" {
+  return inferDisplayTextSource(explicitTitle, COMPLETE_BUNDLE_AUTO_TITLE_PATTERN);
+}
+
+export function inferCompleteBundleSubtitleSource(
+  explicitSubtitle?: unknown,
+): "auto" | "custom" {
+  return inferDisplayTextSource(explicitSubtitle, COMPLETE_BUNDLE_AUTO_SUBTITLE_PATTERN);
+}
 
 export function resolveBxgyDisplayTitle(
   rule: {
@@ -754,17 +807,30 @@ export function resolveBxgyDisplayTitle(
     getQuantity?: unknown;
   },
   explicitTitle?: unknown,
+  explicitTitleSource?: "auto" | "custom",
 ): string {
   const normalizedTitle = String(explicitTitle ?? "").trim();
-  if (normalizedTitle && !BXGY_AUTO_TITLE_PATTERN.test(normalizedTitle)) {
+  if (explicitTitleSource === "custom" && normalizedTitle) {
+    return normalizedTitle;
+  }
+  if (normalizedTitle && inferBxgyTitleSource(normalizedTitle) === "custom") {
     return normalizedTitle;
   }
   return getBxgyDisplayMeta(rule).title;
 }
 
-export function resolveBxgyDisplaySubtitle(explicitSubtitle?: unknown): string {
+export function resolveBxgyDisplaySubtitle(
+  explicitSubtitle?: unknown,
+  explicitSubtitleSource?: "auto" | "custom",
+): string {
   const normalizedSubtitle = String(explicitSubtitle ?? "").trim();
-  if (!normalizedSubtitle || BXGY_AUTO_SUBTITLE_PATTERN.test(normalizedSubtitle)) {
+  if (!normalizedSubtitle) {
+    return "";
+  }
+  if (explicitSubtitleSource === "custom") {
+    return normalizedSubtitle;
+  }
+  if (inferBxgySubtitleSource(normalizedSubtitle) === "auto") {
     return "";
   }
   return normalizedSubtitle;
@@ -778,6 +844,8 @@ export type FreeGiftRule = {
   tierType?: "single";
   title?: string;
   subtitle?: string;
+  titleSource?: "auto" | "custom";
+  subtitleSource?: "auto" | "custom";
   badge?: string;
   isDefault?: boolean;
 };
@@ -1138,6 +1206,8 @@ export type CompleteBundleBar = {
   type: "single" | "quantity-break-same";
   title?: string;
   subtitle?: string;
+  titleSource?: "auto" | "custom";
+  subtitleSource?: "auto" | "custom";
   badge?: string;
   isDefault?: boolean;
   minQuantity?: number;
@@ -1175,8 +1245,12 @@ export function createDefaultCompleteBundleSingleBar(
     id: String(overrides.id || "complete-bundle-single"),
     type: "single",
     title: typeof overrides.title === "string" ? overrides.title : "Single",
+    titleSource:
+      typeof overrides.titleSource === "string" ? overrides.titleSource : "auto",
     subtitle:
       typeof overrides.subtitle === "string" ? overrides.subtitle : "Standard price",
+    subtitleSource:
+      typeof overrides.subtitleSource === "string" ? overrides.subtitleSource : "auto",
     badge: typeof overrides.badge === "string" ? overrides.badge : "",
     isDefault: overrides.isDefault === true,
     minQuantity: 1,
@@ -1209,7 +1283,15 @@ export function normalizeCompleteBundleBars(
       // regular bundle bar type because complete-bundle is an order module.
       type: "quantity-break-same",
       title: String(bar.title || ""),
+      titleSource:
+        bar.titleSource === "custom"
+          ? "custom"
+          : inferCompleteBundleTitleSource(bar.title),
       subtitle: String(bar.subtitle || ""),
+      subtitleSource:
+        bar.subtitleSource === "custom"
+          ? "custom"
+          : inferCompleteBundleSubtitleSource(bar.subtitle),
       badge: String(bar.badge || ""),
       isDefault: !!bar.isDefault,
       minQuantity: Math.max(1, Math.trunc(Number(bar.minQuantity) || 1)),

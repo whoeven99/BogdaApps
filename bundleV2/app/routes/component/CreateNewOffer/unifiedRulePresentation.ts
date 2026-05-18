@@ -24,6 +24,8 @@ export type RulePresentationPatch = Partial<{
 type PresentationRule = {
   title?: string;
   subtitle?: string;
+  titleSource?: "auto" | "custom";
+  subtitleSource?: "auto" | "custom";
   badge?: string;
   isDefault?: boolean;
 };
@@ -41,14 +43,29 @@ function applyPresentationPatchByRuleId<T extends PresentationRule>(
     }
 
     if (patch.isDefault === false && isTarget) {
-      return { ...rule, ...patch, isDefault: false };
+      return {
+        ...rule,
+        ...patch,
+        ...(typeof patch.title === "string" ? { titleSource: "custom" as const } : null),
+        ...(typeof patch.subtitle === "string"
+          ? { subtitleSource: "custom" as const }
+          : null),
+        isDefault: false,
+      };
     }
 
     if (!isTarget) {
       return rule;
     }
 
-    return { ...rule, ...patch };
+    return {
+      ...rule,
+      ...patch,
+      ...(typeof patch.title === "string" ? { titleSource: "custom" as const } : null),
+      ...(typeof patch.subtitle === "string"
+        ? { subtitleSource: "custom" as const }
+        : null),
+    };
   });
 }
 
@@ -110,8 +127,14 @@ export function updateCompleteBundleBarPresentation(
       return {
         ...bar,
         ...(typeof patch.title === "string" && bar.id === barId ? { title: patch.title } : null),
+        ...(typeof patch.title === "string" && bar.id === barId
+          ? { titleSource: "custom" as const }
+          : null),
         ...(typeof patch.subtitle === "string" && bar.id === barId
           ? { subtitle: patch.subtitle }
+          : null),
+        ...(typeof patch.subtitle === "string" && bar.id === barId
+          ? { subtitleSource: "custom" as const }
           : null),
         ...(typeof patch.badge === "string" && bar.id === barId ? { badge: patch.badge } : null),
         isDefault: bar.id === barId,
@@ -125,7 +148,11 @@ export function updateCompleteBundleBarPresentation(
     return {
       ...bar,
       ...(typeof patch.title === "string" ? { title: patch.title } : null),
+      ...(typeof patch.title === "string" ? { titleSource: "custom" as const } : null),
       ...(typeof patch.subtitle === "string" ? { subtitle: patch.subtitle } : null),
+      ...(typeof patch.subtitle === "string"
+        ? { subtitleSource: "custom" as const }
+        : null),
       ...(typeof patch.badge === "string" ? { badge: patch.badge } : null),
       ...(typeof patch.isDefault === "boolean" ? { isDefault: patch.isDefault } : null),
     };

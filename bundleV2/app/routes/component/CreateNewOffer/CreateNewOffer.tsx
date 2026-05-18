@@ -2357,10 +2357,11 @@ export function CreateNewOffer({
     if (behaviorOfferType === "quantity-breaks-different") {
       return differentProductsDiscountRules.map((r, i) => ({
         value: i + 1,
-        label:
+        label: `Tier #${i + 1} (${
           r.tierType === "bxgy"
-            ? `Tier #${i + 1} (BXGY, count ≥ ${r.count})`
-            : `Tier #${i + 1} (simple, count ≥ ${r.count})`,
+            ? `Buy ${r.buyQuantity}, get ${r.buyQuantity + r.getQuantity}`
+            : `Any ${r.count} items`
+        })`,
       }));
     }
     if (behaviorOfferType === "free-gift") {

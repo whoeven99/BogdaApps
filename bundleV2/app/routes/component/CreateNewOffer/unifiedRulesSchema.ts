@@ -4,6 +4,12 @@ import type {
   DiscountRule,
   FreeGiftRule,
   BxgyDiscountRule,
+  inferBxgySubtitleSource,
+  inferBxgyTitleSource,
+  inferCompleteBundleSubtitleSource,
+  inferCompleteBundleTitleSource,
+  inferDifferentProductsSubtitleSource,
+  inferDifferentProductsTitleSource,
 } from "../../../utils/offerParsing";
 import { isSingleDiscountRule } from "../../../utils/offerParsing";
 import type { OfferTypeId } from "./offerTypeOptions";
@@ -102,9 +108,15 @@ export type UnifiedRuleReward =
 export type UnifiedRulePresentation = {
   title: string;
   subtitle: string;
+  titleSource: "auto" | "custom";
+  subtitleSource: "auto" | "custom";
   badge: string;
   isDefault: boolean;
 };
+
+function inferDefaultPresentationSource(value: string | undefined): "auto" | "custom" {
+  return String(value || "").trim() ? "custom" : "auto";
+}
 
 export type UnifiedRulePublishSupport =
   | "supported"
@@ -284,9 +296,18 @@ export function buildDiscountRuleReward(rule: DiscountRule): UnifiedRuleReward {
 }
 
 export function buildDiscountRulePresentation(rule: DiscountRule): UnifiedRulePresentation {
+  const isBxgy = rule.logicType === "bxgy";
   return {
     title: rule.title || "",
     subtitle: rule.subtitle || "",
+    titleSource:
+      rule.titleSource ||
+      (isBxgy ? inferBxgyTitleSource(rule.title) : inferDefaultPresentationSource(rule.title)),
+    subtitleSource:
+      rule.subtitleSource ||
+      (isBxgy
+        ? inferBxgySubtitleSource(rule.subtitle)
+        : inferDefaultPresentationSource(rule.subtitle)),
     badge: rule.badge || "",
     isDefault: !!rule.isDefault,
   };

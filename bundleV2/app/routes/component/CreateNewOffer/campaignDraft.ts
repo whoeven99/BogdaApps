@@ -16,6 +16,8 @@ export type DraftDiscountRule = {
   tierType?: "single" | "standard";
   title?: string;
   subtitle?: string;
+  titleSource?: "auto" | "custom";
+  subtitleSource?: "auto" | "custom";
   badge?: string;
   isDefault?: boolean;
   discountClass?: "product" | "order" | "shipping";
@@ -43,6 +45,8 @@ export type DraftBxgyDiscountRule = {
   tierType?: "single" | "bxgy" | "simple";
   title?: string;
   subtitle?: string;
+  titleSource?: "auto" | "custom";
+  subtitleSource?: "auto" | "custom";
   badge?: string;
   isDefault?: boolean;
 };

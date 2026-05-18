@@ -8,6 +8,12 @@ import type {
   QuantityBreakTier,
 } from "../../../utils/offerParsing";
 import {
+  inferBxgySubtitleSource,
+  inferBxgyTitleSource,
+  inferCompleteBundleSubtitleSource,
+  inferCompleteBundleTitleSource,
+  inferDifferentProductsSubtitleSource,
+  inferDifferentProductsTitleSource,
   getPrimaryOfferTypeFromCampaignConfig,
   isCompleteBundleSingleBar,
   isSingleBxgyRule,
@@ -28,15 +34,41 @@ function buildNodeId(prefix: string, index: number, fallback?: string) {
   return fallback || `${prefix}-${index + 1}`;
 }
 
+function inferDefaultPresentationSource(value: string | undefined): "auto" | "custom" {
+  return String(value || "").trim() ? "custom" : "auto";
+}
+
 function buildBasePresentation(rule: {
   title?: string;
   subtitle?: string;
+  titleSource?: "auto" | "custom";
+  subtitleSource?: "auto" | "custom";
   badge?: string;
   isDefault?: boolean;
+  sourceKind?: "bxgy" | "different_products" | "complete_bundle" | "default";
 }) {
+  const sourceKind = rule.sourceKind || "default";
+  const inferredTitleSource =
+    sourceKind === "bxgy"
+      ? inferBxgyTitleSource(rule.title)
+      : sourceKind === "different_products"
+        ? inferDifferentProductsTitleSource(rule.title)
+        : sourceKind === "complete_bundle"
+          ? inferCompleteBundleTitleSource(rule.title)
+          : inferDefaultPresentationSource(rule.title);
+  const inferredSubtitleSource =
+    sourceKind === "bxgy"
+      ? inferBxgySubtitleSource(rule.subtitle)
+      : sourceKind === "different_products"
+        ? inferDifferentProductsSubtitleSource(rule.subtitle)
+        : sourceKind === "complete_bundle"
+          ? inferCompleteBundleSubtitleSource(rule.subtitle)
+          : inferDefaultPresentationSource(rule.subtitle);
   return {
     title: rule.title || "",
     subtitle: rule.subtitle || "",
+    titleSource: rule.titleSource || inferredTitleSource,
+    subtitleSource: rule.subtitleSource || inferredSubtitleSource,
     badge: rule.badge || "",
     isDefault: !!rule.isDefault,
   };
@@ -151,7 +183,7 @@ export function adaptBxgyRules(
           discountClass: "product",
           discountPercent: Math.max(0, Math.min(100, Number(rule.discountPercent) || 0)),
         },
-    presentation: buildBasePresentation(rule),
+    presentation: buildBasePresentation({ ...rule, sourceKind: "bxgy" }),
     publishSupport: isSingleBxgyRule(rule) ? "draft_only" : "supported",
   }));
 }
@@ -247,7 +279,7 @@ export function adaptDifferentProductsRules(
           discountClass: "product",
           discountPercent: Math.max(0, Math.min(100, Number(rule.discountPercent) || 0)),
         },
-    presentation: buildBasePresentation(rule),
+    presentation: buildBasePresentation({ ...rule, sourceKind: "different_products" }),
     publishSupport: isSingleDifferentProductsRule(rule) ? "draft_only" : "supported",
   }));
 }
@@ -270,7 +302,7 @@ export function adaptCompleteBundleBars(
           reward: {
             kind: "standard_price",
           },
-          presentation: buildBasePresentation(bar),
+          presentation: buildBasePresentation({ ...bar, sourceKind: "complete_bundle" }),
           publishSupport: "supported",
         }
       : {
@@ -291,7 +323,7 @@ export function adaptCompleteBundleBars(
             pricingMode: bar.pricing.mode,
             pricingValue: Number(bar.pricing.value) || 0,
           },
-          presentation: buildBasePresentation(bar),
+          presentation: buildBasePresentation({ ...bar, sourceKind: "complete_bundle" }),
           publishSupport: "supported",
         },
   );

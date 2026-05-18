@@ -536,6 +536,8 @@ function parseDiscountRulesJson(discountRulesJson) {
             tierType: "single",
             title: item.title || "Single",
             subtitle: item.subtitle || "Standard price",
+            titleSource: item.titleSource === "custom" ? "custom" : "auto",
+            subtitleSource: item.subtitleSource === "custom" ? "custom" : "auto",
             badge: item.badge || "",
             isDefault: !!item.isDefault,
           };
@@ -560,6 +562,8 @@ function parseDiscountRulesJson(discountRulesJson) {
           getQuantity: logicType === "bxgy" ? Math.trunc(getQuantity) : undefined,
           title: item.title || "",
           subtitle: item.subtitle || "",
+          titleSource: item.titleSource === "custom" ? "custom" : "auto",
+          subtitleSource: item.subtitleSource === "custom" ? "custom" : "auto",
           badge: item.badge || "",
           isDefault: !!item.isDefault,
         };
@@ -593,6 +597,8 @@ function parseBxgyDiscountRulesJson(discountRulesJson) {
             tierType: "single",
             title: item.title || "Single",
             subtitle: item.subtitle || "Standard price",
+            titleSource: item.titleSource === "custom" ? "custom" : "auto",
+            subtitleSource: item.subtitleSource === "custom" ? "custom" : "auto",
             badge: item.badge || "",
             maxUsesPerOrder: 1,
             isDefault: !!item.isDefault,
@@ -631,6 +637,8 @@ function parseBxgyDiscountRulesJson(discountRulesJson) {
           tierType: item.tierType === "simple" ? "simple" : "bxgy",
           title: item.title || "",
           subtitle: item.subtitle || "",
+          titleSource: item.titleSource === "custom" ? "custom" : "auto",
+          subtitleSource: item.subtitleSource === "custom" ? "custom" : "auto",
           badge: item.badge || "",
           maxUsesPerOrder: Number(item.maxUsesPerOrder) || 1,
           isDefault: !!item.isDefault,
@@ -685,6 +693,8 @@ function parseDifferentProductsDiscountRulesJson(discountRulesJson) {
             tierType: "single",
             title: item.title || "Single",
             subtitle: item.subtitle || "Standard price",
+            titleSource: item.titleSource === "custom" ? "custom" : "auto",
+            subtitleSource: item.subtitleSource === "custom" ? "custom" : "auto",
             badge: item.badge || "",
             maxUsesPerOrder: 1,
             isDefault: !!item.isDefault,
@@ -719,6 +729,8 @@ function parseDifferentProductsDiscountRulesJson(discountRulesJson) {
           tierType,
           title: item.title || "",
           subtitle: item.subtitle || "",
+          titleSource: item.titleSource === "custom" ? "custom" : "auto",
+          subtitleSource: item.subtitleSource === "custom" ? "custom" : "auto",
           badge: item.badge || "",
           maxUsesPerOrder: Number(item.maxUsesPerOrder) || 1,
           isDefault: !!item.isDefault,
@@ -753,6 +765,8 @@ function parseDifferentProductsDiscountRulesFromOffer(offer) {
           tierType: "single",
           title: tier?.title || "Single",
           subtitle: tier?.subtitle || "Standard price",
+          titleSource: tier?.titleSource === "custom" ? "custom" : "auto",
+          subtitleSource: tier?.subtitleSource === "custom" ? "custom" : "auto",
           badge: tier?.badge || "",
           maxUsesPerOrder: 1,
           isDefault: !!tier?.isDefault,
@@ -770,6 +784,8 @@ function parseDifferentProductsDiscountRulesFromOffer(offer) {
         tierType: "simple",
         title: tier?.title || "",
         subtitle: tier?.subtitle || "",
+        titleSource: tier?.titleSource === "custom" ? "custom" : "auto",
+        subtitleSource: tier?.subtitleSource === "custom" ? "custom" : "auto",
         badge: tier?.badge || "",
         maxUsesPerOrder: 1,
         isDefault: !!tier?.isDefault,
@@ -1066,6 +1082,8 @@ function parseCompleteBundleConfig(selectedProductsJson) {
             type: String(bar.type || "") === "single" ? "single" : "quantity-break-same",
             title: String(bar.title || ""),
             subtitle: String(bar.subtitle || ""),
+            titleSource: bar?.titleSource === "custom" ? "custom" : "auto",
+            subtitleSource: bar?.subtitleSource === "custom" ? "custom" : "auto",
             badge: String(bar.badge || ""),
             isDefault: !!bar.isDefault,
             minQuantity,
@@ -1094,6 +1112,8 @@ function createDefaultCompleteBundleSingleBarConfig(overrides) {
     type: "single",
     title: typeof next.title === "string" ? next.title : "Single",
     subtitle: typeof next.subtitle === "string" ? next.subtitle : "Standard price",
+    titleSource: next.titleSource === "custom" ? "custom" : "auto",
+    subtitleSource: next.subtitleSource === "custom" ? "custom" : "auto",
     badge: typeof next.badge === "string" ? next.badge : "",
     isDefault: next.isDefault === true,
     minQuantity: 1,
@@ -2698,21 +2718,225 @@ function getBxgyDisplayMeta(rule) {
 const BXGY_AUTO_TITLE_PATTERN = /^buy\s*\d+\s*,\s*get\s*\d+(?:\s+(?:free|total))?$/i;
 const BXGY_AUTO_SUBTITLE_PATTERN =
   /same product|reward item|cheapest eligible|bundle tier|paying for|total items/i;
+const DIFFERENT_PRODUCTS_AUTO_TITLE_PATTERN = /^(any\s+\d+\s+items|rule)$/i;
+const DIFFERENT_PRODUCTS_AUTO_SUBTITLE_PATTERN =
+  /includes .* trigger product|mix any \d+ from \d+ eligible products|mix across \d+ eligible products/i;
+const COMPLETE_BUNDLE_AUTO_TITLE_PATTERN = /^(single|bar #\d+|complete the bundle)$/i;
+const COMPLETE_BUNDLE_AUTO_SUBTITLE_PATTERN =
+  /standard price|pick \d+-\d+ bundle items|current product \+ \d+-\d+ bundle items from \d+ options/i;
 
-function resolveBxgyDisplayTitle(rule, explicitTitle) {
-  const normalizedTitle = String(explicitTitle || "").trim();
-  if (normalizedTitle && !BXGY_AUTO_TITLE_PATTERN.test(normalizedTitle)) {
-    return normalizedTitle;
+function resolveDisplayTextWithSource(explicitValue, explicitSource, fallbackValue, autoPattern) {
+  const normalizedValue = String(explicitValue || "").trim();
+  if (explicitSource === "custom") {
+    return normalizedValue || fallbackValue;
   }
-  return getBxgyDisplayMeta(rule).title;
+  if (normalizedValue && !(autoPattern && autoPattern.test(normalizedValue))) {
+    return normalizedValue;
+  }
+  return fallbackValue;
 }
 
-function resolveBxgyDisplaySubtitle(explicitSubtitle) {
-  const normalizedSubtitle = String(explicitSubtitle || "").trim();
-  if (!normalizedSubtitle || BXGY_AUTO_SUBTITLE_PATTERN.test(normalizedSubtitle)) {
-    return "";
+function resolveBxgyDisplayTitle(rule, explicitTitle, explicitTitleSource) {
+  const fallbackTitle = getBxgyDisplayMeta(rule).title;
+  return resolveDisplayTextWithSource(
+    explicitTitle,
+    explicitTitleSource,
+    fallbackTitle,
+    BXGY_AUTO_TITLE_PATTERN,
+  );
+}
+
+function resolveBxgyDisplaySubtitle(explicitSubtitle, explicitSubtitleSource) {
+  return resolveDisplayTextWithSource(
+    explicitSubtitle,
+    explicitSubtitleSource,
+    "",
+    BXGY_AUTO_SUBTITLE_PATTERN,
+  );
+}
+
+function resolveThemeDifferentProductsTitle(rule, fallbackTitle) {
+  return resolveDisplayTextWithSource(
+    rule && rule.title,
+    rule && rule.titleSource,
+    fallbackTitle,
+    DIFFERENT_PRODUCTS_AUTO_TITLE_PATTERN,
+  );
+}
+
+function resolveThemeDifferentProductsSubtitle(rule, fallbackSubtitle) {
+  return resolveDisplayTextWithSource(
+    rule && rule.subtitle,
+    rule && rule.subtitleSource,
+    fallbackSubtitle,
+    DIFFERENT_PRODUCTS_AUTO_SUBTITLE_PATTERN,
+  );
+}
+
+function resolveThemeCompleteBundleTitle(bar, fallbackTitle) {
+  return resolveDisplayTextWithSource(
+    bar && bar.title,
+    bar && bar.titleSource,
+    fallbackTitle,
+    COMPLETE_BUNDLE_AUTO_TITLE_PATTERN,
+  );
+}
+
+function resolveThemeCompleteBundleSubtitle(bar, fallbackSubtitle) {
+  return resolveDisplayTextWithSource(
+    bar && bar.subtitle,
+    bar && bar.subtitleSource,
+    fallbackSubtitle,
+    COMPLETE_BUNDLE_AUTO_SUBTITLE_PATTERN,
+  );
+}
+
+/**
+ * @typedef {Object} ThemeDisplayCard
+ * @property {string} title
+ * @property {string} subtitle
+ * @property {string} price
+ * @property {string=} original
+ * @property {string=} saveLabel
+ * @property {string=} summary
+ * @property {string=} badge
+ */
+
+/** @returns {ThemeDisplayCard} */
+function resolveThemeBxgyCardDisplay(rule) {
+  const bxgyDisplay = getBxgyDisplayMeta(rule);
+  return {
+    title: resolveBxgyDisplayTitle(rule, rule && rule.title, rule && rule.titleSource),
+    subtitle: resolveBxgyDisplaySubtitle(rule && rule.subtitle, rule && rule.subtitleSource),
+    price: rule && rule.discountPercent === 100 ? bxgyDisplay.price : `${Number(rule && rule.discountPercent) || 0}% OFF`,
+    saveLabel: bxgyDisplay.saveLabel,
+  };
+}
+
+/** @returns {ThemeDisplayCard | null} */
+function resolveThemeDifferentProductsCardDisplay(rule, unitPrice) {
+  if (!rule) return null;
+  if (String(rule.tierType || "") === "bxgy") {
+    const bxgyDisplay = getBxgyDisplayMeta({
+      buyQuantity: rule.buyQuantity,
+      getQuantity: rule.getQuantity,
+    });
+    return {
+      title: resolveBxgyDisplayTitle(rule, rule.title, rule.titleSource),
+      subtitle: resolveThemeDifferentProductsSubtitle(
+        rule,
+        `Mix any ${Math.max(1, Number(rule.count) || 1)} from ${Array.isArray(rule.buyProductIds) ? rule.buyProductIds.length : 0} eligible products`,
+      ),
+      price:
+        Number(rule.discountPercent) === 100
+          ? bxgyDisplay.price
+          : `${Number(rule.discountPercent) || 0}% OFF`,
+      saveLabel: bxgyDisplay.saveLabel,
+    };
   }
-  return normalizedSubtitle;
+  const amounts = calculateBundleAmounts(
+    unitPrice,
+    Math.max(1, Number(rule.count) || 1),
+    Number(rule.discountPercent) || 0,
+  );
+  return {
+    title: resolveThemeDifferentProductsTitle(rule, `Any ${rule.count} items`),
+    subtitle: resolveThemeDifferentProductsSubtitle(
+      rule,
+      `Mix any ${Math.max(1, Number(rule.count) || 1)} from ${Array.isArray(rule.buyProductIds) ? rule.buyProductIds.length : 0} eligible products`,
+    ),
+    price: formatPrice(amounts.discountedTotal),
+    original: formatPrice(amounts.originalTotal),
+    saveLabel: `SAVE ${formatPrice(amounts.saved)}`,
+  };
+}
+
+/** @returns {ThemeDisplayCard & {
+ *   bundleItems?: any[],
+ *   selectedItemIds?: Set<string>,
+ *   products?: any[],
+ *   minQuantity?: number,
+ *   maxQuantity?: number,
+ *   summaryHtml?: string
+ * }} */
+function resolveThemeCompleteBundleCardDisplay(config, bar, index, unitPrice, anchorProduct) {
+  const anchorPreview = anchorProduct
+    ? {
+        image: anchorProduct.image || "https://via.placeholder.com/48",
+        name: anchorProduct.title || "Current product",
+      }
+    : null;
+
+  if (isCompleteBundleSingleBarConfig(bar)) {
+    return {
+      title: resolveThemeCompleteBundleTitle(bar, "Single"),
+      subtitle: resolveThemeCompleteBundleSubtitle(bar, "Standard price"),
+      price: formatPrice(unitPrice),
+      products: anchorPreview ? [anchorPreview] : [],
+      bundleItems: [],
+      summaryHtml: "",
+      minQuantity: 1,
+      maxQuantity: 1,
+    };
+  }
+
+  const bundleItems = getCompleteBundleSelectableItems(config, bar);
+  const selectedItemIds = new Set(getSelectedCompleteBundleItemIds(config, bar));
+  let sumOriginal = unitPrice;
+  for (const p of bundleItems) {
+    if (!selectedItemIds.has(String(p.productId))) continue;
+    const v = resolveCompleteBundleVariant(bar, p);
+    const base = parseMoneyStringToNumber(v && v.price ? v.price : p.price);
+    sumOriginal += Math.max(0, base);
+  }
+  const bundlePricing = applyCompleteBundleProductPricing(
+    (bar.pricing && bar.pricing.mode) || "full_price",
+    Number(bar.pricing && bar.pricing.value) || 0,
+    sumOriginal,
+  );
+  const sumFinal = bundlePricing.final;
+  const saved = Math.max(0, sumOriginal - sumFinal);
+  const minQuantity = Math.max(1, Math.trunc(Number(bar.minQuantity) || 1));
+  const maxQuantity = Math.max(
+    minQuantity,
+    Math.trunc(Number(bar.maxQuantity) || Number(bar.quantity) || 1),
+  );
+
+  return {
+    title: resolveThemeCompleteBundleTitle(bar, `Bar #${index + 1}`),
+    subtitle: resolveThemeCompleteBundleSubtitle(
+      bar,
+      `Current product + ${minQuantity}-${maxQuantity} bundle items from ${Array.isArray(bar.products) ? bar.products.length : 0} options`,
+    ),
+    price: formatPrice(sumFinal),
+    original: sumOriginal > sumFinal ? formatPrice(sumOriginal) : "",
+    saveLabel: saved > 0 ? `SAVE ${formatPrice(saved)}` : `SELECT ${maxQuantity} ITEMS`,
+    bundleItems,
+    selectedItemIds,
+    products: anchorPreview ? [anchorPreview] : [],
+    minQuantity,
+    maxQuantity,
+    summaryHtml:
+      bundleItems && bundleItems.length
+        ? `<div style="margin-top:8px;">
+                <div style="font-size:13px;font-weight:700;color:#1c1f23;display:flex;flex-wrap:wrap;gap:6px;align-items:baseline;">
+                  <span>${esc(formatPrice(sumFinal))}</span>
+                  ${
+                    sumOriginal > sumFinal
+                      ? `<span style="font-size:12px;color:#9aa0a6;text-decoration:line-through;">${esc(formatPrice(sumOriginal))}</span>`
+                      : ""
+                  }
+                </div>
+                ${
+                  saved > 0
+                    ? `<div style="margin-top:4px;font-size:12px;font-weight:600;color:inherit;">${esc(
+                        `Save ${formatPrice(saved)}!`,
+                      )}</div>`
+                    : ""
+                }
+              </div>`
+        : "",
+  };
 }
 
 function getCartQuantityForSelectedOffer(offer, selectedCount) {
@@ -3632,6 +3856,13 @@ function renderBundlePreviewHtml(offer) {
       .map((bar) => {
         const isSelected = String(bar.id) === selectedBarId;
         const borderCol = isSelected ? accentColor : borderColor;
+        const display = resolveThemeCompleteBundleCardDisplay(
+          completeBundle,
+          bar,
+          completeBundle.bars.indexOf(bar),
+          currentUnitPrice,
+          getCurrentSelectedProduct(),
+        );
         if (isCompleteBundleSingleBarConfig(bar)) {
           return `<div class="create-offer-style-preview-item" style="border:2px solid ${esc(
             borderCol,
@@ -3642,56 +3873,22 @@ function renderBundlePreviewHtml(offer) {
               } onchange="window.ciwiSelectCompleteBundleBar('${esc(bar.id)}')" />
               <span style="flex:1;min-width:0;">
                 <div class="create-offer-style-preview-item-title" style="color:${esc(titleColor)};">${esc(
-                  bar.title || "Single",
+                  display.title,
                 )}</div>
                 <div class="create-offer-style-preview-item-subtitle" style="font-size:12px;color:#5c6166;margin-top:2px;">${esc(
-                  bar.subtitle || "Standard price",
+                  display.subtitle,
                 )}</div>
               </span>
               <span style="font-size:13px;font-weight:700;color:#1c1f23;">${esc(
-                formatPrice(currentUnitPrice),
+                display.price,
               )}</span>
             </label>
           </div>`;
         }
-        const bundleItems = getCompleteBundleSelectableItems(completeBundle, bar);
-        const selectedItemIds = new Set(getSelectedCompleteBundleItemIds(completeBundle, bar));
-        let sumOriginal = currentUnitPrice;
-        for (const p of bundleItems) {
-          if (!selectedItemIds.has(String(p.productId))) continue;
-          const v = resolveCompleteBundleVariant(bar, p);
-          const base = parseMoneyStringToNumber(v?.price || p.price);
-          sumOriginal += Math.max(0, base);
-        }
-        const bundlePricing = applyCompleteBundleProductPricing(
-          bar.pricing?.mode || "full_price",
-          Number(bar.pricing?.value) || 0,
-          sumOriginal,
-        );
-        const sumFinal = bundlePricing.final;
-        const saved = Math.max(0, sumOriginal - sumFinal);
-        const summaryHtml =
-          bundleItems && bundleItems.length
-            ? `<div style="margin-top:8px;">
-                <div style="font-size:13px;font-weight:700;color:#1c1f23;display:flex;flex-wrap:wrap;gap:6px;align-items:baseline;">
-                  <span>${esc(formatPrice(sumFinal))}</span>
-                  ${
-                    sumOriginal > sumFinal
-                      ? `<span style="font-size:12px;color:#9aa0a6;text-decoration:line-through;">${esc(formatPrice(sumOriginal))}</span>`
-                      : ""
-                  }
-                </div>
-                ${
-                  saved > 0
-                    ? `<div style="margin-top:4px;font-size:12px;font-weight:600;color:${esc(accentColor)};">Save ${esc(formatPrice(saved))}!</div>`
-                    : ""
-                }
-              </div>`
-            : "";
         let productsHtml = "";
-        const plist = bundleItems || [];
-        const minQuantity = Math.max(1, Math.trunc(Number(bar.minQuantity) || 1));
-        const maxQuantity = Math.max(minQuantity, Math.trunc(Number(bar.maxQuantity) || Number(bar.quantity) || 1));
+        const plist = display.bundleItems || [];
+        const selectedItemIds = display.selectedItemIds || new Set();
+        const maxQuantity = display.maxQuantity || 1;
         for (let idx = 0; idx < plist.length; idx++) {
           if (idx > 0 && plist.length >= 2) {
             productsHtml += `<div style="display:flex;align-items:center;justify-content:center;color:#9aa0a6;font-weight:700;width:22px;flex-shrink:0;font-size:16px;">+</div>`;
@@ -3717,14 +3914,21 @@ function renderBundlePreviewHtml(offer) {
             } onchange="window.ciwiSelectCompleteBundleBar('${esc(bar.id)}')" />
             <span style="flex:1;min-width:0;">
               <div class="create-offer-style-preview-item-title" style="color:${esc(titleColor)};">${esc(
-                bar.title || "Complete the bundle",
+                display.title,
               )}</div>
               <div class="create-offer-style-preview-item-subtitle" style="font-size:12px;color:#5c6166;margin-top:2px;">${esc(
-                bar.subtitle || `Pick ${minQuantity}-${maxQuantity} bundle items`,
+                display.subtitle,
               )}</div>
             </span>
           </label>
-          ${summaryHtml}
+          ${
+            display.summaryHtml
+              ? display.summaryHtml.replace(
+                  'color:inherit;',
+                  `color:${esc(accentColor)};`,
+                )
+              : ""
+          }
           ${productsWrap}
         </div>`;
       })
@@ -3910,12 +4114,12 @@ function renderBundlePreviewHtml(offer) {
       ...offerRules.map((rule, index) => {
         const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
         const displayCount = rule.count || 1;
-        const bxgyDisplay = getBxgyDisplayMeta(rule);
+        const bxgyDisplay = resolveThemeBxgyCardDisplay(rule);
         return {
           count: displayCount,
-          title: resolveBxgyDisplayTitle(rule, rule.title),
-          subtitle: resolveBxgyDisplaySubtitle(rule.subtitle),
-          price: rule.discountPercent === 100 ? bxgyDisplay.price : `${rule.discountPercent}% OFF`,
+          title: bxgyDisplay.title,
+          subtitle: bxgyDisplay.subtitle,
+          price: bxgyDisplay.price,
           badge: rule.badge || (isFeatured ? "Most Popular" : ""),
           saveLabel: bxgyDisplay.saveLabel,
         };
@@ -4018,28 +4222,24 @@ function renderBundlePreviewHtml(offer) {
         badge: singleRule?.badge || "",
       },
       ...offerRules.map((rule, index) => {
-      const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
-      const amounts = calculateBundleAmounts(unitPrice, rule.count, rule.discountPercent);
-      return {
-        count: rule.count || 1,
-        title: rule.title || `Any ${rule.count} items`,
-        subtitle:
-          rule.subtitle ||
-          `Includes ${rule.buyProductIds.length} trigger product${
-            rule.buyProductIds.length === 1 ? "" : "s"
-          }`,
-        price: formatPrice(amounts.discountedTotal),
-        original: formatPrice(amounts.originalTotal),
-        badge: rule.badge || (isFeatured ? "Most Popular" : ""),
-        saveLabel: `SAVE ${formatPrice(amounts.saved)}`,
-        chooserHtml: renderDifferentProductsPoolControlHtml(
-          offer,
-          rule,
-          borderColor,
-          accentColor,
-        ),
-      };
-    }),
+        const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
+        const display = resolveThemeDifferentProductsCardDisplay(rule, unitPrice);
+        return {
+          count: rule.count || 1,
+          title: (display && display.title) || `Any ${rule.count} items`,
+          subtitle: (display && display.subtitle) || "",
+          price: (display && display.price) || "",
+          original: display && display.original,
+          badge: rule.badge || (isFeatured ? "Most Popular" : ""),
+          saveLabel: display && display.saveLabel,
+          chooserHtml: renderDifferentProductsPoolControlHtml(
+            offer,
+            rule,
+            borderColor,
+            accentColor,
+          ),
+        };
+      }),
     ];
 
     const itemsHtml = items

@@ -5,6 +5,7 @@ import {
   getUnifiedRuleTypeLabel,
   type UnifiedRuleNode,
 } from "./unifiedRulesSchema";
+import { resolvePresentationTextWithSource } from "./builderStandardDisplayResolver";
 import { resolveBuilderBxgyDisplay } from "./bxgyDisplayResolver";
 
 function buildPlaceholders(rule: UnifiedRuleNode): DisplayCustomizerItem["placeholders"] {
@@ -81,9 +82,10 @@ function buildDisplayTitle(rule: UnifiedRuleNode, index: number): string {
   if (rule.type === "bxgy" && rule.condition.kind === "buy_x_get_y") {
     return resolveBuilderBxgyDisplay(rule.condition, rule.presentation).title;
   }
-  return (
-    rule.presentation.title ||
-    `${getUnifiedRuleTypeLabel(rule.type)} Rule ${index + 1}`
+  return resolvePresentationTextWithSource(
+    rule.presentation.title,
+    rule.presentation.titleSource,
+    `${getUnifiedRuleTypeLabel(rule.type)} Rule ${index + 1}`,
   );
 }
 
@@ -95,10 +97,18 @@ export function buildUnifiedDisplayCustomizerItems(
     title:
       rule.type === "bxgy" && rule.condition.kind === "buy_x_get_y"
         ? resolveBuilderBxgyDisplay(rule.condition, rule.presentation).title
-        : rule.presentation.title || "",
+        : resolvePresentationTextWithSource(
+            rule.presentation.title,
+            rule.presentation.titleSource,
+            buildDisplayTitle(rule, index),
+          ),
     displayTitle: buildDisplayTitle(rule, index),
     description: `${describeUnifiedRuleCondition(rule.condition)} • ${describeUnifiedRuleReward(rule.reward)}`,
-    subtitle: rule.presentation.subtitle || "",
+    subtitle: resolvePresentationTextWithSource(
+      rule.presentation.subtitle,
+      rule.presentation.subtitleSource,
+      "",
+    ),
     badge: rule.presentation.badge || "",
     isDefault: !!rule.presentation.isDefault,
     fields: buildEditableFields(rule),

@@ -3,6 +3,7 @@ import {
   getBxgyDisplayMeta,
   isCompleteBundleSingleBar,
 } from "../../../utils/offerParsing";
+import { resolvePresentationTextWithSource } from "./builderStandardDisplayResolver";
 import { resolveBuilderBxgyDisplay } from "./bxgyDisplayResolver";
 import type {
   CampaignDraft,
@@ -205,14 +206,20 @@ export function getCampaignCompositionBars(
     title:
       rule.type === "bxgy" && rule.condition.kind === "buy_x_get_y"
         ? resolveBuilderBxgyDisplay(rule.condition, rule.presentation).title
-        : rule.presentation.title ||
-          buildUnifiedBarTitle(rule, indexWithinCollection),
+        : resolvePresentationTextWithSource(
+            rule.presentation.title,
+            rule.presentation.titleSource,
+            buildUnifiedBarTitle(rule, indexWithinCollection),
+          ),
     summary:
       rule.type === "bxgy"
         ? resolveBuilderBxgyDisplay(rule.condition, rule.presentation).subtitle ||
           buildUnifiedBarSummary(rule)
-        : rule.presentation.subtitle ||
-          buildUnifiedBarSummary(rule),
+        : resolvePresentationTextWithSource(
+            rule.presentation.subtitle,
+            rule.presentation.subtitleSource,
+            buildUnifiedBarSummary(rule),
+          ),
     enabled: true,
     isDefault: !!rule.presentation.isDefault,
     sourceRef: {
