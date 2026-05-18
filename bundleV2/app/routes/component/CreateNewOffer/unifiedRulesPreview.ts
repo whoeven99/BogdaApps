@@ -1,12 +1,10 @@
 import type { PreviewItem, PreviewProduct } from "../BundlePreview/bundlePreviewShared";
 import {
-  getBxgyDisplayMeta,
   isCompleteBundleSingleBar,
-  resolveBxgyDisplaySubtitle,
-  resolveBxgyDisplayTitle,
   type CompleteBundleBar,
   type CompleteBundlePricingMode,
 } from "../../../utils/offerParsing";
+import { resolveBuilderBxgyDisplay } from "./bxgyDisplayResolver";
 import type { OfferTypeId } from "./offerTypeOptions";
 import type { UnifiedRuleNode } from "./unifiedRulesSchema";
 
@@ -179,11 +177,11 @@ function buildStandardRuleItem(
   if (rule.type === "bxgy" && rule.condition.kind === "buy_x_get_y") {
     const percentOff =
       rule.reward.kind === "percentage_off" ? rule.reward.discountPercent : 0;
-    const bxgyDisplay = getBxgyDisplayMeta(rule.condition);
+    const bxgyDisplay = resolveBuilderBxgyDisplay(rule.condition, rule.presentation);
     return {
       id: rule.id,
-      title: resolveBxgyDisplayTitle(rule.condition, rule.presentation.title),
-      subtitle: resolveBxgyDisplaySubtitle(rule.presentation.subtitle),
+      title: bxgyDisplay.title,
+      subtitle: bxgyDisplay.subtitle,
       price:
         percentOff === 100 ? bxgyDisplay.price : `${percentOff}% OFF`,
       featured,
@@ -265,11 +263,11 @@ function buildStandardRuleItem(
     rule.reward.kind === "percentage_off" &&
     rule.condition.kind === "buy_x_get_y"
   ) {
-    const bxgyDisplay = getBxgyDisplayMeta(rule.condition);
+    const bxgyDisplay = resolveBuilderBxgyDisplay(rule.condition, rule.presentation);
     return {
       id: rule.id,
-      title: resolveBxgyDisplayTitle(rule.condition, rule.presentation.title),
-      subtitle: resolveBxgyDisplaySubtitle(rule.presentation.subtitle),
+      title: bxgyDisplay.title,
+      subtitle: bxgyDisplay.subtitle,
       price: bxgyDisplay.price,
       featured,
       badge: rule.presentation.badge || undefined,

@@ -1,11 +1,11 @@
 import type { DisplayCustomizerItem } from "./OfferComponentsDisplayCustomizer";
-import { resolveBxgyDisplayTitle } from "../../../utils/offerParsing";
 import {
   describeUnifiedRuleCondition,
   describeUnifiedRuleReward,
   getUnifiedRuleTypeLabel,
   type UnifiedRuleNode,
 } from "./unifiedRulesSchema";
+import { resolveBuilderBxgyDisplay } from "./bxgyDisplayResolver";
 
 function buildPlaceholders(rule: UnifiedRuleNode): DisplayCustomizerItem["placeholders"] {
   switch (rule.type) {
@@ -79,7 +79,7 @@ function buildEditableFields(rule: UnifiedRuleNode): DisplayCustomizerItem["fiel
 
 function buildDisplayTitle(rule: UnifiedRuleNode, index: number): string {
   if (rule.type === "bxgy" && rule.condition.kind === "buy_x_get_y") {
-    return resolveBxgyDisplayTitle(rule.condition, rule.presentation.title);
+    return resolveBuilderBxgyDisplay(rule.condition, rule.presentation).title;
   }
   return (
     rule.presentation.title ||
@@ -94,7 +94,7 @@ export function buildUnifiedDisplayCustomizerItems(
     id: rule.id,
     title:
       rule.type === "bxgy" && rule.condition.kind === "buy_x_get_y"
-        ? resolveBxgyDisplayTitle(rule.condition, rule.presentation.title)
+        ? resolveBuilderBxgyDisplay(rule.condition, rule.presentation).title
         : rule.presentation.title || "",
     displayTitle: buildDisplayTitle(rule, index),
     description: `${describeUnifiedRuleCondition(rule.condition)} • ${describeUnifiedRuleReward(rule.reward)}`,

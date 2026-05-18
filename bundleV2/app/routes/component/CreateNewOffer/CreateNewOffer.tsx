@@ -71,7 +71,6 @@ import {
   createDefaultCompleteBundleSingleBar,
   isCompleteBundleSingleBar,
   normalizeCompleteBundleBars,
-  getBxgyDisplayMeta,
   type CompleteBundleBar,
   type CompleteBundleProduct,
   type CompleteBundlePricingMode,
@@ -80,6 +79,7 @@ import {
   type FreeGiftRule,
 } from "../../../utils/offerParsing";
 import { type OfferTypeId } from "./offerTypeOptions";
+import { resolveBuilderBxgyDisplay } from "./bxgyDisplayResolver";
 import {
   adaptBxgyRules,
   adaptCompleteBundleBars,
@@ -2351,7 +2351,7 @@ export function CreateNewOffer({
     if (behaviorOfferType === "bxgy") {
       return bxgyDiscountRules.map((r, i) => ({
         value: i + 1,
-        label: `Bar #${i + 1} (${getBxgyDisplayMeta(r).summary})`,
+        label: `Bar #${i + 1} (${resolveBuilderBxgyDisplay(r).summary})`,
       }));
     }
     if (behaviorOfferType === "quantity-breaks-different") {
@@ -2375,7 +2375,7 @@ export function CreateNewOffer({
         value: i + 2,
         label:
           r.logicType === "bxgy"
-            ? `Bar #${i + 2} (BXGY, ${getBxgyDisplayMeta({
+            ? `Bar #${i + 2} (BXGY, ${resolveBuilderBxgyDisplay({
                 buyQuantity: r.buyQuantity || 2,
                 getQuantity: r.getQuantity || 1,
               }).summary})`

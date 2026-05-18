@@ -2,9 +2,8 @@ import {
   buildDraftRuleId,
   getBxgyDisplayMeta,
   isCompleteBundleSingleBar,
-  resolveBxgyDisplaySubtitle,
-  resolveBxgyDisplayTitle,
 } from "../../../utils/offerParsing";
+import { resolveBuilderBxgyDisplay } from "./bxgyDisplayResolver";
 import type {
   CampaignDraft,
   CampaignDraftActions,
@@ -205,12 +204,12 @@ export function getCampaignCompositionBars(
     type: getCampaignBarTypeFromUnifiedRule(rule),
     title:
       rule.type === "bxgy" && rule.condition.kind === "buy_x_get_y"
-        ? resolveBxgyDisplayTitle(rule.condition, rule.presentation.title)
+        ? resolveBuilderBxgyDisplay(rule.condition, rule.presentation).title
         : rule.presentation.title ||
           buildUnifiedBarTitle(rule, indexWithinCollection),
     summary:
       rule.type === "bxgy"
-        ? resolveBxgyDisplaySubtitle(rule.presentation.subtitle) ||
+        ? resolveBuilderBxgyDisplay(rule.condition, rule.presentation).subtitle ||
           buildUnifiedBarSummary(rule)
         : rule.presentation.subtitle ||
           buildUnifiedBarSummary(rule),
