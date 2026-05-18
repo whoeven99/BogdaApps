@@ -89,7 +89,7 @@ export function getUnifiedRuleAuditIssuesForRules(
     issues.push({
       severity: "error",
       message:
-        "Free-gift bars require the global trigger pool and gift products inside every bar before continuing.",
+        "Gift reward rules require the global trigger pool and reward products inside every rule before continuing.",
     });
   }
 

@@ -485,6 +485,10 @@ function calculateCompleteBundleDiscounts(
         return parsedConfig.triggerProductIds.some((triggerId) => productIdsMatch(pid, triggerId));
       });
       if (!anchorLine) continue;
+      const anchorProductId =
+        anchorLine.merchandise.__typename === "ProductVariant"
+          ? anchorLine.merchandise.product?.id
+          : undefined;
 
       const bundleItemAllocations: Array<{
         lineId: string;
@@ -499,7 +503,8 @@ function calculateCompleteBundleDiscounts(
           if (!productIdsMatch(pid, bundleItem.productId)) return false;
           if (
             bar.excludeTriggerProduct &&
-            parsedConfig.triggerProductIds.some((triggerId) => productIdsMatch(pid, triggerId))
+            anchorProductId &&
+            productIdsMatch(pid, anchorProductId)
           ) {
             return false;
           }

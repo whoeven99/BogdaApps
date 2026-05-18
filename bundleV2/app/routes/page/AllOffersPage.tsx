@@ -178,10 +178,15 @@ export function AllOffersPage({
     () =>
       rows.map((offer) => ({
         offer,
-        displayType: getOfferDisplayType(offer.offerType, offer.campaignConfigJson),
+        displayType: getOfferDisplayType(
+          offer.offerType,
+          offer.campaignConfigJson,
+          offer.offerSettingsJson,
+        ),
         rulesText: getOfferRulesText({
           campaignConfigJson: offer.campaignConfigJson,
           discountRulesJson: offer.discountRulesJson,
+          offerSettingsJson: offer.offerSettingsJson,
         }),
       })),
     [rows],

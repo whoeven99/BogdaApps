@@ -1,5 +1,6 @@
 export type OfferTypeId =
   | "quantity-breaks-same"
+  | "progressive-gifts"
   | "shipping-discount"
   | "order-discount"
   | "coupon"
@@ -25,6 +26,14 @@ export const OFFER_TYPE_OPTIONS: OfferTypeOption[] = [
       "Offer discounts when customers buy multiple quantities of the same product",
     primaryDiscountScope: "Product and order discounts",
     primaryRuleType: "Quantity break",
+  },
+  {
+    id: "progressive-gifts",
+    name: "Progressive gifts",
+    description:
+      "Build milestone-based rewards where quantity tiers unlock a separate progressive reward track",
+    primaryDiscountScope: "Milestone rewards",
+    primaryRuleType: "Reward track",
   },
   {
     id: "shipping-discount",

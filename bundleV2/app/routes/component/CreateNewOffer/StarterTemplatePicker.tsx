@@ -133,6 +133,37 @@ function DifferentProductsPreview() {
   );
 }
 
+function ProgressiveGiftsPreview() {
+  return (
+    <div className="flex min-h-[260px] flex-col rounded-[12px] border border-[#dfe3e8] bg-[#f6f6f7] p-[12px]">
+      <div className="space-y-[8px]">
+        <PreviewRow title="Single" subtitle="Standard price" price="EUR65.00" />
+        <PreviewRow
+          title="Build 2 items"
+          subtitle="Unlock the first reward milestone"
+          price="EUR110.50"
+          badge="Milestone 1"
+          selected
+        />
+        <PreviewRow
+          title="Build 3 items"
+          subtitle="Unlock the next milestone reward"
+          price="EUR156.00"
+          badge="Milestone 2"
+        />
+        <div className="rounded-[10px] bg-white px-[12px] py-[9px] shadow-[inset_0_0_0_1px_rgba(0,128,96,0.12)]">
+          <div className="text-[13px] font-semibold text-[#1c1f23]">
+            Progressive rewards
+          </div>
+          <div className="mt-[2px] text-[12px] text-[#6d7175]">
+            Reward track unlocks on top of milestone pricing
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ShippingDiscountPreview() {
   return (
     <div className="flex min-h-[260px] flex-col rounded-[12px] border border-[#dfe3e8] bg-[#f6f6f7] p-[12px]">
@@ -382,6 +413,7 @@ function FreeGiftPreview() {
 
 function OfferTypePreview({ offerType }: { offerType: OfferTypeId }) {
   if (offerType === "bxgy") return <BxgyPreview />;
+  if (offerType === "progressive-gifts") return <ProgressiveGiftsPreview />;
   if (offerType === "shipping-discount") return <ShippingDiscountPreview />;
   if (offerType === "order-discount") return <OrderDiscountPreview />;
   if (offerType === "coupon") return <CouponPreview />;

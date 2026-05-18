@@ -102,7 +102,7 @@ function buildUnifiedBarSummary(rule: UnifiedRuleNode): string {
 
   switch (rule.reward.kind) {
     case "gift_product":
-      return `${thresholdLabel} • ${Math.max(1, Number(rule.reward.giftQuantity) || 1)} free gift${(rule.reward.giftQuantity || 1) > 1 ? "s" : ""}`;
+      return `${thresholdLabel} • ${Math.max(1, Number(rule.reward.giftQuantity) || 1)} gift reward${(rule.reward.giftQuantity || 1) > 1 ? "s" : ""}`;
     case "free_shipping":
       return `${thresholdLabel} • Free shipping`;
     case "percentage_off":
@@ -143,7 +143,7 @@ function buildUnifiedBarTitle(
     case "bxgy":
       return `Bar #${displayIndex} - Buy X, Get Y`;
     case "free_gift":
-      return `Bar #${displayIndex} - Free gift`;
+      return `Reward #${displayIndex} - Gift reward`;
     case "order_discount":
       return `Bar #${displayIndex} - Order discount`;
     case "free_shipping":
@@ -261,7 +261,14 @@ export function getCampaignCompositionModules(
     },
   ];
 
-  return modules;
+  return modules.filter(
+    (module) =>
+      module.id !== "subscription" &&
+      module.id !== "complete_bundle" &&
+      module.id !== "progressive_gifts" &&
+      module.id !== "countdown" &&
+      module.id !== "checkbox_upsells",
+  );
 }
 
 export function getCampaignCompositionRulesSnapshot(

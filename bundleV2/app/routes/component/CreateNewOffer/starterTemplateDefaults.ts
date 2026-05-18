@@ -124,6 +124,32 @@ export const COUPON_TEMPLATE_PREVIEW_ITEMS: PreviewItem[] = [
   },
 ];
 
+export const PROGRESSIVE_GIFTS_TEMPLATE_PREVIEW_ITEMS: PreviewItem[] = [
+  {
+    id: "starter-progressive-single",
+    title: "Single",
+    subtitle: "Standard price",
+    price: "EUR65.00",
+  },
+  {
+    id: "starter-progressive-duo",
+    title: "Build 2 items",
+    subtitle: "Unlock the first reward milestone",
+    price: "EUR110.50",
+    featured: true,
+    badge: "Milestone 1",
+    saveLabel: "UNLOCK REWARD",
+  },
+  {
+    id: "starter-progressive-trio",
+    title: "Build 3 items",
+    subtitle: "Unlock the next milestone reward",
+    price: "EUR156.00",
+    badge: "Milestone 2",
+    saveLabel: "NEXT REWARD",
+  },
+];
+
 function buildOfferSettings(
   overrides: Partial<OfferSettings> = {},
 ): OfferSettings {
@@ -147,6 +173,64 @@ export function getStarterTemplateDefaults(
   offerType: OfferTypeId,
 ): StarterTemplateDefaults {
   switch (offerType) {
+    case "progressive-gifts":
+      return {
+        offerSettings: buildOfferSettings({
+          title: "Build Your Reward Track",
+          layoutFormat: "vertical",
+          progressiveGifts: {
+            enabled: true,
+            title: "Progressive rewards",
+            subtitle: "Unlock extra perks as shoppers move up the milestones",
+            layout: "vertical",
+            hideGiftsUntilUnlocked: false,
+            showLabelsForLockedGifts: true,
+            gifts: [
+              {
+                id: "starter-progressive-gift-1",
+                type: "free_shipping",
+                title: "Free shipping",
+                subtitle: "Unlocked at milestone 2",
+                imageUrl: "",
+                unlockMode: "tier_index",
+                unlockTierIndex: 2,
+                unlockAtCount: 2,
+                freeShippingMaxRateAmount: null,
+              },
+            ],
+          },
+        }),
+        discountRules: [
+          createDefaultSingleDiscountRule({
+            title: "Single",
+            subtitle: "Standard price",
+            isDefault: false,
+          }),
+          {
+            count: 2,
+            discountPercent: 15,
+            title: "Build 2 items",
+            subtitle: "Unlock the first reward milestone",
+            badge: "Milestone 1",
+            isDefault: true,
+          },
+          {
+            count: 3,
+            discountPercent: 20,
+            title: "Build 3 items",
+            subtitle: "Unlock the next milestone reward",
+            badge: "Milestone 2",
+            isDefault: false,
+          },
+        ],
+        bxgyDiscountRules: [],
+        freeGiftRules: [],
+        differentProductsDiscountRules: [],
+        completeBundleBars: [],
+        showCountdownBlock: false,
+        countdownLabel: "Limited time offer",
+        previewFallbackItems: PROGRESSIVE_GIFTS_TEMPLATE_PREVIEW_ITEMS,
+      };
     case "bxgy":
       return {
         offerSettings: buildOfferSettings({

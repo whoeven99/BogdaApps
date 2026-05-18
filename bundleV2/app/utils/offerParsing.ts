@@ -2886,6 +2886,25 @@ export function resolveOfferTypeFromCampaignConfig(params: {
   return primaryOfferType || String(params.offerType || "").trim() || "campaign-builder";
 }
 
+function isProgressiveGiftsTemplateLike(params: {
+  offerType?: string | null;
+  campaignConfigJson?: string | null;
+  offerSettingsJson?: string | null;
+}): boolean {
+  const config = parseCampaignConfig(params.campaignConfigJson);
+  const primaryOfferType = getPrimaryOfferTypeFromCampaignConfig(config);
+  const normalizedOfferType = String(params.offerType || "").trim();
+  const offerSettings = parseOfferSettings(params.offerSettingsJson);
+  if (!offerSettings.progressiveGifts.enabled) {
+    return false;
+  }
+  return (
+    normalizedOfferType === "progressive-gifts" ||
+    primaryOfferType === "quantity-breaks-same" ||
+    (!primaryOfferType && normalizedOfferType === "quantity-breaks-same")
+  );
+}
+
 function getLogicBlockDisplayType(type: string | undefined): string | null {
   if (type === "quantity-breaks") return "Quantity breaks";
   if (type === "quantity-breaks-different") {
@@ -2901,7 +2920,21 @@ function getLogicBlockDisplayType(type: string | undefined): string | null {
 export function getOfferDisplayType(
   offerType: string,
   campaignConfigJson?: string | null,
+  offerSettingsJson?: string | null,
 ): string {
+  if (
+    isProgressiveGiftsTemplateLike({
+      offerType,
+      campaignConfigJson,
+      offerSettingsJson,
+    })
+  ) {
+    const config = parseCampaignConfig(campaignConfigJson);
+    const extraModuleCount = Math.max(0, (config?.logicBlocks.length || 0) - 1);
+    return extraModuleCount > 0
+      ? `Progressive gifts + ${extraModuleCount} module${extraModuleCount === 1 ? "" : "s"}`
+      : "Progressive gifts";
+  }
   const config = parseCampaignConfig(campaignConfigJson);
   const primaryBlock = config?.logicBlocks[0];
   const primaryLabel =
@@ -2939,7 +2972,24 @@ export function getOfferDisplayType(
 export function getOfferRulesText(params: {
   campaignConfigJson?: string | null;
   discountRulesJson?: string | null;
+  offerSettingsJson?: string | null;
 }): string {
+  if (
+    isProgressiveGiftsTemplateLike({
+      offerType: "quantity-breaks-same",
+      campaignConfigJson: params.campaignConfigJson,
+      offerSettingsJson: params.offerSettingsJson,
+    })
+  ) {
+    const config = parseCampaignConfig(params.campaignConfigJson);
+    const quantityBreaks = config?.logicBlocks.find(
+      (block): block is QuantityBreaksLogicBlock => block.type === "quantity-breaks",
+    );
+    const milestoneCount = quantityBreaks?.config.tiers.length || 0;
+    const progressiveGifts = parseOfferSettings(params.offerSettingsJson).progressiveGifts;
+    const rewardCount = progressiveGifts.gifts.length;
+    return `${milestoneCount} milestone${milestoneCount === 1 ? "" : "s"}, ${rewardCount} reward slot${rewardCount === 1 ? "" : "s"}`;
+  }
   const config = parseCampaignConfig(params.campaignConfigJson);
   if (config) {
     const quantityBreaks = config.logicBlocks.find(

@@ -4,9 +4,6 @@ import { Button, Input, Select, Switch, Modal, message } from "antd";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
-import {
-  Trash2,
-} from "lucide-react";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -459,11 +456,33 @@ export function CreateNewOffer({
         : null,
     [initialCampaignConfig],
   );
+  const initialProgressiveGiftsEnabled = useMemo(() => {
+    const offerSettingsJson = initialCampaignConfig
+      ? buildOfferSettingsJsonFromCampaignConfig(
+          initialCampaignConfig,
+          initialOffer?.offerSettingsJson,
+        )
+      : initialOffer?.offerSettingsJson;
+    return parseOfferSettings(offerSettingsJson).progressiveGifts.enabled;
+  }, [initialCampaignConfig, initialOffer?.offerSettingsJson]);
   const initialBuilderOfferType = useMemo(
-    () =>
-      (initialCampaignRuntimeOutputs?.primaryOfferType as OfferTypeId | undefined) ??
-      (initialOffer?.offerType as OfferTypeId | undefined),
-    [initialCampaignRuntimeOutputs?.primaryOfferType, initialOffer?.offerType],
+    () => {
+      const inferredPrimary =
+        (initialCampaignRuntimeOutputs?.primaryOfferType as OfferTypeId | undefined) ??
+        (initialOffer?.offerType as OfferTypeId | undefined);
+      if (
+        inferredPrimary === "quantity-breaks-same" &&
+        initialProgressiveGiftsEnabled
+      ) {
+        return "progressive-gifts";
+      }
+      return inferredPrimary;
+    },
+    [
+      initialCampaignRuntimeOutputs?.primaryOfferType,
+      initialOffer?.offerType,
+      initialProgressiveGiftsEnabled,
+    ],
   );
   const initialPrimarySelectedProductsJson = useMemo(() => {
     switch (initialBuilderOfferType) {
@@ -480,6 +499,7 @@ export function CreateNewOffer({
         return initialCampaignRuntimeOutputs?.modules.completeBundle?.selectedProductsJson ?? null;
       case "subscription":
         return initialCampaignRuntimeOutputs?.modules.subscription?.selectedProductsJson ?? null;
+      case "progressive-gifts":
       case "quantity-breaks-same":
       case "shipping-discount":
       case "order-discount":
@@ -535,6 +555,9 @@ export function CreateNewOffer({
       initialOfferType ??
       "quantity-breaks-same",
   );
+  const isProgressiveGiftsTemplate = offerType === "progressive-gifts";
+  const behaviorOfferType: Exclude<OfferTypeId, "progressive-gifts"> =
+    isProgressiveGiftsTemplate ? "quantity-breaks-same" : offerType;
   const initialCompleteBundleConfig = useMemo(
     () =>
       parseCompleteBundleConfig(
@@ -602,6 +625,14 @@ export function CreateNewOffer({
     if (!initialOffer?.id) return;
     setProgressiveGifts(persistedOfferSettings.progressiveGifts);
   }, [initialOffer?.id, persistedOfferSettings.progressiveGifts]);
+  useEffect(() => {
+    if (offerType === "subscription") {
+      setSubscriptionEnabled(true);
+    }
+    if (isProgressiveGiftsTemplate && !progressiveGifts.enabled) {
+      setProgressiveGifts((prev) => ({ ...prev, enabled: true }));
+    }
+  }, [isProgressiveGiftsTemplate, offerType, progressiveGifts.enabled]);
 
   const [previewGiftBar, setPreviewGiftBar] = useState(1);
   const [previewGiftQty, setPreviewGiftQty] = useState(1);
@@ -780,7 +811,7 @@ export function CreateNewOffer({
       setEndTimeError("");
     }
 
-    if (offerType === "coupon" && couponEnabled && !couponCode.trim()) {
+    if (behaviorOfferType === "coupon" && couponEnabled && !couponCode.trim()) {
       message.error("Coupon offers require a shared coupon code.");
       hasError = true;
     }
@@ -950,11 +981,86 @@ export function CreateNewOffer({
     });
     return Array.from(deduped.values());
   };
+  const mapScopedProductsToCompleteBundleProducts = (
+    scopeProducts: typeof selectedProductsData,
+    previousProducts: CompleteBundleProduct[] = [],
+  ): CompleteBundleProduct[] => {
+    const previousByLookupKey = new Map<string, CompleteBundleProduct>();
+    previousProducts.forEach((product) => {
+      getShopifyProductLookupKeys(String(product.productId || "")).forEach((key) => {
+        if (!previousByLookupKey.has(key)) {
+          previousByLookupKey.set(key, product);
+        }
+      });
+    });
+
+    return scopeProducts.map((scopeProduct) => {
+      const lookupKeys = getShopifyProductLookupKeys(String(scopeProduct.id || ""));
+      const catalogProduct =
+        lookupKeys
+          .map((key) => storeProductMap.get(key))
+          .find(Boolean) || null;
+      const previousProduct =
+        lookupKeys
+          .map((key) => previousByLookupKey.get(key))
+          .find(Boolean) || null;
+      const variants = Array.isArray(catalogProduct?.variants)
+        ? catalogProduct.variants.map((variant) => ({
+            id: String(variant.id || ""),
+            title: String(variant.title || ""),
+            price: String(variant.price || ""),
+            selectedOptions: Array.isArray(variant.selectedOptions)
+              ? variant.selectedOptions.map((opt) => ({
+                  name: String(opt.name || ""),
+                  value: String(opt.value || ""),
+                }))
+              : [],
+          }))
+        : Array.isArray(previousProduct?.variants)
+          ? previousProduct.variants
+          : [];
+      const preferredVariantId = String(previousProduct?.selectedVariantId || "");
+      const chosenVariant =
+        variants.find((variant) => String(variant.id) === preferredVariantId) || variants[0];
+
+      return {
+        productId: String(scopeProduct.id || ""),
+        handle: previousProduct?.handle || catalogProduct?.handle || "",
+        title: catalogProduct?.name || scopeProduct.title || previousProduct?.title || "Product",
+        image: catalogProduct?.image || scopeProduct.image || previousProduct?.image || "",
+        price:
+          chosenVariant?.price ||
+          catalogProduct?.price ||
+          scopeProduct.price ||
+          previousProduct?.price ||
+          "",
+        defaultVariantId:
+          previousProduct?.defaultVariantId || String(variants[0]?.id || ""),
+        selectedVariantId:
+          chosenVariant?.id ||
+          previousProduct?.selectedVariantId ||
+          String(variants[0]?.id || ""),
+        selectedOptions:
+          previousProduct?.selectedOptions &&
+          Object.keys(previousProduct.selectedOptions).length > 0
+            ? previousProduct.selectedOptions
+            : Object.fromEntries(
+                (chosenVariant?.selectedOptions || []).map((opt) => [opt.name, opt.value]),
+              ),
+        pricing: previousProduct?.pricing ?? { mode: "full_price", value: 0 },
+        variants,
+      };
+    });
+  };
+  const completeBundleProductsMatch = (
+    left: CompleteBundleProduct[],
+    right: CompleteBundleProduct[],
+  ) => JSON.stringify(left) === JSON.stringify(right);
   const [collectionSelectionModalOpen, setCollectionSelectionModalOpen] = useState(false);
   const [pendingCollectionIds, setPendingCollectionIds] = useState<string[]>([]);
   const [triggerSelection, setTriggerSelection] = useState<TriggerSelectionMeta>(null);
   useEffect(() => {
-    if (offerType !== "quantity-breaks-different") return;
+    if (behaviorOfferType !== "quantity-breaks-different") return;
     if (differentProductsEligibleProductsData.length > 0) return;
     if (selectedProductsData.length === 0) return;
     const nextEligible = selectedProductsData.map((product) => ({ ...product }));
@@ -969,7 +1075,7 @@ export function CreateNewOffer({
       }),
     );
   }, [
-    offerType,
+    behaviorOfferType,
     differentProductsEligibleProductsData.length,
     selectedProductsData,
   ]);
@@ -1089,7 +1195,7 @@ export function CreateNewOffer({
       type: "product",
       action: "select",
       // 保持 Shopify 原生 picker 机制，不传 filter.query，避免 collection 过滤 UI 失效
-      multiple: type === "normal" && offerType === "subscription" ? false : true,
+      multiple: type === "normal" && behaviorOfferType === "subscription" ? false : true,
       selectionIds:
         type === "buy"
           ? buyProducts.map((id) => ({ id }))
@@ -1118,17 +1224,18 @@ export function CreateNewOffer({
       return;
     }
 
-    const nextProducts = offerType === "subscription" ? newData.slice(0, 1) : newData;
+    const nextProducts =
+      behaviorOfferType === "subscription" ? newData.slice(0, 1) : newData;
     const nextIds = nextProducts.map((item: any) => String(item.id));
     setSelectedProductsData(nextProducts);
-    if (bxgyDiscountRules.length > 0 || offerType === "bxgy") {
+    if (bxgyDiscountRules.length > 0 || behaviorOfferType === "bxgy") {
       setBuyProducts(nextIds);
     }
-    if (freeGiftRules.length > 0 || offerType === "free-gift") {
+    if (freeGiftRules.length > 0 || behaviorOfferType === "free-gift") {
       setFreeGiftTriggerProducts(nextIds);
     }
 
-    if (offerType === "subscription" && nextProducts[0]?.id) {
+    if (behaviorOfferType === "subscription" && nextProducts[0]?.id) {
       subscriptionStatusFetcher.submit(
         {
           intent: "get-product-subscription-status",
@@ -1174,16 +1281,17 @@ export function CreateNewOffer({
     );
   };
   const applyStepTwoTriggerProducts = (products: ReturnType<typeof mapProductIdsToDraftProducts>) => {
-    const nextProducts = offerType === "subscription" ? products.slice(0, 1) : products;
+    const nextProducts =
+      behaviorOfferType === "subscription" ? products.slice(0, 1) : products;
     const nextIds = nextProducts.map((product) => String(product.id));
     setSelectedProductsData(nextProducts);
-    if (bxgyDiscountRules.length > 0 || offerType === "bxgy") {
+    if (bxgyDiscountRules.length > 0 || behaviorOfferType === "bxgy") {
       setBuyProducts(nextIds);
     }
-    if (freeGiftRules.length > 0 || offerType === "free-gift") {
+    if (freeGiftRules.length > 0 || behaviorOfferType === "free-gift") {
       setFreeGiftTriggerProducts(nextIds);
     }
-    if (offerType === "subscription" && nextProducts[0]?.id) {
+    if (behaviorOfferType === "subscription" && nextProducts[0]?.id) {
       subscriptionStatusFetcher.submit(
         {
           intent: "get-product-subscription-status",
@@ -1200,7 +1308,7 @@ export function CreateNewOffer({
     const selected = await (window as any).shopify.resourcePicker({
       type: "product",
       action: "select",
-      multiple: offerType === "subscription" ? false : true,
+      multiple: behaviorOfferType === "subscription" ? false : true,
       selectionIds: (selectionProductIds || selectedProductsData.map((product) => String(product.id))).map(
         (id) => ({ id }),
       ),
@@ -1340,7 +1448,7 @@ export function CreateNewOffer({
     );
   };
   const clearCompleteBundleBars = () => {
-    if (offerType === "complete-bundle") {
+    if (behaviorOfferType === "complete-bundle") {
       const fallbackBars = createInitialCompleteBundleBars();
       setCompleteBundleBars(fallbackBars);
       setActiveBundleBarId(getPreferredActiveCompleteBundleBarId(fallbackBars));
@@ -1715,7 +1823,7 @@ export function CreateNewOffer({
 
   // 兼容历史轻量数据：若 selectedProductsJson 里没有变体明细，则用 storeProducts 按 productId 动态补全
   useEffect(() => {
-    if (offerType !== "complete-bundle") return;
+    if (behaviorOfferType !== "complete-bundle") return;
     if (!storeProductMap.size) return;
     setCompleteBundleBars((prev) => {
       let changed = false;
@@ -1754,6 +1862,28 @@ export function CreateNewOffer({
       return changed ? next : prev;
     });
   }, [offerType, storeProductMap]);
+  useEffect(() => {
+    if (!completeBundleBars.some((bar) => !isCompleteBundleSingleBar(bar))) return;
+    setCompleteBundleBars((prev) => {
+      let changed = false;
+      const next = prev.map((bar) => {
+        if (isCompleteBundleSingleBar(bar)) return bar;
+        const syncedProducts = mapScopedProductsToCompleteBundleProducts(
+          selectedProductsData,
+          bar.products,
+        );
+        if (completeBundleProductsMatch(bar.products, syncedProducts)) {
+          return bar;
+        }
+        changed = true;
+        return {
+          ...bar,
+          products: syncedProducts,
+        };
+      });
+      return changed ? normalizeCompleteBundleBars(next) : prev;
+    });
+  }, [completeBundleBars, selectedProductsData, storeProducts]);
   const updateBundleBarProductVariant = (
     barId: string,
     productId: string,
@@ -1828,27 +1958,14 @@ export function CreateNewOffer({
   };
 
   /**
-   * 向 Bar #2 及之后追加新商品（多选 resourcePicker，按 productId 去重后合并到该栏）
+   * complete-bundle 使用共享 offer scope；bar 商品由 scope 自动同步。
    */
   const appendProductsToBundleBar = async (barId: string) => {
     await handleSelectProductsForBundleBar(barId);
   };
 
   /**
-   * 仅 Bar #2 及之后：从该 bundle 栏移除单个商品（Bar1 仅默认主商品，不提供删除入口）
-   */
-  const removeProductFromBundleBar = (barId: string, productId: string) => {
-    setCompleteBundleBars((prev) =>
-      prev.map((bar) =>
-        bar.id !== barId
-          ? bar
-          : { ...bar, products: bar.products.filter((p) => p.productId !== productId) },
-      ),
-    );
-  };
-
-  /**
-   * complete-bundle 现在使用整包折扣；单个商品卡只保留变体预览与移除操作。
+   * complete-bundle 商品卡现在只是共享 scope 的变体预览，不再允许按 bar 删除商品。
    */
   const renderCompleteBundleProductPricingCard = (
     bar: CompleteBundleBar,
@@ -1870,7 +1987,7 @@ export function CreateNewOffer({
     const selectedOptionsMap = Object.fromEntries(
       (selectedVariant?.selectedOptions || []).map((opt) => [opt.name, opt.value]),
     );
-    const productLabel = `Bundle item ${productIdx + 1}`;
+    const productLabel = `Scoped product ${productIdx + 1}`;
 
     return (
       <div
@@ -1893,16 +2010,9 @@ export function CreateNewOffer({
               </div>
             </div>
           </div>
-          <Button
-            type="text"
-            danger
-            size="small"
-            className="shrink-0"
-            icon={<Trash2 size={14} aria-hidden />}
-            onClick={() => removeProductFromBundleBar(bar.id, product.productId)}
-          >
-            删除
-          </Button>
+          <div className="shrink-0 text-[11px] font-medium text-[#5c6166]">
+            Shared scope
+          </div>
         </div>
         <div className="rounded-[8px] border border-[#edf1f4] bg-[#f6f8f9] px-3 py-2 text-[12px] text-[#5c6166]">
           This item participates in the bundle-level order discount. Configure pricing on the
@@ -1972,9 +2082,9 @@ export function CreateNewOffer({
         })),
       );
     }
-  }, [buyProducts, offerType]);
+  }, [buyProducts, behaviorOfferType]);
   useEffect(() => {
-    if (offerType !== "complete-bundle") return;
+    if (behaviorOfferType !== "complete-bundle") return;
     if (!completeBundleBars.length) return;
     const exists = completeBundleBars.some((bar) => bar.id === activeBundleBarId);
     if (!exists) {
@@ -2001,13 +2111,13 @@ export function CreateNewOffer({
   }, [subscriptionStatusFetcher.state, subscriptionStatusFetcher.data]);
 
   const previewBarOptions = useMemo(() => {
-    if (offerType === "bxgy") {
+    if (behaviorOfferType === "bxgy") {
       return bxgyDiscountRules.map((r, i) => ({
         value: i + 1,
         label: `Bar #${i + 1} (${getBxgyDisplayMeta(r).summary})`,
       }));
     }
-    if (offerType === "quantity-breaks-different") {
+    if (behaviorOfferType === "quantity-breaks-different") {
       return differentProductsDiscountRules.map((r, i) => ({
         value: i + 1,
         label:
@@ -2016,7 +2126,7 @@ export function CreateNewOffer({
             : `Tier #${i + 1} (simple, count ≥ ${r.count})`,
       }));
     }
-    if (offerType === "free-gift") {
+    if (behaviorOfferType === "free-gift") {
       return freeGiftRules.map((r, i) => ({
         value: i + 1,
         label: `Gift tier #${i + 1} (count ≥ ${r.count})`,
@@ -2038,7 +2148,7 @@ export function CreateNewOffer({
       })),
     ];
   }, [
-    offerType,
+    behaviorOfferType,
     bxgyDiscountRules,
     differentProductsDiscountRules,
     discountRules,
@@ -2162,6 +2272,12 @@ export function CreateNewOffer({
         // "additional" modules duplicates preview and runtime rules.
         includeAsAdditional: false,
       },
+      "progressive-gifts": {
+        logicBlockId: "logic-quantity-breaks",
+        logicBlock: quantityBreaksLogicBlock,
+        scopeIds: selectedScopeProductIds,
+        includeAsAdditional: false,
+      },
       "shipping-discount": {
         logicBlockId: "logic-quantity-breaks",
         logicBlock: quantityBreaksLogicBlock,
@@ -2224,7 +2340,7 @@ export function CreateNewOffer({
       },
     };
 
-    const primaryModule = moduleDescriptors[offerType];
+    const primaryModule = moduleDescriptors[behaviorOfferType];
     if (!primaryModule) {
       return null;
     }
@@ -2241,7 +2357,7 @@ export function CreateNewOffer({
     (Object.entries(moduleDescriptors) as Array<
       [OfferTypeId, (typeof moduleDescriptors)[OfferTypeId]]
     >).forEach(([type, descriptor]) => {
-      if (type === offerType || !descriptor.includeAsAdditional) {
+      if (type === behaviorOfferType || !descriptor.includeAsAdditional) {
         return;
       }
       logicBlocks.push(descriptor.logicBlock);
@@ -2372,7 +2488,7 @@ export function CreateNewOffer({
     totalBudget,
     usageLimitPerCustomer,
     widgetTitle,
-    offerType,
+    behaviorOfferType,
   ]);
   const campaignConfigJson = useMemo(
     () => (currentCampaignConfig ? JSON.stringify(currentCampaignConfig) : ""),
@@ -2384,8 +2500,7 @@ export function CreateNewOffer({
       selectedProductsData.every((item) => item.hasSubscription),
     [selectedProductsData],
   );
-  const shouldShowSubscriptionPreview =
-    offerType === "subscription" && subscriptionEnabled;
+  const shouldShowSubscriptionPreview = subscriptionEnabled;
   const subscriptionPreviewStyle = allSelectedProductsHaveSubscription
     ? "solid"
     : "dashed";
@@ -2430,11 +2545,11 @@ export function CreateNewOffer({
   const unifiedRulesSnapshot = useMemo(() => {
     const selectedScopeProductIds = selectedProductsData.map((product) => String(product.id));
     const sharedQuantityBreakOfferType: OfferTypeId =
-      offerType === "quantity-breaks-same" ||
-      offerType === "shipping-discount" ||
-      offerType === "order-discount" ||
-      offerType === "coupon"
-        ? offerType
+      behaviorOfferType === "quantity-breaks-same" ||
+      behaviorOfferType === "shipping-discount" ||
+      behaviorOfferType === "order-discount" ||
+      behaviorOfferType === "coupon"
+        ? behaviorOfferType
         : "quantity-breaks-same";
 
     const sharedQuantityBreakRules = adaptDiscountRules(
@@ -2474,6 +2589,10 @@ export function CreateNewOffer({
         rules: sharedQuantityBreakRules,
         includeAsAdditional: false,
       },
+      "progressive-gifts": {
+        rules: sharedQuantityBreakRules,
+        includeAsAdditional: false,
+      },
       "shipping-discount": {
         rules: sharedQuantityBreakRules,
         includeAsAdditional: false,
@@ -2508,25 +2627,25 @@ export function CreateNewOffer({
       },
     };
 
-    const primaryModule = moduleDescriptors[offerType];
+    const primaryModule = moduleDescriptors[behaviorOfferType];
     if (!primaryModule) return [];
 
     const nextRules =
-      offerType === "subscription" && sharedQuantityBreakRules.length > 0
+      behaviorOfferType === "subscription" && sharedQuantityBreakRules.length > 0
         ? [...sharedQuantityBreakRules, ...primaryModule.rules]
         : [...primaryModule.rules];
 
     (Object.entries(moduleDescriptors) as Array<
       [OfferTypeId, (typeof moduleDescriptors)[OfferTypeId]]
     >).forEach(([type, descriptor]) => {
-      if (type === offerType || !descriptor.includeAsAdditional) return;
+      if (type === behaviorOfferType || !descriptor.includeAsAdditional) return;
 
       nextRules.push(...descriptor.rules);
     });
 
     return nextRules;
   }, [
-    offerType,
+    behaviorOfferType,
     selectedProductsData,
     discountRules,
     differentProductsDiscountRules,
@@ -2541,7 +2660,7 @@ export function CreateNewOffer({
   ]);
   const campaignDraft = useMemo<CampaignDraft>(
     () => ({
-      offerType,
+      offerType: behaviorOfferType,
       selectedProductsData,
       differentProductsEligibleProductsData,
       discountRules,
@@ -2580,7 +2699,7 @@ export function CreateNewOffer({
       unifiedRulesSnapshot,
     }),
     [
-      offerType,
+      behaviorOfferType,
       selectedProductsData,
       differentProductsEligibleProductsData,
       discountRules,
@@ -2656,13 +2775,13 @@ export function CreateNewOffer({
     [orderedCompositionRulesSnapshot],
   );
   const activeDisplayRules = useMemo(() => {
-    if (offerType === "complete-bundle") {
+    if (behaviorOfferType === "complete-bundle") {
       return orderedCompositionRulesSnapshot.filter(
         (rule) => rule.sourceOfferType === "complete-bundle",
       );
     }
     const primarySingleSource =
-      offerType === "subscription" ? "quantity-breaks-same" : offerType;
+      behaviorOfferType === "subscription" ? "quantity-breaks-same" : behaviorOfferType;
     const primarySingleRule = orderedCompositionRulesSnapshot.find(
       (rule) =>
         rule.type === "single_purchase" &&
@@ -2672,7 +2791,7 @@ export function CreateNewOffer({
       ...(primarySingleRule ? [primarySingleRule] : []),
       ...orderedCompositionRulesSnapshot.filter((rule) => rule.type !== "single_purchase"),
     ];
-  }, [offerType, orderedCompositionRulesSnapshot]);
+  }, [behaviorOfferType, orderedCompositionRulesSnapshot]);
   const getModuleBlockingMessage = () => {
     if (
       completeBundleBars.some((bar) => !isCompleteBundleSingleBar(bar)) &&
@@ -2699,7 +2818,7 @@ export function CreateNewOffer({
     id: string,
     patch: RulePresentationPatch,
   ) => {
-    if (offerType === "subscription") {
+    if (behaviorOfferType === "subscription") {
       if (id === "subscription-option") {
         if (typeof patch.title === "string") setSubscriptionTitle(patch.title);
         if (typeof patch.subtitle === "string") setSubscriptionSubtitle(patch.subtitle);
@@ -2846,9 +2965,9 @@ export function CreateNewOffer({
       .format("YYYY-MM-DD HH:mm")}`;
   }, [countdownLabel, endTime, scheduleTimezone, showCountdownBlock]);
   const previewItems: PreviewItem[] = useMemo(() => {
-    if (offerType === "complete-bundle") {
+    if (behaviorOfferType === "complete-bundle") {
       return buildUnifiedPreviewItems({
-        offerType,
+        offerType: behaviorOfferType,
         rules: activeDisplayRules.filter(
           (rule) => rule.sourceOfferType === "complete-bundle",
         ),
@@ -2900,7 +3019,7 @@ export function CreateNewOffer({
           formatPrice: formatPreviewPrice,
         })
       : buildUnifiedPreviewItems({
-          offerType,
+          offerType: behaviorOfferType,
           rules: activeDisplayRules,
           selectedProducts: previewSelectedProducts,
           completeBundleBars,
@@ -2909,7 +3028,7 @@ export function CreateNewOffer({
         });
     return computedItems;
   }, [
-    offerType,
+    behaviorOfferType,
     activeDisplayRules,
     completeBundleBars,
     selectedProductsData,
@@ -2923,13 +3042,6 @@ export function CreateNewOffer({
     "Display",
     "Targeting",
   ];
-
-  useEffect(() => {
-    // 中文注释：当用户在第 1 步切换到 Subscription 类型时，默认自动打开订阅开关
-    if (offerType === "subscription") {
-      setSubscriptionEnabled(true);
-    }
-  }, [offerType]);
 
   const displayCustomizerCommonProps = {
     widgetTitle,
@@ -2981,14 +3093,14 @@ export function CreateNewOffer({
 
 
   const progressiveGiftDisplaySections =
-    progressiveGifts.enabled && offerType !== "complete-bundle"
+    isProgressiveGiftsTemplate && behaviorOfferType !== "complete-bundle"
       ? [
           {
             id: "progressive-gifts",
-            title: "Progressive Gifts",
+            title: "Progressive rewards",
             content: (
               <ProgressiveGiftsSection
-                offerType={offerType}
+                offerType={behaviorOfferType}
                 unifiedRulesSnapshot={unifiedRulesSnapshot}
                 value={progressiveGifts}
                 onChange={setProgressiveGifts}
@@ -3000,25 +3112,35 @@ export function CreateNewOffer({
         ]
       : [];
   const renderDisplayCustomizer = () => {
+    if (isProgressiveGiftsTemplate) {
+      return (
+        <OfferComponentsDisplayCustomizer
+          itemGroupTitle="Milestone components"
+          extraSections={progressiveGiftDisplaySections}
+          items={unifiedDisplayItems}
+          onUpdateItem={campaignDraftActions.updateUnifiedRulePresentation}
+          {...displayCustomizerCommonProps}
+        />
+      );
+    }
 
     if (
-      offerType === "quantity-breaks-same" ||
-      offerType === "shipping-discount" ||
-      offerType === "order-discount" ||
-      offerType === "coupon"
+      behaviorOfferType === "quantity-breaks-same" ||
+      behaviorOfferType === "shipping-discount" ||
+      behaviorOfferType === "order-discount" ||
+      behaviorOfferType === "coupon"
     ) {
       return (
         <OfferComponentsDisplayCustomizer
           itemGroupTitle={
-            offerType === "shipping-discount"
+            behaviorOfferType === "shipping-discount"
               ? "Shipping Components"
-              : offerType === "order-discount"
+              : behaviorOfferType === "order-discount"
                 ? "Order Discount Components"
-                : offerType === "coupon"
+                : behaviorOfferType === "coupon"
                   ? "Coupon Components"
               : "Tier Components"
           }
-          extraSections={progressiveGiftDisplaySections}
           items={unifiedDisplayItems}
           onUpdateItem={campaignDraftActions.updateUnifiedRulePresentation}
           {...displayCustomizerCommonProps}
@@ -3026,11 +3148,10 @@ export function CreateNewOffer({
       );
     }
 
-    if (offerType === "bxgy") {
+    if (behaviorOfferType === "bxgy") {
       return (
         <OfferComponentsDisplayCustomizer
           itemGroupTitle="BXGY Components"
-          extraSections={progressiveGiftDisplaySections}
           items={unifiedDisplayItems}
           onUpdateItem={campaignDraftActions.updateUnifiedRulePresentation}
           {...displayCustomizerCommonProps}
@@ -3038,11 +3159,10 @@ export function CreateNewOffer({
       );
     }
 
-    if (offerType === "free-gift") {
+    if (behaviorOfferType === "free-gift") {
       return (
         <OfferComponentsDisplayCustomizer
           itemGroupTitle="Free Gift Components"
-          extraSections={progressiveGiftDisplaySections}
           items={unifiedDisplayItems}
           onUpdateItem={campaignDraftActions.updateUnifiedRulePresentation}
           {...displayCustomizerCommonProps}
@@ -3050,11 +3170,10 @@ export function CreateNewOffer({
       );
     }
 
-    if (offerType === "quantity-breaks-different") {
+    if (behaviorOfferType === "quantity-breaks-different") {
       return (
         <OfferComponentsDisplayCustomizer
           itemGroupTitle="Cross-product Components"
-          extraSections={progressiveGiftDisplaySections}
           items={unifiedDisplayItems}
           onUpdateItem={campaignDraftActions.updateUnifiedRulePresentation}
           {...displayCustomizerCommonProps}
@@ -3062,7 +3181,7 @@ export function CreateNewOffer({
       );
     }
 
-    if (offerType === "complete-bundle") {
+    if (behaviorOfferType === "complete-bundle") {
       return (
         <OfferComponentsDisplayCustomizer
           itemGroupTitle="Bundle Components"
@@ -3073,11 +3192,10 @@ export function CreateNewOffer({
       );
     }
 
-    if (offerType === "subscription") {
+    if (behaviorOfferType === "subscription") {
       return (
         <OfferComponentsDisplayCustomizer
           itemGroupTitle="Subscription Components"
-          extraSections={progressiveGiftDisplaySections}
           items={subscriptionDisplayItems}
           onUpdateItem={campaignDraftActions.updateUnifiedRulePresentation}
           {...displayCustomizerCommonProps}
@@ -3089,14 +3207,17 @@ export function CreateNewOffer({
   };
 
   const displayComponentCount =
-    offerType === "subscription"
+    behaviorOfferType === "subscription"
       ? subscriptionDisplayItems.length
       : unifiedDisplayItems.length;
   const displayStepMeta = [
     `${displayComponentCount} components`,
     showCountdownBlock ? "Countdown enabled" : null,
-    progressiveGifts.enabled && offerType !== "complete-bundle"
-      ? "Progressive gifts"
+    isProgressiveGiftsTemplate ? "Progressive rewards" : null,
+    progressiveGifts.enabled &&
+    !isProgressiveGiftsTemplate &&
+    behaviorOfferType !== "complete-bundle"
+      ? "Legacy progressive gifts"
       : null,
   ]
     .filter(Boolean)
@@ -3120,9 +3241,13 @@ export function CreateNewOffer({
     .filter(Boolean)
     .join(" • ");
   const previewPanelMeta =
-    offerType === "complete-bundle" ? "Bundle preview" : "Storefront preview";
+    behaviorOfferType === "complete-bundle"
+      ? "Bundle preview"
+      : isProgressiveGiftsTemplate
+        ? "Progressive rewards preview"
+        : "Storefront preview";
   const progressiveGiftPreviewControls =
-    progressiveGifts.enabled && offerType !== "complete-bundle" ? (
+    isProgressiveGiftsTemplate && behaviorOfferType !== "complete-bundle" ? (
       <div className="mb-4 rounded-[10px] bg-[#f6f8f9] px-4 py-3">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div className="text-[13px] font-medium text-[#1c1f23]">
@@ -3324,7 +3449,7 @@ export function CreateNewOffer({
       <input type="hidden" name="offerName" value={offerName} />
       <input type="hidden" name="cartTitle" value={cartTitle} />
       <input type="hidden" name="title" value={widgetTitle} />
-      <input type="hidden" name="offerType" value={offerType} />
+      <input type="hidden" name="offerType" value={behaviorOfferType} />
       <input type="hidden" name="layoutFormat" value={layoutFormat} />
       <input type="hidden" name="scheduleTimezone" value={scheduleTimezone} />
       <input type="hidden" name="accentColor" value={accentColor} />
@@ -3576,6 +3701,7 @@ export function CreateNewOffer({
 
               <StepTwoCompositionBuilder
                 draft={campaignDraft}
+                templateOfferType={offerType}
                 actions={campaignDraftActions}
                 totalStoreProductsCount={allStoreProductIds.length}
                 activeTriggerSelectionMode={triggerSelection?.mode ?? null}
@@ -3757,7 +3883,7 @@ export function CreateNewOffer({
                 </div>
               </div>
 
-              {offerType === "coupon" ? (
+              {behaviorOfferType === "coupon" ? (
                 <div className="mb-8 flex flex-col gap-3">
                   <div className="flex items-center justify-between gap-3">
                     <h3 className="m-0 text-[14px] font-medium text-[#1c1f23]">

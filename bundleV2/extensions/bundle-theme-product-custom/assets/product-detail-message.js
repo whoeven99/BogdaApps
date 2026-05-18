@@ -1506,14 +1506,12 @@ function resolveCompleteBundleVariant(bar, product) {
   return (product.variants || []).find((v) => String(v.id) === String(vid)) || product.variants?.[0] || null;
 }
 
-function getCompleteBundleSelectableItems(config, bar) {
+function getCompleteBundleSelectableItems(_config, bar) {
   const currentProductId = getCurrentProductGid();
   return (bar?.products || []).filter((product) => {
     if (!bar?.excludeTriggerProduct) return true;
     if (currentProductId && productIdsMatch(currentProductId, product.productId)) return false;
-    return !(config?.triggerProductIds || []).some((triggerId) =>
-      productIdsMatch(triggerId, product.productId),
-    );
+    return true;
   });
 }
 

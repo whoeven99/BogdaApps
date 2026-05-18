@@ -194,7 +194,7 @@ export const OFFER_TYPE_RULE_CAPABILITIES: OfferTypeRuleCapability[] = [
     scopeModel: "trigger_gift_products",
     publishSupport: "supported",
     notes:
-      "Uses a dedicated trigger pool and gift pool. The current publish-ready path is item-quantity free gift with storefront gift-line add and cart discount execution.",
+      "Uses a dedicated trigger pool and gift reward pool. The current publish-ready path is item-quantity gift reward with storefront gift-line add and cart discount execution.",
   },
   {
     offerType: "complete-bundle",
