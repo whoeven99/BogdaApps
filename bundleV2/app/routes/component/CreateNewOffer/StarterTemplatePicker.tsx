@@ -270,8 +270,8 @@ function BxgyPreview() {
           badge="Save 50%"
           selected
         />
-        <PreviewRow title="Buy 2, get 3 total" price="Pay for 2" badge="Save 60%" />
-        <PreviewRow title="Buy 3, get 6 total" price="Pay for 3" badge="Save 67%" />
+        <PreviewRow title="Buy 2, get 2 free" price="Get 2 Free" badge="Save 50%" />
+        <PreviewRow title="Buy 3, get 3 free" price="Get 3 Free" badge="Save 50%" />
         <div className="rounded-[10px] bg-[#f6f6f7] px-[12px] py-[8px] text-[12px] font-semibold text-[#1c1f23]">
           + Free special gift!
         </div>
@@ -371,13 +371,13 @@ function SubscriptionPreview() {
           price="EUR65.00"
         />
         <PreviewRow
-          title="Buy 1, get 1 free"
-          price="EUR52.00"
-          badge="Save 60%"
+          title="2-pack subscription"
+          price="EUR104.00"
+          badge="Save 20%"
           selected
         />
-        <PreviewRow title="Buy 2, get 3 free" price="EUR104.00" badge="Save 68%" />
-        <PreviewRow title="Buy 3, get 6 free" price="EUR156.00" badge="Save 73%" />
+        <PreviewRow title="3-pack subscription" price="EUR136.50" badge="Save 30%" />
+        <PreviewRow title="4-pack subscription" price="EUR156.00" badge="Save 40%" />
         <div className="rounded-[10px] bg-white px-[12px] py-[9px] shadow-[inset_0_0_0_1px_rgba(0,128,96,0.12)]">
           <div className="text-[13px] font-semibold text-[#1c1f23]">
             Subscribe & Save 20%

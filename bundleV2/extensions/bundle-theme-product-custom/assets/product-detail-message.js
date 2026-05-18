@@ -29,11 +29,34 @@ const SOURCE_SCRIPT_LEGACY_IDS = {
   "bundles-config": "ciwi-bundles-config",
   "bundle-offers": "ciwi-bundle-offers",
 };
+const CIWI_DEBUG_SERVER_URL = "http://127.0.0.1:7777/event";
+const CIWI_DEBUG_SESSION_ID = "bundle-ui-empty-offers";
 
 // 中文注释：程序化写入 quantity / selling_plan 时会 synthetic dispatch change，否则会冒泡到
 // document 上 attachBundlePriceSync 的 capture 监听器 → scheduleBundlePriceRefresh →
 // 全量重绘 innerHTML → 再次 sync… 形成 F12 日志刷屏的死循环
 let __ciwiSuppressBundlePriceSync = false;
+
+function reportCiwiDebugEvent(hypothesisId, location, msg, data) {
+  if (typeof fetch !== "function") return;
+  try {
+    void fetch(CIWI_DEBUG_SERVER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: CIWI_DEBUG_SESSION_ID,
+        runId: "pre-fix",
+        hypothesisId,
+        location,
+        msg: `[DEBUG] ${msg}`,
+        data: data && typeof data === "object" ? data : {},
+        ts: Date.now(),
+      }),
+    }).catch(() => {});
+  } catch {
+    // ignore debug reporting failures
+  }
+}
 
 function getMountSources() {
   return Array.from(document.querySelectorAll(MOUNT_SOURCE_SELECTOR));
@@ -2338,9 +2361,36 @@ function getCurrentOffer(offersConfig) {
   const now = Date.now();
 
   console.log("[ciwi] offers total:", offers.length, "currentProductGid:", currentProductGid, "currentMarketId:", currentMarketId);
+  // #region debug-point B:get-current-offer-entry
+  reportCiwiDebugEvent("B", "product-detail-message.js:getCurrentOffer:entry", "theme evaluating current offer", {
+    offersLength: offers.length,
+    currentProductGid: currentProductGid || null,
+    currentMarketId: currentMarketId || null,
+    currentCountryIsoCode: currentCountryIsoCode || null,
+    offerSummaries: offers.slice(0, 8).map((offer) => ({
+      id: String(offer?.id || ""),
+      name: String(offer?.name || ""),
+      status: offer?.status !== false,
+      startTime: String(offer?.startTime || ""),
+      endTime: String(offer?.endTime || ""),
+      offerType: String(offer?.offerType || ""),
+    })),
+  });
+  // #endregion
 
   if (!offers.length) {
     console.log("[ciwi] no offers in metafield — skip bundle UI");
+    // #region debug-point A:no-offers
+    reportCiwiDebugEvent("A", "product-detail-message.js:getCurrentOffer:no-offers", "theme offers array is empty before product filtering", {
+      hasOffersConfig: !!offersConfig,
+      offersConfigKeys:
+        offersConfig && typeof offersConfig === "object" ? Object.keys(offersConfig).slice(0, 8) : [],
+      updatedAt:
+        offersConfig && typeof offersConfig === "object" && "updatedAt" in offersConfig
+          ? String(offersConfig.updatedAt || "")
+          : "",
+    });
+    // #endregion
     return null;
   }
 
@@ -4207,15 +4257,50 @@ function readOffersConfigFromMetafield() {
   try {
     const source = getPreferredMountSource();
     if (!source) {
+      // #region debug-point E:no-mount-source
+      reportCiwiDebugEvent("E", "product-detail-message.js:readOffersConfigFromMetafield:no-source", "theme could not find preferred mount source", {
+        mountSourceCount: getMountSources().length,
+      });
+      // #endregion
       return null;
     }
     const mergedEl = getSourceScriptElement("bundle-offers", source);
     if (!mergedEl) {
+      // #region debug-point A:no-bundle-offers-script
+      reportCiwiDebugEvent("A", "product-detail-message.js:readOffersConfigFromMetafield:no-script", "theme bundle-offers script missing from source", {
+        sourceType: String(source?.dataset?.ciwiSourceType || ""),
+        sourceHtmlPreview: String(source?.outerHTML || "").slice(0, 240),
+      });
+      // #endregion
       return null;
     }
-    return parseCiwiMetafieldScript("bundle-offers");
+    const raw = (mergedEl.innerText || mergedEl.textContent || "").trim();
+    const parsed = parseCiwiMetafieldScript("bundle-offers");
+    // #region debug-point A:metafield-parse
+    reportCiwiDebugEvent("A", "product-detail-message.js:readOffersConfigFromMetafield:parsed", "theme bundle-offers metafield parsed", {
+      sourceType: String(source?.dataset?.ciwiSourceType || ""),
+      rawLength: raw.length,
+      parsedType: parsed == null ? "null" : Array.isArray(parsed) ? "array" : typeof parsed,
+      parsedKeys:
+        parsed && typeof parsed === "object" && !Array.isArray(parsed)
+          ? Object.keys(parsed).slice(0, 8)
+          : [],
+      parsedOffersLength:
+        parsed && typeof parsed === "object" && Array.isArray(parsed.offers) ? parsed.offers.length : null,
+      parsedUpdatedAt:
+        parsed && typeof parsed === "object" && "updatedAt" in parsed
+          ? String(parsed.updatedAt || "")
+          : "",
+    });
+    // #endregion
+    return parsed;
   } catch (e) {
     console.error("[ciwi] Failed to parse bundle offers metafield", e);
+    // #region debug-point C:metafield-parse-error
+    reportCiwiDebugEvent("C", "product-detail-message.js:readOffersConfigFromMetafield:error", "theme failed to parse bundle-offers metafield", {
+      error: e instanceof Error ? e.message : String(e || ""),
+    });
+    // #endregion
     return null;
   }
 }

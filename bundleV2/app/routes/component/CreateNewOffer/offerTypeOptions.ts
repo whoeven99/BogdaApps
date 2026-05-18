@@ -71,7 +71,7 @@ export const OFFER_TYPE_OPTIONS: OfferTypeOption[] = [
     id: "bxgy",
     name: "Buy X, Get Y (BXGY)",
     description:
-      "Set up same-product BXGY offers such as Buy 2, Get 1 Free or pay for 3 and receive 5 total items",
+      "Set up same-product BXGY offers with simple free-item tiers such as Buy 1, Get 1 Free or Buy 2, Get 2 Free",
     primaryDiscountScope: "Product discounts",
     primaryRuleType: "BXGY",
   },
@@ -87,7 +87,7 @@ export const OFFER_TYPE_OPTIONS: OfferTypeOption[] = [
     id: "subscription",
     name: "Subscription",
     description:
-      "Show subscription purchase option below bundle bars for products that support selling plans",
+      "Show one-time and subscription purchase options for products that support selling plans",
     primaryDiscountScope: "Product discounts",
     primaryRuleType: "Subscription upsell",
   },
