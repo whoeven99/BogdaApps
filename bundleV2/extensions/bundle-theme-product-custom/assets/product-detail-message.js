@@ -97,6 +97,18 @@ function getSourceScriptElement(scriptName, source = getPreferredMountSource()) 
     `${SOURCE_SCRIPT_SELECTOR}[data-ciwi-script="${normalizedName}"]`,
   );
   if (scopedElement) return scopedElement;
+  let sibling = source?.nextElementSibling || null;
+  while (sibling) {
+    if (sibling.matches?.(MOUNT_SOURCE_SELECTOR)) break;
+    if (sibling.matches?.(`${SOURCE_SCRIPT_SELECTOR}[data-ciwi-script="${normalizedName}"]`)) {
+      return sibling;
+    }
+    sibling = sibling.nextElementSibling;
+  }
+  const globalScopedElement = document.querySelector(
+    `${SOURCE_SCRIPT_SELECTOR}[data-ciwi-script="${normalizedName}"]`,
+  );
+  if (globalScopedElement) return globalScopedElement;
   const legacyId = SOURCE_SCRIPT_LEGACY_IDS[normalizedName];
   return legacyId ? document.getElementById(legacyId) : null;
 }
@@ -2504,7 +2516,12 @@ function getCurrentOffer(offersConfig) {
         console.log("[ciwi] offer skipped: no valid bxgy discount rules", offer.id);
         continue;
       }
-      const rule = bxgyRules[0];
+      const rule =
+        bxgyRules.find((candidate) => String(candidate?.tierType || "") !== "single") || null;
+      if (!rule) {
+        console.log("[ciwi] bxgy offer skipped: only single tier found", offer.id);
+        continue;
+      }
       if (!rule.count) {
         console.log("[ciwi] bxgy offer skipped: count is invalid", offer.id);
         continue;
