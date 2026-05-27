@@ -4,14 +4,16 @@ import type {
   DiscountRule,
   FreeGiftRule,
   BxgyDiscountRule,
+} from "../../../utils/offerParsing";
+import {
   inferBxgySubtitleSource,
   inferBxgyTitleSource,
   inferCompleteBundleSubtitleSource,
   inferCompleteBundleTitleSource,
   inferDifferentProductsSubtitleSource,
   inferDifferentProductsTitleSource,
+  isSingleDiscountRule,
 } from "../../../utils/offerParsing";
-import { isSingleDiscountRule } from "../../../utils/offerParsing";
 import type { OfferTypeId } from "./offerTypeOptions";
 
 export type UnifiedRuleType =

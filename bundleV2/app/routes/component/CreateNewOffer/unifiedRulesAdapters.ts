@@ -352,6 +352,8 @@ export function adaptSubscriptionRule(
       presentation: {
         title: "Subscription",
         subtitle: "",
+        titleSource: "custom",
+        subtitleSource: "auto",
         badge: "",
         isDefault: enabled,
       },

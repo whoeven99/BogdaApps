@@ -212,7 +212,7 @@ export function getCampaignCompositionBars(
             buildUnifiedBarTitle(rule, indexWithinCollection),
           ),
     summary:
-      rule.type === "bxgy"
+      rule.type === "bxgy" && rule.condition.kind === "buy_x_get_y"
         ? resolveBuilderBxgyDisplay(rule.condition, rule.presentation).subtitle ||
           buildUnifiedBarSummary(rule)
         : resolvePresentationTextWithSource(
