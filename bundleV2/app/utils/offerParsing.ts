@@ -954,6 +954,7 @@ export function createDefaultSingleDifferentProductsRule(
 ): DifferentProductsDiscountRule {
   const next = { ...overrides };
   return {
+    id: typeof next.id === "string" && next.id ? next.id : "different-products-single",
     count: 0,
     discountPercent: 0,
     buyQuantity: 0,
@@ -1038,6 +1039,7 @@ export function createDefaultSingleBxgyRule(
 ): BxgyDiscountRule {
   const next = { ...overrides };
   return {
+    id: typeof next.id === "string" && next.id ? next.id : "bxgy-single",
     count: 0,
     buyQuantity: 0,
     getQuantity: 0,
@@ -1107,6 +1109,7 @@ export function createDefaultSingleFreeGiftRule(
 ): FreeGiftRule {
   const next = { ...overrides };
   return {
+    id: typeof next.id === "string" && next.id ? next.id : "free-gift-single",
     count: 0,
     giftQuantity: 0,
     giftProductIds: [],
@@ -1541,8 +1544,12 @@ function sanitizeQuantityBreakTier(raw: unknown): QuantityBreakTier | null {
   }
   if (!Number.isFinite(qty) || qty < 1) return null;
   if (!Number.isFinite(discountPercent)) return null;
+  const stableId =
+    typeof item.id === "string" && item.id
+      ? item.id
+      : `legacy-discount-rule-${qty}`;
   return {
-    id: typeof item.id === "string" && item.id ? item.id : undefined,
+    id: stableId,
     qty,
     discountPercent: Math.max(0, Math.min(100, discountPercent)),
     tierType: "standard",
@@ -1608,8 +1615,13 @@ function sanitizeBxgyTier(raw: unknown): BxgyDiscountRule | null {
   if (!Number.isFinite(getQuantity) || getQuantity < 1) return null;
   if (!Number.isFinite(discountPercent)) return null;
   if (buyProductIds.length === 0) return null;
+  const stableId =
+    typeof item.id === "string" && item.id
+      ? item.id
+      : `legacy-bxgy-rule-${buyQuantity}-${getQuantity}`;
 
   return {
+    id: stableId,
     count: buyQuantity,
     buyQuantity,
     getQuantity,
@@ -1660,8 +1672,15 @@ function sanitizeDifferentProductsTier(
     if (!Number.isFinite(getQuantity) || getQuantity < 1) return null;
     if (getProductIds.length === 0) return null;
   }
+  const stableId =
+    typeof item.id === "string" && item.id
+      ? item.id
+      : tierType === "bxgy"
+        ? `legacy-different-products-bxgy-${buyQuantity}-${getQuantity}`
+        : `legacy-different-products-rule-${count}`;
 
   return {
+    id: stableId,
     count: tierType === "bxgy" ? buyQuantity : count,
     discountPercent: Math.max(0, Math.min(100, discountPercent)),
     buyQuantity,
@@ -1690,8 +1709,13 @@ function sanitizeFreeGiftTier(raw: unknown): FreeGiftRule | null {
   const giftQuantity = Math.trunc(Number(item.giftQuantity));
   if (!Number.isFinite(count) || count < 1) return null;
   if (!Number.isFinite(giftQuantity) || giftQuantity < 1) return null;
+  const stableId =
+    typeof item.id === "string" && item.id
+      ? item.id
+      : `legacy-free-gift-rule-${count}`;
 
   return {
+    id: stableId,
     count,
     giftQuantity,
     tierType: undefined,
