@@ -13,27 +13,31 @@ function normalizeShopAdminHandle(shop: string): string {
   const raw = String(shop || "").trim();
   if (!raw) return "";
 
-  const withoutProtocol = raw.replace(/^https?:\/\//i, "");
-  const adminStoreMatch = withoutProtocol.match(/admin\.shopify\.com\/store\/([^/?#]+)/i);
-  if (adminStoreMatch?.[1]) {
-    return adminStoreMatch[1].trim();
+  const decodedRaw = (() => {
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw;
+    }
+  })();
+
+  const normalizedInput = decodedRaw
+    .replace(/^https?:\/\//i, "")
+    .replace(/^admin\.shopify\.com\//i, "")
+    .replace(/^\/+|\/+$/g, "");
+
+  const parts = normalizedInput
+    .split(/[/?#]/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  const storeIndex = parts.findIndex((part) => part.toLowerCase() === "store");
+  if (storeIndex >= 0 && parts[storeIndex + 1]) {
+    return parts[storeIndex + 1].replace(/\.myshopify\.com$/i, "").trim();
   }
 
-  const prefixedStoreMatch = withoutProtocol.match(/^store\/([^/?#]+)/i);
-  if (prefixedStoreMatch?.[1]) {
-    return prefixedStoreMatch[1].trim();
-  }
-
-  const pathStoreMatch = withoutProtocol.match(/\/store\/([^/?#]+)/i);
-  if (pathStoreMatch?.[1]) {
-    return pathStoreMatch[1].trim();
-  }
-
-  if (withoutProtocol.includes(".myshopify.com")) {
-    return withoutProtocol.replace(/\.myshopify\.com.*$/i, "").trim();
-  }
-
-  return withoutProtocol.replace(/^\/+|\/+$/g, "").trim();
+  const firstPart = parts[0] ?? "";
+  return firstPart.replace(/\.myshopify\.com$/i, "").trim();
 }
 
 function normalizeThemeEditorThemeId(themeId: string | null | undefined): string {

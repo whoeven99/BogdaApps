@@ -195,7 +195,7 @@ export function DashboardPage({
     localStorage.setItem("hideThemeExtensionBanner", "true");
   };
 
-  const effectiveShop = shop || themeEditorStoreId;
+  const effectiveShop = themeEditorStoreId || shop;
   const defaultThemeEditorId =
     preferredThemeTarget?.editorId || preferredThemeTarget?.id || themeEditorThemeId;
 
