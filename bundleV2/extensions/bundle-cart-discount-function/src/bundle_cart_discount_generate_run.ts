@@ -822,6 +822,14 @@ export function bundleCartDiscountGenerateRun(
     hasProductDiscountClass || !hasOrderDiscountClass
       ? cartRelevantBxgyOffers
       : cartRelevantBxgyOffers.filter((compiledOffer) => offerRequiresOrderBxgyEvaluation(compiledOffer));
+  if (cartRelevantBxgyOffers.length > 0 && bxgyOffersForEvaluation.length === 0) {
+    log("bxgy_eval_skipped", {
+      hasProductDiscountClass,
+      hasOrderDiscountClass,
+      cartRelevantBxgyOfferIds: cartRelevantBxgyOffers.map((compiledOffer) => compiledOffer.offer.id),
+      reason: "order_only_run_without_total_items_semantics",
+    });
+  }
   const freeGiftOffers = eligibleOffers.filter(
     (compiledOffer) =>
       compiledOffer.offer.offerType === "free-gift" &&
@@ -1023,16 +1031,16 @@ export function bundleCartDiscountGenerateRun(
   }
 
   if (productCandidates.length > 0) {
-    const groupedProductCandidates =
-      groupProductCandidatesByOverlappingTargets(productCandidates);
-    for (const groupedCandidates of groupedProductCandidates) {
-      operations.push({
-        productDiscountsAdd: {
-          candidates: groupedCandidates,
-          selectionStrategy: ProductDiscountSelectionStrategy.Maximum,
-        },
-      });
-    }
+    const resolvedProductCandidates = resolveExclusiveProductCandidates(
+      productCandidates,
+      input.cart.lines,
+    );
+    operations.push({
+      productDiscountsAdd: {
+        candidates: resolvedProductCandidates,
+        selectionStrategy: ProductDiscountSelectionStrategy.All,
+      },
+    });
   }
 
   if (orderCandidates.length > 0) {
@@ -2747,57 +2755,107 @@ function getCandidateTargetCartLineIds(
   );
 }
 
-function groupProductCandidatesByOverlappingTargets(
+function parseCandidatePercentValue(value: string | null | undefined): number {
+  if (!value) return 0;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function estimateCandidateSavings(
+  candidate: ProductDiscountCandidate,
+  unitPriceByLineId: Map<string, number>,
+): number {
+  const targetLineIds = getCandidateTargetCartLineIds(candidate);
+  if (!targetLineIds.length) return 0;
+
+  return targetLineIds.reduce((sum, lineId) => {
+    const target = candidate.targets.find((entry) => entry.cartLine?.id === lineId)?.cartLine;
+    const quantity = Math.max(1, Math.trunc(Number(target?.quantity) || 1));
+    const unitPrice = Math.max(0, unitPriceByLineId.get(lineId) || 0);
+
+    if ("percentage" in candidate.value) {
+      const percent = Math.max(
+        0,
+        Math.min(100, parseCandidatePercentValue(candidate.value.percentage?.value)),
+      );
+      return sum + unitPrice * quantity * (percent / 100);
+    }
+
+    const fixedAmount = Number(candidate.value.fixedAmount?.amount || 0);
+    const normalizedFixedAmount = Number.isFinite(fixedAmount) ? Math.max(0, fixedAmount) : 0;
+    return (
+      sum +
+      (candidate.value.fixedAmount?.appliesToEachItem
+        ? normalizedFixedAmount * quantity
+        : normalizedFixedAmount)
+    );
+  }, 0);
+}
+
+function resolveExclusiveProductCandidates(
   candidates: ProductDiscountCandidate[],
-): ProductDiscountCandidate[][] {
-  const groups: Array<{
-    candidates: ProductDiscountCandidate[];
-    targetLineIds: Set<string>;
+  cartLines: CartInput["cart"]["lines"],
+): ProductDiscountCandidate[] {
+  const unitPriceByLineId = new Map(
+    cartLines.map((line) => [
+      line.id,
+      parseMoneyAmount(line.cost?.amountPerQuantity?.amount),
+    ]),
+  );
+  const winners: Array<{
+    candidate: ProductDiscountCandidate;
+    targetLineIds: string[];
+    savings: number;
+    index: number;
   }> = [];
 
-  for (const candidate of candidates) {
+  for (const [index, candidate] of candidates.entries()) {
     const targetLineIds = getCandidateTargetCartLineIds(candidate);
     if (!targetLineIds.length) {
-      groups.push({
-        candidates: [candidate],
-        targetLineIds: new Set<string>(),
+      winners.push({
+        candidate,
+        targetLineIds,
+        savings: estimateCandidateSavings(candidate, unitPriceByLineId),
+        index,
       });
       continue;
     }
 
-    const overlappingGroupIndexes = groups
-      .map((group, index) =>
-        targetLineIds.some((lineId) => group.targetLineIds.has(lineId)) ? index : -1,
-      )
-      .filter((index) => index >= 0);
+    const savings = estimateCandidateSavings(candidate, unitPriceByLineId);
+    const conflictingWinnerIndex = winners.findIndex((winner) =>
+      targetLineIds.some((lineId) => winner.targetLineIds.includes(lineId)),
+    );
 
-    if (!overlappingGroupIndexes.length) {
-      groups.push({
-        candidates: [candidate],
-        targetLineIds: new Set(targetLineIds),
+    if (conflictingWinnerIndex < 0) {
+      winners.push({
+        candidate,
+        targetLineIds,
+        savings,
+        index,
       });
       continue;
     }
 
-    const primaryGroupIndex = overlappingGroupIndexes[0];
-    const primaryGroup = groups[primaryGroupIndex];
-    primaryGroup.candidates.push(candidate);
-    for (const lineId of targetLineIds) {
-      primaryGroup.targetLineIds.add(lineId);
-    }
-
-    for (let i = overlappingGroupIndexes.length - 1; i >= 1; i -= 1) {
-      const mergeIndex = overlappingGroupIndexes[i];
-      const groupToMerge = groups[mergeIndex];
-      primaryGroup.candidates.push(...groupToMerge.candidates);
-      for (const lineId of groupToMerge.targetLineIds) {
-        primaryGroup.targetLineIds.add(lineId);
-      }
-      groups.splice(mergeIndex, 1);
+    const conflictingWinner = winners[conflictingWinnerIndex];
+    if (savings > conflictingWinner.savings) {
+      log("product_candidate_conflict_resolved", {
+        previousTargetLineIds: conflictingWinner.targetLineIds,
+        nextTargetLineIds: targetLineIds,
+        previousSavings: conflictingWinner.savings.toFixed(4),
+        nextSavings: savings.toFixed(4),
+      });
+      winners[conflictingWinnerIndex] = {
+        candidate,
+        targetLineIds,
+        savings,
+        index,
+      };
     }
   }
 
-  return groups.map((group) => group.candidates);
+  return winners
+    .sort((a, b) => a.index - b.index)
+    .map((winner) => winner.candidate);
 }
 /**
  * selectedProductsJson 存的是 Product GID（与主题端、后台一致），需用购物车行的 product.id / variant.id 匹配，不能用 CartLine.id。

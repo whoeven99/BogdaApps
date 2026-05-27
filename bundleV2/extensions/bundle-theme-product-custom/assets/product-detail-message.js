@@ -343,6 +343,89 @@ function getSelectedVariantId() {
   return String(input.value || "").trim();
 }
 
+function readBundleConfigJson() {
+  const configEl = getBundleConfigElement();
+  if (!configEl) return null;
+  try {
+    return JSON.parse(configEl.textContent || "{}");
+  } catch {
+    return null;
+  }
+}
+
+function parseInventoryQuantity(rawValue) {
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed)) return null;
+  return Math.max(0, Math.trunc(parsed));
+}
+
+function getCurrentSelectedVariantRecord() {
+  const config = readBundleConfigJson();
+  const variants = Array.isArray(config?.variants) ? config.variants : [];
+  if (!variants.length) return null;
+  const selectedVariantId = getSelectedVariantId();
+  if (selectedVariantId) {
+    const matched = variants.find((variant) => String(variant?.id || "") === selectedVariantId);
+    if (matched) return matched;
+  }
+  return variants[0] || null;
+}
+
+function isVariantOutOfStock(variant) {
+  if (!variant) return true;
+  if (variant.available === false) return true;
+  if (variant.available === true) return false;
+  const inventoryPolicy = String(variant.inventoryPolicy || variant.inventory_policy || "").toLowerCase();
+  if (inventoryPolicy === "continue") return false;
+  const inventoryQuantity = parseInventoryQuantity(
+    variant.inventoryQuantity != null ? variant.inventoryQuantity : variant.inventory_quantity,
+  );
+  return inventoryQuantity != null ? inventoryQuantity <= 0 : false;
+}
+
+function variantHasSufficientInventory(variant, requiredQuantity) {
+  const needed = Math.max(1, Math.trunc(Number(requiredQuantity) || 1));
+  if (!variant || variant.available === false) return false;
+  const inventoryPolicy = String(variant.inventoryPolicy || variant.inventory_policy || "").toLowerCase();
+  if (inventoryPolicy === "continue") return true;
+  const inventoryQuantity = parseInventoryQuantity(
+    variant.inventoryQuantity != null ? variant.inventoryQuantity : variant.inventory_quantity,
+  );
+  if (inventoryQuantity == null) return true;
+  if (!inventoryPolicy && variant.available === true && inventoryQuantity === 0) return true;
+  return inventoryQuantity >= needed;
+}
+
+function findFirstSellableVariant(variants) {
+  const list = Array.isArray(variants) ? variants : [];
+  return list.find((variant) => !isVariantOutOfStock(variant)) || list[0] || null;
+}
+
+function resolveProductVariantById(product, variantId, options) {
+  const variants = Array.isArray(product?.variants) ? product.variants : [];
+  const matched = variants.find((variant) => String(variant?.id || "") === String(variantId || ""));
+  if (matched) return matched;
+  if (options?.preferSellable) {
+    return findFirstSellableVariant(variants);
+  }
+  return variants[0] || null;
+}
+
+function getAvailableDifferentProductsPoolCount(offer, selectedRule) {
+  const poolProducts = getDifferentProductsPoolProducts(offer, selectedRule);
+  return poolProducts.reduce((count, product) => {
+    const sellableVariant = findFirstSellableVariant(product?.variants);
+    return count + (sellableVariant && !isVariantOutOfStock(sellableVariant) ? 1 : 0);
+  }, 0);
+}
+
+function getAvailableCompleteBundleSelectableCount(config, bar) {
+  return getCompleteBundleSelectableItems(config, bar).reduce((count, product) => {
+    const sellableVariant = findFirstSellableVariant(product?.variants);
+    return count + (sellableVariant && !isVariantOutOfStock(sellableVariant) ? 1 : 0);
+  }, 0);
+}
+
 function getCurrentProductHasSubscription() {
   const configEl = getBundleConfigElement();
   if (!configEl) return false;
@@ -2405,6 +2488,42 @@ function syncCurrentBundleToSessionStorage(offer) {
   }
 }
 
+function shouldHideOfferForInventory(offer) {
+  const currentVariant = getCurrentSelectedVariantRecord();
+  if (
+    offer?.offerType === "bxgy" ||
+    offer?.offerType === "subscription" ||
+    offer?.offerType === "quantity-breaks-same" ||
+    !offer?.offerType
+  ) {
+    return isVariantOutOfStock(currentVariant);
+  }
+
+  if (offer.offerType === "free-gift") {
+    if (isVariantOutOfStock(currentVariant)) return true;
+    const activeRule = resolveActiveFreeGiftRule(offer, { fallbackToDefault: true });
+    return !resolveSellableFreeGiftVariant(offer, activeRule);
+  }
+
+  if (offer.offerType === "quantity-breaks-different") {
+    const rules = parseDifferentProductsDiscountRulesFromOffer(offer).filter(
+      (rule) => Number(rule?.count) > 0,
+    );
+    return !rules.some((rule) => getAvailableDifferentProductsPoolCount(offer, rule) > 0);
+  }
+
+  if (offer.offerType === "complete-bundle") {
+    if (isVariantOutOfStock(currentVariant)) return true;
+    const config = parseCompleteBundleConfig(offer?.selectedProductsJson);
+    return !config.bars.some((bar) => {
+      if (isCompleteBundleSingleBarConfig(bar)) return true;
+      return getAvailableCompleteBundleSelectableCount(config, bar) > 0;
+    });
+  }
+
+  return isVariantOutOfStock(currentVariant);
+}
+
 function getCurrentOffer(offersConfig) {
   const offers = Array.isArray(offersConfig?.offers) ? offersConfig.offers : [];
   const currentProductGid = getCurrentProductGid();
@@ -2652,6 +2771,11 @@ function getCurrentOffer(offersConfig) {
       }
     }
 
+    if (shouldHideOfferForInventory(offer)) {
+      console.log("[ciwi] offer skipped: hidden by inventory state", offer.id, offer.offerType);
+      continue;
+    }
+
     console.log("[ciwi] offer selected for current product", {
       index,
       offerId: offer.id,
@@ -2669,6 +2793,7 @@ function getCurrentOffer(offersConfig) {
 window.__ciwiBundleState = window.__ciwiBundleState || {
   selectedOfferId: null,
   selectedCount: null,
+  bundleErrorMessage: "",
   selectedBundleVariants: {},
   selectedDifferentProductVariants: {},
   selectedDifferentProducts: {},
@@ -2687,10 +2812,30 @@ function syncOfferScopedState(offer) {
 
   window.__ciwiBundleState.selectedOfferId = nextOfferId;
   window.__ciwiBundleState.selectedCount = null;
+  window.__ciwiBundleState.bundleErrorMessage = "";
 
   if (offer?.offerType !== "complete-bundle") {
     window.__ciwiBundleState.selectedCompleteBundleBarId = null;
   }
+}
+
+function clearBundleErrorMessage() {
+  if (!window.__ciwiBundleState) return;
+  window.__ciwiBundleState.bundleErrorMessage = "";
+}
+
+function setBundleErrorMessage(message) {
+  if (!window.__ciwiBundleState) return;
+  window.__ciwiBundleState.bundleErrorMessage = String(message || "");
+  rerenderCurrentBundleWidget();
+}
+
+function renderCurrentBundleInlineErrorHtml() {
+  const message = String(window.__ciwiBundleState?.bundleErrorMessage || "").trim();
+  if (!message) return "";
+  return `<div style="margin-top:12px;padding:10px 12px;border-radius:8px;border:1px solid #fecaca;background:#fef2f2;color:#991b1b;font-size:13px;line-height:1.45;">${esc(
+    message,
+  )}</div>`;
 }
 
 function rerenderCurrentBundleWidget() {
@@ -2702,6 +2847,23 @@ function rerenderCurrentBundleWidget() {
   wrap.innerHTML = html;
   bindBundleInteractions(wrap);
   syncSubscriptionSelectionToTheme(currentOffer);
+}
+
+function refreshBundleWidgetAfterHydration(currentOffer) {
+  const wrap = document.querySelector(".ciwi-bundle-wrapper");
+  if (!wrap || !currentOffer) return;
+  const html = renderBundlePreviewHtml(currentOffer);
+  if (html) {
+    wrap.innerHTML = html;
+    bindBundleInteractions(wrap);
+    syncSubscriptionSelectionToTheme(currentOffer);
+    return;
+  }
+  wrap.remove();
+  clearBundleErrorMessage();
+  setTimeout(() => {
+    run();
+  }, 0);
 }
 
 function getBxgyDisplayMeta(rule) {
@@ -2996,6 +3158,27 @@ function getCartQuantityForSelectedOffer(offer, selectedCount) {
   );
 }
 
+function validateMainVariantInventoryForOffer(offer, requiredQuantity) {
+  const currentVariant = getCurrentSelectedVariantRecord();
+  if (isVariantOutOfStock(currentVariant)) {
+    return {
+      ok: false,
+      message: "This offer is sold out for the currently selected variant.",
+    };
+  }
+  if (!variantHasSufficientInventory(currentVariant, requiredQuantity)) {
+    const availableQuantity = parseInventoryQuantity(currentVariant?.inventoryQuantity);
+    return {
+      ok: false,
+      message:
+        availableQuantity != null
+          ? `Only ${availableQuantity} item${availableQuantity === 1 ? "" : "s"} are available for this offer.`
+          : "There is not enough inventory to add this offer.",
+    };
+  }
+  return { ok: true, message: "" };
+}
+
 function updateThemeQuantityInput(count) {
   const form = getAddToCartForm();
   if (form) {
@@ -3133,6 +3316,7 @@ window.ciwiSelectBundleOption = function(count) {
   if (window.__ciwiBundleState) {
     window.__ciwiBundleState.selectedCount = count;
   }
+  clearBundleErrorMessage();
   const currentOffer = getCurrentOffer(offersConfigCache);
   updateThemeQuantityInput(getCartQuantityForSelectedOffer(currentOffer, count));
   if (currentOffer) {
@@ -3151,24 +3335,18 @@ window.ciwiSelectBundleOption = function(count) {
   if (currentOffer?.offerType === "complete-bundle") {
     void hydrateCompleteBundleOfferInPlace(currentOffer).then((changed) => {
       if (!changed) return;
-      const wrapNext = document.querySelector(".ciwi-bundle-wrapper");
-      if (!wrapNext) return;
-      const htmlNext = renderBundlePreviewHtml(currentOffer);
-      if (htmlNext) wrapNext.innerHTML = htmlNext;
+      refreshBundleWidgetAfterHydration(currentOffer);
     });
   } else if (currentOffer?.offerType === "quantity-breaks-different") {
     void hydrateDifferentProductsOfferInPlace(currentOffer).then((changed) => {
       if (!changed) return;
-      const wrapNext = document.querySelector(".ciwi-bundle-wrapper");
-      if (!wrapNext) return;
-      const htmlNext = renderBundlePreviewHtml(currentOffer);
-      if (htmlNext) {
-        wrapNext.innerHTML = htmlNext;
-        bindBundleInteractions(wrapNext);
-      }
+      refreshBundleWidgetAfterHydration(currentOffer);
     });
   } else if (currentOffer?.offerType === "free-gift") {
-    void hydrateFreeGiftOfferInPlace(currentOffer);
+    void hydrateFreeGiftOfferInPlace(currentOffer).then((changed) => {
+      if (!changed) return;
+      refreshBundleWidgetAfterHydration(currentOffer);
+    });
   }
 };
 
@@ -3288,12 +3466,18 @@ window.ciwiHandleBundleAddToCart = function(event) {
   const count =
     explicitCount == null ? getDefaultSelectedCountForOffer(currentOffer) : explicitCount;
   const cartQuantity = getCartQuantityForSelectedOffer(currentOffer, count);
+  clearBundleErrorMessage();
   console.log("[ciwi] handleBundleAddToCart", {
     offerId: currentOffer?.id || "",
     offerType: currentOffer?.offerType || "",
     selectedCount: Number(count),
     cartQuantity,
   });
+  const mainInventoryCheck = validateMainVariantInventoryForOffer(currentOffer, cartQuantity);
+  if (!mainInventoryCheck.ok) {
+    setBundleErrorMessage(mainInventoryCheck.message);
+    return;
+  }
   updateThemeQuantityInput(cartQuantity);
   ensureBundleLineProperties(currentOffer, { fallbackToDefault: explicitCount == null });
   syncSubscriptionSelectionToTheme(currentOffer);
@@ -3315,12 +3499,10 @@ window.ciwiHandleBundleAddToCart = function(event) {
     performFreeGiftCartAdd()
       .then((ok) => {
         if (ok) return notifyThemeAfterCartAdd();
-        submitBundleFormFallback();
         return false;
       })
       .catch((error) => {
         console.error("[ciwi] performFreeGiftCartAdd failed", error);
-        submitBundleFormFallback();
       });
     return;
   }
@@ -3416,6 +3598,7 @@ window.ciwiToggleDifferentProductSelection = function(pickerKey, productId, vari
       ? prev
       : [...prev, { productId: nextProductId, variantId: nextVariantId }];
   window.__ciwiBundleState.selectedDifferentProducts[key] = next;
+  clearBundleErrorMessage();
   rerenderCurrentBundleWidget();
   rerenderDifferentProductsModal();
 };
@@ -3427,6 +3610,7 @@ window.ciwiSetDifferentProductsVariant = function(productId, variantId) {
   window.__ciwiBundleState.selectedDifferentProductVariants[String(productId || "")] = String(
     variantId || "",
   );
+  clearBundleErrorMessage();
   rerenderCurrentBundleWidget();
   rerenderDifferentProductsModal();
 };
@@ -3484,6 +3668,17 @@ async function performDifferentProductsCartAdd() {
 
   const poolProducts = getDifferentProductsPoolProducts(currentOffer, selectedRule);
   const requiredQty = getDifferentProductsRequiredQuantity(selectedRule);
+  const availablePoolCount = getAvailableDifferentProductsPoolCount(currentOffer, selectedRule);
+  if (availablePoolCount <= 0) {
+    setBundleErrorMessage("This offer is sold out and is no longer available.");
+    return false;
+  }
+  if (availablePoolCount < requiredQty) {
+    setBundleErrorMessage(
+      `Only ${availablePoolCount} eligible item${availablePoolCount === 1 ? "" : "s"} are in stock for this offer.`,
+    );
+    return false;
+  }
   const selectedEntries = getSelectedDifferentProductsEntries(currentOffer, selectedRule, poolProducts);
   if (selectedEntries.length < requiredQty) {
     window.ciwiOpenDifferentProductsModal(
@@ -3502,11 +3697,10 @@ async function performDifferentProductsCartAdd() {
     .map((entry) => {
       const product = productMap.get(String(entry?.productId || ""));
       if (!product) return null;
-      const selectedVariant =
-        (product.variants || []).find(
-          (variant) => String(variant.id || "") === String(entry?.variantId || ""),
-        ) || null;
-      if (selectedVariant && selectedVariant.available === false) return null;
+      const selectedVariant = resolveProductVariantById(product, entry?.variantId || "", {
+        preferSellable: false,
+      });
+      if (!variantHasSufficientInventory(selectedVariant, 1)) return null;
       const variantId = toAjaxVariantId(
         selectedVariant?.id ||
           entry?.variantId ||
@@ -3560,6 +3754,7 @@ window.ciwiSelectBundleVariant = function(barId, productId, variantId) {
     window.__ciwiBundleState.selectedBundleVariants[barId] = {};
   }
   window.__ciwiBundleState.selectedBundleVariants[barId][productId] = String(variantId || "");
+  clearBundleErrorMessage();
   const wrap = document.querySelector(".ciwi-bundle-wrapper");
   const currentOffer = getCurrentOffer(offersConfigCache);
   if (wrap && currentOffer && currentOffer.offerType === "complete-bundle") {
@@ -3600,6 +3795,7 @@ window.ciwiToggleCompleteBundleProduct = function (barId, productId, checked) {
   Array.from(nextSet).forEach((id) => {
     window.__ciwiBundleState.selectedCompleteBundleProducts[barId][id] = true;
   });
+  clearBundleErrorMessage();
   const wrap = document.querySelector(".ciwi-bundle-wrapper");
   if (wrap && currentOffer && currentOffer.offerType === "complete-bundle") {
     const html = renderBundlePreviewHtml(currentOffer);
@@ -3611,6 +3807,7 @@ window.ciwiToggleCompleteBundleProduct = function (barId, productId, checked) {
 window.ciwiSelectCompleteBundleBar = function (barId) {
   if (!window.__ciwiBundleState) return;
   window.__ciwiBundleState.selectedCompleteBundleBarId = String(barId || "");
+  clearBundleErrorMessage();
   const wrap = document.querySelector(".ciwi-bundle-wrapper");
   const currentOffer = getCurrentOffer(offersConfigCache);
   if (wrap && currentOffer && currentOffer.offerType === "complete-bundle") {
@@ -3646,13 +3843,42 @@ function resolveFreeGiftVariantId(offer, rule) {
     const hydrated = hydratedProducts.find(
       (item) => String(item.productId || "") === String(productId || ""),
     );
-    const variantId = toAjaxVariantId(
-      hydrated?.selectedVariantId || hydrated?.variants?.[0]?.id || "",
+    const selectedVariant = resolveProductVariantById(
+      hydrated,
+      hydrated?.selectedVariantId || "",
+      { preferSellable: true },
     );
+    const variantId = toAjaxVariantId(selectedVariant?.id || hydrated?.selectedVariantId || "");
     if (variantId) return variantId;
   }
 
   return "";
+}
+
+function resolveSellableFreeGiftVariant(offer, rule) {
+  const configuredGiftIds =
+    Array.isArray(rule?.giftProductIds) && rule.giftProductIds.length > 0
+      ? rule.giftProductIds
+      : parseFreeGiftConfig(offer?.selectedProductsJson, offer?.discountRulesJson).giftProducts;
+  const hydratedProducts = Array.isArray(offer?.__ciwiFreeGiftHydratedProducts)
+    ? offer.__ciwiFreeGiftHydratedProducts
+    : [];
+
+  for (const productId of configuredGiftIds) {
+    const hydrated = hydratedProducts.find(
+      (item) => String(item.productId || "") === String(productId || ""),
+    );
+    const sellableVariant = resolveProductVariantById(
+      hydrated,
+      hydrated?.selectedVariantId || "",
+      { preferSellable: true },
+    );
+    if (sellableVariant && !isVariantOutOfStock(sellableVariant)) {
+      return sellableVariant;
+    }
+  }
+
+  return null;
 }
 
 async function performFreeGiftCartAdd() {
@@ -3675,11 +3901,23 @@ async function performFreeGiftCartAdd() {
   const selectedRule = resolveActiveFreeGiftRule(currentOffer, { quantity });
   if (!selectedRule) return false;
 
+  const giftVariant = resolveSellableFreeGiftVariant(currentOffer, selectedRule);
   const giftVariantId = resolveFreeGiftVariantId(currentOffer, selectedRule);
-  if (!giftVariantId) {
+  const giftQuantity = Math.max(1, Math.trunc(Number(selectedRule.giftQuantity) || 1));
+  if (!giftVariantId || !giftVariant) {
     console.warn("[ciwi] free gift add-to-cart skipped: no resolvable gift variant", {
       offerId: currentOffer.id,
     });
+    setBundleErrorMessage("This free gift is out of stock and can no longer be claimed.");
+    return false;
+  }
+  if (!variantHasSufficientInventory(giftVariant, giftQuantity)) {
+    const availableGiftQuantity = parseInventoryQuantity(giftVariant?.inventoryQuantity);
+    setBundleErrorMessage(
+      availableGiftQuantity != null
+        ? `Only ${availableGiftQuantity} free gift item${availableGiftQuantity === 1 ? "" : "s"} are available right now.`
+        : "There is not enough inventory to add the free gift.",
+    );
     return false;
   }
 
@@ -3687,7 +3925,7 @@ async function performFreeGiftCartAdd() {
     { id: Number(mainVariantId), quantity },
     {
       id: Number(giftVariantId),
-      quantity: Math.max(1, Math.trunc(Number(selectedRule.giftQuantity) || 1)),
+      quantity: giftQuantity,
     },
   ];
 
@@ -3752,6 +3990,11 @@ async function performCompleteBundleCartAdd() {
     const mainVariantId = toAjaxVariantId(getSelectedVariantId());
     if (!mainVariantId) return false;
     const quantity = getCurrentQuantityFromThemeForm();
+    const mainInventoryCheck = validateMainVariantInventoryForOffer(currentOffer, quantity);
+    if (!mainInventoryCheck.ok) {
+      setBundleErrorMessage(mainInventoryCheck.message);
+      return false;
+    }
     items.push({ id: Number(mainVariantId), quantity });
     const barToUse =
       config.bars.find((b) => String(b.id) === String(selId)) || config.bars[0] || null;
@@ -3777,14 +4020,39 @@ async function performCompleteBundleCartAdd() {
       return false;
     }
     const selectedItemIds = new Set(getSelectedCompleteBundleItemIds(config, barToUse));
-    if (selectedItemIds.size < Math.max(1, Math.trunc(Number(barToUse.minQuantity) || 1))) {
+    const requiredSelectionCount = Math.max(1, Math.trunc(Number(barToUse.minQuantity) || 1));
+    const availableSelectionCount = getAvailableCompleteBundleSelectableCount(config, barToUse);
+    if (availableSelectionCount <= 0) {
+      setBundleErrorMessage("This bundle is sold out and is no longer available.");
+      return false;
+    }
+    if (availableSelectionCount < requiredSelectionCount) {
+      setBundleErrorMessage(
+        `Only ${availableSelectionCount} bundle item${availableSelectionCount === 1 ? "" : "s"} are in stock for this offer.`,
+      );
+      return false;
+    }
+    if (selectedItemIds.size < requiredSelectionCount) {
+      setBundleErrorMessage(
+        `Please select ${requiredSelectionCount} in-stock product${requiredSelectionCount === 1 ? "" : "s"} for this bundle.`,
+      );
       return false;
     }
     for (const product of getCompleteBundleSelectableItems(config, barToUse)) {
       if (!selectedItemIds.has(String(product.productId))) continue;
       const selectedMap = window.__ciwiBundleState?.selectedBundleVariants?.[barToUse.id] || {};
+      const selectedVariant = resolveProductVariantById(
+        product,
+        selectedMap[product.productId] || product.selectedVariantId || "",
+        { preferSellable: false },
+      );
+      if (!variantHasSufficientInventory(selectedVariant, 1)) {
+        setBundleErrorMessage("Some selected bundle products are out of stock. Please update your selection.");
+        return false;
+      }
       const variantId = toAjaxVariantId(
-        selectedMap[product.productId] ||
+        selectedVariant?.id ||
+          selectedMap[product.productId] ||
           product.selectedVariantId ||
           product.variants?.[0]?.id ||
           "",
@@ -3823,15 +4091,14 @@ window.ciwiHandleCompleteBundleAddToCart = async function (event) {
     event.stopPropagation();
   }
   const ok = await performCompleteBundleCartAdd();
-  if (!ok) {
-    window.ciwiHandleBundleAddToCart(event);
-    return;
-  }
+  if (!ok) return;
   await notifyThemeAfterCartAdd();
 };
 
 function renderBundlePreviewHtml(offer) {
   syncOfferScopedState(offer);
+  if (!offer || shouldHideOfferForInventory(offer)) return "";
+  const bundleErrorHtml = renderCurrentBundleInlineErrorHtml();
 
   if (offer.offerType === "complete-bundle") {
     const completeBundle = parseCompleteBundleConfig(offer?.selectedProductsJson);
@@ -3957,6 +4224,7 @@ function renderBundlePreviewHtml(offer) {
         titleFontWeight,
       )} !important;">${esc(widgetTitle)}</div>
       <div class="create-offer-style-preview-list create-offer-style-preview-list--vertical">${barsHtml}</div>
+      ${bundleErrorHtml}
       ${
         showCustomButton
           ? `<button type="button" class="create-offer-preview-button" onclick="window.ciwiHandleCompleteBundleAddToCart(event)" style="width:100%;margin-top:12px;padding:12px;background:${esc(
@@ -4080,6 +4348,7 @@ function renderBundlePreviewHtml(offer) {
       <div class="create-offer-style-preview-list create-offer-style-preview-list--${layoutFormat}">
         ${itemsHtml}
       </div>
+      ${bundleErrorHtml}
       ${showCustomButton ? `<button type="button" class="create-offer-preview-button" onclick="window.ciwiHandleBundleAddToCart(event)" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
         ${esc(buttonText)}
       </button>` : ""}
@@ -4178,6 +4447,7 @@ function renderBundlePreviewHtml(offer) {
       <div class="create-offer-style-preview-list create-offer-style-preview-list--${layoutFormat}">
         ${itemsHtml}
       </div>
+      ${bundleErrorHtml}
       ${showCustomButton ? `<button class="create-offer-preview-button" onclick="window.ciwiHandleBundleAddToCart()" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
         ${esc(buttonText)}
       </button>` : ""}
@@ -4304,6 +4574,7 @@ function renderBundlePreviewHtml(offer) {
       <div class="create-offer-style-preview-list create-offer-style-preview-list--${layoutFormat}">
         ${itemsHtml}
       </div>
+      ${bundleErrorHtml}
       ${showCustomButton ? `<button class="create-offer-preview-button" onclick="window.ciwiHandleBundleAddToCart()" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
         ${esc(buttonText)}
       </button>` : ""}
@@ -4500,6 +4771,7 @@ function renderBundlePreviewHtml(offer) {
       ${itemsHtml}
     </div>
     ${subscriptionHtml}
+    ${bundleErrorHtml}
     ${showCustomButton ? `<button type="button" class="create-offer-preview-button" onclick="window.ciwiHandleBundleAddToCart(event)" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
       ${esc(buttonText)}
     </button>` : ""}
@@ -4895,8 +5167,7 @@ function run() {
         if (!changed) return;
         const wrap = document.querySelector(".ciwi-bundle-wrapper");
         if (wrap) {
-          const html = renderBundlePreviewHtml(currentOffer);
-          if (html) wrap.innerHTML = html;
+          refreshBundleWidgetAfterHydration(currentOffer);
         } else if (tryMount(currentOffer) !== "done") {
           fallbackMount(currentOffer);
         }
@@ -4904,20 +5175,12 @@ function run() {
     } else if (currentOffer.offerType === "quantity-breaks-different") {
       void hydrateDifferentProductsOfferInPlace(currentOffer).then((changed) => {
         if (!changed) return;
-        const wrap = document.querySelector(".ciwi-bundle-wrapper");
-        if (wrap) {
-          const html = renderBundlePreviewHtml(currentOffer);
-          if (html) wrap.innerHTML = html;
-        }
+        refreshBundleWidgetAfterHydration(currentOffer);
       });
     } else if (currentOffer.offerType === "free-gift") {
       void hydrateFreeGiftOfferInPlace(currentOffer).then((changed) => {
         if (!changed) return;
-        const wrap = document.querySelector(".ciwi-bundle-wrapper");
-        if (wrap) {
-          const html = renderBundlePreviewHtml(currentOffer);
-          if (html) wrap.innerHTML = html;
-        }
+        refreshBundleWidgetAfterHydration(currentOffer);
       });
     }
     syncCurrentBundleToSessionStorage(currentOffer);
