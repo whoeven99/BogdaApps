@@ -17,10 +17,13 @@ import {
 } from "lucide-react";
 import "../../styles/tailwind.css";
 import { CreateNewOffer } from "../component/CreateNewOffer/CreateNewOffer";
-import type { IndexLoaderData } from "../_index/route";
-import { parseDiscountRules } from "../../utils/offerParsing";
-import { openThemeEditorAppEmbed } from "../../utils/themeEditor";
-import { BUNDLE_THEME_PRODUCT_PLUGIN } from "../../utils/themePlugins";
+import type { IndexLoaderData, ThemeEditorTarget } from "../_index/route";
+import {
+  getOfferDisplayType,
+  getOfferRulesText,
+  getOfferScheduleTimezone,
+} from "../../utils/offerParsing";
+import { openThemeEditor } from "../../utils/themeEditor";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -44,6 +47,15 @@ interface DashboardPageProps {
   themeExtensionEnabled: boolean;
   themeExtensionDetectionFailed?: boolean;
   themeExtensionError?: string;
+  themeTargets?: IndexLoaderData["themeTargets"];
+  themeExtensionMatchedThemeId?: string;
+}
+
+function formatThemeTargetLabel(theme: ThemeEditorTarget): string {
+  if (theme.role === "MAIN") return `${theme.name} (Live)`;
+  if (theme.role === "UNPUBLISHED") return `${theme.name} (Draft)`;
+  if (theme.role === "DEVELOPMENT") return `${theme.name} (Development)`;
+  return `${theme.name} (${theme.role || "Theme"})`;
 }
 
 type DashboardOfferRow = {
@@ -53,6 +65,7 @@ type DashboardOfferRow = {
   offerType: string;
   discountRulesJson: string | null;
   offerSettingsJson: string | null;
+  campaignConfigJson?: string | null;
   isActive: boolean;
   createdAt: string | Date | undefined;
   updatedAt: string | Date | undefined;
@@ -132,21 +145,38 @@ export function DashboardPage({
   themeExtensionEnabled,
   themeExtensionDetectionFailed = false,
   themeExtensionError,
+  themeTargets = [],
+  themeExtensionMatchedThemeId,
 }: DashboardPageProps) {
   const [searchParams] = useSearchParams();
-  const actionData = useActionData() as { toast?: string } | undefined;
+  const actionData = useActionData() as
+    | { toast?: string }
+    | { _offerActionError: true; message: string }
+    | undefined;
   const navigation = useNavigation();
   const [showCreateOffer, setShowCreateOffer] = useState(false);
   const [editingOfferId, setEditingOfferId] = useState<string | null>(null);
   const [deletingOffer, setDeletingOffer] = useState<DashboardOfferRow | null>(
     null,
   );
-  const [togglingIds, setTogglingIds] = useState<string[]>([]);
+  const [pendingToggleStatus, setPendingToggleStatus] = useState<Record<string, boolean>>({});
+  const [submittingToggleIds, setSubmittingToggleIds] = useState<Set<string>>(() => new Set());
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(() => new Set());
   const [overviewMetrics, setOverviewMetrics] = useState<GmvOverviewMetrics | null>(
     null,
   );
 
   const [showThemeExtensionModal, setShowThemeExtensionModal] = useState(false);
+  const preferredThemeTarget = themeTargets.find(
+    (theme) => theme.id === themeExtensionMatchedThemeId,
+  ) ||
+    themeTargets.find((theme) => theme.role === "MAIN") ||
+    themeTargets.find((theme) => theme.role === "UNPUBLISHED") ||
+    themeTargets[0] ||
+    null;
+  const [selectedThemeId, setSelectedThemeId] = useState(
+    preferredThemeTarget?.id || "",
+  );
   const [hideBanner, setHideBanner] = useState(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("hideThemeExtensionBanner") === "true";
@@ -165,6 +195,10 @@ export function DashboardPage({
     localStorage.setItem("hideThemeExtensionBanner", "true");
   };
 
+  const effectiveShop = shop || themeEditorStoreId;
+  const defaultThemeEditorId =
+    preferredThemeTarget?.editorId || preferredThemeTarget?.id || themeEditorThemeId;
+
   const offerRows: DashboardOfferRow[] = (offers ?? []).map((offer) => {
     const isActive = !!offer.status;
     const createdAt = offer.createdAt;
@@ -181,6 +215,7 @@ export function DashboardPage({
       offerType: offer.offerType,
       discountRulesJson: offer.discountRulesJson,
       offerSettingsJson: offer.offerSettingsJson,
+      campaignConfigJson: offer.campaignConfigJson,
       isActive,
       createdAt,
       updatedAt,
@@ -191,7 +226,7 @@ export function DashboardPage({
     };
   });
 
-  const visibleOffers = offerRows.slice(0, 4);
+  const visibleOffers = offerRows.filter((offer) => !pendingDeleteIds.has(offer.id)).slice(0, 4);
 
   // 计算真实 Overview 数据
   const fallbackOverview = (() => {
@@ -242,17 +277,66 @@ export function DashboardPage({
       const intent = navigation.formData.get("intent");
       const id = navigation.formData.get("offerId");
       if (intent === "toggle-offer-status" && typeof id === "string" && id) {
-        setTogglingIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+        const nextStatusRaw = navigation.formData.get("nextStatus");
+        const nextStatus = String(nextStatusRaw || "").trim() === "true";
+        setPendingToggleStatus((prev) => ({ ...prev, [id]: nextStatus }));
+        setSubmittingToggleIds((prev) => {
+          const next = new Set(prev);
+          next.add(id);
+          return next;
+        });
       }
-    } else if (navigation.state === "idle" && togglingIds.length > 0) {
-      const timer = setTimeout(() => {
-        setTogglingIds([]);
-      }, 300);
-      return () => clearTimeout(timer);
+      if (intent === "delete-offer" && typeof id === "string" && id) {
+        setPendingDeleteIds((prev) => {
+          const next = new Set(prev);
+          next.add(id);
+          return next;
+        });
+      }
     }
-  }, [navigation.state, navigation.formData, togglingIds.length]);
+  }, [navigation.state, navigation.formData]);
 
-  const getIsToggling = (offerId: string) => togglingIds.includes(offerId);
+  useEffect(() => {
+    if (!actionData) return;
+    if (!("_offerActionError" in actionData) || !actionData._offerActionError) return;
+    setPendingToggleStatus({});
+    setSubmittingToggleIds(new Set());
+    setPendingDeleteIds(new Set());
+  }, [actionData]);
+
+  useEffect(() => {
+    setPendingToggleStatus((prev) => {
+      const ids = Object.keys(prev);
+      if (ids.length === 0) return prev;
+      let next: Record<string, boolean> | null = null;
+      for (const id of ids) {
+        const desiredStatus = prev[id];
+        const offer = offerRows.find((row) => row.id === id);
+        if (!offer || offer.isActive === desiredStatus) {
+          if (!next) next = { ...prev };
+          delete next[id];
+        }
+      }
+      return next ?? prev;
+    });
+
+    setPendingDeleteIds((prev) => {
+      if (prev.size === 0) return prev;
+      let changed = false;
+      const next = new Set<string>();
+      const rowIds = new Set(offerRows.map((row) => row.id));
+      for (const id of prev) {
+        if (rowIds.has(id)) {
+          next.add(id);
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [offerRows]);
+
+  const getIsToggling = (offerId: string) => submittingToggleIds.has(offerId);
 
   const handleViewDetails = () => {
     onViewAnalytics?.();
@@ -273,21 +357,47 @@ export function DashboardPage({
   };
   const handleViewAllAbTests = () => {}; // mock
   const handleThemeExtensionToggle = () => {
-    openThemeEditorAppEmbed(
-      themeEditorStoreId,
-      themeEditorThemeId,
-      apiKey,
-      BUNDLE_THEME_PRODUCT_PLUGIN,
-    );
+    if (!effectiveShop || !apiKey) return;
+    if (themeTargets.length > 1) {
+      setShowThemeExtensionModal(true);
+      return;
+    }
+    openThemeEditor(effectiveShop, apiKey, {
+      themeId: defaultThemeEditorId,
+      openAppEmbed: true,
+    });
   };
 
-  const toast = searchParams.get("toast") || actionData?.toast;
+  const handleOpenSelectedTheme = () => {
+    if (!effectiveShop || !apiKey) return;
+    setShowThemeExtensionModal(false);
+    openThemeEditor(effectiveShop, apiKey, {
+      themeId: selectedThemeId || defaultThemeEditorId,
+      openAppEmbed: true,
+    });
+  };
+
+  const toast =
+    searchParams.get("toast") ||
+    (actionData && "toast" in actionData ? actionData.toast : undefined);
 
   useEffect(() => {
     if (toast?.startsWith("delete-success")) {
       setDeletingOffer(null);
     }
+    if (toast?.startsWith("toggle-success")) {
+      setSubmittingToggleIds(new Set());
+    }
   }, [toast]);
+
+  useEffect(() => {
+    setSelectedThemeId((previous) => {
+      if (previous && themeTargets.some((theme) => theme.id === previous)) {
+        return previous;
+      }
+      return preferredThemeTarget?.id || "";
+    });
+  }, [preferredThemeTarget?.id, themeTargets]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -537,8 +647,8 @@ export function DashboardPage({
                 : "Bundles widget is currently disabled."}
           </p>
           <p className="font-sans font-normal text-[13px] leading-[20px] text-[#5c6166] tracking-[-0.1px] mb-[12px]">
-            This opens Theme Editor App Embeds. Toggle the extension there and
-            click Save in Shopify.
+            This opens Theme Editor. Enable the app embed or add the app block
+            from the Apps panel on the live or draft theme you choose.
           </p>
           {themeExtensionStatus === "unknown" && themeExtensionError ? (
             <div className="mb-[12px] rounded-[8px] border border-[#ffe0b2] bg-[#fff8e1] px-[12px] py-[10px]">
@@ -636,26 +746,33 @@ export function DashboardPage({
             ) : (
               visibleOffers.map((offer) => {
                 const isToggling = getIsToggling(offer.id);
-                const displayIsActive = themeExtensionBlocksOffers ? false : offer.isActive;
+                const optimisticStatus = pendingToggleStatus[offer.id];
+                const displayIsActive = themeExtensionBlocksOffers
+                  ? false
+                  : typeof optimisticStatus === "boolean"
+                    ? optimisticStatus
+                    : offer.isActive;
                 const statusLabel = displayIsActive ? "Active" : "Inactive";
-                const displayType = offer.offerType === "quantity-breaks-same" ? "Quantity breaks" : offer.offerType;
-                
-                const rules = parseDiscountRules(offer.discountRulesJson);
-                const rulesText = rules.length > 0 
-                  ? rules.map(r => `Buy ${r.count} Get ${r.discountPercent}% Off`).join(", ")
-                  : "-";
-                  
+                const displayType = getOfferDisplayType(
+                  offer.offerType,
+                  offer.campaignConfigJson,
+                  offer.offerSettingsJson,
+                );
+                const rulesText = getOfferRulesText({
+                  campaignConfigJson: offer.campaignConfigJson,
+                  discountRulesJson: offer.discountRulesJson,
+                  offerSettingsJson: offer.offerSettingsJson,
+                });
+
                 const formatTime = (timeStr: string | Date | undefined) => {
                   if (!timeStr) return "-";
                   const d = dayjs(timeStr);
                   if (!d.isValid()) return "-";
-                  let tz = ianaTimezone;
-                  try {
-                    if (offer.offerSettingsJson) {
-                      const parsed = JSON.parse(offer.offerSettingsJson);
-                      if (parsed.scheduleTimezone) tz = parsed.scheduleTimezone;
-                    }
-                  } catch (e) {}
+                  const tz = getOfferScheduleTimezone({
+                    campaignConfigJson: offer.campaignConfigJson,
+                    offerSettingsJson: offer.offerSettingsJson,
+                    fallback: ianaTimezone,
+                  });
                   return d.tz(tz).format("YYYY-MM-DD HH:mm:ss") + ` (UTC${d.tz(tz).format('Z')})`;
                 };
 
@@ -695,7 +812,12 @@ export function DashboardPage({
                             if (themeExtensionBlocksOffers) {
                               e.preventDefault();
                               setShowThemeExtensionModal(true);
+                              return;
                             }
+                            setPendingToggleStatus((prev) => ({
+                              ...prev,
+                              [offer.id]: offer.isActive ? false : true,
+                            }));
                           }}
                           className={`flex items-center gap-[8px] bg-transparent border-0 p-0 cursor-pointer ${
                             isToggling ? "opacity-70 cursor-default" : ""
@@ -787,7 +909,12 @@ export function DashboardPage({
           ) : (
             visibleOffers.map((offer) => {
               const isToggling = getIsToggling(offer.id);
-              const displayIsActive = themeExtensionBlocksOffers ? false : offer.isActive;
+              const optimisticStatus = pendingToggleStatus[offer.id];
+              const displayIsActive = themeExtensionBlocksOffers
+                ? false
+                : typeof optimisticStatus === "boolean"
+                  ? optimisticStatus
+                  : offer.isActive;
               const statusLabel = displayIsActive ? "Active" : "Inactive";
               const gmvDisplay = `$${offer.gmv.toLocaleString()}`;
               const conversionDisplay = `${offer.conversion.toFixed(1)}%`;
@@ -823,7 +950,12 @@ export function DashboardPage({
                         if (themeExtensionBlocksOffers) {
                           e.preventDefault();
                           setShowThemeExtensionModal(true);
+                          return;
                         }
+                        setPendingToggleStatus((prev) => ({
+                          ...prev,
+                          [offer.id]: offer.isActive ? false : true,
+                        }));
                       }}
                       className={`flex items-center gap-[8px] mb-[12px] bg-transparent border-0 p-0 cursor-pointer ${
                         isToggling ? "opacity-70 cursor-default" : ""
@@ -1230,11 +1362,33 @@ export function DashboardPage({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.4)]">
           <div className="bg-white rounded-[16px] shadow-[0_8px_24px_rgba(0,0,0,0.12)] max-w-[400px] w-[90%] p-[24px]">
             <h2 className="font-sans font-semibold text-[18px] leading-[27px] text-[#1c1f23] mb-[8px]">
-              Activate Theme Extension
+              Open Theme Editor
             </h2>
-            <p className="font-sans text-[14px] leading-[21px] text-[#5c6166] mb-[16px]">
-              You need to activate the theme extension on an online or draft theme before you can turn on any offers.
-            </p>
+            <div className="font-sans text-[14px] leading-[21px] text-[#5c6166] mb-[16px]">
+              <p className="m-0">
+                Choose the live or draft theme you want to configure. In Shopify
+                Theme Editor, you can enable the app embed or add the app block
+                from the Apps panel on a product template.
+              </p>
+              {themeTargets.length > 0 ? (
+                <label className="mt-[12px] block">
+                  <div className="mb-[6px] text-[12px] font-medium text-[#1c1f23]">
+                    Theme
+                  </div>
+                  <select
+                    value={selectedThemeId}
+                    onChange={(event) => setSelectedThemeId(event.target.value)}
+                    className="w-full rounded-[8px] border border-[#d0d5dd] bg-white px-[12px] py-[8px] text-[14px] text-[#1c1f23]"
+                  >
+                    {themeTargets.map((theme) => (
+                      <option key={theme.id} value={theme.id}>
+                        {formatThemeTargetLabel(theme)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+            </div>
             <div className="flex justify-end gap-[8px]">
               <button
                 type="button"
@@ -1246,12 +1400,11 @@ export function DashboardPage({
               <button
                 type="button"
                 onClick={() => {
-                  setShowThemeExtensionModal(false);
-                  handleThemeExtensionToggle();
+                  handleOpenSelectedTheme();
                 }}
                 className="px-[12px] py-[6px] rounded-[6px] bg-[#008060] !text-white text-[14px] font-sans hover:bg-[#006e52]"
               >
-                Activate Now
+                Open Theme Editor
               </button>
             </div>
           </div>

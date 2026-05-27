@@ -8,6 +8,7 @@ import {
   type ActionFunctionArgs,
   type HeadersFunction,
   type LoaderFunctionArgs,
+  type ShouldRevalidateFunctionArgs,
 } from "react-router";
 import {
   authenticate,
@@ -40,25 +41,36 @@ import {
 } from "../../billing.server";
 import {
   OFFER_TEXT_LIMITS,
-  buildLegacyFieldsFromCampaignConfig,
+  buildPersistedOfferFieldsFromCampaignConfig,
   clampNumber,
   getInvalidIpCountryCodes,
   normalizeCustomerProfileFilters,
   normalizeCustomerSegments,
   normalizeIpCountryCodes,
   normalizeTargetMarkets,
+  LONG_RUNNING_OFFER_END_TIME_ISO,
   parseProgressiveGiftsConfig,
   progressiveGiftsConfigToStorableJson,
   parseCompleteBundleConfig,
   parseDifferentProductsDiscountRules,
+  parseFreeGiftRules,
   parseFreeGiftSelectedProducts,
   parseSelectedProductIds,
   migrateLegacyOfferToCampaignConfig,
   parseCampaignConfig,
   sanitizeHexColor,
   sanitizeSingleLineText,
+  trimSelectedProductsJsonForFunction,
+  isOfferPublishedForBundleMetafieldSync,
+  normalizeOfferEndTimeForUi,
+  resolveOfferTypeFromCampaignConfig,
 } from "../../utils/offerParsing";
 import { sanitizeEnvLikeValue, sanitizeUrlLikeEnvValue } from "../../utils/env";
+import {
+  BUNDLE_METAFIELD_FUNCTION_OFFERS_KEY,
+  BUNDLE_STOREFRONT_OFFERS_KEY,
+} from "../../utils/bundleShopMetafieldKeys";
+import { reconcileShopOfferShardedMetafields } from "../../utils/bundleShopOfferMetafields.server";
 import { BUNDLE_THEME_PRODUCT_PLUGIN } from "../../utils/themePlugins";
 import type { OfferTypeId } from "../component/CreateNewOffer/offerTypeOptions";
 
@@ -107,6 +119,34 @@ function getErrorMessage(error: unknown): string {
   }
 }
 
+const BUNDLE_DEBUG_SERVER_URL = "http://127.0.0.1:7777/event";
+const BUNDLE_DEBUG_SESSION_ID = "bundle-ui-empty-offers";
+
+function reportBundleDebugEvent(
+  hypothesisId: string,
+  location: string,
+  msg: string,
+  data: Record<string, unknown>,
+) {
+  try {
+    void fetch(BUNDLE_DEBUG_SERVER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: BUNDLE_DEBUG_SESSION_ID,
+        runId: "pre-fix",
+        hypothesisId,
+        location,
+        msg: `[DEBUG] ${msg}`,
+        data,
+        ts: Date.now(),
+      }),
+    }).catch(() => {});
+  } catch {
+    // ignore debug reporting failures
+  }
+}
+
 function isMissingOfferCampaignConfigColumnError(error: unknown): boolean {
   const message = getErrorMessage(error).toLowerCase();
   return (
@@ -130,82 +170,54 @@ type ShopOffersMetafieldSyncResult =
   | { ok: true }
   | { ok: false; message: string };
 
-const BUNDLE_METAFIELD_NAMESPACE = "ciwi_bundle";
-const BUNDLE_METAFIELD_BASE_KEY = "ciwi-bundle-offers";
-const BUNDLE_METAFIELD_ACTIVE_ENV_KEY = "ciwi-bundle-active-env";
-const BUNDLE_METAFIELD_ENABLED_PROD_KEY = "ciwi-bundle-enabled-prod";
-const BUNDLE_METAFIELD_ENABLED_TEST_KEY = "ciwi-bundle-enabled-test";
-const LONG_RUNNING_OFFER_END_TIME = new Date("2999-12-31T23:59:59.000Z");
-const PROD_SHOPIFY_API_KEY = "bfc13ad696f2a8d2a77ba6eee1e26966";
-const TEST_SHOPIFY_API_KEY = "ab25ea895c6df574ae9ff70e9c7731c5";
-type BundleEnvironment = "prod" | "test";
+const LONG_RUNNING_OFFER_END_TIME = new Date(LONG_RUNNING_OFFER_END_TIME_ISO);
 
-function resolveBundleEnvironment(): BundleEnvironment {
-  const explicit =
-    String(process.env.BUNDLE_ENV || process.env.APP_ENV || "")
-      .trim()
-      .toLowerCase();
-  if (explicit === "prod" || explicit === "production") return "prod";
-  if (explicit === "test" || explicit === "staging") return "test";
-
-  const apiKey = sanitizeEnvLikeValue(process.env.SHOPIFY_API_KEY);
-  if (apiKey === PROD_SHOPIFY_API_KEY) return "prod";
-  if (apiKey === TEST_SHOPIFY_API_KEY) return "test";
-
-  return process.env.NODE_ENV === "production" ? "prod" : "test";
+/**
+ * 主题与购物车 Function 仅需变体 id/价/option；写入 shop metafield 时去掉冗余 title 与重复字段以控制体积。
+ * （主题 parse 会从 selectedOptions 拼回展示文案；Function 不读 variants。）
+ */
+function slimVariantsForBundleStorefrontMetafield(
+  variants: StoreProductItem["variants"] | undefined,
+): Array<{ id: string; price: string; selectedOptions: Array<{ name: string; value: string }> }> {
+  if (!Array.isArray(variants)) return [];
+  return variants
+    .filter((v) => v && typeof v === "object" && v.id)
+    .map((v) => ({
+      id: String(v.id),
+      price: String(v.price ?? ""),
+      selectedOptions: Array.isArray(v.selectedOptions)
+        ? v.selectedOptions
+            .filter((opt) => opt && typeof opt === "object")
+            .map((opt) => ({
+              name: String(opt.name ?? ""),
+              value: String(opt.value ?? ""),
+            }))
+        : [],
+    }));
 }
 
-function buildOfferMetafieldsInput(
-  ownerId: string,
-  offersPayload: string,
-  themeExtensionEnabled: boolean,
-) {
-  const env = resolveBundleEnvironment();
-  const envOfferKey = `${BUNDLE_METAFIELD_BASE_KEY}-${env}`;
-  const envEnabledKey =
-    env === "prod"
-      ? BUNDLE_METAFIELD_ENABLED_PROD_KEY
-      : BUNDLE_METAFIELD_ENABLED_TEST_KEY;
-  const activeEnvPayload = JSON.stringify({
-    env,
-    updatedAt: new Date().toISOString(),
-  });
-
-  return [
-    {
-      ownerId,
-      namespace: BUNDLE_METAFIELD_NAMESPACE,
-      key: envOfferKey,
-      type: "json",
-      value: offersPayload,
-    },
-    {
-      ownerId,
-      namespace: BUNDLE_METAFIELD_NAMESPACE,
-      key: BUNDLE_METAFIELD_ACTIVE_ENV_KEY,
-      type: "json",
-      value: activeEnvPayload,
-    },
-    {
-      ownerId,
-      namespace: BUNDLE_METAFIELD_NAMESPACE,
-      key: envEnabledKey,
-      type: "json",
-      value: JSON.stringify({
-        enabled: themeExtensionEnabled,
-        env,
-        updatedAt: new Date().toISOString(),
-      }),
-    },
-    // 兼容历史读路径，避免函数/主题未更新时出现空数据。
-    {
-      ownerId,
-      namespace: BUNDLE_METAFIELD_NAMESPACE,
-      key: BUNDLE_METAFIELD_BASE_KEY,
-      type: "json",
-      value: offersPayload,
-    },
-  ];
+function slimVariantsFromStoredProductShape(
+  raw: unknown,
+): Array<{ id: string; price: string; selectedOptions: Array<{ name: string; value: string }> }> {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((v) => v && typeof v === "object" && (v as { id?: unknown }).id)
+    .map((v) => {
+      const selectedOptions = Array.isArray((v as { selectedOptions?: unknown }).selectedOptions)
+        ? ((v as { selectedOptions: Array<{ name?: unknown; value?: unknown }> }).selectedOptions || [])
+            .filter((opt) => opt && typeof opt === "object")
+            .map((opt) => ({
+              name: String(opt.name ?? ""),
+              value: String(opt.value ?? ""),
+            }))
+        : [];
+      return {
+        id: String((v as { id?: unknown }).id ?? ""),
+        price: String((v as { price?: unknown }).price ?? ""),
+        selectedOptions,
+      };
+    })
+    .filter((row) => row.id);
 }
 
 function buildHydratedCompleteBundleSelectedProductsJson(
@@ -217,31 +229,58 @@ function buildHydratedCompleteBundleSelectedProductsJson(
   if (!config.bars.length) return selectedProductsJson;
 
   const bars = config.bars.map((bar) => ({
-    ...bar,
+    id: bar.id,
+    type: bar.type,
+    title: bar.title,
+    subtitle: bar.subtitle,
+    minQuantity: bar.minQuantity,
+    maxQuantity: bar.maxQuantity,
+    excludeTriggerProduct: bar.excludeTriggerProduct,
+    quantity: bar.quantity,
+    pricing: bar.pricing,
     products: (bar.products || []).map((product) => {
       const hit = storeProductMap.get(String(product.productId || ""));
-      if (!hit) return product;
+      if (!hit) {
+        return {
+          productId: product.productId,
+          handle: product.handle ?? "",
+          title: product.title ?? "",
+          image: product.image ?? "",
+          price: product.price ?? "",
+          defaultVariantId: product.defaultVariantId ?? "",
+          selectedVariantId:
+            String(product.selectedVariantId || product.defaultVariantId || ""),
+          selectedOptions:
+            product.selectedOptions && typeof product.selectedOptions === "object"
+              ? product.selectedOptions
+              : {},
+          pricing: product.pricing ?? { mode: "full_price" as const, value: 0 },
+          variants: slimVariantsFromStoredProductShape(product.variants),
+        };
+      }
       const variants = Array.isArray(hit.variants) ? hit.variants : [];
       const preferredVariantId = String(product.selectedVariantId || "");
       const selectedVariant =
         variants.find((variant) => String(variant.id) === preferredVariantId) || variants[0];
 
       return {
-        ...product,
+        productId: product.productId,
         handle: hit.handle || product.handle || "",
         title: hit.name || product.title || "",
         image: hit.image || product.image || "",
         price: selectedVariant?.price || product.price || hit.price || "",
         defaultVariantId: String(variants[0]?.id || product.defaultVariantId || ""),
-        selectedVariantId:
-          String(selectedVariant?.id || product.selectedVariantId || variants[0]?.id || ""),
+        selectedVariantId: String(
+          selectedVariant?.id || product.selectedVariantId || variants[0]?.id || "",
+        ),
         selectedOptions:
           product.selectedOptions && Object.keys(product.selectedOptions).length > 0
             ? product.selectedOptions
             : Object.fromEntries(
                 (selectedVariant?.selectedOptions || []).map((opt) => [opt.name, opt.value]),
               ),
-        variants,
+        pricing: product.pricing ?? { mode: "full_price" as const, value: 0 },
+        variants: slimVariantsForBundleStorefrontMetafield(variants),
       };
     }),
   }));
@@ -278,7 +317,9 @@ function buildHydratedDifferentProductsSelectedProductsJson(
         image: hit.image || "",
         price: firstVariant?.price || hit.price || "",
         selectedVariantId: String(firstVariant?.id || ""),
-        variants: Array.isArray(hit.variants) ? hit.variants : [],
+        variants: slimVariantsForBundleStorefrontMetafield(
+          Array.isArray(hit.variants) ? hit.variants : undefined,
+        ),
       };
     })
     .filter(
@@ -291,9 +332,8 @@ function buildHydratedDifferentProductsSelectedProductsJson(
         image: string;
         price: string;
         selectedVariantId: string;
-        variants: StoreProductItem["variants"];
-      } =>
-        Boolean(product?.id),
+        variants: ReturnType<typeof slimVariantsForBundleStorefrontMetafield>;
+      } => Boolean(product?.id),
     );
 
   return hydratedCatalog.length > 0
@@ -301,35 +341,133 @@ function buildHydratedDifferentProductsSelectedProductsJson(
     : selectedProductsJson ?? null;
 }
 
+function compileOfferRuntimeSyncData(offer: OfferListItem): {
+  offerType: string;
+  selectedProductsJson: string | null;
+  discountRulesJson: string | null;
+  offerSettingsJson: string | null;
+  referencedProductIds: string[];
+  storefrontHydration: "none" | "complete-bundle" | "quantity-breaks-different";
+} {
+  const parsedCampaignConfig = parseCampaignConfig(offer.campaignConfigJson);
+  if (parsedCampaignConfig) {
+    const persistedFields = buildPersistedOfferFieldsFromCampaignConfig(
+      parsedCampaignConfig,
+      offer.offerSettingsJson,
+    );
+    return {
+      offerType: persistedFields.offerType,
+      selectedProductsJson: persistedFields.selectedProductsJsonForFunction,
+      discountRulesJson: persistedFields.discountRulesJson,
+      offerSettingsJson: persistedFields.offerSettingsJson,
+      referencedProductIds: persistedFields.referencedProductIds,
+      storefrontHydration: persistedFields.storefrontHydration,
+    };
+  }
+
+  const effectiveOfferType = resolveOfferTypeFromCampaignConfig({
+    offerType: offer.offerType,
+    campaignConfigJson: offer.campaignConfigJson,
+  });
+
+  return {
+    offerType: effectiveOfferType,
+    selectedProductsJson: trimSelectedProductsJsonForFunction(
+      effectiveOfferType,
+      offer.selectedProductsJson,
+    ),
+    discountRulesJson: offer.discountRulesJson ?? null,
+    offerSettingsJson: offer.offerSettingsJson ?? null,
+    referencedProductIds: collectLegacyReferencedProductIds(offer),
+    storefrontHydration:
+      effectiveOfferType === "complete-bundle"
+        ? "complete-bundle"
+        : effectiveOfferType === "quantity-breaks-different"
+          ? "quantity-breaks-different"
+          : "none",
+  };
+}
+
 async function buildCompactOffersPayload(
   shopOffers: OfferListItem[],
 ): Promise<string> {
-  // 仅同步 status=true 的活动，避免无效活动占用 payload 体积并干扰函数计算
-  const activeOffers = shopOffers.filter((offer) => offer.status === true);
+  // 仅同步后台仍「启用」的活动，避免无效活动占用 payload 体积并干扰函数计算
+  const activeOffers = shopOffers.filter(isOfferPublishedForBundleMetafieldSync);
+  // #region debug-point D:compact-payload-filter
+  reportBundleDebugEvent(
+    "D",
+    "app/routes/_index/route.tsx:buildCompactOffersPayload",
+    "admin filtered offers for bundle metafield payload",
+    {
+      totalOffers: shopOffers.length,
+      activeOffers: activeOffers.length,
+      offerSummaries: shopOffers.slice(0, 12).map((offer) => {
+        const campaignConfig = parseCampaignConfig(offer.campaignConfigJson);
+        return {
+          id: String(offer.id || ""),
+          name: String(offer.name || ""),
+          status: offer.status !== false,
+          campaignStatus:
+            campaignConfig && campaignConfig.settings
+              ? campaignConfig.settings.status !== false
+              : null,
+          offerType: String(offer.offerType || ""),
+          startTime: String(offer.startTime || ""),
+          endTime: String(offer.endTime || ""),
+        };
+      }),
+    },
+  );
+  // #endregion
   // 先生成 Function 可安全消费的瘦 payload，避免 complete-bundle 展示字段把 metafield 撑爆。
-  const compactOffers = activeOffers.map((offer) => ({
-    id: offer.id,
-    name: offer.name,
-    cartTitle: offer.cartTitle,
-    status: offer.status,
-    startTime: offer.startTime,
-    endTime: offer.endTime,
-    selectedProductsJson: offer.selectedProductsJson ?? null,
-    discountRulesJson: offer.discountRulesJson ?? null,
-    offerSettingsJson: offer.offerSettingsJson ?? null,
-    offerType: offer.offerType,
-  }));
-  return JSON.stringify({
+  const compactOffers = activeOffers.map((offer) => {
+    const runtimeSyncData = compileOfferRuntimeSyncData(offer);
+    return {
+      id: offer.id,
+      name: offer.name,
+      cartTitle: offer.cartTitle,
+      status: offer.status,
+      startTime: offer.startTime,
+      endTime: offer.endTime,
+      selectedProductsJson: runtimeSyncData.selectedProductsJson,
+      discountRulesJson: runtimeSyncData.discountRulesJson,
+      offerSettingsJson: runtimeSyncData.offerSettingsJson,
+      offerType: runtimeSyncData.offerType,
+    };
+  });
+  const payload: {
+    updatedAt: string;
+    offers: typeof compactOffers;
+  } = {
     updatedAt: new Date().toISOString(),
     offers: compactOffers,
-  });
+  };
+  return JSON.stringify(payload);
 }
 
-async function buildStorefrontOffersPayload(
+async function buildStorefrontOffersStructured(
   admin: any,
   shopOffers: OfferListItem[],
-): Promise<string> {
-  const activeOffers = shopOffers.filter((offer) => offer.status === true);
+): Promise<{
+  updatedAt: string;
+  offers: Array<{
+    id: string;
+    name?: string;
+    cartTitle?: string;
+    status?: boolean;
+    startTime?: string;
+    endTime?: string;
+    selectedProductsJson?: string | null;
+    discountRulesJson?: string | null;
+    offerSettingsJson?: string | null;
+    offerType?: string;
+  }>;
+}> {
+  const activeOffers = shopOffers.filter(isOfferPublishedForBundleMetafieldSync);
+  const compiledActiveOffers = activeOffers.map((offer) => ({
+    offer,
+    runtimeSyncData: compileOfferRuntimeSyncData(offer),
+  }));
   const compactPayload = await buildCompactOffersPayload(shopOffers);
   const compactPayloadParsed = JSON.parse(compactPayload) as {
     updatedAt?: string;
@@ -349,11 +487,13 @@ async function buildStorefrontOffersPayload(
 
   // storefront 需要补齐前台直接渲染所需的商品展示字段，避免主题脚本首次渲染时缺少 title/handle/image。
   const storefrontCatalogProductIds = collectReferencedProductIds(
-    activeOffers.filter(
-      (offer) =>
-        offer.offerType === "complete-bundle" ||
-        offer.offerType === "quantity-breaks-different",
-    ),
+    compiledActiveOffers
+      .filter(
+        ({ runtimeSyncData }) =>
+          runtimeSyncData.storefrontHydration === "complete-bundle" ||
+          runtimeSyncData.storefrontHydration === "quantity-breaks-different",
+      )
+      .map(({ offer }) => offer),
   );
   const storeProducts =
     storefrontCatalogProductIds.length > 0
@@ -363,27 +503,68 @@ async function buildStorefrontOffersPayload(
     storeProducts.map((product) => [String(product.id || ""), product]),
   );
 
-  const storefrontOffers = (compactPayloadParsed.offers || []).map((offer) => ({
-    ...offer,
-    selectedProductsJson:
-      offer.offerType === "complete-bundle"
-        ? buildHydratedCompleteBundleSelectedProductsJson(
-            offer.selectedProductsJson,
-            storeProductMap,
-          )
-        : offer.offerType === "quantity-breaks-different"
-          ? buildHydratedDifferentProductsSelectedProductsJson(
+  const storefrontOffers = (compactPayloadParsed.offers || []).map((offer) => {
+    const matchedCompiledOffer = compiledActiveOffers.find(
+      ({ offer: activeOffer }) => String(activeOffer.id) === String(offer.id || ""),
+    );
+    const hydrationMode = matchedCompiledOffer?.runtimeSyncData.storefrontHydration || "none";
+    const effectiveOfferType =
+      matchedCompiledOffer?.runtimeSyncData.offerType ||
+      resolveOfferTypeFromCampaignConfig({
+        offerType: offer.offerType,
+      });
+    return {
+      ...offer,
+      offerType: effectiveOfferType,
+      selectedProductsJson:
+        hydrationMode === "complete-bundle"
+          ? buildHydratedCompleteBundleSelectedProductsJson(
               offer.selectedProductsJson,
-              offer.discountRulesJson,
               storeProductMap,
             )
-        : offer.selectedProductsJson ?? null,
-  }));
-
-  return JSON.stringify({
-    updatedAt: compactPayloadParsed.updatedAt || new Date().toISOString(),
-    offers: storefrontOffers,
+          : hydrationMode === "quantity-breaks-different"
+            ? buildHydratedDifferentProductsSelectedProductsJson(
+                offer.selectedProductsJson,
+                offer.discountRulesJson,
+                storeProductMap,
+              )
+            : offer.selectedProductsJson ?? null,
+    };
   });
+
+  const updatedAt = compactPayloadParsed.updatedAt || new Date().toISOString();
+  const offers = storefrontOffers
+    .map((offer) => ({
+      ...offer,
+      id: String(offer.id || "").trim(),
+    }))
+    .filter((offer) => offer.id);
+
+  // #region debug-point D:storefront-structured
+  reportBundleDebugEvent(
+    "D",
+    "app/routes/_index/route.tsx:buildStorefrontOffersStructured",
+    "admin built storefront offers payload",
+    {
+      activeOffers: activeOffers.length,
+      compactOffers: Array.isArray(compactPayloadParsed.offers)
+        ? compactPayloadParsed.offers.length
+        : 0,
+      storefrontOffers: offers.length,
+      storefrontOfferSummaries: offers.slice(0, 12).map((offer) => ({
+        id: String(offer.id || ""),
+        name: String(offer.name || ""),
+        status: offer.status !== false,
+        offerType: String(offer.offerType || ""),
+      })),
+    },
+  );
+  // #endregion
+
+  return {
+    updatedAt,
+    offers,
+  };
 }
 
 async function loadShopOffersForSync(shopNameToSync: string): Promise<OfferListItem[]> {
@@ -439,7 +620,7 @@ async function syncFunctionOwnerOffersMetafield(
     console.log("[offers-sync][function-owner] syncing payload", {
       shopName: shopNameToSync,
       offerCount: shopOffers.length,
-      activeOffers: shopOffers.filter((offer) => offer.status === true).length,
+      activeOffers: shopOffers.filter(isOfferPublishedForBundleMetafieldSync).length,
       payloadLength: functionMetafieldValue.length,
     });
     await reconcileBundleAutomaticDiscounts(admin);
@@ -473,12 +654,10 @@ async function syncShopOffersMetafield(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   admin: any,
   shopNameToSync: string,
-  themeExtensionEnabled: boolean,
 ): Promise<ShopOffersMetafieldSyncResult> {
   try {
     console.log("[offers-sync] start syncShopOffersMetafield", {
       shopName: shopNameToSync,
-      themeExtensionEnabled,
     });
     const shopOffers = await loadShopOffersForSync(shopNameToSync);
     console.log("[offers-sync] loaded offers from db", {
@@ -487,20 +666,32 @@ async function syncShopOffersMetafield(
       offerIds: shopOffers.map((o) => o.id),
     });
 
-    const fullPayload = JSON.stringify({
-      updatedAt: new Date().toISOString(),
-      offers: shopOffers,
-    });
     const functionMetafieldValue = await buildCompactOffersPayload(shopOffers);
-    const storefrontMetafieldValue = await buildStorefrontOffersPayload(admin, shopOffers);
+
+    const storefrontStructured = await buildStorefrontOffersStructured(admin, shopOffers);
+    const mergedStorefrontPreview = JSON.stringify({
+      updatedAt: storefrontStructured.updatedAt,
+      offers: storefrontStructured.offers,
+    });
     console.log("[offers-sync] payload size snapshot", {
       totalOffers: shopOffers.length,
-      activeOffers: shopOffers.filter((offer) => offer.status === true).length,
-      fullPayloadLength: fullPayload.length,
+      activeOffers: shopOffers.filter(isOfferPublishedForBundleMetafieldSync).length,
+      mergedStorefrontPreviewLength: mergedStorefrontPreview.length,
       functionPayloadLength: functionMetafieldValue.length,
-      storefrontPayloadLength: storefrontMetafieldValue.length,
-      functionReducedBy: fullPayload.length - functionMetafieldValue.length,
+      storefrontOfferRows: storefrontStructured.offers.length,
+      functionReducedBy: mergedStorefrontPreview.length - functionMetafieldValue.length,
     });
+
+    const functionInputUtf8Bytes = new TextEncoder().encode(functionMetafieldValue).length;
+    if (functionInputUtf8Bytes > 10_000) {
+      console.warn(
+        "[offers-sync] compact offers JSON exceeds Shopify Function single-metafield input limit (~10kB UTF-8); cart/delivery Functions may receive null",
+        {
+          utf8Bytes: functionInputUtf8Bytes,
+          key: BUNDLE_METAFIELD_FUNCTION_OFFERS_KEY,
+        },
+      );
+    }
 
     const shopIdResponse = await admin.graphql(
       `#graphql
@@ -536,65 +727,25 @@ async function syncShopOffersMetafield(
       };
     }
 
-    console.log("[offers-sync] writing shop metafield", {
+    console.log("[offers-sync] writing shop bundle metafields", {
       shopId,
-      namespace: BUNDLE_METAFIELD_NAMESPACE,
-      key: BUNDLE_METAFIELD_BASE_KEY,
-      payloadLength: storefrontMetafieldValue.length,
+      namespace: "ciwi_bundle",
+      storefrontOffersKey: BUNDLE_STOREFRONT_OFFERS_KEY,
+      storefrontPayloadLength: mergedStorefrontPreview.length,
+      functionInputKey: BUNDLE_METAFIELD_FUNCTION_OFFERS_KEY,
+      functionInputPayloadLength: functionMetafieldValue.length,
     });
-    const metafieldsSetResponse = await admin.graphql(
-      `#graphql
-      mutation MetafieldsSet($metafields: [MetafieldsSetInput!]!) {
-        metafieldsSet(metafields: $metafields) {
-          metafields {
-            id
-            key
-            namespace
-          }
-          userErrors {
-            field
-            message
-          }
-        }
-      }
-    `,
-      {
-        variables: {
-          metafields: buildOfferMetafieldsInput(
-            shopId,
-            storefrontMetafieldValue,
-            themeExtensionEnabled,
-          ),
-        },
-      },
-    );
 
-    const metafieldsSetJson = (await metafieldsSetResponse.json()) as {
-      data?: {
-        metafieldsSet?: {
-          userErrors?: Array<{ message?: string }>;
-        };
-      };
-      errors?: Array<{ message?: string }>;
-    };
-
-    if (metafieldsSetJson.errors?.length) {
-      console.error("[offers-sync] metafieldsSet graphql errors", metafieldsSetJson.errors);
-      return {
-        ok: false,
-        message: metafieldsSetJson.errors
-          .map((e) => e.message || "unknown")
-          .join("; "),
-      };
-    }
-
-    const userErrors = metafieldsSetJson?.data?.metafieldsSet?.userErrors ?? [];
-    if (userErrors.length > 0) {
-      console.error("[offers-sync] metafieldsSet userErrors", userErrors);
-      return {
-        ok: false,
-        message: userErrors.map((e) => e.message || "unknown").join("; "),
-      };
+    const shardSync = await reconcileShopOfferShardedMetafields(admin, shopId, {
+      syncAtIso: storefrontStructured.updatedAt,
+      storefrontOffersPayload: mergedStorefrontPreview,
+      functionOffersCompactPayload: functionMetafieldValue,
+    });
+    if (!shardSync.ok) {
+      console.error("[offers-sync] sharded metafield sync failed", {
+        message: shardSync.message,
+      });
+      return shardSync;
     }
 
     console.log("[offers-sync] syncing offers into automatic discount owner metafields");
@@ -637,19 +788,9 @@ async function runOfferPostWriteSync(admin: any, shopName: string): Promise<void
       });
     }
 
-    const themeExtensionDetection = await getCurrentThemeExtensionEnabled(admin);
-    if (themeExtensionDetection.debug?.error) {
-      console.error("Skip shop offers sync after offer write because theme detection failed", {
-        shopName,
-        error: themeExtensionDetection.debug.error,
-      });
-      return;
-    }
-
     const syncResult = await syncShopOffersMetafield(
       admin,
       shopName,
-      themeExtensionDetection.enabled,
     );
     if (!syncResult.ok) {
       console.error("syncShopOffersMetafield failed after offer write", {
@@ -742,6 +883,7 @@ export type IndexLoaderData = {
   offers?: OfferListItem[];
   storeProducts?: StoreProductItem[];
   markets: MarketItem[];
+  themeTargets: ThemeEditorTarget[];
   shop: string;
   themeEditorStoreId: string;
   themeEditorThemeId: string;
@@ -750,11 +892,20 @@ export type IndexLoaderData = {
   themeExtensionEnabled: boolean;
   themeExtensionDetectionFailed: boolean;
   themeExtensionDebug?: ThemeExtensionDetectionDebug;
+  themeExtensionMatchedThemeId?: string;
   billingSubscriptions: Array<{ name: string; status: string }>;
   billingTestMode: boolean;
 };
 
+export type ThemeEditorTarget = {
+  id: string;
+  editorId: string;
+  name: string;
+  role: string;
+};
+
 type ThemeExtensionDebugEntry = {
+  fileName?: string;
   entryKey: string | null;
   blockType: string;
   disabled?: boolean;
@@ -801,6 +952,56 @@ export type ThemeExtensionDetectionDebug = {
   };
   error?: string;
 };
+
+async function fetchThemeEditorTargets(admin: any): Promise<ThemeEditorTarget[]> {
+  try {
+    const response = await admin.graphql(
+      `#graphql
+        query ThemeEditorTargets {
+          themes(first: 20) {
+            edges {
+              node {
+                id
+                themeStoreId
+                name
+                role
+              }
+            }
+          }
+        }
+      `,
+    );
+    const json = await response.json();
+    const themeNodes =
+      json?.data?.themes?.edges
+        ?.map((edge: { node?: Record<string, any> | null }) => edge?.node)
+        .filter(Boolean) ?? [];
+    const priorityByRole: Record<string, number> = {
+      MAIN: 0,
+      UNPUBLISHED: 1,
+      DEVELOPMENT: 2,
+      DEMO: 3,
+    };
+
+    return themeNodes
+      .map((theme: any) => ({
+        id: String(theme?.id || ""),
+        editorId: String(theme?.themeStoreId || "").trim(),
+        name: String(theme?.name || "").trim(),
+        role: String(theme?.role || "").trim(),
+      }))
+      .filter((theme: ThemeEditorTarget) => theme.id && theme.name)
+      .sort((left: ThemeEditorTarget, right: ThemeEditorTarget) => {
+        const leftPriority = priorityByRole[left.role] ?? 99;
+        const rightPriority = priorityByRole[right.role] ?? 99;
+        if (leftPriority !== rightPriority) return leftPriority - rightPriority;
+        return left.name.localeCompare(right.name);
+      });
+  } catch (error) {
+    console.error("[theme-extension] failed to fetch theme editor targets", error);
+    return [];
+  }
+}
 
 async function fetchShopOffers(shop: string): Promise<OfferListItem[]> {
   try {
@@ -874,45 +1075,55 @@ function parseBxgySelectedProductIds(selectedProductsJson?: string | null): stri
   }
 }
 
-function collectReferencedProductIds(offers: OfferListItem[]): string[] {
-  const ids = new Set<string>();
-  for (const offer of offers) {
-    if (offer.offerType === "complete-bundle") {
-      const config = parseCompleteBundleConfig(offer.selectedProductsJson);
-      for (const bar of config.bars) {
-        for (const product of bar.products || []) {
-          const productId = String(product.productId || "").trim();
-          if (productId) ids.add(productId);
-        }
-      }
-      continue;
-    }
+function collectLegacyReferencedProductIds(offer: OfferListItem): string[] {
+  const effectiveOfferType = resolveOfferTypeFromCampaignConfig({
+    offerType: offer.offerType,
+    campaignConfigJson: offer.campaignConfigJson,
+  });
+  if (effectiveOfferType === "complete-bundle") {
+    const config = parseCompleteBundleConfig(offer.selectedProductsJson);
+    return Array.from(
+      new Set(
+        config.bars.flatMap((bar) =>
+          (bar.products || []).map((product) => String(product.productId || "").trim()),
+        ),
+      ),
+    ).filter(Boolean);
+  }
 
-    if (offer.offerType === "quantity-breaks-different") {
-      const selectedIds = parseSelectedProductIds(offer.selectedProductsJson);
-      const ruleIds = parseDifferentProductsDiscountRules(
-        offer.discountRulesJson,
-      ).flatMap((rule) => [
-        ...(Array.isArray(rule.buyProductIds) ? rule.buyProductIds : []),
-        ...(Array.isArray(rule.getProductIds) ? rule.getProductIds : []),
-      ]);
-      for (const productId of [...selectedIds, ...ruleIds]) {
-        const normalized = String(productId || "").trim();
-        if (normalized) ids.add(normalized);
-      }
-      continue;
-    }
+  if (effectiveOfferType === "quantity-breaks-different") {
+    const selectedIds = parseSelectedProductIds(offer.selectedProductsJson);
+    const ruleIds = parseDifferentProductsDiscountRules(
+      offer.discountRulesJson,
+    ).flatMap((rule) => [
+      ...(Array.isArray(rule.buyProductIds) ? rule.buyProductIds : []),
+      ...(Array.isArray(rule.getProductIds) ? rule.getProductIds : []),
+    ]);
+    return Array.from(new Set([...selectedIds, ...ruleIds])).filter(Boolean);
+  }
 
-    const selectedIds =
-      offer.offerType === "bxgy"
+  return Array.from(
+    new Set(
+      effectiveOfferType === "bxgy"
         ? parseBxgySelectedProductIds(offer.selectedProductsJson)
-        : offer.offerType === "free-gift"
+        : effectiveOfferType === "free-gift"
           ? [
               ...parseFreeGiftSelectedProducts(offer.selectedProductsJson).triggerProducts,
               ...parseFreeGiftSelectedProducts(offer.selectedProductsJson).giftProducts,
+              ...parseFreeGiftRules(offer.discountRulesJson).flatMap((rule) =>
+                Array.isArray(rule.giftProductIds) ? rule.giftProductIds : [],
+              ),
             ]
-        : parseSelectedProductIds(offer.selectedProductsJson);
-    for (const productId of selectedIds) {
+          : parseSelectedProductIds(offer.selectedProductsJson),
+    ),
+  ).filter(Boolean);
+}
+
+function collectReferencedProductIds(offers: OfferListItem[]): string[] {
+  const ids = new Set<string>();
+  for (const offer of offers) {
+    const runtimeSyncData = compileOfferRuntimeSyncData(offer);
+    for (const productId of runtimeSyncData.referencedProductIds) {
       const normalized = String(productId || "").trim();
       if (normalized) ids.add(normalized);
     }
@@ -1160,48 +1371,58 @@ const ensureWebPixel = async (admin: any, shop: string) => {
 
 /**
  * Collect objects that look like theme JSON blocks (have string `type`).
- * App embeds may live under `current.blocks` or nested elsewhere in settings_data.
+ * App embeds may live under `current.blocks` in settings_data, while app blocks may
+ * live in product template / section JSON files.
  */
 type ThemeBlockEntry = {
   block: Record<string, any>;
+  fileName: string;
   entryKey: string | null;
 };
 
 const collectThemeBlockEntries = (
   node: unknown,
   out: ThemeBlockEntry[],
+  fileName: string,
   entryKey: string | null = null,
 ): void => {
   if (node === null || typeof node !== "object") return;
   if (Array.isArray(node)) {
-    for (const item of node) collectThemeBlockEntries(item, out, entryKey);
+    for (const item of node) collectThemeBlockEntries(item, out, fileName, entryKey);
     return;
   }
   const rec = node as Record<string, unknown>;
   if (typeof rec.type === "string" || entryKey) {
     out.push({
       block: rec as Record<string, any>,
+      fileName,
       entryKey,
     });
   }
   for (const [key, value] of Object.entries(rec)) {
-    collectThemeBlockEntries(value, out, key);
+    collectThemeBlockEntries(value, out, fileName, key);
   }
 };
 
+function normalizeThemeJsonFileContent(content: string): string {
+  return String(content || "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "");
+}
+
 /**
- * App embed status for a single theme extension block (e.g. product_detail_message -> product-detail-message.js).
- * Defaults to the MAIN theme to avoid broader theme-scan access regressions.
+ * App extension status for a single theme extension block (app embed or app block).
  * Matches editor deep-link form: `appEmbed={client_id}/{blockHandle}` e.g. `1cdf.../product_detail_message`.
- * In settings_data, Shopify may persist app embeds as generic block types like
- * `shopify://apps/{app-slug}/blocks/app-embed/{extensionUid}` rather than the liquid block filename.
+ * In theme JSON, Shopify may persist entries as generic block types like
+ * `shopify://apps/{app-slug}/blocks/app-embed/{extensionUid}` or
+ * `shopify://apps/{app-slug}/blocks/product_detail_message_block/{extensionUid}`.
  */
 const getThemeExtensionEnabledAcrossThemes = async (
   admin: any,
   pluginKey: string,
   extensionHandle: string,
-  /** Liquid filename base, e.g. product_detail_message for product_detail_message.liquid */
-  blockHandle: string,
+  /** Liquid filename bases, e.g. product_detail_message for product_detail_message.liquid */
+  blockHandles: string[],
   extensionUid: string,
   /** SHOPIFY_API_KEY / app client id - required to match real storefront block types */
   appClientId: string,
@@ -1215,7 +1436,7 @@ const getThemeExtensionEnabledAcrossThemes = async (
     pluginKey,
     extensionHandle,
     extensionUid,
-    embedHandle: blockHandle,
+    embedHandle: blockHandles[0] || "",
     appClientId,
     appName: String(appName || ""),
     appNameSlug: "",
@@ -1228,15 +1449,24 @@ const getThemeExtensionEnabledAcrossThemes = async (
     const response = await admin.graphql(
       `#graphql
         query ThemeSettingsDataAcrossThemes {
-          themes(first: 1, roles: [MAIN]) {
+          themes(first: 20) {
             edges {
               node {
                 id
                 name
                 role
-                files(filenames: ["config/settings_data.json"], first: 1) {
+                files(
+                  filenames: [
+                    "config/settings_data.json"
+                    "templates/*.json"
+                    "sections/*.json"
+                    "section_groups/*.json"
+                  ]
+                  first: 250
+                ) {
                   nodes {
                     ... on OnlineStoreThemeFile {
+                      filename
                       body {
                         ... on OnlineStoreThemeFileBodyText {
                           content
@@ -1253,6 +1483,10 @@ const getThemeExtensionEnabledAcrossThemes = async (
     );
     const json = await response.json();
     const graphqlErrors = Array.isArray(json?.errors) ? json.errors : [];
+    const themeNodes =
+      json?.data?.themes?.edges
+        ?.map((edge: { node?: Record<string, any> | null }) => edge?.node)
+        .filter(Boolean) ?? [];
     if (graphqlErrors.length > 0) {
       debug.error = graphqlErrors
         .map((item: { message?: string }) => String(item?.message || "").trim())
@@ -1260,18 +1494,20 @@ const getThemeExtensionEnabledAcrossThemes = async (
         .join(" | ");
       console.error("[theme-extension] graphql errors while scanning themes", {
         errors: graphqlErrors,
+        recoveredThemeCount: themeNodes.length,
       });
-      return { enabled: false, debug };
+      if (themeNodes.length === 0) {
+        return { enabled: false, debug };
+      }
     }
-    const themeNodes =
-      json?.data?.themes?.edges
-        ?.map((edge: { node?: Record<string, any> | null }) => edge?.node)
-        .filter(Boolean) ?? [];
     debug.scannedThemeCount = themeNodes.length;
+    const normalizedBlockHandles = Array.from(
+      new Set(blockHandles.map((handle) => String(handle || "").trim()).filter(Boolean)),
+    );
     console.error("[theme-extension] scanning themes", {
       pluginKey,
       extensionHandle,
-      blockHandle,
+      blockHandles: normalizedBlockHandles,
       extensionUid,
       appClientId,
       appName,
@@ -1280,23 +1516,34 @@ const getThemeExtensionEnabledAcrossThemes = async (
         id: theme?.id,
         name: theme?.name,
         role: theme?.role,
-        hasSettingsData: Boolean(theme?.files?.nodes?.[0]?.body?.content),
+          hasSettingsData: Boolean(
+            (theme?.files?.nodes || []).some(
+              (node: any) =>
+                String(node?.filename || "") === "config/settings_data.json" &&
+                typeof node?.body?.content === "string" &&
+                node.body.content.trim() !== "",
+            ),
+          ),
       })),
     });
 
-    const handleKebab = blockHandle.replace(/_/g, "-");
+    const handleKebabs = normalizedBlockHandles.map((handle) => handle.replace(/_/g, "-"));
     const embedHandleCandidates = [
-      `${appClientId}/${blockHandle}`,
-      `${appClientId}/${handleKebab}`,
+      ...normalizedBlockHandles.map((handle) => `${appClientId}/${handle}`),
+      ...handleKebabs.map((handle) => `${appClientId}/${handle}`),
     ].filter(Boolean);
     const blockPathSegments = [
-      `/blocks/${blockHandle}/`,
-      `/blocks/${handleKebab}/`,
+      ...normalizedBlockHandles.map((handle) => `/blocks/${handle}/`),
+      ...handleKebabs.map((handle) => `/blocks/${handle}/`),
     ];
     const embedUidSegments = [
       extensionUid ? `/blocks/app-embed/${extensionUid}` : "",
-      extensionUid ? `/blocks/${blockHandle}/${extensionUid}` : "",
-      extensionUid ? `/blocks/${handleKebab}/${extensionUid}` : "",
+      ...normalizedBlockHandles.map((handle) =>
+        extensionUid ? `/blocks/${handle}/${extensionUid}` : "",
+      ),
+      ...handleKebabs.map((handle) =>
+        extensionUid ? `/blocks/${handle}/${extensionUid}` : "",
+      ),
     ].filter(Boolean);
 
     const appNameSlug = String(appName || "")
@@ -1331,8 +1578,12 @@ const getThemeExtensionEnabledAcrossThemes = async (
       }
       if (!appClientId) return false;
       if (
-        blockType.includes(`/apps/${appClientId}/${blockHandle}/`) ||
-        blockType.includes(`/apps/${appClientId}/${handleKebab}/`)
+        normalizedBlockHandles.some((handle) =>
+          blockType.includes(`/apps/${appClientId}/${handle}/`),
+        ) ||
+        handleKebabs.some((handle) =>
+          blockType.includes(`/apps/${appClientId}/${handle}/`),
+        )
       ) {
         return true;
       }
@@ -1351,49 +1602,65 @@ const getThemeExtensionEnabledAcrossThemes = async (
     let scannedBlockCount = 0;
 
     for (const theme of themeNodes) {
-      const content = theme?.files?.nodes?.[0]?.body?.content;
+      const themeFiles = Array.isArray(theme?.files?.nodes)
+        ? theme.files.nodes
+        : [];
+      const jsonFiles = themeFiles
+        .map((node: any) => ({
+          fileName: String(node?.filename || "").trim(),
+          content: node?.body?.content,
+        }))
+        .filter(
+          (file: { fileName: string; content?: unknown }) =>
+            Boolean(file.fileName) &&
+            file.fileName.endsWith(".json") &&
+            typeof file.content === "string" &&
+            file.content.trim() !== "",
+        );
       const themeDebug: ThemeExtensionThemeDebug = {
         id: String(theme?.id || ""),
         name: String(theme?.name || ""),
         role: String(theme?.role || ""),
-        hasSettingsData: Boolean(content && typeof content === "string"),
+        hasSettingsData: jsonFiles.some(
+          (file: { fileName: string }) =>
+            file.fileName === "config/settings_data.json",
+        ),
         matchedEntries: [],
       };
       debug.themes.push(themeDebug);
-      if (!content || typeof content !== "string") {
-        themeDebug.result = "missing-settings-data";
-        console.error("[theme-extension] theme missing settings_data", {
+      if (!jsonFiles.length) {
+        themeDebug.result = "missing-theme-json-files";
+        console.error("[theme-extension] theme missing relevant json files", {
           themeId: theme?.id,
           themeName: theme?.name,
           themeRole: theme?.role,
         });
         continue;
       }
-
-      // Some themes may include comments in settings_data content.
-      // Strip JS-style comments before JSON.parse for compatibility.
-      const normalizedContent = content
-        .replace(/\/\*[\s\S]*?\*\//g, "")
-        .replace(/^\s*\/\/.*$/gm, "");
-
-      let settingsData;
-      try {
-        settingsData = JSON.parse(normalizedContent);
-        themeDebug.parseOk = true;
-      } catch (e) {
-        themeDebug.parseOk = false;
-        themeDebug.result = "parse-failed";
-        console.error("[theme-extension] failed to parse settings_data.json", {
-          themeId: theme?.id,
-          themeName: theme?.name,
-          themeRole: theme?.role,
-          error: e,
-        });
-        continue;
-      }
-
       const blockEntries: ThemeBlockEntry[] = [];
-      collectThemeBlockEntries(settingsData, blockEntries);
+      let parsedFileCount = 0;
+      let parseFailedCount = 0;
+      for (const file of jsonFiles) {
+        try {
+          const parsed = JSON.parse(normalizeThemeJsonFileContent(file.content));
+          parsedFileCount += 1;
+          collectThemeBlockEntries(parsed, blockEntries, file.fileName);
+        } catch (error) {
+          parseFailedCount += 1;
+          console.error("[theme-extension] failed to parse theme json file", {
+            themeId: theme?.id,
+            themeName: theme?.name,
+            themeRole: theme?.role,
+            fileName: file.fileName,
+            error,
+          });
+        }
+      }
+      themeDebug.parseOk = parsedFileCount > 0 && parseFailedCount === 0;
+      if (parsedFileCount === 0) {
+        themeDebug.result = "parse-failed";
+        continue;
+      }
       scannedBlockCount += blockEntries.length;
       debug.scannedBlockCount = scannedBlockCount;
       themeDebug.totalBlockEntries = blockEntries.length;
@@ -1408,7 +1675,8 @@ const getThemeExtensionEnabledAcrossThemes = async (
           );
         })
         .slice(0, 12)
-        .map(({ block, entryKey }) => ({
+        .map(({ block, entryKey, fileName }) => ({
+          fileName,
           entryKey,
           blockType: String(block?.type || ""),
           disabled: block?.disabled,
@@ -1419,12 +1687,13 @@ const getThemeExtensionEnabledAcrossThemes = async (
         themeId: theme?.id,
         themeName: theme?.name,
         themeRole: theme?.role,
+        files: jsonFiles.map((file: { fileName: string }) => file.fileName),
         totalBlockEntries: blockEntries.length,
         appRelatedEntryCount: appRelatedEntries.length,
         appRelatedEntries,
       });
 
-      for (const { block, entryKey } of blockEntries) {
+      for (const { block, entryKey, fileName } of blockEntries) {
         const blockType = String(block?.type || "");
         const matchesBlock = matchesEmbedFromEditorUrl(blockType, entryKey);
         if (!matchesBlock) continue;
@@ -1436,6 +1705,7 @@ const getThemeExtensionEnabledAcrossThemes = async (
           !matchedByApp && !matchedByUid && isLikelyThemeEmbedBlock(block);
         const enabled = block?.disabled !== true;
         themeDebug.matchedEntries?.push({
+          fileName,
           entryKey,
           blockType,
           disabled: block?.disabled,
@@ -1447,13 +1717,14 @@ const getThemeExtensionEnabledAcrossThemes = async (
         });
         console.error("[theme-extension] matched embed block", {
           extensionHandle,
-          blockHandle,
+          blockHandles: normalizedBlockHandles,
           extensionUid,
           appClientId,
           appNameSlug,
           themeId: theme?.id,
           themeName: theme?.name,
           themeRole: theme?.role,
+          fileName,
           entryKey,
           blockType,
           matchedByApp,
@@ -1476,6 +1747,7 @@ const getThemeExtensionEnabledAcrossThemes = async (
             themeId: theme?.id,
             themeName: theme?.name,
             themeRole: theme?.role,
+            fileName,
             entryKey,
             blockType,
           });
@@ -1495,7 +1767,7 @@ const getThemeExtensionEnabledAcrossThemes = async (
 
     console.error("[theme-extension] no matched embed block", {
       extensionHandle,
-      blockHandle,
+      blockHandles: normalizedBlockHandles,
       extensionUid,
       appClientId,
       appNameSlug,
@@ -1531,7 +1803,8 @@ async function getCurrentThemeExtensionEnabled(admin: any): Promise<{
       admin,
       BUNDLE_THEME_PRODUCT_PLUGIN.key,
       BUNDLE_THEME_PRODUCT_PLUGIN.extensionHandle,
-      BUNDLE_THEME_PRODUCT_PLUGIN.embedHandle,
+      BUNDLE_THEME_PRODUCT_PLUGIN.blockHandles ??
+        [BUNDLE_THEME_PRODUCT_PLUGIN.embedHandle],
       BUNDLE_THEME_PRODUCT_PLUGIN.extensionUid,
       apiKey,
       appDisplayName,
@@ -1555,65 +1828,6 @@ async function getCurrentThemeExtensionEnabled(admin: any): Promise<{
         error: error instanceof Error ? error.message : JSON.stringify(error),
       },
     };
-  }
-}
-
-async function syncBundleEnabledMetafield(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  admin: any,
-  themeExtensionEnabled: boolean,
-): Promise<void> {
-  try {
-    const env = resolveBundleEnvironment();
-    const envEnabledKey =
-      env === "prod"
-        ? BUNDLE_METAFIELD_ENABLED_PROD_KEY
-        : BUNDLE_METAFIELD_ENABLED_TEST_KEY;
-    const shopIdResponse = await admin.graphql(
-      `#graphql
-      query ShopId {
-        shop {
-          id
-        }
-      }
-    `,
-    );
-    const shopIdJson = (await shopIdResponse.json()) as {
-      data?: { shop?: { id?: string } };
-    };
-    const shopId = shopIdJson?.data?.shop?.id;
-    if (!shopId) return;
-
-    await admin.graphql(
-      `#graphql
-      mutation MetafieldsSet($metafields: [MetafieldsSetInput!]!) {
-        metafieldsSet(metafields: $metafields) {
-          userErrors {
-            message
-          }
-        }
-      }
-    `,
-      {
-        variables: {
-          metafields: [
-            {
-              ownerId: shopId,
-              namespace: BUNDLE_METAFIELD_NAMESPACE,
-              key: envEnabledKey,
-              type: "json",
-              value: JSON.stringify({
-                enabled: themeExtensionEnabled,
-                env,
-                updatedAt: new Date().toISOString(),
-              }),
-            },
-          ],
-        },
-      },
-    );
-  } catch (error) {
-    console.error("Failed to sync bundle enabled metafield", error);
   }
 }
 
@@ -1675,21 +1889,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     .split("/")
     .filter(Boolean)
     .pop() ?? "";
-  if (!themeExtensionDetectionFailed) {
-    await syncBundleEnabledMetafield(admin, themeExtensionEnabled);
-    const syncResult = await syncShopOffersMetafield(
-      admin,
-      session.shop,
-      themeExtensionEnabled,
-    );
-    if (!syncResult.ok) {
-      console.error("Failed to sync shop offers metafield in loader", {
-        shopName: session.shop,
-        message: syncResult.message,
-      });
-    }
-  } else {
-    console.error("[theme-extension] skip bundle metafield sync because detection failed", {
+  const themeTargets = await fetchThemeEditorTargets(admin);
+
+  const syncResult = await syncShopOffersMetafield(
+    admin,
+    session.shop,
+  );
+  if (!syncResult.ok) {
+    console.error("Failed to sync shop offers metafield in loader", {
+      shopName: session.shop,
+      message: syncResult.message,
+    });
+  }
+  if (themeExtensionDetectionFailed) {
+    console.error("[theme-extension] theme detection failed (shop offers metafield still attempted)", {
       shopName: session.shop,
       error: themeExtensionDetection.debug?.error,
     });
@@ -1735,6 +1948,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   return Response.json({
     markets,
+    themeTargets,
     shop: session.shop,
     themeEditorStoreId,
     themeEditorThemeId,
@@ -1743,9 +1957,31 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     themeExtensionEnabled,
     themeExtensionDetectionFailed,
     themeExtensionDebug: themeExtensionDetection.debug,
+    themeExtensionMatchedThemeId: themeExtensionDetection.debug?.matchedTheme?.id,
     billingSubscriptions,
     billingTestMode: billingIsTestCharge(),
   } satisfies IndexLoaderData);
+};
+
+const SKIP_INDEX_REVALIDATE_INTENTS = new Set([
+  "create-offer",
+  "update-offer",
+  "toggle-offer-status",
+  "delete-offer",
+  "load-offers",
+  "load-store-products",
+  "get-product-subscription-status",
+]);
+
+export const shouldRevalidate = ({
+  formData,
+  defaultShouldRevalidate,
+}: ShouldRevalidateFunctionArgs) => {
+  const intent = String(formData?.get("intent") || "").trim();
+  if (SKIP_INDEX_REVALIDATE_INTENTS.has(intent)) {
+    return false;
+  }
+  return defaultShouldRevalidate;
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -1966,6 +2202,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       : "vertical";
     let startTimeRaw = String(formData.get("startTime") || "").trim();
     let endTimeRaw = String(formData.get("endTime") || "").trim();
+    endTimeRaw = normalizeOfferEndTimeForUi(endTimeRaw);
     let selectedProductsJson = String(
       formData.get("selectedProductsJson") || "",
     );
@@ -1999,6 +2236,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const usageLimitPerCustomer = String(
       formData.get("usageLimitPerCustomer") || "unlimited",
     );
+    const couponEnabled = String(formData.get("couponEnabled") || "") === "true";
+    const couponCode = sanitizeSingleLineText(
+      formData.get("couponCode"),
+      64,
+      "",
+    ).toUpperCase();
 
     const accentColor = sanitizeHexColorParam(
       String(formData.get("accentColor") || ""),
@@ -2163,8 +2406,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       oneTimeSubtitle,
       subscriptionDefaultSelected,
       scheduleTimezone: scheduleTimezoneRaw || undefined,
+      couponEnabled,
+      couponCode,
       progressiveGifts: progressiveGiftsConfigToStorableJson(progressiveGiftsSanitized),
     });
+
+    if (couponEnabled && !couponCode) {
+      return offerActionErrorResponse("Coupon offers require a shared coupon code.", 400);
+    }
 
     let campaignConfigJson: string | null = null;
 
@@ -2220,15 +2469,25 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       if (parsedCampaignConfig.logicBlocks.length === 0) {
         return offerActionErrorResponse("Please add at least one promotion rule.", 400);
       }
-      const derivedLegacyFields =
-        buildLegacyFieldsFromCampaignConfig(parsedCampaignConfig);
-      campaignConfigJson = JSON.stringify(parsedCampaignConfig);
-      offerType = derivedLegacyFields.offerType;
-      if (!selectedProductsJson) {
-        selectedProductsJson = derivedLegacyFields.selectedProductsJson || "";
+      if (
+        parsedCampaignConfig.settings.couponEnabled === true &&
+        !String(parsedCampaignConfig.settings.couponCode || "").trim()
+      ) {
+        return offerActionErrorResponse("Coupon offers require a shared coupon code.", 400);
       }
-      discountRulesJson = derivedLegacyFields.discountRulesJson || discountRulesJson;
-      offerSettingsJson = derivedLegacyFields.offerSettingsJson;
+      const persistedFields = buildPersistedOfferFieldsFromCampaignConfig(
+        parsedCampaignConfig,
+        JSON.stringify({
+          progressiveGifts: progressiveGiftsConfigToStorableJson(progressiveGiftsSanitized),
+        }),
+      );
+      campaignConfigJson = JSON.stringify(parsedCampaignConfig);
+      offerType = persistedFields.offerType;
+      if (!selectedProductsJson) {
+        selectedProductsJson = persistedFields.selectedProductsJson || "";
+      }
+      discountRulesJson = persistedFields.discountRulesJson || discountRulesJson;
+      offerSettingsJson = persistedFields.offerSettingsJson;
       status = parsedCampaignConfig.settings.status;
       startTimeRaw = parsedCampaignConfig.settings.startTime || startTimeRaw;
       endTimeRaw = parsedCampaignConfig.settings.endTime || endTimeRaw;
@@ -2460,9 +2719,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     }
 
-    await runOfferPostWriteSync(admin, shopName);
-
     invalidateShopOffersCache(shopName);
+    void runOfferPostWriteSync(admin, shopName).catch((error) => {
+      console.error("Offer post-write sync crashed unexpectedly", {
+        shopName,
+        error,
+      });
+    });
 
     return Response.json({
       success: true,
@@ -2482,45 +2745,73 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     let updatedOffer;
     try {
+      const existingOffer = await prismaAny.offer.findUnique({
+        where: { id: idRaw },
+        select: {
+          id: true,
+          shopName: true,
+          campaignConfigJson: true,
+        },
+      });
+
+      if (!existingOffer) {
+        return new Response("Offer not found", { status: 404 });
+      }
+
+      let nextCampaignConfigJson = existingOffer.campaignConfigJson ?? null;
+      const parsedCampaignConfig = parseCampaignConfig(existingOffer.campaignConfigJson);
+      if (parsedCampaignConfig) {
+        nextCampaignConfigJson = JSON.stringify({
+          ...parsedCampaignConfig,
+          settings: {
+            ...parsedCampaignConfig.settings,
+            status: nextStatus,
+          },
+        });
+      } else if (existingOffer.campaignConfigJson) {
+        try {
+          const shallowConfig = JSON.parse(String(existingOffer.campaignConfigJson)) as {
+            settings?: Record<string, unknown>;
+            [key: string]: unknown;
+          };
+          nextCampaignConfigJson = JSON.stringify({
+            ...shallowConfig,
+            settings: {
+              ...(shallowConfig.settings && typeof shallowConfig.settings === "object"
+                ? shallowConfig.settings
+                : {}),
+              status: nextStatus,
+            },
+          });
+        } catch (error) {
+          console.error("toggle-offer-status campaignConfigJson parse failed", {
+            offerId: idRaw,
+            error,
+          });
+        }
+      }
+
       updatedOffer = await prismaAny.offer.update({
         where: { id: idRaw },
-        data: { status: nextStatus },
+        data: {
+          status: nextStatus,
+          campaignConfigJson: nextCampaignConfigJson,
+        },
       });
     } catch (error) {
       console.error("toggle-offer-status update failed", error);
       return offerActionErrorResponse("Toggle status failed.", 500);
     }
 
-    // Sync metafield
-    try {
-      const shopNameToSync = updatedOffer?.shopName as string | undefined;
-      if (shopNameToSync) {
-        const themeExtensionDetection = await getCurrentThemeExtensionEnabled(admin);
-        if (themeExtensionDetection.debug?.error) {
-          console.error("Skip offers metafield sync after toggle because theme detection failed", {
-            shopNameToSync,
-            error: themeExtensionDetection.debug.error,
-          });
-        } else {
-          const syncResult = await syncShopOffersMetafield(
-            admin,
-            shopNameToSync,
-            themeExtensionDetection.enabled,
-          );
-          if (!syncResult.ok) {
-            console.error("Failed to sync offers metafield after toggle", {
-              shopNameToSync,
-              message: syncResult.message,
-            });
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Failed to sync offers metafield after toggle", error);
-    }
-
-    if (updatedOffer?.shopName) {
-      invalidateShopOffersCache(String(updatedOffer.shopName));
+    const shopNameToSync = updatedOffer?.shopName as string | undefined;
+    if (shopNameToSync) {
+      invalidateShopOffersCache(String(shopNameToSync));
+      void runOfferPostWriteSync(admin, shopNameToSync).catch((error) => {
+        console.error("Offer post-write sync crashed unexpectedly", {
+          shopName: shopNameToSync,
+          error,
+        });
+      });
     }
 
     return Response.json({ success: true, toast: `toggle-success-${Date.now()}` });
@@ -2532,53 +2823,37 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return new Response("Missing offer id", { status: 400 });
     }
 
-    const prismaAny: any = prisma;
-
     // Find shopName to sync metafield
     let shopNameToSync: string | undefined;
     try {
       const offerToDelete = await prismaAny.offer.findUnique({
         where: { id: idRaw },
+        select: {
+          id: true,
+          shopName: true,
+        },
       });
       shopNameToSync = offerToDelete?.shopName as string | undefined;
 
       await prismaAny.offer.delete({
         where: { id: idRaw },
+        select: {
+          id: true,
+        },
       });
     } catch (error) {
       console.error("delete-offer failed", error);
       return offerActionErrorResponse("Delete offer failed.", 500);
     }
 
-    // Sync metafield after deleting offer
-    try {
-      if (shopNameToSync) {
-        const themeExtensionDetection = await getCurrentThemeExtensionEnabled(admin);
-        if (themeExtensionDetection.debug?.error) {
-          console.error("Skip offers metafield sync after delete because theme detection failed", {
-            shopNameToSync,
-            error: themeExtensionDetection.debug.error,
-          });
-        } else {
-          const syncResult = await syncShopOffersMetafield(
-            admin,
-            shopNameToSync,
-            themeExtensionDetection.enabled,
-          );
-          if (!syncResult.ok) {
-            console.error("Failed to sync offers metafield after delete", {
-              shopNameToSync,
-              message: syncResult.message,
-            });
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Failed to sync offers metafield after delete", error);
-    }
-
     if (shopNameToSync) {
-      invalidateShopOffersCache(shopNameToSync);
+      invalidateShopOffersCache(String(shopNameToSync));
+      void runOfferPostWriteSync(admin, shopNameToSync).catch((error) => {
+        console.error("Offer post-write sync crashed unexpectedly", {
+          shopName: shopNameToSync,
+          error,
+        });
+      });
     }
 
     return Response.json({ success: true, toast: `delete-success-${Date.now()}` });
@@ -2594,6 +2869,7 @@ type HomeTabKey = "dashboard" | "offers" | "analytics" | "pricing";
 export default function Index() {
   const {
     markets,
+    themeTargets,
     shop,
     themeEditorStoreId,
     themeEditorThemeId,
@@ -2602,10 +2878,14 @@ export default function Index() {
     themeExtensionEnabled,
     themeExtensionDetectionFailed,
     themeExtensionDebug,
+    themeExtensionMatchedThemeId,
     billingSubscriptions,
     billingTestMode,
   } = useLoaderData() as IndexLoaderData;
-  const actionData = useActionData() as { toast?: string } | undefined;
+  const actionData = useActionData() as
+    | { toast?: string }
+    | { _offerActionError: true; message: string }
+    | undefined;
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -2628,7 +2908,9 @@ export default function Index() {
     !storeProductsFetcher.data?.storeProducts &&
     storeProductsFetcher.state !== "idle";
 
-  const toast = searchParams.get("toast") || actionData?.toast;
+  const toast =
+    searchParams.get("toast") ||
+    (actionData && "toast" in actionData ? actionData.toast : undefined);
 
   useEffect(() => {
     if (searchParams.get("billing_return") !== "1") return;
@@ -2642,13 +2924,19 @@ export default function Index() {
   }, [searchParams, navigate]);
 
   useEffect(() => {
+    if (actionData && "_offerActionError" in actionData && actionData._offerActionError) {
+      setToastMessage(actionData.message);
+      return;
+    }
     if (toast?.startsWith("create-success")) {
       setToastMessage("Offer created successfully");
+      setActiveTab("offers");
       setShowCreateOffer(false);
       setCreateOfferType(null);
       setEditingOfferId(null);
     } else if (toast?.startsWith("update-success")) {
       setToastMessage("Offer updated successfully");
+      setActiveTab("offers");
       setShowCreateOffer(false);
       setCreateOfferType(null);
       setEditingOfferId(null);
@@ -2662,20 +2950,23 @@ export default function Index() {
     } else {
       setToastMessage(null);
     }
-  }, [toast]);
+  }, [toast, actionData]);
 
   useEffect(() => {
-    if (!toast || !toastMessage) return;
+    if (!toastMessage) return;
 
     const timer = setTimeout(() => {
-      const next = new URLSearchParams(searchParams);
-      next.delete("toast");
-      navigate(
-        {
-          search: next.toString() ? `?${next.toString()}` : "",
-        },
-        { replace: true },
-      );
+      if (toast) {
+        const next = new URLSearchParams(searchParams);
+        next.delete("toast");
+        navigate(
+          {
+            search: next.toString() ? `?${next.toString()}` : "",
+          },
+          { replace: true },
+        );
+      }
+      setToastMessage(null);
     }, 3000);
 
     return () => clearTimeout(timer);
@@ -2822,6 +3113,8 @@ export default function Index() {
             themeEditorStoreId={themeEditorStoreId}
             themeEditorThemeId={themeEditorThemeId}
             apiKey={apiKey}
+            themeTargets={themeTargets}
+            themeExtensionMatchedThemeId={themeExtensionMatchedThemeId}
             ianaTimezone={ianaTimezone}
             themeExtensionEnabled={themeExtensionEnabled}
             themeExtensionDetectionFailed={themeExtensionDetectionFailed}
@@ -2847,12 +3140,15 @@ export default function Index() {
           <AllOffersPage
             offers={offers}
             offersLoading={isOffersLoading}
+            shop={shop}
             ianaTimezone={ianaTimezone}
             themeExtensionEnabled={themeExtensionEnabled}
             themeExtensionDetectionFailed={themeExtensionDetectionFailed}
             themeEditorStoreId={themeEditorStoreId}
             themeEditorThemeId={themeEditorThemeId}
             apiKey={apiKey}
+            themeTargets={themeTargets}
+            themeExtensionMatchedThemeId={themeExtensionMatchedThemeId}
             onCreateOffer={() => {
               setShowCreateOffer(true);
               setCreateOfferType(null);

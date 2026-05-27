@@ -83,6 +83,39 @@ type MetafieldSnapshot = {
   type?: string;
 } | null | undefined;
 
+function logCiwiBundleOffersDiagnostics(
+  discountOwnerMf: MetafieldSnapshot,
+  shopOffersFnMf: MetafieldSnapshot,
+  effectiveParsedPayload: OfferMetafieldPayload | null | undefined,
+  extra: {
+    resolvedSource: string;
+  },
+): void {
+  log("ciwi_bundle_offers_resolve", {
+    resolvedSource: extra.resolvedSource,
+    discountOwner: {
+      namespace: "$app:ciwi_bundle",
+      key: "offers",
+      metafield: summarizeMetafield(discountOwnerMf),
+    },
+    shopOffersFn: {
+      namespace: "ciwi_bundle",
+      key: "ciwi-bundle-offers-fn",
+      metafield: summarizeMetafield(shopOffersFnMf),
+    },
+    parsedOffersCount: Array.isArray(effectiveParsedPayload?.offers)
+      ? effectiveParsedPayload!.offers!.length
+      : null,
+    parsedUpdatedAt: effectiveParsedPayload?.updatedAt ?? null,
+    parsedOfferIds: Array.isArray(effectiveParsedPayload?.offers)
+      ? effectiveParsedPayload!.offers!
+          .map((offer) => String(offer?.id || "").trim())
+          .filter(Boolean)
+          .slice(0, 10)
+      : [],
+  });
+}
+
 type BxgyDiscountRule = {
   count: number;
   buyQuantity: number;
@@ -91,18 +124,35 @@ type BxgyDiscountRule = {
   getProductIds: string[];
   discountPercent: number;
   maxUsesPerOrder: number;
-  tierType?: "bxgy" | "simple";
-};
-
-type FreeGiftRule = {
-  count: number;
-  giftQuantity: number;
-  giftProductIds: string[];
+  tierType?: "single" | "bxgy" | "simple";
 };
 
 type Offer = NonNullable<OfferMetafieldPayload["offers"]>[number];
 
-/** complete-bundle：单件商品的计价方式（与主题端 offerParsing 对齐） */
+type CouponAccess = {
+  enabled: boolean;
+  code: string;
+};
+
+type ParsedOfferSettings = {
+  markets: string;
+  customerSegments: string[];
+  customerProfileFilters: string[];
+  ipCountryCodes: string[];
+  couponAccess: CouponAccess;
+  quantityEnabled: boolean;
+};
+
+type CompiledOfferRuntime = {
+  offer: Offer;
+  settings: ParsedOfferSettings;
+  selectedIds: string[];
+  standardRules: DiscountTier[];
+  bxgyRules: BxgyDiscountRule[];
+  hasUnifiedBxgyTier: boolean;
+};
+
+/** complete-bundle：整包计价方式（与主题端 offerParsing 对齐） */
 type CompleteBundlePricingMode =
   | "full_price"
   | "percentage_off"
@@ -116,6 +166,7 @@ type CompleteBundleProductRow = {
 
 type CompleteBundleBarRow = {
   id: string;
+  type?: "single" | "quantity-break-same";
   minQuantity: number;
   maxQuantity: number;
   excludeTriggerProduct: boolean;
@@ -129,39 +180,6 @@ function parseMoneyAmount(raw: unknown): number {
   if (raw == null) return 0;
   const n = typeof raw === "number" ? raw : Number(String(raw));
   return Number.isFinite(n) ? n : 0;
-}
-
-function parseFreeGiftRulesJson(discountRulesJson?: string | null): FreeGiftRule[] {
-  if (!discountRulesJson) return [];
-
-  try {
-    const parsed = JSON.parse(discountRulesJson) as unknown;
-    if (!Array.isArray(parsed)) return [];
-
-    const rules: FreeGiftRule[] = [];
-    for (const item of parsed) {
-      if (!item || typeof item !== "object") continue;
-      const count = Number((item as { count?: unknown }).count);
-      const giftQuantity = Number((item as { giftQuantity?: unknown }).giftQuantity);
-      if (!Number.isFinite(count) || count < 1) continue;
-      if (!Number.isFinite(giftQuantity) || giftQuantity < 1) continue;
-
-      rules.push({
-        count: Math.max(1, Math.trunc(count)),
-        giftQuantity: Math.max(1, Math.trunc(giftQuantity)),
-        giftProductIds: Array.isArray((item as { giftProductIds?: unknown }).giftProductIds)
-          ? ((item as { giftProductIds: unknown[] }).giftProductIds)
-              .map((id) => String(id || "").trim())
-              .filter(Boolean)
-          : [],
-      });
-    }
-
-    rules.sort((a, b) => a.count - b.count);
-    return rules;
-  } catch {
-    return [];
-  }
 }
 
 /**
@@ -253,7 +271,11 @@ function parseCompleteBundleBarsJson(
       ? ((parsed as { productIds?: unknown[] }).productIds || [])
           .map((id) => String(id || "").trim())
           .filter(Boolean)
-      : [];
+      : Array.isArray((parsed as { triggerProductIds?: unknown })?.triggerProductIds)
+        ? ((parsed as { triggerProductIds?: unknown[] }).triggerProductIds || [])
+          .map((id) => String(id || "").trim())
+          .filter(Boolean)
+        : [];
     const barsIn = (parsed as { bars?: unknown })?.bars;
     if (!Array.isArray(barsIn)) return { triggerProductIds, bars: [] };
 
@@ -320,6 +342,10 @@ function parseCompleteBundleBarsJson(
 
       out.push({
         id,
+        type:
+          String((rawBar as { type?: unknown }).type || "") === "single"
+            ? "single"
+            : "quantity-break-same",
         minQuantity,
         maxQuantity,
         excludeTriggerProduct,
@@ -338,6 +364,7 @@ function offerPassesScheduleAndMarket(
   offer: Offer,
   marketId: string | undefined,
   nowMs: number | null,
+  parsedSettings?: ParsedOfferSettings,
 ): boolean {
   if (offer.status === false) {
     log("offer_skip_disabled", { offerId: offer.id, name: offer.name });
@@ -380,18 +407,18 @@ function offerPassesScheduleAndMarket(
     }
   }
 
-  if (marketId && offer.offerSettingsJson) {
+  const offerMarkets = parsedSettings?.markets;
+  if (marketId && (offerMarkets || offer.offerSettingsJson)) {
     try {
-      const settings = JSON.parse(offer.offerSettingsJson) as {
-        markets?: string;
-      };
-      const offerMarkets = settings.markets;
+      const resolvedMarkets =
+        offerMarkets ??
+        (JSON.parse(offer.offerSettingsJson || "{}") as { markets?: string }).markets;
       if (
-        typeof offerMarkets === "string" &&
-        offerMarkets !== "all" &&
-        offerMarkets.trim() !== ""
+        typeof resolvedMarkets === "string" &&
+        resolvedMarkets !== "all" &&
+        resolvedMarkets.trim() !== ""
       ) {
-        const allowedMarkets = offerMarkets.split(",").map((m) => m.trim());
+        const allowedMarkets = resolvedMarkets.split(",").map((m) => m.trim());
         const matchMarket = allowedMarkets.some(
           (m) => m === marketId || m.endsWith(`/${marketId}`),
         );
@@ -414,21 +441,24 @@ function offerPassesScheduleAndMarket(
 }
 
 /**
- * complete-bundle 购物车折扣：
- * - 当某一「档位」bar 要求的全部商品都在购物车中（每件至少 1，可拆同一行的数量）时生效；
- * - 多档位时必须先试「件数最多」的一档，否则会出现只命中低档位、整包优惠漏算的问题；
- * - 商品 ID 需与购物车行 product.id 对齐（GID 与纯数字混合存储时通过归一化比较）。
+ * complete-bundle 整体订单折扣：
+ * - 主商品与所选 bundle items 一起组成整包，再按 bar.pricing 对整包 subtotal 计算折后价；
+ * - 每个匹配 bar 产出一条 order candidate，由 Shopify 选择最大优惠；
+ * - 商品 ID 仍按 product.id 比较（兼容 GID / 纯数字混存）。
  */
 function calculateCompleteBundleDiscounts(
   cartLines: CartLineForBundle[],
   offers: Offer[],
   marketId: string | undefined,
   nowMs: number | null,
-): ProductDiscountCandidate[] {
+): OrderDiscountCandidate[] {
   const completeOffers = offers.filter((o) => isCompleteBundleOfferType(o.offerType));
   if (!completeOffers.length) {
     return [];
   }
+
+  const allCartLineIds = cartLines.map((line) => line.id);
+  const candidates: OrderDiscountCandidate[] = [];
 
   for (const offer of completeOffers) {
     if (!offerPassesScheduleAndMarket(offer, marketId, nowMs)) {
@@ -442,7 +472,20 @@ function calculateCompleteBundleDiscounts(
       continue;
     }
 
-    for (const bar of barsRaw) {
+    const bars = [...barsRaw].sort((left, right) => {
+      const leftMax = Math.max(
+        Math.max(1, Math.trunc(Number(left.minQuantity) || 1)),
+        Math.trunc(Number(left.maxQuantity) || 1),
+      );
+      const rightMax = Math.max(
+        Math.max(1, Math.trunc(Number(right.minQuantity) || 1)),
+        Math.trunc(Number(right.maxQuantity) || 1),
+      );
+      return rightMax - leftMax;
+    });
+
+    for (const bar of bars) {
+      if (bar.type === "single") continue;
       if (!bar.products.length) continue;
       const anchorLine = cartLines.find((line) => {
         if (line.merchandise.__typename !== "ProductVariant") return false;
@@ -450,210 +493,220 @@ function calculateCompleteBundleDiscounts(
         return parsedConfig.triggerProductIds.some((triggerId) => productIdsMatch(pid, triggerId));
       });
       if (!anchorLine) continue;
+      const anchorProductId =
+        anchorLine.merchandise.__typename === "ProductVariant"
+          ? anchorLine.merchandise.product?.id
+          : undefined;
 
-      const accessoryAllocations: Array<{
+      const bundleItemAllocations: Array<{
         lineId: string;
-        qty: number;
         unitBase: number;
-        mode: CompleteBundlePricingMode;
-        value: number;
       }> = [];
-      for (const accessory of bar.products) {
+      const usedLineIds = new Set<string>([anchorLine.id]);
+      for (const bundleItem of bar.products) {
         const matchedLine = cartLines.find((line) => {
           if (line.merchandise.__typename !== "ProductVariant") return false;
+          if (usedLineIds.has(line.id)) return false;
           const pid = line.merchandise.product?.id;
-          if (!productIdsMatch(pid, accessory.productId)) return false;
+          if (!productIdsMatch(pid, bundleItem.productId)) return false;
           if (
             bar.excludeTriggerProduct &&
-            parsedConfig.triggerProductIds.some((triggerId) => productIdsMatch(pid, triggerId))
+            anchorProductId &&
+            productIdsMatch(pid, anchorProductId)
           ) {
             return false;
           }
           return true;
         });
         if (!matchedLine) continue;
-        accessoryAllocations.push({
+        bundleItemAllocations.push({
           lineId: matchedLine.id,
-          qty: 1,
           unitBase: parseMoneyAmount(matchedLine.cost?.amountPerQuantity?.amount),
-          mode: accessory.pricing.mode,
-          value: accessory.pricing.value,
         });
+        usedLineIds.add(matchedLine.id);
       }
 
-      if (accessoryAllocations.length < bar.minQuantity) {
+      if (bundleItemAllocations.length < bar.minQuantity) {
         log("complete_bundle_bar_no_match", {
           offerId: offer.id,
           barId: bar.id,
-          reason: "insufficient_accessories",
-          matchedAccessories: accessoryAllocations.length,
+          reason: "insufficient_bundle_items",
+          matchedBundleItems: bundleItemAllocations.length,
           minQuantity: bar.minQuantity,
         });
         continue;
       }
 
-      const allocations = accessoryAllocations.slice(0, bar.maxQuantity);
+      const allocations = bundleItemAllocations.slice(0, bar.maxQuantity);
+      const bundleSubtotal = [
+        parseMoneyAmount(anchorLine.cost?.amountPerQuantity?.amount),
+        ...allocations.map((row) => row.unitBase),
+      ].reduce((sum, value) => sum + Math.max(0, value), 0);
+      const { final, original } = applyCompleteBundleUnitPricing(
+        bundleSubtotal,
+        bar.pricing.mode,
+        bar.pricing.value,
+      );
+      const totalDiscount = Math.max(0, original - final);
+      if (totalDiscount <= 0) continue;
 
-      // 同一购物车行可能对应多个槽位（同款多件），合并为一条 fixedAmount，避免多条 candidate 互相覆盖
-      const mergeByLine = new Map<string, { qty: number; totalDiscount: number }>();
+      const includedLineIds = new Set<string>([anchorLine.id, ...allocations.map((row) => row.lineId)]);
+      const excludedCartLineIds = allCartLineIds.filter((id) => !includedLineIds.has(id));
 
-      for (const a of allocations) {
-        const { final, original } = applyCompleteBundleUnitPricing(
-          a.unitBase,
-          a.mode,
-          a.value,
-        );
-        const unitDiscount = Math.max(0, original - final);
-        const row = mergeByLine.get(a.lineId) || { qty: 0, totalDiscount: 0 };
-        row.qty += 1;
-        row.totalDiscount += unitDiscount;
-        mergeByLine.set(a.lineId, row);
-      }
-
-      const candidates: ProductDiscountCandidate[] = [];
-      for (const [lineId, agg] of mergeByLine) {
-        if (agg.qty <= 0 || agg.totalDiscount <= 0) continue;
-        candidates.push({
-          message: offer.cartTitle || "Bundle Discount",
-          targets: [{ cartLine: { id: lineId, quantity: agg.qty } }],
-          value: {
-            fixedAmount: {
-              amount: agg.totalDiscount.toFixed(2),
-              appliesToEachItem: false,
+      candidates.push({
+        message: offer.cartTitle || "Bundle order discount",
+        targets: [
+          {
+            orderSubtotal: {
+              excludedCartLineIds,
             },
           },
-        });
-      }
+        ],
+        value: {
+          fixedAmount: {
+            amount: totalDiscount.toFixed(2),
+          },
+        },
+      });
 
-      if (candidates.length) {
-        log("complete_bundle_matched", {
-          offerId: offer.id,
-          barId: bar.id,
-          candidateCount: candidates.length,
-        });
-        return candidates;
-      }
+      log("complete_bundle_matched", {
+        offerId: offer.id,
+        barId: bar.id,
+        includedLineCount: includedLineIds.size,
+        totalDiscount,
+      });
     }
   }
 
-  return [];
+  return candidates;
+}
+
+function offersJsonHasList(v: unknown): v is OfferMetafieldPayload {
+  if (!v || typeof v !== "object") return false;
+  const o = v as OfferMetafieldPayload;
+  return Array.isArray(o.offers) && o.offers.length > 0;
+}
+
+type ShopMetafieldsForLog = {
+  bundleEnabledShop?: { jsonValue?: unknown; type?: string } | null;
+  offersShop?: { jsonValue?: unknown; type?: string } | null;
+};
+
+/**
+ * 读取活动配置：`discount` owner 上的 `$app:ciwi_bundle` / `offers`（与后台同步主路径）
+ * + shop `ciwi-bundle-offers-fn` 兜底（checkout 可能对 shop JSON metafield 注入不稳定）。
+ */
+function resolveCartOffersPayload(input: CartInput): {
+  payload: OfferMetafieldPayload | null | undefined;
+  offersSource: string;
+  shopAny: ShopMetafieldsForLog;
+  discountOwnerOffersMetafield: MetafieldSnapshot;
+} {
+  const shopAny = input.shop as unknown as ShopMetafieldsForLog;
+  const discountOwnerMf =
+    input.discount.offersFromDiscountOwner as MetafieldSnapshot | null | undefined;
+  const shopOffersFnNode = shopAny.offersShop;
+  const jDisc = discountOwnerMf?.jsonValue as OfferMetafieldPayload | null | undefined;
+  const jShop = shopOffersFnNode?.jsonValue as OfferMetafieldPayload | null | undefined;
+
+  const summarizeJv = (
+    namespace: string,
+    key: string,
+    mfNode: typeof discountOwnerMf,
+    jv: typeof jDisc,
+  ) => {
+    const raw = jv as unknown;
+    log("read_ciwi_offers_metafield", {
+      namespace,
+      key,
+      metafieldNodePresent: mfNode != null,
+      jsonValueKind:
+        raw === undefined
+          ? "undefined"
+          : raw === null
+            ? "null"
+            : Array.isArray(raw)
+              ? "array"
+              : typeof raw,
+      topLevelKeys:
+        raw && typeof raw === "object" && !Array.isArray(raw)
+          ? Object.keys(raw as Record<string, unknown>).slice(0, 30)
+          : null,
+      offersArrayLength: Array.isArray((jv as OfferMetafieldPayload | null)?.offers)
+        ? ((jv as OfferMetafieldPayload).offers?.length ?? 0)
+        : null,
+    });
+  };
+
+  summarizeJv("$app:ciwi_bundle", "offers", discountOwnerMf, jDisc);
+  summarizeJv("ciwi_bundle", "ciwi-bundle-offers-fn", shopOffersFnNode, jShop);
+
+  if (offersJsonHasList(jDisc)) {
+    return {
+      payload: jDisc,
+      offersSource: "discount_owner_app_ciwi_bundle_offers",
+      shopAny,
+      discountOwnerOffersMetafield: discountOwnerMf,
+    };
+  }
+
+  if (offersJsonHasList(jShop)) {
+    return {
+      payload: jShop,
+      offersSource: "shop_ciwi_bundle_offers_fn",
+      shopAny,
+      discountOwnerOffersMetafield: discountOwnerMf,
+    };
+  }
+
+  const fallback = jDisc ?? jShop ?? null;
+  const offersSource =
+    fallback != null
+      ? jDisc != null
+        ? "discount_owner_empty_lists"
+        : "shop_offers_empty_lists"
+      : "no_offers_metafield";
+
+  return {
+    payload: fallback,
+    offersSource,
+    shopAny,
+    discountOwnerOffersMetafield: discountOwnerMf,
+  };
 }
 
 export function bundleCartDiscountGenerateRun(
   input: CartInput,
 ): CartLinesDiscountsGenerateRunResult {
-  const shopAny = input.shop as unknown as {
-    offersProd?: { jsonValue?: unknown; type?: string } | null;
-    offersTest?: { jsonValue?: unknown; type?: string } | null;
-    bundleEnabledProd?: { jsonValue?: unknown; type?: string } | null;
-    bundleEnabledTest?: { jsonValue?: unknown; type?: string } | null;
-  };
-  const discountAny = input.discount as unknown as {
-    appOwnedOffers?: { jsonValue?: unknown; value?: unknown; type?: string } | null;
-    legacyOffers?: { jsonValue?: unknown; value?: unknown; type?: string } | null;
-  };
-  const discountAppOwnedMetafield = discountAny.appOwnedOffers as MetafieldSnapshot;
-  const discountLegacyMetafield = discountAny.legacyOffers as MetafieldSnapshot;
-  // 运行时优先读 discount owner 的 app-owned 配置，再尝试 legacy namespace。
-  const activeOffersMetafield =
-    discountAppOwnedMetafield ??
-    discountLegacyMetafield;
-  const fallbackOffersSource = discountAppOwnedMetafield
-    ? "discount_app_owned"
-    : discountLegacyMetafield
-      ? "discount_legacy"
-      : null;
-  const fallbackOffersPayload = activeOffersMetafield?.jsonValue as
-    | OfferMetafieldPayload
-    | null
-    | undefined;
-  const bundleEnabledProdPayload = shopAny.bundleEnabledProd?.jsonValue as
-    | { enabled?: boolean }
-    | null
-    | undefined;
-  const bundleEnabledTestPayload = shopAny.bundleEnabledTest?.jsonValue as
-    | { enabled?: boolean }
-    | null
-    | undefined;
-  const prodEnabled = bundleEnabledProdPayload?.enabled === true;
-  const testEnabled = bundleEnabledTestPayload?.enabled === true;
-  const offersProdPayload = shopAny.offersProd?.jsonValue as
-    | OfferMetafieldPayload
-    | null
-    | undefined;
-  const offersTestPayload = shopAny.offersTest?.jsonValue as
-    | OfferMetafieldPayload
-    | null
-    | undefined;
-  const hasEnvConfig =
-    shopAny.bundleEnabledProd?.jsonValue != null ||
-    shopAny.bundleEnabledTest?.jsonValue != null ||
-    shopAny.offersProd?.jsonValue != null ||
-    shopAny.offersTest?.jsonValue != null;
-  const toUpdatedAtMs = (payload: OfferMetafieldPayload | null | undefined): number => {
-    const raw = payload?.updatedAt;
-    if (!raw || typeof raw !== "string") return 0;
-    const ts = Date.parse(raw);
-    return Number.isFinite(ts) ? ts : 0;
-  };
-  let selectedEnv: "prod" | "test" | null = null;
-  let offersPayload: OfferMetafieldPayload | null | undefined = fallbackOffersPayload;
-  let offersSource = fallbackOffersSource;
-  if (hasEnvConfig) {
-    if (!prodEnabled && !testEnabled) {
-      selectedEnv = null;
-      offersPayload = null;
-      offersSource = "env_disabled";
-    } else if (prodEnabled && !testEnabled) {
-      selectedEnv = "prod";
-      offersPayload = offersProdPayload;
-      offersSource = "shop_env_prod";
-    } else if (!prodEnabled && testEnabled) {
-      selectedEnv = "test";
-      offersPayload = offersTestPayload;
-      offersSource = "shop_env_test";
-    } else {
-      const prodTs = toUpdatedAtMs(offersProdPayload);
-      const testTs = toUpdatedAtMs(offersTestPayload);
-      if (prodTs >= testTs) {
-        selectedEnv = "prod";
-        offersPayload = offersProdPayload;
-        offersSource = "shop_env_prod";
-      } else {
-        selectedEnv = "test";
-        offersPayload = offersTestPayload;
-        offersSource = "shop_env_test";
-      }
-    }
-  }
+  const {
+    payload: resolvedPayload,
+    offersSource: resolvedSource,
+    shopAny,
+    discountOwnerOffersMetafield,
+  } = resolveCartOffersPayload(input);
+
+  const offersPayload = resolvedPayload ?? null;
+  const offersSource = resolvedSource;
+
+  logCiwiBundleOffersDiagnostics(
+    discountOwnerOffersMetafield,
+    shopAny.offersShop as MetafieldSnapshot,
+    offersPayload,
+    {
+      resolvedSource: offersSource ?? "",
+    },
+  );
 
   log("shop_metafields_snapshot", {
-    discountAppOwnedOffers: summarizeMetafield(discountAppOwnedMetafield),
-    discountLegacyOffers: summarizeMetafield(discountLegacyMetafield),
-    offersProd: summarizeMetafield(shopAny.offersProd as MetafieldSnapshot),
-    offersTest: summarizeMetafield(shopAny.offersTest as MetafieldSnapshot),
-    bundleEnabledProd: summarizeMetafield(shopAny.bundleEnabledProd as MetafieldSnapshot),
-    bundleEnabledTest: summarizeMetafield(shopAny.bundleEnabledTest as MetafieldSnapshot),
-    rawValueLens: {
-      discountAppOwned: String(discountAppOwnedMetafield?.value || "").length,
-      discountLegacy: String(discountLegacyMetafield?.value || "").length,
-    },
-    hasEnvConfig,
-    prodEnabled,
-    testEnabled,
-    selectedEnv,
+    bundleEnabledShop: summarizeMetafield(shopAny.bundleEnabledShop as MetafieldSnapshot),
+    offersShop: summarizeMetafield(shopAny.offersShop as MetafieldSnapshot),
+    discountOwnerOffersMetafield: summarizeMetafield(discountOwnerOffersMetafield),
     activeSource: offersSource,
   });
 
   log("run_start", {
     cartLineCount: input.cart.lines.length,
     discountClasses: input.discount.discountClasses,
-    metafieldPresent: Boolean(activeOffersMetafield),
-    metafieldType: activeOffersMetafield?.type ?? null,
-    hasEnvConfig,
-    prodEnabled,
-    testEnabled,
-    selectedEnv,
     hasOffers: Boolean(offersPayload),
     offersSource,
   });
@@ -663,16 +716,24 @@ export function bundleCartDiscountGenerateRun(
     return { operations: [] };
   }
   const offers = offersPayload?.offers ?? [];
+  const compiledOffers = offers.map((offer) => compileOfferRuntime(offer));
+  const enteredCodes = new Set(
+    [normalizeCouponCode(input.triggeringDiscountCode)].filter(Boolean),
+  );
+  const buyerTargetingContext = buildBuyerTargetingContext(input);
+  const acceptedCouponCodes = new Set<string>();
+  const acceptedCouponCodeByOfferId = new Map<string, string>();
 
   log("metafield_offers", {
     updatedAt: offersPayload?.updatedAt ?? null,
-    offerCount: offers.length,
-    offersSummary: offers.map((o) => ({
-      id: o.id,
-      name: o.name,
-      status: o.status,
-      selectedProductsJsonLength: o.selectedProductsJson?.length ?? 0,
-      discountRulesJsonLength: o.discountRulesJson?.length ?? 0,
+    offerCount: compiledOffers.length,
+    offersSummary: compiledOffers.map(({ offer, selectedIds, standardRules, bxgyRules }) => ({
+      id: offer.id,
+      name: offer.name,
+      status: offer.status,
+      selectedIdCount: selectedIds.length,
+      standardRuleCount: standardRules.length,
+      bxgyRuleCount: bxgyRules.length,
     })),
   });
 
@@ -696,68 +757,136 @@ export function bundleCartDiscountGenerateRun(
   const hasOrderDiscountClass = input.discount.discountClasses.includes(
     DiscountClass.Order,
   );
+  const localizationCountryCode = normalizeCountryCode(
+    input.localization?.country?.isoCode,
+  );
+  const eligibleOffers = compiledOffers.filter((compiledOffer) => {
+    const { offer, settings } = compiledOffer;
+    if (!offerMatchesCustomerSegments(offer, buyerTargetingContext, settings)) {
+      log("offer_skip_customer_segment", {
+        offerId: offer.id,
+        name: offer.name,
+      });
+      return false;
+    }
+    if (!offerMatchesCustomerProfileFilters(offer, buyerTargetingContext, settings)) {
+      log("offer_skip_customer_profile_filter", {
+        offerId: offer.id,
+        name: offer.name,
+      });
+      return false;
+    }
+    if (!offerMatchesIpCountryCodes(offer, localizationCountryCode, settings)) {
+      log("offer_skip_ip_country_code", {
+        offerId: offer.id,
+        name: offer.name,
+        localizationCountryCode,
+      });
+      return false;
+    }
+    const couponAccess = settings.couponAccess;
+    if (!couponAccess.enabled) {
+      return true;
+    }
+    const acceptedCode = resolveAcceptedCouponCode(offer, enteredCodes, settings);
+    if (!acceptedCode) {
+      log("offer_skip_coupon_code_mismatch", {
+        offerId: offer.id,
+        name: offer.name,
+        configuredCode: couponAccess.code,
+      });
+      return false;
+    }
+    acceptedCouponCodes.add(acceptedCode);
+    acceptedCouponCodeByOfferId.set(String(offer.id || ""), acceptedCode);
+    return true;
+  });
 
   const productCandidates: ProductDiscountCandidate[] = [];
   const orderCandidates: OrderDiscountCandidate[] = [];
 
   const marketId = input.localization?.market?.id;
   const nowMs = resolveNowMs();
-  const bxgyOffers = offers.filter(
-    (o) =>
-      (o.offerType === "bxgy" ||
-        o.offerType === "quantity-breaks-different" ||
-        (o.offerType === "quantity-breaks-same" &&
-          hasUnifiedBxgyTier(o.discountRulesJson))) &&
-      offerPassesScheduleAndMarket(o, marketId, nowMs),
+  const bxgyOffers = eligibleOffers.filter(
+    (compiledOffer) =>
+      (compiledOffer.offer.offerType === "bxgy" ||
+        compiledOffer.offer.offerType === "quantity-breaks-different" ||
+        (compiledOffer.offer.offerType === "quantity-breaks-same" &&
+          compiledOffer.hasUnifiedBxgyTier)) &&
+      offerPassesScheduleAndMarket(compiledOffer.offer, marketId, nowMs, compiledOffer.settings),
   );
-  const freeGiftOffers = offers.filter(
-    (o) => o.offerType === "free-gift" && offerPassesScheduleAndMarket(o, marketId, nowMs),
+  const cartRelevantBxgyOffers = bxgyOffers.filter((compiledOffer) =>
+    offerIntersectsCartForBxgyEvaluation(compiledOffer, input.cart.lines),
+  );
+  const bxgyOffersForEvaluation =
+    hasProductDiscountClass || !hasOrderDiscountClass
+      ? cartRelevantBxgyOffers
+      : cartRelevantBxgyOffers.filter((compiledOffer) => offerRequiresOrderBxgyEvaluation(compiledOffer));
+  const freeGiftOffers = eligibleOffers.filter(
+    (compiledOffer) =>
+      compiledOffer.offer.offerType === "free-gift" &&
+      offerPassesScheduleAndMarket(compiledOffer.offer, marketId, nowMs, compiledOffer.settings),
   );
   /** 普通数量阶梯：不含 BXGY 与 complete-bundle（后两者有独立分支） */
-  const regularOffers = offers.filter(
-    (o) =>
-      o.offerType !== "bxgy" &&
-      o.offerType !== "quantity-breaks-different" &&
-      o.offerType !== "free-gift" &&
-      !isCompleteBundleOfferType(o.offerType),
+  const regularOffers = eligibleOffers.filter(
+    (compiledOffer) =>
+      compiledOffer.offer.offerType !== "bxgy" &&
+      compiledOffer.offer.offerType !== "quantity-breaks-different" &&
+      compiledOffer.offer.offerType !== "free-gift" &&
+      !isCompleteBundleOfferType(compiledOffer.offer.offerType) &&
+      offerPassesScheduleAndMarket(compiledOffer.offer, marketId, nowMs, compiledOffer.settings),
   );
+  const regularOfferIndex = buildRegularOfferIndex(regularOffers);
   log("offer_groups_resolved", {
-    totalOffers: offers.length,
+    totalOffers: compiledOffers.length,
+    eligibleOffers: eligibleOffers.length,
     bxgyCount: bxgyOffers.length,
+    bxgyCartRelevantCount: cartRelevantBxgyOffers.length,
+    bxgyEvalCount: bxgyOffersForEvaluation.length,
     freeGiftCount: freeGiftOffers.length,
-    completeBundleCount: offers.filter((o) => isCompleteBundleOfferType(o.offerType)).length,
+    completeBundleCount: compiledOffers.filter((o) => isCompleteBundleOfferType(o.offer.offerType)).length,
     regularCount: regularOffers.length,
   });
 
-  // ① 优先处理 BXGY（买 X 送 Y 等）
-  if (hasProductDiscountClass) {
-    const bxgyCandidates = calculateBxgyDiscount(input.cart.lines, bxgyOffers);
-    if (bxgyCandidates.length > 0) {
-      productCandidates.push(...bxgyCandidates);
+  // ① 处理 BXGY（买 X 送 Y 等）：只负责生成候选，最终由 Shopify 按最大减免选择商品折扣。
+  if (bxgyOffersForEvaluation.length > 0) {
+    const bxgyDiscounts = calculateBxgyDiscount(
+      input.cart.lines,
+      bxgyOffersForEvaluation,
+    );
+    if (hasProductDiscountClass && bxgyDiscounts.productCandidates.length > 0) {
+      productCandidates.push(...bxgyDiscounts.productCandidates);
+    }
+    if (hasOrderDiscountClass && bxgyDiscounts.orderCandidates.length > 0) {
+      orderCandidates.push(...bxgyDiscounts.orderCandidates);
     }
   }
 
-  if (hasProductDiscountClass && productCandidates.length === 0) {
-    const freeGiftCandidates = calculateFreeGiftDiscount(input.cart.lines, freeGiftOffers);
+  // ② free gift 作为 order reward 生成订单级 fixed-amount 候选。
+  if (hasOrderDiscountClass) {
+    const freeGiftCandidates = calculateFreeGiftDiscount(
+      input.cart.lines,
+      freeGiftOffers.map((compiledOffer) => compiledOffer.offer),
+    );
     if (freeGiftCandidates.length > 0) {
-      productCandidates.push(...freeGiftCandidates);
+      orderCandidates.push(...freeGiftCandidates);
     }
   }
 
-  // ② 再处理 complete-bundle：多 SKU 成套，与 discountRulesJson 阶梯无关
-  if (hasProductDiscountClass && productCandidates.length === 0) {
+  // ③ 处理 complete-bundle：主商品 + bundle items 一起走整包订单折扣，可与商品折扣候选并存。
+  if (hasOrderDiscountClass) {
     log("complete_bundle_evaluation_start", {
       marketId,
       cartLineCount: input.cart.lines.length,
     });
     const completeBundleCandidates = calculateCompleteBundleDiscounts(
       input.cart.lines,
-      offers,
+      eligibleOffers.map((compiledOffer) => compiledOffer.offer),
       marketId,
       nowMs,
     );
     if (completeBundleCandidates.length > 0) {
-      productCandidates.push(...completeBundleCandidates);
+      orderCandidates.push(...completeBundleCandidates);
       log("complete_bundle_evaluation_success", {
         candidateCount: completeBundleCandidates.length,
       });
@@ -768,8 +897,8 @@ export function bundleCartDiscountGenerateRun(
     }
   }
 
-  // ③ 最后按行匹配普通 bundle 的 discountRulesJson 数量阶梯
-  if (hasProductDiscountClass && productCandidates.length === 0) {
+  // ④ 按行匹配普通 bundle 的 discountRulesJson 数量阶梯，与 BXGY 一起参与商品折扣最大减免竞争。
+  if (hasProductDiscountClass) {
     for (const line of input.cart.lines) {
       if (line.merchandise.__typename !== "ProductVariant") {
         log("line_skip", {
@@ -799,14 +928,8 @@ export function bundleCartDiscountGenerateRun(
         continue;
       }
 
-      const bestRegularOffer = findBestRegularOfferForLine(
-        productId,
-        variantId,
-        marketId,
-        quantity,
-        regularOffers,
-      );
-      if (!bestRegularOffer) {
+      const suitOffer = findOffer(productId, variantId, regularOfferIndex);
+      if (!suitOffer) {
         log("line_no_matching_offer", {
           cartLineId: lineId,
           productId,
@@ -817,11 +940,14 @@ export function bundleCartDiscountGenerateRun(
 
       log("line_matched_offer", {
         cartLineId: lineId,
-        offerId: bestRegularOffer.offer.id,
-        offerName: bestRegularOffer.offer.name,
+        offerId: suitOffer.offer.id,
+        offerName: suitOffer.offer.name,
       });
 
-      const discountPercentValue = bestRegularOffer.discountPercentValue;
+      const discountPercentValue = getBestProductDiscountPercentValueFromTiers(
+        suitOffer.standardRules,
+        quantity,
+      );
       log("line_discount_percent", {
         cartLineId: lineId,
         discountPercentValue,
@@ -837,7 +963,7 @@ export function bundleCartDiscountGenerateRun(
       }
 
       const candidate: ProductDiscountCandidate = {
-        message: bestRegularOffer.offer.cartTitle || "Bundle Discount",
+        message: suitOffer.offer.cartTitle || "Bundle Discount",
         targets: [
           {
             cartLine: {
@@ -851,6 +977,11 @@ export function bundleCartDiscountGenerateRun(
             value: discountPercentValue,
           },
         },
+        associatedDiscountCode: acceptedCouponCodeByOfferId.get(String(suitOffer.offer.id || ""))
+          ? {
+              code: acceptedCouponCodeByOfferId.get(String(suitOffer.offer.id || ""))!,
+            }
+          : undefined,
       };
 
       productCandidates.push(candidate);
@@ -861,18 +992,19 @@ export function bundleCartDiscountGenerateRun(
     }
   }
 
-  const resolvedProductCandidates = resolveExclusiveProductCandidates(
-    productCandidates,
-    input.cart.lines,
-  );
-
   if (hasOrderDiscountClass) {
     orderCandidates.push(
-      ...buildOrderDiscountCandidates(input, regularOffers, marketId, nowMs),
+      ...buildOrderDiscountCandidatesFromCompiledOffers(
+        input,
+        regularOffers,
+        marketId,
+        nowMs,
+        acceptedCouponCodeByOfferId,
+      ),
     );
   }
 
-  if (!resolvedProductCandidates.length && !orderCandidates.length) {
+  if (!productCandidates.length && !orderCandidates.length && acceptedCouponCodes.size === 0) {
     log("early_exit", {
       reason: "no_discount_candidates_after_evaluation",
       linesProcessed: input.cart.lines.length,
@@ -882,13 +1014,25 @@ export function bundleCartDiscountGenerateRun(
 
   const operations: CartLinesDiscountsGenerateRunResult["operations"] = [];
 
-  if (resolvedProductCandidates.length > 0) {
+  if (acceptedCouponCodes.size > 0) {
     operations.push({
-      productDiscountsAdd: {
-        candidates: resolvedProductCandidates,
-        selectionStrategy: ProductDiscountSelectionStrategy.All,
+      enteredDiscountCodesAccept: {
+        codes: Array.from(acceptedCouponCodes).map((code) => ({ code })),
       },
     });
+  }
+
+  if (productCandidates.length > 0) {
+    const groupedProductCandidates =
+      groupProductCandidatesByOverlappingTargets(productCandidates);
+    for (const groupedCandidates of groupedProductCandidates) {
+      operations.push({
+        productDiscountsAdd: {
+          candidates: groupedCandidates,
+          selectionStrategy: ProductDiscountSelectionStrategy.Maximum,
+        },
+      });
+    }
   }
 
   if (orderCandidates.length > 0) {
@@ -901,8 +1045,7 @@ export function bundleCartDiscountGenerateRun(
   }
 
   log("run_success", {
-    candidateCount: resolvedProductCandidates.length,
-    candidateCountBeforeConflictResolution: productCandidates.length,
+    candidateCount: productCandidates.length,
     orderCandidateCount: orderCandidates.length,
     operationsJsonLength: JSON.stringify(operations).length,
   });
@@ -917,12 +1060,354 @@ type DiscountTier = {
   conditionType: "item_quantity" | "cart_amount";
   amountThreshold?: number;
   rewardType: "percentage_off" | "gift_product" | "free_shipping";
+  giftQuantity?: number;
   logicType: "standard" | "bxgy";
   buyQuantity?: number;
   getQuantity?: number;
   maxUsesPerOrder?: number;
   rewardProductIds: string[];
 };
+
+const RECOGNIZED_CUSTOMER_SEGMENTS = new Set([
+  "all",
+  "new_customers",
+  "returning_customers",
+  "vip",
+  "high_aov",
+]);
+
+const RECOGNIZED_CUSTOMER_PROFILE_FILTERS = new Set([
+  "subscription_active",
+  "bundle_buyer",
+  "repeat_buyer",
+  "high_intent",
+]);
+
+type BuyerTargetingContext = {
+  isAuthenticated: boolean;
+  numberOfOrders: number;
+  amountSpent: number;
+  tags: Set<string>;
+  hasSubscriptionLine: boolean;
+};
+
+function normalizeCouponCode(value: unknown): string {
+  return String(value || "").trim().toUpperCase();
+}
+
+function normalizeCustomerSegmentHandle(value: unknown): string {
+  return String(value || "").trim().toLowerCase();
+}
+
+function parseCustomerSegments(offerSettingsJson?: string | null): string[] {
+  if (!offerSettingsJson) return ["all"];
+  try {
+    const parsed = JSON.parse(offerSettingsJson) as {
+      customerSegments?: unknown;
+    };
+    const rawValue = parsed.customerSegments;
+    if (typeof rawValue !== "string" || !rawValue.trim()) {
+      return ["all"];
+    }
+    const normalized = rawValue
+      .split(",")
+      .map((segment) => normalizeCustomerSegmentHandle(segment))
+      .filter(Boolean);
+    return normalized.length ? Array.from(new Set(normalized)) : ["all"];
+  } catch {
+    return ["all"];
+  }
+}
+
+function parseCustomerProfileFilters(offerSettingsJson?: string | null): string[] {
+  if (!offerSettingsJson) return [];
+  try {
+    const parsed = JSON.parse(offerSettingsJson) as {
+      customerProfileFilters?: unknown;
+    };
+    const rawValue = parsed.customerProfileFilters;
+    if (typeof rawValue !== "string" || !rawValue.trim()) {
+      return [];
+    }
+    const normalized = rawValue
+      .split(",")
+      .map((value) => normalizeCustomerSegmentHandle(value))
+      .filter(Boolean);
+    return normalized.length ? Array.from(new Set(normalized)) : [];
+  } catch {
+    return [];
+  }
+}
+
+function normalizeCountryCode(value: unknown): string {
+  return String(value || "").trim().toUpperCase();
+}
+
+function parseIpCountryCodes(offerSettingsJson?: string | null): string[] {
+  if (!offerSettingsJson) return [];
+  try {
+    const parsed = JSON.parse(offerSettingsJson) as {
+      ipCountryCodes?: unknown;
+    };
+    const rawValue = parsed.ipCountryCodes;
+    if (typeof rawValue !== "string" || !rawValue.trim()) {
+      return [];
+    }
+    const normalized = rawValue
+      .split(",")
+      .map((value) => normalizeCountryCode(value))
+      .filter(Boolean);
+    return normalized.length ? Array.from(new Set(normalized)) : [];
+  } catch {
+    return [];
+  }
+}
+
+function buildBuyerTargetingContext(input: CartInput): BuyerTargetingContext {
+  const buyerIdentity = input.cart.buyerIdentity;
+  const customer = buyerIdentity?.customer;
+  const tags = new Set(
+    (customer?.hasTags || [])
+      .filter((entry) => entry.hasTag)
+      .map((entry) => normalizeCustomerSegmentHandle(entry.tag)),
+  );
+
+  return {
+    isAuthenticated: buyerIdentity?.isAuthenticated === true,
+    numberOfOrders: Math.max(0, Math.trunc(Number(customer?.numberOfOrders) || 0)),
+    amountSpent: Math.max(
+      0,
+      parseMoneyAmount(customer?.amountSpent?.amount),
+    ),
+    tags,
+    hasSubscriptionLine: input.cart.lines.some((line) => Boolean(line.sellingPlanAllocation?.sellingPlan?.id)),
+  };
+}
+
+function offerMatchesCustomerSegments(
+  offer: Offer,
+  buyerContext: BuyerTargetingContext,
+  parsedSettings?: ParsedOfferSettings,
+): boolean {
+  const configuredSegments =
+    parsedSettings?.customerSegments ?? parseCustomerSegments(offer.offerSettingsJson);
+  if (
+    configuredSegments.length === 0 ||
+    configuredSegments.includes("all")
+  ) {
+    return true;
+  }
+
+  const recognizedSegments = configuredSegments.filter((segment) =>
+    RECOGNIZED_CUSTOMER_SEGMENTS.has(segment),
+  );
+  if (!recognizedSegments.length) {
+    log("offer_customer_segment_skip_runtime_restriction", {
+      offerId: offer.id,
+      segments: configuredSegments,
+    });
+    return true;
+  }
+
+  return recognizedSegments.some((segment) => {
+    switch (segment) {
+      case "new_customers":
+        return !buyerContext.isAuthenticated || buyerContext.numberOfOrders === 0;
+      case "returning_customers":
+        return buyerContext.isAuthenticated && buyerContext.numberOfOrders > 0;
+      case "vip":
+        return buyerContext.tags.has("vip");
+      case "high_aov":
+        return (
+          buyerContext.tags.has("high_aov") ||
+          buyerContext.amountSpent >= 500
+        );
+      default:
+        return false;
+    }
+  });
+}
+
+function offerMatchesCustomerProfileFilters(
+  offer: Offer,
+  buyerContext: BuyerTargetingContext,
+  parsedSettings?: ParsedOfferSettings,
+): boolean {
+  const configuredFilters =
+    parsedSettings?.customerProfileFilters ??
+    parseCustomerProfileFilters(offer.offerSettingsJson);
+  if (!configuredFilters.length) {
+    return true;
+  }
+
+  const recognizedFilters = configuredFilters.filter((filter) =>
+    RECOGNIZED_CUSTOMER_PROFILE_FILTERS.has(filter),
+  );
+  if (!recognizedFilters.length) {
+    log("offer_customer_profile_skip_runtime_restriction", {
+      offerId: offer.id,
+      filters: configuredFilters,
+    });
+    return true;
+  }
+
+  return recognizedFilters.every((filter) => {
+    switch (filter) {
+      case "subscription_active":
+        return (
+          buyerContext.hasSubscriptionLine ||
+          buyerContext.tags.has("subscription_active")
+        );
+      case "bundle_buyer":
+        return buyerContext.tags.has("bundle_buyer");
+      case "repeat_buyer":
+        return (
+          buyerContext.tags.has("repeat_buyer") ||
+          buyerContext.numberOfOrders > 1
+        );
+      case "high_intent":
+        return buyerContext.tags.has("high_intent");
+      default:
+        return true;
+    }
+  });
+}
+
+function offerMatchesIpCountryCodes(
+  offer: Offer,
+  countryCode: string,
+  parsedSettings?: ParsedOfferSettings,
+): boolean {
+  const configuredCodes =
+    parsedSettings?.ipCountryCodes ?? parseIpCountryCodes(offer.offerSettingsJson);
+  if (!configuredCodes.length) {
+    return true;
+  }
+  if (!countryCode) {
+    log("offer_ip_country_runtime_unavailable", {
+      offerId: offer.id,
+      configuredCodes,
+    });
+    return false;
+  }
+  return configuredCodes.includes(countryCode);
+}
+
+function parseCouponAccess(offerSettingsJson?: string | null): CouponAccess {
+  if (!offerSettingsJson) {
+    return { enabled: false, code: "" };
+  }
+  try {
+    const parsed = JSON.parse(offerSettingsJson) as {
+      couponEnabled?: unknown;
+      couponCode?: unknown;
+    };
+    return {
+      enabled: parsed.couponEnabled === true,
+      code: normalizeCouponCode(parsed.couponCode),
+    };
+  } catch {
+    return { enabled: false, code: "" };
+  }
+}
+
+function resolveAcceptedCouponCode(
+  offer: Offer,
+  enteredCodes: Set<string>,
+  parsedSettings?: ParsedOfferSettings,
+): string | null {
+  const couponAccess = parsedSettings?.couponAccess ?? parseCouponAccess(offer.offerSettingsJson);
+  if (!couponAccess.enabled) return null;
+  return couponAccess.code && enteredCodes.has(couponAccess.code)
+    ? couponAccess.code
+    : null;
+}
+
+function compileOfferSettings(offerSettingsJson?: string | null): ParsedOfferSettings {
+  if (!offerSettingsJson) {
+    return {
+      markets: "all",
+      customerSegments: ["all"],
+      customerProfileFilters: [],
+      ipCountryCodes: [],
+      couponAccess: { enabled: false, code: "" },
+      quantityEnabled: true,
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(offerSettingsJson) as {
+      markets?: unknown;
+      customerSegments?: unknown;
+      customerProfileFilters?: unknown;
+      ipCountryCodes?: unknown;
+      couponEnabled?: unknown;
+      couponCode?: unknown;
+      quantity?: unknown;
+      showQuantityBar?: unknown;
+    };
+
+    const customerSegments =
+      typeof parsed.customerSegments === "string" && parsed.customerSegments.trim()
+        ? Array.from(
+            new Set(
+              parsed.customerSegments
+                .split(",")
+                .map((segment) => normalizeCustomerSegmentHandle(segment))
+                .filter(Boolean),
+            ),
+          )
+        : ["all"];
+
+    const customerProfileFilters =
+      typeof parsed.customerProfileFilters === "string" && parsed.customerProfileFilters.trim()
+        ? Array.from(
+            new Set(
+              parsed.customerProfileFilters
+                .split(",")
+                .map((value) => normalizeCustomerSegmentHandle(value))
+                .filter(Boolean),
+            ),
+          )
+        : [];
+
+    const ipCountryCodes =
+      typeof parsed.ipCountryCodes === "string" && parsed.ipCountryCodes.trim()
+        ? Array.from(
+            new Set(
+              parsed.ipCountryCodes
+                .split(",")
+                .map((value) => normalizeCountryCode(value))
+                .filter(Boolean),
+            ),
+          )
+        : [];
+
+    return {
+      markets:
+        typeof parsed.markets === "string" && parsed.markets.trim()
+          ? parsed.markets.trim()
+          : "all",
+      customerSegments: customerSegments.length ? customerSegments : ["all"],
+      customerProfileFilters,
+      ipCountryCodes,
+      couponAccess: {
+        enabled: parsed.couponEnabled === true,
+        code: normalizeCouponCode(parsed.couponCode),
+      },
+      quantityEnabled: !(parsed.quantity === false || parsed.showQuantityBar === false),
+    };
+  } catch {
+    return {
+      markets: "all",
+      customerSegments: ["all"],
+      customerProfileFilters: [],
+      ipCountryCodes: [],
+      couponAccess: { enabled: false, code: "" },
+      quantityEnabled: true,
+    };
+  }
+}
 
 function parseDiscountRulesJson(
   discountRulesJson?: string | null,
@@ -936,6 +1421,7 @@ function parseDiscountRulesJson(
     const tiers: DiscountTier[] = [];
     for (const item of parsed) {
       if (!item || typeof item !== "object") continue;
+      if ((item as { tierType?: unknown }).tierType === "single") continue;
       const count = Number((item as { count?: unknown }).count);
       const logicType =
         (item as { logicType?: unknown }).logicType === "bxgy" ? "bxgy" : "standard";
@@ -952,14 +1438,23 @@ function parseDiscountRulesJson(
               Math.trunc(Number((item as { buyQuantity?: unknown }).buyQuantity)),
             )
           : undefined;
+      const rewardType =
+        (item as { rewardType?: unknown }).rewardType === "gift_product" ||
+        (item as { rewardType?: unknown }).rewardType === "free_shipping"
+          ? ((item as { rewardType: "gift_product" | "free_shipping" }).rewardType)
+          : "percentage_off";
       tiers.push({
         count: logicType === "bxgy" ? normalizedBuyQuantity || Math.trunc(count) : Math.trunc(count),
         discountPercent: logicType === "bxgy" ? 100 : discountPercent,
         discountClass:
-          (item as { discountClass?: unknown }).discountClass === "order" ||
-          (item as { discountClass?: unknown }).discountClass === "shipping"
-            ? ((item as { discountClass: "order" | "shipping" }).discountClass)
-            : "product",
+          rewardType === "gift_product"
+            ? "order"
+            : rewardType === "free_shipping"
+              ? "shipping"
+              : (item as { discountClass?: unknown }).discountClass === "order" ||
+                  (item as { discountClass?: unknown }).discountClass === "shipping"
+                ? ((item as { discountClass: "order" | "shipping" }).discountClass)
+                : "product",
         conditionType:
           (item as { conditionType?: unknown }).conditionType === "cart_amount"
             ? "cart_amount"
@@ -969,11 +1464,12 @@ function parseDiscountRulesJson(
         )
           ? Math.max(0, Number((item as { amountThreshold?: unknown }).amountThreshold))
           : undefined,
-        rewardType:
-          (item as { rewardType?: unknown }).rewardType === "gift_product" ||
-          (item as { rewardType?: unknown }).rewardType === "free_shipping"
-            ? ((item as { rewardType: "gift_product" | "free_shipping" }).rewardType)
-            : "percentage_off",
+        rewardType,
+        giftQuantity: Number.isFinite(
+          Number((item as { giftQuantity?: unknown }).giftQuantity),
+        )
+          ? Math.max(1, Math.trunc(Number((item as { giftQuantity?: unknown }).giftQuantity)))
+          : undefined,
         logicType,
         buyQuantity: normalizedBuyQuantity,
         getQuantity: Number.isFinite(
@@ -1020,7 +1516,9 @@ function parseBxgyDiscountRules(discountRulesJson?: string | null): BxgyDiscount
     const out: BxgyDiscountRule[] = [];
     for (const item of parsed) {
       if (!item || typeof item !== "object") continue;
-      
+      const tierType = (item as { tierType?: unknown }).tierType;
+      if (tierType === "single") continue;
+
       const count = Number((item as { count?: unknown }).count);
       const buyQuantity = Number(
         (item as { buyQuantity?: unknown; count?: unknown }).buyQuantity ??
@@ -1029,33 +1527,40 @@ function parseBxgyDiscountRules(discountRulesJson?: string | null): BxgyDiscount
       const getQuantity = Number((item as { getQuantity?: unknown }).getQuantity);
       const discountPercent = Number((item as { discountPercent?: unknown }).discountPercent);
       const maxUsesPerOrder = Number((item as { maxUsesPerOrder?: unknown }).maxUsesPerOrder) || 1;
-      const tierType = (item as { tierType?: unknown }).tierType;
-      
       const buyProductIds = (item as { buyProductIds?: unknown }).buyProductIds;
       const getProductIds = (item as { getProductIds?: unknown }).getProductIds;
-      
+
+      const normalizedTierType = tierType === "simple" ? "simple" : "bxgy";
       if (!Number.isFinite(buyQuantity) || buyQuantity < 1) continue;
-      if (!Number.isFinite(getQuantity) || getQuantity < 1) continue;
       if (!Number.isFinite(discountPercent)) continue;
       if (!Array.isArray(buyProductIds) || !buyProductIds.length) continue;
       const normalizedBuyProductIds = buyProductIds.filter(id => typeof id === "string") as string[];
-      
+      if (!normalizedBuyProductIds.length) continue;
+      if (normalizedTierType === "bxgy" && (!Number.isFinite(getQuantity) || getQuantity < 1)) {
+        continue;
+      }
+      const normalizedGetProductIds =
+        normalizedTierType === "bxgy" &&
+        Array.isArray(getProductIds) &&
+        getProductIds.length > 0
+          ? (getProductIds.filter(id => typeof id === "string") as string[])
+          : normalizedTierType === "bxgy"
+            ? normalizedBuyProductIds
+            : [];
+
       out.push({
         count: Math.max(1, Math.trunc(buyQuantity)),
         buyQuantity: Math.max(1, Math.trunc(buyQuantity)),
-        getQuantity: Math.trunc(getQuantity),
+        getQuantity: normalizedTierType === "bxgy" ? Math.trunc(getQuantity) : 0,
         buyProductIds: normalizedBuyProductIds,
-        getProductIds:
-          Array.isArray(getProductIds) && getProductIds.length > 0
-            ? getProductIds.filter(id => typeof id === "string") as string[]
-            : normalizedBuyProductIds,
+        getProductIds: normalizedGetProductIds,
         discountPercent: Math.max(0, Math.min(100, discountPercent)),
         maxUsesPerOrder: Math.max(1, Math.trunc(maxUsesPerOrder)),
         // Legacy dedicated BXGY records may not persist tierType; default them to BXGY.
-        tierType: tierType === "simple" ? "simple" : "bxgy",
+        tierType: normalizedTierType,
       });
     }
-    
+
     out.sort((a, b) => a.count - b.count);
     return out;
   } catch {
@@ -1063,8 +1568,11 @@ function parseBxgyDiscountRules(discountRulesJson?: string | null): BxgyDiscount
   }
 }
 
-function hasUnifiedBxgyTier(discountRulesJson?: string | null): boolean {
-  return parseDiscountRulesJson(discountRulesJson).some(
+function hasUnifiedBxgyTier(
+  discountRulesJson?: string | null,
+  parsedRules?: DiscountTier[],
+): boolean {
+  return (parsedRules ?? parseDiscountRulesJson(discountRulesJson)).some(
     (tier) =>
       tier.logicType === "bxgy" &&
       tier.discountClass === "product" &&
@@ -1073,11 +1581,15 @@ function hasUnifiedBxgyTier(discountRulesJson?: string | null): boolean {
   );
 }
 
-function buildBxgyRulesFromUnifiedDiscountRules(offer: Offer): BxgyDiscountRule[] {
-  const productPool = parseSelectedIds(offer.selectedProductsJson);
+function buildBxgyRulesFromUnifiedDiscountRules(
+  offer: Offer,
+  selectedIds?: string[],
+  parsedRules?: DiscountTier[],
+): BxgyDiscountRule[] {
+  const productPool = selectedIds ?? parseSelectedIds(offer.selectedProductsJson);
   if (!productPool.length) return [];
 
-  const tiers = parseDiscountRulesJson(offer.discountRulesJson).filter(
+  const tiers = (parsedRules ?? parseDiscountRulesJson(offer.discountRulesJson)).filter(
     (tier) =>
       tier.logicType === "bxgy" &&
       tier.discountClass === "product" &&
@@ -1100,6 +1612,29 @@ function buildBxgyRulesFromUnifiedDiscountRules(offer: Offer): BxgyDiscountRule[
   });
 }
 
+function compileOfferRuntime(offer: Offer): CompiledOfferRuntime {
+  const settings = compileOfferSettings(offer.offerSettingsJson);
+  const selectedIds = parseSelectedIds(offer.selectedProductsJson);
+  const standardRules = parseDiscountRulesJson(offer.discountRulesJson);
+  const dedicatedBxgyRules = parseBxgyDiscountRules(offer.discountRulesJson);
+  const hasUnifiedBxgy = hasUnifiedBxgyTier(offer.discountRulesJson, standardRules);
+  const bxgyRules =
+    dedicatedBxgyRules.length > 0
+      ? dedicatedBxgyRules
+      : hasUnifiedBxgy
+        ? buildBxgyRulesFromUnifiedDiscountRules(offer, selectedIds, standardRules)
+        : [];
+
+  return {
+    offer,
+    settings,
+    selectedIds,
+    standardRules,
+    bxgyRules,
+    hasUnifiedBxgyTier: hasUnifiedBxgy,
+  };
+}
+
 function matchesAnyConfiguredId(
   configuredIds: string[],
   productId: string | undefined,
@@ -1112,178 +1647,381 @@ function matchesAnyConfiguredId(
   );
 }
 
-function buildBxgySamePoolCandidates(
-  cartLines: CartInput["cart"]["lines"],
-  offer: Offer,
-  rule: BxgyDiscountRule,
-): ProductDiscountCandidate[] {
-  const eligibleGetIds = rule.getProductIds.length ? rule.getProductIds : rule.buyProductIds;
-  if (!eligibleGetIds.length) {
-    log("bxgy_same_pool_skip_missing_get_products", { offerId: offer.id });
-    return [];
-  }
-
-  const matchingLines = cartLines
-    .filter((line) => {
-      if (line.merchandise?.__typename !== "ProductVariant") return false;
-      const productId = line.merchandise?.product?.id;
-      const variantId = line.merchandise?.id;
-      return matchesAnyConfiguredId(eligibleGetIds, productId, variantId);
-    })
-    .map((line) => ({
-      line,
-      unitPrice: parseMoneyAmount(line.cost?.amountPerQuantity?.amount),
-      quantity: Math.max(0, Number(line.quantity) || 0),
-    }))
-    .filter((entry) => entry.quantity > 0);
-
-  if (!matchingLines.length) {
-    log("bxgy_same_pool_no_matching_lines", {
-      offerId: offer.id,
-      eligibleGetIds,
-    });
-    return [];
-  }
-
-  const totalEligibleQuantity = matchingLines.reduce((sum, entry) => sum + entry.quantity, 0);
+function resolveSameProductBxgyQuantities(rule: Pick<BxgyDiscountRule, "buyQuantity" | "getQuantity">): {
+  buyQuantity: number;
+  bundleQuantity: number;
+  freeQuantity: number;
+  semantics: "free_items" | "total_items";
+} {
   const buyQuantity = Math.max(1, Math.trunc(Number(rule.buyQuantity) || 1));
   const getQuantity = Math.max(1, Math.trunc(Number(rule.getQuantity) || 1));
-  const bundleSize = buyQuantity + getQuantity;
-  const promotionTimes = Math.floor(totalEligibleQuantity / bundleSize);
-  const maxPromotionTimes = Math.min(
-    promotionTimes,
-    Math.max(1, Math.trunc(Number(rule.maxUsesPerOrder) || 1)),
-  );
-  let remainingFreeQuantity = maxPromotionTimes * getQuantity;
 
-  log("bxgy_same_pool_eval", {
-    offerId: offer.id,
-    eligibleLineCount: matchingLines.length,
-    totalEligibleQuantity,
+  // Some BXGY records use `getQuantity` as the final bundle size (pay X for Y total),
+  // while legacy records store it as free-item quantity. Treat larger-than-buy values as
+  // total-size semantics so "buy 3 get 5" charges 3 items across 5 total items.
+  if (getQuantity > buyQuantity) {
+    return {
+      buyQuantity,
+      bundleQuantity: getQuantity,
+      freeQuantity: Math.max(1, getQuantity - buyQuantity),
+      semantics: "total_items",
+    };
+  }
+
+  return {
     buyQuantity,
-    getQuantity,
-    bundleSize,
-    promotionTimes,
-    maxPromotionTimes,
-  });
-
-  if (remainingFreeQuantity <= 0) {
-    return [];
-  }
-
-  const candidates: ProductDiscountCandidate[] = [];
-  const sortedByUnitPrice = matchingLines.slice().sort((a, b) => a.unitPrice - b.unitPrice);
-
-  for (const entry of sortedByUnitPrice) {
-    if (remainingFreeQuantity <= 0) break;
-    const discountQuantity = Math.min(entry.quantity, remainingFreeQuantity);
-    if (discountQuantity <= 0) continue;
-
-    candidates.push({
-      message: offer.cartTitle || "Buy X Get Y",
-      targets: [
-        {
-          cartLine: {
-            id: entry.line.id,
-            quantity: discountQuantity,
-          },
-        },
-      ],
-      value: {
-        percentage: {
-          value: Math.max(0, Math.min(100, rule.discountPercent)).toFixed(1),
-        },
-      },
-    });
-
-    remainingFreeQuantity -= discountQuantity;
-  }
-
-  return candidates;
+    bundleQuantity: buyQuantity + getQuantity,
+    freeQuantity: getQuantity,
+    semantics: "free_items",
+  };
 }
+
+function getEffectiveBxgyRules(compiledOffer: CompiledOfferRuntime): BxgyDiscountRule[] {
+  return compiledOffer.bxgyRules;
+}
+
+function offerRequiresOrderBxgyEvaluation(compiledOffer: CompiledOfferRuntime): boolean {
+  return getEffectiveBxgyRules(compiledOffer).some(
+    (rule) => resolveSameProductBxgyQuantities(rule).semantics === "total_items",
+  );
+}
+
+function cartContainsConfiguredIds(
+  cartLines: CartInput["cart"]["lines"],
+  configuredIds: string[],
+): boolean {
+  if (!configuredIds.length) return false;
+
+  return cartLines.some((line) => {
+    if (line.merchandise?.__typename !== "ProductVariant") return false;
+    const productId = line.merchandise?.product?.id;
+    const variantId = line.merchandise?.id;
+    return configuredIds.some(
+      (configuredId) =>
+        (productId && productIdsMatch(productId, configuredId)) ||
+        (variantId && productIdsMatch(variantId, configuredId)),
+    );
+  });
+}
+
+function offerIntersectsCartForBxgyEvaluation(
+  compiledOffer: CompiledOfferRuntime,
+  cartLines: CartInput["cart"]["lines"],
+): boolean {
+  const selectedIds = compiledOffer.selectedIds;
+  if (cartContainsConfiguredIds(cartLines, selectedIds)) return true;
+
+  const bxgyRules = getEffectiveBxgyRules(compiledOffer);
+  const ruleScopedIds = Array.from(
+    new Set(
+      bxgyRules.flatMap((rule) => [
+        ...(Array.isArray(rule.buyProductIds) ? rule.buyProductIds : []),
+        ...(Array.isArray(rule.getProductIds) ? rule.getProductIds : []),
+      ]),
+    ),
+  );
+  if (cartContainsConfiguredIds(cartLines, ruleScopedIds)) return true;
+
+  return selectedIds.length === 0 && ruleScopedIds.length === 0;
+}
+
+type BxgyDiscountComputation = {
+  productCandidates: ProductDiscountCandidate[];
+  orderCandidates: OrderDiscountCandidate[];
+};
 
 /**
  * 计算 BXGY 折扣 — 支持多层级 (tier)，按 buyQuantity 字段选择最优匹配层级
  */
 function calculateBxgyDiscount(
   cartLines: any[],
-  offers: Offer[],
-): ProductDiscountCandidate[] {
-  const allCandidates: ProductDiscountCandidate[] = [];
+  offers: CompiledOfferRuntime[],
+): BxgyDiscountComputation {
+  const allProductCandidates: ProductDiscountCandidate[] = [];
+  const allOrderCandidates: OrderDiscountCandidate[] = [];
+  const allCartLineIds = cartLines.map((line) => line.id);
+  const pickBestSameProductRuleForQuantity = (
+    totalQuantity: number,
+    rules: BxgyDiscountRule[],
+  ): {
+    rule: BxgyDiscountRule;
+    resolved: ReturnType<typeof resolveSameProductBxgyQuantities>;
+    promotionTimes: number;
+    maxPromotionTimes: number;
+  } | null => {
+    let best: {
+      rule: BxgyDiscountRule;
+      resolved: ReturnType<typeof resolveSameProductBxgyQuantities>;
+      promotionTimes: number;
+      maxPromotionTimes: number;
+      score: number;
+    } | null = null;
+    for (const rule of rules) {
+      const resolved = resolveSameProductBxgyQuantities(rule);
+      const promotionTimes = Math.floor(totalQuantity / resolved.bundleQuantity);
+      const maxPromotionTimes = Math.min(
+        promotionTimes,
+        Math.max(1, Math.trunc(Number(rule.maxUsesPerOrder) || 1)),
+      );
+      if (maxPromotionTimes <= 0) continue;
+      const score = maxPromotionTimes * resolved.freeQuantity;
+      if (
+        !best ||
+        score > best.score ||
+        (score === best.score && resolved.bundleQuantity > best.resolved.bundleQuantity)
+      ) {
+        best = {
+          rule,
+          resolved,
+          promotionTimes,
+          maxPromotionTimes,
+          score,
+        };
+      }
+    }
+    if (!best) return null;
+    return {
+      rule: best.rule,
+      resolved: best.resolved,
+      promotionTimes: best.promotionTimes,
+      maxPromotionTimes: best.maxPromotionTimes,
+    };
+  };
 
-  for (const offer of offers) {
+  for (const compiledOffer of offers) {
+    const offer = compiledOffer.offer;
     if (offer.offerType === "bxgy") {
-      const dedicatedBxgyRules = parseBxgyDiscountRules(offer.discountRulesJson);
-      const bxgyRules =
-        dedicatedBxgyRules.length > 0
-          ? dedicatedBxgyRules
-          : buildBxgyRulesFromUnifiedDiscountRules(offer);
+      const bxgyRules = compiledOffer.bxgyRules;
       if (!bxgyRules.length) continue;
 
-      const selectedProductIds = parseSelectedIds(offer.selectedProductsJson);
+      const selectedProductIds = compiledOffer.selectedIds;
       if (!selectedProductIds.length) {
         log("bxgy_same_product_skip_missing_pool", { offerId: offer.id });
         continue;
       }
+      const candidates: ProductDiscountCandidate[] = [];
+      const discountedLineIds = new Set<string>();
+      let totalOrderDiscountAmount = 0;
+      for (const selectedProductId of selectedProductIds) {
+        const matchingLines = cartLines
+          .filter((line) => {
+            if (line.merchandise?.__typename !== "ProductVariant") return false;
+            const productId = line.merchandise?.product?.id;
+            return productIdsMatch(productId, selectedProductId);
+          })
+          .map((line) => ({
+            line,
+            unitPrice: parseMoneyAmount(line.cost?.amountPerQuantity?.amount),
+            quantity: Math.max(0, Number(line.quantity) || 0),
+          }))
+          .filter((entry) => entry.quantity > 0);
 
-      let bestRule: BxgyDiscountRule | null = null;
-      for (const rule of bxgyRules) {
-        if (selectedProductIds.length === 0) continue;
-        const matchingQuantity = cartLines.reduce((sum, line) => {
-          const productId = line.merchandise?.product?.id;
-          const variantId = line.merchandise?.id;
-          return matchesAnyConfiguredId(selectedProductIds, productId, variantId)
-            ? sum + Math.max(0, Number(line.quantity) || 0)
-            : sum;
-        }, 0);
+        if (!matchingLines.length) continue;
 
-        if (matchingQuantity >= Math.max(1, Math.trunc(Number(rule.buyQuantity) || 1))) {
-          bestRule = rule;
+        const totalQuantity = matchingLines.reduce((sum, entry) => sum + entry.quantity, 0);
+        const selected = pickBestSameProductRuleForQuantity(totalQuantity, bxgyRules);
+        if (!selected) {
+          log("bxgy_same_product_no_matching_rule", { offerId: offer.id });
+          continue;
         }
+
+        log("bxgy_same_product_rule_eval", {
+          offerId: offer.id,
+          selectedProductId,
+          ruleBuyQuantity: selected.rule.buyQuantity,
+          ruleGetQuantity: selected.rule.getQuantity,
+          totalQuantity,
+          bundleQuantity: selected.resolved.bundleQuantity,
+          promotionTimes: selected.promotionTimes,
+          maxPromotionTimes: selected.maxPromotionTimes,
+        });
+
+        log("bxgy_same_product_line_eval", {
+          offerId: offer.id,
+          selectedProductId,
+          totalQuantity,
+          bundleQuantity: selected.resolved.bundleQuantity,
+          promotionTimes: selected.promotionTimes,
+          maxPromotionTimes: selected.maxPromotionTimes,
+        });
+        let remainingFreeQuantity = selected.maxPromotionTimes * selected.resolved.freeQuantity;
+
+        if (remainingFreeQuantity <= 0) continue;
+
+        const sortedByUnitPrice = matchingLines
+          .slice()
+          .sort((a, b) => a.unitPrice - b.unitPrice);
+
+        for (const entry of sortedByUnitPrice) {
+          if (remainingFreeQuantity <= 0) break;
+          const discountQuantity = Math.min(entry.quantity, remainingFreeQuantity);
+          if (discountQuantity <= 0) continue;
+          if (selected.resolved.semantics === "total_items") {
+            discountedLineIds.add(entry.line.id);
+            totalOrderDiscountAmount += entry.unitPrice * discountQuantity;
+          } else {
+            candidates.push({
+              message: offer.cartTitle || "Buy X Get Y",
+              targets: [
+                {
+                  cartLine: {
+                    id: entry.line.id,
+                    quantity: discountQuantity,
+                  },
+                },
+              ],
+              value: {
+                percentage: {
+                  value: "100.0",
+                },
+              },
+            });
+          }
+          log("bxgy_same_product_candidate_added", {
+            offerId: offer.id,
+            cartLineId: entry.line.id,
+            quantity: discountQuantity,
+            unitPrice: entry.unitPrice,
+            semantics: selected.resolved.semantics,
+          });
+          remainingFreeQuantity -= discountQuantity;
+        }
+
+        log("bxgy_same_product_rule_applied", {
+          offerId: offer.id,
+          selectedProductId,
+          buyQuantity: selected.resolved.buyQuantity,
+          configuredGetQuantity: selected.rule.getQuantity,
+          bundleQuantity: selected.resolved.bundleQuantity,
+          freeQuantity: selected.resolved.freeQuantity,
+          semantics: selected.resolved.semantics,
+          promotionTimes: selected.maxPromotionTimes,
+        });
       }
 
-      if (!bestRule) {
-        log("bxgy_same_product_no_matching_rule", { offerId: offer.id });
-        continue;
+      if (totalOrderDiscountAmount > 0) {
+        const excludedCartLineIds = allCartLineIds.filter((id) => !discountedLineIds.has(id));
+        allOrderCandidates.push({
+          message: offer.cartTitle || "Buy X Get Y",
+          targets: [
+            {
+              orderSubtotal: {
+                excludedCartLineIds,
+              },
+            },
+          ],
+          value: {
+            fixedAmount: {
+              amount: totalOrderDiscountAmount.toFixed(2),
+            },
+          },
+        });
+        log("bxgy_same_product_order_candidate_added", {
+          offerId: offer.id,
+          discountedLineCount: discountedLineIds.size,
+          totalOrderDiscountAmount: Number(totalOrderDiscountAmount.toFixed(2)),
+        });
       }
 
-      const candidates = buildBxgySamePoolCandidates(cartLines, offer, bestRule);
-
-      allCandidates.push(...candidates);
+      allProductCandidates.push(...candidates);
       continue;
     }
 
-    const dedicatedBxgyRules = parseBxgyDiscountRules(offer.discountRulesJson);
-    const bxgyRules =
-      dedicatedBxgyRules.length > 0
-        ? dedicatedBxgyRules
-        : buildBxgyRulesFromUnifiedDiscountRules(offer);
+    const bxgyRules = compiledOffer.bxgyRules;
     if (!bxgyRules.length) continue;
 
     if (offer.offerType !== "quantity-breaks-different") {
-      let bestRule: BxgyDiscountRule | null = null;
-      for (const rule of bxgyRules) {
-        const matchingQuantity = cartLines.reduce((sum, line) => {
-          const productId = line.merchandise?.product?.id;
-          const variantId = line.merchandise?.id;
-          return matchesAnyConfiguredId(rule.buyProductIds, productId, variantId)
-            ? sum + Math.max(0, Number(line.quantity) || 0)
-            : sum;
-        }, 0);
+      const candidates: ProductDiscountCandidate[] = [];
+      const discountedLineIds = new Set<string>();
+      let totalOrderDiscountAmount = 0;
+      const productPool = Array.from(
+        new Set(
+          bxgyRules.flatMap((rule) =>
+            Array.isArray(rule.buyProductIds) ? rule.buyProductIds : [],
+          ),
+        ),
+      );
+      for (const selectedProductId of productPool) {
+        const matchingLines = cartLines
+          .filter((line) => {
+            if (line.merchandise?.__typename !== "ProductVariant") return false;
+            const productId = line.merchandise?.product?.id;
+            return productIdsMatch(productId, selectedProductId);
+          })
+          .map((line) => ({
+            line,
+            unitPrice: parseMoneyAmount(line.cost?.amountPerQuantity?.amount),
+            quantity: Math.max(0, Number(line.quantity) || 0),
+          }))
+          .filter((entry) => entry.quantity > 0);
 
-        if (matchingQuantity >= Math.max(1, Math.trunc(Number(rule.buyQuantity) || 1))) {
-          bestRule = rule;
+        if (!matchingLines.length) continue;
+
+        const totalQuantity = matchingLines.reduce((sum, entry) => sum + entry.quantity, 0);
+        const applicableRules = bxgyRules.filter((rule) =>
+          (rule.buyProductIds ?? []).some((id) => productIdsMatch(id, selectedProductId)),
+        );
+        const selected = pickBestSameProductRuleForQuantity(totalQuantity, applicableRules);
+        if (!selected) continue;
+
+        let remainingFreeQuantity = selected.maxPromotionTimes * selected.resolved.freeQuantity;
+        if (remainingFreeQuantity <= 0) continue;
+
+        const sortedByUnitPrice = matchingLines.slice().sort((a, b) => a.unitPrice - b.unitPrice);
+        for (const entry of sortedByUnitPrice) {
+          if (remainingFreeQuantity <= 0) break;
+          const discountQuantity = Math.min(entry.quantity, remainingFreeQuantity);
+          if (discountQuantity <= 0) continue;
+          if (selected.resolved.semantics === "total_items") {
+            discountedLineIds.add(entry.line.id);
+            totalOrderDiscountAmount += entry.unitPrice * discountQuantity;
+          } else {
+            candidates.push({
+              message: offer.cartTitle || "Buy X Get Y",
+              targets: [{ cartLine: { id: entry.line.id, quantity: discountQuantity } }],
+              value: {
+                percentage: {
+                  value: "100.0",
+                },
+              },
+            });
+          }
+          log("bxgy_shared_same_product_candidate_added", {
+            offerId: offer.id,
+            cartLineId: entry.line.id,
+            quantity: discountQuantity,
+            unitPrice: entry.unitPrice,
+            semantics: selected.resolved.semantics,
+          });
+          remainingFreeQuantity -= discountQuantity;
         }
       }
 
-      if (!bestRule) {
-        log("bxgy_same_product_no_matching_rule", { offerId: offer.id });
-        continue;
+      if (totalOrderDiscountAmount > 0) {
+        const excludedCartLineIds = allCartLineIds.filter((id) => !discountedLineIds.has(id));
+        allOrderCandidates.push({
+          message: offer.cartTitle || "Buy X Get Y",
+          targets: [
+            {
+              orderSubtotal: {
+                excludedCartLineIds,
+              },
+            },
+          ],
+          value: {
+            fixedAmount: {
+              amount: totalOrderDiscountAmount.toFixed(2),
+            },
+          },
+        });
+        log("bxgy_shared_same_product_order_candidate_added", {
+          offerId: offer.id,
+          discountedLineCount: discountedLineIds.size,
+          totalOrderDiscountAmount: Number(totalOrderDiscountAmount.toFixed(2)),
+        });
       }
 
-      const candidates = buildBxgySamePoolCandidates(cartLines, offer, bestRule);
-
-      allCandidates.push(...candidates);
+      allProductCandidates.push(...candidates);
       continue;
     }
 
@@ -1401,7 +2139,7 @@ function calculateBxgyDiscount(
         }
       }
 
-      allCandidates.push(...candidates);
+      allProductCandidates.push(...candidates);
       continue;
     }
 
@@ -1455,23 +2193,29 @@ function calculateBxgyDiscount(
       }
     }
 
-    allCandidates.push(...candidates);
+    allProductCandidates.push(...candidates);
   }
 
-  return allCandidates;
+  return {
+    productCandidates: allProductCandidates,
+    orderCandidates: allOrderCandidates,
+  };
 }
 
 function calculateFreeGiftDiscount(
   cartLines: CartInput["cart"]["lines"],
   offers: Offer[],
-): ProductDiscountCandidate[] {
-  const allCandidates: ProductDiscountCandidate[] = [];
+): OrderDiscountCandidate[] {
+  const allCartLineIds = cartLines.map((line) => line.id);
+  const allCandidates: OrderDiscountCandidate[] = [];
 
   for (const offer of offers) {
     const selection = parseFreeGiftSelection(offer.selectedProductsJson);
     const triggerProductIds = selection.triggerProductIds;
     const fallbackGiftProductIds = selection.giftProductIds;
-    const freeGiftRules = parseFreeGiftRulesJson(offer.discountRulesJson);
+    const freeGiftRules = parseDiscountRulesJson(offer.discountRulesJson).filter(
+      (rule) => rule.rewardType === "gift_product" && rule.discountClass === "order",
+    );
 
     if (!triggerProductIds.length || !freeGiftRules.length) {
       log("free_gift_skip_missing_configuration", {
@@ -1483,16 +2227,20 @@ function calculateFreeGiftDiscount(
     }
 
     let triggerQuantity = 0;
+    let triggerSubtotalAmount = 0;
     for (const line of cartLines) {
       if (line.merchandise.__typename !== "ProductVariant") continue;
       const productId = line.merchandise.product?.id;
       const variantId = line.merchandise.id;
       if (matchesAnyConfiguredId(triggerProductIds, productId, variantId)) {
-        triggerQuantity += Math.max(1, Math.trunc(Number(line.quantity) || 1));
+        const quantity = Math.max(1, Math.trunc(Number(line.quantity) || 1));
+        triggerQuantity += quantity;
+        triggerSubtotalAmount +=
+          parseMoneyAmount(line.cost?.amountPerQuantity?.amount) * quantity;
       }
     }
 
-    if (triggerQuantity <= 0) {
+    if (triggerQuantity <= 0 && triggerSubtotalAmount <= 0) {
       log("free_gift_skip_no_trigger_quantity", {
         offerId: offer.id,
         triggerProductIds,
@@ -1500,25 +2248,50 @@ function calculateFreeGiftDiscount(
       continue;
     }
 
-    let bestRule: FreeGiftRule | null = null;
-    for (const rule of freeGiftRules) {
-      if (triggerQuantity >= rule.count) {
-        bestRule = rule;
+    const eligibleRules = freeGiftRules.filter((rule) =>
+      evaluateRuleCondition(rule, {
+        totalQuantity: triggerQuantity,
+        subtotalAmount: triggerSubtotalAmount,
+      }),
+    );
+    const bestRule = eligibleRules.reduce<DiscountTier | null>((best, current) => {
+      if (!best) return current;
+      const currentGiftQuantity = Math.max(
+        1,
+        Math.trunc(Number(current.giftQuantity) || 1),
+      );
+      const bestGiftQuantity = Math.max(1, Math.trunc(Number(best.giftQuantity) || 1));
+      if (currentGiftQuantity !== bestGiftQuantity) {
+        return currentGiftQuantity > bestGiftQuantity ? current : best;
       }
-    }
+      const currentThreshold =
+        current.conditionType === "cart_amount"
+          ? Math.max(0, Number(current.amountThreshold) || 0)
+          : Math.max(1, Math.trunc(Number(current.count) || 1));
+      const bestThreshold =
+        best.conditionType === "cart_amount"
+          ? Math.max(0, Number(best.amountThreshold) || 0)
+          : Math.max(1, Math.trunc(Number(best.count) || 1));
+      return currentThreshold >= bestThreshold ? current : best;
+    }, null);
 
     if (!bestRule) {
       log("free_gift_skip_threshold_not_met", {
         offerId: offer.id,
         triggerQuantity,
-        thresholds: freeGiftRules.map((rule) => rule.count),
+        triggerSubtotalAmount,
+        thresholds: freeGiftRules.map((rule) =>
+          rule.conditionType === "cart_amount"
+            ? Math.max(0, Number(rule.amountThreshold) || 0)
+            : rule.count,
+        ),
       });
       continue;
     }
 
     const eligibleGiftProductIds =
-      bestRule.giftProductIds.length > 0
-        ? bestRule.giftProductIds
+      bestRule.rewardProductIds.length > 0
+        ? bestRule.rewardProductIds
         : fallbackGiftProductIds;
     if (!eligibleGiftProductIds.length) {
       log("free_gift_skip_no_reward_products", {
@@ -1529,7 +2302,9 @@ function calculateFreeGiftDiscount(
       continue;
     }
 
-    let remainingGiftQuantity = bestRule.giftQuantity;
+    let remainingGiftQuantity = Math.max(1, Math.trunc(Number(bestRule.giftQuantity) || 1));
+    let totalGiftDiscountAmount = 0;
+    const discountedGiftLineIds = new Set<string>();
     for (const line of cartLines) {
       if (remainingGiftQuantity <= 0) break;
       if (line.merchandise.__typename !== "ProductVariant") continue;
@@ -1545,15 +2320,9 @@ function calculateFreeGiftDiscount(
       );
       if (discountQuantity <= 0) continue;
 
-      allCandidates.push({
-        message: offer.cartTitle || "Free gift",
-        targets: [{ cartLine: { id: line.id, quantity: discountQuantity } }],
-        value: {
-          percentage: {
-            value: "100.0",
-          },
-        },
-      });
+      totalGiftDiscountAmount +=
+        parseMoneyAmount(line.cost?.amountPerQuantity?.amount) * discountQuantity;
+      discountedGiftLineIds.add(line.id);
 
       remainingGiftQuantity -= discountQuantity;
       log("free_gift_candidate_added", {
@@ -1561,8 +2330,32 @@ function calculateFreeGiftDiscount(
         cartLineId: line.id,
         quantity: discountQuantity,
         selectedRuleCount: bestRule.count,
+        selectedRuleAmountThreshold: bestRule.amountThreshold,
       });
     }
+
+    if (totalGiftDiscountAmount <= 0 || discountedGiftLineIds.size === 0) {
+      continue;
+    }
+
+    const excludedCartLineIds = allCartLineIds.filter(
+      (id) => !discountedGiftLineIds.has(id),
+    );
+    allCandidates.push({
+      message: offer.cartTitle || "Free gift",
+      targets: [
+        {
+          orderSubtotal: {
+            excludedCartLineIds,
+          },
+        },
+      ],
+      value: {
+        fixedAmount: {
+          amount: totalGiftDiscountAmount.toFixed(2),
+        },
+      },
+    });
   }
 
   return allCandidates;
@@ -1573,77 +2366,10 @@ function formatDiscountPercentValue(percent: number): string {
   return percent.toFixed(1);
 }
 
-function parseDiscountPercentNumber(percent: string | null | undefined): number {
-  if (!percent) return 0;
-  const n = Number(percent);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function estimateProductCandidateSavings(
-  candidate: ProductDiscountCandidate,
-  unitPriceByLineId: Map<string, number>,
-): number {
-  const target = candidate.targets[0]?.cartLine;
-  if (!target?.id) return 0;
-
-  const quantity = Math.max(1, Math.trunc(Number(target.quantity) || 1));
-  if ("percentage" in candidate.value) {
-    const unitPrice = Math.max(0, unitPriceByLineId.get(target.id) || 0);
-    const percent = Math.max(
-      0,
-      Math.min(100, parseDiscountPercentNumber(candidate.value.percentage?.value)),
-    );
-    return unitPrice * quantity * (percent / 100);
-  }
-
-  const rawAmount = Number(candidate.value.fixedAmount?.amount || 0);
-  const amount = Number.isFinite(rawAmount) ? Math.max(0, rawAmount) : 0;
-  return candidate.value.fixedAmount?.appliesToEachItem ? amount * quantity : amount;
-}
-
-function resolveExclusiveProductCandidates(
-  candidates: ProductDiscountCandidate[],
+function getScopedLinesForSelectedIds(
   cartLines: CartInput["cart"]["lines"],
-): ProductDiscountCandidate[] {
-  const unitPriceByLineId = new Map(
-    cartLines.map((line) => [
-      line.id,
-      parseMoneyAmount(line.cost?.amountPerQuantity?.amount),
-    ]),
-  );
-  const bestByLineId = new Map<
-    string,
-    { candidate: ProductDiscountCandidate; savings: number; index: number }
-  >();
-
-  for (const [index, candidate] of candidates.entries()) {
-    const target = candidate.targets[0]?.cartLine;
-    if (!target?.id) continue;
-
-    const savings = estimateProductCandidateSavings(candidate, unitPriceByLineId);
-    const existing = bestByLineId.get(target.id);
-    if (!existing || savings > existing.savings) {
-      if (existing) {
-        log("product_candidate_conflict_resolved", {
-          cartLineId: target.id,
-          replacedSavings: existing.savings.toFixed(4),
-          nextSavings: savings.toFixed(4),
-        });
-      }
-      bestByLineId.set(target.id, { candidate, savings, index });
-    }
-  }
-
-  return Array.from(bestByLineId.values())
-    .sort((a, b) => a.index - b.index)
-    .map((entry) => entry.candidate);
-}
-
-function getScopedLinesForOffer(
-  cartLines: CartInput["cart"]["lines"],
-  offer: Offer,
+  selectedIds: string[],
 ): CartInput["cart"]["lines"] {
-  const selectedIds = parseSelectedIds(offer.selectedProductsJson);
   if (!selectedIds.length) {
     return cartLines.filter(
       (line) => line.merchandise.__typename === "ProductVariant",
@@ -1679,6 +2405,7 @@ function getBestProductDiscountPercentValue(
 ): string | null {
   const tiers = parseDiscountRulesJson(discountRulesJson).filter(
     (tier) =>
+      tier.logicType !== "bxgy" &&
       tier.discountClass === "product" &&
       tier.rewardType === "percentage_off" &&
       tier.conditionType === "item_quantity",
@@ -1704,18 +2431,55 @@ function getBestProductDiscountPercentValue(
   return formatDiscountPercentValue(best.discountPercent);
 }
 
+function getBestProductDiscountPercentValueFromTiers(
+  tiers: DiscountTier[],
+  quantity: number,
+): string | null {
+  const eligibleTiers = tiers.filter(
+    (tier) =>
+      tier.logicType !== "bxgy" &&
+      tier.discountClass === "product" &&
+      tier.rewardType === "percentage_off" &&
+      tier.conditionType === "item_quantity",
+  );
+
+  if (eligibleTiers.length === 0) {
+    log("discount_rules_fallback_default", { quantity });
+    return DEFAULT_DISCOUNT_PERCENTAGE;
+  }
+
+  let best: DiscountTier | null = null;
+  for (const tier of eligibleTiers) {
+    if (quantity >= tier.count) best = tier;
+  }
+
+  if (!best) {
+    log("discount_rules_no_tier_met", {
+      quantity,
+      tierCounts: eligibleTiers.map((t) => t.count),
+    });
+    return null;
+  }
+
+  return formatDiscountPercentValue(best.discountPercent);
+}
+
 function buildOrderDiscountCandidates(
   input: CartInput,
   offers: Offer[],
   marketId: string | undefined,
   nowMs: number | null,
+  acceptedCouponCodeByOfferId: Map<string, string>,
 ): OrderDiscountCandidate[] {
   const candidates: OrderDiscountCandidate[] = [];
   const allCartLineIds = input.cart.lines.map((line) => line.id);
 
   for (const offer of offers) {
     if (!offerPassesScheduleAndMarket(offer, marketId, nowMs)) continue;
-    const scopedLines = getScopedLinesForOffer(input.cart.lines, offer);
+    const scopedLines = getScopedLinesForSelectedIds(
+      input.cart.lines,
+      parseSelectedIds(offer.selectedProductsJson),
+    );
     if (!scopedLines.length) continue;
 
     const metrics = scopedLines.reduce(
@@ -1757,6 +2521,77 @@ function buildOrderDiscountCandidates(
           value: formatDiscountPercentValue(bestRule.discountPercent),
         },
       },
+      associatedDiscountCode: acceptedCouponCodeByOfferId.get(String(offer.id || ""))
+        ? {
+            code: acceptedCouponCodeByOfferId.get(String(offer.id || ""))!,
+          }
+        : undefined,
+    });
+  }
+
+  return candidates;
+}
+
+function buildOrderDiscountCandidatesFromCompiledOffers(
+  input: CartInput,
+  offers: CompiledOfferRuntime[],
+  marketId: string | undefined,
+  nowMs: number | null,
+  acceptedCouponCodeByOfferId: Map<string, string>,
+): OrderDiscountCandidate[] {
+  const candidates: OrderDiscountCandidate[] = [];
+  const allCartLineIds = input.cart.lines.map((line) => line.id);
+
+  for (const compiledOffer of offers) {
+    const offer = compiledOffer.offer;
+    if (!offerPassesScheduleAndMarket(offer, marketId, nowMs, compiledOffer.settings)) continue;
+    const scopedLines = getScopedLinesForSelectedIds(input.cart.lines, compiledOffer.selectedIds);
+    if (!scopedLines.length) continue;
+
+    const metrics = scopedLines.reduce(
+      (acc, line) => ({
+        totalQuantity: acc.totalQuantity + Math.max(1, Math.trunc(Number(line.quantity) || 1)),
+        subtotalAmount:
+          acc.subtotalAmount +
+          parseMoneyAmount(line.cost?.amountPerQuantity?.amount) *
+            Math.max(1, Math.trunc(Number(line.quantity) || 1)),
+      }),
+      { totalQuantity: 0, subtotalAmount: 0 },
+    );
+
+    const eligibleRules = compiledOffer.standardRules.filter(
+      (rule) =>
+        rule.discountClass === "order" &&
+        rule.rewardType === "percentage_off" &&
+        evaluateRuleCondition(rule, metrics),
+    );
+    if (!eligibleRules.length) continue;
+
+    const bestRule = eligibleRules.reduce((best, current) =>
+      current.discountPercent > best.discountPercent ? current : best,
+    );
+    const scopedIds = new Set(scopedLines.map((line) => line.id));
+    const excludedCartLineIds = allCartLineIds.filter((id) => !scopedIds.has(id));
+
+    candidates.push({
+      message: offer.cartTitle || "Bundle order discount",
+      targets: [
+        {
+          orderSubtotal: {
+            excludedCartLineIds,
+          },
+        },
+      ],
+      value: {
+        percentage: {
+          value: formatDiscountPercentValue(bestRule.discountPercent),
+        },
+      },
+      associatedDiscountCode: acceptedCouponCodeByOfferId.get(String(offer.id || ""))
+        ? {
+            code: acceptedCouponCodeByOfferId.get(String(offer.id || ""))!,
+          }
+        : undefined,
     });
   }
 
@@ -1768,90 +2603,6 @@ function getDiscountPercentValue(
   quantity: number,
 ): string | null {
   return getBestProductDiscountPercentValue(discountRulesJson, quantity);
-}
-
-function matchesRegularOfferLine(
-  offer: Offer,
-  productId: string | undefined,
-  variantId: string | undefined,
-): boolean {
-  const selectedIds = parseSelectedIds(offer.selectedProductsJson);
-  if (!selectedIds.length) {
-    return true;
-  }
-
-  return selectedIds.some(
-    (sid) =>
-      (productId && productIdsMatch(productId, sid)) ||
-      (variantId && productIdsMatch(variantId, sid)),
-  );
-}
-
-function isRegularOfferQuantityDisabled(offer: Offer): boolean {
-  if (offer.offerType === "bxgy" || isCompleteBundleOfferType(offer.offerType) || !offer.offerSettingsJson) {
-    return false;
-  }
-
-  try {
-    const settings = JSON.parse(offer.offerSettingsJson) as {
-      quantity?: boolean;
-      showQuantityBar?: boolean;
-    };
-    return settings.quantity === false || settings.showQuantityBar === false;
-  } catch {
-    return false;
-  }
-}
-
-function findBestRegularOfferForLine(
-  productId: string | undefined,
-  variantId: string | undefined,
-  marketId: string | undefined,
-  quantity: number,
-  offers: Offer[],
-): { offer: Offer; discountPercentValue: string } | null {
-  const nowMs = resolveNowMs();
-  let bestMatch: { offer: Offer; discountPercentValue: string; percentNumber: number } | null = null;
-
-  for (const offer of offers) {
-    if (!offerPassesScheduleAndMarket(offer, marketId, nowMs)) {
-      continue;
-    }
-
-    if (isRegularOfferQuantityDisabled(offer)) {
-      log("offer_skip_quantity_bar_disabled", { offerId: offer.id, name: offer.name });
-      continue;
-    }
-
-    const hit = matchesRegularOfferLine(offer, productId, variantId);
-    log("offer_selected_ids_check", {
-      offerId: offer.id,
-      name: offer.name,
-      selectedIdCount: parseSelectedIds(offer.selectedProductsJson).length,
-      productId,
-      variantId,
-      hit,
-    });
-    if (!hit) {
-      continue;
-    }
-
-    const discountPercentValue = getDiscountPercentValue(offer.discountRulesJson, quantity);
-    if (!discountPercentValue) {
-      continue;
-    }
-
-    const percentNumber = parseDiscountPercentNumber(discountPercentValue);
-    if (!bestMatch || percentNumber > bestMatch.percentNumber) {
-      bestMatch = { offer, discountPercentValue, percentNumber };
-    }
-  }
-
-  if (!bestMatch) return null;
-  return {
-    offer: bestMatch.offer,
-    discountPercentValue: bestMatch.discountPercentValue,
-  };
 }
 
 const parseSelectedIds = (selectedProductsJson?: string | null): string[] => {
@@ -1979,6 +2730,186 @@ function resolveNowMs(): number | null {
 
   return null;
 }
+
+
+function getCandidateTargetCartLineIds(
+  candidate: ProductDiscountCandidate,
+): string[] {
+  return Array.from(
+    new Set(
+      (candidate.targets ?? [])
+        .flatMap((target) => {
+          const cartLineId = target.cartLine?.id;
+          return cartLineId ? [cartLineId] : [];
+        })
+        .filter(Boolean),
+    ),
+  );
+}
+
+function groupProductCandidatesByOverlappingTargets(
+  candidates: ProductDiscountCandidate[],
+): ProductDiscountCandidate[][] {
+  const groups: Array<{
+    candidates: ProductDiscountCandidate[];
+    targetLineIds: Set<string>;
+  }> = [];
+
+  for (const candidate of candidates) {
+    const targetLineIds = getCandidateTargetCartLineIds(candidate);
+    if (!targetLineIds.length) {
+      groups.push({
+        candidates: [candidate],
+        targetLineIds: new Set<string>(),
+      });
+      continue;
+    }
+
+    const overlappingGroupIndexes = groups
+      .map((group, index) =>
+        targetLineIds.some((lineId) => group.targetLineIds.has(lineId)) ? index : -1,
+      )
+      .filter((index) => index >= 0);
+
+    if (!overlappingGroupIndexes.length) {
+      groups.push({
+        candidates: [candidate],
+        targetLineIds: new Set(targetLineIds),
+      });
+      continue;
+    }
+
+    const primaryGroupIndex = overlappingGroupIndexes[0];
+    const primaryGroup = groups[primaryGroupIndex];
+    primaryGroup.candidates.push(candidate);
+    for (const lineId of targetLineIds) {
+      primaryGroup.targetLineIds.add(lineId);
+    }
+
+    for (let i = overlappingGroupIndexes.length - 1; i >= 1; i -= 1) {
+      const mergeIndex = overlappingGroupIndexes[i];
+      const groupToMerge = groups[mergeIndex];
+      primaryGroup.candidates.push(...groupToMerge.candidates);
+      for (const lineId of groupToMerge.targetLineIds) {
+        primaryGroup.targetLineIds.add(lineId);
+      }
+      groups.splice(mergeIndex, 1);
+    }
+  }
+
+  return groups.map((group) => group.candidates);
+}
+/**
+ * selectedProductsJson 存的是 Product GID（与主题端、后台一致），需用购物车行的 product.id / variant.id 匹配，不能用 CartLine.id。
+ */
+type RegularOfferIndex = {
+  matchAllOffers: CompiledOfferRuntime[];
+  byLookupKey: Map<string, CompiledOfferRuntime[]>;
+};
+
+function buildOfferLookupKey(raw: string | undefined | null): string {
+  return extractShopifyProductNumericId(raw);
+}
+
+function appendOfferToLookupIndex(
+  index: Map<string, CompiledOfferRuntime[]>,
+  lookupKey: string,
+  compiledOffer: CompiledOfferRuntime,
+): void {
+  if (!lookupKey) return;
+  const existing = index.get(lookupKey);
+  if (existing) {
+    existing.push(compiledOffer);
+    return;
+  }
+  index.set(lookupKey, [compiledOffer]);
+}
+
+function buildRegularOfferIndex(offers: CompiledOfferRuntime[]): RegularOfferIndex {
+  const byLookupKey = new Map<string, CompiledOfferRuntime[]>();
+  const matchAllOffers: CompiledOfferRuntime[] = [];
+
+  for (const compiledOffer of offers) {
+    if (!compiledOffer.settings.quantityEnabled) continue;
+    if (!compiledOffer.selectedIds.length) {
+      matchAllOffers.push(compiledOffer);
+      continue;
+    }
+
+    const seenKeys = new Set<string>();
+    for (const selectedId of compiledOffer.selectedIds) {
+      const lookupKey = buildOfferLookupKey(selectedId);
+      if (!lookupKey || seenKeys.has(lookupKey)) continue;
+      seenKeys.add(lookupKey);
+      appendOfferToLookupIndex(byLookupKey, lookupKey, compiledOffer);
+    }
+  }
+
+  return {
+    matchAllOffers,
+    byLookupKey,
+  };
+}
+
+const findOffer = (
+  productId: string | undefined,
+  variantId: string | undefined,
+  offerIndex: RegularOfferIndex,
+): CompiledOfferRuntime | null => {
+  const candidateOffers: CompiledOfferRuntime[] = [];
+  const seenOfferIds = new Set<string>();
+  const lookupKeys = [buildOfferLookupKey(productId), buildOfferLookupKey(variantId)].filter(Boolean);
+
+  for (const compiledOffer of offerIndex.matchAllOffers) {
+    const offerId = String(compiledOffer.offer.id || "");
+    if (seenOfferIds.has(offerId)) continue;
+    seenOfferIds.add(offerId);
+    candidateOffers.push(compiledOffer);
+  }
+
+  for (const lookupKey of lookupKeys) {
+    for (const compiledOffer of offerIndex.byLookupKey.get(lookupKey) ?? []) {
+      const offerId = String(compiledOffer.offer.id || "");
+      if (seenOfferIds.has(offerId)) continue;
+      seenOfferIds.add(offerId);
+      candidateOffers.push(compiledOffer);
+    }
+  }
+
+  for (const compiledOffer of candidateOffers) {
+    const offer = compiledOffer.offer;
+    const selectedIds = compiledOffer.selectedIds;
+    if (!selectedIds.length) {
+      log("offer_match_all_products", { offerId: offer.id, name: offer.name });
+      return compiledOffer;
+    }
+
+    let hit = false;
+    for (const sid of selectedIds) {
+      if (productId && productIdsMatch(productId, sid)) {
+        hit = true;
+        break;
+      }
+      if (variantId && productIdsMatch(variantId, sid)) {
+        hit = true;
+        break;
+      }
+    }
+
+    log("offer_selected_ids_check", {
+      offerId: offer.id,
+      name: offer.name,
+      selectedIdCount: selectedIds.length,
+      productId,
+      variantId,
+      hit,
+    });
+
+    if (hit) return compiledOffer;
+  }
+
+  return null;
+};
 
 /**
  * 校验是否允许生成本次折扣：购物车非空。

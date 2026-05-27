@@ -1,13 +1,27 @@
 query CartInput {
+  triggeringDiscountCode
   cart {
-    cost {
-      subtotalAmount {
-        amount
+    buyerIdentity {
+      isAuthenticated
+      customer {
+        numberOfOrders
+        amountSpent {
+          amount
+        }
+        hasTags(tags: ["vip", "high_aov", "subscription_active", "bundle_buyer", "repeat_buyer", "high_intent"]) {
+          tag
+          hasTag
+        }
       }
     }
     lines {
       id
       quantity
+      sellingPlanAllocation {
+        sellingPlan {
+          id
+        }
+      }
       cost {
         amountPerQuantity {
           amount
@@ -25,31 +39,26 @@ query CartInput {
     }
   }
   shop {
-    offersProd: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-offers-prod") {
+    bundleEnabledShop: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-enabled") {
       jsonValue
     }
-    offersTest: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-offers-test") {
-      jsonValue
-    }
-    bundleEnabledProd: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-enabled-prod") {
-      jsonValue
-    }
-    bundleEnabledTest: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-enabled-test") {
+    offersShop: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-offers-fn") {
       jsonValue
     }
   }
   localization {
+    country {
+      isoCode
+    }
     market {
       id
     }
   }
   discount {
-    appOwnedOffers: metafield(namespace: "$app:ciwi_bundle", key: "offers") {
-      jsonValue
-    }
-    legacyOffers: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-offers") {
-      jsonValue
-    }
     discountClasses
+    # automatic discount owner: syncCartLinesAutomaticDiscountMetafield + shipping discount sync
+    offersFromDiscountOwner: metafield(namespace: "$app:ciwi_bundle", key: "offers") {
+      jsonValue
+    }
   }
 }

@@ -11,6 +11,8 @@ declare namespace NodeJS {
     /** Turso CLI: turso db tokens create <database-name> */
     TURSO_AUTH_TOKEN?: string;
     SHOPIFY_API_KEY?: string;
+    PROD_SHOPIFY_API_KEY?: string;
+    TEST_SHOPIFY_API_KEY?: string;
     SHOPIFY_API_SECRET?: string;
     SCOPES?: string;
     SHOPIFY_APP_URL?: string;

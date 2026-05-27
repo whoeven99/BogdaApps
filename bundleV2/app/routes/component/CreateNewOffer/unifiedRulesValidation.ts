@@ -1,5 +1,4 @@
 import type { CampaignDraft } from "./campaignDraft";
-import { getUnifiedRuleBlockingMessage as getLegacyUnifiedRuleBlockingMessage } from "./unifiedRuleModel";
 import {
   describeUnifiedRuleCondition,
   describeUnifiedRuleReward,
@@ -18,6 +17,10 @@ function describeDraftOnlyRule(rule: UnifiedRuleNode): string {
   )} with ${describeUnifiedRuleReward(rule.reward)}`;
 }
 
+function isNonBlockingDraftOnlyRule(rule: UnifiedRuleNode): boolean {
+  return rule.type === "single_purchase";
+}
+
 export function getUnifiedRuleAuditIssuesForRules(
   draft: CampaignDraft,
   rules: UnifiedRuleNode[],
@@ -32,7 +35,10 @@ export function getUnifiedRuleAuditIssuesForRules(
     return issues;
   }
 
-  const draftOnlyRules = rules.filter((rule) => rule.publishSupport === "draft_only");
+  const draftOnlyRules = rules.filter(
+    (rule) =>
+      rule.publishSupport === "draft_only" && !isNonBlockingDraftOnlyRule(rule),
+  );
   if (draftOnlyRules.length > 0) {
     issues.push({
       severity: "error",
@@ -45,16 +51,6 @@ export function getUnifiedRuleAuditIssuesForRules(
         message: `${description} is not publishable in the current flow yet.`,
       });
     });
-  }
-
-  if (draft.offerType === "quantity-breaks-same") {
-    const legacyBlockingMessage = getLegacyUnifiedRuleBlockingMessage(draft.discountRules);
-    if (legacyBlockingMessage) {
-      issues.push({
-        severity: "error",
-        message: legacyBlockingMessage,
-      });
-    }
   }
 
   const hasSelectedProductsGap = rules.some(
@@ -93,7 +89,7 @@ export function getUnifiedRuleAuditIssuesForRules(
     issues.push({
       severity: "error",
       message:
-        "Free-gift bars require the global trigger pool and gift products inside every bar before continuing.",
+        "Gift reward rules require the global trigger pool and reward products inside every rule before continuing.",
     });
   }
 

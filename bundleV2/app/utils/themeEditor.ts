@@ -3,39 +3,109 @@ import {
   type ThemeAppEmbedConfig,
 } from "./themePlugins";
 
-export function buildThemeEditorAppEmbedUrl(
-  storeId: string,
-  themeId: string,
+type ThemeEditorUrlOptions = {
+  plugin?: ThemeAppEmbedConfig;
+  themeId?: string | null;
+  openAppEmbed?: boolean;
+};
+
+function normalizeShopAdminHandle(shop: string): string {
+  const raw = String(shop || "").trim();
+  if (!raw) return "";
+
+  const withoutProtocol = raw.replace(/^https?:\/\//i, "");
+  const adminStoreMatch = withoutProtocol.match(/admin\.shopify\.com\/store\/([^/?#]+)/i);
+  if (adminStoreMatch?.[1]) {
+    return adminStoreMatch[1].trim();
+  }
+
+  const prefixedStoreMatch = withoutProtocol.match(/^store\/([^/?#]+)/i);
+  if (prefixedStoreMatch?.[1]) {
+    return prefixedStoreMatch[1].trim();
+  }
+
+  const pathStoreMatch = withoutProtocol.match(/\/store\/([^/?#]+)/i);
+  if (pathStoreMatch?.[1]) {
+    return pathStoreMatch[1].trim();
+  }
+
+  if (withoutProtocol.includes(".myshopify.com")) {
+    return withoutProtocol.replace(/\.myshopify\.com.*$/i, "").trim();
+  }
+
+  return withoutProtocol.replace(/^\/+|\/+$/g, "").trim();
+}
+
+function normalizeThemeEditorThemeId(themeId: string | null | undefined): string {
+  const raw = String(themeId || "").trim();
+  if (!raw) return "";
+  if (raw === "current") return raw;
+  if (/^\d+$/.test(raw)) return raw;
+  const gidMatch = raw.match(/\/(\d+)(?:\?.*)?$/);
+  if (gidMatch?.[1]) return gidMatch[1];
+  return raw;
+}
+
+export function buildThemeEditorUrl(
+  shop: string,
   apiKey: string,
-  plugin: ThemeAppEmbedConfig = BUNDLE_THEME_PRODUCT_PLUGIN,
+  options: ThemeEditorUrlOptions = {},
 ): string {
-  const normalizedStoreId = String(storeId || "").trim();
-  const normalizedThemeId = String(themeId || "").trim();
+  const {
+    plugin = BUNDLE_THEME_PRODUCT_PLUGIN,
+    themeId,
+    openAppEmbed = false,
+  } = options;
+  const storeHandle = normalizeShopAdminHandle(shop);
   const normalizedApiKey = String(apiKey || "").trim();
+  const normalizedThemeId = normalizeThemeEditorThemeId(themeId);
   const url = new URL(
-    `https://admin.shopify.com/store/${normalizedStoreId}/themes/${normalizedThemeId}/editor`,
+    `https://admin.shopify.com/store/${storeHandle}/themes/${normalizedThemeId || "current"}/editor`,
   );
 
-  url.searchParams.set("context", "apps");
-  url.searchParams.set(
-    "appEmbed",
-    `${normalizedApiKey}/${plugin.embedHandle}`,
-  );
+  if (openAppEmbed) {
+    url.searchParams.set("context", "apps");
+    url.searchParams.set(
+      "appEmbed",
+      `${normalizedApiKey}/${plugin.embedHandle}`,
+    );
+  }
 
   return url.toString();
 }
-
-export function openThemeEditorAppEmbed(
-  storeId: string,
-  themeId: string,
+export function buildThemeEditorAppEmbedUrl(
+  shop: string,
   apiKey: string,
   plugin: ThemeAppEmbedConfig = BUNDLE_THEME_PRODUCT_PLUGIN,
+  themeId?: string | null,
+): string {
+  return buildThemeEditorUrl(shop, apiKey, {
+    plugin,
+    themeId,
+    openAppEmbed: true,
+  });
+}
+
+export function openThemeEditor(
+  shop: string,
+  apiKey: string,
+  options: ThemeEditorUrlOptions = {},
+): void {
+  const editorUrl = buildThemeEditorUrl(shop, apiKey, options);
+  window.open(editorUrl, "_blank", "noopener,noreferrer");
+}
+
+export function openThemeEditorAppEmbed(
+  shop: string,
+  apiKey: string,
+  plugin: ThemeAppEmbedConfig = BUNDLE_THEME_PRODUCT_PLUGIN,
+  themeId?: string | null,
 ): void {
   const editorUrl = buildThemeEditorAppEmbedUrl(
-    storeId,
-    themeId,
+    shop,
     apiKey,
     plugin,
+    themeId,
   );
   window.open(editorUrl, "_blank", "noopener,noreferrer");
 }

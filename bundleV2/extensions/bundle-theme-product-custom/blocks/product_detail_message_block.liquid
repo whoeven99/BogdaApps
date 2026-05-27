@@ -1,4 +1,4 @@
-{% assign ciwi_source_type = 'app-embed' %}
+{% assign ciwi_source_type = 'app-block' %}
 <div
   class="ciwi-product-message-src"
   data-ciwi-source-type="{{ ciwi_source_type | escape }}"
@@ -65,8 +65,8 @@
 
 {% schema %}
 {
-  "name": "Ciwi Bundle & Discount",
-  "target": "body",
+  "name": "Ciwi Bundle Block",
+  "target": "section",
   "enabled_on": {
     "templates": ["product"]
   },

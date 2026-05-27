@@ -5,13 +5,21 @@ import {
   getUnifiedRuleTypeLabel,
   type UnifiedRuleNode,
 } from "./unifiedRulesSchema";
+import { resolvePresentationTextWithSource } from "./builderStandardDisplayResolver";
+import { resolveBuilderBxgyDisplay } from "./bxgyDisplayResolver";
 
 function buildPlaceholders(rule: UnifiedRuleNode): DisplayCustomizerItem["placeholders"] {
   switch (rule.type) {
+    case "single_purchase":
+      return {
+        title: "e.g. Single",
+        subtitle: "e.g. Standard price",
+        badge: "e.g. Base option",
+      };
     case "bxgy":
       return {
-        title: "e.g. Buy 2, Get 1",
-        subtitle: "e.g. Buy 2 and get 1 reward item",
+        title: "e.g. Buy 2, Get 3",
+        subtitle: "",
         badge: "e.g. Best reward",
       };
     case "free_gift":
@@ -71,9 +79,13 @@ function buildEditableFields(rule: UnifiedRuleNode): DisplayCustomizerItem["fiel
 }
 
 function buildDisplayTitle(rule: UnifiedRuleNode, index: number): string {
-  return (
-    rule.presentation.title ||
-    `${getUnifiedRuleTypeLabel(rule.type)} Rule ${index + 1}`
+  if (rule.type === "bxgy" && rule.condition.kind === "buy_x_get_y") {
+    return resolveBuilderBxgyDisplay(rule.condition, rule.presentation).title;
+  }
+  return resolvePresentationTextWithSource(
+    rule.presentation.title,
+    rule.presentation.titleSource,
+    `${getUnifiedRuleTypeLabel(rule.type)} Rule ${index + 1}`,
   );
 }
 
@@ -82,10 +94,21 @@ export function buildUnifiedDisplayCustomizerItems(
 ): DisplayCustomizerItem[] {
   return rules.map((rule, index) => ({
     id: rule.id,
-    title: rule.presentation.title || "",
+    title:
+      rule.type === "bxgy" && rule.condition.kind === "buy_x_get_y"
+        ? resolveBuilderBxgyDisplay(rule.condition, rule.presentation).title
+        : resolvePresentationTextWithSource(
+            rule.presentation.title,
+            rule.presentation.titleSource,
+            buildDisplayTitle(rule, index),
+          ),
     displayTitle: buildDisplayTitle(rule, index),
     description: `${describeUnifiedRuleCondition(rule.condition)} • ${describeUnifiedRuleReward(rule.reward)}`,
-    subtitle: rule.presentation.subtitle || "",
+    subtitle: resolvePresentationTextWithSource(
+      rule.presentation.subtitle,
+      rule.presentation.subtitleSource,
+      "",
+    ),
     badge: rule.presentation.badge || "",
     isDefault: !!rule.presentation.isDefault,
     fields: buildEditableFields(rule),

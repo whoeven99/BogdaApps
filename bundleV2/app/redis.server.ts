@@ -8,19 +8,16 @@ type RedisClient = {
 };
 
 let redis: RedisClient;
-
-declare global {
-  var __redis: RedisClient | undefined;
-}
+const globalForRedis = globalThis as typeof globalThis & { __redis?: RedisClient };
 
 // 这能防止我们在开发环境中建立过多的连接。
 if (process.env.NODE_ENV === "prod" || process.env.NODE_ENV === "test") {
   redis = new Redis(redisUrl);
 } else {
-  if (!global.__redis) {
-    global.__redis = new Redis(redisUrl);
+  if (!globalForRedis.__redis) {
+    globalForRedis.__redis = new Redis(redisUrl);
   }
-  redis = global.__redis;
+  redis = globalForRedis.__redis;
 }
 
 let bogdaRateCache: Record<string, string> | null = null;

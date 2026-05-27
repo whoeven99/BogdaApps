@@ -1,5 +1,9 @@
 export type OfferTypeId =
   | "quantity-breaks-same"
+  | "progressive-gifts"
+  | "shipping-discount"
+  | "order-discount"
+  | "coupon"
   | "quantity-breaks-different"
   | "bxgy"
   | "complete-bundle"
@@ -24,6 +28,38 @@ export const OFFER_TYPE_OPTIONS: OfferTypeOption[] = [
     primaryRuleType: "Quantity break",
   },
   {
+    id: "progressive-gifts",
+    name: "Progressive gifts",
+    description:
+      "Build milestone-based rewards where quantity tiers unlock a separate progressive reward track",
+    primaryDiscountScope: "Milestone rewards",
+    primaryRuleType: "Reward track",
+  },
+  {
+    id: "shipping-discount",
+    name: "Free shipping tiers",
+    description:
+      "Unlock free shipping with item-quantity or cart-amount tiers while keeping the same selected product scope",
+    primaryDiscountScope: "Shipping discounts",
+    primaryRuleType: "Free shipping",
+  },
+  {
+    id: "order-discount",
+    name: "Order discount tiers",
+    description:
+      "Unlock order-level percentage discounts with item-quantity or cart-amount tiers across the selected product scope",
+    primaryDiscountScope: "Order discounts",
+    primaryRuleType: "Order discount",
+  },
+  {
+    id: "coupon",
+    name: "Coupon offer",
+    description:
+      "Require a shared coupon code before applying an order-level percentage discount across the selected product scope",
+    primaryDiscountScope: "Coupon-triggered order discounts",
+    primaryRuleType: "Shared code",
+  },
+  {
     id: "quantity-breaks-different",
     name: "Quantity breaks for different products",
     description:
@@ -33,9 +69,9 @@ export const OFFER_TYPE_OPTIONS: OfferTypeOption[] = [
   },
   {
     id: "bxgy",
-    name: "Buy X, Get Y Free (BXGY)",
+    name: "Buy X, Get Y (BXGY)",
     description:
-      "Set up same-product Buy X, Get Y Free offers (for example, Buy 2, Get 1 Free)",
+      "Set up same-product BXGY offers with escalating quantity tiers such as Buy 2, Get 3 or Buy 3, Get 5",
     primaryDiscountScope: "Product discounts",
     primaryRuleType: "BXGY",
   },
@@ -43,15 +79,15 @@ export const OFFER_TYPE_OPTIONS: OfferTypeOption[] = [
     id: "complete-bundle",
     name: "Complete the bundle",
     description:
-      "Create multiple bundle bars and let customers choose product variants/options",
-    primaryDiscountScope: "Product discounts",
-    primaryRuleType: "Bundle completion",
+      "Create bundle bars where the current product and selected bundle items receive one combined discount",
+    primaryDiscountScope: "Order discounts",
+    primaryRuleType: "Whole-bundle discount",
   },
   {
     id: "subscription",
     name: "Subscription",
     description:
-      "Show subscription purchase option below bundle bars for products that support selling plans",
+      "Show one-time and subscription purchase options for products that support selling plans",
     primaryDiscountScope: "Product discounts",
     primaryRuleType: "Subscription upsell",
   },
@@ -65,7 +101,12 @@ export const OFFER_TYPE_OPTIONS: OfferTypeOption[] = [
   },
 ];
 
-const HIDDEN_OFFER_TYPE_IDS: OfferTypeId[] = ["free-gift"];
+const HIDDEN_OFFER_TYPE_IDS: OfferTypeId[] = [
+  "shipping-discount",
+  "order-discount",
+  "coupon",
+  "free-gift",
+];
 
 export function getVisibleOfferTypeOptions(
   selectedOfferType?: OfferTypeId,

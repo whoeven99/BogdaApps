@@ -4,46 +4,76 @@ import type {
   ProgressiveGiftsConfig,
   ProgressiveGiftUnlockMode,
 } from "../../../utils/offerParsing";
-
-type DiscountRuleLite = { count: number };
-type BxgyRuleLite = { count: number };
-type DifferentProductsRuleLite = { count: number; tierType: "bxgy" | "simple" };
+import type { UnifiedRuleNode } from "./unifiedRulesSchema";
 
 type Props = {
   offerType: string;
-  normalizedDiscountRules: DiscountRuleLite[];
-  bxgyDiscountRules: BxgyRuleLite[];
-  differentProductsDiscountRules: DifferentProductsRuleLite[];
+  unifiedRulesSnapshot: UnifiedRuleNode[];
   value: ProgressiveGiftsConfig;
   onChange: (next: ProgressiveGiftsConfig) => void;
   showToggle?: boolean;
   embedded?: boolean;
 };
 
-/** 生成「Bar #N」下拉选项，与店面前台档位顺序一致 */
-function buildBarOptions(
+function getProgressiveGiftRuleThresholdLabel(rule: UnifiedRuleNode): string {
+  switch (rule.condition.kind) {
+    case "cart_amount":
+      return `spend >= ${Math.max(0, Number(rule.condition.amountThreshold) || 0)}`;
+    case "buy_x_get_y":
+      return `count >= ${Math.max(1, Number(rule.condition.triggerCount) || 1)}`;
+    case "item_quantity":
+      return `qty ${Math.max(1, Number(rule.condition.count) || 1)}`;
+    default:
+      return "configured";
+  }
+}
+
+function getProgressiveGiftRelevantRules(
   offerType: string,
-  normalizedDiscountRules: DiscountRuleLite[],
-  bxgyDiscountRules: BxgyRuleLite[],
-  differentProductsDiscountRules: DifferentProductsRuleLite[],
+  unifiedRulesSnapshot: UnifiedRuleNode[],
+): UnifiedRuleNode[] {
+  return unifiedRulesSnapshot.filter(
+    (rule) =>
+      rule.sourceOfferType === offerType &&
+      rule.type !== "single_purchase" &&
+      rule.type !== "complete_bundle" &&
+      rule.type !== "subscription",
+  );
+}
+
+/** 生成「Bar #N」下拉选项，与店面前台档位顺序一致 */
+export function buildProgressiveGiftBarOptions(
+  offerType: string,
+  unifiedRulesSnapshot: UnifiedRuleNode[],
 ): { value: number; label: string }[] {
+  const relevantRules = getProgressiveGiftRelevantRules(
+    offerType,
+    unifiedRulesSnapshot,
+  );
+
   if (offerType === "bxgy") {
-    return bxgyDiscountRules.map((r, i) => ({
-      value: i + 1,
-      label: `Bar #${i + 1} (count >= ${r.count})`,
-    }));
+    return [
+      { value: 1, label: "Bar #1 (Single, qty 1)" },
+      ...relevantRules.map((rule, i) => ({
+        value: i + 2,
+        label: `Bar #${i + 2} (${getProgressiveGiftRuleThresholdLabel(rule)})`,
+      })),
+    ];
   }
   if (offerType === "quantity-breaks-different") {
-    return differentProductsDiscountRules.map((r, i) => ({
-      value: i + 1,
-      label: `Tier #${i + 1} (qty ${r.count})`,
-    }));
+    return [
+      { value: 1, label: "Tier #1 (Single, qty 1)" },
+      ...relevantRules.map((rule, i) => ({
+        value: i + 2,
+        label: `Tier #${i + 2} (${getProgressiveGiftRuleThresholdLabel(rule)})`,
+      })),
+    ];
   }
   return [
     { value: 1, label: "Bar #1 (Single, qty 1)" },
-    ...normalizedDiscountRules.map((r, i) => ({
+    ...relevantRules.map((rule, i) => ({
       value: i + 2,
-      label: `Bar #${i + 2} (qty ${r.count})`,
+      label: `Bar #${i + 2} (${getProgressiveGiftRuleThresholdLabel(rule)})`,
     })),
   ];
 }
@@ -54,19 +84,15 @@ function newGiftId(): string {
 
 export function ProgressiveGiftsSection({
   offerType,
-  normalizedDiscountRules,
-  bxgyDiscountRules,
-  differentProductsDiscountRules,
+  unifiedRulesSnapshot,
   value,
   onChange,
   showToggle = true,
   embedded = false,
 }: Props) {
-  const barOptions = buildBarOptions(
+  const barOptions = buildProgressiveGiftBarOptions(
     offerType,
-    normalizedDiscountRules,
-    bxgyDiscountRules,
-    differentProductsDiscountRules,
+    unifiedRulesSnapshot,
   );
 
   const patch = (partial: Partial<ProgressiveGiftsConfig>) => {
@@ -111,12 +137,18 @@ export function ProgressiveGiftsSection({
   ].join(" • ");
 
   return (
-    <div className={embedded ? "space-y-4" : "mt-8 space-y-4 rounded-[12px] border border-[#e3e8ed] bg-white p-4"}>
+    <div
+      className={
+        embedded
+          ? "space-y-4"
+          : "mt-6 space-y-4 rounded-[12px] border border-[#dfe3e8] bg-white p-4"
+      }
+    >
       {!embedded ? (
-        <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="mb-3 flex items-center justify-between gap-3">
           <div>
-            <h3 className="m-0 text-[16px] font-semibold text-[#1c1f23]">Progressive gifts</h3>
-            <div className="mt-1 text-[12px] text-[#5c6166]">{sectionMeta}</div>
+            <h3 className="m-0 text-[14px] font-semibold text-[#1c1f23]">Progressive gifts</h3>
+            <div className="mt-1 text-[12px] text-[#6d7175]">{sectionMeta}</div>
           </div>
           {showToggle ? (
             <Switch
@@ -128,7 +160,7 @@ export function ProgressiveGiftsSection({
       ) : null}
 
       {!value.enabled ? (
-        <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-4 text-[13px] text-[#5c6166]">
+        <div className="rounded-[10px] border border-[#dfe3e8] bg-[#f6f6f7] px-4 py-4 text-[13px] text-[#5c6166]">
           Progressive gifts stay hidden until this component is enabled.
         </div>
       ) : (
@@ -139,7 +171,7 @@ export function ProgressiveGiftsSection({
               label: "Settings",
               children: (
                 <div className="flex flex-col gap-4 pt-2">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <label className="block text-[14px] font-medium text-[#1c1f23]">
                       Section title
                       <Input
@@ -160,14 +192,14 @@ export function ProgressiveGiftsSection({
                     </label>
                   </div>
                   <div className="flex flex-col gap-2">
-                    <div className="flex items-center justify-between rounded-[10px] bg-[#f6f8f9] px-4 py-3">
+                    <div className="flex items-center justify-between rounded-[10px] border border-[#dfe3e8] bg-[#f6f6f7] px-4 py-3">
                       <span className="text-[14px] text-[#1c1f23]">Hide gift cards until unlocked</span>
                       <Switch
                         checked={value.hideGiftsUntilUnlocked}
                         onChange={(c) => patch({ hideGiftsUntilUnlocked: c })}
                       />
                     </div>
-                    <div className="flex items-center justify-between rounded-[10px] bg-[#f6f8f9] px-4 py-3">
+                    <div className="flex items-center justify-between rounded-[10px] border border-[#dfe3e8] bg-[#f6f6f7] px-4 py-3">
                       <span className="text-[14px] text-[#1c1f23]">Show labels while locked</span>
                       <Switch
                         checked={value.showLabelsForLockedGifts}
@@ -184,7 +216,7 @@ export function ProgressiveGiftsSection({
                       </Button>
                     </div>
                     {value.gifts.length === 0 ? (
-                      <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-4 text-[13px] text-[#5c6166]">
+                      <div className="rounded-[10px] border border-[#dfe3e8] bg-[#f6f6f7] px-4 py-4 text-[13px] text-[#5c6166]">
                         No gifts yet. Add one to configure a progressive reward.
                       </div>
                     ) : (
@@ -192,7 +224,7 @@ export function ProgressiveGiftsSection({
                         {value.gifts.map((gift) => (
                           <div
                             key={gift.id}
-                            className="grid grid-cols-1 gap-3 rounded-[12px] border border-[#e3e8ed] bg-white p-4 md:grid-cols-2"
+                            className="grid grid-cols-1 gap-3 rounded-[10px] border border-[#dfe3e8] bg-white p-4 md:grid-cols-2"
                           >
                             <label className="block text-[13px] font-medium text-[#1c1f23]">
                               Type

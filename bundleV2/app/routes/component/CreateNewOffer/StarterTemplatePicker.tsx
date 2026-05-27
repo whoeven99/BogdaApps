@@ -18,7 +18,7 @@ function PreviewRow({
 }) {
   return (
     <div
-      className={`rounded-[10px] border bg-white px-[12px] py-[10px] transition-colors ${
+      className={`rounded-[8px] border bg-white px-[12px] py-[10px] transition-colors ${
         selected
           ? "border-[#008060] shadow-[inset_0_0_0_1px_rgba(0,128,96,0.08)]"
           : "border-[#dfe3e8]"
@@ -48,9 +48,11 @@ function PreviewRow({
                 </div>
               ) : null}
             </div>
-            <div className="shrink-0 text-[14px] font-semibold leading-[18px] text-[#1c1f23]">
-              {price}
-            </div>
+            {price.trim() ? (
+              <div className="shrink-0 text-[14px] font-semibold leading-[18px] text-[#1c1f23]">
+                {price}
+              </div>
+            ) : null}
           </div>
           {badge ? (
             <div className="mt-[6px] inline-flex rounded-full bg-[#f6f6f7] px-[8px] py-[2px] text-[11px] font-semibold uppercase tracking-[0.04em] text-[#5c6166]">
@@ -72,7 +74,7 @@ function TemplateAction({
 }) {
   return (
     <div
-      className={`mt-auto rounded-[10px] px-[14px] py-[10px] text-center text-[13px] font-semibold transition-colors ${
+      className={`mt-auto rounded-[8px] px-[14px] py-[10px] text-center text-[13px] font-semibold transition-colors ${
         active
           ? "bg-[#e9f9f1] text-[#008060]"
           : "bg-[#008060] text-white group-hover:bg-[#006e52]"
@@ -85,7 +87,7 @@ function TemplateAction({
 
 function QuantityBreakPreview() {
   return (
-    <div className="flex min-h-[260px] flex-col rounded-[16px] border border-[#dfe3e8] bg-[#f6f6f7] p-[14px]">
+    <div className="flex min-h-[260px] flex-col rounded-[12px] border border-[#dfe3e8] bg-[#f6f6f7] p-[12px]">
       <div className="space-y-[8px]">
         <PreviewRow title="Single" subtitle="Standard price" price="EUR65.00" />
         <div className="relative">
@@ -107,7 +109,7 @@ function QuantityBreakPreview() {
 
 function DifferentProductsPreview() {
   return (
-    <div className="flex min-h-[260px] flex-col rounded-[16px] border border-[#dfe3e8] bg-[#f6f6f7] p-[14px]">
+    <div className="flex min-h-[260px] flex-col rounded-[12px] border border-[#dfe3e8] bg-[#f6f6f7] p-[12px]">
       <div className="space-y-[8px]">
         <PreviewRow title="Single" subtitle="Standard price" price="EUR65.00" />
         <div className="relative">
@@ -128,9 +130,132 @@ function DifferentProductsPreview() {
           price="EUR156.00"
           badge="Save EUR39.00"
         />
-        <div className="rounded-[10px] bg-white px-[12px] py-[9px] text-[12px] text-[#5c6166] shadow-[inset_0_0_0_1px_rgba(17,24,39,0.08)]">
-          Each tier can choose its own eligible products while keeping the same quantity-break card style.
+      </div>
+    </div>
+  );
+}
+
+function ProgressiveGiftsPreview() {
+  return (
+    <div className="flex min-h-[260px] flex-col rounded-[12px] border border-[#dfe3e8] bg-[#f6f6f7] p-[12px]">
+      <div className="space-y-[8px]">
+        <PreviewRow title="Single" subtitle="Standard price" price="EUR65.00" />
+        <PreviewRow
+          title="Build 2 items"
+          subtitle="Unlock the first reward milestone"
+          price="EUR110.50"
+          badge="Milestone 1"
+          selected
+        />
+        <PreviewRow
+          title="Build 3 items"
+          subtitle="Unlock the next milestone reward"
+          price="EUR156.00"
+          badge="Milestone 2"
+        />
+        <div className="rounded-[10px] bg-white px-[12px] py-[9px] shadow-[inset_0_0_0_1px_rgba(0,128,96,0.12)]">
+          <div className="text-[13px] font-semibold text-[#1c1f23]">
+            Progressive rewards
+          </div>
+          <div className="mt-[2px] text-[12px] text-[#6d7175]">
+            Reward track unlocks on top of milestone pricing
+          </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ShippingDiscountPreview() {
+  return (
+    <div className="flex min-h-[260px] flex-col rounded-[12px] border border-[#dfe3e8] bg-[#f6f6f7] p-[12px]">
+      <div className="space-y-[8px]">
+        <PreviewRow
+          title="Single"
+          subtitle="Standard shipping applies"
+          price="Shipping calculated at checkout"
+        />
+        <PreviewRow
+          title="Buy 2 items"
+          subtitle="Unlock free shipping"
+          price="FREE SHIPPING"
+          badge="Shipping perk"
+          selected
+        />
+        <PreviewRow
+          title="Spend EUR120"
+          subtitle="Cart threshold unlock"
+          price="FREE SHIPPING"
+          badge="Cart amount"
+        />
+        <div className="rounded-[10px] bg-white px-[12px] py-[9px] shadow-[inset_0_0_0_1px_rgba(17,24,39,0.06)]">
+          <div className="text-[13px] font-semibold text-[#1c1f23]">
+            Delivery discount function
+          </div>
+          <div className="mt-[2px] text-[12px] text-[#6d7175]">
+            Applies on checkout shipping options
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OrderDiscountPreview() {
+  return (
+    <div className="flex min-h-[260px] flex-col rounded-[12px] border border-[#dfe3e8] bg-[#f6f6f7] p-[12px]">
+      <div className="space-y-[8px]">
+        <PreviewRow title="Single" subtitle="Standard price" price="EUR65.00" />
+        <PreviewRow
+          title="Buy 2 items"
+          subtitle="Unlock 10% off your order"
+          price="10% OFF"
+          badge="Order-wide"
+          selected
+        />
+        <PreviewRow
+          title="Spend EUR120"
+          subtitle="Unlock 15% off your order"
+          price="15% OFF"
+          badge="Cart amount"
+        />
+        <div className="rounded-[10px] bg-white px-[12px] py-[9px] shadow-[inset_0_0_0_1px_rgba(17,24,39,0.06)]">
+          <div className="text-[13px] font-semibold text-[#1c1f23]">
+            Order subtotal discount
+          </div>
+          <div className="mt-[2px] text-[12px] text-[#6d7175]">
+            Applies after scoped products unlock the tier
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CouponPreview() {
+  return (
+    <div className="flex min-h-[260px] flex-col rounded-[12px] border border-[#dfe3e8] bg-[#f6f6f7] p-[12px]">
+      <div className="space-y-[8px]">
+        <PreviewRow
+          title="Single"
+          subtitle="Standard price"
+          price="EUR65.00"
+        />
+        <div className="rounded-[10px] bg-white px-[12px] py-[9px] shadow-[inset_0_0_0_1px_rgba(17,24,39,0.06)]">
+          <div className="text-[13px] font-semibold text-[#1c1f23]">
+            Coupon code: SAVE15
+          </div>
+          <div className="mt-[2px] text-[12px] text-[#6d7175]">
+            Customers must enter the shared code first
+          </div>
+        </div>
+        <PreviewRow
+          title="Buy 2 items"
+          subtitle="Unlock 15% off your order"
+          price="15% OFF"
+          badge="Coupon code"
+          selected
+        />
       </div>
     </div>
   );
@@ -138,16 +263,17 @@ function DifferentProductsPreview() {
 
 function BxgyPreview() {
   return (
-    <div className="flex min-h-[260px] flex-col rounded-[16px] border border-[#dfe3e8] bg-[#f6f6f7] p-[14px]">
+    <div className="flex min-h-[260px] flex-col rounded-[12px] border border-[#dfe3e8] bg-[#f6f6f7] p-[12px]">
       <div className="space-y-[8px]">
+        <PreviewRow title="Single" subtitle="Standard price" price="EUR65.00" />
         <PreviewRow
-          title="Buy 1, get 1 free"
-          price="EUR65.00"
-          badge="Save 50%"
+          title="Buy 2, get 3"
+          price=""
+          badge="Save 33%"
           selected
         />
-        <PreviewRow title="Buy 2, get 3 free" price="EUR130.00" badge="Save 60%" />
-        <PreviewRow title="Buy 3, get 6 free" price="EUR195.00" badge="Save 67%" />
+        <PreviewRow title="Buy 3, get 5" price="" badge="Save 40%" />
+        <PreviewRow title="Buy 4, get 8" price="" badge="Save 50%" />
         <div className="rounded-[10px] bg-[#f6f6f7] px-[12px] py-[8px] text-[12px] font-semibold text-[#1c1f23]">
           + Free special gift!
         </div>
@@ -158,7 +284,7 @@ function BxgyPreview() {
 
 function CompleteBundlePreview() {
   return (
-    <div className="flex min-h-[260px] flex-col rounded-[16px] border border-[#dfe3e8] bg-[#f6f6f7] p-[14px]">
+    <div className="flex min-h-[260px] flex-col rounded-[12px] border border-[#dfe3e8] bg-[#f6f6f7] p-[12px]">
       <div className="space-y-[8px]">
         <div className="rounded-[10px] border border-[#bfc4c9] bg-[#f3f3f3] px-[12px] py-[10px]">
           <div className="flex items-start gap-[10px]">
@@ -239,16 +365,21 @@ function CompleteBundlePreview() {
 
 function SubscriptionPreview() {
   return (
-    <div className="flex min-h-[260px] flex-col rounded-[16px] border border-[#dfe3e8] bg-[#f6f6f7] p-[14px]">
+    <div className="flex min-h-[260px] flex-col rounded-[12px] border border-[#dfe3e8] bg-[#f6f6f7] p-[12px]">
       <div className="space-y-[8px]">
         <PreviewRow
-          title="Buy 1, get 1 free"
-          price="EUR52.00"
-          badge="Save 60%"
+          title="Single"
+          subtitle="One-time purchase"
+          price="EUR65.00"
+        />
+        <PreviewRow
+          title="2-pack subscription"
+          price="EUR104.00"
+          badge="Save 20%"
           selected
         />
-        <PreviewRow title="Buy 2, get 3 free" price="EUR104.00" badge="Save 68%" />
-        <PreviewRow title="Buy 3, get 6 free" price="EUR156.00" badge="Save 73%" />
+        <PreviewRow title="3-pack subscription" price="EUR136.50" badge="Save 30%" />
+        <PreviewRow title="4-pack subscription" price="EUR156.00" badge="Save 40%" />
         <div className="rounded-[10px] bg-white px-[12px] py-[9px] shadow-[inset_0_0_0_1px_rgba(0,128,96,0.12)]">
           <div className="text-[13px] font-semibold text-[#1c1f23]">
             Subscribe & Save 20%
@@ -262,8 +393,9 @@ function SubscriptionPreview() {
 
 function FreeGiftPreview() {
   return (
-    <div className="flex min-h-[260px] flex-col rounded-[16px] border border-[#dfe3e8] bg-[#f6f6f7] p-[14px]">
+    <div className="flex min-h-[260px] flex-col rounded-[12px] border border-[#dfe3e8] bg-[#f6f6f7] p-[12px]">
       <div className="space-y-[8px]">
+        <PreviewRow title="Single" subtitle="Standard price" price="EUR65.00" />
         <PreviewRow
           title="Buy 2 items"
           subtitle="Unlock 1 free mini gift"
@@ -276,9 +408,6 @@ function FreeGiftPreview() {
           subtitle="Unlock 2 free gifts"
           price="2 FREE"
         />
-        <div className="rounded-[10px] bg-white px-[12px] py-[9px] text-[12px] text-[#5c6166] shadow-[inset_0_0_0_1px_rgba(17,24,39,0.08)]">
-          Gift products are chosen separately from the trigger products.
-        </div>
       </div>
     </div>
   );
@@ -286,6 +415,10 @@ function FreeGiftPreview() {
 
 function OfferTypePreview({ offerType }: { offerType: OfferTypeId }) {
   if (offerType === "bxgy") return <BxgyPreview />;
+  if (offerType === "progressive-gifts") return <ProgressiveGiftsPreview />;
+  if (offerType === "shipping-discount") return <ShippingDiscountPreview />;
+  if (offerType === "order-discount") return <OrderDiscountPreview />;
+  if (offerType === "coupon") return <CouponPreview />;
   if (offerType === "quantity-breaks-different") return <DifferentProductsPreview />;
   if (offerType === "complete-bundle") return <CompleteBundlePreview />;
   if (offerType === "subscription") return <SubscriptionPreview />;
@@ -326,18 +459,19 @@ export default function StarterTemplatePicker({
               if (!disabled) onSelect(option.id);
             }}
             disabled={disabled}
-            className={`group flex h-full flex-col rounded-[12px] border bg-white p-[12px] text-left transition-all ${
+            aria-label={`${option.name}. ${option.description}`}
+            className={`group flex h-full flex-col rounded-[12px] border bg-white p-[10px] text-left transition-colors ${
               isSelected
                 ? "border-[#008060] shadow-[0_0_0_1px_rgba(0,128,96,0.08)]"
                 : "border-[#dfe3e8]"
             } ${
               disabled
                 ? "cursor-not-allowed opacity-70"
-                : "hover:border-[#bfd7cd] hover:shadow-[0_4px_12px_rgba(15,23,42,0.06)]"
+                : "hover:border-[#bfd7cd]"
             }`}
           >
             <OfferTypePreview offerType={option.id} />
-            <div className="flex flex-1 flex-col px-[4px] pt-[14px]">
+            <div className="flex flex-1 flex-col px-[4px] pt-[12px]">
               <div className="mb-[8px] flex flex-wrap gap-[6px]">
                 <span className="rounded-full bg-[#f0f9f6] px-[8px] py-[3px] text-[11px] font-semibold text-[#108043]">
                   {option.primaryDiscountScope}
@@ -349,10 +483,7 @@ export default function StarterTemplatePicker({
               <h2 className="m-0 text-[16px] font-semibold leading-[24px] text-[#1c1f23]">
                 {option.name}
               </h2>
-              <p className="mb-0 mt-[6px] text-[12px] leading-[18px] text-[#5c6166]">
-                {option.description}
-              </p>
-              <div className="mt-auto pt-[14px]">
+              <div className="mt-auto pt-[12px]">
                 <TemplateAction
                   label={isSelected ? "Selected Template" : actionLabel}
                   active={isSelected}

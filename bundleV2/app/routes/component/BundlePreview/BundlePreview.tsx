@@ -1,7 +1,6 @@
 import type { ProgressiveGiftsConfig } from "../../../utils/offerParsing";
 import {
   type CheckboxUpsellPreview,
-  type ProductBundlePreview,
   renderBundlePreviewHtml,
   renderProgressiveGiftsPreviewHtml,
   type StickyAddToCartPreview,
@@ -36,7 +35,6 @@ type Props = {
   showSubscriptionExplanation?: boolean;
   subscriptionExplanationTitle?: string;
   subscriptionExplanationBody?: string;
-  productBundlePreview?: ProductBundlePreview | null;
   checkboxUpsellPreview?: CheckboxUpsellPreview | null;
   stickyAddToCartPreview?: StickyAddToCartPreview | null;
 };
@@ -66,7 +64,6 @@ export default function BundlePreview({
   showSubscriptionExplanation,
   subscriptionExplanationTitle,
   subscriptionExplanationBody,
-  productBundlePreview,
   checkboxUpsellPreview,
   stickyAddToCartPreview,
 }: Props) {
@@ -92,7 +89,6 @@ export default function BundlePreview({
     showSubscriptionExplanation,
     subscriptionExplanationTitle,
     subscriptionExplanationBody,
-    productBundlePreview,
     checkboxUpsellPreview,
     stickyAddToCartPreview,
   });
@@ -107,9 +103,28 @@ export default function BundlePreview({
       : "";
 
   return (
-    <div className="ciwi-bundle-preview-wrap">
-      <div dangerouslySetInnerHTML={{ __html: html }} />
-      {prog ? <div dangerouslySetInnerHTML={{ __html: prog }} /> : null}
+    <div className="ciwi-theme-preview">
+      <div className="ciwi-theme-preview__canvas">
+        <div className="ciwi-theme-preview__header">
+          <span className="ciwi-theme-preview__eyebrow">Product template</span>
+          <span className="ciwi-theme-preview__status">In stock</span>
+        </div>
+        <div className="ciwi-theme-preview__title">Sample product details</div>
+        <div className="ciwi-theme-preview__price-row">
+          <span className="ciwi-theme-preview__price">€65,00</span>
+          <span className="ciwi-theme-preview__compare">€79,00</span>
+        </div>
+        <div className="ciwi-theme-preview__options">
+          <span className="ciwi-theme-preview__option">Default variant</span>
+          <span className="ciwi-theme-preview__option">One-time purchase</span>
+        </div>
+        <div className="ciwi-bundle-preview-wrap">
+          <div className="ciwi-bundle-wrapper">
+            <div dangerouslySetInnerHTML={{ __html: html }} />
+            {prog ? <div dangerouslySetInnerHTML={{ __html: prog }} /> : null}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

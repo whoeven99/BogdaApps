@@ -1,23 +1,21 @@
-import type {
-  DifferentProductsDiscountRule,
-  FreeGiftRule,
+import {
+  buildDraftRuleId,
+  getBxgyDisplayMeta,
+  isCompleteBundleSingleBar,
 } from "../../../utils/offerParsing";
+import { resolvePresentationTextWithSource } from "./builderStandardDisplayResolver";
+import { resolveBuilderBxgyDisplay } from "./bxgyDisplayResolver";
 import type {
   CampaignDraft,
   CampaignDraftActions,
-  DraftBxgyDiscountRule,
   DraftDiscountRule,
 } from "./campaignDraft";
 import {
-  adaptBxgyRules,
-  adaptCompleteBundleBars,
-  adaptDiscountRules,
-  adaptDifferentProductsRules,
-  adaptFreeGiftRules,
-} from "./unifiedRulesAdapters";
-import type { UnifiedRuleNode } from "./unifiedRulesSchema";
+  type UnifiedRuleNode,
+} from "./unifiedRulesSchema";
 
 export type CampaignBarType =
+  | "single_purchase"
   | "quantity_break"
   | "bxgy"
   | "free_gift";
@@ -35,7 +33,7 @@ export type CampaignBarItem = {
       | "differentProductsDiscountRules"
       | "bxgyDiscountRules"
       | "freeGiftRules";
-    index: number;
+    ruleId: string;
   };
   supportState?: "supported" | "draft_only" | "unsupported";
 };
@@ -55,108 +53,181 @@ export type CampaignModuleItem = {
   toggleable: boolean;
 };
 
-const HIDDEN_COMPONENT_MODULE_IDS: StepTwoModuleId[] = [
-  "checkbox_upsells",
-  "progressive_gifts",
-];
+function hasConfiguredDiscountRules(rules: DraftDiscountRule[]): boolean {
+  return rules.length > 0;
+}
 
-function getDraftDiscountRuleType(rule: DraftDiscountRule): CampaignBarType {
-  if (rule.logicType === "bxgy") return "bxgy";
-  if (rule.rewardType === "gift_product") return "free_gift";
+function hasConfiguredCompleteBundleBars(bars: CampaignDraft["completeBundleBars"]): boolean {
+  return bars.some((bar) => !isCompleteBundleSingleBar(bar));
+}
+
+function getCampaignBarTypeFromUnifiedRule(rule: UnifiedRuleNode): CampaignBarType {
+  if (rule.type === "single_purchase") return "single_purchase";
+  if (rule.type === "bxgy") return "bxgy";
+  if (rule.type === "free_gift") return "free_gift";
   return "quantity_break";
 }
 
-function buildQuantityBreakSummary(rule: DraftDiscountRule) {
-  if (rule.logicType === "bxgy") {
-    return `Buy ${rule.buyQuantity || 2}, get ${rule.getQuantity || 1}`;
+function getSourceCollectionForUnifiedRule(
+  rule: UnifiedRuleNode,
+): CampaignBarItem["sourceRef"]["collection"] {
+  switch (rule.sourceOfferType) {
+    case "quantity-breaks-different":
+      return "differentProductsDiscountRules";
+    case "bxgy":
+      return "bxgyDiscountRules";
+    case "free-gift":
+      return "freeGiftRules";
+    default:
+      return "discountRules";
   }
-  if (rule.rewardType === "gift_product") {
-    return `Unlock ${rule.giftQuantity || 1} free gift${(rule.giftQuantity || 1) > 1 ? "s" : ""}`;
+}
+
+function getThresholdSummary(rule: UnifiedRuleNode): string {
+  switch (rule.condition.kind) {
+    case "cart_amount":
+      return `Spend ${Math.max(0, Number(rule.condition.amountThreshold) || 0)}`;
+    case "buy_x_get_y":
+      return getBxgyDisplayMeta(rule.condition).summary;
+    case "item_quantity":
+      return `${Math.max(1, Number(rule.condition.count) || 1)} item${Math.max(1, Number(rule.condition.count) || 1) === 1 ? "" : "s"}`;
+    default:
+      return "Offer rule";
   }
-  return `${Math.max(1, Number(rule.count) || 1)} items • ${Math.max(0, Number(rule.discountPercent) || 0)}% off`;
 }
 
-function buildBxgySummary(rule: DraftBxgyDiscountRule) {
-  return `Buy ${rule.buyQuantity || 2}, Get ${rule.getQuantity || 1} Free`;
+function buildUnifiedBarSummary(rule: UnifiedRuleNode): string {
+  if (rule.type === "single_purchase") {
+    return "Standalone purchase • Standard price";
+  }
+  const thresholdLabel = getThresholdSummary(rule);
+
+  switch (rule.reward.kind) {
+    case "gift_product":
+      return `${thresholdLabel} • ${Math.max(1, Number(rule.reward.giftQuantity) || 1)} gift reward${(rule.reward.giftQuantity || 1) > 1 ? "s" : ""}`;
+    case "free_shipping":
+      return `${thresholdLabel} • Free shipping`;
+    case "percentage_off":
+      return `${thresholdLabel} • ${Math.max(0, Number(rule.reward.discountPercent) || 0)}% off${rule.reward.discountClass === "order" ? " order" : ""}`;
+    default:
+      return thresholdLabel;
+  }
 }
 
-function buildFreeGiftSummary(rule: FreeGiftRule) {
-  return `Trigger at ${Math.max(1, Number(rule.count) || 1)} • ${Math.max(1, Number(rule.giftQuantity) || 1)} free gift${(rule.giftQuantity || 1) > 1 ? "s" : ""}`;
+function getDifferentProductsSharedPoolIds(draft: CampaignDraft): string[] {
+  const sharedPool =
+    draft.differentProductsEligibleProductsData.length > 0
+      ? draft.differentProductsEligibleProductsData
+      : draft.selectedProductsData;
+  return sharedPool.map((product) => String(product.id));
 }
 
-function buildDifferentProductsSummary(rule: DifferentProductsDiscountRule) {
-  return `${Math.max(1, Number(rule.count) || 1)} items • ${Math.max(0, Number(rule.discountPercent) || 0)}% off • ${Array.isArray(rule.buyProductIds) ? rule.buyProductIds.length : 0} products`;
+function getNextDifferentProductsCount(
+  rules: CampaignDraft["differentProductsDiscountRules"],
+  tierType: "simple" | "bxgy",
+): number {
+  const relevantRules = rules.filter((rule) => rule.tierType === tierType);
+  const maxCount = relevantRules.reduce(
+    (highest, rule) => Math.max(highest, Math.max(1, Math.trunc(Number(rule.count) || 1))),
+    1,
+  );
+  return Math.max(2, maxCount + 1);
+}
+
+function buildUnifiedBarTitle(
+  rule: UnifiedRuleNode,
+  indexWithinCollection: number,
+): string {
+  const displayIndex = indexWithinCollection + 1;
+  switch (rule.type) {
+    case "single_purchase":
+      return `Bar #${displayIndex} - Single`;
+    case "bxgy":
+      return `Bar #${displayIndex} - Buy X, Get Y`;
+    case "free_gift":
+      return `Reward #${displayIndex} - Gift reward`;
+    case "order_discount":
+      return `Bar #${displayIndex} - Order discount`;
+    case "free_shipping":
+      return `Bar #${displayIndex} - Shipping discount`;
+    case "quantity_break":
+      return rule.sourceOfferType === "quantity-breaks-different"
+        ? `Bar #${displayIndex} - Mix & match`
+        : `Bar #${displayIndex} - Quantity break`;
+    default:
+      return `Bar #${displayIndex} - Offer rule`;
+  }
+}
+
+function isPrimarySingleRuleSource(
+  offerType: CampaignDraft["offerType"],
+  sourceOfferType: UnifiedRuleNode["sourceOfferType"],
+): boolean {
+  if (offerType === "subscription") {
+    return sourceOfferType === "quantity-breaks-same";
+  }
+  return sourceOfferType === offerType;
+}
+
+function isBarRule(rule: UnifiedRuleNode, draft: CampaignDraft): boolean {
+  if (rule.type === "complete_bundle" || rule.type === "subscription") {
+    return false;
+  }
+  if (rule.type === "single_purchase") {
+    return draft.offerType !== "complete-bundle" &&
+      isPrimarySingleRuleSource(draft.offerType, rule.sourceOfferType);
+  }
+  return true;
+}
+
+function buildCampaignCompositionBarCounters(rules: UnifiedRuleNode[]) {
+  const counters = new Map<CampaignBarItem["sourceRef"]["collection"], number>();
+
+  return rules.map((rule) => {
+    const collection = getSourceCollectionForUnifiedRule(rule);
+    const nextCount = counters.get(collection) ?? 0;
+    counters.set(collection, nextCount + 1);
+    return {
+      rule,
+      collection,
+      indexWithinCollection: nextCount,
+    };
+  });
 }
 
 export function getCampaignCompositionBars(
   draft: CampaignDraft,
 ): CampaignBarItem[] {
-  const differentProductsBars = draft.differentProductsDiscountRules.map((rule, index) => ({
-    id: `different-products-rule-${index + 1}`,
-    type: "quantity_break" as const,
-    title: rule.title || `Bar #${index + 1} - Quantity break`,
-    summary: rule.subtitle || buildDifferentProductsSummary(rule),
+  return buildCampaignCompositionBarCounters(
+    draft.unifiedRulesSnapshot.filter((rule) => isBarRule(rule, draft)),
+  ).map(({ rule, collection, indexWithinCollection }) => ({
+    id: rule.id,
+    type: getCampaignBarTypeFromUnifiedRule(rule),
+    title:
+      rule.type === "bxgy" && rule.condition.kind === "buy_x_get_y"
+        ? resolveBuilderBxgyDisplay(rule.condition, rule.presentation).title
+        : resolvePresentationTextWithSource(
+            rule.presentation.title,
+            rule.presentation.titleSource,
+            buildUnifiedBarTitle(rule, indexWithinCollection),
+          ),
+    summary:
+      rule.type === "bxgy"
+        ? resolveBuilderBxgyDisplay(rule.condition, rule.presentation).subtitle ||
+          buildUnifiedBarSummary(rule)
+        : resolvePresentationTextWithSource(
+            rule.presentation.subtitle,
+            rule.presentation.subtitleSource,
+            buildUnifiedBarSummary(rule),
+          ),
     enabled: true,
-    isDefault: !!rule.isDefault,
+    isDefault: !!rule.presentation.isDefault,
     sourceRef: {
-      collection: "differentProductsDiscountRules" as const,
-      index,
+      collection,
+      ruleId: rule.id,
     },
-    supportState: "supported" as const,
+    supportState: rule.publishSupport,
   }));
-
-  const draftRuleBars = draft.discountRules.map((rule, index) => {
-    const type = getDraftDiscountRuleType(rule);
-    return {
-      id: rule.id || `discount-rule-${index + 1}`,
-      type,
-      title:
-        rule.title ||
-        (type === "bxgy"
-          ? `Bar #${index + 1} - Buy X, Get Y Free`
-          : type === "free_gift"
-            ? `Bar #${index + 1} - Free gift`
-            : `Bar #${index + 1} - Quantity break`),
-      summary: rule.subtitle || buildQuantityBreakSummary(rule),
-      enabled: true,
-      isDefault: !!rule.isDefault,
-      sourceRef: {
-        collection: "discountRules" as const,
-        index,
-      },
-      supportState: "supported" as const,
-    };
-  });
-
-  const bxgyBars = draft.bxgyDiscountRules.map((rule, index) => ({
-    id: `bxgy-rule-${index + 1}`,
-    type: "bxgy" as const,
-    title: rule.title || `Bar #${index + 1} - Buy X, Get Y Free`,
-    summary: rule.subtitle || buildBxgySummary(rule),
-    enabled: true,
-    isDefault: !!rule.isDefault,
-    sourceRef: {
-      collection: "bxgyDiscountRules" as const,
-      index,
-    },
-    supportState: "supported" as const,
-  }));
-
-  const freeGiftBars = draft.freeGiftRules.map((rule, index) => ({
-    id: `free-gift-rule-${index + 1}`,
-    type: "free_gift" as const,
-    title: rule.title || `Bar #${index + 1} - Free gift`,
-    summary: rule.subtitle || buildFreeGiftSummary(rule),
-    enabled: true,
-    isDefault: !!rule.isDefault,
-    sourceRef: {
-      collection: "freeGiftRules" as const,
-      index,
-    },
-    supportState: "supported" as const,
-  }));
-
-  return [...differentProductsBars, ...draftRuleBars, ...bxgyBars, ...freeGiftBars];
 }
 
 export function getCampaignCompositionModules(
@@ -169,7 +240,8 @@ export function getCampaignCompositionModules(
       label: "Complete bundle",
       description: "Optional component for adding and editing bundled products.",
       enabled:
-        draft.offerType === "complete-bundle" || draft.completeBundleBars.length > 0,
+        draft.offerType === "complete-bundle" ||
+        hasConfiguredCompleteBundleBars(draft.completeBundleBars),
       toggleable: draft.offerType !== "complete-bundle",
     },
     {
@@ -202,47 +274,20 @@ export function getCampaignCompositionModules(
     },
   ];
 
-  return modules.filter((module) => !HIDDEN_COMPONENT_MODULE_IDS.includes(module.id));
+  return modules.filter(
+    (module) =>
+      module.id !== "subscription" &&
+      module.id !== "complete_bundle" &&
+      module.id !== "progressive_gifts" &&
+      module.id !== "countdown" &&
+      module.id !== "checkbox_upsells",
+  );
 }
 
 export function getCampaignCompositionRulesSnapshot(
   draft: CampaignDraft,
 ): UnifiedRuleNode[] {
-  const rules: UnifiedRuleNode[] = [];
-
-  if (draft.discountRules.length > 0) {
-    rules.push(...adaptDiscountRules("quantity-breaks-same", draft.discountRules));
-  }
-
-  if (draft.bxgyDiscountRules.length > 0) {
-    rules.push(
-      ...adaptBxgyRules(
-        draft.bxgyDiscountRules,
-        draft.buyProducts,
-        draft.buyProducts,
-      ),
-    );
-  }
-
-  if (draft.freeGiftRules.length > 0) {
-    rules.push(
-      ...adaptFreeGiftRules(
-        draft.freeGiftRules,
-        draft.freeGiftTriggerProducts,
-        draft.giftProductsData.map((product) => String(product.id)),
-      ),
-    );
-  }
-
-  if (draft.differentProductsDiscountRules.length > 0) {
-    rules.push(...adaptDifferentProductsRules(draft.differentProductsDiscountRules));
-  }
-
-  if (draft.completeBundleBars.length > 0) {
-    rules.push(...adaptCompleteBundleBars(draft.completeBundleBars));
-  }
-
-  return rules;
+  return draft.unifiedRulesSnapshot;
 }
 
 export function orderCampaignCompositionBars(
@@ -275,7 +320,10 @@ export function orderCampaignCompositionRules(
   });
 }
 
-function buildDefaultDiscountRule(type: CampaignBarType): DraftDiscountRule {
+function buildDefaultDiscountRule(
+  type: CampaignBarType,
+  offerType?: CampaignDraft["offerType"],
+): DraftDiscountRule {
   if (type === "bxgy") {
     return {
       count: 2,
@@ -305,7 +353,52 @@ function buildDefaultDiscountRule(type: CampaignBarType): DraftDiscountRule {
       rewardType: "gift_product",
       rewardProductIds: [],
       giftQuantity: 1,
-      discountClass: "product",
+      discountClass: "order",
+    };
+  }
+
+  if (offerType === "shipping-discount") {
+    return {
+      count: 2,
+      discountPercent: 0,
+      title: "",
+      subtitle: "",
+      badge: "",
+      isDefault: false,
+      rewardType: "free_shipping",
+      offerKind: "free_shipping",
+      discountClass: "shipping",
+      conditionType: "item_quantity",
+    };
+  }
+
+  if (offerType === "order-discount") {
+    return {
+      count: 2,
+      discountPercent: 10,
+      title: "",
+      subtitle: "",
+      badge: "",
+      isDefault: false,
+      rewardType: "percentage_off",
+      offerKind: "percentage_discount",
+      discountClass: "order",
+      conditionType: "item_quantity",
+    };
+  }
+
+  if (offerType === "coupon") {
+    return {
+      count: 2,
+      discountPercent: 15,
+      title: "",
+      subtitle: "",
+      badge: "",
+      isDefault: false,
+      rewardType: "percentage_off",
+      offerKind: "percentage_discount",
+      discountClass: "order",
+      conditionType: "item_quantity",
     };
   }
 
@@ -326,15 +419,24 @@ export function appendCampaignCompositionBar(
   draft: CampaignDraft,
   actions: CampaignDraftActions,
 ) {
+  // #region debug-point A:append-bar
+  fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"step2-add-bar",runId:"pre-fix",hypothesisId:"A",location:"campaignCompositionAdapter.ts:356",msg:"[DEBUG] appendCampaignCompositionBar invoked",data:{offerType:draft.offerType,barType:type,discountRules:draft.discountRules.length,differentProductsRules:draft.differentProductsDiscountRules.length,bxgyRules:draft.bxgyDiscountRules.length,freeGiftRules:draft.freeGiftRules.length,completeBundleBars:draft.completeBundleBars.length},ts:Date.now()})}).catch(()=>{});
+  // #endregion
   if (draft.offerType === "quantity-breaks-different" && type === "quantity_break") {
+    const nextCount = getNextDifferentProductsCount(
+      draft.differentProductsDiscountRules,
+      "simple",
+    );
+    const sharedProductIds = getDifferentProductsSharedPoolIds(draft);
     actions.setDifferentProductsDiscountRules((prev) => [
       ...prev,
       {
-        count: 2,
+        id: buildDraftRuleId("different_products_rule"),
+        count: nextCount,
         discountPercent: 10,
-        buyQuantity: 2,
+        buyQuantity: nextCount,
         getQuantity: 0,
-        buyProductIds: draft.selectedProductsData.map((product) => String(product.id)),
+        buyProductIds: sharedProductIds,
         getProductIds: [],
         maxUsesPerOrder: 1,
         tierType: "simple",
@@ -347,8 +449,50 @@ export function appendCampaignCompositionBar(
     return;
   }
 
+  if (draft.offerType === "quantity-breaks-different" && type === "bxgy") {
+    const nextCount = getNextDifferentProductsCount(
+      draft.differentProductsDiscountRules,
+      "bxgy",
+    );
+    const sharedProductIds = getDifferentProductsSharedPoolIds(draft);
+    actions.setDifferentProductsDiscountRules((prev) => [
+      ...prev,
+      {
+        id: buildDraftRuleId("different_products_rule"),
+        count: nextCount,
+        discountPercent: 100,
+        buyQuantity: nextCount,
+        getQuantity: 1,
+        buyProductIds: sharedProductIds,
+        getProductIds: sharedProductIds,
+        maxUsesPerOrder: 1,
+        tierType: "bxgy",
+        title: "",
+        subtitle: "",
+        badge: "",
+        isDefault: false,
+      },
+    ]);
+    return;
+  }
+
   if (draft.offerType === "quantity-breaks-same") {
-    actions.setDiscountRules((prev) => [...prev, buildDefaultDiscountRule(type)]);
+    actions.setDiscountRules((prev) => [...prev, buildDefaultDiscountRule(type, draft.offerType)]);
+    return;
+  }
+
+  if (draft.offerType === "shipping-discount") {
+    actions.setDiscountRules((prev) => [...prev, buildDefaultDiscountRule(type, draft.offerType)]);
+    return;
+  }
+
+  if (draft.offerType === "order-discount") {
+    actions.setDiscountRules((prev) => [...prev, buildDefaultDiscountRule(type, draft.offerType)]);
+    return;
+  }
+
+  if (draft.offerType === "coupon") {
+    actions.setDiscountRules((prev) => [...prev, buildDefaultDiscountRule(type, draft.offerType)]);
     return;
   }
 
@@ -356,6 +500,7 @@ export function appendCampaignCompositionBar(
     actions.setBxgyDiscountRules((prev) => [
       ...prev,
       {
+          id: buildDraftRuleId("bxgy_rule"),
         count: 2,
         buyQuantity: 2,
         getQuantity: 1,
@@ -376,6 +521,7 @@ export function appendCampaignCompositionBar(
     actions.setFreeGiftRules((prev) => [
       ...prev,
       {
+          id: buildDraftRuleId("free_gift_rule"),
         count: 2,
         giftQuantity: 1,
         title: "",
@@ -387,7 +533,10 @@ export function appendCampaignCompositionBar(
     return;
   }
 
-  actions.setDiscountRules((prev) => [...prev, buildDefaultDiscountRule("quantity_break")]);
+  actions.setDiscountRules((prev) => [
+    ...prev,
+    buildDefaultDiscountRule("quantity_break", draft.offerType),
+  ]);
 }
 
 export function removeCampaignCompositionBar(
@@ -397,22 +546,28 @@ export function removeCampaignCompositionBar(
   switch (bar.sourceRef.collection) {
     case "discountRules":
       actions.setDiscountRules((prev) =>
-        prev.filter((_, index) => index !== bar.sourceRef.index),
+        prev.filter((rule, index) => (rule.id || `discount-rule-${index + 1}`) !== bar.sourceRef.ruleId),
       );
       return;
     case "differentProductsDiscountRules":
       actions.setDifferentProductsDiscountRules((prev) =>
-        prev.filter((_, index) => index !== bar.sourceRef.index),
+        prev.filter(
+          (rule, index) =>
+            (rule.id || `different-products-rule-${index + 1}`) !== bar.sourceRef.ruleId,
+        ),
       );
       return;
     case "bxgyDiscountRules":
       actions.setBxgyDiscountRules((prev) =>
-        prev.filter((_, index) => index !== bar.sourceRef.index),
+        prev.filter((rule, index) => (rule.id || `bxgy-rule-${index + 1}`) !== bar.sourceRef.ruleId),
       );
       return;
     case "freeGiftRules":
       actions.setFreeGiftRules((prev) =>
-        prev.filter((_, index) => index !== bar.sourceRef.index),
+        prev.filter(
+          (rule, index) =>
+            (rule.id || `free-gift-rule-${index + 1}`) !== bar.sourceRef.ruleId,
+        ),
       );
       return;
   }

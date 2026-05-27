@@ -2,8 +2,55 @@ import { Button } from "antd";
 import { Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 
+export type OfferRuleIntent =
+  | "neutral"
+  | "info"
+  | "warning"
+  | "critical"
+  | "success";
+
+function getOfferRuleTone(intent: OfferRuleIntent) {
+  switch (intent) {
+    case "critical":
+      return {
+        notice: "border-[#ffd6d2] bg-[#fff1f0]",
+        title: "text-[#b42318]",
+        body: "text-[#8a2e0b]",
+        pill: "border-[#ffd6d2] bg-[#fff1f0] text-[#b42318]",
+      };
+    case "warning":
+      return {
+        notice: "border-[#ffe7ba] bg-[#fff7e6]",
+        title: "text-[#ad6800]",
+        body: "text-[#8a6116]",
+        pill: "border-[#ffe7ba] bg-[#fff7e6] text-[#ad6800]",
+      };
+    case "success":
+      return {
+        notice: "border-[#b7ebc6] bg-[#f6ffed]",
+        title: "text-[#237804]",
+        body: "text-[#25603b]",
+        pill: "border-[#b7ebc6] bg-[#f6ffed] text-[#237804]",
+      };
+    case "info":
+      return {
+        notice: "border-[#dfe3e8] bg-[#f6f8f9]",
+        title: "text-[#1c1f23]",
+        body: "text-[#5c6166]",
+        pill: "border-[#dfe3e8] bg-[#f6f8f9] text-[#5c6166]",
+      };
+    default:
+      return {
+        notice: "border-[#dfe3e8] bg-white",
+        title: "text-[#1c1f23]",
+        body: "text-[#5c6166]",
+        pill: "border-[#dfe3e8] bg-white text-[#5c6166]",
+      };
+  }
+}
+
 type OfferRulesSectionProps = {
-  description: string;
+  description?: string;
   children: ReactNode;
 };
 
@@ -13,9 +60,11 @@ export function OfferRulesSection({
 }: OfferRulesSectionProps) {
   return (
     <div className="space-y-4">
-      <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
-        {description}
-      </div>
+      {description ? (
+        <div className="text-[12px] leading-[18px] text-[#6d7175]">
+          {description}
+        </div>
+      ) : null}
       {children}
     </div>
   );
@@ -122,32 +171,53 @@ export function OfferRuleFooterRow({ children }: OfferRuleFooterRowProps) {
   );
 }
 
+type OfferRuleStatusPillProps = {
+  intent?: OfferRuleIntent;
+  children: ReactNode;
+};
+
+export function OfferRuleStatusPill({
+  intent = "neutral",
+  children,
+}: OfferRuleStatusPillProps) {
+  const tone = getOfferRuleTone(intent);
+  return (
+    <span
+      className={`inline-flex w-fit items-center rounded-full border px-2 py-1 text-[11px] font-medium ${tone.pill}`}
+    >
+      {children}
+    </span>
+  );
+}
+
 type OfferRuleNoticeProps = {
   title?: string;
-  intent?: "info" | "warning" | "critical" | "success";
+  intent?: OfferRuleIntent;
+  actions?: ReactNode;
   children: ReactNode;
 };
 
 export function OfferRuleNotice({
   title,
   intent = "info",
+  actions,
   children,
 }: OfferRuleNoticeProps) {
-  const toneClasses =
-    intent === "critical"
-      ? "border-[#ffd6d2] bg-[#fff1f0] text-[#b42318]"
-      : intent === "warning"
-        ? "border-[#ffe7ba] bg-[#fff7e6] text-[#ad6800]"
-        : intent === "success"
-          ? "border-[#b7ebc6] bg-[#f6ffed] text-[#237804]"
-          : "border-[#dfe3e8] bg-[#f6f8f9] text-[#5c6166]";
+  const tone = getOfferRuleTone(intent);
 
   return (
-    <div className={`rounded-[10px] border px-4 py-3 text-[13px] ${toneClasses}`}>
-      {title ? (
-        <div className="mb-1 text-[13px] font-medium text-[#1c1f23]">{title}</div>
+    <div className={`rounded-[10px] border px-4 py-3 ${tone.notice}`}>
+      {title || actions ? (
+        <div className="mb-1 flex items-start justify-between gap-3">
+          {title ? (
+            <div className={`text-[13px] font-medium ${tone.title}`}>{title}</div>
+          ) : (
+            <div />
+          )}
+          {actions ? <div className="shrink-0">{actions}</div> : null}
+        </div>
       ) : null}
-      {children}
+      <div className={`text-[12px] leading-[18px] ${tone.body}`}>{children}</div>
     </div>
   );
 }
@@ -160,15 +230,19 @@ type OfferRuleAddPanelProps = {
 
 export function OfferRuleAddPanel({
   title = "Add another rule",
-  description = "Choose the next rule type to extend this offer setup.",
+  description,
   children,
 }: OfferRuleAddPanelProps) {
   return (
-    <div className="mt-4 rounded-[12px] bg-[#f6f8f9] p-4">
+    <div className="mt-4 rounded-[8px] border border-[#dfe3e8] bg-[#fcfcfd] p-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <div className="text-[14px] font-medium text-[#1c1f23]">{title}</div>
-          <div className="mt-1 text-[13px] text-[#5c6166]">{description}</div>
+          {description ? (
+            <div className="mt-1 text-[12px] leading-[18px] text-[#6d7175]">
+              {description}
+            </div>
+          ) : null}
         </div>
         {children}
       </div>

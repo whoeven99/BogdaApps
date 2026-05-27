@@ -4,10 +4,18 @@ import type {
   DiscountRule,
   FreeGiftRule,
   BxgyDiscountRule,
+  inferBxgySubtitleSource,
+  inferBxgyTitleSource,
+  inferCompleteBundleSubtitleSource,
+  inferCompleteBundleTitleSource,
+  inferDifferentProductsSubtitleSource,
+  inferDifferentProductsTitleSource,
 } from "../../../utils/offerParsing";
+import { isSingleDiscountRule } from "../../../utils/offerParsing";
 import type { OfferTypeId } from "./offerTypeOptions";
 
 export type UnifiedRuleType =
+  | "single_purchase"
   | "quantity_break"
   | "order_discount"
   | "free_shipping"
@@ -46,6 +54,9 @@ export type UnifiedRuleScope =
 
 export type UnifiedRuleCondition =
   | {
+      kind: "single_purchase";
+    }
+  | {
       kind: "item_quantity";
       count: number;
     }
@@ -69,6 +80,9 @@ export type UnifiedRuleCondition =
     };
 
 export type UnifiedRuleReward =
+  | {
+      kind: "standard_price";
+    }
   | {
       kind: "percentage_off";
       discountClass: "product" | "order";
@@ -94,9 +108,15 @@ export type UnifiedRuleReward =
 export type UnifiedRulePresentation = {
   title: string;
   subtitle: string;
+  titleSource: "auto" | "custom";
+  subtitleSource: "auto" | "custom";
   badge: string;
   isDefault: boolean;
 };
+
+function inferDefaultPresentationSource(value: string | undefined): "auto" | "custom" {
+  return String(value || "").trim() ? "custom" : "auto";
+}
 
 export type UnifiedRulePublishSupport =
   | "supported"
@@ -143,6 +163,30 @@ export const OFFER_TYPE_RULE_CAPABILITIES: OfferTypeRuleCapability[] = [
       "Supports standard quantity/order/shipping rules and unified BXGY tiers within the selected product pool.",
   },
   {
+    offerType: "shipping-discount",
+    primaryRuleTypes: ["free_shipping"],
+    scopeModel: "selected_products",
+    publishSupport: "supported",
+    notes:
+      "Uses selected campaign products as triggers and unlocks delivery discounts through free-shipping rules.",
+  },
+  {
+    offerType: "order-discount",
+    primaryRuleTypes: ["order_discount"],
+    scopeModel: "selected_products",
+    publishSupport: "supported",
+    notes:
+      "Uses selected campaign products as triggers and unlocks order-level percentage discounts through unified quantity tiers.",
+  },
+  {
+    offerType: "coupon",
+    primaryRuleTypes: ["order_discount"],
+    scopeModel: "selected_products",
+    publishSupport: "supported",
+    notes:
+      "Uses shared coupon-code gating plus selected campaign products to unlock order-level percentage discounts.",
+  },
+  {
     offerType: "quantity-breaks-different",
     primaryRuleTypes: ["quantity_break"],
     scopeModel: "shared_product_pool",
@@ -162,7 +206,7 @@ export const OFFER_TYPE_RULE_CAPABILITIES: OfferTypeRuleCapability[] = [
     scopeModel: "trigger_gift_products",
     publishSupport: "supported",
     notes:
-      "Uses a dedicated trigger pool and gift pool. The current publish-ready path is item-quantity free gift with storefront gift-line add and cart discount execution.",
+      "Uses a dedicated trigger pool and gift reward pool. The current publish-ready path is item-quantity gift reward with storefront gift-line add and cart discount execution.",
   },
   {
     offerType: "complete-bundle",
@@ -181,6 +225,7 @@ export const OFFER_TYPE_RULE_CAPABILITIES: OfferTypeRuleCapability[] = [
 ];
 
 export function getDiscountRuleType(rule: DiscountRule): UnifiedRuleType {
+  if (isSingleDiscountRule(rule)) return "single_purchase";
   if (rule.logicType === "bxgy") return "bxgy";
   if (rule.rewardType === "gift_product") return "free_gift";
   if (rule.rewardType === "free_shipping") return "free_shipping";
@@ -189,6 +234,11 @@ export function getDiscountRuleType(rule: DiscountRule): UnifiedRuleType {
 }
 
 export function buildDiscountRuleCondition(rule: DiscountRule): UnifiedRuleCondition {
+  if (isSingleDiscountRule(rule)) {
+    return {
+      kind: "single_purchase",
+    };
+  }
   if (rule.logicType === "bxgy") {
     const normalizedBuyQuantity = Math.max(
       1,
@@ -217,6 +267,11 @@ export function buildDiscountRuleCondition(rule: DiscountRule): UnifiedRuleCondi
 }
 
 export function buildDiscountRuleReward(rule: DiscountRule): UnifiedRuleReward {
+  if (isSingleDiscountRule(rule)) {
+    return {
+      kind: "standard_price",
+    };
+  }
   if (rule.rewardType === "gift_product") {
     return {
       kind: "gift_product",
@@ -241,9 +296,18 @@ export function buildDiscountRuleReward(rule: DiscountRule): UnifiedRuleReward {
 }
 
 export function buildDiscountRulePresentation(rule: DiscountRule): UnifiedRulePresentation {
+  const isBxgy = rule.logicType === "bxgy";
   return {
     title: rule.title || "",
     subtitle: rule.subtitle || "",
+    titleSource:
+      rule.titleSource ||
+      (isBxgy ? inferBxgyTitleSource(rule.title) : inferDefaultPresentationSource(rule.title)),
+    subtitleSource:
+      rule.subtitleSource ||
+      (isBxgy
+        ? inferBxgySubtitleSource(rule.subtitle)
+        : inferDefaultPresentationSource(rule.subtitle)),
     badge: rule.badge || "",
     isDefault: !!rule.isDefault,
   };
@@ -257,6 +321,8 @@ export function getRuleCapability(offerType: OfferTypeId): OfferTypeRuleCapabili
 
 export function getUnifiedRuleTypeLabel(type: UnifiedRuleType): string {
   switch (type) {
+    case "single_purchase":
+      return "Single";
     case "quantity_break":
       return "Quantity Break";
     case "order_discount":
@@ -297,6 +363,8 @@ export function describeUnifiedRuleScope(scope: UnifiedRuleScope): string {
 
 export function describeUnifiedRuleCondition(condition: UnifiedRuleCondition): string {
   switch (condition.kind) {
+    case "single_purchase":
+      return "Single purchase option";
     case "item_quantity":
       return `Item quantity >= ${condition.count}`;
     case "cart_amount":
@@ -314,6 +382,8 @@ export function describeUnifiedRuleCondition(condition: UnifiedRuleCondition): s
 
 export function describeUnifiedRuleReward(reward: UnifiedRuleReward): string {
   switch (reward.kind) {
+    case "standard_price":
+      return "Standard price";
     case "percentage_off":
       return `${reward.discountClass} discount ${reward.discountPercent}%`;
     case "free_shipping":
@@ -339,18 +409,3 @@ export function getPublishSupportLabel(support: UnifiedRulePublishSupport): stri
       return "Support";
   }
 }
-
-export type ExistingRuleSets = {
-  offerType: OfferTypeId;
-  selectedProductIds: string[];
-  buyProductIds: string[];
-  getProductIds: string[];
-  freeGiftTriggerProductIds: string[];
-  freeGiftGiftProductIds: string[];
-  discountRules: DiscountRule[];
-  bxgyDiscountRules: BxgyDiscountRule[];
-  freeGiftRules: FreeGiftRule[];
-  differentProductsDiscountRules: DifferentProductsDiscountRule[];
-  completeBundleBars: CompleteBundleBar[];
-  subscriptionEnabled: boolean;
-};

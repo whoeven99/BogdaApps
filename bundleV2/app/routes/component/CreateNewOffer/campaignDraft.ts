@@ -13,8 +13,11 @@ export type DraftDiscountRule = {
   id?: string;
   count: number;
   discountPercent: number;
+  tierType?: "single" | "standard";
   title?: string;
   subtitle?: string;
+  titleSource?: "auto" | "custom";
+  subtitleSource?: "auto" | "custom";
   badge?: string;
   isDefault?: boolean;
   discountClass?: "product" | "order" | "shipping";
@@ -31,6 +34,7 @@ export type DraftDiscountRule = {
 };
 
 export type DraftBxgyDiscountRule = {
+  id?: string;
   count: number;
   buyQuantity: number;
   getQuantity: number;
@@ -38,8 +42,11 @@ export type DraftBxgyDiscountRule = {
   getProductIds: string[];
   discountPercent: number;
   maxUsesPerOrder: number;
+  tierType?: "single" | "bxgy" | "simple";
   title?: string;
   subtitle?: string;
+  titleSource?: "auto" | "custom";
+  subtitleSource?: "auto" | "custom";
   badge?: string;
   isDefault?: boolean;
 };
@@ -56,20 +63,14 @@ export type DraftSelectedProduct = {
 export type CampaignDraft = {
   offerType: OfferTypeId;
   selectedProductsData: DraftSelectedProduct[];
+  differentProductsEligibleProductsData: DraftSelectedProduct[];
   discountRules: DraftDiscountRule[];
-  normalizedDiscountRules: DraftDiscountRule[];
   bxgyDiscountRules: DraftBxgyDiscountRule[];
   differentProductsDiscountRules: DifferentProductsDiscountRule[];
   buyProducts: string[];
   getProducts: string[];
   completeBundleBars: CompleteBundleBar[];
   activeBundleBarId: string;
-  productBundleEnabled: boolean;
-  productBundleTitle: string;
-  productBundleSubtitle: string;
-  productBundleMinQuantity: number;
-  productBundleProductIds: string[];
-  productBundleProductsData: DraftSelectedProduct[];
   subscriptionEnabled: boolean;
   subscriptionTitle: string;
   subscriptionSubtitle: string;
@@ -83,6 +84,8 @@ export type CampaignDraft = {
   subscriptionExplanationTitle: string;
   subscriptionExplanationBody: string;
   freeGiftTriggerProducts: string[];
+  freeGiftSharedGiftProductIds: string[];
+  freeGiftSharedGiftProductsData: DraftSelectedProduct[];
   giftProductsData: DraftSelectedProduct[];
   freeGiftRules: FreeGiftRule[];
   progressiveGifts: ProgressiveGiftsConfig;
@@ -102,9 +105,13 @@ export type CampaignDraftActions = {
   setSelectedProductsData: React.Dispatch<
     React.SetStateAction<DraftSelectedProduct[]>
   >;
+  setDifferentProductsEligibleProductsData: React.Dispatch<
+    React.SetStateAction<DraftSelectedProduct[]>
+  >;
   handleSelectProducts: (
-    type?: "buy" | "gift" | "normal" | "product_bundle",
+    type?: "buy" | "gift" | "normal",
   ) => void | Promise<void>;
+  handleSelectDifferentProductsEligibleProducts: () => void | Promise<void>;
   setDiscountRules: React.Dispatch<React.SetStateAction<DraftDiscountRule[]>>;
   setBxgyDiscountRules: React.Dispatch<
     React.SetStateAction<DraftBxgyDiscountRule[]>
@@ -113,7 +120,7 @@ export type CampaignDraftActions = {
     React.SetStateAction<DifferentProductsDiscountRule[]>
   >;
   setActiveBundleBarId: (barId: string) => void;
-  addCompleteBundleBar: (type: "quantity-break-same" | "bxgy") => void;
+  addCompleteBundleBar: (type: "quantity-break-same") => void;
   removeCompleteBundleBar: (barId: string) => void;
   clearCompleteBundleBars: () => void;
   updateCompleteBundleBar: (
@@ -122,10 +129,6 @@ export type CampaignDraftActions = {
   ) => void;
   handleSelectProductsForBundleBar: (barId: string) => void | Promise<void>;
   appendProductsToBundleBar: (barId: string) => void | Promise<void>;
-  setProductBundleEnabled: (value: boolean) => void;
-  setProductBundleTitle: (value: string) => void;
-  setProductBundleSubtitle: (value: string) => void;
-  setProductBundleMinQuantity: (value: number) => void;
   setCheckboxUpsellsEnabled: (value: boolean) => void;
   setCheckboxUpsellsTitle: (value: string) => void;
   setCheckboxUpsellsSubtitle: (value: string) => void;

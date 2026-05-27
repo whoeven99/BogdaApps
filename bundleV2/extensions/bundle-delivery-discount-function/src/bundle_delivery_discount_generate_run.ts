@@ -2,7 +2,7 @@
  * 配送折扣 Function（cart.delivery-options.discounts.generate.run）
  * ------------------------------------------------------------------
  * 与行项目折扣 Function 分离：仅处理「阶梯赠品」中的免邮（free_shipping）。
- * 配置来源：Shop metafield `ciwi_bundle` / `ciwi-bundle-offers`（与商品折扣相同）。
+ * 配置来源：shop `ciwi-bundle-offers-fn`；若 shop `ciwi-bundle-enabled` 中 `enabled === false` 则提前退出。
  *
  * 购物车行属性（与主题 `properties[__ciwi_*]` 对应）：
  * - 理想情况：行上带有 `__ciwi_bundle_offer_id`、`__ciwi_bundle_tier`（主题脚本写入）。
@@ -80,6 +80,34 @@ type UnifiedShippingRule = {
   rewardType: "percentage_off" | "gift_product" | "free_shipping";
 };
 
+type CouponAccess = {
+  enabled: boolean;
+  code: string;
+};
+
+const RECOGNIZED_CUSTOMER_SEGMENTS = new Set([
+  "all",
+  "new_customers",
+  "returning_customers",
+  "vip",
+  "high_aov",
+]);
+
+const RECOGNIZED_CUSTOMER_PROFILE_FILTERS = new Set([
+  "subscription_active",
+  "bundle_buyer",
+  "repeat_buyer",
+  "high_intent",
+]);
+
+type BuyerTargetingContext = {
+  isAuthenticated: boolean;
+  numberOfOrders: number;
+  amountSpent: number;
+  tags: Set<string>;
+  hasSubscriptionLine: boolean;
+};
+
 function resolveNowMs(): number | null {
   const v = Date.now();
   return Number.isFinite(v) && v > 0 ? v : null;
@@ -90,11 +118,44 @@ function parseSelectedIds(selectedProductsJson?: string | null): string[] {
   try {
     const parsed = JSON.parse(selectedProductsJson) as unknown;
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const productIds = (parsed as { productIds?: unknown }).productIds;
+      if (Array.isArray(productIds)) {
+        const ids = productIds
+          .map((id) => String(id || "").trim())
+          .filter(Boolean);
+        if (ids.length) return [...new Set(ids)];
+      }
+
+      const bars = (parsed as { bars?: unknown }).bars;
+      if (Array.isArray(bars) && bars.length) {
+        const ids: string[] = [];
+        for (const bar of bars) {
+          if (!bar || typeof bar !== "object") continue;
+          const products = (bar as { products?: unknown }).products;
+          if (!Array.isArray(products)) continue;
+          for (const p of products) {
+            if (p && typeof p === "object") {
+              const pid = (p as { productId?: unknown }).productId;
+              if (typeof pid === "string" && pid.trim()) ids.push(pid.trim());
+            }
+          }
+        }
+        if (ids.length) return [...new Set(ids)];
+      }
+
       const buyProducts = (parsed as { buyProducts?: string[] }).buyProducts;
       const getProducts = (parsed as { getProducts?: string[] }).getProducts;
+      const triggerProducts = (parsed as { triggerProducts?: string[] }).triggerProducts;
+      const giftProducts = (parsed as { giftProducts?: string[] }).giftProducts;
       const all: string[] = [];
       if (Array.isArray(buyProducts)) all.push(...buyProducts.filter((x) => typeof x === "string"));
       if (Array.isArray(getProducts)) all.push(...getProducts.filter((x) => typeof x === "string"));
+      if (Array.isArray(triggerProducts)) {
+        all.push(...triggerProducts.filter((x) => typeof x === "string"));
+      }
+      if (Array.isArray(giftProducts)) {
+        all.push(...giftProducts.filter((x) => typeof x === "string"));
+      }
       return [...new Set(all)];
     }
     if (!Array.isArray(parsed)) return [];
@@ -189,6 +250,232 @@ function parseMoneyAmount(raw: unknown): number | null {
   const n = typeof raw === "string" ? Number.parseFloat(raw) : Number(raw);
   if (!Number.isFinite(n)) return null;
   return n;
+}
+
+function normalizeCouponCode(value: unknown): string {
+  return String(value || "").trim().toUpperCase();
+}
+
+function normalizeCustomerSegmentHandle(value: unknown): string {
+  return String(value || "").trim().toLowerCase();
+}
+
+function parseCustomerSegments(offerSettingsJson?: string | null): string[] {
+  if (!offerSettingsJson) return ["all"];
+  try {
+    const parsed = JSON.parse(offerSettingsJson) as {
+      customerSegments?: unknown;
+    };
+    const rawValue = parsed.customerSegments;
+    if (typeof rawValue !== "string" || !rawValue.trim()) {
+      return ["all"];
+    }
+    const normalized = rawValue
+      .split(",")
+      .map((segment) => normalizeCustomerSegmentHandle(segment))
+      .filter(Boolean);
+    return normalized.length ? Array.from(new Set(normalized)) : ["all"];
+  } catch {
+    return ["all"];
+  }
+}
+
+function parseCustomerProfileFilters(offerSettingsJson?: string | null): string[] {
+  if (!offerSettingsJson) return [];
+  try {
+    const parsed = JSON.parse(offerSettingsJson) as {
+      customerProfileFilters?: unknown;
+    };
+    const rawValue = parsed.customerProfileFilters;
+    if (typeof rawValue !== "string" || !rawValue.trim()) {
+      return [];
+    }
+    const normalized = rawValue
+      .split(",")
+      .map((value) => normalizeCustomerSegmentHandle(value))
+      .filter(Boolean);
+    return normalized.length ? Array.from(new Set(normalized)) : [];
+  } catch {
+    return [];
+  }
+}
+
+function normalizeCountryCode(value: unknown): string {
+  return String(value || "").trim().toUpperCase();
+}
+
+function parseIpCountryCodes(offerSettingsJson?: string | null): string[] {
+  if (!offerSettingsJson) return [];
+  try {
+    const parsed = JSON.parse(offerSettingsJson) as {
+      ipCountryCodes?: unknown;
+    };
+    const rawValue = parsed.ipCountryCodes;
+    if (typeof rawValue !== "string" || !rawValue.trim()) {
+      return [];
+    }
+    const normalized = rawValue
+      .split(",")
+      .map((value) => normalizeCountryCode(value))
+      .filter(Boolean);
+    return normalized.length ? Array.from(new Set(normalized)) : [];
+  } catch {
+    return [];
+  }
+}
+
+function buildBuyerTargetingContext(
+  input: CartDeliveryDiscountInput,
+): BuyerTargetingContext {
+  const buyerIdentity = input.cart.buyerIdentity;
+  const customer = buyerIdentity?.customer;
+  const tags = new Set(
+    (customer?.hasTags || [])
+      .filter((entry) => entry.hasTag)
+      .map((entry) => normalizeCustomerSegmentHandle(entry.tag)),
+  );
+
+  return {
+    isAuthenticated: buyerIdentity?.isAuthenticated === true,
+    numberOfOrders: Math.max(0, Math.trunc(Number(customer?.numberOfOrders) || 0)),
+    amountSpent: Math.max(
+      0,
+      Number.parseFloat(String(customer?.amountSpent?.amount || 0)) || 0,
+    ),
+    tags,
+    hasSubscriptionLine: input.cart.lines.some((line) => Boolean(line.sellingPlanAllocation?.sellingPlan?.id)),
+  };
+}
+
+function offerMatchesCustomerSegments(
+  offer: OfferRow,
+  buyerContext: BuyerTargetingContext,
+): boolean {
+  const configuredSegments = parseCustomerSegments(offer.offerSettingsJson);
+  if (
+    configuredSegments.length === 0 ||
+    configuredSegments.includes("all")
+  ) {
+    return true;
+  }
+
+  const recognizedSegments = configuredSegments.filter((segment) =>
+    RECOGNIZED_CUSTOMER_SEGMENTS.has(segment),
+  );
+  if (!recognizedSegments.length) {
+    logZh("customer segment 仅为自定义 handle，runtime 暂不限制", {
+      offerId: offer.id,
+      segments: configuredSegments,
+    });
+    return true;
+  }
+
+  return recognizedSegments.some((segment) => {
+    switch (segment) {
+      case "new_customers":
+        return !buyerContext.isAuthenticated || buyerContext.numberOfOrders === 0;
+      case "returning_customers":
+        return buyerContext.isAuthenticated && buyerContext.numberOfOrders > 0;
+      case "vip":
+        return buyerContext.tags.has("vip");
+      case "high_aov":
+        return (
+          buyerContext.tags.has("high_aov") ||
+          buyerContext.amountSpent >= 500
+        );
+      default:
+        return false;
+    }
+  });
+}
+
+function offerMatchesCustomerProfileFilters(
+  offer: OfferRow,
+  buyerContext: BuyerTargetingContext,
+): boolean {
+  const configuredFilters = parseCustomerProfileFilters(offer.offerSettingsJson);
+  if (!configuredFilters.length) {
+    return true;
+  }
+
+  const recognizedFilters = configuredFilters.filter((filter) =>
+    RECOGNIZED_CUSTOMER_PROFILE_FILTERS.has(filter),
+  );
+  if (!recognizedFilters.length) {
+    logZh("customer profile filter 仅为自定义 handle，runtime 暂不限制", {
+      offerId: offer.id,
+      filters: configuredFilters,
+    });
+    return true;
+  }
+
+  return recognizedFilters.every((filter) => {
+    switch (filter) {
+      case "subscription_active":
+        return (
+          buyerContext.hasSubscriptionLine ||
+          buyerContext.tags.has("subscription_active")
+        );
+      case "bundle_buyer":
+        return buyerContext.tags.has("bundle_buyer");
+      case "repeat_buyer":
+        return (
+          buyerContext.tags.has("repeat_buyer") ||
+          buyerContext.numberOfOrders > 1
+        );
+      case "high_intent":
+        return buyerContext.tags.has("high_intent");
+      default:
+        return true;
+    }
+  });
+}
+
+function offerMatchesIpCountryCodes(
+  offer: OfferRow,
+  countryCode: string,
+): boolean {
+  const configuredCodes = parseIpCountryCodes(offer.offerSettingsJson);
+  if (!configuredCodes.length) {
+    return true;
+  }
+  if (!countryCode) {
+    logZh("ip country runtime 不可用，跳过活动", {
+      offerId: offer.id,
+      configuredCodes,
+    });
+    return false;
+  }
+  return configuredCodes.includes(countryCode);
+}
+
+function parseCouponAccess(offerSettingsJson?: string | null): CouponAccess {
+  if (!offerSettingsJson) {
+    return { enabled: false, code: "" };
+  }
+  try {
+    const parsed = JSON.parse(offerSettingsJson) as {
+      couponEnabled?: unknown;
+      couponCode?: unknown;
+    };
+    return {
+      enabled: parsed.couponEnabled === true,
+      code: normalizeCouponCode(parsed.couponCode),
+    };
+  } catch {
+    return { enabled: false, code: "" };
+  }
+}
+
+function resolveAcceptedCouponCode(
+  offer: OfferRow,
+  enteredCodes: Set<string>,
+): string | null {
+  const couponAccess = parseCouponAccess(offer.offerSettingsJson);
+  if (!couponAccess.enabled) return null;
+  return couponAccess.code && enteredCodes.has(couponAccess.code)
+    ? couponAccess.code
+    : null;
 }
 
 function extractShopifyNumericId(raw: string | undefined | null): string {
@@ -457,6 +744,63 @@ function hasEligibleShippingRule(
   });
 }
 
+function extractOffersListFromJson(v: unknown): OfferRow[] {
+  if (!v || typeof v !== "object") return [];
+  const o = v as { offers?: unknown };
+  return Array.isArray(o.offers) ? (o.offers as OfferRow[]) : [];
+}
+
+function pickDeliveryOffersFromInput(input: CartDeliveryDiscountInput): {
+  offers: OfferRow[];
+  source: string;
+} {
+  const shop = input.shop as unknown as {
+    offersFn?: { jsonValue?: unknown } | null;
+  };
+  const discountOwnerMf = input.discount.offersFromDiscountOwner;
+  const jDisc = discountOwnerMf?.jsonValue;
+  const offersFnNode = shop.offersFn;
+  const jShop = offersFnNode?.jsonValue;
+
+  const logJv = (namespace: string, key: string, mfNode: unknown, jv: unknown) => {
+    log("read_ciwi_offers_metafield", {
+      namespace,
+      key,
+      metafieldNodePresent: mfNode != null,
+      jsonValueKind:
+        jv === undefined
+          ? "undefined"
+          : jv === null
+            ? "null"
+            : Array.isArray(jv)
+              ? "array"
+              : typeof jv,
+      topLevelKeys:
+        jv && typeof jv === "object" && !Array.isArray(jv)
+          ? Object.keys(jv as Record<string, unknown>).slice(0, 30)
+          : null,
+      offersArrayLength:
+        jv &&
+        typeof jv === "object" &&
+        !Array.isArray(jv) &&
+        Array.isArray((jv as { offers?: unknown }).offers)
+          ? (jv as { offers: unknown[] }).offers.length
+          : null,
+    });
+  };
+
+  logJv("$app:ciwi_bundle", "offers", discountOwnerMf, jDisc);
+  logJv("ciwi_bundle", "ciwi-bundle-offers-fn", offersFnNode, jShop);
+
+  const fromDiscount = extractOffersListFromJson(jDisc);
+  const fromShop = extractOffersListFromJson(jShop);
+  if (fromDiscount.length) {
+    return { offers: fromDiscount, source: "discount_owner_app_ciwi_bundle_offers" };
+  }
+  if (fromShop.length) return { offers: fromShop, source: "shop_ciwi_bundle_offers_fn" };
+  return { offers: [], source: "none" };
+}
+
 export function bundleDeliveryDiscountGenerateRun(
   input: CartDeliveryDiscountInput,
 ): CartDeliveryOptionsDiscountsGenerateRunResult {
@@ -476,22 +820,68 @@ export function bundleDeliveryDiscountGenerateRun(
     return { operations: [] };
   }
 
-  const shopPayload = input.shop?.metafield?.jsonValue as
-    | { offers?: OfferRow[] }
-    | null
-    | undefined;
-  const offers = shopPayload?.offers ?? [];
+  const shop = input.shop as unknown as {
+    bundleEnabledShop?: { jsonValue?: unknown } | null;
+    offersFn?: { jsonValue?: unknown } | null;
+  };
+
+  const { offers, source: offersSource } = pickDeliveryOffersFromInput(input);
   if (!offers.length) {
     log("early_exit", { reason: "no_offers" });
-    logZh("提前退出：店铺 metafield 中无活动", {
-      metafieldPresent: Boolean(input.shop?.metafield),
+    logZh("提前退出：无活动（shop ciwi-bundle-offers-fn）", {
+      offersSource,
     });
     return { operations: [] };
   }
 
   const marketId = input.localization.market?.id ?? undefined;
+  const localizationCountryCode = normalizeCountryCode(
+    input.localization.country?.isoCode,
+  );
+  const buyerTargetingContext = buildBuyerTargetingContext(input);
+  const enteredCodes = new Set(
+    [normalizeCouponCode(input.triggeringDiscountCode)].filter(Boolean),
+  );
+  const acceptedCouponCodes = new Set<string>();
+  const acceptedCouponCodeByOfferId = new Map<string, string>();
+  const eligibleOffers = offers.filter((offer) => {
+    if (!offerMatchesCustomerSegments(offer, buyerTargetingContext)) {
+      logZh("customer segment 未命中，跳过活动", {
+        offerId: offer.id,
+      });
+      return false;
+    }
+    if (!offerMatchesCustomerProfileFilters(offer, buyerTargetingContext)) {
+      logZh("customer profile filter 未命中，跳过活动", {
+        offerId: offer.id,
+      });
+      return false;
+    }
+    if (!offerMatchesIpCountryCodes(offer, localizationCountryCode)) {
+      logZh("ip country code 未命中，跳过活动", {
+        offerId: offer.id,
+        localizationCountryCode,
+      });
+      return false;
+    }
+    const couponAccess = parseCouponAccess(offer.offerSettingsJson);
+    if (!couponAccess.enabled) {
+      return true;
+    }
+    const acceptedCode = resolveAcceptedCouponCode(offer, enteredCodes);
+    if (!acceptedCode) {
+      logZh("coupon code 未命中，跳过活动", {
+        offerId: offer.id,
+        configuredCode: couponAccess.code,
+      });
+      return false;
+    }
+    acceptedCouponCodes.add(acceptedCode);
+    acceptedCouponCodeByOfferId.set(String(offer.id || ""), acceptedCode);
+    return true;
+  });
   const handlesToDiscount = new Set<string>();
-  const regularShippingOffers = offers.filter(
+  const regularShippingOffers = eligibleOffers.filter(
     (offer) =>
       offer.offerType !== "bxgy" &&
       offer.offerType !== "quantity-breaks-different" &&
@@ -522,7 +912,7 @@ export function bundleDeliveryDiscountGenerateRun(
 
     const resolved = resolveOfferAndTierForProgressiveLine(
       line,
-      offers,
+      eligibleOffers,
       marketId,
       productId,
       variantId,
@@ -601,7 +991,7 @@ export function bundleDeliveryDiscountGenerateRun(
     }
   }
 
-  if (!handlesToDiscount.size) {
+  if (!handlesToDiscount.size && acceptedCouponCodes.size === 0) {
     log("early_exit", { reason: "no_qualifying_options" });
     logZh("提前退出：没有可打折的配送方式", {
       deliveryGroupCount: input.cart.deliveryGroups.length,
@@ -613,7 +1003,15 @@ export function bundleDeliveryDiscountGenerateRun(
     message: "Bundle free shipping",
     targets: [{ deliveryOption: { handle } }],
     value: { percentage: { value: "100.0" } },
-    associatedDiscountCode: undefined as undefined,
+    associatedDiscountCode:
+      acceptedCouponCodes.size > 0
+        ? {
+            code:
+              acceptedCouponCodeByOfferId.get(
+                Array.from(acceptedCouponCodeByOfferId.keys())[0] || "",
+              ) || Array.from(acceptedCouponCodes)[0],
+          }
+        : undefined,
   }));
 
   log("apply", { optionCount: candidates.length });
@@ -624,12 +1022,25 @@ export function bundleDeliveryDiscountGenerateRun(
 
   return {
     operations: [
-      {
-        deliveryDiscountsAdd: {
-          candidates,
-          selectionStrategy: DeliveryDiscountSelectionStrategy.All,
-        },
-      },
+      ...(acceptedCouponCodes.size > 0
+        ? [
+            {
+              enteredDiscountCodesAccept: {
+                codes: Array.from(acceptedCouponCodes).map((code) => ({ code })),
+              },
+            } as const,
+          ]
+        : []),
+      ...(candidates.length > 0
+        ? [
+            {
+              deliveryDiscountsAdd: {
+                candidates,
+                selectionStrategy: DeliveryDiscountSelectionStrategy.All,
+              },
+            } as const,
+          ]
+        : []),
     ],
   };
 }
