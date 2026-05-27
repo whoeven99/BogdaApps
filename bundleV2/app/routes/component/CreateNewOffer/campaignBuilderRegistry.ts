@@ -158,7 +158,7 @@ function getCompleteBundleRules(
 function getCompleteBundleValidationState(ctx: CampaignBuilderRegistryContext) {
   const triggerProductCount = ctx.selectedProductsData.length;
   const hasNoTriggerProducts = triggerProductCount < 1;
-  const hasInvalidBar = ctx.completeBundleBars.some((bar) => {
+  const invalidBundleBars = ctx.completeBundleBars.filter((bar) => {
     if (isCompleteBundleSingleBar(bar)) {
       return false;
     }
@@ -172,7 +172,8 @@ function getCompleteBundleValidationState(ctx: CampaignBuilderRegistryContext) {
   });
   return {
     hasNoTriggerProducts,
-    hasInvalidBar,
+    hasInvalidBar: invalidBundleBars.length > 0,
+    hasEmptyBundleBar: invalidBundleBars.some((bar) => (bar.products?.length ?? 0) === 0),
   };
 }
 
@@ -434,24 +435,34 @@ const BEHAVIOR_BY_OFFER_TYPE: Record<OfferTypeId, CampaignBuilderBehavior> = {
       return `${completeBundleRules.length} complete-bundle bar${completeBundleRules.length === 1 ? "" : "s"} with trigger + whole-bundle pricing`;
     },
     validateScopeAndLogicStep: (ctx) => {
-      const { hasNoTriggerProducts, hasInvalidBar } =
+      const { hasNoTriggerProducts, hasInvalidBar, hasEmptyBundleBar } =
         getCompleteBundleValidationState(ctx);
       const completeBundleRules = getCompleteBundleRules(ctx);
-      return hasNoTriggerProducts ||
-        hasInvalidBar ||
-        completeBundleRules.length === 0
-        ? "Please select at least 1 trigger product and make sure every bundle bar has enough bundle items for its min/max selection range."
-        : null;
+      if (hasNoTriggerProducts) {
+        return "Please select at least 1 trigger product.";
+      }
+      if (hasEmptyBundleBar || completeBundleRules.length === 0) {
+        return "Please select at least 1 bundle item for the bundle bar.";
+      }
+      if (hasInvalidBar) {
+        return "Bundle item quantity does not match the current min/max setting. Adjust the item count or update the bar quantity.";
+      }
+      return null;
     },
     validateFinalSubmitScopeAndLogic: (ctx) => {
-      const { hasNoTriggerProducts, hasInvalidBar } =
+      const { hasNoTriggerProducts, hasInvalidBar, hasEmptyBundleBar } =
         getCompleteBundleValidationState(ctx);
       const completeBundleRules = getCompleteBundleRules(ctx);
-      return hasNoTriggerProducts ||
-        completeBundleRules.length === 0 ||
-        hasInvalidBar
-        ? "Complete bundle offers require trigger products plus valid bundle-item pools for every configured bar."
-        : null;
+      if (hasNoTriggerProducts) {
+        return "Complete bundle offers require at least 1 trigger product.";
+      }
+      if (hasEmptyBundleBar || completeBundleRules.length === 0) {
+        return "Complete bundle offers require at least 1 bundle item in each configured bar.";
+      }
+      if (hasInvalidBar) {
+        return "Complete bundle offers require bundle-item counts that fit the configured min/max quantity for each bar.";
+      }
+      return null;
     },
   },
   subscription: {

@@ -1742,7 +1742,19 @@ export function CreateNewOffer({
         );
       }
 
+      const bundleItemCount = mappedProducts.length;
+      const currentMin = Math.max(1, Math.trunc(Number(targetBar.minQuantity) || 1));
+      const currentMax = Math.max(
+        currentMin,
+        Math.trunc(Number(targetBar.maxQuantity) || Number(targetBar.quantity) || 1),
+      );
+      const nextMin = Math.min(currentMin, bundleItemCount);
+      const nextMax = Math.min(Math.max(nextMin, currentMax), bundleItemCount);
+
       updateCompleteBundleBar(barId, {
+        minQuantity: nextMin,
+        maxQuantity: nextMax,
+        quantity: nextMax,
         products: mappedProducts.map((p) => {
           const prev = targetBar.products.find((op) => op.productId === p.productId);
           return {
@@ -2079,50 +2091,6 @@ export function CreateNewOffer({
     );
   };
 
-  const updateBundleBarProductOption = (
-    barId: string,
-    productId: string,
-    optionName: string,
-    optionValue: string,
-  ) => {
-    setCompleteBundleBars((prev) =>
-      prev.map((bar) => {
-        if (bar.id !== barId) return bar;
-        return {
-          ...bar,
-          products: bar.products.map((product) => {
-            if (product.productId !== productId) return product;
-            const currentVariant =
-              product.variants?.find((v) => v.id === product.selectedVariantId) ||
-              product.variants?.[0];
-            const currentOptions = Object.fromEntries(
-              (currentVariant?.selectedOptions || []).map((opt) => [opt.name, opt.value]),
-            );
-            const nextOptions = {
-              ...currentOptions,
-              ...(product.selectedOptions || {}),
-              [optionName]: optionValue,
-            };
-            const matchedVariant = product.variants?.find((variant) => {
-              const variantOptions = Object.fromEntries(
-                (variant.selectedOptions || []).map((opt) => [opt.name, opt.value]),
-              );
-              return Object.entries(nextOptions).every(
-                ([name, value]) => variantOptions[name] === value,
-              );
-            });
-            return {
-              ...product,
-              selectedOptions: nextOptions,
-              selectedVariantId: matchedVariant?.id || product.selectedVariantId,
-              price: matchedVariant?.price || product.price,
-            };
-          }),
-        };
-      }),
-    );
-  };
-
   /**
    * complete-bundle 使用共享 offer scope；bar 商品由 scope 自动同步。
    */
@@ -2154,14 +2122,18 @@ export function CreateNewOffer({
     const selectedOptionsMap = Object.fromEntries(
       (selectedVariant?.selectedOptions || []).map((opt) => [opt.name, opt.value]),
     );
-    const productLabel = `Scoped product ${productIdx + 1}`;
+    const productLabel = `Bundle item ${productIdx + 1}`;
+    const variantSelectValue =
+      selectionMode === "product"
+        ? "__product__"
+        : product.selectedVariantId || selectedVariant?.id || "__product__";
 
     return (
       <div
         key={product.productId}
         className="create-offer-bundle-product-card"
       >
-        <div className="flex items-start gap-2 mb-2 justify-between">
+        <div className="mb-3 flex items-start gap-3 justify-between">
           <div className="flex items-start gap-2 flex-1 min-w-0">
             {product.image ? (
               <img
@@ -2172,108 +2144,60 @@ export function CreateNewOffer({
             ) : null}
             <div className="flex-1 min-w-0">
               <div className="text-[12px] font-medium text-[#1c1f23]">{productLabel}</div>
-              <div className="text-[11px] text-[#5c6166] truncate">
+              <div className="text-[12px] text-[#1c1f23] truncate">
                 {product.title || product.productId}
+              </div>
+              <div className="mt-1 text-[11px] text-[#5c6166] truncate">
+                {selectionMode === "product"
+                  ? "Customer chooses variant"
+                  : selectedVariant?.title || "Locked variant"}
               </div>
             </div>
           </div>
-          <div className="shrink-0 text-[11px] font-medium text-[#5c6166]">
-            Shared scope
-          </div>
         </div>
-        <div className="rounded-[8px] border border-[#edf1f4] bg-[#f6f8f9] px-3 py-2 text-[12px] text-[#5c6166]">
-          {selectionMode === "variant"
-            ? "This bundle item is locked to one variant. The storefront will add the configured variant when the bundle is selected."
-            : "This bundle item is product-level. Customers can still choose the variant on the storefront, and the selected variant becomes the cart line."}
-        </div>
-        <div className="mt-3">
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-            <label className="block text-[12px] font-medium text-[#1c1f23]">
-              Bundle level
-              <Select
-                size="small"
-                className="mt-1 w-full"
-                value={selectionMode}
-                onChange={(value) =>
-                  updateBundleBarProductSelectionMode(
-                    bar.id,
-                    product.productId,
-                    String(value) === "variant" ? "variant" : "product",
-                  )
-                }
-                options={[
-                  {
-                    label: "Product level",
-                    value: "product",
-                  },
-                  {
-                    label: "Variant level",
-                    value: "variant",
-                  },
-                ]}
-              />
-            </label>
-          </div>
-          <div className="mt-3 text-[12px] font-medium mb-1 text-[#1c1f23]">
-            {selectionMode === "variant"
-              ? "Locked variant"
-              : "Default variant / storefront preview"}
-          </div>
-          {Array.isArray(product.variants) &&
-            product.variants.length > 0 &&
-            optionNames.length === 0 && (
-              <Select
-                size="small"
-                className="w-full mb-2"
-                value={product.selectedVariantId || product.variants[0].id}
-                onChange={(variantId) =>
-                  updateBundleBarProductVariant(bar.id, product.productId, String(variantId))
-                }
-                options={product.variants.map((variant) => ({
-                  label: variant.title,
-                  value: variant.id,
-                }))}
-              />
-            )}
-          {optionNames.length > 0 ? (
-            <div className="grid grid-cols-1 gap-2">
-              {optionNames.map((optionName) => {
-                const optionValues = Array.from(
-                  new Set(
-                    (product.variants || [])
-                      .flatMap((variant) => variant.selectedOptions || [])
-                      .filter((opt) => opt.name === optionName)
-                      .map((opt) => opt.value)
-                      .filter(Boolean),
-                  ),
-                );
-                return (
-                  <Select
-                    key={`${product.productId}-${optionName}-cfg`}
-                    size="small"
-                    className="w-full"
-                    value={selectedOptionsMap[optionName] || optionValues[0]}
-                    onChange={(value) =>
-                      updateBundleBarProductOption(bar.id, product.productId, optionName, String(value))
-                    }
-                    options={optionValues.map((value) => ({
-                      label: value,
-                      value,
-                    }))}
-                  />
-                );
-              })}
+        <div>
+          <div className="mb-1 text-[12px] font-medium text-[#1c1f23]">Variant</div>
+          <Select
+            size="middle"
+            className="w-full"
+            value={variantSelectValue}
+            onChange={(value) => {
+              const nextValue = String(value);
+              if (nextValue === "__product__") {
+                updateBundleBarProductSelectionMode(bar.id, product.productId, "product");
+                return;
+              }
+              updateBundleBarProductSelectionMode(bar.id, product.productId, "variant");
+              updateBundleBarProductVariant(bar.id, product.productId, nextValue);
+            }}
+            options={[
+              { label: "Customer chooses on storefront", value: "__product__" },
+              ...(product.variants || []).map((variant) => ({
+                label:
+                  variant.title ||
+                  (Array.isArray(variant.selectedOptions)
+                    ? variant.selectedOptions
+                        .map((opt) => String(opt.value || "").trim())
+                        .filter(Boolean)
+                        .join(" / ")
+                    : "") ||
+                  "Default variant",
+                value: variant.id,
+              })),
+            ]}
+          />
+          {selectionMode === "variant" && optionNames.length > 0 ? (
+            <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-[#5c6166]">
+              {Object.entries(selectedOptionsMap).map(([name, value]) => (
+                <span
+                  key={`${product.productId}-${name}-${value}`}
+                  className="rounded-full bg-[#f6f8f9] px-2 py-1"
+                >
+                  {name}: {value}
+                </span>
+              ))}
             </div>
           ) : null}
-          {selectionMode === "product" ? (
-            <div className="mt-2 text-[11px] text-[#5c6166]">
-              Customers can change the variant on the storefront before the bundle is added to cart.
-            </div>
-          ) : (
-            <div className="mt-2 text-[11px] text-[#5c6166]">
-              The bundle discount will only match this configured variant.
-            </div>
-          )}
         </div>
       </div>
     );

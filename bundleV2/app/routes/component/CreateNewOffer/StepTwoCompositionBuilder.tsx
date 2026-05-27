@@ -1036,18 +1036,18 @@ function CompleteBundleModuleDetail({
   const wrap = (content: React.ReactNode) =>
     embedded ? <>{content}</> : <DetailSection title="Complete bundle">{content}</DetailSection>;
 
+  useEffect(() => {
+    if (draft.completeBundleBars.length > 0) {
+      return;
+    }
+    actions.addCompleteBundleBar("quantity-break-same");
+  }, [actions, draft.completeBundleBars.length]);
+
   if (!draft.completeBundleBars.length && !isPrimaryTemplate) {
     return wrap(
       <>
         <QuietEmptyState>
-          <div className="space-y-3">
-            <div>
-              Add a complete bundle option without replacing the main offer bars.
-            </div>
-            <Button onClick={() => actions.addCompleteBundleBar("quantity-break-same")}>
-              Add bundle configuration
-            </Button>
-          </div>
+          Preparing the complete bundle configuration...
         </QuietEmptyState>
       </>,
     );
@@ -1057,15 +1057,7 @@ function CompleteBundleModuleDetail({
     return wrap(
       <>
         <QuietEmptyState>
-          <div className="space-y-3">
-            <div>
-              Add the complete bundle option for this template and start configuring its scoped
-              products.
-            </div>
-            <Button onClick={() => actions.addCompleteBundleBar("quantity-break-same")}>
-              Add bundle configuration
-            </Button>
-          </div>
+          Preparing the complete bundle configuration...
         </QuietEmptyState>
       </>,
     );
@@ -1086,7 +1078,7 @@ function CompleteBundleModuleDetail({
 
       <div className="mt-4">
         {isPrimaryTemplate ? (
-          <div className="mb-4 space-y-3">
+          <div className="mb-4">
             <CompactActionRow
               title="Trigger products"
               meta={
@@ -1099,10 +1091,6 @@ function CompleteBundleModuleDetail({
               }
               onAction={onEditTriggerProducts}
             />
-            <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
-              Step 2 is split into two parts: first choose the trigger products that display the
-              offer, then configure the bundle-item pool for each non-single bar.
-            </div>
           </div>
         ) : null}
         <CompleteBundleEditor

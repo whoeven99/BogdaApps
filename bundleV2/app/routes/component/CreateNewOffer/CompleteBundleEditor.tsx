@@ -53,7 +53,7 @@ export default function CompleteBundleEditor({
   renderCompleteBundleProductPricingCard,
   section = "all",
   simpleMode = false,
-  simpleModeContext = "component",
+  simpleModeContext: _simpleModeContext = "component",
   updateRuleValues,
   updateRulePresentation,
 }: Props) {
@@ -275,15 +275,6 @@ export default function CompleteBundleEditor({
             <>
               {!isCompleteBundleSingleBar(activeBar) ? (
                 <>
-                  <div className="rounded-[10px] border border-[#e3e8ed] bg-white px-4 py-3 text-[12px] text-[#5c6166]">
-                    This bundle bar reuses the shared offer product scope. Step 2 controls how many
-                    scoped products can join the current product and how the whole bundle is priced.
-                    <span className="ml-1 font-medium text-[#1c1f23]">
-                      {activeBarProductCount} scoped product
-                      {activeBarProductCount === 1 ? "" : "s"} synced.
-                    </span>
-                  </div>
-
                   <div className="mt-4 rounded-[10px] border border-[#e3e8ed] bg-white p-4">
                     <div className="text-[14px] font-medium text-[#1c1f23]">Bundle discount</div>
                     <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -333,15 +324,10 @@ export default function CompleteBundleEditor({
 
                   <div className="mt-4 rounded-[10px] bg-[#f6f8f9] px-4 py-4">
                     <div className="text-[14px] font-medium text-[#1c1f23]">Bundle item pool</div>
-                    <div className="mt-1 text-[12px] text-[#5c6166]">
-                      {simpleModeContext === "primary"
-                        ? "Use the trigger-product selector above for the main products, then choose which bundle items belong to this bar."
-                        : "Choose the bundle items for this module here. Trigger products stay separate from the bundle-item pool."}
-                    </div>
                     <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                       <div className="text-[12px] text-[#5c6166]">
-                        {activeBarProductCount} product
-                        {activeBarProductCount === 1 ? "" : "s"} currently in this bar
+                        {activeBarProductCount} item
+                        {activeBarProductCount === 1 ? "" : "s"}
                       </div>
                       {selectBundleProductsForBar ? (
                         <Button size="small" onClick={() => selectBundleProductsForBar(activeBar.id)}>
@@ -353,67 +339,27 @@ export default function CompleteBundleEditor({
 
                   {activeBarProductCount === 0 ? (
                     <div className="mt-3 rounded-[10px] border border-dashed border-[#dfe3e8] bg-white px-4 py-4 text-[13px] text-[#5c6166]">
-                      {simpleModeContext === "primary"
-                        ? "No bundle items yet. Select the main trigger products above, then add bundle items for this bar."
-                        : "No bundle items yet. Add products that customers can combine with the trigger product."}
+                      No bundle items yet.
                     </div>
                   ) : (
-                    <div className="mt-3 space-y-4">
-                      <div className="space-y-2">
-                        {activeBar.products.map((product) => {
-                          const selectedVariant =
-                            product.variants?.find((variant) => variant.id === product.selectedVariantId) ||
-                            product.variants?.[0];
-
-                          return (
-                            <div
-                              key={product.productId}
-                              className="flex items-center gap-3 rounded-[10px] border border-[#e3e8ed] bg-white px-3 py-3"
-                            >
-                              <img
-                                src={product.image || "https://via.placeholder.com/48"}
-                                alt={product.title || "Bundle product"}
-                                className="h-10 w-10 rounded-[8px] border border-[#edf1f4] object-cover"
-                              />
-                              <div className="min-w-0 flex-1">
-                                <div className="truncate text-[13px] font-medium text-[#1c1f23]">
-                                  {product.title || "Bundle item"}
-                                </div>
-                                <div className="mt-1 truncate text-[12px] text-[#5c6166]">
-                                  {selectedVariant?.title && selectedVariant.title !== "Default Title"
-                                    ? selectedVariant.title
-                                    : "Default variant"}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
+                    <div className="mt-3 rounded-[10px] border border-[#e3e8ed] bg-white p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-[14px] font-medium text-[#1c1f23]">Bundle items</div>
+                        {selectBundleProductsForBar ? (
+                          <Button size="small" onClick={() => selectBundleProductsForBar(activeBar.id)}>
+                            Edit bundle items
+                          </Button>
+                        ) : null}
                       </div>
-
-                      <div className="rounded-[10px] border border-[#e3e8ed] bg-white p-4">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="text-[14px] font-medium text-[#1c1f23]">Bundle items</div>
-                          {selectBundleProductsForBar ? (
-                            <Button size="small" onClick={() => selectBundleProductsForBar(activeBar.id)}>
-                              Edit bundle items
-                            </Button>
-                          ) : null}
-                        </div>
-                        <div className="mt-1 text-[12px] text-[#5c6166]">
-                          Choose the products that can join the trigger product in this bar. For
-                          product-level bundles, customers can still choose the variant on the
-                          storefront. For variant-level bundles, the configured variant is locked.
-                        </div>
-                        <div className="mt-4 flex flex-col gap-4">
-                          {activeBar.products.map((product, productIdx) =>
-                            renderCompleteBundleProductPricingCard(
-                              activeBar,
-                              product,
-                              productIdx,
-                              true,
-                            ),
-                          )}
-                        </div>
+                      <div className="mt-4 flex flex-col gap-4">
+                        {activeBar.products.map((product, productIdx) =>
+                          renderCompleteBundleProductPricingCard(
+                            activeBar,
+                            product,
+                            productIdx,
+                            true,
+                          ),
+                        )}
                       </div>
                     </div>
                   )}
