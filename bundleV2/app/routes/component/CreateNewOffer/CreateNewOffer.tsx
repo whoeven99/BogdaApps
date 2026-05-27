@@ -506,6 +506,7 @@ type CompleteBundleProductDraft = {
   price: string;
   defaultVariantId?: string;
   selectedVariantId?: string;
+  selectionMode?: "product" | "variant";
   selectedOptions?: Record<string, string>;
   pricing?: { mode: CompleteBundlePricingMode; value: number };
   variants?: Array<{
@@ -1275,81 +1276,6 @@ export function CreateNewOffer({
     });
     return Array.from(deduped.values());
   };
-  const mapScopedProductsToCompleteBundleProducts = (
-    scopeProducts: typeof selectedProductsData,
-    previousProducts: CompleteBundleProduct[] = [],
-  ): CompleteBundleProduct[] => {
-    const previousByLookupKey = new Map<string, CompleteBundleProduct>();
-    previousProducts.forEach((product) => {
-      getShopifyProductLookupKeys(String(product.productId || "")).forEach((key) => {
-        if (!previousByLookupKey.has(key)) {
-          previousByLookupKey.set(key, product);
-        }
-      });
-    });
-
-    return scopeProducts.map((scopeProduct) => {
-      const lookupKeys = getShopifyProductLookupKeys(String(scopeProduct.id || ""));
-      const catalogProduct =
-        lookupKeys
-          .map((key) => storeProductMap.get(key))
-          .find(Boolean) || null;
-      const previousProduct =
-        lookupKeys
-          .map((key) => previousByLookupKey.get(key))
-          .find(Boolean) || null;
-      const variants = Array.isArray(catalogProduct?.variants)
-        ? catalogProduct.variants.map((variant) => ({
-            id: String(variant.id || ""),
-            title: String(variant.title || ""),
-            price: String(variant.price || ""),
-            selectedOptions: Array.isArray(variant.selectedOptions)
-              ? variant.selectedOptions.map((opt) => ({
-                  name: String(opt.name || ""),
-                  value: String(opt.value || ""),
-                }))
-              : [],
-          }))
-        : Array.isArray(previousProduct?.variants)
-          ? previousProduct.variants
-          : [];
-      const preferredVariantId = String(previousProduct?.selectedVariantId || "");
-      const chosenVariant =
-        variants.find((variant) => String(variant.id) === preferredVariantId) || variants[0];
-
-      return {
-        productId: String(scopeProduct.id || ""),
-        handle: previousProduct?.handle || catalogProduct?.handle || "",
-        title: catalogProduct?.name || scopeProduct.title || previousProduct?.title || "Product",
-        image: catalogProduct?.image || scopeProduct.image || previousProduct?.image || "",
-        price:
-          chosenVariant?.price ||
-          catalogProduct?.price ||
-          scopeProduct.price ||
-          previousProduct?.price ||
-          "",
-        defaultVariantId:
-          previousProduct?.defaultVariantId || String(variants[0]?.id || ""),
-        selectedVariantId:
-          chosenVariant?.id ||
-          previousProduct?.selectedVariantId ||
-          String(variants[0]?.id || ""),
-        selectedOptions:
-          previousProduct?.selectedOptions &&
-          Object.keys(previousProduct.selectedOptions).length > 0
-            ? previousProduct.selectedOptions
-            : Object.fromEntries(
-                (chosenVariant?.selectedOptions || []).map((opt) => [opt.name, opt.value]),
-              ),
-        pricing: previousProduct?.pricing ?? { mode: "full_price", value: 0 },
-        variants,
-      };
-    });
-  };
-  const completeBundleProductsMatch = (
-    left: CompleteBundleProduct[],
-    right: CompleteBundleProduct[],
-  ) => JSON.stringify(left) === JSON.stringify(right);
   const [collectionSelectionModalOpen, setCollectionSelectionModalOpen] = useState(false);
   const [pendingCollectionIds, setPendingCollectionIds] = useState<string[]>([]);
   const [triggerSelection, setTriggerSelection] = useState<TriggerSelectionMeta>(null);
@@ -1785,6 +1711,7 @@ export function CreateNewOffer({
           price: item.variants?.[0]?.price || "€0.00",
           defaultVariantId: item.variants?.[0]?.id ? String(item.variants[0].id) : "",
           selectedVariantId: item.variants?.[0]?.id ? String(item.variants[0].id) : "",
+            selectionMode: "product" as const,
           selectedOptions: {},
           variants: Array.isArray(item.variants)
             ? item.variants.map((variant: any) => ({
@@ -1826,6 +1753,7 @@ export function CreateNewOffer({
             price: p.price,
             defaultVariantId: p.defaultVariantId,
             selectedVariantId: p.selectedVariantId,
+            selectionMode: prev?.selectionMode === "variant" ? "variant" : "product",
             selectedOptions: p.selectedOptions,
             variants: p.variants,
             pricing: prev?.pricing ?? p.pricing ?? { mode: "full_price" as const, value: 0 },
@@ -2099,28 +2027,6 @@ export function CreateNewOffer({
       return changed ? next : prev;
     });
   }, [offerType, storeProductMap]);
-  useEffect(() => {
-    if (!completeBundleBars.some((bar) => !isCompleteBundleSingleBar(bar))) return;
-    setCompleteBundleBars((prev) => {
-      let changed = false;
-      const next = prev.map((bar) => {
-        if (isCompleteBundleSingleBar(bar)) return bar;
-        const syncedProducts = mapScopedProductsToCompleteBundleProducts(
-          selectedProductsData,
-          bar.products,
-        );
-        if (completeBundleProductsMatch(bar.products, syncedProducts)) {
-          return bar;
-        }
-        changed = true;
-        return {
-          ...bar,
-          products: syncedProducts,
-        };
-      });
-      return changed ? normalizeCompleteBundleBars(next) : prev;
-    });
-  }, [completeBundleBars, selectedProductsData, storeProducts]);
   const updateBundleBarProductVariant = (
     barId: string,
     productId: string,
@@ -2145,6 +2051,29 @@ export function CreateNewOffer({
               price: hit?.price || product.price,
             };
           }),
+        };
+      }),
+    );
+  };
+
+  const updateBundleBarProductSelectionMode = (
+    barId: string,
+    productId: string,
+    selectionMode: "product" | "variant",
+  ) => {
+    setCompleteBundleBars((prev) =>
+      prev.map((bar) => {
+        if (bar.id !== barId) return bar;
+        return {
+          ...bar,
+          products: bar.products.map((product) =>
+            product.productId === productId
+              ? {
+                  ...product,
+                  selectionMode,
+                }
+              : product,
+          ),
         };
       }),
     );
@@ -2213,6 +2142,7 @@ export function CreateNewOffer({
     const selectedVariant =
       product.variants?.find((v) => v.id === product.selectedVariantId) ||
       product.variants?.[0];
+    const selectionMode = product.selectionMode === "variant" ? "variant" : "product";
     const optionNames = Array.from(
       new Set(
         (product.variants || [])
@@ -2252,11 +2182,43 @@ export function CreateNewOffer({
           </div>
         </div>
         <div className="rounded-[8px] border border-[#edf1f4] bg-[#f6f8f9] px-3 py-2 text-[12px] text-[#5c6166]">
-          This item participates in the bundle-level order discount. Configure pricing on the
-          bundle bar, not per product.
+          {selectionMode === "variant"
+            ? "This bundle item is locked to one variant. The storefront will add the configured variant when the bundle is selected."
+            : "This bundle item is product-level. Customers can still choose the variant on the storefront, and the selected variant becomes the cart line."}
         </div>
         <div className="mt-3">
-          <div className="text-[12px] font-medium mb-1 text-[#1c1f23]">Variant / Option preview</div>
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+            <label className="block text-[12px] font-medium text-[#1c1f23]">
+              Bundle level
+              <Select
+                size="small"
+                className="mt-1 w-full"
+                value={selectionMode}
+                onChange={(value) =>
+                  updateBundleBarProductSelectionMode(
+                    bar.id,
+                    product.productId,
+                    String(value) === "variant" ? "variant" : "product",
+                  )
+                }
+                options={[
+                  {
+                    label: "Product level",
+                    value: "product",
+                  },
+                  {
+                    label: "Variant level",
+                    value: "variant",
+                  },
+                ]}
+              />
+            </label>
+          </div>
+          <div className="mt-3 text-[12px] font-medium mb-1 text-[#1c1f23]">
+            {selectionMode === "variant"
+              ? "Locked variant"
+              : "Default variant / storefront preview"}
+          </div>
           {Array.isArray(product.variants) &&
             product.variants.length > 0 &&
             optionNames.length === 0 && (
@@ -2303,6 +2265,15 @@ export function CreateNewOffer({
               })}
             </div>
           ) : null}
+          {selectionMode === "product" ? (
+            <div className="mt-2 text-[11px] text-[#5c6166]">
+              Customers can change the variant on the storefront before the bundle is added to cart.
+            </div>
+          ) : (
+            <div className="mt-2 text-[11px] text-[#5c6166]">
+              The bundle discount will only match this configured variant.
+            </div>
+          )}
         </div>
       </div>
     );

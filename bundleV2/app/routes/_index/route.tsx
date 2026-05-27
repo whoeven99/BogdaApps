@@ -49,6 +49,7 @@ import {
   normalizeIpCountryCodes,
   normalizeTargetMarkets,
   LONG_RUNNING_OFFER_END_TIME_ISO,
+  isCompleteBundleSingleBar,
   parseProgressiveGiftsConfig,
   progressiveGiftsConfigToStorableJson,
   parseCompleteBundleConfig,
@@ -2341,11 +2342,25 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         );
       }
       const hasInvalidBar = completeBundle.bars.some(
-        (bar) => !bar.products.length || !Number.isFinite(Number(bar.quantity)) || Number(bar.quantity) < 1,
+        (bar) => {
+          if (isCompleteBundleSingleBar(bar)) {
+            return false;
+          }
+          const minQuantity = Math.max(1, Math.trunc(Number(bar.minQuantity) || 1));
+          const maxQuantity = Math.max(
+            minQuantity,
+            Math.trunc(Number(bar.maxQuantity) || Number(bar.quantity) || 1),
+          );
+          return (
+            !bar.products.length ||
+            bar.products.length < minQuantity ||
+            maxQuantity > bar.products.length
+          );
+        },
       );
       if (hasInvalidBar) {
         return offerActionErrorResponse(
-          "Each complete bundle bar must have products and a valid quantity.",
+          "Each complete bundle bar must have enough bundle items for its min/max quantity range.",
           400,
         );
       }

@@ -1088,11 +1088,11 @@ function CompleteBundleModuleDetail({
         {isPrimaryTemplate ? (
           <div className="mb-4 space-y-3">
             <CompactActionRow
-              title="Applies to products"
+              title="Trigger products"
               meta={
                 draft.selectedProductsData.length > 0
                   ? `${draft.selectedProductsData.length} selected${totalStoreProductsCount > 0 ? ` of ${totalStoreProductsCount} products` : ""}`
-                  : "Choose which products should show this bundle offer."
+                  : "Choose which main products should show this bundle offer."
               }
               actionLabel={
                 draft.selectedProductsData.length > 0 ? "Edit products" : "Select products"
@@ -1100,9 +1100,8 @@ function CompleteBundleModuleDetail({
               onAction={onEditTriggerProducts}
             />
             <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
-              Select the shared product scope for this offer first. Every non-single bundle bar
-              will reuse that same scope, and the current PDP product will be excluded
-              automatically on the storefront.
+              Step 2 is split into two parts: first choose the trigger products that display the
+              offer, then configure the bundle-item pool for each non-single bar.
             </div>
           </div>
         ) : null}
@@ -1113,6 +1112,7 @@ function CompleteBundleModuleDetail({
           addCompleteBundleBar={actions.addCompleteBundleBar}
           removeCompleteBundleBar={actions.removeCompleteBundleBar}
           updateCompleteBundleBar={actions.updateCompleteBundleBar}
+          selectBundleProductsForBar={actions.handleSelectProductsForBundleBar}
           renderCompleteBundleProductPricingCard={renderCompleteBundleProductPricingCard}
           updateRuleValues={actions.updateUnifiedRuleValues}
           updateRulePresentation={actions.updateUnifiedRulePresentation}
@@ -1151,6 +1151,15 @@ export default function StepTwoCompositionBuilder({
 }: Props) {
   const [activeModuleId, setActiveModuleId] = useState<ActiveModuleId>(null);
   const isProgressiveGiftsTemplate = templateOfferType === "progressive-gifts";
+  const primaryOfferOptionId =
+    templateOfferType === "subscription"
+      ? "subscription"
+      : templateOfferType === "complete-bundle"
+        ? "complete_bundle"
+        : null;
+  const [activeOfferOptionId, setActiveOfferOptionId] = useState<string | null>(
+    primaryOfferOptionId,
+  );
   const visibleModules = useMemo(() => modules, [modules]);
   const visibleAddBarMenuItems = useMemo(
     () =>
@@ -1235,6 +1244,30 @@ export default function StepTwoCompositionBuilder({
     draft.freeGiftTriggerProducts.length;
   const isPrimaryCompleteBundle = draft.offerType === "complete-bundle";
   const enabledModuleCount = visibleModules.filter((module) => module.enabled).length;
+
+  useEffect(() => {
+    const completeBundleOptionEnabled =
+      draft.offerType === "complete-bundle" ||
+      draft.completeBundleBars.some((bar) => !isCompleteBundleSingleBar(bar));
+    const activeOfferOptionStillValid =
+      activeOfferOptionId === "subscription"
+        ? draft.subscriptionEnabled || primaryOfferOptionId === "subscription"
+        : activeOfferOptionId === "complete_bundle"
+          ? completeBundleOptionEnabled || primaryOfferOptionId === "complete_bundle"
+          : activeOfferOptionId == null;
+
+    if (activeOfferOptionStillValid) {
+      return;
+    }
+
+    setActiveOfferOptionId(primaryOfferOptionId);
+  }, [
+    activeOfferOptionId,
+    draft.completeBundleBars,
+    draft.offerType,
+    draft.subscriptionEnabled,
+    primaryOfferOptionId,
+  ]);
 
   const renderBarActions = (bar: CampaignBarItem, index: number) => (
     <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
@@ -1774,73 +1807,126 @@ export default function StepTwoCompositionBuilder({
         Configure purchase-path options that sit beside the main offer bars. Subscription is
         treated here as an offer option instead of a separate component.
       </div>
-      <div className="rounded-[12px] border border-[#e3e8ed] bg-white p-4">
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <div>
-            <div className="text-[14px] font-medium text-[#1c1f23]">Subscription option</div>
-            <div className="mt-1 text-[12px] text-[#5c6166]">
-              Add a recurring purchase choice alongside the one-time path.
+      {[
+        {
+          id: "subscription" as const,
+          title: "Subscription option",
+          description: "Add a recurring purchase choice alongside the one-time path.",
+          enabled: draft.subscriptionEnabled,
+          toggleable: true,
+          detail: (
+            <SubscriptionSettingsEditor
+              subscriptionEnabled={draft.subscriptionEnabled}
+              setSubscriptionEnabled={actions.setSubscriptionEnabled}
+              subscriptionTitle={draft.subscriptionTitle}
+              setSubscriptionTitle={actions.setSubscriptionTitle}
+              subscriptionSubtitle={draft.subscriptionSubtitle}
+              setSubscriptionSubtitle={actions.setSubscriptionSubtitle}
+              oneTimeTitle={draft.oneTimeTitle}
+              setOneTimeTitle={actions.setOneTimeTitle}
+              oneTimeSubtitle={draft.oneTimeSubtitle}
+              setOneTimeSubtitle={actions.setOneTimeSubtitle}
+              subscriptionPosition={draft.subscriptionPosition}
+              setSubscriptionPosition={actions.setSubscriptionPosition}
+              subscriptionDefaultSelected={draft.subscriptionDefaultSelected}
+              setSubscriptionDefaultSelected={actions.setSubscriptionDefaultSelected}
+              shouldShowSubscriptionPreview={draft.shouldShowSubscriptionPreview}
+              allSelectedProductsHaveSubscription={draft.allSelectedProductsHaveSubscription}
+              shouldShowSubscriptionExplanation={draft.shouldShowSubscriptionExplanation}
+              subscriptionExplanationTitle={draft.subscriptionExplanationTitle}
+              subscriptionExplanationBody={draft.subscriptionExplanationBody}
+            />
+          ),
+        },
+        {
+          id: "complete_bundle" as const,
+          title: "Complete bundle option",
+          description: "Add a scoped bundle path alongside the base purchase option.",
+          enabled: completeBundleOptionEnabled,
+          toggleable: !isPrimaryCompleteBundle,
+          detail: (
+            <CompleteBundleModuleDetail
+              draft={draft}
+              actions={actions}
+              totalStoreProductsCount={totalStoreProductsCount}
+              onEditTriggerProducts={onCustomFilterTriggerProducts}
+              renderCompleteBundleProductPricingCard={renderCompleteBundleProductPricingCard}
+              embedded
+            />
+          ),
+        },
+      ].map((option) => {
+        const isExpanded = activeOfferOptionId === option.id;
+        return (
+          <div key={option.id} className="rounded-[12px] border border-[#e3e8ed] bg-white p-4">
+            <div className="flex items-start justify-between gap-3">
+              <button
+                type="button"
+                onClick={() =>
+                  setActiveOfferOptionId((prev) =>
+                    prev === option.id && option.id !== primaryOfferOptionId ? null : option.id,
+                  )
+                }
+                className="min-w-0 flex-1 bg-transparent p-0 text-left"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="text-[14px] font-medium text-[#1c1f23]">{option.title}</div>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                      option.enabled
+                        ? "bg-[#e8f7ef] text-[#0f8a4b]"
+                        : "bg-[#f4f6f8] text-[#5c6166]"
+                    }`}
+                  >
+                    {option.enabled ? "Enabled" : "Optional"}
+                  </span>
+                  {!option.toggleable ? (
+                    <span className="rounded-full bg-[#f4f6f8] px-2 py-0.5 text-[11px] font-medium text-[#5c6166]">
+                      Active template
+                    </span>
+                  ) : null}
+                </div>
+                <div className="mt-1 text-[12px] text-[#5c6166]">{option.description}</div>
+              </button>
+              <div className="flex items-center gap-2">
+                {isExpanded ? (
+                  <ChevronUp size={16} aria-hidden className="text-[#5c6166]" />
+                ) : (
+                  <ChevronDown size={16} aria-hidden className="text-[#5c6166]" />
+                )}
+                {option.toggleable ? (
+                  <Switch
+                    checked={option.enabled}
+                    onClick={(checked, event) => {
+                      event?.stopPropagation();
+                      if (option.id === "subscription") {
+                        actions.setSubscriptionEnabled(Boolean(checked));
+                      }
+                      if (option.id === "complete_bundle") {
+                        if (checked && draft.completeBundleBars.length === 0) {
+                          actions.addCompleteBundleBar("quantity-break-same");
+                        }
+                        if (!checked) {
+                          actions.clearCompleteBundleBars();
+                        }
+                      }
+                      if (checked) {
+                        setActiveOfferOptionId(option.id);
+                      } else if (activeOfferOptionId === option.id) {
+                        setActiveOfferOptionId(primaryOfferOptionId);
+                      }
+                    }}
+                  />
+                ) : null}
+              </div>
             </div>
+
+            {isExpanded ? (
+              <div className="mt-4 border-t border-[#e8ebee] pt-4">{option.detail}</div>
+            ) : null}
           </div>
-          <span
-            className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-              draft.subscriptionEnabled
-                ? "bg-[#e8f7ef] text-[#0f8a4b]"
-                : "bg-[#f4f6f8] text-[#5c6166]"
-            }`}
-          >
-            {draft.subscriptionEnabled ? "Enabled" : "Optional"}
-          </span>
-        </div>
-        <SubscriptionSettingsEditor
-          subscriptionEnabled={draft.subscriptionEnabled}
-          setSubscriptionEnabled={actions.setSubscriptionEnabled}
-          subscriptionTitle={draft.subscriptionTitle}
-          setSubscriptionTitle={actions.setSubscriptionTitle}
-          subscriptionSubtitle={draft.subscriptionSubtitle}
-          setSubscriptionSubtitle={actions.setSubscriptionSubtitle}
-          oneTimeTitle={draft.oneTimeTitle}
-          setOneTimeTitle={actions.setOneTimeTitle}
-          oneTimeSubtitle={draft.oneTimeSubtitle}
-          setOneTimeSubtitle={actions.setOneTimeSubtitle}
-          subscriptionPosition={draft.subscriptionPosition}
-          setSubscriptionPosition={actions.setSubscriptionPosition}
-          subscriptionDefaultSelected={draft.subscriptionDefaultSelected}
-          setSubscriptionDefaultSelected={actions.setSubscriptionDefaultSelected}
-          shouldShowSubscriptionPreview={draft.shouldShowSubscriptionPreview}
-          allSelectedProductsHaveSubscription={draft.allSelectedProductsHaveSubscription}
-          shouldShowSubscriptionExplanation={draft.shouldShowSubscriptionExplanation}
-          subscriptionExplanationTitle={draft.subscriptionExplanationTitle}
-          subscriptionExplanationBody={draft.subscriptionExplanationBody}
-        />
-      </div>
-      <div className="rounded-[12px] border border-[#e3e8ed] bg-white p-4">
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <div>
-            <div className="text-[14px] font-medium text-[#1c1f23]">Complete bundle option</div>
-            <div className="mt-1 text-[12px] text-[#5c6166]">
-              Add a scoped bundle path alongside the base purchase option.
-            </div>
-          </div>
-          <span
-            className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-              completeBundleOptionEnabled
-                ? "bg-[#e8f7ef] text-[#0f8a4b]"
-                : "bg-[#f4f6f8] text-[#5c6166]"
-            }`}
-          >
-            {completeBundleOptionEnabled ? "Enabled" : "Optional"}
-          </span>
-        </div>
-        <CompleteBundleModuleDetail
-          draft={draft}
-          actions={actions}
-          totalStoreProductsCount={totalStoreProductsCount}
-          onEditTriggerProducts={onCustomFilterTriggerProducts}
-          renderCompleteBundleProductPricingCard={renderCompleteBundleProductPricingCard}
-          embedded
-        />
-      </div>
+        );
+      })}
     </div>
   );
 

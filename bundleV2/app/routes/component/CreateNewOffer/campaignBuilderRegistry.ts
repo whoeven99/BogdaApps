@@ -156,8 +156,8 @@ function getCompleteBundleRules(
 }
 
 function getCompleteBundleValidationState(ctx: CampaignBuilderRegistryContext) {
-  const scopedProductCount = ctx.selectedProductsData.length;
-  const hasNoTriggerProducts = scopedProductCount < 2;
+  const triggerProductCount = ctx.selectedProductsData.length;
+  const hasNoTriggerProducts = triggerProductCount < 1;
   const hasInvalidBar = ctx.completeBundleBars.some((bar) => {
     if (isCompleteBundleSingleBar(bar)) {
       return false;
@@ -167,8 +167,8 @@ function getCompleteBundleValidationState(ctx: CampaignBuilderRegistryContext) {
       min,
       Math.trunc(Number(bar.maxQuantity) || Number(bar.quantity) || 1),
     );
-    const maxSelectableWithinScope = Math.max(0, scopedProductCount - 1);
-    return max < min || min > maxSelectableWithinScope;
+    const bundleItemCount = Array.isArray(bar.products) ? bar.products.length : 0;
+    return bundleItemCount < min || max < min || max > bundleItemCount;
   });
   return {
     hasNoTriggerProducts,
@@ -427,7 +427,7 @@ const BEHAVIOR_BY_OFFER_TYPE: Record<OfferTypeId, CampaignBuilderBehavior> = {
       const completeBundleRules = getCompleteBundleRules(ctx);
       const uniqueProductCount =
         getCompleteBundleScopedProductCount(completeBundleRules);
-      return `${ctx.selectedProductsData.length} scoped products, ${uniqueProductCount} synced into bundle bars`;
+      return `${ctx.selectedProductsData.length} trigger products, ${uniqueProductCount} bundle items across configured bars`;
     },
     getLogicSummary: (ctx) => {
       const completeBundleRules = getCompleteBundleRules(ctx);
@@ -440,7 +440,7 @@ const BEHAVIOR_BY_OFFER_TYPE: Record<OfferTypeId, CampaignBuilderBehavior> = {
       return hasNoTriggerProducts ||
         hasInvalidBar ||
         completeBundleRules.length === 0
-        ? "Please select at least 2 products for the shared offer scope and make sure every bundle bar fits within the number of scoped products available after excluding the current PDP product."
+        ? "Please select at least 1 trigger product and make sure every bundle bar has enough bundle items for its min/max selection range."
         : null;
     },
     validateFinalSubmitScopeAndLogic: (ctx) => {
@@ -450,7 +450,7 @@ const BEHAVIOR_BY_OFFER_TYPE: Record<OfferTypeId, CampaignBuilderBehavior> = {
       return hasNoTriggerProducts ||
         completeBundleRules.length === 0 ||
         hasInvalidBar
-        ? "Complete bundle offers require a shared product scope with at least 2 products and valid min/max item limits that fit inside that scope."
+        ? "Complete bundle offers require trigger products plus valid bundle-item pools for every configured bar."
         : null;
     },
   },

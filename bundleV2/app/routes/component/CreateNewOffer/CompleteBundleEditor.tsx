@@ -28,6 +28,7 @@ type Props = {
   addCompleteBundleBar: (type: "quantity-break-same") => void;
   removeCompleteBundleBar: (barId: string) => void;
   updateCompleteBundleBar: (barId: string, patch: Partial<CompleteBundleBar>) => void;
+  selectBundleProductsForBar?: (barId: string) => void;
   renderCompleteBundleProductPricingCard: (
     bar: CompleteBundleBar,
     product: CompleteBundleProduct,
@@ -48,6 +49,7 @@ export default function CompleteBundleEditor({
   addCompleteBundleBar,
   removeCompleteBundleBar,
   updateCompleteBundleBar,
+  selectBundleProductsForBar,
   renderCompleteBundleProductPricingCard,
   section = "all",
   simpleMode = false,
@@ -218,12 +220,12 @@ export default function CompleteBundleEditor({
                             value={
                               isSingleBar
                                 ? "Current product only"
-                                : "Current product + bundle items"
+                                : "Trigger products + bundle items"
                             }
                             description={
                               isSingleBar
                                 ? "This bar preserves the standalone purchase path for the current product."
-                                : "The current PDP product is always included. The selected bundle items join it and the discount applies to the whole bundle subtotal."
+                                : "Step 2 first selects which products can trigger this offer. This bar then defines which bundle items join those trigger products and how the whole bundle is priced."
                             }
                           />
                           <OfferRuleSummaryBox
@@ -236,13 +238,13 @@ export default function CompleteBundleEditor({
                             description={
                               isSingleBar
                                 ? "No bundle items are attached to this bar, and it stays at standard price."
-                                : "All non-single bars reuse the shared offer product scope. The current PDP product is excluded automatically at runtime."
+                                : "Customers select bundle items from the product pool configured for this bar."
                             }
                           />
                         </div>
                         {!isSingleBar ? (
                           <div className="mt-3 text-[12px] text-[#5c6166]">
-                            {bar.products.length} scoped product
+                            {bar.products.length} bundle item
                             {bar.products.length === 1 ? "" : "s"} synced to this bar
                           </div>
                         ) : null}
@@ -330,23 +332,30 @@ export default function CompleteBundleEditor({
                   </div>
 
                   <div className="mt-4 rounded-[10px] bg-[#f6f8f9] px-4 py-4">
-                    <div className="text-[14px] font-medium text-[#1c1f23]">Shared offer scope</div>
+                    <div className="text-[14px] font-medium text-[#1c1f23]">Bundle item pool</div>
                     <div className="mt-1 text-[12px] text-[#5c6166]">
                       {simpleModeContext === "primary"
-                        ? "Use the product selector above to define the offer scope. Every bundle bar uses that same scope, and the current PDP product is excluded automatically when customers pick bundle items."
-                        : "This module reuses the campaign product scope. Bundle bars no longer maintain a separate product pool."}
+                        ? "Use the trigger-product selector above for the main products, then choose which bundle items belong to this bar."
+                        : "Choose the bundle items for this module here. Trigger products stay separate from the bundle-item pool."}
                     </div>
-                    <div className="mt-3 text-[12px] text-[#5c6166]">
-                      {activeBarProductCount} product
-                      {activeBarProductCount === 1 ? "" : "s"} currently in scope
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                      <div className="text-[12px] text-[#5c6166]">
+                        {activeBarProductCount} product
+                        {activeBarProductCount === 1 ? "" : "s"} currently in this bar
+                      </div>
+                      {selectBundleProductsForBar ? (
+                        <Button size="small" onClick={() => selectBundleProductsForBar(activeBar.id)}>
+                          {activeBarProductCount > 0 ? "Edit bundle items" : "Select bundle items"}
+                        </Button>
+                      ) : null}
                     </div>
                   </div>
 
                   {activeBarProductCount === 0 ? (
                     <div className="mt-3 rounded-[10px] border border-dashed border-[#dfe3e8] bg-white px-4 py-4 text-[13px] text-[#5c6166]">
                       {simpleModeContext === "primary"
-                        ? "No scoped products yet. Select the products this offer should run on first."
-                        : "No scoped products yet. Select the products this offer should run on first."}
+                        ? "No bundle items yet. Select the main trigger products above, then add bundle items for this bar."
+                        : "No bundle items yet. Add products that customers can combine with the trigger product."}
                     </div>
                   ) : (
                     <div className="mt-3 space-y-4">
@@ -382,11 +391,18 @@ export default function CompleteBundleEditor({
                       </div>
 
                       <div className="rounded-[10px] border border-[#e3e8ed] bg-white p-4">
-                        <div className="text-[14px] font-medium text-[#1c1f23]">Scoped products</div>
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-[14px] font-medium text-[#1c1f23]">Bundle items</div>
+                          {selectBundleProductsForBar ? (
+                            <Button size="small" onClick={() => selectBundleProductsForBar(activeBar.id)}>
+                              Edit bundle items
+                            </Button>
+                          ) : null}
+                        </div>
                         <div className="mt-1 text-[12px] text-[#5c6166]">
-                          These products come from the shared offer scope. On the storefront, the
-                          current PDP product is excluded automatically, and the remaining scoped
-                          products become the selectable bundle items.
+                          Choose the products that can join the trigger product in this bar. For
+                          product-level bundles, customers can still choose the variant on the
+                          storefront. For variant-level bundles, the configured variant is locked.
                         </div>
                         <div className="mt-4 flex flex-col gap-4">
                           {activeBar.products.map((product, productIdx) =>
@@ -410,10 +426,10 @@ export default function CompleteBundleEditor({
           <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3">
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <div>
-                <div className="text-[14px] font-medium text-[#1c1f23]">Shared offer scope</div>
+                <div className="text-[14px] font-medium text-[#1c1f23]">Bundle item pool</div>
                 <div className="mt-1 text-[12px] text-[#5c6166]">
-                  Every non-single bar reuses the campaign product scope. The current PDP product is
-                  excluded automatically when customers build the bundle.
+                  Trigger products are configured at the campaign level. Each non-single bar keeps
+                  its own bundle-item pool.
                 </div>
               </div>
               <div className="text-[12px] text-[#5c6166]">
@@ -457,15 +473,21 @@ export default function CompleteBundleEditor({
             </div>
             <div className="mt-3 pt-3 border-t border-[#ebedef]">
               <div className="text-[13px] font-medium text-[#1c1f23] mb-2">
-                Scoped products
+                Bundle items
               </div>
               <div className="mb-2 text-[11px] text-[#5c6166]">
-                Product scope is shared across bars. Edit the campaign product selection instead of
-                changing items per bar.
+                Select the products that can join the trigger product for this bar.
               </div>
+              {selectBundleProductsForBar ? (
+                <div className="mb-3">
+                  <Button size="small" onClick={() => selectBundleProductsForBar(activeBar.id)}>
+                    {activeBar.products.length > 0 ? "Edit bundle items" : "Select bundle items"}
+                  </Button>
+                </div>
+              ) : null}
               {activeBar.products.length === 0 ? (
                 <div className="text-[12px] text-[#5c6166]">
-                  This bar has no scoped products yet. Select campaign products to continue.
+                  This bar has no bundle items yet. Select products to continue.
                 </div>
               ) : (
                 <div className="flex flex-col gap-4">

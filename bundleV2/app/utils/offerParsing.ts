@@ -1189,6 +1189,7 @@ export type CompleteBundleProduct = {
   price?: string;
   defaultVariantId?: string;
   selectedVariantId?: string;
+  selectionMode?: "product" | "variant";
   // 变体 option 值（如 Color/Size），用于前端预览回显
   selectedOptions?: Record<string, string>;
   /** 单件商品的定价：Full price / 百分比 / 立减金额 / 固定价 */
@@ -3745,6 +3746,11 @@ export function parseCompleteBundleConfig(
                 price: String((p as { price?: unknown }).price || ""),
                 defaultVariantId: String((p as { defaultVariantId?: unknown }).defaultVariantId || ""),
                 selectedVariantId: String((p as { selectedVariantId?: unknown }).selectedVariantId || ""),
+                selectionMode: (
+                  String((p as { selectionMode?: unknown }).selectionMode || "") === "variant"
+                    ? "variant"
+                    : "product"
+                ) as "product" | "variant",
                 selectedOptions:
                   (p as { selectedOptions?: unknown }).selectedOptions &&
                   typeof (p as { selectedOptions?: unknown }).selectedOptions === "object"
@@ -3867,6 +3873,7 @@ export function buildCompleteBundleConfig(
                   productId: String(p.productId).trim(),
                   // 保留选中变体 ID，确保 storefront 仍可直接 /cart/add
                   selectedVariantId: String(p.selectedVariantId || ""),
+                  selectionMode: p.selectionMode === "variant" ? "variant" : "product",
                   // 仅保留运行必需字段，展示数据统一按 productId 动态补全
                   pricing: (() => {
                     const pmRaw = String(p.pricing?.mode || "full_price");
@@ -4130,13 +4137,20 @@ const OFFER_TYPE_PAYLOAD_STRATEGIES: Record<string, OfferTypePayloadStrategy> = 
               const pv = Number.isFinite(Number(p.pricing?.value))
                 ? Number(p.pricing?.value)
                 : 0;
-              return { productId, pricing: { mode: pm, value: pv } };
+              return {
+                productId,
+                selectedVariantId: String(p.selectedVariantId || ""),
+                selectionMode: p.selectionMode === "variant" ? "variant" : "product",
+                pricing: { mode: pm, value: pv },
+              };
             })
             .filter(
               (
                 row,
               ): row is {
                 productId: string;
+                selectedVariantId: string;
+                selectionMode: "product" | "variant";
                 pricing: { mode: CompleteBundlePricingMode; value: number };
               } => row !== null,
             );

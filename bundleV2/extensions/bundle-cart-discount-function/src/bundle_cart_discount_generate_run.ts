@@ -155,6 +155,8 @@ type CompleteBundlePricingMode =
 
 type CompleteBundleProductRow = {
   productId: string;
+  selectedVariantId?: string;
+  selectionMode?: "product" | "variant";
   pricing: { mode: CompleteBundlePricingMode; value: number };
 };
 
@@ -316,7 +318,15 @@ function parseCompleteBundleBarsJson(
           );
           const pvRaw = Number((p as { pricing?: { value?: unknown } }).pricing?.value);
           const pv = Number.isFinite(pvRaw) ? pvRaw : 0;
-          products.push({ productId, pricing: { mode: pm, value: pv } });
+          products.push({
+            productId,
+            selectedVariantId: String((p as { selectedVariantId?: unknown }).selectedVariantId || ""),
+            selectionMode:
+              String((p as { selectionMode?: unknown }).selectionMode || "") === "variant"
+                ? "variant"
+                : "product",
+            pricing: { mode: pm, value: pv },
+          });
         }
       }
 
@@ -502,7 +512,14 @@ function calculateCompleteBundleDiscounts(
           if (line.merchandise.__typename !== "ProductVariant") return false;
           if (usedLineIds.has(line.id)) return false;
           const pid = line.merchandise.product?.id;
-          if (!productIdsMatch(pid, bundleItem.productId)) return false;
+          const variantId = line.merchandise.id;
+          const enforceVariant =
+            bundleItem.selectionMode === "variant" && !!bundleItem.selectedVariantId;
+          if (enforceVariant) {
+            if (!productIdsMatch(variantId, bundleItem.selectedVariantId || "")) return false;
+          } else if (!productIdsMatch(pid, bundleItem.productId)) {
+            return false;
+          }
           if (
             bar.excludeTriggerProduct &&
             anchorProductId &&

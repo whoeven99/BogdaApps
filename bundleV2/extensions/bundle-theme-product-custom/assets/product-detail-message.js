@@ -1128,6 +1128,7 @@ function parseCompleteBundleConfig(selectedProductsJson) {
                     image: String(p.image || ""),
                     price: String(p.price || ""),
                     selectedVariantId: String(p.selectedVariantId || p.defaultVariantId || ""),
+                    selectionMode: String(p.selectionMode || "") === "variant" ? "variant" : "product",
                     pricing: { mode: pm, value: pv },
                     variants: Array.isArray(p.variants)
                       ? p.variants
@@ -1503,7 +1504,10 @@ async function hydrateCompleteBundleOfferInPlace(offer) {
     }
   }
   if (changed) {
-    offer.selectedProductsJson = JSON.stringify({ bars: config.bars });
+    offer.selectedProductsJson = JSON.stringify({
+      triggerProductIds: config.triggerProductIds,
+      bars: config.bars,
+    });
   }
   return changed;
 }
@@ -1658,6 +1662,15 @@ async function hydrateDifferentProductsOfferInPlace(offer) {
 
 /** 当前栏内某商品在 widget 中选中的变体（与 __ciwiBundleState.selectedBundleVariants 同步） */
 function resolveCompleteBundleVariant(bar, product) {
+  if (String(product?.selectionMode || "") === "variant") {
+    const lockedVariantId =
+      product.selectedVariantId || product.variants?.[0]?.id || "";
+    return (
+      (product.variants || []).find((v) => String(v.id) === String(lockedVariantId)) ||
+      product.variants?.[0] ||
+      null
+    );
+  }
   const picked =
     window.__ciwiBundleState?.selectedBundleVariants?.[bar.id]?.[product.productId] || "";
   const vid = picked || product.selectedVariantId || product.variants?.[0]?.id || "";
@@ -1700,8 +1713,9 @@ function buildOneCompleteBundleProductHtml(bar, product, options) {
   const base = parseMoneyStringToNumber(v?.price || product.price);
   const variantOptions = Array.isArray(product.variants) ? product.variants : [];
   const curVid = v?.id || "";
+  const lockedToVariant = String(product?.selectionMode || "") === "variant";
   const optionHtml = variantOptions.length
-    ? `<select class="ciwi-bundle-variant-select" onchange="window.ciwiSelectBundleVariant('${esc(bar.id)}','${esc(
+    ? `<select class="ciwi-bundle-variant-select" ${lockedToVariant ? "disabled" : ""} onchange="window.ciwiSelectBundleVariant('${esc(bar.id)}','${esc(
         product.productId,
       )}', this.value)">${variantOptions
         .map(
@@ -1747,6 +1761,9 @@ function buildOneCompleteBundleProductHtml(bar, product, options) {
           <span style="font-weight:700;color:#1c1f23;">${esc(formatPrice(base))}</span>
         </div>
         ${optionHtml ? `<div style="margin-top:6px;">${optionHtml}</div>` : ""}
+        <div style="margin-top:6px;font-size:11px;color:#5c6166;">
+          ${lockedToVariant ? "Fixed variant for this bundle item" : "Variant is chosen by the customer on the storefront"}
+        </div>
       </div>
     </div>
   </div>`;
