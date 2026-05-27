@@ -48,7 +48,8 @@ interface AllOffersPageProps {
   ianaTimezone?: string;
   themeExtensionEnabled?: boolean;
   themeExtensionDetectionFailed?: boolean;
-  shop?: string;
+  themeEditorStoreId?: string;
+  themeEditorThemeId?: string;
   apiKey?: string;
 }
 
@@ -60,7 +61,8 @@ export function AllOffersPage({
   ianaTimezone = "UTC",
   themeExtensionEnabled = false,
   themeExtensionDetectionFailed = false,
-  shop = "",
+  themeEditorStoreId = "",
+  themeEditorThemeId = "",
   apiKey = "",
 }: AllOffersPageProps) {
   const themeExtensionStatus = themeExtensionDetectionFailed
@@ -119,9 +121,10 @@ export function AllOffersPage({
   };
 
   const handleThemeExtensionToggle = () => {
-    if (!shop || !apiKey) return;
+    if (!themeEditorStoreId || !themeEditorThemeId || !apiKey) return;
     openThemeEditorAppEmbed(
-      shop,
+      themeEditorStoreId,
+      themeEditorThemeId,
       apiKey,
       BUNDLE_THEME_PRODUCT_PLUGIN,
     );

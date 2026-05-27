@@ -37,6 +37,8 @@ interface DashboardPageProps {
   storeProducts?: IndexLoaderData["storeProducts"];
   markets?: IndexLoaderData["markets"];
   shop: string;
+  themeEditorStoreId: string;
+  themeEditorThemeId: string;
   apiKey: string;
   ianaTimezone: string;
   themeExtensionEnabled: boolean;
@@ -123,6 +125,8 @@ export function DashboardPage({
   storeProducts = [],
   markets = [],
   shop,
+  themeEditorStoreId,
+  themeEditorThemeId,
   apiKey,
   ianaTimezone,
   themeExtensionEnabled,
@@ -270,7 +274,8 @@ export function DashboardPage({
   const handleViewAllAbTests = () => {}; // mock
   const handleThemeExtensionToggle = () => {
     openThemeEditorAppEmbed(
-      shop,
+      themeEditorStoreId,
+      themeEditorThemeId,
       apiKey,
       BUNDLE_THEME_PRODUCT_PLUGIN,
     );

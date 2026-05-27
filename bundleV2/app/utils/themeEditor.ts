@@ -3,42 +3,17 @@ import {
   type ThemeAppEmbedConfig,
 } from "./themePlugins";
 
-function normalizeShopAdminHandle(shop: string): string {
-  const raw = String(shop || "").trim();
-  if (!raw) return "";
-
-  const withoutProtocol = raw.replace(/^https?:\/\//i, "");
-  const adminStoreMatch = withoutProtocol.match(/admin\.shopify\.com\/store\/([^/?#]+)/i);
-  if (adminStoreMatch?.[1]) {
-    return adminStoreMatch[1].trim();
-  }
-
-  const prefixedStoreMatch = withoutProtocol.match(/^store\/([^/?#]+)/i);
-  if (prefixedStoreMatch?.[1]) {
-    return prefixedStoreMatch[1].trim();
-  }
-
-  const pathStoreMatch = withoutProtocol.match(/\/store\/([^/?#]+)/i);
-  if (pathStoreMatch?.[1]) {
-    return pathStoreMatch[1].trim();
-  }
-
-  if (withoutProtocol.includes(".myshopify.com")) {
-    return withoutProtocol.replace(/\.myshopify\.com.*$/i, "").trim();
-  }
-
-  return withoutProtocol.replace(/^\/+|\/+$/g, "").trim();
-}
-
 export function buildThemeEditorAppEmbedUrl(
-  shop: string,
+  storeId: string,
+  themeId: string,
   apiKey: string,
   plugin: ThemeAppEmbedConfig = BUNDLE_THEME_PRODUCT_PLUGIN,
 ): string {
-  const storeHandle = normalizeShopAdminHandle(shop);
+  const normalizedStoreId = String(storeId || "").trim();
+  const normalizedThemeId = String(themeId || "").trim();
   const normalizedApiKey = String(apiKey || "").trim();
   const url = new URL(
-    `https://admin.shopify.com/store/${storeHandle}/themes/current/editor`,
+    `https://admin.shopify.com/store/${normalizedStoreId}/themes/${normalizedThemeId}/editor`,
   );
 
   url.searchParams.set("context", "apps");
@@ -51,10 +26,16 @@ export function buildThemeEditorAppEmbedUrl(
 }
 
 export function openThemeEditorAppEmbed(
-  shop: string,
+  storeId: string,
+  themeId: string,
   apiKey: string,
   plugin: ThemeAppEmbedConfig = BUNDLE_THEME_PRODUCT_PLUGIN,
 ): void {
-  const editorUrl = buildThemeEditorAppEmbedUrl(shop, apiKey, plugin);
+  const editorUrl = buildThemeEditorAppEmbedUrl(
+    storeId,
+    themeId,
+    apiKey,
+    plugin,
+  );
   window.open(editorUrl, "_blank", "noopener,noreferrer");
 }

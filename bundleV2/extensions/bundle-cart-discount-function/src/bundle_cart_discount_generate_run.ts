@@ -799,8 +799,14 @@ export function bundleCartDiscountGenerateRun(
         continue;
       }
 
-      const suitOffer = findOffer(productId, variantId, marketId, regularOffers);
-      if (!suitOffer) {
+      const bestRegularOffer = findBestRegularOfferForLine(
+        productId,
+        variantId,
+        marketId,
+        quantity,
+        regularOffers,
+      );
+      if (!bestRegularOffer) {
         log("line_no_matching_offer", {
           cartLineId: lineId,
           productId,
@@ -811,14 +817,11 @@ export function bundleCartDiscountGenerateRun(
 
       log("line_matched_offer", {
         cartLineId: lineId,
-        offerId: suitOffer.id,
-        offerName: suitOffer.name,
+        offerId: bestRegularOffer.offer.id,
+        offerName: bestRegularOffer.offer.name,
       });
 
-      const discountPercentValue = getDiscountPercentValue(
-        suitOffer.discountRulesJson,
-        quantity,
-      );
+      const discountPercentValue = bestRegularOffer.discountPercentValue;
       log("line_discount_percent", {
         cartLineId: lineId,
         discountPercentValue,
@@ -834,7 +837,7 @@ export function bundleCartDiscountGenerateRun(
       }
 
       const candidate: ProductDiscountCandidate = {
-        message: suitOffer.cartTitle || "Bundle Discount",
+        message: bestRegularOffer.offer.cartTitle || "Bundle Discount",
         targets: [
           {
             cartLine: {
@@ -858,13 +861,18 @@ export function bundleCartDiscountGenerateRun(
     }
   }
 
+  const resolvedProductCandidates = resolveExclusiveProductCandidates(
+    productCandidates,
+    input.cart.lines,
+  );
+
   if (hasOrderDiscountClass) {
     orderCandidates.push(
       ...buildOrderDiscountCandidates(input, regularOffers, marketId, nowMs),
     );
   }
 
-  if (!productCandidates.length && !orderCandidates.length) {
+  if (!resolvedProductCandidates.length && !orderCandidates.length) {
     log("early_exit", {
       reason: "no_discount_candidates_after_evaluation",
       linesProcessed: input.cart.lines.length,
@@ -874,10 +882,10 @@ export function bundleCartDiscountGenerateRun(
 
   const operations: CartLinesDiscountsGenerateRunResult["operations"] = [];
 
-  if (productCandidates.length > 0) {
+  if (resolvedProductCandidates.length > 0) {
     operations.push({
       productDiscountsAdd: {
-        candidates: productCandidates,
+        candidates: resolvedProductCandidates,
         selectionStrategy: ProductDiscountSelectionStrategy.All,
       },
     });
@@ -893,7 +901,8 @@ export function bundleCartDiscountGenerateRun(
   }
 
   log("run_success", {
-    candidateCount: productCandidates.length,
+    candidateCount: resolvedProductCandidates.length,
+    candidateCountBeforeConflictResolution: productCandidates.length,
     orderCandidateCount: orderCandidates.length,
     operationsJsonLength: JSON.stringify(operations).length,
   });
@@ -1103,6 +1112,96 @@ function matchesAnyConfiguredId(
   );
 }
 
+function buildBxgySamePoolCandidates(
+  cartLines: CartInput["cart"]["lines"],
+  offer: Offer,
+  rule: BxgyDiscountRule,
+): ProductDiscountCandidate[] {
+  const eligibleGetIds = rule.getProductIds.length ? rule.getProductIds : rule.buyProductIds;
+  if (!eligibleGetIds.length) {
+    log("bxgy_same_pool_skip_missing_get_products", { offerId: offer.id });
+    return [];
+  }
+
+  const matchingLines = cartLines
+    .filter((line) => {
+      if (line.merchandise?.__typename !== "ProductVariant") return false;
+      const productId = line.merchandise?.product?.id;
+      const variantId = line.merchandise?.id;
+      return matchesAnyConfiguredId(eligibleGetIds, productId, variantId);
+    })
+    .map((line) => ({
+      line,
+      unitPrice: parseMoneyAmount(line.cost?.amountPerQuantity?.amount),
+      quantity: Math.max(0, Number(line.quantity) || 0),
+    }))
+    .filter((entry) => entry.quantity > 0);
+
+  if (!matchingLines.length) {
+    log("bxgy_same_pool_no_matching_lines", {
+      offerId: offer.id,
+      eligibleGetIds,
+    });
+    return [];
+  }
+
+  const totalEligibleQuantity = matchingLines.reduce((sum, entry) => sum + entry.quantity, 0);
+  const buyQuantity = Math.max(1, Math.trunc(Number(rule.buyQuantity) || 1));
+  const getQuantity = Math.max(1, Math.trunc(Number(rule.getQuantity) || 1));
+  const bundleSize = buyQuantity + getQuantity;
+  const promotionTimes = Math.floor(totalEligibleQuantity / bundleSize);
+  const maxPromotionTimes = Math.min(
+    promotionTimes,
+    Math.max(1, Math.trunc(Number(rule.maxUsesPerOrder) || 1)),
+  );
+  let remainingFreeQuantity = maxPromotionTimes * getQuantity;
+
+  log("bxgy_same_pool_eval", {
+    offerId: offer.id,
+    eligibleLineCount: matchingLines.length,
+    totalEligibleQuantity,
+    buyQuantity,
+    getQuantity,
+    bundleSize,
+    promotionTimes,
+    maxPromotionTimes,
+  });
+
+  if (remainingFreeQuantity <= 0) {
+    return [];
+  }
+
+  const candidates: ProductDiscountCandidate[] = [];
+  const sortedByUnitPrice = matchingLines.slice().sort((a, b) => a.unitPrice - b.unitPrice);
+
+  for (const entry of sortedByUnitPrice) {
+    if (remainingFreeQuantity <= 0) break;
+    const discountQuantity = Math.min(entry.quantity, remainingFreeQuantity);
+    if (discountQuantity <= 0) continue;
+
+    candidates.push({
+      message: offer.cartTitle || "Buy X Get Y",
+      targets: [
+        {
+          cartLine: {
+            id: entry.line.id,
+            quantity: discountQuantity,
+          },
+        },
+      ],
+      value: {
+        percentage: {
+          value: Math.max(0, Math.min(100, rule.discountPercent)).toFixed(1),
+        },
+      },
+    });
+
+    remainingFreeQuantity -= discountQuantity;
+  }
+
+  return candidates;
+}
+
 /**
  * 计算 BXGY 折扣 — 支持多层级 (tier)，按 buyQuantity 字段选择最优匹配层级
  */
@@ -1148,63 +1247,7 @@ function calculateBxgyDiscount(
         continue;
       }
 
-      const candidates: ProductDiscountCandidate[] = [];
-      for (const selectedProductId of selectedProductIds) {
-        const matchingLines = cartLines
-          .filter((line) => {
-            if (line.merchandise?.__typename !== "ProductVariant") return false;
-            const productId = line.merchandise?.product?.id;
-            return productIdsMatch(productId, selectedProductId);
-          })
-          .map((line) => ({
-            line,
-            unitPrice: parseMoneyAmount(line.cost?.amountPerQuantity?.amount),
-            quantity: Math.max(0, Number(line.quantity) || 0),
-          }))
-          .filter((entry) => entry.quantity > 0);
-
-        if (!matchingLines.length) continue;
-
-        const totalQuantity = matchingLines.reduce((sum, entry) => sum + entry.quantity, 0);
-        const buyQuantity = Math.max(1, Math.trunc(Number(bestRule.buyQuantity) || 1));
-        const getQuantity = Math.max(1, Math.trunc(Number(bestRule.getQuantity) || 1));
-        const bundleSize = buyQuantity + getQuantity;
-        const promotionTimes = Math.floor(totalQuantity / bundleSize);
-        const maxPromotionTimes = Math.min(
-          promotionTimes,
-          Math.max(1, Math.trunc(Number(bestRule.maxUsesPerOrder) || 1)),
-        );
-        let remainingFreeQuantity = maxPromotionTimes * getQuantity;
-
-        if (remainingFreeQuantity <= 0) continue;
-
-        const sortedByUnitPrice = matchingLines
-          .slice()
-          .sort((a, b) => a.unitPrice - b.unitPrice);
-
-        for (const entry of sortedByUnitPrice) {
-          if (remainingFreeQuantity <= 0) break;
-          const discountQuantity = Math.min(entry.quantity, remainingFreeQuantity);
-          if (discountQuantity <= 0) continue;
-          candidates.push({
-            message: offer.cartTitle || "Buy X Get Y",
-            targets: [
-              {
-                cartLine: {
-                  id: entry.line.id,
-                  quantity: discountQuantity,
-                },
-              },
-            ],
-            value: {
-              percentage: {
-                value: "100.0",
-              },
-            },
-          });
-          remainingFreeQuantity -= discountQuantity;
-        }
-      }
+      const candidates = buildBxgySamePoolCandidates(cartLines, offer, bestRule);
 
       allCandidates.push(...candidates);
       continue;
@@ -1238,48 +1281,7 @@ function calculateBxgyDiscount(
         continue;
       }
 
-      const candidates: ProductDiscountCandidate[] = [];
-      for (const selectedProductId of bestRule.buyProductIds) {
-        const matchingLines = cartLines
-          .filter((line) => {
-            if (line.merchandise?.__typename !== "ProductVariant") return false;
-            const productId = line.merchandise?.product?.id;
-            return productIdsMatch(productId, selectedProductId);
-          })
-          .map((line) => ({
-            line,
-            unitPrice: parseMoneyAmount(line.cost?.amountPerQuantity?.amount),
-            quantity: Math.max(0, Number(line.quantity) || 0),
-          }))
-          .filter((entry) => entry.quantity > 0);
-
-        if (!matchingLines.length) continue;
-
-        const totalQuantity = matchingLines.reduce((sum, entry) => sum + entry.quantity, 0);
-        const buyQuantity = Math.max(1, Math.trunc(Number(bestRule.buyQuantity) || 1));
-        const getQuantity = Math.max(1, Math.trunc(Number(bestRule.getQuantity) || 1));
-        const bundleSize = buyQuantity + getQuantity;
-        const promotionTimes = Math.floor(totalQuantity / bundleSize);
-        let remainingFreeQuantity = promotionTimes * getQuantity;
-        if (remainingFreeQuantity <= 0) continue;
-
-        const sortedByUnitPrice = matchingLines.slice().sort((a, b) => a.unitPrice - b.unitPrice);
-        for (const entry of sortedByUnitPrice) {
-          if (remainingFreeQuantity <= 0) break;
-          const discountQuantity = Math.min(entry.quantity, remainingFreeQuantity);
-          if (discountQuantity <= 0) continue;
-          candidates.push({
-            message: offer.cartTitle || "Buy X Get Y",
-            targets: [{ cartLine: { id: entry.line.id, quantity: discountQuantity } }],
-            value: {
-              percentage: {
-                value: "100.0",
-              },
-            },
-          });
-          remainingFreeQuantity -= discountQuantity;
-        }
-      }
+      const candidates = buildBxgySamePoolCandidates(cartLines, offer, bestRule);
 
       allCandidates.push(...candidates);
       continue;
@@ -1571,6 +1573,72 @@ function formatDiscountPercentValue(percent: number): string {
   return percent.toFixed(1);
 }
 
+function parseDiscountPercentNumber(percent: string | null | undefined): number {
+  if (!percent) return 0;
+  const n = Number(percent);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function estimateProductCandidateSavings(
+  candidate: ProductDiscountCandidate,
+  unitPriceByLineId: Map<string, number>,
+): number {
+  const target = candidate.targets[0]?.cartLine;
+  if (!target?.id) return 0;
+
+  const quantity = Math.max(1, Math.trunc(Number(target.quantity) || 1));
+  if ("percentage" in candidate.value) {
+    const unitPrice = Math.max(0, unitPriceByLineId.get(target.id) || 0);
+    const percent = Math.max(
+      0,
+      Math.min(100, parseDiscountPercentNumber(candidate.value.percentage?.value)),
+    );
+    return unitPrice * quantity * (percent / 100);
+  }
+
+  const rawAmount = Number(candidate.value.fixedAmount?.amount || 0);
+  const amount = Number.isFinite(rawAmount) ? Math.max(0, rawAmount) : 0;
+  return candidate.value.fixedAmount?.appliesToEachItem ? amount * quantity : amount;
+}
+
+function resolveExclusiveProductCandidates(
+  candidates: ProductDiscountCandidate[],
+  cartLines: CartInput["cart"]["lines"],
+): ProductDiscountCandidate[] {
+  const unitPriceByLineId = new Map(
+    cartLines.map((line) => [
+      line.id,
+      parseMoneyAmount(line.cost?.amountPerQuantity?.amount),
+    ]),
+  );
+  const bestByLineId = new Map<
+    string,
+    { candidate: ProductDiscountCandidate; savings: number; index: number }
+  >();
+
+  for (const [index, candidate] of candidates.entries()) {
+    const target = candidate.targets[0]?.cartLine;
+    if (!target?.id) continue;
+
+    const savings = estimateProductCandidateSavings(candidate, unitPriceByLineId);
+    const existing = bestByLineId.get(target.id);
+    if (!existing || savings > existing.savings) {
+      if (existing) {
+        log("product_candidate_conflict_resolved", {
+          cartLineId: target.id,
+          replacedSavings: existing.savings.toFixed(4),
+          nextSavings: savings.toFixed(4),
+        });
+      }
+      bestByLineId.set(target.id, { candidate, savings, index });
+    }
+  }
+
+  return Array.from(bestByLineId.values())
+    .sort((a, b) => a.index - b.index)
+    .map((entry) => entry.candidate);
+}
+
 function getScopedLinesForOffer(
   cartLines: CartInput["cart"]["lines"],
   offer: Offer,
@@ -1702,6 +1770,90 @@ function getDiscountPercentValue(
   return getBestProductDiscountPercentValue(discountRulesJson, quantity);
 }
 
+function matchesRegularOfferLine(
+  offer: Offer,
+  productId: string | undefined,
+  variantId: string | undefined,
+): boolean {
+  const selectedIds = parseSelectedIds(offer.selectedProductsJson);
+  if (!selectedIds.length) {
+    return true;
+  }
+
+  return selectedIds.some(
+    (sid) =>
+      (productId && productIdsMatch(productId, sid)) ||
+      (variantId && productIdsMatch(variantId, sid)),
+  );
+}
+
+function isRegularOfferQuantityDisabled(offer: Offer): boolean {
+  if (offer.offerType === "bxgy" || isCompleteBundleOfferType(offer.offerType) || !offer.offerSettingsJson) {
+    return false;
+  }
+
+  try {
+    const settings = JSON.parse(offer.offerSettingsJson) as {
+      quantity?: boolean;
+      showQuantityBar?: boolean;
+    };
+    return settings.quantity === false || settings.showQuantityBar === false;
+  } catch {
+    return false;
+  }
+}
+
+function findBestRegularOfferForLine(
+  productId: string | undefined,
+  variantId: string | undefined,
+  marketId: string | undefined,
+  quantity: number,
+  offers: Offer[],
+): { offer: Offer; discountPercentValue: string } | null {
+  const nowMs = resolveNowMs();
+  let bestMatch: { offer: Offer; discountPercentValue: string; percentNumber: number } | null = null;
+
+  for (const offer of offers) {
+    if (!offerPassesScheduleAndMarket(offer, marketId, nowMs)) {
+      continue;
+    }
+
+    if (isRegularOfferQuantityDisabled(offer)) {
+      log("offer_skip_quantity_bar_disabled", { offerId: offer.id, name: offer.name });
+      continue;
+    }
+
+    const hit = matchesRegularOfferLine(offer, productId, variantId);
+    log("offer_selected_ids_check", {
+      offerId: offer.id,
+      name: offer.name,
+      selectedIdCount: parseSelectedIds(offer.selectedProductsJson).length,
+      productId,
+      variantId,
+      hit,
+    });
+    if (!hit) {
+      continue;
+    }
+
+    const discountPercentValue = getDiscountPercentValue(offer.discountRulesJson, quantity);
+    if (!discountPercentValue) {
+      continue;
+    }
+
+    const percentNumber = parseDiscountPercentNumber(discountPercentValue);
+    if (!bestMatch || percentNumber > bestMatch.percentNumber) {
+      bestMatch = { offer, discountPercentValue, percentNumber };
+    }
+  }
+
+  if (!bestMatch) return null;
+  return {
+    offer: bestMatch.offer,
+    discountPercentValue: bestMatch.discountPercentValue,
+  };
+}
+
 const parseSelectedIds = (selectedProductsJson?: string | null): string[] => {
   if (!selectedProductsJson) return [];
 
@@ -1827,135 +1979,6 @@ function resolveNowMs(): number | null {
 
   return null;
 }
-
-/**
- * selectedProductsJson 存的是 Product GID（与主题端、后台一致），需用购物车行的 product.id / variant.id 匹配，不能用 CartLine.id。
- */
-const findOffer = (
-  productId: string | undefined,
-  variantId: string | undefined,
-  marketId: string | undefined,
-  offers: Offer[],
-): Offer | null => {
-  const nowMs = resolveNowMs();
-  const nowIso = nowMs ? new Date(nowMs).toISOString() : null;
-
-  for (const offer of offers) {
-    if (offer.offerType === 'bxgy') continue; // Skip BXGY offers
-
-    if (offer.status === false) {
-      log("offer_skip_disabled", { offerId: offer.id, name: offer.name });
-      continue;
-    }
-
-    if (offer.startTime) {
-      const startTimeMs = Date.parse(offer.startTime);
-      log("offer_start_time_check", {
-        offerId: offer.id,
-        name: offer.name,
-        startTime: offer.startTime,
-        nowIso,
-        nowMs,
-        startTimeMs: Number.isFinite(startTimeMs) ? startTimeMs : null,
-        isBeforeStart:
-          Number.isFinite(startTimeMs) && nowMs !== null ? nowMs < startTimeMs : null,
-      });
-      if (nowMs === null) {
-        log("offer_time_unavailable_skip_start_check", {
-          offerId: offer.id,
-          name: offer.name,
-          startTime: offer.startTime,
-        });
-      } else if (Number.isFinite(startTimeMs) && nowMs < startTimeMs) {
-        log("offer_skip_before_start", { offerId: offer.id, name: offer.name, startTime: offer.startTime });
-        continue;
-      }
-    }
-
-    if (offer.endTime) {
-      const endTimeMs = Date.parse(offer.endTime);
-      if (nowMs === null) {
-        log("offer_time_unavailable_skip_end_check", {
-          offerId: offer.id,
-          name: offer.name,
-          endTime: offer.endTime,
-        });
-      } else if (Number.isFinite(endTimeMs) && nowMs > endTimeMs) {
-        log("offer_skip_after_end", { offerId: offer.id, name: offer.name, endTime: offer.endTime });
-        continue;
-      }
-    }
-
-    if (marketId && offer.offerSettingsJson) {
-      try {
-        const settings = JSON.parse(offer.offerSettingsJson);
-        const offerMarkets = settings.markets;
-        if (typeof offerMarkets === "string" && offerMarkets !== "all" && offerMarkets.trim() !== "") {
-          const allowedMarkets = offerMarkets.split(",").map((m: string) => m.trim());
-          const matchMarket = allowedMarkets.some(m => m === marketId || m.endsWith(`/${marketId}`));
-          if (!matchMarket) {
-            log("offer_skip_market_mismatch", { offerId: offer.id, name: offer.name, marketId, allowedMarkets });
-            continue;
-          }
-        }
-      } catch (e) {
-        // ignore parse error
-      }
-    }
-
-    // 兼容旧版开关：当 quantity bar 显式为 false 时，不参与普通 quantity-break 折扣计算
-    if (
-      offer.offerType !== "bxgy" &&
-      !isCompleteBundleOfferType(offer.offerType) &&
-      offer.offerSettingsJson
-    ) {
-      try {
-        const settings = JSON.parse(offer.offerSettingsJson) as {
-          quantity?: boolean;
-          showQuantityBar?: boolean;
-        };
-        if (settings.quantity === false || settings.showQuantityBar === false) {
-          log("offer_skip_quantity_bar_disabled", { offerId: offer.id, name: offer.name });
-          continue;
-        }
-      } catch {
-        // ignore parse error
-      }
-    }
-
-    const selectedIds = parseSelectedIds(offer.selectedProductsJson);
-    if (!selectedIds.length) {
-      log("offer_match_all_products", { offerId: offer.id, name: offer.name });
-      return offer;
-    }
-
-    // 配置中的 id 可能是纯数字，购物车行侧为 GID，需归一化后比较
-    let hit = false;
-    for (const sid of selectedIds) {
-      if (productId && productIdsMatch(productId, sid)) {
-        hit = true;
-        break;
-      }
-      if (variantId && productIdsMatch(variantId, sid)) {
-        hit = true;
-        break;
-      }
-    }
-
-    log("offer_selected_ids_check", {
-      offerId: offer.id,
-      name: offer.name,
-      selectedIdCount: selectedIds.length,
-      productId,
-      variantId,
-      hit,
-    });
-
-    if (hit) return offer;
-  }
-
-  return null;
-};
 
 /**
  * 校验是否允许生成本次折扣：购物车非空。

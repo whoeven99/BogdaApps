@@ -1942,6 +1942,7 @@ function getCurrentOffer(offersConfig) {
 }
 
 window.__ciwiBundleState = window.__ciwiBundleState || {
+  selectedOfferId: null,
   selectedCount: null,
   selectedBundleVariants: {},
   selectedDifferentProductVariants: {},
@@ -1953,6 +1954,19 @@ window.__ciwiBundleState = window.__ciwiBundleState || {
   subscriptionMode: null,
   selectedSellingPlanId: "",
 };
+
+function syncOfferScopedState(offer) {
+  const nextOfferId = String(offer?.id || "");
+  if (!nextOfferId || !window.__ciwiBundleState) return;
+  if (String(window.__ciwiBundleState.selectedOfferId || "") === nextOfferId) return;
+
+  window.__ciwiBundleState.selectedOfferId = nextOfferId;
+  window.__ciwiBundleState.selectedCount = null;
+
+  if (offer?.offerType !== "complete-bundle") {
+    window.__ciwiBundleState.selectedCompleteBundleBarId = null;
+  }
+}
 
 function rerenderCurrentBundleWidget() {
   const wrap = document.querySelector(".ciwi-bundle-wrapper");
@@ -2710,6 +2724,8 @@ window.ciwiHandleCompleteBundleAddToCart = async function (event) {
 };
 
 function renderBundlePreviewHtml(offer) {
+  syncOfferScopedState(offer);
+
   if (offer.offerType === "complete-bundle") {
     const completeBundle = parseCompleteBundleConfig(offer?.selectedProductsJson);
     if (!completeBundle.bars.length) return "";

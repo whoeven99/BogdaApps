@@ -743,6 +743,8 @@ export type IndexLoaderData = {
   storeProducts?: StoreProductItem[];
   markets: MarketItem[];
   shop: string;
+  themeEditorStoreId: string;
+  themeEditorThemeId: string;
   apiKey: string;
   ianaTimezone: string;
   themeExtensionEnabled: boolean;
@@ -1662,6 +1664,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const themeExtensionDetection = await getCurrentThemeExtensionEnabled(admin);
   const themeExtensionEnabled = themeExtensionDetection.enabled;
   const themeExtensionDetectionFailed = Boolean(themeExtensionDetection.debug?.error);
+  const themeEditorStoreId = String(session.shop || "")
+    .trim()
+    .replace(/\.myshopify\.com$/i, "");
+  const themeEditorThemeId = String(
+    themeExtensionDetection.debug?.matchedTheme?.id ||
+      themeExtensionDetection.debug?.themes?.[0]?.id ||
+      "",
+  )
+    .split("/")
+    .filter(Boolean)
+    .pop() ?? "";
   if (!themeExtensionDetectionFailed) {
     await syncBundleEnabledMetafield(admin, themeExtensionEnabled);
     const syncResult = await syncShopOffersMetafield(
@@ -1723,6 +1736,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return Response.json({
     markets,
     shop: session.shop,
+    themeEditorStoreId,
+    themeEditorThemeId,
     apiKey,
     ianaTimezone,
     themeExtensionEnabled,
@@ -2580,6 +2595,8 @@ export default function Index() {
   const {
     markets,
     shop,
+    themeEditorStoreId,
+    themeEditorThemeId,
     apiKey,
     ianaTimezone,
     themeExtensionEnabled,
@@ -2802,6 +2819,8 @@ export default function Index() {
             storeProducts={storeProducts}
             markets={markets}
             shop={shop}
+            themeEditorStoreId={themeEditorStoreId}
+            themeEditorThemeId={themeEditorThemeId}
             apiKey={apiKey}
             ianaTimezone={ianaTimezone}
             themeExtensionEnabled={themeExtensionEnabled}
@@ -2831,7 +2850,8 @@ export default function Index() {
             ianaTimezone={ianaTimezone}
             themeExtensionEnabled={themeExtensionEnabled}
             themeExtensionDetectionFailed={themeExtensionDetectionFailed}
-            shop={shop}
+            themeEditorStoreId={themeEditorStoreId}
+            themeEditorThemeId={themeEditorThemeId}
             apiKey={apiKey}
             onCreateOffer={() => {
               setShowCreateOffer(true);
