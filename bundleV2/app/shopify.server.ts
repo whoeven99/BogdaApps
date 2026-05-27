@@ -6,10 +6,14 @@ import {
 } from "@shopify/shopify-app-react-router/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
+import {
+  FunctionDiscountClass,
+  resolveFunctionDiscountClassesForOffer,
+  trimOfferSettingsJsonForFunction,
+} from "./utils/offerParsing";
 import { sanitizeEnvLikeValue, sanitizeUrlLikeEnvValue } from "./utils/env";
 
 const CART_LINES_DISCOUNT_FUNCTION_TITLE = "Bundle Cart Discount Function";
-const CART_LINES_DISCOUNT_AUTO_TITLE = "Ciwi Bundle Auto Discount";
 const CART_LINES_PRODUCT_DISCOUNT_AUTO_TITLE = "Ciwi Bundle Auto Product Discount";
 const CART_LINES_ORDER_DISCOUNT_AUTO_TITLE = "Ciwi Bundle Auto Order Discount";
 /** 与 extensions/bundle-delivery-discount-function/shopify.extension.toml 中 name 一致，供 GraphQL 按标题定位 Function */
@@ -45,12 +49,6 @@ const CART_LINES_ORDER_DISCOUNT_EXPECTED_COMBINES_WITH = {
   productDiscounts: true,
   shippingDiscounts: true,
 } as const satisfies AutomaticAppDiscountCombinesWith;
-
-function getAutoDiscountTitle(): string {
-  const appName = sanitizeEnvLikeValue(process.env.SHOPIFY_APP_NAME);
-  if (!appName) return CART_LINES_DISCOUNT_AUTO_TITLE;
-  return `${appName} - ${CART_LINES_DISCOUNT_AUTO_TITLE}`;
-}
 
 function getAutoProductDiscountTitle(): string {
   const appName = sanitizeEnvLikeValue(process.env.SHOPIFY_APP_NAME);
@@ -88,13 +86,95 @@ function getExpectedCartLinesAutomaticDiscountConfigs(): CartLinesAutomaticDisco
 }
 
 function buildAutomaticDiscountOffersPayload(value?: string): string {
+  return buildAutomaticDiscountOffersPayloadForClass(value, null);
+}
+
+type AutomaticDiscountOfferPayload = {
+  updatedAt?: string;
+  offers?: Array<{
+    id?: string;
+    name?: string;
+    cartTitle?: string;
+    status?: boolean;
+    startTime?: string;
+    endTime?: string;
+    selectedProductsJson?: string | null;
+    discountRulesJson?: string | null;
+    offerSettingsJson?: string | null;
+    offerType?: string | null;
+  }>;
+};
+
+type AutomaticDiscountTargetClass = FunctionDiscountClass | null;
+
+function parseAutomaticDiscountOffersPayload(
+  value?: string,
+): AutomaticDiscountOfferPayload {
   if (typeof value === "string" && value.trim()) {
-    return value;
+    try {
+      const parsed = JSON.parse(value) as AutomaticDiscountOfferPayload;
+      if (parsed && typeof parsed === "object") {
+        return parsed;
+      }
+    } catch {
+      // fall through to empty payload
+    }
   }
-  return JSON.stringify({
+
+  return {
     updatedAt: new Date().toISOString(),
     offers: [],
+  };
+}
+
+function buildAutomaticDiscountOffersPayloadForClass(
+  value: string | undefined,
+  targetClass: AutomaticDiscountTargetClass,
+): string {
+  const parsed = parseAutomaticDiscountOffersPayload(value);
+  const offers = Array.isArray(parsed.offers) ? parsed.offers : [];
+  const normalizedOffers = offers
+    .filter((offer) => {
+      if (!targetClass) return true;
+      return resolveFunctionDiscountClassesForOffer({
+        offerType: offer.offerType,
+        discountRulesJson: offer.discountRulesJson,
+      }).includes(targetClass);
+    })
+    .map((offer) => ({
+      id: offer.id,
+      name: offer.name,
+      cartTitle: offer.cartTitle,
+      status: offer.status,
+      startTime: offer.startTime,
+      endTime: offer.endTime,
+      selectedProductsJson: offer.selectedProductsJson ?? null,
+      discountRulesJson: offer.discountRulesJson ?? null,
+      offerSettingsJson: trimOfferSettingsJsonForFunction(offer.offerSettingsJson),
+      offerType: offer.offerType ?? null,
+    }));
+
+  return JSON.stringify({
+    updatedAt:
+      typeof parsed.updatedAt === "string" && parsed.updatedAt.trim()
+        ? parsed.updatedAt
+        : new Date().toISOString(),
+    offers: normalizedOffers,
   });
+}
+
+function normalizeSingleDiscountClass(
+  discountClasses: unknown,
+): FunctionDiscountClass | null {
+  if (!Array.isArray(discountClasses) || discountClasses.length !== 1) {
+    return null;
+  }
+
+  const value = String(discountClasses[0] || "").trim().toUpperCase();
+  if (value === "PRODUCT" || value === "ORDER" || value === "SHIPPING") {
+    return value;
+  }
+  return null;
 }
 
 async function resolveShopifyDiscountFunctionIdByExactTitle(
@@ -123,69 +203,43 @@ async function resolveShopifyDiscountFunctionIdByExactTitle(
   return targetFn?.id ? String(targetFn.id) : null;
 }
 
-type AutomaticDiscountOwnerCollection = {
+type AutomaticDiscountSyncTarget = {
+  nodeId: string;
   ownerIds: string[];
-  targetDiscountNodeIds: string[];
-  diagnostics: {
-    targetFunctionId: string;
-    matchedDiscounts: unknown[];
-    strictMatchCount: number;
-  };
+  title: string;
+  status: string;
+  functionId: string;
+  discountClass: FunctionDiscountClass;
 };
 
-function collectAutomaticDiscountOwnersForFunctionId(params: {
+function collectAutomaticDiscountSyncTargets(params: {
   discountNodes: any[];
   functionId: string;
-  titleSubstrings: string[];
-}): AutomaticDiscountOwnerCollection | null {
-  const { discountNodes, functionId, titleSubstrings } = params;
-  const matchedDiscounts = discountNodes
+  discountClasses: FunctionDiscountClass[];
+}): AutomaticDiscountSyncTarget[] {
+  const { discountNodes, functionId, discountClasses } = params;
+  const allowedClasses = new Set(discountClasses);
+
+  return discountNodes
     .map((node: any) => {
       const d = node?.discount;
       if (!d || d.__typename !== "DiscountAutomaticApp") return null;
-      const title = String(d?.title || "");
+      if (String(d?.appDiscountType?.functionId || "") !== functionId) return null;
+      const discountClass = normalizeSingleDiscountClass(d?.discountClasses);
+      if (!discountClass || !allowedClasses.has(discountClass)) return null;
+      const nodeId = String(node?.id || "").trim();
+      const discountId = String(d?.discountId || "").trim();
+      if (!nodeId && !discountId) return null;
       return {
-        nodeId: String(node?.id || ""),
-        discountId: String(d?.discountId || ""),
-        title,
+        nodeId,
+        ownerIds: Array.from(new Set([discountId, nodeId].filter(Boolean))),
+        title: String(d?.title || ""),
         status: String(d?.status || ""),
-        discountFunctionId: String(d?.appDiscountType?.functionId || ""),
-        functionMatches: d?.appDiscountType?.functionId === functionId,
-        titleMatches: titleSubstrings.some((candidate) => title.includes(candidate)),
-      };
+        functionId,
+        discountClass,
+      } satisfies AutomaticDiscountSyncTarget;
     })
-    .filter(Boolean);
-  const strictFunctionMatches = matchedDiscounts.filter((d: any) => d?.functionMatches);
-  const fallbackTitleMatches =
-    strictFunctionMatches.length === 0
-      ? matchedDiscounts.filter((d: any) => d?.titleMatches)
-      : [];
-  const targetDiscounts =
-    strictFunctionMatches.length > 0 ? strictFunctionMatches : fallbackTitleMatches;
-  if (!targetDiscounts.length) return null;
-
-  const ownerIds: string[] = Array.from(
-    new Set(
-      targetDiscounts.flatMap((d: any) =>
-        [d.discountId, d.nodeId].map((id: string) => String(id || "").trim()).filter(Boolean),
-      ),
-    ),
-  );
-  const targetDiscountNodeIds: string[] = Array.from(
-    new Set(
-      targetDiscounts.map((d: any) => String(d?.nodeId || "").trim()).filter(Boolean),
-    ),
-  );
-
-  return {
-    ownerIds,
-    targetDiscountNodeIds,
-    diagnostics: {
-      targetFunctionId: functionId,
-      matchedDiscounts,
-      strictMatchCount: strictFunctionMatches.length,
-    },
-  };
+    .filter((target): target is AutomaticDiscountSyncTarget => target !== null);
 }
 
 async function getCartLinesDiscountFunctionId(admin: any): Promise<string | null> {
@@ -244,6 +298,7 @@ export async function syncCartLinesAutomaticDiscountMetafield(
                   discountId
                   title
                   status
+                  discountClasses
                   appDiscountType {
                     functionId
                   }
@@ -261,36 +316,36 @@ export async function syncCartLinesAutomaticDiscountMetafield(
       cartLinesFunctionId: functionId,
     });
 
-    const cartOwners = collectAutomaticDiscountOwnersForFunctionId({
+    const cartTargets = collectAutomaticDiscountSyncTargets({
       discountNodes,
       functionId,
-      titleSubstrings: [
-        CART_LINES_DISCOUNT_AUTO_TITLE,
-        getAutoDiscountTitle(),
-        CART_LINES_PRODUCT_DISCOUNT_AUTO_TITLE,
-        getAutoProductDiscountTitle(),
-        CART_LINES_ORDER_DISCOUNT_AUTO_TITLE,
-        getAutoOrderDiscountTitle(),
-      ],
+      discountClasses: ["PRODUCT", "ORDER"],
     });
-    console.log("[discount][sync-meta] matched discount diagnostics (cart lines)", {
-      cartOwners: cartOwners?.diagnostics ?? null,
+    console.log("[discount][sync-meta] matched cart discount targets", {
+      targets: cartTargets.map((target) => ({
+        nodeId: target.nodeId,
+        title: target.title,
+        status: target.status,
+        discountClass: target.discountClass,
+      })),
     });
 
     const shippingFunctionId = await getDeliveryDiscountFunctionIdForSync(admin);
-    const shippingOwners = shippingFunctionId
-      ? collectAutomaticDiscountOwnersForFunctionId({
+    const shippingTargets = shippingFunctionId
+      ? collectAutomaticDiscountSyncTargets({
           discountNodes,
           functionId: shippingFunctionId,
-          titleSubstrings: [
-            DELIVERY_DISCOUNT_AUTO_TITLE,
-            getAutoShippingDiscountTitle(),
-          ],
+          discountClasses: ["SHIPPING"],
         })
-      : null;
-    if (shippingOwners) {
-      console.log("[discount][sync-meta] matched discount diagnostics (delivery shipping)", {
-        shippingOwners: shippingOwners.diagnostics,
+      : [];
+    if (shippingTargets.length > 0) {
+      console.log("[discount][sync-meta] matched delivery discount targets", {
+        targets: shippingTargets.map((target) => ({
+          nodeId: target.nodeId,
+          title: target.title,
+          status: target.status,
+          discountClass: target.discountClass,
+        })),
       });
     } else if (shippingFunctionId) {
       console.warn(
@@ -298,17 +353,8 @@ export async function syncCartLinesAutomaticDiscountMetafield(
       );
     }
 
-    const ownerIds: string[] = Array.from(
-      new Set([...(cartOwners?.ownerIds ?? []), ...(shippingOwners?.ownerIds ?? [])]),
-    );
-    const targetDiscountNodeIds: string[] = Array.from(
-      new Set([
-        ...(cartOwners?.targetDiscountNodeIds ?? []),
-        ...(shippingOwners?.targetDiscountNodeIds ?? []),
-      ]),
-    );
-
-    if (!ownerIds.length) {
+    const syncTargets = [...cartTargets, ...shippingTargets];
+    if (!syncTargets.length) {
       console.error("[discount][sync-meta] no owner ids matched cart or shipping functions", {
         cartLinesFunctionId: functionId,
         shippingFunctionId,
@@ -320,18 +366,39 @@ export async function syncCartLinesAutomaticDiscountMetafield(
       };
     }
 
-    console.log("[discount][sync-meta] merged owner ids resolved", {
-      ownerCount: ownerIds.length,
-      ownerIds,
-      targetDiscountNodeIds,
-      matchedCartOwners: cartOwners != null,
-      matchedShippingOwners: shippingOwners != null,
+    const payloadByClass = new Map<FunctionDiscountClass, string>([
+      ["PRODUCT", buildAutomaticDiscountOffersPayloadForClass(metafieldValue, "PRODUCT")],
+      ["ORDER", buildAutomaticDiscountOffersPayloadForClass(metafieldValue, "ORDER")],
+      ["SHIPPING", buildAutomaticDiscountOffersPayloadForClass(metafieldValue, "SHIPPING")],
+    ]);
+    const ownerAssignments = syncTargets.flatMap((target) =>
+      target.ownerIds.map((ownerId) => ({
+        ownerId,
+        discountClass: target.discountClass,
+        payload: payloadByClass.get(target.discountClass) || buildAutomaticDiscountOffersPayload(),
+      })),
+    );
+
+    console.log("[discount][sync-meta] resolved sync targets", {
+      targetCount: syncTargets.length,
+      ownerCount: ownerAssignments.length,
+      targets: syncTargets.map((target) => ({
+        nodeId: target.nodeId,
+        ownerIds: target.ownerIds,
+        title: target.title,
+        discountClass: target.discountClass,
+        payloadLength: (payloadByClass.get(target.discountClass) || "").length,
+      })),
     });
 
     // 先用 discountAutomaticAppUpdate 写入函数 owner 的 metafields（与函数运行时 owner 最稳定对齐）
-    for (const discountNodeId of targetDiscountNodeIds) {
+    for (const target of syncTargets) {
+      const payload =
+        payloadByClass.get(target.discountClass) || buildAutomaticDiscountOffersPayload();
       console.log("[discount][sync-meta] updating automatic app discount metafields", {
-        discountNodeId,
+        discountNodeId: target.nodeId,
+        discountClass: target.discountClass,
+        payloadLength: payload.length,
       });
       const updateResp = await admin.graphql(
         `#graphql
@@ -350,20 +417,20 @@ export async function syncCartLinesAutomaticDiscountMetafield(
         `,
         {
           variables: {
-            id: discountNodeId,
+            id: target.nodeId,
             automaticAppDiscount: {
               metafields: [
                 {
                   namespace: CART_LINES_DISCOUNT_METAFIELD_NAMESPACE,
                   key: CART_LINES_DISCOUNT_METAFIELD_KEY,
                   type: "json",
-                  value: buildAutomaticDiscountOffersPayload(metafieldValue),
+                  value: payload,
                 },
                 {
                   namespace: CART_LINES_DISCOUNT_DEFAULT_APP_NAMESPACE,
                   key: CART_LINES_DISCOUNT_METAFIELD_KEY,
                   type: "json",
-                  value: buildAutomaticDiscountOffersPayload(metafieldValue),
+                  value: payload,
                 },
               ],
             },
@@ -380,7 +447,7 @@ export async function syncCartLinesAutomaticDiscountMetafield(
       };
       if (updateJson.errors?.length) {
         console.error("[discount][sync-meta] discountAutomaticAppUpdate graphql errors", {
-          discountNodeId,
+          discountNodeId: target.nodeId,
           errors: updateJson.errors,
         });
       }
@@ -388,18 +455,19 @@ export async function syncCartLinesAutomaticDiscountMetafield(
         updateJson?.data?.discountAutomaticAppUpdate?.userErrors ?? [];
       if (updateUserErrors.length) {
         console.error("[discount][sync-meta] discountAutomaticAppUpdate userErrors", {
-          discountNodeId,
+          discountNodeId: target.nodeId,
           userErrors: updateUserErrors,
         });
       } else {
         console.log("[discount][sync-meta] discountAutomaticAppUpdate success", {
-          discountNodeId,
+          discountNodeId: target.nodeId,
+          discountClass: target.discountClass,
         });
       }
     }
 
     console.log("[discount][sync-meta] calling metafieldsSet", {
-      mutationTargets: ownerIds.length * 2,
+      mutationTargets: ownerAssignments.length * 2,
     });
     const metafieldsSetResponse = await admin.graphql(
       `#graphql
@@ -419,20 +487,20 @@ export async function syncCartLinesAutomaticDiscountMetafield(
       `,
       {
         variables: {
-          metafields: ownerIds.flatMap((ownerId: string) => [
+          metafields: ownerAssignments.flatMap((assignment) => [
             {
-              ownerId,
+              ownerId: assignment.ownerId,
               namespace: CART_LINES_DISCOUNT_METAFIELD_NAMESPACE,
               key: CART_LINES_DISCOUNT_METAFIELD_KEY,
               type: "json",
-              value: buildAutomaticDiscountOffersPayload(metafieldValue),
+              value: assignment.payload,
             },
             {
-              ownerId,
+              ownerId: assignment.ownerId,
               namespace: CART_LINES_DISCOUNT_DEFAULT_APP_NAMESPACE,
               key: CART_LINES_DISCOUNT_METAFIELD_KEY,
               type: "json",
-              value: buildAutomaticDiscountOffersPayload(metafieldValue),
+              value: assignment.payload,
             },
           ]),
         },
@@ -466,10 +534,10 @@ export async function syncCartLinesAutomaticDiscountMetafield(
     }
 
     console.log("[discount][sync-meta] success", {
-      ownerCount: ownerIds.length,
+      ownerCount: ownerAssignments.length,
       payloadLength: typeof metafieldValue === "string" ? metafieldValue.length : 0,
     });
-    for (const discountNodeId of targetDiscountNodeIds) {
+    for (const target of syncTargets) {
       const verifyResp = await admin.graphql(
         `#graphql
           query VerifyDiscountMetafields($id: ID!) {
@@ -484,12 +552,13 @@ export async function syncCartLinesAutomaticDiscountMetafield(
             }
           }
         `,
-        { variables: { id: discountNodeId } },
+        { variables: { id: target.nodeId } },
       );
       const verifyJson = await verifyResp.json();
       const node = verifyJson?.data?.discountNode;
       console.log("[discount][sync-meta] verify discount metafields", {
-        discountNodeId,
+        discountNodeId: target.nodeId,
+        discountClass: target.discountClass,
         appOwnedLen: String(node?.appOwnedOffers?.value || "").length,
         defaultAppLen: String(node?.defaultAppOffers?.value || "").length,
       });

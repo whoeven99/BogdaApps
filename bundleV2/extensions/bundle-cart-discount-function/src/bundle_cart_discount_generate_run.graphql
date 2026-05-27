@@ -38,14 +38,6 @@ query CartInput {
       }
     }
   }
-  shop {
-    bundleEnabledShop: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-enabled") {
-      jsonValue
-    }
-    offersShop: metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-offers-fn") {
-      jsonValue
-    }
-  }
   localization {
     country {
       isoCode

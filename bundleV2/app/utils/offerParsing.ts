@@ -3902,6 +3902,102 @@ export function trimSelectedProductsJsonForFunction(
   }
 }
 
+export type FunctionDiscountClass = "PRODUCT" | "ORDER" | "SHIPPING";
+
+export function trimOfferSettingsJsonForFunction(
+  offerSettingsJson?: string | null,
+): string | null {
+  if (offerSettingsJson == null || !String(offerSettingsJson).trim()) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(String(offerSettingsJson)) as {
+      markets?: unknown;
+      customerSegments?: unknown;
+      customerProfileFilters?: unknown;
+      ipCountryCodes?: unknown;
+      couponEnabled?: unknown;
+      couponCode?: unknown;
+      quantity?: unknown;
+      showQuantityBar?: unknown;
+    };
+
+    const next: Record<string, unknown> = {};
+    if (typeof parsed.markets === "string" && parsed.markets.trim() && parsed.markets.trim() !== "all") {
+      next.markets = parsed.markets.trim();
+    }
+    if (typeof parsed.customerSegments === "string" && parsed.customerSegments.trim()) {
+      next.customerSegments = parsed.customerSegments.trim();
+    }
+    if (
+      typeof parsed.customerProfileFilters === "string" &&
+      parsed.customerProfileFilters.trim()
+    ) {
+      next.customerProfileFilters = parsed.customerProfileFilters.trim();
+    }
+    if (typeof parsed.ipCountryCodes === "string" && parsed.ipCountryCodes.trim()) {
+      next.ipCountryCodes = parsed.ipCountryCodes.trim();
+    }
+    if (parsed.couponEnabled === true) {
+      next.couponEnabled = true;
+      if (typeof parsed.couponCode === "string" && parsed.couponCode.trim()) {
+        next.couponCode = parsed.couponCode.trim();
+      }
+    }
+    if (parsed.quantity === false) {
+      next.quantity = false;
+    }
+    if (parsed.showQuantityBar === false) {
+      next.showQuantityBar = false;
+    }
+
+    return JSON.stringify(next);
+  } catch {
+    return String(offerSettingsJson).trim() || null;
+  }
+}
+
+export function resolveFunctionDiscountClassesForOffer(params: {
+  offerType?: string | null;
+  discountRulesJson?: string | null;
+}): FunctionDiscountClass[] {
+  const offerType = String(params.offerType || "").trim();
+  const classes = new Set<FunctionDiscountClass>();
+
+  if (
+    offerType === "bxgy" ||
+    offerType === "quantity-breaks-different" ||
+    offerType === "subscription"
+  ) {
+    classes.add("PRODUCT");
+  }
+
+  if (offerType === "free-gift" || offerType === "complete-bundle") {
+    classes.add("ORDER");
+  }
+
+  const normalizedRules = parseDiscountRules(params.discountRulesJson);
+  for (const rule of normalizedRules) {
+    if (rule.tierType === "single") continue;
+    if (rule.rewardType === "free_shipping" || rule.discountClass === "shipping") {
+      classes.add("SHIPPING");
+      continue;
+    }
+    if (rule.rewardType === "gift_product" || rule.discountClass === "order") {
+      classes.add("ORDER");
+      continue;
+    }
+    classes.add("PRODUCT");
+  }
+
+  if (classes.size === 0) {
+    classes.add("PRODUCT");
+  }
+
+  return Array.from(classes);
+}
+
 type OfferTypeSelectedProductsPayloadParams = {
   offerType: string;
   selectedProductsData: unknown;

@@ -2,7 +2,7 @@
  * 配送折扣 Function（cart.delivery-options.discounts.generate.run）
  * ------------------------------------------------------------------
  * 与行项目折扣 Function 分离：仅处理「阶梯赠品」中的免邮（free_shipping）。
- * 配置来源：shop `ciwi-bundle-offers-fn`；若 shop `ciwi-bundle-enabled` 中 `enabled === false` 则提前退出。
+ * 配置来源：automatic discount owner 上的 `$app:ciwi_bundle/offers`，由后台按 SHIPPING class 同步。
  *
  * 购物车行属性（与主题 `properties[__ciwi_*]` 对应）：
  * - 理想情况：行上带有 `__ciwi_bundle_offer_id`、`__ciwi_bundle_tier`（主题脚本写入）。
@@ -754,51 +754,42 @@ function pickDeliveryOffersFromInput(input: CartDeliveryDiscountInput): {
   offers: OfferRow[];
   source: string;
 } {
-  const shop = input.shop as unknown as {
-    offersFn?: { jsonValue?: unknown } | null;
-  };
   const discountOwnerMf = input.discount.offersFromDiscountOwner;
   const jDisc = discountOwnerMf?.jsonValue;
-  const offersFnNode = shop.offersFn;
-  const jShop = offersFnNode?.jsonValue;
 
-  const logJv = (namespace: string, key: string, mfNode: unknown, jv: unknown) => {
-    log("read_ciwi_offers_metafield", {
-      namespace,
-      key,
-      metafieldNodePresent: mfNode != null,
-      jsonValueKind:
-        jv === undefined
-          ? "undefined"
-          : jv === null
-            ? "null"
-            : Array.isArray(jv)
-              ? "array"
-              : typeof jv,
-      topLevelKeys:
-        jv && typeof jv === "object" && !Array.isArray(jv)
-          ? Object.keys(jv as Record<string, unknown>).slice(0, 30)
-          : null,
-      offersArrayLength:
-        jv &&
-        typeof jv === "object" &&
-        !Array.isArray(jv) &&
-        Array.isArray((jv as { offers?: unknown }).offers)
-          ? (jv as { offers: unknown[] }).offers.length
-          : null,
-    });
-  };
-
-  logJv("$app:ciwi_bundle", "offers", discountOwnerMf, jDisc);
-  logJv("ciwi_bundle", "ciwi-bundle-offers-fn", offersFnNode, jShop);
+  log("read_ciwi_offers_metafield", {
+    namespace: "$app:ciwi_bundle",
+    key: "offers",
+    metafieldNodePresent: discountOwnerMf != null,
+    jsonValueKind:
+      jDisc === undefined
+        ? "undefined"
+        : jDisc === null
+          ? "null"
+          : Array.isArray(jDisc)
+            ? "array"
+            : typeof jDisc,
+    topLevelKeys:
+      jDisc && typeof jDisc === "object" && !Array.isArray(jDisc)
+        ? Object.keys(jDisc as Record<string, unknown>).slice(0, 30)
+        : null,
+    offersArrayLength:
+      jDisc &&
+      typeof jDisc === "object" &&
+      !Array.isArray(jDisc) &&
+      Array.isArray((jDisc as { offers?: unknown }).offers)
+        ? (jDisc as { offers: unknown[] }).offers.length
+        : null,
+  });
 
   const fromDiscount = extractOffersListFromJson(jDisc);
-  const fromShop = extractOffersListFromJson(jShop);
   if (fromDiscount.length) {
     return { offers: fromDiscount, source: "discount_owner_app_ciwi_bundle_offers" };
   }
-  if (fromShop.length) return { offers: fromShop, source: "shop_ciwi_bundle_offers_fn" };
-  return { offers: [], source: "none" };
+  return {
+    offers: [],
+    source: jDisc != null ? "discount_owner_empty_lists" : "none",
+  };
 }
 
 export function bundleDeliveryDiscountGenerateRun(
@@ -820,15 +811,10 @@ export function bundleDeliveryDiscountGenerateRun(
     return { operations: [] };
   }
 
-  const shop = input.shop as unknown as {
-    bundleEnabledShop?: { jsonValue?: unknown } | null;
-    offersFn?: { jsonValue?: unknown } | null;
-  };
-
   const { offers, source: offersSource } = pickDeliveryOffersFromInput(input);
   if (!offers.length) {
     log("early_exit", { reason: "no_offers" });
-    logZh("提前退出：无活动（shop ciwi-bundle-offers-fn）", {
+    logZh("提前退出：无活动（discount owner offers）", {
       offersSource,
     });
     return { operations: [] };
