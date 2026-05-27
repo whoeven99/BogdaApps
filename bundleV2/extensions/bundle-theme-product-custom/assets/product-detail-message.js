@@ -371,6 +371,38 @@ function getCurrentSelectedVariantRecord() {
   return variants[0] || null;
 }
 
+function getCurrentSelectedProduct() {
+  const config = readBundleConfigJson();
+  const configProduct =
+    config?.product && typeof config.product === "object" ? config.product : null;
+  const analyticsProduct =
+    window?.ShopifyAnalytics?.meta?.product &&
+    typeof window.ShopifyAnalytics.meta.product === "object"
+      ? window.ShopifyAnalytics.meta.product
+      : null;
+
+  const title =
+    String(
+      configProduct?.title ||
+        config?.productTitle ||
+        config?.title ||
+        analyticsProduct?.title ||
+        analyticsProduct?.product_title ||
+        "",
+    ).trim() || "Current product";
+
+  const image =
+    getProductImageUrl(configProduct) ||
+    getProductImageUrl(config) ||
+    getProductImageUrl(analyticsProduct) ||
+    "";
+
+  return {
+    title,
+    image,
+  };
+}
+
 function isVariantOutOfStock(variant) {
   if (!variant) return true;
   if (variant.available === false) return true;
@@ -2720,8 +2752,14 @@ function getCurrentOffer(offersConfig) {
       const triggerProductIds = Array.isArray(completeBundle.triggerProductIds)
         ? completeBundle.triggerProductIds
         : [];
+      if (triggerProductIds.length === 0) {
+        console.log(
+          "[ciwi] complete bundle skipped: trigger product ids are empty",
+          offer.id,
+        );
+        continue;
+      }
       if (
-        triggerProductIds.length > 0 &&
         !productIdListIncludes(triggerProductIds, currentProductGid)
       ) {
         console.log(

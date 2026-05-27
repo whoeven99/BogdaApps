@@ -2750,7 +2750,7 @@ export function compileCampaignRuntimeOutputs(
       ? finalizeCampaignRuntimeModuleOutput({
           offerType: "complete-bundle",
           selectedProductsJson: JSON.stringify({
-            productIds: completeBundleConfig.triggerProductIds ?? [],
+            triggerProductIds: completeBundleConfig.triggerProductIds ?? [],
             bars: completeBundleConfig.bars,
           }),
           discountRulesJson: completeBundleDiscountRules,
