@@ -9,11 +9,13 @@ import {
 } from "../generated/api";
 
 const LOG_PREFIX = "[ciwi-cart-lines-discount]";
+const ENABLE_FUNCTION_LOGS = false;
 
 const DISCOUNT_PERCENTAGE = "10.0";
 const DEFAULT_DISCOUNT_PERCENTAGE = DISCOUNT_PERCENTAGE;
 
 function log(step: string, detail?: unknown): void {
+  if (!ENABLE_FUNCTION_LOGS) return;
   try {
     if (detail === undefined) {
       console.error(`${LOG_PREFIX} ${step}`);
@@ -123,6 +125,14 @@ type BxgyDiscountRule = {
 
 type Offer = NonNullable<OfferMetafieldPayload["offers"]>[number];
 
+type IndexedCartLine = {
+  line: CartInput["cart"]["lines"][number];
+  unitPrice: number;
+  quantity: number;
+  productLookupKey: string;
+  variantLookupKey: string;
+};
+
 type CouponAccess = {
   enabled: boolean;
   code: string;
@@ -200,6 +210,81 @@ function productIdsMatch(
   const b = extractShopifyProductNumericId(configProductId);
   if (a.length && b.length) return a === b;
   return String(cartProductGid || "") === String(configProductId || "");
+}
+
+function buildIndexedCartLines(
+  cartLines: CartInput["cart"]["lines"],
+): {
+  entries: IndexedCartLine[];
+  byLookupKey: Map<string, IndexedCartLine[]>;
+  lookupKeys: Set<string>;
+  totalQuantity: number;
+} {
+  const byLookupKey = new Map<string, IndexedCartLine[]>();
+  const lookupKeys = new Set<string>();
+  const entries: IndexedCartLine[] = [];
+  let totalQuantity = 0;
+
+  for (const line of cartLines) {
+    const quantity = Math.max(0, Number(line.quantity) || 0);
+    const productLookupKey =
+      line.merchandise?.__typename === "ProductVariant"
+        ? buildOfferLookupKey(line.merchandise?.product?.id)
+        : "";
+    const variantLookupKey =
+      line.merchandise?.__typename === "ProductVariant"
+        ? buildOfferLookupKey(line.merchandise?.id)
+        : "";
+    const entry: IndexedCartLine = {
+      line,
+      unitPrice: parseMoneyAmount(line.cost?.amountPerQuantity?.amount),
+      quantity,
+      productLookupKey,
+      variantLookupKey,
+    };
+    entries.push(entry);
+    totalQuantity += quantity;
+
+    for (const lookupKey of [productLookupKey, variantLookupKey]) {
+      if (!lookupKey) continue;
+      lookupKeys.add(lookupKey);
+      const bucket = byLookupKey.get(lookupKey);
+      if (bucket) {
+        bucket.push(entry);
+      } else {
+        byLookupKey.set(lookupKey, [entry]);
+      }
+    }
+  }
+
+  return {
+    entries,
+    byLookupKey,
+    lookupKeys,
+    totalQuantity,
+  };
+}
+
+function getIndexedCartEntriesForConfiguredIds(
+  cartIndex: ReturnType<typeof buildIndexedCartLines>,
+  configuredIds: string[],
+): IndexedCartLine[] {
+  if (!configuredIds.length) return [];
+  const matched: IndexedCartLine[] = [];
+  const seenLineIds = new Set<string>();
+
+  for (const configuredId of configuredIds) {
+    const lookupKey = buildOfferLookupKey(configuredId);
+    if (!lookupKey) continue;
+    for (const entry of cartIndex.byLookupKey.get(lookupKey) ?? []) {
+      const lineId = String(entry.line.id || "");
+      if (!lineId || seenLineIds.has(lineId)) continue;
+      seenLineIds.add(lineId);
+      matched.push(entry);
+    }
+  }
+
+  return matched;
 }
 
 /** 判断是否为 complete-bundle 活动（兼容大小写、空格与下划线） */
@@ -777,6 +862,7 @@ export function bundleCartDiscountGenerateRun(
 
   const productCandidates: ProductDiscountCandidate[] = [];
   const orderCandidates: OrderDiscountCandidate[] = [];
+  const cartIndex = buildIndexedCartLines(input.cart.lines);
 
   const marketId = input.localization?.market?.id;
   const nowMs = resolveNowMs();
@@ -789,7 +875,7 @@ export function bundleCartDiscountGenerateRun(
       offerPassesScheduleAndMarket(compiledOffer.offer, marketId, nowMs, compiledOffer.settings),
   );
   const cartRelevantBxgyOffers = bxgyOffers.filter((compiledOffer) =>
-    offerIntersectsCartForBxgyEvaluation(compiledOffer, input.cart.lines),
+    offerIntersectsCartForBxgyEvaluation(compiledOffer, cartIndex),
   );
   const bxgyOffersForEvaluation = hasProductDiscountClass
     ? cartRelevantBxgyOffers
@@ -831,7 +917,7 @@ export function bundleCartDiscountGenerateRun(
   // ① 处理 BXGY（买 X 送 Y 等）：只负责生成候选，最终由 Shopify 按最大减免选择商品折扣。
   if (bxgyOffersForEvaluation.length > 0) {
     const bxgyCandidates = calculateBxgyDiscount(
-      input.cart.lines,
+      cartIndex,
       bxgyOffersForEvaluation,
     );
     if (bxgyCandidates.length > 0) {
@@ -972,10 +1058,9 @@ export function bundleCartDiscountGenerateRun(
   const resolvedProductCandidates = productCandidates.length
     ? resolveExclusiveProductCandidates(productCandidates, input.cart.lines)
     : [];
-  const effectiveUnitPriceByLineId = buildEffectiveUnitPriceByLineId(
-    input.cart.lines,
-    resolvedProductCandidates,
-  );
+  const effectiveUnitPriceByLineId = hasOrderDiscountClass
+    ? buildEffectiveUnitPriceByLineId(input.cart.lines, resolvedProductCandidates)
+    : new Map<string, number>();
 
   // ③ free gift 作为 order reward 生成订单级 fixed-amount 候选。
   if (hasOrderDiscountClass) {
@@ -1701,29 +1786,22 @@ function getEffectiveBxgyRules(compiledOffer: CompiledOfferRuntime): BxgyDiscoun
 }
 
 function cartContainsConfiguredIds(
-  cartLines: CartInput["cart"]["lines"],
+  cartIndex: ReturnType<typeof buildIndexedCartLines>,
   configuredIds: string[],
 ): boolean {
   if (!configuredIds.length) return false;
-
-  return cartLines.some((line) => {
-    if (line.merchandise?.__typename !== "ProductVariant") return false;
-    const productId = line.merchandise?.product?.id;
-    const variantId = line.merchandise?.id;
-    return configuredIds.some(
-      (configuredId) =>
-        (productId && productIdsMatch(productId, configuredId)) ||
-        (variantId && productIdsMatch(variantId, configuredId)),
-    );
+  return configuredIds.some((configuredId) => {
+    const lookupKey = buildOfferLookupKey(configuredId);
+    return lookupKey ? cartIndex.lookupKeys.has(lookupKey) : false;
   });
 }
 
 function offerIntersectsCartForBxgyEvaluation(
   compiledOffer: CompiledOfferRuntime,
-  cartLines: CartInput["cart"]["lines"],
+  cartIndex: ReturnType<typeof buildIndexedCartLines>,
 ): boolean {
   const selectedIds = compiledOffer.selectedIds;
-  if (cartContainsConfiguredIds(cartLines, selectedIds)) return true;
+  if (cartContainsConfiguredIds(cartIndex, selectedIds)) return true;
 
   const bxgyRules = getEffectiveBxgyRules(compiledOffer);
   const ruleScopedIds = Array.from(
@@ -1734,7 +1812,7 @@ function offerIntersectsCartForBxgyEvaluation(
       ]),
     ),
   );
-  if (cartContainsConfiguredIds(cartLines, ruleScopedIds)) return true;
+  if (cartContainsConfiguredIds(cartIndex, ruleScopedIds)) return true;
 
   return selectedIds.length === 0 && ruleScopedIds.length === 0;
 }
@@ -1743,7 +1821,7 @@ function offerIntersectsCartForBxgyEvaluation(
  * 计算 BXGY 折扣 — 支持多层级 (tier)，按 buyQuantity 字段选择最优匹配层级
  */
 function calculateBxgyDiscount(
-  cartLines: any[],
+  cartIndex: ReturnType<typeof buildIndexedCartLines>,
   offers: CompiledOfferRuntime[],
 ): ProductDiscountCandidate[] {
   const allProductCandidates: ProductDiscountCandidate[] = [];
@@ -1808,17 +1886,7 @@ function calculateBxgyDiscount(
       }
       const candidates: ProductDiscountCandidate[] = [];
       for (const selectedProductId of selectedProductIds) {
-        const matchingLines = cartLines
-          .filter((line) => {
-            if (line.merchandise?.__typename !== "ProductVariant") return false;
-            const productId = line.merchandise?.product?.id;
-            return productIdsMatch(productId, selectedProductId);
-          })
-          .map((line) => ({
-            line,
-            unitPrice: parseMoneyAmount(line.cost?.amountPerQuantity?.amount),
-            quantity: Math.max(0, Number(line.quantity) || 0),
-          }))
+        const matchingLines = getIndexedCartEntriesForConfiguredIds(cartIndex, [selectedProductId])
           .filter((entry) => entry.quantity > 0);
 
         if (!matchingLines.length) continue;
@@ -1916,17 +1984,7 @@ function calculateBxgyDiscount(
         ),
       );
       for (const selectedProductId of productPool) {
-        const matchingLines = cartLines
-          .filter((line) => {
-            if (line.merchandise?.__typename !== "ProductVariant") return false;
-            const productId = line.merchandise?.product?.id;
-            return productIdsMatch(productId, selectedProductId);
-          })
-          .map((line) => ({
-            line,
-            unitPrice: parseMoneyAmount(line.cost?.amountPerQuantity?.amount),
-            quantity: Math.max(0, Number(line.quantity) || 0),
-          }))
+        const matchingLines = getIndexedCartEntriesForConfiguredIds(cartIndex, [selectedProductId])
           .filter((entry) => entry.quantity > 0);
 
         if (!matchingLines.length) continue;
@@ -1972,10 +2030,7 @@ function calculateBxgyDiscount(
 
     const candidates: ProductDiscountCandidate[] = [];
 
-    const totalBuyQuantity = cartLines.reduce(
-      (sum, line) => sum + Math.max(0, Number(line.quantity) || 0),
-      0,
-    );
+    const totalBuyQuantity = cartIndex.totalQuantity;
 
     // Find the best matching tier: highest count that cart meets.
     // For quantity-breaks-different each tier may have its own eligible product subset,
@@ -1983,14 +2038,10 @@ function calculateBxgyDiscount(
     let bestRule: BxgyDiscountRule | null = null;
     for (const r of bxgyRules) {
       if (!r.buyProductIds.length) continue;
-      let matchingBuyProductCount = 0;
-      for (const line of cartLines) {
-        const productId = line.merchandise?.product?.id;
-        const variantId = line.merchandise?.id;
-        if (matchesAnyConfiguredId(r.buyProductIds, productId, variantId)) {
-          matchingBuyProductCount += line.quantity;
-        }
-      }
+      const matchingBuyProductCount = getIndexedCartEntriesForConfiguredIds(
+        cartIndex,
+        r.buyProductIds,
+      ).reduce((sum, entry) => sum + entry.quantity, 0);
 
       log("bxgy_rule_match_eval", {
         offerId: offer.id,
@@ -2015,14 +2066,11 @@ function calculateBxgyDiscount(
     }
     const selectedRule = bestRule;
 
-    let buyProductCount = 0;
-    for (const line of cartLines) {
-      const productId = line.merchandise?.product?.id;
-      const variantId = line.merchandise?.id;
-      if (matchesAnyConfiguredId(selectedRule.buyProductIds, productId, variantId)) {
-        buyProductCount += line.quantity;
-      }
-    }
+    const matchedBuyEntries = getIndexedCartEntriesForConfiguredIds(
+      cartIndex,
+      selectedRule.buyProductIds,
+    );
+    const buyProductCount = matchedBuyEntries.reduce((sum, entry) => sum + entry.quantity, 0);
 
     // Check the count threshold (cart must have at least `count` items total)
     if (totalBuyQuantity < selectedRule.count) {
@@ -2052,22 +2100,13 @@ function calculateBxgyDiscount(
       const discountTargetQty = maxPromotionTimes * selectedRule.buyQuantity;
       let remaining = discountTargetQty;
 
-      for (const line of cartLines) {
+      for (const entry of matchedBuyEntries) {
         if (remaining <= 0) break;
-        const productId = line.merchandise?.product?.id;
-        const variantId = line.merchandise?.id;
-        const isBuyProduct = matchesAnyConfiguredId(
-          selectedRule.buyProductIds,
-          productId,
-          variantId,
-        );
-        if (!isBuyProduct) continue;
-
-        const discountQuantity = Math.min(line.quantity, remaining);
+        const discountQuantity = Math.min(entry.quantity, remaining);
         if (discountQuantity > 0) {
           candidates.push({
             message: offer.cartTitle || "Bundle Discount",
-            targets: [{ cartLine: { id: line.id, quantity: discountQuantity } }],
+            targets: [{ cartLine: { id: entry.line.id, quantity: discountQuantity } }],
             value: {
               percentage: {
                 value: selectedRule.discountPercent.toFixed(1),
@@ -2077,7 +2116,7 @@ function calculateBxgyDiscount(
           remaining -= discountQuantity;
           log("simple_tier_candidate_added", {
             offerId: offer.id,
-            cartLineId: line.id,
+            cartLineId: entry.line.id,
             quantity: discountQuantity,
             discountPercent: selectedRule.discountPercent,
           });
@@ -2090,51 +2129,42 @@ function calculateBxgyDiscount(
 
     // Find get products and apply discount
     let remainingGetQuantity = maxPromotionTimes * selectedRule.getQuantity;
+    const matchedGetEntries = getIndexedCartEntriesForConfiguredIds(
+      cartIndex,
+      selectedRule.getProductIds,
+    );
 
-    for (const line of cartLines) {
-      const productId = line.merchandise?.product?.id;
-      const variantId = line.merchandise?.id;
-
+    for (const entry of matchedGetEntries) {
       if (remainingGetQuantity <= 0) break;
+      const discountQuantity = Math.min(entry.quantity, remainingGetQuantity);
 
-      if (
-        matchesAnyConfiguredId(
-          selectedRule.getProductIds,
-          productId,
-          variantId,
-        )
-      ) {
-
-        const discountQuantity = Math.min(line.quantity, remainingGetQuantity);
-
-        if (discountQuantity > 0) {
-          const candidate: ProductDiscountCandidate = {
-            message: offer.cartTitle || "Buy X Get Y",
-            targets: [
-              {
-                cartLine: {
-                  id: line.id,
-                  quantity: discountQuantity,
-                },
-              },
-            ],
-            value: {
-              percentage: {
-                value: selectedRule.discountPercent.toFixed(1),
+      if (discountQuantity > 0) {
+        const candidate: ProductDiscountCandidate = {
+          message: offer.cartTitle || "Buy X Get Y",
+          targets: [
+            {
+              cartLine: {
+                id: entry.line.id,
+                quantity: discountQuantity,
               },
             },
-          };
+          ],
+          value: {
+            percentage: {
+              value: selectedRule.discountPercent.toFixed(1),
+            },
+          },
+        };
 
-          candidates.push(candidate);
-          remainingGetQuantity -= discountQuantity;
+        candidates.push(candidate);
+        remainingGetQuantity -= discountQuantity;
 
-          log("bxgy_candidate_added", {
-            offerId: offer.id,
-            cartLineId: line.id,
-            quantity: discountQuantity,
-            discountPercent: selectedRule.discountPercent,
-          });
-        }
+        log("bxgy_candidate_added", {
+          offerId: offer.id,
+          cartLineId: entry.line.id,
+          quantity: discountQuantity,
+          discountPercent: selectedRule.discountPercent,
+        });
       }
     }
 
@@ -2931,38 +2961,6 @@ const findOffers = (
       seenOfferIds.add(offerId);
       candidateOffers.push(compiledOffer);
     }
-  }
-
-  for (const compiledOffer of candidateOffers) {
-    const offer = compiledOffer.offer;
-    const selectedIds = compiledOffer.selectedIds;
-    if (!selectedIds.length) {
-      log("offer_match_all_products", { offerId: offer.id, name: offer.name });
-      continue;
-    }
-
-    let hit = false;
-    for (const sid of selectedIds) {
-      if (productId && productIdsMatch(productId, sid)) {
-        hit = true;
-        break;
-      }
-      if (variantId && productIdsMatch(variantId, sid)) {
-        hit = true;
-        break;
-      }
-    }
-
-    log("offer_selected_ids_check", {
-      offerId: offer.id,
-      name: offer.name,
-      selectedIdCount: selectedIds.length,
-      productId,
-      variantId,
-      hit,
-    });
-
-    if (!hit) continue;
   }
 
   return candidateOffers.filter((compiledOffer) => {
