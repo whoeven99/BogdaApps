@@ -243,7 +243,25 @@
 
 .ciwi-different-products-picker__variant-select {
   width: 100%;
+  max-width: 100%;
+  display: block;
+  box-sizing: border-box;
   margin-top: 8px;
+  min-height: 32px;
+  border: 1px solid #dfe3e8;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1c1f23;
+  font-size: 12px;
+  padding: 6px 8px;
+}
+
+.ciwi-bundle-variant-select {
+  width: 100%;
+  max-width: 100%;
+  display: block;
+  box-sizing: border-box;
+  min-width: 0;
   min-height: 32px;
   border: 1px solid #dfe3e8;
   border-radius: 6px;
