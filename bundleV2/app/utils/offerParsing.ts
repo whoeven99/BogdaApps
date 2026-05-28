@@ -134,7 +134,7 @@ function sanitizeStickyAddToCartButtonText(raw: unknown): string {
   );
 }
 
-/** 阶梯赠品（Progressive gifts）— 嵌套在 offerSettingsJson.progressiveGifts */
+/** 阶梯赠品（Progressive gifts）—嵌套在 offerSettingsJson.progressiveGifts */
 export type ProgressiveGiftType = "free_shipping";
 
 export type ProgressiveGiftUnlockMode = "tier_index" | "at_count";
