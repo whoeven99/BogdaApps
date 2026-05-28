@@ -146,10 +146,9 @@ When there is uncertainty, prefer the option that:
 Use these priorities when choosing the next todo:
 
 1. Remove product-discount short-circuit behavior in the cart Function.
-2. Keep complete bundle as an order discount module and remove BXGY dependency.
+2. Keep complete bundle as a bundle-total module, executed through targeted product discount candidates, and remove BXGY dependency.
 3. Reframe free gift as an order reward module.
 4. Treat `offerType` as a template or primary module, not the whole campaign.
 5. Build toward a campaign-to-runtime compiler.
 6. Leave shipping discount outside the main campaign rewrite until intentionally
    designed.
-

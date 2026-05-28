@@ -76,6 +76,7 @@ Current and target product discount modules:
 
 - quantity breaks
 - BXGY
+- complete bundle
 
 Rule:
 
@@ -95,7 +96,6 @@ Order discount modules reduce the order subtotal or a scoped subtotal.
 
 Current and target order discount modules:
 
-- complete bundle
 - free gift reward
 
 Order discounts may stack with the winning product discount when Shopify
@@ -143,10 +143,14 @@ Legacy data may continue to infer this from quantity values for compatibility.
 
 ### Complete Bundle
 
-Complete bundle is an order discount module.
+Complete bundle is a bundle-total pricing module.
 
-It means a trigger product plus selected bundle items form a bundle, and that
-bundle subtotal receives an order-level discount.
+Its product semantics stay the same:
+
+- a trigger product plus selected bundle items form one bundle
+- the bundle receives one total discount or fixed bundle price
+- the shopper should experience this as bundle-total pricing, not separate
+  per-item promotions
 
 It should not depend on BXGY semantics.
 
@@ -166,8 +170,23 @@ Supported pricing modes:
 
 Implementation note:
 
-Complete bundle should continue using order discount candidates because product
-discount targeting is too fragile for mixed-cart bundle behavior.
+Complete bundle currently compiles to product discount candidates, not order
+discount candidates.
+
+Reason:
+
+- `orderSubtotal` targeting cannot scope a discount to partial quantities inside
+  one cart line
+- complete bundle needs exact cart-line plus quantity targeting when the cart
+  contains unrelated items or mixed quantities
+
+Execution rule:
+
+- emit one multi-target `ProductDiscountCandidate` per matched bundle
+- use `fixedAmount` with `appliesToEachItem: false`
+- target only the matched trigger line quantity and matched bundle-item
+  quantities
+- let it compete with other product discounts only on overlapping cart lines
 
 ### Free Gift Reward
 
@@ -257,7 +276,8 @@ Target migration:
 - generate all qualifying product discount candidates
 - select the maximum product discount outcome
 - generate order discount candidates independently
-- keep complete bundle as order discount
+- keep complete bundle bundle-total semantics while executing it through
+  targeted product discount candidates
 - migrate free gift from product discount behavior to order reward behavior
 - leave shipping discount out of the main campaign rewrite for now
 
@@ -268,6 +288,8 @@ Target migration:
 - Then update legacy-field compilation while legacy runtime paths still exist.
 - Keep product discount competition separate from order discount stacking.
 - Do not make complete bundle depend on BXGY.
+- Do not convert complete bundle back to broad `orderSubtotal` targeting unless
+  Shopify introduces quantity-precise order-discount scoping.
 - Do not model free gift as a normal product discount in new work.
 - Before changing Shopify Function logic, confirm which discount class the module
   should produce.

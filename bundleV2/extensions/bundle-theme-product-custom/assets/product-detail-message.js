@@ -36,6 +36,7 @@ const CIWI_DEBUG_SESSION_ID = "bundle-ui-empty-offers";
 // document 上 attachBundlePriceSync 的 capture 监听器 → scheduleBundlePriceRefresh →
 // 全量重绘 innerHTML → 再次 sync… 形成 F12 日志刷屏的死循环
 let __ciwiSuppressBundlePriceSync = false;
+let __ciwiDefaultOfferSnapshot = null;
 
 function reportCiwiDebugEvent(hypothesisId, location, msg, data) {
   if (typeof fetch !== "function") return;
@@ -446,14 +447,20 @@ function resolveProductVariantById(product, variantId, options) {
 function getAvailableDifferentProductsPoolCount(offer, selectedRule) {
   const poolProducts = getDifferentProductsPoolProducts(offer, selectedRule);
   return poolProducts.reduce((count, product) => {
-    const sellableVariant = findFirstSellableVariant(product?.variants);
+    const sellableVariant = resolveDifferentProductsVariant(product, {
+      useStoredSelection: false,
+      preferSellable: true,
+    });
     return count + (sellableVariant && !isVariantOutOfStock(sellableVariant) ? 1 : 0);
   }, 0);
 }
 
 function getAvailableCompleteBundleSelectableCount(config, bar) {
   return getCompleteBundleSelectableItems(config, bar).reduce((count, product) => {
-    const sellableVariant = findFirstSellableVariant(product?.variants);
+    const sellableVariant = resolveCompleteBundleVariant(bar, product, {
+      useStoredSelection: false,
+      preferSellable: true,
+    });
     return count + (sellableVariant && !isVariantOutOfStock(sellableVariant) ? 1 : 0);
   }, 0);
 }
@@ -1122,6 +1129,16 @@ function resolveActiveFreeGiftRule(offer, options) {
   return eligibleRules[eligibleRules.length - 1] || null;
 }
 
+function resolveCompleteBundleTriggerProductIdsFromParsed(parsed) {
+  if (Array.isArray(parsed?.triggerProductIds)) {
+    return parsed.triggerProductIds.map((id) => String(id || "").trim()).filter(Boolean);
+  }
+  if (Array.isArray(parsed?.productIds)) {
+    return parsed.productIds.map((id) => String(id || "").trim()).filter(Boolean);
+  }
+  return [];
+}
+
 function parseCompleteBundleConfig(selectedProductsJson) {
   if (typeof selectedProductsJson !== "string" || !selectedProductsJson.trim()) {
     return { triggerProductIds: [], bars: [] };
@@ -1129,11 +1146,7 @@ function parseCompleteBundleConfig(selectedProductsJson) {
   try {
     const parsed = JSON.parse(selectedProductsJson);
     const bars = Array.isArray(parsed?.bars) ? parsed.bars : [];
-    const triggerProductIds = Array.isArray(parsed?.triggerProductIds)
-      ? parsed.triggerProductIds.map((id) => String(id || "").trim()).filter(Boolean)
-      : Array.isArray(parsed?.productIds)
-        ? parsed.productIds.map((id) => String(id || "").trim()).filter(Boolean)
-        : [];
+    const triggerProductIds = resolveCompleteBundleTriggerProductIdsFromParsed(parsed);
     return {
       triggerProductIds,
       bars: normalizeCompleteBundleBarsConfig(
@@ -1475,7 +1488,7 @@ function hydrateProductFromStorefrontJson(rawProduct, existing) {
     price: String(variants[0]?.price || rawProduct?.price || existing?.price || ""),
     selectedVariantId: hasSelected
       ? selectedVariantId
-      : String(variants[0]?.id || selectedVariantId || ""),
+      : String(findFirstSellableVariant(variants)?.id || variants[0]?.id || selectedVariantId || ""),
     variants,
   };
 }
@@ -1693,7 +1706,7 @@ async function hydrateDifferentProductsOfferInPlace(offer) {
 }
 
 /** 当前栏内某商品在 widget 中选中的变体（与 __ciwiBundleState.selectedBundleVariants 同步） */
-function resolveCompleteBundleVariant(bar, product) {
+function resolveCompleteBundleVariant(bar, product, options) {
   if (String(product?.selectionMode || "") === "variant") {
     const lockedVariantId =
       product.selectedVariantId || product.variants?.[0]?.id || "";
@@ -1703,10 +1716,14 @@ function resolveCompleteBundleVariant(bar, product) {
       null
     );
   }
-  const picked =
-    window.__ciwiBundleState?.selectedBundleVariants?.[bar.id]?.[product.productId] || "";
+  const useStoredSelection = options?.useStoredSelection !== false;
+  const picked = useStoredSelection
+    ? window.__ciwiBundleState?.selectedBundleVariants?.[bar.id]?.[product.productId] || ""
+    : "";
   const vid = picked || product.selectedVariantId || product.variants?.[0]?.id || "";
-  return (product.variants || []).find((v) => String(v.id) === String(vid)) || product.variants?.[0] || null;
+  return resolveProductVariantById(product, vid, {
+    preferSellable: options?.preferSellable === true ? !picked : false,
+  });
 }
 
 function getCompleteBundleSelectableItems(_config, bar) {
@@ -1718,10 +1735,13 @@ function getCompleteBundleSelectableItems(_config, bar) {
   });
 }
 
-function getSelectedCompleteBundleItemIds(config, bar) {
+function getSelectedCompleteBundleItemIds(config, bar, options) {
   const pool = getCompleteBundleSelectableItems(config, bar);
   const allowedIds = new Set(pool.map((product) => String(product.productId)));
-  const rawMap = window.__ciwiBundleState?.selectedCompleteBundleProducts?.[bar.id] || {};
+  const useStoredSelection = options?.useStoredSelection !== false;
+  const rawMap = useStoredSelection
+    ? window.__ciwiBundleState?.selectedCompleteBundleProducts?.[bar.id] || {}
+    : {};
   const explicitIds = Object.keys(rawMap).filter(
     (productId) => rawMap[productId] && allowedIds.has(String(productId)),
   );
@@ -1730,9 +1750,16 @@ function getSelectedCompleteBundleItemIds(config, bar) {
     minQuantity,
     Math.trunc(Number(bar?.maxQuantity) || Number(bar?.quantity) || 1),
   );
+  const inStockPool = pool.filter((product) => {
+    const variant = resolveCompleteBundleVariant(bar, product, {
+      useStoredSelection,
+      preferSellable: true,
+    });
+    return variant && !isVariantOutOfStock(variant);
+  });
   const selectedIds = explicitIds.length
     ? explicitIds.slice(0, maxQuantity)
-    : pool.slice(0, minQuantity).map((product) => String(product.productId));
+    : inStockPool.slice(0, minQuantity).map((product) => String(product.productId));
   return Array.from(new Set(selectedIds));
 }
 
@@ -1818,6 +1845,35 @@ function getCurrentMarketId() {
     }
   }
   return null;
+}
+
+function getDefaultOfferStateSnapshot() {
+  const productId = String(getCurrentProductGid() || "");
+  const variantId = String(getSelectedVariantId() || "");
+  const unitPrice = Math.max(0, Number(getCurrentUnitPrice()) || 0);
+  const quantity = Math.max(1, Math.trunc(Number(getCurrentQuantityFromThemeForm()) || 1));
+
+  if (!__ciwiDefaultOfferSnapshot || __ciwiDefaultOfferSnapshot.productId !== productId) {
+    __ciwiDefaultOfferSnapshot = {
+      productId,
+      variantId,
+      unitPrice,
+      quantity,
+    };
+    return __ciwiDefaultOfferSnapshot;
+  }
+
+  if (!__ciwiDefaultOfferSnapshot.variantId && variantId) {
+    __ciwiDefaultOfferSnapshot.variantId = variantId;
+  }
+  if ((__ciwiDefaultOfferSnapshot.unitPrice || 0) <= 0 && unitPrice > 0) {
+    __ciwiDefaultOfferSnapshot.unitPrice = unitPrice;
+  }
+  if ((__ciwiDefaultOfferSnapshot.quantity || 0) <= 0 && quantity > 0) {
+    __ciwiDefaultOfferSnapshot.quantity = quantity;
+  }
+
+  return __ciwiDefaultOfferSnapshot;
 }
 
 function getCurrentCountryIsoCode() {
@@ -2073,7 +2129,7 @@ function buildDifferentProductsSelectionKey(productId, variantId) {
   return `${String(productId || "")}::${String(variantId || "")}`;
 }
 
-function getDefaultDifferentProductsSelectionEntries(poolProducts, requiredQty) {
+function getDefaultDifferentProductsSelectionEntries(poolProducts, requiredQty, options) {
   const limit = Math.max(1, Math.trunc(Number(requiredQty) || 1));
   const currentProductGid = getCurrentProductGid();
   const selectedEntries = [];
@@ -2081,7 +2137,13 @@ function getDefaultDifferentProductsSelectionEntries(poolProducts, requiredQty) 
     const currentProduct = (poolProducts || []).find((product) =>
       productIdsMatch(currentProductGid, product?.productId),
     );
-    const currentVariantId = String(resolveDifferentProductsVariant(currentProduct)?.id || "");
+    const currentVariantId = String(
+      resolveDifferentProductsVariant(currentProduct, {
+        useStoredSelection: false,
+        preferSellable: true,
+        currentVariantId: options?.currentVariantId,
+      })?.id || "",
+    );
     if (currentProduct?.productId && currentVariantId) {
       selectedEntries.push({
         productId: String(currentProduct.productId),
@@ -2091,7 +2153,13 @@ function getDefaultDifferentProductsSelectionEntries(poolProducts, requiredQty) 
   }
   for (const product of poolProducts || []) {
     const productId = String(product?.productId || "");
-    const variantId = String(resolveDifferentProductsVariant(product)?.id || "");
+    const variantId = String(
+      resolveDifferentProductsVariant(product, {
+        useStoredSelection: false,
+        preferSellable: true,
+        currentVariantId: options?.currentVariantId,
+      })?.id || "",
+    );
     if (!productId || !variantId) continue;
     const nextKey = buildDifferentProductsSelectionKey(productId, variantId);
     if (
@@ -2142,21 +2210,48 @@ function getSelectedDifferentProductsEntries(offer, selectedRule, poolProducts) 
   return getDefaultDifferentProductsSelectionEntries(poolProducts, limit);
 }
 
-function resolveDifferentProductsVariant(product) {
+function resolveDifferentProductsVariant(product, options) {
   const currentProductGid = getCurrentProductGid();
-  const picked =
-    window.__ciwiBundleState?.selectedDifferentProductVariants?.[product.productId] || "";
+  const useStoredSelection = options?.useStoredSelection !== false;
+  const picked = useStoredSelection
+    ? window.__ciwiBundleState?.selectedDifferentProductVariants?.[product.productId] || ""
+    : "";
   const currentVariantId =
     currentProductGid && productIdsMatch(currentProductGid, product?.productId)
-      ? getSelectedVariantId()
+      ? String(options?.currentVariantId || getSelectedVariantId() || "")
       : "";
   const variantId =
     picked || currentVariantId || product.selectedVariantId || product.variants?.[0]?.id || "";
-  return (
-    (product.variants || []).find((variant) => String(variant.id) === String(variantId)) ||
-    product.variants?.[0] ||
-    null
-  );
+  return resolveProductVariantById(product, variantId, {
+    preferSellable: options?.preferSellable === true && !picked && !currentVariantId,
+  });
+}
+
+function getEstimatedOfferProductUnitPrice(productIdLike, fallbackUnitPrice) {
+  const currentProductGid = getCurrentProductGid();
+  if (currentProductGid && productIdsMatch(currentProductGid, productIdLike)) {
+    return Math.max(0, Number(fallbackUnitPrice) || 0);
+  }
+
+  const cached = readCachedStorefrontProduct(productIdLike);
+  if (!cached) {
+    return Math.max(0, Number(fallbackUnitPrice) || 0);
+  }
+
+  const hydrated = hydrateProductFromStorefrontJson(cached, {
+    productId: String(productIdLike || ""),
+    handle: "",
+    title: "",
+    image: "",
+    price: "",
+    selectedVariantId: "",
+    variants: [],
+  });
+  const variant = resolveProductVariantById(hydrated, hydrated?.selectedVariantId || "", {
+    preferSellable: true,
+  });
+  const unitPrice = parseMoneyStringToNumber(variant?.price || hydrated?.price || "");
+  return unitPrice > 0 ? unitPrice : Math.max(0, Number(fallbackUnitPrice) || 0);
 }
 
 function buildEligibleProductHref(product) {
@@ -2558,7 +2653,11 @@ function shouldHideOfferForInventory(offer) {
     const rules = parseDifferentProductsDiscountRulesFromOffer(offer).filter(
       (rule) => Number(rule?.count) > 0,
     );
-    return !rules.some((rule) => getAvailableDifferentProductsPoolCount(offer, rule) > 0);
+    return !rules.some(
+      (rule) =>
+        getAvailableDifferentProductsPoolCount(offer, rule) >=
+        getDifferentProductsRequiredQuantity(rule),
+    );
   }
 
   if (offer.offerType === "complete-bundle") {
@@ -2566,11 +2665,174 @@ function shouldHideOfferForInventory(offer) {
     const config = parseCompleteBundleConfig(offer?.selectedProductsJson);
     return !config.bars.some((bar) => {
       if (isCompleteBundleSingleBarConfig(bar)) return true;
-      return getAvailableCompleteBundleSelectableCount(config, bar) > 0;
+      const requiredSelectionCount = Math.max(1, Math.trunc(Number(bar?.minQuantity) || 1));
+      return getAvailableCompleteBundleSelectableCount(config, bar) >= requiredSelectionCount;
     });
   }
 
   return isVariantOutOfStock(currentVariant);
+}
+
+function getDefaultOfferRule(rules, preferredCount) {
+  const actionableRules = (Array.isArray(rules) ? rules : []).filter(
+    (rule) => String(rule?.tierType || "") !== "single",
+  );
+  if (!actionableRules.length) return null;
+  if (Number.isFinite(Number(preferredCount))) {
+    const matchedRule = actionableRules.find(
+      (rule) => Number(rule?.count) === Math.trunc(Number(preferredCount)),
+    );
+    if (matchedRule) return matchedRule;
+  }
+  return actionableRules.find((rule) => rule.isDefault) || actionableRules[0] || null;
+}
+
+function calculateBxgySavingsEstimate(rule, unitPrice) {
+  const safeUnitPrice = Math.max(0, Number(unitPrice) || 0);
+  const rewardProductIds =
+    Array.isArray(rule?.getProductIds) && rule.getProductIds.length > 0
+      ? rule.getProductIds
+      : Array.isArray(rule?.buyProductIds)
+        ? rule.buyProductIds
+        : [];
+  const rewardUnitPriceCandidates = rewardProductIds
+    .map((productId) => getEstimatedOfferProductUnitPrice(productId, safeUnitPrice))
+    .filter((price) => Number.isFinite(price) && price > 0)
+    .sort((left, right) => left - right);
+  const rewardUnitPrice = rewardUnitPriceCandidates[0] || safeUnitPrice;
+  const rewardQuantity = Math.max(1, Math.trunc(Number(rule?.getQuantity) || 1));
+  const discountPercent = Math.max(0, Math.min(100, Number(rule?.discountPercent) || 0));
+  return Math.round(rewardUnitPrice * rewardQuantity * (discountPercent / 100) * 100) / 100;
+}
+
+function getDefaultCompleteBundleBar(config) {
+  const bars = Array.isArray(config?.bars) ? config.bars : [];
+  const defaultBarId = getDefaultSelectedCompleteBundleBarId(config);
+  return bars.find((bar) => String(bar?.id || "") === String(defaultBarId || "")) || bars[0] || null;
+}
+
+function getCurrentDefaultOfferSavings(offer) {
+  const snapshot = getDefaultOfferStateSnapshot();
+  const currentUnitPrice = Math.max(0, Number(snapshot?.unitPrice) || 0);
+  if (!offer) return 0;
+
+  if (offer.offerType === "complete-bundle") {
+    const config = parseCompleteBundleConfig(offer.selectedProductsJson);
+    const bar = getDefaultCompleteBundleBar(config);
+    if (!bar || isCompleteBundleSingleBarConfig(bar)) return 0;
+    const selectedItemIds = new Set(
+      getSelectedCompleteBundleItemIds(config, bar, { useStoredSelection: false }),
+    );
+    if (!selectedItemIds.size) return 0;
+    let sumOriginal = currentUnitPrice;
+    for (const product of getCompleteBundleSelectableItems(config, bar)) {
+      if (!selectedItemIds.has(String(product?.productId || ""))) continue;
+      const variant = resolveCompleteBundleVariant(bar, product, {
+        useStoredSelection: false,
+        preferSellable: true,
+      });
+      const base = parseMoneyStringToNumber(variant?.price || product?.price || "");
+      sumOriginal += Math.max(0, base);
+    }
+    const bundlePricing = applyCompleteBundleProductPricing(
+      (bar.pricing && bar.pricing.mode) || "full_price",
+      Number(bar.pricing && bar.pricing.value) || 0,
+      sumOriginal,
+    );
+    return Math.max(0, Math.round((sumOriginal - bundlePricing.final) * 100) / 100);
+  }
+
+  if (offer.offerType === "quantity-breaks-different") {
+    const defaultRule = getDefaultOfferRule(
+      parseDifferentProductsDiscountRulesFromOffer(offer),
+      getDefaultSelectedCountForOffer(offer),
+    );
+    if (!defaultRule) return 0;
+    const poolProducts = getDifferentProductsPoolProducts(offer, defaultRule);
+    const selectedEntries = getDefaultDifferentProductsSelectionEntries(
+      poolProducts,
+      getDifferentProductsRequiredQuantity(defaultRule),
+      { currentVariantId: snapshot?.variantId },
+    );
+    if (
+      selectedEntries.length < getDifferentProductsRequiredQuantity(defaultRule)
+    ) {
+      return 0;
+    }
+    const selectedPrices = selectedEntries
+      .map((entry) => {
+        const product = poolProducts.find(
+          (item) => String(item?.productId || "") === String(entry?.productId || ""),
+        );
+        const variant = resolveProductVariantById(product, entry?.variantId || "", {
+          preferSellable: true,
+        });
+        return parseMoneyStringToNumber(variant?.price || product?.price || "");
+      })
+      .filter((price) => Number.isFinite(price) && price > 0);
+    if (!selectedPrices.length) return 0;
+    if (String(defaultRule.tierType || "") === "bxgy") {
+      const rewardPrices = selectedPrices.slice().sort((left, right) => left - right);
+      const rewardQuantity = Math.max(
+        1,
+        Math.min(
+          rewardPrices.length,
+          Math.trunc(Number(defaultRule?.getQuantity) || 1),
+        ),
+      );
+      const rewardSubtotal = rewardPrices
+        .slice(0, rewardQuantity)
+        .reduce((sum, price) => sum + Math.max(0, price), 0);
+      const discountPercent = Math.max(
+        0,
+        Math.min(100, Number(defaultRule?.discountPercent) || 0),
+      );
+      return Math.round(rewardSubtotal * (discountPercent / 100) * 100) / 100;
+    }
+    const subtotal = selectedPrices.reduce((sum, price) => sum + Math.max(0, price), 0);
+    const discountPercent = Math.max(
+      0,
+      Math.min(100, Number(defaultRule?.discountPercent) || 0),
+    );
+    return Math.round(subtotal * (discountPercent / 100) * 100) / 100;
+  }
+
+  if (offer.offerType === "bxgy") {
+    const defaultRule = getPreferredActionableBxgyRule(
+      offer.discountRulesJson,
+      getDefaultSelectedCountForOffer(offer),
+    );
+    return defaultRule ? calculateBxgySavingsEstimate(defaultRule, currentUnitPrice) : 0;
+  }
+
+  if (offer.offerType === "free-gift") {
+    const activeRule = resolveActiveFreeGiftRule(offer, {
+      quantity: Math.max(1, Math.trunc(Number(snapshot?.quantity) || 1)),
+    });
+    if (!activeRule) return 0;
+    const sellableGiftVariant = resolveSellableFreeGiftVariant(offer, activeRule);
+    if (!sellableGiftVariant) return 0;
+    const giftQuantity = Math.max(1, Math.trunc(Number(activeRule?.giftQuantity) || 1));
+    return (
+      Math.round(
+        parseMoneyStringToNumber(sellableGiftVariant?.price || "") * giftQuantity * 100,
+      ) / 100
+    );
+  }
+
+  const defaultRule = getDefaultOfferRule(
+    parseDiscountRulesJson(offer.discountRulesJson),
+    getDefaultSelectedCountForOffer(offer),
+  );
+  if (!defaultRule) return 0;
+  if (String(defaultRule.logicType || "") === "bxgy") {
+    return calculateBxgySavingsEstimate(defaultRule, currentUnitPrice);
+  }
+  return calculateBundleAmounts(
+    currentUnitPrice,
+    Math.max(1, Math.trunc(Number(defaultRule?.count) || 1)),
+    Number(defaultRule?.discountPercent) || 0,
+  ).saved;
 }
 
 function getCurrentOffer(offersConfig) {
@@ -2613,6 +2875,8 @@ function getCurrentOffer(offersConfig) {
     // #endregion
     return null;
   }
+
+  const matchingCandidates = [];
 
   for (let index = 0; index < offers.length; index += 1) {
     const offer = offers[index];
@@ -2831,14 +3095,40 @@ function getCurrentOffer(offersConfig) {
       continue;
     }
 
-    console.log("[ciwi] offer selected for current product", {
+    const defaultSavings = Math.max(0, Number(getCurrentDefaultOfferSavings(offer)) || 0);
+    matchingCandidates.push({
+      offer,
+      index,
+      defaultSavings,
+    });
+    console.log("[ciwi] offer candidate for current product", {
       index,
       offerId: offer.id,
       offerName: offer.name,
       offerType: offer.offerType,
       currentProductGid,
+      defaultSavings,
     });
-    return offer;
+  }
+
+  if (matchingCandidates.length > 0) {
+    matchingCandidates.sort((left, right) => {
+      if (right.defaultSavings !== left.defaultSavings) {
+        return right.defaultSavings - left.defaultSavings;
+      }
+      return left.index - right.index;
+    });
+    const winner = matchingCandidates[0];
+    console.log("[ciwi] offer selected for current product", {
+      index: winner.index,
+      offerId: winner.offer.id,
+      offerName: winner.offer.name,
+      offerType: winner.offer.offerType,
+      currentProductGid,
+      defaultSavings: winner.defaultSavings,
+      candidateCount: matchingCandidates.length,
+    });
+    return winner.offer;
   }
 
   console.log("[ciwi] no matching offer for current product — skip bundle UI");
@@ -4102,7 +4392,7 @@ async function performCompleteBundleCartAdd() {
       const selectedVariant = resolveProductVariantById(
         product,
         selectedMap[product.productId] || product.selectedVariantId || "",
-        { preferSellable: false },
+        { preferSellable: !selectedMap[product.productId] },
       );
       if (!variantHasSufficientInventory(selectedVariant, 1)) {
         setBundleErrorMessage("Some selected bundle products are out of stock. Please update your selection.");

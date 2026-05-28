@@ -181,6 +181,11 @@ type CompleteBundleBarRow = {
 };
 
 type CartLineForBundle = CartInput["cart"]["lines"][number];
+type CompleteBundleAllocation = {
+  lineId: string;
+  unitBase: number;
+  quantity: number;
+};
 
 function parseMoneyAmount(raw: unknown): number {
   if (raw == null) return 0;
@@ -341,6 +346,27 @@ function normalizePricingMode(raw: unknown): CompleteBundlePricingMode {
   return "full_price";
 }
 
+function sortIndexedCartEntriesForBundleMatch(
+  entries: IndexedCartLine[],
+): IndexedCartLine[] {
+  return entries
+    .slice()
+    .sort((left, right) => {
+      if (right.unitPrice !== left.unitPrice) {
+        return right.unitPrice - left.unitPrice;
+      }
+      return String(left.line.id || "").localeCompare(String(right.line.id || ""));
+    });
+}
+
+function buildCompleteBundleAllocationRows(
+  allocationsByLineId: Map<string, CompleteBundleAllocation>,
+): CompleteBundleAllocation[] {
+  return Array.from(allocationsByLineId.values()).sort((left, right) =>
+    left.lineId.localeCompare(right.lineId),
+  );
+}
+
 /** 解析 selectedProductsJson 中的 complete-bundle bars（与后台 offerParsing 结构一致） */
 function parseCompleteBundleBarsJson(
   selectedProductsJson?: string | null,
@@ -348,14 +374,14 @@ function parseCompleteBundleBarsJson(
   if (!selectedProductsJson) return { triggerProductIds: [], bars: [] };
   try {
     const parsed = JSON.parse(selectedProductsJson) as unknown;
-    const triggerProductIds = Array.isArray((parsed as { productIds?: unknown })?.productIds)
-      ? ((parsed as { productIds?: unknown[] }).productIds || [])
+    const triggerProductIds = Array.isArray((parsed as { triggerProductIds?: unknown })?.triggerProductIds)
+      ? ((parsed as { triggerProductIds?: unknown[] }).triggerProductIds || [])
           .map((id) => String(id || "").trim())
           .filter(Boolean)
-      : Array.isArray((parsed as { triggerProductIds?: unknown })?.triggerProductIds)
-        ? ((parsed as { triggerProductIds?: unknown[] }).triggerProductIds || [])
-          .map((id) => String(id || "").trim())
-          .filter(Boolean)
+      : Array.isArray((parsed as { productIds?: unknown })?.productIds)
+        ? ((parsed as { productIds?: unknown[] }).productIds || [])
+            .map((id) => String(id || "").trim())
+            .filter(Boolean)
         : [];
     const barsIn = (parsed as { bars?: unknown })?.bars;
     if (!Array.isArray(barsIn)) return { triggerProductIds, bars: [] };
@@ -530,25 +556,23 @@ function offerPassesScheduleAndMarket(
 }
 
 /**
- * complete-bundle 整体订单折扣：
- * - 主商品与所选 bundle items 一起组成整包，再按 bar.pricing 对整包 subtotal 计算折后价；
- * - 每个匹配 bar 产出一条 order candidate，由 Shopify 选择最大优惠；
- * - 商品 ID 仍按 product.id 比较（兼容 GID / 纯数字混存）。
+ * complete-bundle 整包计价：
+ * - 语义仍然是“整包总价”，但执行层改为 product discount；
+ * - 每个匹配 bar 产出一条多 target 的 product candidate，value 是整包总优惠；
+ * - target 精确到命中的 cart line + quantity，避免 orderSubtotal 只能按整条 line 计价的问题。
  */
-function calculateCompleteBundleDiscounts(
-  cartLines: CartLineForBundle[],
+function calculateCompleteBundleProductDiscounts(
+  cartIndex: ReturnType<typeof buildIndexedCartLines>,
   offers: Offer[],
   marketId: string | undefined,
   nowMs: number | null,
-  effectiveUnitPriceByLineId?: Map<string, number>,
-): OrderDiscountCandidate[] {
+): ProductDiscountCandidate[] {
   const completeOffers = offers.filter((o) => isCompleteBundleOfferType(o.offerType));
   if (!completeOffers.length) {
     return [];
   }
 
-  const allCartLineIds = cartLines.map((line) => line.id);
-  const candidates: OrderDiscountCandidate[] = [];
+  const candidates: ProductDiscountCandidate[] = [];
 
   for (const offer of completeOffers) {
     if (!offerPassesScheduleAndMarket(offer, marketId, nowMs)) {
@@ -577,70 +601,81 @@ function calculateCompleteBundleDiscounts(
     for (const bar of bars) {
       if (bar.type === "single") continue;
       if (!bar.products.length) continue;
-      const anchorLine = cartLines.find((line) => {
-        if (line.merchandise.__typename !== "ProductVariant") return false;
-        const pid = line.merchandise.product?.id;
-        return parsedConfig.triggerProductIds.some((triggerId) => productIdsMatch(pid, triggerId));
-      });
-      if (!anchorLine) continue;
-      const anchorProductId =
-        anchorLine.merchandise.__typename === "ProductVariant"
-          ? anchorLine.merchandise.product?.id
-          : undefined;
+      const anchorEntry = sortIndexedCartEntriesForBundleMatch(
+        getIndexedCartEntriesForConfiguredIds(cartIndex, parsedConfig.triggerProductIds).filter(
+          (entry) => entry.quantity > 0,
+        ),
+      )[0];
+      const anchorLine = anchorEntry?.line;
+      if (!anchorLine || anchorLine.merchandise.__typename !== "ProductVariant") continue;
+      const anchorProductId = anchorLine.merchandise.product?.id;
 
-      const bundleItemAllocations: Array<{
-        lineId: string;
-        unitBase: number;
-      }> = [];
-      const usedLineIds = new Set<string>([anchorLine.id]);
+      const remainingQuantityByLineId = new Map(
+        cartIndex.entries.map((entry) => [String(entry.line.id || ""), entry.quantity]),
+      );
+      remainingQuantityByLineId.set(
+        anchorLine.id,
+        Math.max(0, (remainingQuantityByLineId.get(anchorLine.id) || 0) - 1),
+      );
+      const allocationsByLineId = new Map<string, CompleteBundleAllocation>();
+      let matchedBundleItemsCount = 0;
       for (const bundleItem of bar.products) {
-        const matchedLine = cartLines.find((line) => {
-          if (line.merchandise.__typename !== "ProductVariant") return false;
-          if (usedLineIds.has(line.id)) return false;
-          const pid = line.merchandise.product?.id;
-          const variantId = line.merchandise.id;
-          const enforceVariant =
-            bundleItem.selectionMode === "variant" && !!bundleItem.selectedVariantId;
-          if (enforceVariant) {
-            if (!productIdsMatch(variantId, bundleItem.selectedVariantId || "")) return false;
-          } else if (!productIdsMatch(pid, bundleItem.productId)) {
-            return false;
-          }
-          if (
-            bar.excludeTriggerProduct &&
-            anchorProductId &&
-            productIdsMatch(pid, anchorProductId)
-          ) {
-            return false;
-          }
-          return true;
-        });
-        if (!matchedLine) continue;
-        bundleItemAllocations.push({
-          lineId: matchedLine.id,
-          unitBase:
-            effectiveUnitPriceByLineId?.get(matchedLine.id) ??
-            parseMoneyAmount(matchedLine.cost?.amountPerQuantity?.amount),
-        });
-        usedLineIds.add(matchedLine.id);
+        if (matchedBundleItemsCount >= bar.maxQuantity) break;
+        const configuredIds =
+          bundleItem.selectionMode === "variant" && bundleItem.selectedVariantId
+            ? [bundleItem.selectedVariantId]
+            : [bundleItem.productId];
+        const matchedEntry = sortIndexedCartEntriesForBundleMatch(
+          getIndexedCartEntriesForConfiguredIds(cartIndex, configuredIds).filter((entry) => {
+            const lineId = String(entry.line.id || "");
+            if (!lineId) return false;
+            if ((remainingQuantityByLineId.get(lineId) || 0) <= 0) return false;
+            if (entry.line.merchandise.__typename !== "ProductVariant") return false;
+            const pid = entry.line.merchandise.product?.id;
+            if (
+              bar.excludeTriggerProduct &&
+              anchorProductId &&
+              productIdsMatch(pid, anchorProductId)
+            ) {
+              return false;
+            }
+            return true;
+          }),
+        )[0];
+        if (!matchedEntry) continue;
+        const matchedLineId = String(matchedEntry.line.id || "");
+        remainingQuantityByLineId.set(
+          matchedLineId,
+          Math.max(0, (remainingQuantityByLineId.get(matchedLineId) || 0) - 1),
+        );
+        const existingAllocation = allocationsByLineId.get(matchedLineId);
+        if (existingAllocation) {
+          existingAllocation.quantity += 1;
+        } else {
+          allocationsByLineId.set(matchedLineId, {
+            lineId: matchedLineId,
+            unitBase: matchedEntry.unitPrice,
+            quantity: 1,
+          });
+        }
+        matchedBundleItemsCount += 1;
       }
 
-      if (bundleItemAllocations.length < bar.minQuantity) {
+      if (matchedBundleItemsCount < bar.minQuantity) {
         log("complete_bundle_bar_no_match", {
           offerId: offer.id,
           barId: bar.id,
           reason: "insufficient_bundle_items",
-          matchedBundleItems: bundleItemAllocations.length,
+          matchedBundleItems: matchedBundleItemsCount,
           minQuantity: bar.minQuantity,
         });
         continue;
       }
 
-      const allocations = bundleItemAllocations.slice(0, bar.maxQuantity);
+      const allocations = buildCompleteBundleAllocationRows(allocationsByLineId);
       const bundleSubtotal = [
-        effectiveUnitPriceByLineId?.get(anchorLine.id) ??
-          parseMoneyAmount(anchorLine.cost?.amountPerQuantity?.amount),
-        ...allocations.map((row) => row.unitBase),
+        anchorEntry.unitPrice,
+        ...allocations.map((row) => row.unitBase * row.quantity),
       ].reduce((sum, value) => sum + Math.max(0, value), 0);
       const { final, original } = applyCompleteBundleUnitPricing(
         bundleSubtotal,
@@ -650,21 +685,26 @@ function calculateCompleteBundleDiscounts(
       const totalDiscount = Math.max(0, original - final);
       if (totalDiscount <= 0) continue;
 
-      const includedLineIds = new Set<string>([anchorLine.id, ...allocations.map((row) => row.lineId)]);
-      const excludedCartLineIds = allCartLineIds.filter((id) => !includedLineIds.has(id));
-
       candidates.push({
         message: offer.cartTitle || "Bundle order discount",
         targets: [
           {
-            orderSubtotal: {
-              excludedCartLineIds,
+            cartLine: {
+              id: anchorLine.id,
+              quantity: 1,
             },
           },
+          ...allocations.map((row) => ({
+            cartLine: {
+              id: row.lineId,
+              quantity: row.quantity,
+            },
+          })),
         ],
         value: {
           fixedAmount: {
             amount: totalDiscount.toFixed(2),
+            appliesToEachItem: false,
           },
         },
       });
@@ -672,7 +712,7 @@ function calculateCompleteBundleDiscounts(
       log("complete_bundle_matched", {
         offerId: offer.id,
         barId: bar.id,
-        includedLineCount: includedLineIds.size,
+        includedLineCount: allocations.length + 1,
         bundleSubtotal,
         totalDiscount,
       });
@@ -1055,42 +1095,21 @@ export function bundleCartDiscountGenerateRun(
     }
   }
 
-  const resolvedProductCandidates = productCandidates.length
-    ? resolveExclusiveProductCandidates(productCandidates, input.cart.lines)
-    : [];
-  const effectiveUnitPriceByLineId = hasOrderDiscountClass
-    ? buildEffectiveUnitPriceByLineId(input.cart.lines, resolvedProductCandidates)
-    : new Map<string, number>();
-
-  // ③ free gift 作为 order reward 生成订单级 fixed-amount 候选。
-  if (hasOrderDiscountClass) {
-    const freeGiftCandidates = calculateFreeGiftDiscount(
-      input.cart.lines,
-      freeGiftOffers.map((compiledOffer) => compiledOffer.offer),
-    );
-    if (freeGiftCandidates.length > 0) {
-      orderCandidates.push(...freeGiftCandidates);
-    }
-  }
-
-  // ④ 处理 complete-bundle：主商品 + bundle items 一起走整包订单折扣。
-  // 这里按本轮最终生效的 product discount 后单价重算 bundle subtotal，
-  // 避免 complete-bundle 的 fixed amount 看起来覆盖同车的商品级优惠。
-  if (hasOrderDiscountClass) {
+  // ③ complete-bundle 保持“整包总价”语义，但执行层改为多 target 的 product discount，
+  // 与其它商品折扣一起走同一套重叠 cart line 冲突决议。
+  if (hasProductDiscountClass) {
     log("complete_bundle_evaluation_start", {
       marketId,
       cartLineCount: input.cart.lines.length,
-      resolvedProductCandidateCount: resolvedProductCandidates.length,
     });
-    const completeBundleCandidates = calculateCompleteBundleDiscounts(
-      input.cart.lines,
+    const completeBundleCandidates = calculateCompleteBundleProductDiscounts(
+      cartIndex,
       eligibleOffers.map((compiledOffer) => compiledOffer.offer),
       marketId,
       nowMs,
-      effectiveUnitPriceByLineId,
     );
     if (completeBundleCandidates.length > 0) {
-      orderCandidates.push(...completeBundleCandidates);
+      productCandidates.push(...completeBundleCandidates);
       log("complete_bundle_evaluation_success", {
         candidateCount: completeBundleCandidates.length,
       });
@@ -1098,6 +1117,21 @@ export function bundleCartDiscountGenerateRun(
       log("complete_bundle_evaluation_no_match", {
         reason: "no_complete_bundle_candidates",
       });
+    }
+  }
+
+  const resolvedProductCandidates = productCandidates.length
+    ? resolveExclusiveProductCandidates(productCandidates, input.cart.lines)
+    : [];
+
+  // ④ free gift 作为 order reward 生成订单级 fixed-amount 候选。
+  if (hasOrderDiscountClass) {
+    const freeGiftCandidates = calculateFreeGiftDiscount(
+      input.cart.lines,
+      freeGiftOffers.map((compiledOffer) => compiledOffer.offer),
+    );
+    if (freeGiftCandidates.length > 0) {
+      orderCandidates.push(...freeGiftCandidates);
     }
   }
 
@@ -2704,19 +2738,26 @@ function resolveNowMs(): number | null {
 }
 
 
+function getCandidateTargetQuantities(
+  candidate: ProductDiscountCandidate,
+): Map<string, number> {
+  const quantitiesByLineId = new Map<string, number>();
+  for (const target of candidate.targets ?? []) {
+    const cartLineId = String(target.cartLine?.id || "").trim();
+    if (!cartLineId) continue;
+    const quantity = Math.max(1, Math.trunc(Number(target.cartLine?.quantity) || 1));
+    quantitiesByLineId.set(
+      cartLineId,
+      (quantitiesByLineId.get(cartLineId) || 0) + quantity,
+    );
+  }
+  return quantitiesByLineId;
+}
+
 function getCandidateTargetCartLineIds(
   candidate: ProductDiscountCandidate,
 ): string[] {
-  return Array.from(
-    new Set(
-      (candidate.targets ?? [])
-        .flatMap((target) => {
-          const cartLineId = target.cartLine?.id;
-          return cartLineId ? [cartLineId] : [];
-        })
-        .filter(Boolean),
-    ),
-  );
+  return Array.from(getCandidateTargetQuantities(candidate).keys());
 }
 
 function parseCandidatePercentValue(value: string | null | undefined): number {
@@ -2729,12 +2770,22 @@ function estimateCandidateSavings(
   candidate: ProductDiscountCandidate,
   unitPriceByLineId: Map<string, number>,
 ): number {
-  const targetLineIds = getCandidateTargetCartLineIds(candidate);
-  if (!targetLineIds.length) return 0;
+  const targetQuantitiesByLineId = getCandidateTargetQuantities(candidate);
+  if (!targetQuantitiesByLineId.size) return 0;
 
-  return targetLineIds.reduce((sum, lineId) => {
-    const target = candidate.targets.find((entry) => entry.cartLine?.id === lineId)?.cartLine;
-    const quantity = Math.max(1, Math.trunc(Number(target?.quantity) || 1));
+  if ("fixedAmount" in candidate.value) {
+    const fixedAmount = Number(candidate.value.fixedAmount?.amount || 0);
+    const normalizedFixedAmount = Number.isFinite(fixedAmount) ? Math.max(0, fixedAmount) : 0;
+    if (!candidate.value.fixedAmount?.appliesToEachItem) {
+      return normalizedFixedAmount;
+    }
+
+    return Array.from(targetQuantitiesByLineId.values()).reduce((sum, quantity) => {
+      return sum + normalizedFixedAmount * quantity;
+    }, 0);
+  }
+
+  return Array.from(targetQuantitiesByLineId.entries()).reduce((sum, [lineId, quantity]) => {
     const unitPrice = Math.max(0, unitPriceByLineId.get(lineId) || 0);
 
     if ("percentage" in candidate.value) {
@@ -2744,16 +2795,204 @@ function estimateCandidateSavings(
       );
       return sum + unitPrice * quantity * (percent / 100);
     }
-
-    const fixedAmount = Number(candidate.value.fixedAmount?.amount || 0);
-    const normalizedFixedAmount = Number.isFinite(fixedAmount) ? Math.max(0, fixedAmount) : 0;
-    return (
-      sum +
-      (candidate.value.fixedAmount?.appliesToEachItem
-        ? normalizedFixedAmount * quantity
-        : normalizedFixedAmount)
-    );
+    return sum;
   }, 0);
+}
+
+function getCandidateQuantityOverCapacityByLineId(
+  candidateTargetQuantities: Map<string, number>,
+  winners: Array<{
+    targetQuantitiesByLineId: Map<string, number>;
+  }>,
+  lineCapacityByLineId: Map<string, number>,
+): Map<string, number> {
+  const overCapacityByLineId = new Map<string, number>();
+
+  for (const [lineId, candidateQuantity] of candidateTargetQuantities.entries()) {
+    const lineCapacity = Math.max(0, lineCapacityByLineId.get(lineId) || 0);
+    const occupiedQuantity = winners.reduce(
+      (sum, winner) => sum + (winner.targetQuantitiesByLineId.get(lineId) || 0),
+      0,
+    );
+    const overCapacity = Math.max(0, occupiedQuantity + candidateQuantity - lineCapacity);
+    if (overCapacity > 0) {
+      overCapacityByLineId.set(lineId, overCapacity);
+    }
+  }
+
+  return overCapacityByLineId;
+}
+
+function chooseProductWinnerIndicesToReplaceGreedy(
+  remainingOverCapacityByLineId: Map<string, number>,
+  winnerIndicesTouchingOverCapacity: number[],
+  winners: Array<{
+    targetQuantitiesByLineId: Map<string, number>;
+    savings: number;
+  }>,
+): number[] {
+  const selectedWinnerIndices = new Set<number>();
+  while (Array.from(remainingOverCapacityByLineId.values()).some((quantity) => quantity > 0)) {
+    let bestChoice:
+      | {
+          winnerIndex: number;
+          usefulFreedQuantity: number;
+          savings: number;
+        }
+      | null = null;
+
+    for (const winnerIndex of winnerIndicesTouchingOverCapacity) {
+      if (selectedWinnerIndices.has(winnerIndex)) continue;
+      const winner = winners[winnerIndex];
+      let usefulFreedQuantity = 0;
+
+      for (const [lineId, overCapacity] of remainingOverCapacityByLineId.entries()) {
+        if (overCapacity <= 0) continue;
+        usefulFreedQuantity += Math.min(
+          overCapacity,
+          winner.targetQuantitiesByLineId.get(lineId) || 0,
+        );
+      }
+
+      if (usefulFreedQuantity <= 0) continue;
+
+      if (
+        !bestChoice ||
+        winner.savings / usefulFreedQuantity < bestChoice.savings / bestChoice.usefulFreedQuantity ||
+        (winner.savings / usefulFreedQuantity === bestChoice.savings / bestChoice.usefulFreedQuantity &&
+          winner.savings < bestChoice.savings)
+      ) {
+        bestChoice = {
+          winnerIndex,
+          usefulFreedQuantity,
+          savings: winner.savings,
+        };
+      }
+    }
+
+    if (!bestChoice) {
+      return winnerIndicesTouchingOverCapacity;
+    }
+
+    selectedWinnerIndices.add(bestChoice.winnerIndex);
+    const selectedWinner = winners[bestChoice.winnerIndex];
+    for (const [lineId, overCapacity] of remainingOverCapacityByLineId.entries()) {
+      if (overCapacity <= 0) continue;
+      const freedQuantity = selectedWinner.targetQuantitiesByLineId.get(lineId) || 0;
+      remainingOverCapacityByLineId.set(
+        lineId,
+        Math.max(0, overCapacity - freedQuantity),
+      );
+    }
+  }
+
+  return Array.from(selectedWinnerIndices);
+}
+
+function chooseProductWinnerIndicesToReplace(
+  candidateTargetQuantities: Map<string, number>,
+  winners: Array<{
+    targetQuantitiesByLineId: Map<string, number>;
+    savings: number;
+  }>,
+  lineCapacityByLineId: Map<string, number>,
+): number[] {
+  const remainingOverCapacityByLineId = getCandidateQuantityOverCapacityByLineId(
+    candidateTargetQuantities,
+    winners,
+    lineCapacityByLineId,
+  );
+  if (!remainingOverCapacityByLineId.size) {
+    return [];
+  }
+
+  const winnerIndicesTouchingOverCapacity = winners.reduce<number[]>(
+    (matched, winner, winnerIndex) => {
+      const touchesOverCapacityLine = Array.from(remainingOverCapacityByLineId.keys()).some(
+        (lineId) => (winner.targetQuantitiesByLineId.get(lineId) || 0) > 0,
+      );
+      if (touchesOverCapacityLine) {
+        matched.push(winnerIndex);
+      }
+      return matched;
+    },
+    [],
+  );
+  const MAX_EXACT_CONFLICT_WINNERS = 10;
+  if (winnerIndicesTouchingOverCapacity.length > MAX_EXACT_CONFLICT_WINNERS) {
+    return chooseProductWinnerIndicesToReplaceGreedy(
+      remainingOverCapacityByLineId,
+      winnerIndicesTouchingOverCapacity,
+      winners,
+    );
+  }
+
+  const baseOccupiedByLineId = new Map<string, number>();
+  for (const lineId of candidateTargetQuantities.keys()) {
+    baseOccupiedByLineId.set(
+      lineId,
+      winners.reduce(
+        (sum, winner) => sum + (winner.targetQuantitiesByLineId.get(lineId) || 0),
+        0,
+      ),
+    );
+  }
+
+  let bestSubset: number[] | null = null;
+  let bestSubsetSavings = Number.POSITIVE_INFINITY;
+  let bestSubsetCount = Number.POSITIVE_INFINITY;
+  const subsetCount = 1 << winnerIndicesTouchingOverCapacity.length;
+
+  for (let mask = 1; mask < subsetCount; mask += 1) {
+    const freedByLineId = new Map<string, number>();
+    let removedSavings = 0;
+    const removedWinnerIndices: number[] = [];
+    let shouldSkipSubset = false;
+
+    for (let bit = 0; bit < winnerIndicesTouchingOverCapacity.length; bit += 1) {
+      if ((mask & (1 << bit)) === 0) continue;
+      const winnerIndex = winnerIndicesTouchingOverCapacity[bit];
+      const winner = winners[winnerIndex];
+      removedWinnerIndices.push(winnerIndex);
+      removedSavings += winner.savings;
+      if (
+        removedSavings > bestSubsetSavings ||
+        (removedSavings === bestSubsetSavings &&
+          removedWinnerIndices.length >= bestSubsetCount)
+      ) {
+        shouldSkipSubset = true;
+        break;
+      }
+      for (const [lineId, quantity] of winner.targetQuantitiesByLineId.entries()) {
+        freedByLineId.set(lineId, (freedByLineId.get(lineId) || 0) + quantity);
+      }
+    }
+
+    if (shouldSkipSubset) continue;
+
+    const fitsAfterRemoval = Array.from(candidateTargetQuantities.entries()).every(
+      ([lineId, candidateQuantity]) =>
+        Math.max(0, baseOccupiedByLineId.get(lineId) || 0) -
+          Math.max(0, freedByLineId.get(lineId) || 0) +
+          candidateQuantity <=
+        Math.max(0, lineCapacityByLineId.get(lineId) || 0),
+    );
+    if (!fitsAfterRemoval) continue;
+
+    bestSubset = removedWinnerIndices;
+    bestSubsetSavings = removedSavings;
+    bestSubsetCount = removedWinnerIndices.length;
+  }
+
+  if (bestSubset) {
+    return bestSubset;
+  }
+
+  return chooseProductWinnerIndicesToReplaceGreedy(
+    remainingOverCapacityByLineId,
+    winnerIndicesTouchingOverCapacity,
+    winners,
+  );
 }
 
 function resolveExclusiveProductCandidates(
@@ -2766,19 +3005,28 @@ function resolveExclusiveProductCandidates(
       parseMoneyAmount(line.cost?.amountPerQuantity?.amount),
     ]),
   );
+  const lineCapacityByLineId = new Map(
+    cartLines.map((line) => [
+      line.id,
+      Math.max(0, Math.trunc(Number(line.quantity) || 0)),
+    ]),
+  );
   const winners: Array<{
     candidate: ProductDiscountCandidate;
     targetLineIds: string[];
+    targetQuantitiesByLineId: Map<string, number>;
     savings: number;
     index: number;
   }> = [];
 
   for (const [index, candidate] of candidates.entries()) {
-    const targetLineIds = getCandidateTargetCartLineIds(candidate);
+    const targetQuantitiesByLineId = getCandidateTargetQuantities(candidate);
+    const targetLineIds = Array.from(targetQuantitiesByLineId.keys());
     if (!targetLineIds.length) {
       winners.push({
         candidate,
         targetLineIds,
+        targetQuantitiesByLineId,
         savings: estimateCandidateSavings(candidate, unitPriceByLineId),
         index,
       });
@@ -2786,35 +3034,55 @@ function resolveExclusiveProductCandidates(
     }
 
     const savings = estimateCandidateSavings(candidate, unitPriceByLineId);
-    const conflictingWinnerIndex = winners.findIndex((winner) =>
-      targetLineIds.some((lineId) => winner.targetLineIds.includes(lineId)),
+    const conflictingWinnerIndices = chooseProductWinnerIndicesToReplace(
+      targetQuantitiesByLineId,
+      winners,
+      lineCapacityByLineId,
     );
 
-    if (conflictingWinnerIndex < 0) {
+    if (!conflictingWinnerIndices.length) {
       winners.push({
         candidate,
         targetLineIds,
+        targetQuantitiesByLineId,
         savings,
         index,
       });
       continue;
     }
 
-    const conflictingWinner = winners[conflictingWinnerIndex];
-    if (savings > conflictingWinner.savings) {
-      log("product_candidate_conflict_resolved", {
-        previousTargetLineIds: conflictingWinner.targetLineIds,
-        nextTargetLineIds: targetLineIds,
-        previousSavings: conflictingWinner.savings.toFixed(4),
-        nextSavings: savings.toFixed(4),
-      });
-      winners[conflictingWinnerIndex] = {
-        candidate,
-        targetLineIds,
-        savings,
-        index,
-      };
+    const conflictingSavings = conflictingWinnerIndices.reduce(
+      (sum, winnerIndex) => sum + winners[winnerIndex].savings,
+      0,
+    );
+
+    if (savings <= conflictingSavings) {
+      continue;
     }
+
+    const previousTargetLineIds = Array.from(
+      new Set(
+        conflictingWinnerIndices.flatMap((winnerIndex) => winners[winnerIndex].targetLineIds),
+      ),
+    );
+    log("product_candidate_conflict_resolved", {
+      previousTargetLineIds,
+      nextTargetLineIds: targetLineIds,
+      previousSavings: conflictingSavings.toFixed(4),
+      nextSavings: savings.toFixed(4),
+    });
+
+    const conflictingWinnerIndexSet = new Set(conflictingWinnerIndices);
+    const nextWinners = winners.filter((_, winnerIndex) => !conflictingWinnerIndexSet.has(winnerIndex));
+    nextWinners.push({
+      candidate,
+      targetLineIds,
+      targetQuantitiesByLineId,
+      savings,
+      index,
+    });
+    winners.length = 0;
+    winners.push(...nextWinners);
   }
 
   return winners
@@ -2822,70 +3090,6 @@ function resolveExclusiveProductCandidates(
     .map((winner) => winner.candidate);
 }
 
-function buildEffectiveUnitPriceByLineId(
-  cartLines: CartInput["cart"]["lines"],
-  candidates: ProductDiscountCandidate[],
-): Map<string, number> {
-  const baseUnitPriceByLineId = new Map(
-    cartLines.map((line) => [
-      line.id,
-      parseMoneyAmount(line.cost?.amountPerQuantity?.amount),
-    ]),
-  );
-  if (!candidates.length) {
-    return baseUnitPriceByLineId;
-  }
-
-  const discountAmountByLineId = new Map<string, number>();
-  const discountedQuantityByLineId = new Map<string, number>();
-
-  for (const candidate of candidates) {
-    for (const target of candidate.targets ?? []) {
-      const lineId = String(target.cartLine?.id || "").trim();
-      if (!lineId) continue;
-      const quantity = Math.max(1, Math.trunc(Number(target.cartLine?.quantity) || 1));
-      const unitPrice = Math.max(0, baseUnitPriceByLineId.get(lineId) || 0);
-      let discountAmount = 0;
-
-      if ("percentage" in candidate.value) {
-        const percent = Math.max(
-          0,
-          Math.min(100, parseCandidatePercentValue(candidate.value.percentage?.value)),
-        );
-        discountAmount = unitPrice * quantity * (percent / 100);
-      } else {
-        const fixedAmount = Number(candidate.value.fixedAmount?.amount || 0);
-        const normalizedFixedAmount = Number.isFinite(fixedAmount) ? Math.max(0, fixedAmount) : 0;
-        discountAmount = candidate.value.fixedAmount?.appliesToEachItem
-          ? normalizedFixedAmount * quantity
-          : normalizedFixedAmount;
-      }
-
-      if (discountAmount <= 0) continue;
-      discountAmountByLineId.set(
-        lineId,
-        (discountAmountByLineId.get(lineId) || 0) + discountAmount,
-      );
-      discountedQuantityByLineId.set(
-        lineId,
-        (discountedQuantityByLineId.get(lineId) || 0) + quantity,
-      );
-    }
-  }
-
-  const effectiveUnitPriceByLineId = new Map(baseUnitPriceByLineId);
-  for (const [lineId, baseUnitPrice] of baseUnitPriceByLineId.entries()) {
-    const discountAmount = Math.max(0, discountAmountByLineId.get(lineId) || 0);
-    const discountedQuantity = Math.max(0, discountedQuantityByLineId.get(lineId) || 0);
-    if (discountAmount <= 0 || discountedQuantity <= 0) continue;
-    effectiveUnitPriceByLineId.set(
-      lineId,
-      Math.max(0, baseUnitPrice - discountAmount / discountedQuantity),
-    );
-  }
-
-  return effectiveUnitPriceByLineId;
-}
 /**
  * selectedProductsJson 存的是 Product GID（与主题端、后台一致），需用购物车行的 product.id / variant.id 匹配，不能用 CartLine.id。
  */

@@ -3675,10 +3675,10 @@ export function parseCompleteBundleConfig(
       triggerProductIds?: unknown[];
       bars?: unknown;
     };
-    const rawTriggerProductIds = Array.isArray(parsedRecord.productIds)
-      ? parsedRecord.productIds
-      : Array.isArray(parsedRecord.triggerProductIds)
-        ? parsedRecord.triggerProductIds
+    const rawTriggerProductIds = Array.isArray(parsedRecord.triggerProductIds)
+      ? parsedRecord.triggerProductIds
+      : Array.isArray(parsedRecord.productIds)
+        ? parsedRecord.productIds
         : [];
     const triggerProductIds = rawTriggerProductIds
           .map((id) => String(id || "").trim())
