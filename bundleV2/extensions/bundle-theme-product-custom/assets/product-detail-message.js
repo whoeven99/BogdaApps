@@ -4320,6 +4320,118 @@ async function notifyThemeAfterCartAdd() {
   }
 }
 
+function getBundleLinePropertiesForOffer(offer, options) {
+  if (!offer || !offer.id) return null;
+  const fallbackToDefault = options?.fallbackToDefault === true;
+  const bar = computeSelectedBarIndexForOffer(offer, { fallbackToDefault });
+  const selectedCount = getSelectedCountForOffer(offer, { fallbackToDefault });
+  if (
+    (offer.offerType === "complete-bundle" && bar <= 0) ||
+    (offer.offerType === "free-gift" && bar <= 0) ||
+    (offer.offerType !== "complete-bundle" && selectedCount === CIWI_SINGLE_OPTION_COUNT)
+  ) {
+    return null;
+  }
+  return {
+    [CIWI_PROP_OFFER_ID]: String(offer.id),
+    [CIWI_PROP_TIER]: String(bar),
+  };
+}
+
+function submitCompleteBundleNativeCartAdd(items, offer) {
+  if (!Array.isArray(items) || !items.length) return false;
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = "/cart/add";
+  form.style.display = "none";
+
+  const addField = (name, value) => {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = name;
+    input.value = String(value ?? "");
+    form.appendChild(input);
+  };
+
+  addField("form_type", "product");
+  addField("utf8", "✓");
+  addField(
+    "return_to",
+    `${window.location.pathname || "/"}${window.location.search || ""}${window.location.hash || ""}`,
+  );
+
+  items.forEach((item, index) => {
+    addField(`items[${index}][id]`, Math.trunc(Number(item?.id) || 0));
+    addField(`items[${index}][quantity]`, Math.max(1, Math.trunc(Number(item?.quantity) || 1)));
+  });
+
+  const lineProperties = getBundleLinePropertiesForOffer(offer, { fallbackToDefault: true });
+  if (lineProperties) {
+    Object.entries(lineProperties).forEach(([key, value]) => {
+      addField(`items[0][properties][${key}]`, value);
+    });
+  }
+
+  document.body.appendChild(form);
+  form.submit();
+  return true;
+}
+
+function isCloudflareChallengeResponse(responseText, response, contentType) {
+  const body = String(responseText || "");
+  const lowerContentType = String(contentType || "").toLowerCase();
+  return (
+    Number(response?.status) === 403 ||
+    lowerContentType.includes("text/html") ||
+    body.includes("Verifying your connection") ||
+    body.includes("__cf_chl_opt") ||
+    body.includes("/cdn-cgi/challenge-platform/")
+  );
+}
+
+async function addItemsToCartWithFallback(items, offer) {
+  const res = await fetch("/cart/add.js", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ items }),
+  });
+  const contentType = String(res.headers.get("content-type") || "");
+  const rawText = await res.text().catch(() => "");
+  const body =
+    contentType.toLowerCase().includes("application/json") && rawText
+      ? (() => {
+          try {
+            return JSON.parse(rawText);
+          } catch {
+            return null;
+          }
+        })()
+      : null;
+
+  if (res.ok) {
+    return true;
+  }
+
+  if (isCloudflareChallengeResponse(rawText, res, contentType)) {
+    console.warn("[ciwi] cart/add.js hit Cloudflare challenge, falling back to native form submit", {
+      status: res.status,
+      contentType,
+      offerId: offer?.id || "",
+      itemCount: items.length,
+    });
+    submitCompleteBundleNativeCartAdd(items, offer);
+    return false;
+  }
+
+  console.error(
+    "[ciwi] cart/add.js failed",
+    res.status,
+    body?.description || body?.message || rawText || body,
+  );
+  return false;
+}
+
 /**
  * 将当前选中的 complete-bundle 档加入购物车。
  * bar.quantity 仅表示档位文案（如 Qty 2），不叠乘到每行 SKU 数量；每行固定加 1 件。
@@ -4347,22 +4459,7 @@ async function performCompleteBundleCartAdd() {
     const barToUse =
       config.bars.find((b) => String(b.id) === String(selId)) || config.bars[0] || null;
     if (!barToUse || isCompleteBundleSingleBarConfig(barToUse)) {
-      const res = await fetch("/cart/add.js", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ items }),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        console.error(
-          "[ciwi] cart/add.js failed",
-          res.status,
-          body?.description || body?.message || body,
-        );
-        return false;
-      }
-      return true;
+      return await addItemsToCartWithFallback(items, currentOffer);
     }
     if (!Array.isArray(barToUse.products) || !barToUse.products.length) {
       return false;
@@ -4409,22 +4506,7 @@ async function performCompleteBundleCartAdd() {
       items.push({ id: Number(variantId), quantity: 1 });
     }
     if (items.length <= 1) return false;
-    const res = await fetch("/cart/add.js", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify({ items }),
-    });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      console.error(
-        "[ciwi] cart/add.js failed",
-        res.status,
-        body?.description || body?.message || body,
-      );
-      return false;
-    }
-    return true;
+    return await addItemsToCartWithFallback(items, currentOffer);
   } catch (error) {
     console.error("[ciwi] performCompleteBundleCartAdd failed", error);
     return false;
