@@ -233,7 +233,11 @@ function buildHydratedCompleteBundleSelectedProductsJson(
     id: bar.id,
     type: bar.type,
     title: bar.title,
+    titleSource: bar.titleSource,
     subtitle: bar.subtitle,
+    subtitleSource: bar.subtitleSource,
+    badge: bar.badge,
+    isDefault: bar.isDefault,
     minQuantity: bar.minQuantity,
     maxQuantity: bar.maxQuantity,
     excludeTriggerProduct: bar.excludeTriggerProduct,
@@ -251,6 +255,7 @@ function buildHydratedCompleteBundleSelectedProductsJson(
           defaultVariantId: product.defaultVariantId ?? "",
           selectedVariantId:
             String(product.selectedVariantId || product.defaultVariantId || ""),
+          selectionMode: product.selectionMode === "variant" ? "variant" : "product",
           selectedOptions:
             product.selectedOptions && typeof product.selectedOptions === "object"
               ? product.selectedOptions
@@ -274,6 +279,7 @@ function buildHydratedCompleteBundleSelectedProductsJson(
         selectedVariantId: String(
           selectedVariant?.id || product.selectedVariantId || variants[0]?.id || "",
         ),
+        selectionMode: product.selectionMode === "variant" ? "variant" : "product",
         selectedOptions:
           product.selectedOptions && Object.keys(product.selectedOptions).length > 0
             ? product.selectedOptions
@@ -286,7 +292,10 @@ function buildHydratedCompleteBundleSelectedProductsJson(
     }),
   }));
 
-  return JSON.stringify({ bars });
+  return JSON.stringify({
+    triggerProductIds: config.triggerProductIds ?? [],
+    bars,
+  });
 }
 
 function buildHydratedDifferentProductsSelectedProductsJson(
@@ -345,6 +354,7 @@ function buildHydratedDifferentProductsSelectedProductsJson(
 function compileOfferRuntimeSyncData(offer: OfferListItem): {
   offerType: string;
   selectedProductsJson: string | null;
+  storefrontSelectedProductsJson: string | null;
   discountRulesJson: string | null;
   offerSettingsJson: string | null;
   referencedProductIds: string[];
@@ -359,6 +369,7 @@ function compileOfferRuntimeSyncData(offer: OfferListItem): {
     return {
       offerType: persistedFields.offerType,
       selectedProductsJson: persistedFields.selectedProductsJsonForFunction,
+      storefrontSelectedProductsJson: persistedFields.selectedProductsJson,
       discountRulesJson: persistedFields.discountRulesJson,
       offerSettingsJson: persistedFields.offerSettingsJson,
       referencedProductIds: persistedFields.referencedProductIds,
@@ -377,6 +388,7 @@ function compileOfferRuntimeSyncData(offer: OfferListItem): {
       effectiveOfferType,
       offer.selectedProductsJson,
     ),
+    storefrontSelectedProductsJson: offer.selectedProductsJson ?? null,
     discountRulesJson: offer.discountRulesJson ?? null,
     offerSettingsJson: offer.offerSettingsJson ?? null,
     referencedProductIds: collectLegacyReferencedProductIds(offer),
@@ -520,12 +532,14 @@ async function buildStorefrontOffersStructured(
       selectedProductsJson:
         hydrationMode === "complete-bundle"
           ? buildHydratedCompleteBundleSelectedProductsJson(
-              offer.selectedProductsJson,
+              matchedCompiledOffer?.runtimeSyncData.storefrontSelectedProductsJson ??
+                offer.selectedProductsJson,
               storeProductMap,
             )
           : hydrationMode === "quantity-breaks-different"
             ? buildHydratedDifferentProductsSelectedProductsJson(
-                offer.selectedProductsJson,
+                matchedCompiledOffer?.runtimeSyncData.storefrontSelectedProductsJson ??
+                  offer.selectedProductsJson,
                 offer.discountRulesJson,
                 storeProductMap,
               )
