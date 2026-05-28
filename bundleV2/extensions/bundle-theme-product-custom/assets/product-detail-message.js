@@ -17,6 +17,7 @@ const DEFAULT_SELECTORS = [
 
 const RETRY_MS = 12_000;
 const SESSION_STORAGE_BUNDLE_RULE_KEY = "current-ciwi-bundle-rule";
+const SESSION_STORAGE_PENDING_CART_REFRESH_KEY = "ciwi-pending-cart-refresh";
 let offersConfigCache = null;
 let priceSyncController = null;
 let bundlePriceDebounceT = null;
@@ -2632,6 +2633,44 @@ function syncCurrentBundleToSessionStorage(offer) {
   }
 }
 
+function persistPendingCartRefresh(reason, payload) {
+  try {
+    window.sessionStorage.setItem(
+      SESSION_STORAGE_PENDING_CART_REFRESH_KEY,
+      JSON.stringify({
+        reason: String(reason || ""),
+        path: `${window.location.pathname || "/"}${window.location.search || ""}`,
+        ts: Date.now(),
+        payload: payload && typeof payload === "object" ? payload : {},
+      }),
+    );
+  } catch (error) {
+    console.warn("[ciwi] failed to persist pending cart refresh", error);
+  }
+}
+
+async function consumePendingCartRefresh() {
+  try {
+    const raw = window.sessionStorage.getItem(SESSION_STORAGE_PENDING_CART_REFRESH_KEY);
+    if (!raw) return;
+    window.sessionStorage.removeItem(SESSION_STORAGE_PENDING_CART_REFRESH_KEY);
+    const parsed = JSON.parse(raw);
+    const ageMs = Date.now() - Number(parsed?.ts || 0);
+    const expectedPath = String(parsed?.path || "");
+    const currentPath = `${window.location.pathname || "/"}${window.location.search || ""}`;
+    if (ageMs < 0 || ageMs > 15_000) return;
+    if (expectedPath && expectedPath !== currentPath) return;
+    console.log("[ciwi] consuming pending cart refresh", {
+      reason: String(parsed?.reason || ""),
+      ageMs,
+      payload: parsed?.payload || {},
+    });
+    await notifyThemeAfterCartAdd();
+  } catch (error) {
+    console.warn("[ciwi] failed to consume pending cart refresh", error);
+  }
+}
+
 function shouldHideOfferForInventory(offer) {
   const currentVariant = getCurrentSelectedVariantRecord();
   if (
@@ -4372,6 +4411,10 @@ function submitCompleteBundleNativeCartAdd(items, offer) {
     });
   }
 
+  persistPendingCartRefresh("complete-bundle-native-submit", {
+    offerId: offer?.id || "",
+    itemCount: items.length,
+  });
   document.body.appendChild(form);
   form.submit();
   return true;
@@ -5619,7 +5662,10 @@ function run() {
     const offerName = currentOffer.name || `Bundle-${currentOffer.id}`;
     sessionStorage.setItem("current-ciwi-offer-name", offerName);
 
-    if (tryMount(currentOffer) === "done") return;
+    if (tryMount(currentOffer) === "done") {
+      void consumePendingCartRefresh();
+      return;
+    }
 
     const started = Date.now();
     const obs = new MutationObserver(() => {
@@ -5639,7 +5685,9 @@ function run() {
       if (!document.querySelector(".ciwi-bundle-wrapper")) {
         fallbackMount(currentOffer);
       }
+      void consumePendingCartRefresh();
     }, RETRY_MS);
+    void consumePendingCartRefresh();
   } catch (e) {
     console.error("[ciwi] bundle ui error:", e);
   }
