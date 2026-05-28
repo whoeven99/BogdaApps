@@ -4004,8 +4004,12 @@ export function resolveFunctionDiscountClassesForOffer(params: {
     classes.add("PRODUCT");
   }
 
-  if (offerType === "free-gift" || offerType === "complete-bundle") {
+  if (offerType === "free-gift") {
     classes.add("ORDER");
+  }
+
+  if (offerType === "complete-bundle") {
+    classes.add("PRODUCT");
   }
 
   const normalizedRules = parseDiscountRules(params.discountRulesJson);
