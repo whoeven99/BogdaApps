@@ -802,6 +802,10 @@ export function CreateNewOffer({
       selectedSourceOfferType === "free-gift"
         ? parseFreeGiftSelectedProducts(selectedProductsJson)
         : { triggerProducts: [], giftProducts: [] };
+    const completeBundleSelectedProducts =
+      selectedSourceOfferType === "complete-bundle"
+        ? parseCompleteBundleConfig(selectedProductsJson)
+        : { triggerProductIds: [], bars: [] };
     const bxgyBuyProducts =
       selectedSourceOfferType === "bxgy" && selectedProductsJson
         ? (() => {
@@ -816,6 +820,8 @@ export function CreateNewOffer({
     const selectedProductIds =
       selectedSourceOfferType === "free-gift"
         ? freeGiftSelectedProducts.triggerProducts
+        : selectedSourceOfferType === "complete-bundle"
+          ? completeBundleSelectedProducts.triggerProductIds
         : selectedSourceOfferType === "bxgy"
           ? bxgyBuyProducts
           : selectedProductsJson
@@ -1920,11 +1926,18 @@ export function CreateNewOffer({
   const [compositionBarOrder, setCompositionBarOrder] = useState<string[]>([]);
   useEffect(() => {
     if (selectedProductsData.length > 0) return;
-    const fallbackIds =
+    const completeBundleTriggerProductIds = Array.isArray(
+      initialCompleteBundleConfig.triggerProductIds,
+    )
+      ? initialCompleteBundleConfig.triggerProductIds
+      : [];
+    const fallbackIds: string[] =
       buyProducts.length > 0
         ? buyProducts
         : freeGiftTriggerProducts.length > 0
           ? freeGiftTriggerProducts
+          : completeBundleTriggerProductIds.length > 0
+            ? completeBundleTriggerProductIds
           : [];
     if (!fallbackIds.length) return;
     setSelectedProductsData(mapProductIdsToDraftProducts(fallbackIds));
@@ -1932,6 +1945,7 @@ export function CreateNewOffer({
     selectedProductsData.length,
     buyProducts,
     freeGiftTriggerProducts,
+    initialCompleteBundleConfig.triggerProductIds,
     storeProducts,
   ]);
 
