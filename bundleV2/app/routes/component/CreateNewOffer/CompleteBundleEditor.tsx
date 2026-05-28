@@ -72,11 +72,11 @@ export default function CompleteBundleEditor({
   const activePricingValue = Number(activeBar?.pricing?.value) || 0;
   const getPricingValueLabel = (mode: CompleteBundleBar["pricing"]["mode"]) =>
     mode === "percentage_off"
-      ? "Bundle discount (%)"
+      ? "Bundle total discount (%)"
       : mode === "amount_off"
-        ? "Amount off bundle (€)"
+        ? "Amount off bundle total (€)"
         : mode === "fixed_price"
-          ? "Bundle price (€)"
+          ? "Fixed bundle total (€)"
           : "Pricing value";
 
   return (
@@ -225,7 +225,7 @@ export default function CompleteBundleEditor({
                             description={
                               isSingleBar
                                 ? "This bar preserves the standalone purchase path for the current product."
-                                : "Step 2 first selects which products can trigger this offer. This bar then defines which bundle items join those trigger products and how the whole bundle is priced."
+                                : "Step 2 first selects which products can trigger this offer. This bar then defines which bundle items join those trigger products and how the whole bundle total is priced."
                             }
                           />
                           <OfferRuleSummaryBox
@@ -268,7 +268,7 @@ export default function CompleteBundleEditor({
           {isCompleteBundleSingleBar(activeBar) ? (
             <OfferRuleNotice title="Single purchase bar" intent="info">
               This bar only controls the standalone purchase option. Bundle bars below reuse the
-              same offer product scope and only configure bundle-level pricing.
+              same offer product scope and only configure bundle-total pricing.
             </OfferRuleNotice>
           ) : null}
           {simpleMode ? (
@@ -276,10 +276,13 @@ export default function CompleteBundleEditor({
               {!isCompleteBundleSingleBar(activeBar) ? (
                 <>
                   <div className="mt-4 rounded-[10px] border border-[#e3e8ed] bg-white p-4">
-                    <div className="text-[14px] font-medium text-[#1c1f23]">Bundle discount</div>
+                    <div className="text-[14px] font-medium text-[#1c1f23]">Bundle pricing</div>
+                    <div className="mt-1 text-[12px] text-[#5c6166]">
+                      This pricing applies to the whole bundle total, not to each item separately.
+                    </div>
                     <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
                       <label className="block text-[13px] font-medium text-[#1c1f23]">
-                        Discount model
+                        Bundle total pricing
                         <Select
                           size="large"
                           className="mt-1 w-full"
@@ -294,9 +297,18 @@ export default function CompleteBundleEditor({
                           }
                           options={[
                             { label: "Full price", value: "full_price" },
-                            { label: "Percentage off", value: "percentage_off" },
-                            { label: "Amount off", value: "amount_off" },
-                            { label: "Fixed bundle price", value: "fixed_price" },
+                            {
+                              label: "Percentage off bundle total",
+                              value: "percentage_off",
+                            },
+                            {
+                              label: "Amount off bundle total",
+                              value: "amount_off",
+                            },
+                            {
+                              label: "Set fixed bundle total",
+                              value: "fixed_price",
+                            },
                           ]}
                         />
                       </label>
@@ -375,7 +387,7 @@ export default function CompleteBundleEditor({
                 <div className="text-[14px] font-medium text-[#1c1f23]">Bundle item pool</div>
                 <div className="mt-1 text-[12px] text-[#5c6166]">
                   Trigger products are configured at the campaign level. Each non-single bar keeps
-                  its own bundle-item pool.
+                  its own bundle-item pool and bundle-total pricing.
                 </div>
               </div>
               <div className="text-[12px] text-[#5c6166]">
@@ -422,7 +434,8 @@ export default function CompleteBundleEditor({
                 Bundle items
               </div>
               <div className="mb-2 text-[11px] text-[#5c6166]">
-                Select the products that can join the trigger product for this bar.
+                Select the products that can join the trigger product for this bar. The pricing
+                above applies to the combined bundle total, not to each item separately.
               </div>
               {selectBundleProductsForBar ? (
                 <div className="mb-3">

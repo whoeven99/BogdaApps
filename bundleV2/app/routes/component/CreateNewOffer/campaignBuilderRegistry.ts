@@ -294,9 +294,9 @@ const META_BY_OFFER_TYPE: Record<OfferTypeId, CampaignBuilderMeta> = {
   "complete-bundle": {
     logicBlockLabel: "Complete Bundle",
     logicBlockDescription:
-      "Attach bundle-item pools to the current PDP product and discount the whole bundle together.",
+      "Attach bundle-item pools to the current PDP product and price the whole bundle together.",
     stepTwoDescription:
-      "Select the trigger products, build each bundle bar, and control min/max bundle-item selection plus whole-bundle pricing.",
+      "Select the trigger products, build each bundle bar, and control min/max bundle-item selection plus bundle-total pricing.",
   },
   subscription: {
     logicBlockLabel: "Subscription",

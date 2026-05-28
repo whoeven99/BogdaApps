@@ -1389,7 +1389,7 @@ export function CreateNewOffer({
           id: createCompleteBundleBarId(),
           type,
           title: "Complete the bundle",
-          subtitle: "Choose bundle items and apply one discount to the whole bundle",
+          subtitle: "Choose bundle items and set the pricing for the whole bundle total",
           badge: "",
           isDefault: false,
           minQuantity: 1,

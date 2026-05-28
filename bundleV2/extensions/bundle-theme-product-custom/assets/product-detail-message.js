@@ -2954,7 +2954,7 @@ const DIFFERENT_PRODUCTS_AUTO_SUBTITLE_PATTERN =
   /includes .* trigger product|mix any \d+ from \d+ eligible products|mix across \d+ eligible products/i;
 const COMPLETE_BUNDLE_AUTO_TITLE_PATTERN = /^(single|bar #\d+|complete the bundle)$/i;
 const COMPLETE_BUNDLE_AUTO_SUBTITLE_PATTERN =
-  /standard price|pick \d+-\d+ bundle items|current product \+ \d+-\d+ bundle items from \d+ options/i;
+  /standard price|buy on its own|pick \d+-\d+ bundle items|current product \+ \d+-\d+ bundle items from \d+ options|choose bundle items and set the pricing for the whole bundle total/i;
 
 function resolveDisplayTextWithSource(explicitValue, explicitSource, fallbackValue, autoPattern) {
   const normalizedValue = String(explicitValue || "").trim();
@@ -3101,7 +3101,7 @@ function resolveThemeCompleteBundleCardDisplay(config, bar, index, unitPrice, an
   if (isCompleteBundleSingleBarConfig(bar)) {
     return {
       title: resolveThemeCompleteBundleTitle(bar, "Single"),
-      subtitle: resolveThemeCompleteBundleSubtitle(bar, "Standard price"),
+      subtitle: resolveThemeCompleteBundleSubtitle(bar, "Buy on its own"),
       price: formatPrice(unitPrice),
       products: anchorPreview ? [anchorPreview] : [],
       bundleItems: [],
@@ -3137,11 +3137,14 @@ function resolveThemeCompleteBundleCardDisplay(config, bar, index, unitPrice, an
     title: resolveThemeCompleteBundleTitle(bar, `Bar #${index + 1}`),
     subtitle: resolveThemeCompleteBundleSubtitle(
       bar,
-      `Current product + ${minQuantity}-${maxQuantity} bundle items from ${Array.isArray(bar.products) ? bar.products.length : 0} options`,
+      `Choose ${minQuantity}-${maxQuantity} bundle items and unlock bundle-total pricing`,
     ),
     price: formatPrice(sumFinal),
     original: sumOriginal > sumFinal ? formatPrice(sumOriginal) : "",
-    saveLabel: saved > 0 ? `SAVE ${formatPrice(saved)}` : `SELECT ${maxQuantity} ITEMS`,
+    saveLabel:
+      saved > 0
+        ? `Bundle total saves ${formatPrice(saved)}`
+        : `Select ${maxQuantity} items`,
     bundleItems,
     selectedItemIds,
     products: anchorPreview ? [anchorPreview] : [],
@@ -3161,7 +3164,7 @@ function resolveThemeCompleteBundleCardDisplay(config, bar, index, unitPrice, an
                 ${
                   saved > 0
                     ? `<div style="margin-top:4px;font-size:12px;font-weight:600;color:inherit;">${esc(
-                        `Save ${formatPrice(saved)}!`,
+                        `Bundle total saves ${formatPrice(saved)}`,
                       )}</div>`
                     : ""
                 }
