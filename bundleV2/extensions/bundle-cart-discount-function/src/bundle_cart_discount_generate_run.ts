@@ -455,6 +455,7 @@ function calculateCompleteBundleDiscounts(
   offers: Offer[],
   marketId: string | undefined,
   nowMs: number | null,
+  effectiveUnitPriceByLineId?: Map<string, number>,
 ): OrderDiscountCandidate[] {
   const completeOffers = offers.filter((o) => isCompleteBundleOfferType(o.offerType));
   if (!completeOffers.length) {
@@ -532,7 +533,9 @@ function calculateCompleteBundleDiscounts(
         if (!matchedLine) continue;
         bundleItemAllocations.push({
           lineId: matchedLine.id,
-          unitBase: parseMoneyAmount(matchedLine.cost?.amountPerQuantity?.amount),
+          unitBase:
+            effectiveUnitPriceByLineId?.get(matchedLine.id) ??
+            parseMoneyAmount(matchedLine.cost?.amountPerQuantity?.amount),
         });
         usedLineIds.add(matchedLine.id);
       }
@@ -550,7 +553,8 @@ function calculateCompleteBundleDiscounts(
 
       const allocations = bundleItemAllocations.slice(0, bar.maxQuantity);
       const bundleSubtotal = [
-        parseMoneyAmount(anchorLine.cost?.amountPerQuantity?.amount),
+        effectiveUnitPriceByLineId?.get(anchorLine.id) ??
+          parseMoneyAmount(anchorLine.cost?.amountPerQuantity?.amount),
         ...allocations.map((row) => row.unitBase),
       ].reduce((sum, value) => sum + Math.max(0, value), 0);
       const { final, original } = applyCompleteBundleUnitPricing(
@@ -584,6 +588,7 @@ function calculateCompleteBundleDiscounts(
         offerId: offer.id,
         barId: bar.id,
         includedLineCount: includedLineIds.size,
+        bundleSubtotal,
         totalDiscount,
       });
     }
@@ -834,42 +839,7 @@ export function bundleCartDiscountGenerateRun(
     }
   }
 
-  // ② free gift 作为 order reward 生成订单级 fixed-amount 候选。
-  if (hasOrderDiscountClass) {
-    const freeGiftCandidates = calculateFreeGiftDiscount(
-      input.cart.lines,
-      freeGiftOffers.map((compiledOffer) => compiledOffer.offer),
-    );
-    if (freeGiftCandidates.length > 0) {
-      orderCandidates.push(...freeGiftCandidates);
-    }
-  }
-
-  // ③ 处理 complete-bundle：主商品 + bundle items 一起走整包订单折扣，可与商品折扣候选并存。
-  if (hasOrderDiscountClass) {
-    log("complete_bundle_evaluation_start", {
-      marketId,
-      cartLineCount: input.cart.lines.length,
-    });
-    const completeBundleCandidates = calculateCompleteBundleDiscounts(
-      input.cart.lines,
-      eligibleOffers.map((compiledOffer) => compiledOffer.offer),
-      marketId,
-      nowMs,
-    );
-    if (completeBundleCandidates.length > 0) {
-      orderCandidates.push(...completeBundleCandidates);
-      log("complete_bundle_evaluation_success", {
-        candidateCount: completeBundleCandidates.length,
-      });
-    } else {
-      log("complete_bundle_evaluation_no_match", {
-        reason: "no_complete_bundle_candidates",
-      });
-    }
-  }
-
-  // ④ 按行匹配普通 bundle 的 discountRulesJson 数量阶梯，与 BXGY 一起参与商品折扣最大减免竞争。
+  // ② 按行匹配普通 bundle 的 discountRulesJson 数量阶梯，与 BXGY 一起参与商品折扣最大减免竞争。
   if (hasProductDiscountClass) {
     for (const line of input.cart.lines) {
       if (line.merchandise.__typename !== "ProductVariant") {
@@ -999,6 +969,53 @@ export function bundleCartDiscountGenerateRun(
     }
   }
 
+  const resolvedProductCandidates = productCandidates.length
+    ? resolveExclusiveProductCandidates(productCandidates, input.cart.lines)
+    : [];
+  const effectiveUnitPriceByLineId = buildEffectiveUnitPriceByLineId(
+    input.cart.lines,
+    resolvedProductCandidates,
+  );
+
+  // ③ free gift 作为 order reward 生成订单级 fixed-amount 候选。
+  if (hasOrderDiscountClass) {
+    const freeGiftCandidates = calculateFreeGiftDiscount(
+      input.cart.lines,
+      freeGiftOffers.map((compiledOffer) => compiledOffer.offer),
+    );
+    if (freeGiftCandidates.length > 0) {
+      orderCandidates.push(...freeGiftCandidates);
+    }
+  }
+
+  // ④ 处理 complete-bundle：主商品 + bundle items 一起走整包订单折扣。
+  // 这里按本轮最终生效的 product discount 后单价重算 bundle subtotal，
+  // 避免 complete-bundle 的 fixed amount 看起来覆盖同车的商品级优惠。
+  if (hasOrderDiscountClass) {
+    log("complete_bundle_evaluation_start", {
+      marketId,
+      cartLineCount: input.cart.lines.length,
+      resolvedProductCandidateCount: resolvedProductCandidates.length,
+    });
+    const completeBundleCandidates = calculateCompleteBundleDiscounts(
+      input.cart.lines,
+      eligibleOffers.map((compiledOffer) => compiledOffer.offer),
+      marketId,
+      nowMs,
+      effectiveUnitPriceByLineId,
+    );
+    if (completeBundleCandidates.length > 0) {
+      orderCandidates.push(...completeBundleCandidates);
+      log("complete_bundle_evaluation_success", {
+        candidateCount: completeBundleCandidates.length,
+      });
+    } else {
+      log("complete_bundle_evaluation_no_match", {
+        reason: "no_complete_bundle_candidates",
+      });
+    }
+  }
+
   if (hasOrderDiscountClass) {
     orderCandidates.push(
       ...buildOrderDiscountCandidatesFromCompiledOffers(
@@ -1030,10 +1047,6 @@ export function bundleCartDiscountGenerateRun(
   }
 
   if (productCandidates.length > 0) {
-    const resolvedProductCandidates = resolveExclusiveProductCandidates(
-      productCandidates,
-      input.cart.lines,
-    );
     operations.push({
       productDiscountsAdd: {
         candidates: resolvedProductCandidates,
@@ -1052,7 +1065,7 @@ export function bundleCartDiscountGenerateRun(
   }
 
   log("run_success", {
-    candidateCount: productCandidates.length,
+    candidateCount: resolvedProductCandidates.length,
     orderCandidateCount: orderCandidates.length,
     operationsJsonLength: JSON.stringify(operations).length,
   });
@@ -2777,6 +2790,71 @@ function resolveExclusiveProductCandidates(
   return winners
     .sort((a, b) => a.index - b.index)
     .map((winner) => winner.candidate);
+}
+
+function buildEffectiveUnitPriceByLineId(
+  cartLines: CartInput["cart"]["lines"],
+  candidates: ProductDiscountCandidate[],
+): Map<string, number> {
+  const baseUnitPriceByLineId = new Map(
+    cartLines.map((line) => [
+      line.id,
+      parseMoneyAmount(line.cost?.amountPerQuantity?.amount),
+    ]),
+  );
+  if (!candidates.length) {
+    return baseUnitPriceByLineId;
+  }
+
+  const discountAmountByLineId = new Map<string, number>();
+  const discountedQuantityByLineId = new Map<string, number>();
+
+  for (const candidate of candidates) {
+    for (const target of candidate.targets ?? []) {
+      const lineId = String(target.cartLine?.id || "").trim();
+      if (!lineId) continue;
+      const quantity = Math.max(1, Math.trunc(Number(target.cartLine?.quantity) || 1));
+      const unitPrice = Math.max(0, baseUnitPriceByLineId.get(lineId) || 0);
+      let discountAmount = 0;
+
+      if ("percentage" in candidate.value) {
+        const percent = Math.max(
+          0,
+          Math.min(100, parseCandidatePercentValue(candidate.value.percentage?.value)),
+        );
+        discountAmount = unitPrice * quantity * (percent / 100);
+      } else {
+        const fixedAmount = Number(candidate.value.fixedAmount?.amount || 0);
+        const normalizedFixedAmount = Number.isFinite(fixedAmount) ? Math.max(0, fixedAmount) : 0;
+        discountAmount = candidate.value.fixedAmount?.appliesToEachItem
+          ? normalizedFixedAmount * quantity
+          : normalizedFixedAmount;
+      }
+
+      if (discountAmount <= 0) continue;
+      discountAmountByLineId.set(
+        lineId,
+        (discountAmountByLineId.get(lineId) || 0) + discountAmount,
+      );
+      discountedQuantityByLineId.set(
+        lineId,
+        (discountedQuantityByLineId.get(lineId) || 0) + quantity,
+      );
+    }
+  }
+
+  const effectiveUnitPriceByLineId = new Map(baseUnitPriceByLineId);
+  for (const [lineId, baseUnitPrice] of baseUnitPriceByLineId.entries()) {
+    const discountAmount = Math.max(0, discountAmountByLineId.get(lineId) || 0);
+    const discountedQuantity = Math.max(0, discountedQuantityByLineId.get(lineId) || 0);
+    if (discountAmount <= 0 || discountedQuantity <= 0) continue;
+    effectiveUnitPriceByLineId.set(
+      lineId,
+      Math.max(0, baseUnitPrice - discountAmount / discountedQuantity),
+    );
+  }
+
+  return effectiveUnitPriceByLineId;
 }
 /**
  * selectedProductsJson 存的是 Product GID（与主题端、后台一致），需用购物车行的 product.id / variant.id 匹配，不能用 CartLine.id。
