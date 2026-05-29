@@ -425,9 +425,6 @@ export function appendCampaignCompositionBar(
   draft: CampaignDraft,
   actions: CampaignDraftActions,
 ) {
-  // #region debug-point A:append-bar
-  fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"step2-add-bar",runId:"pre-fix",hypothesisId:"A",location:"campaignCompositionAdapter.ts:356",msg:"[DEBUG] appendCampaignCompositionBar invoked",data:{offerType:draft.offerType,barType:type,discountRules:draft.discountRules.length,differentProductsRules:draft.differentProductsDiscountRules.length,bxgyRules:draft.bxgyDiscountRules.length,freeGiftRules:draft.freeGiftRules.length,completeBundleBars:draft.completeBundleBars.length},ts:Date.now()})}).catch(()=>{});
-  // #endregion
   if (draft.offerType === "quantity-breaks-different" && type === "quantity_break") {
     const nextCount = getNextDifferentProductsCount(
       draft.differentProductsDiscountRules,

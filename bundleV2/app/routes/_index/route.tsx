@@ -120,34 +120,6 @@ function getErrorMessage(error: unknown): string {
   }
 }
 
-const BUNDLE_DEBUG_SERVER_URL = "http://127.0.0.1:7777/event";
-const BUNDLE_DEBUG_SESSION_ID = "bundle-ui-empty-offers";
-
-function reportBundleDebugEvent(
-  hypothesisId: string,
-  location: string,
-  msg: string,
-  data: Record<string, unknown>,
-) {
-  try {
-    void fetch(BUNDLE_DEBUG_SERVER_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sessionId: BUNDLE_DEBUG_SESSION_ID,
-        runId: "pre-fix",
-        hypothesisId,
-        location,
-        msg: `[DEBUG] ${msg}`,
-        data,
-        ts: Date.now(),
-      }),
-    }).catch(() => {});
-  } catch {
-    // ignore debug reporting failures
-  }
-}
-
 function isMissingOfferCampaignConfigColumnError(error: unknown): boolean {
   const message = getErrorMessage(error).toLowerCase();
   return (
@@ -406,32 +378,6 @@ async function buildCompactOffersPayload(
 ): Promise<string> {
   // 仅同步后台仍「启用」的活动，避免无效活动占用 payload 体积并干扰函数计算
   const activeOffers = shopOffers.filter(isOfferPublishedForBundleMetafieldSync);
-  // #region debug-point D:compact-payload-filter
-  reportBundleDebugEvent(
-    "D",
-    "app/routes/_index/route.tsx:buildCompactOffersPayload",
-    "admin filtered offers for bundle metafield payload",
-    {
-      totalOffers: shopOffers.length,
-      activeOffers: activeOffers.length,
-      offerSummaries: shopOffers.slice(0, 12).map((offer) => {
-        const campaignConfig = parseCampaignConfig(offer.campaignConfigJson);
-        return {
-          id: String(offer.id || ""),
-          name: String(offer.name || ""),
-          status: offer.status !== false,
-          campaignStatus:
-            campaignConfig && campaignConfig.settings
-              ? campaignConfig.settings.status !== false
-              : null,
-          offerType: String(offer.offerType || ""),
-          startTime: String(offer.startTime || ""),
-          endTime: String(offer.endTime || ""),
-        };
-      }),
-    },
-  );
-  // #endregion
   // 先生成 Function 可安全消费的瘦 payload，避免 complete-bundle 展示字段把 metafield 撑爆。
   const compactOffers = activeOffers.map((offer) => {
     const runtimeSyncData = compileOfferRuntimeSyncData(offer);
@@ -554,27 +500,6 @@ async function buildStorefrontOffersStructured(
       id: String(offer.id || "").trim(),
     }))
     .filter((offer) => offer.id);
-
-  // #region debug-point D:storefront-structured
-  reportBundleDebugEvent(
-    "D",
-    "app/routes/_index/route.tsx:buildStorefrontOffersStructured",
-    "admin built storefront offers payload",
-    {
-      activeOffers: activeOffers.length,
-      compactOffers: Array.isArray(compactPayloadParsed.offers)
-        ? compactPayloadParsed.offers.length
-        : 0,
-      storefrontOffers: offers.length,
-      storefrontOfferSummaries: offers.slice(0, 12).map((offer) => ({
-        id: String(offer.id || ""),
-        name: String(offer.name || ""),
-        status: offer.status !== false,
-        offerType: String(offer.offerType || ""),
-      })),
-    },
-  );
-  // #endregion
 
   return {
     updatedAt,

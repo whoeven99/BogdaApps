@@ -928,7 +928,7 @@ export function normalizeDiscountRules(rules: DiscountRule[]): DiscountRule[] {
   const explicitDefault = orderedRules.find((rule) => rule.isDefault);
   const fallbackDefault = offerRules[0] || singleRule;
   const defaultKey = explicitDefault?.id || fallbackDefault?.id || "";
-  return orderedRules.map((rule, index) =>
+  return orderedRules.map((rule) =>
     isSingleDiscountRule(rule)
       ? createDefaultSingleDiscountRule({
           ...rule,
@@ -938,7 +938,7 @@ export function normalizeDiscountRules(rules: DiscountRule[]): DiscountRule[] {
           ...rule,
           id: rule.id || buildDraftRuleId("discount_rule"),
           tierType: "standard",
-          isDefault: defaultKey ? rule.id === defaultKey : index === 1,
+          isDefault: defaultKey ? rule.id === defaultKey : false,
         },
   );
 }

@@ -1079,20 +1079,6 @@ export default function StepTwoCompositionBuilder({
     }
     setActiveModuleId(null);
   }, [activeModuleId, visibleModules]);
-  useEffect(() => {
-    // #region debug-point B:bars-snapshot
-    fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"step2-add-bar",runId:"pre-fix",hypothesisId:"B",location:"StepTwoCompositionBuilder.tsx:1093",msg:"[DEBUG] StepTwo bars/snapshot changed",data:{offerType:draft.offerType,barsCount:bars.length,barIds:bars.map((bar)=>bar.id),snapshotCount:draft.unifiedRulesSnapshot.length,snapshotIds:draft.unifiedRulesSnapshot.map((rule)=>rule.id),discountRules:draft.discountRules.length,differentProductsRules:draft.differentProductsDiscountRules.length,bxgyRules:draft.bxgyDiscountRules.length,freeGiftRules:draft.freeGiftRules.length},ts:Date.now()})}).catch(()=>{});
-    // #endregion
-  }, [
-    bars,
-    draft.offerType,
-    draft.unifiedRulesSnapshot,
-    draft.discountRules.length,
-    draft.differentProductsDiscountRules.length,
-    draft.bxgyDiscountRules.length,
-    draft.freeGiftRules.length,
-  ]);
-
   const showGlobalProductPool =
     bars.some(
       (bar) =>
@@ -1177,9 +1163,6 @@ export default function StepTwoCompositionBuilder({
   const renderBarDetail = (bar: CampaignBarItem, index: number) => {
     const unifiedRule = draft.unifiedRulesSnapshot.find((rule) => rule.id === bar.id);
     if (!unifiedRule) {
-      // #region debug-point C:missing-unified-rule
-      fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"step2-add-bar",runId:"pre-fix",hypothesisId:"C",location:"StepTwoCompositionBuilder.tsx:1147",msg:"[DEBUG] renderBarDetail missing unifiedRule",data:{barId:bar.id,barType:bar.type,barSourceCollection:bar.sourceRef.collection,snapshotIds:draft.unifiedRulesSnapshot.map((rule)=>rule.id)},ts:Date.now()})}).catch(()=>{});
-      // #endregion
       return null;
     }
 
@@ -1303,9 +1286,6 @@ export default function StepTwoCompositionBuilder({
       );
       const rule = targetRuleIndex >= 0 ? draft.discountRules[targetRuleIndex] : null;
       if (!rule) {
-        // #region debug-point D:missing-discount-rule
-        fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"step2-add-bar",runId:"pre-fix",hypothesisId:"D",location:"StepTwoCompositionBuilder.tsx:1207",msg:"[DEBUG] unifiedRule resolved but draft.discountRules lookup failed",data:{ruleId:unifiedRule.id,sourceOfferType:unifiedRule.sourceOfferType,discountRuleIds:draft.discountRules.map((entry)=>entry.id || "")},ts:Date.now()})}).catch(()=>{});
-        // #endregion
         return null;
       }
       if (unifiedRule.type === "single_purchase") {
