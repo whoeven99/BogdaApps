@@ -18,6 +18,7 @@ const DEFAULT_SELECTORS = [
 const RETRY_MS = 12_000;
 const SESSION_STORAGE_BUNDLE_RULE_KEY = "current-ciwi-bundle-rule";
 const SESSION_STORAGE_PENDING_CART_REFRESH_KEY = "ciwi-pending-cart-refresh";
+const CIWI_BUNDLE_ADDED_QUERY_PARAM = "ciwi_bundle_added";
 let offersConfigCache = null;
 let priceSyncController = null;
 let bundlePriceDebounceT = null;
@@ -2651,21 +2652,34 @@ function persistPendingCartRefresh(reason, payload) {
 
 async function consumePendingCartRefresh() {
   try {
+    const url = new URL(window.location.href);
+    const hasSuccessQuery = url.searchParams.get(CIWI_BUNDLE_ADDED_QUERY_PARAM) === "1";
     const raw = window.sessionStorage.getItem(SESSION_STORAGE_PENDING_CART_REFRESH_KEY);
-    if (!raw) return;
-    window.sessionStorage.removeItem(SESSION_STORAGE_PENDING_CART_REFRESH_KEY);
-    const parsed = JSON.parse(raw);
+    const parsed = raw ? JSON.parse(raw) : null;
     const ageMs = Date.now() - Number(parsed?.ts || 0);
     const expectedPath = String(parsed?.path || "");
-    const currentPath = `${window.location.pathname || "/"}${window.location.search || ""}`;
-    if (ageMs < 0 || ageMs > 15_000) return;
-    if (expectedPath && expectedPath !== currentPath) return;
-    console.log("[ciwi] consuming pending cart refresh", {
+    const compareUrl = new URL(window.location.href);
+    compareUrl.searchParams.delete(CIWI_BUNDLE_ADDED_QUERY_PARAM);
+    const currentPath = `${compareUrl.pathname || "/"}${compareUrl.search || ""}`;
+    const hasValidPendingState =
+      !!parsed &&
+      ageMs >= 0 &&
+      ageMs <= 15_000 &&
+      (!expectedPath || expectedPath === currentPath);
+    if (!hasSuccessQuery && !hasValidPendingState) return;
+    window.sessionStorage.removeItem(SESSION_STORAGE_PENDING_CART_REFRESH_KEY);
+    clearBundleErrorMessage();
+    setBundleSuccessMessage("Bundle added to cart. Your bundle pricing is now applied in the cart.");
+    if (hasSuccessQuery) {
+      url.searchParams.delete(CIWI_BUNDLE_ADDED_QUERY_PARAM);
+      window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+    }
+    console.log("[ciwi] consumed pending bundle add return", {
       reason: String(parsed?.reason || ""),
-      ageMs,
+      ageMs: hasValidPendingState ? ageMs : null,
+      usedQueryFlag: hasSuccessQuery,
       payload: parsed?.payload || {},
     });
-    await notifyThemeAfterCartAdd();
   } catch (error) {
     console.warn("[ciwi] failed to consume pending cart refresh", error);
   }
@@ -3178,6 +3192,7 @@ window.__ciwiBundleState = window.__ciwiBundleState || {
   selectedOfferId: null,
   selectedCount: null,
   bundleErrorMessage: "",
+  bundleSuccessMessage: "",
   selectedBundleVariants: {},
   selectedDifferentProductVariants: {},
   selectedDifferentProducts: {},
@@ -3197,6 +3212,7 @@ function syncOfferScopedState(offer) {
   window.__ciwiBundleState.selectedOfferId = nextOfferId;
   window.__ciwiBundleState.selectedCount = null;
   window.__ciwiBundleState.bundleErrorMessage = "";
+  window.__ciwiBundleState.bundleSuccessMessage = "";
 
   if (offer?.offerType !== "complete-bundle") {
     window.__ciwiBundleState.selectedCompleteBundleBarId = null;
@@ -3208,10 +3224,30 @@ function clearBundleErrorMessage() {
   window.__ciwiBundleState.bundleErrorMessage = "";
 }
 
+function clearBundleSuccessMessage() {
+  if (!window.__ciwiBundleState) return;
+  window.__ciwiBundleState.bundleSuccessMessage = "";
+}
+
 function setBundleErrorMessage(message) {
   if (!window.__ciwiBundleState) return;
   window.__ciwiBundleState.bundleErrorMessage = String(message || "");
+  clearBundleSuccessMessage();
   rerenderCurrentBundleWidget();
+}
+
+function setBundleSuccessMessage(message) {
+  if (!window.__ciwiBundleState) return;
+  window.__ciwiBundleState.bundleSuccessMessage = String(message || "");
+  rerenderCurrentBundleWidget();
+}
+
+function renderCurrentBundleInlineSuccessHtml() {
+  const message = String(window.__ciwiBundleState?.bundleSuccessMessage || "").trim();
+  if (!message) return "";
+  return `<div style="margin-top:12px;padding:10px 12px;border-radius:8px;border:1px solid #86efac;background:#f0fdf4;color:#166534;font-size:13px;line-height:1.45;">${esc(
+    message,
+  )}</div>`;
 }
 
 function renderCurrentBundleInlineErrorHtml() {
@@ -4394,10 +4430,9 @@ function submitCompleteBundleNativeCartAdd(items, offer) {
 
   addField("form_type", "product");
   addField("utf8", "✓");
-  addField(
-    "return_to",
-    `${window.location.pathname || "/"}${window.location.search || ""}${window.location.hash || ""}`,
-  );
+  const returnUrl = new URL(window.location.href);
+  returnUrl.searchParams.set(CIWI_BUNDLE_ADDED_QUERY_PARAM, "1");
+  addField("return_to", `${returnUrl.pathname}${returnUrl.search}${returnUrl.hash || ""}`);
 
   items.forEach((item, index) => {
     addField(`items[${index}][id]`, Math.trunc(Number(item?.id) || 0));
@@ -4571,6 +4606,7 @@ window.ciwiHandleCompleteBundleAddToCart = async function (event) {
 function renderBundlePreviewHtml(offer) {
   syncOfferScopedState(offer);
   if (!offer || shouldHideOfferForInventory(offer)) return "";
+  const bundleSuccessHtml = renderCurrentBundleInlineSuccessHtml();
   const bundleErrorHtml = renderCurrentBundleInlineErrorHtml();
 
   if (offer.offerType === "complete-bundle") {
@@ -4697,6 +4733,7 @@ function renderBundlePreviewHtml(offer) {
         titleFontWeight,
       )} !important;">${esc(widgetTitle)}</div>
       <div class="create-offer-style-preview-list create-offer-style-preview-list--vertical">${barsHtml}</div>
+      ${bundleSuccessHtml}
       ${bundleErrorHtml}
       ${
         showCustomButton
@@ -4821,6 +4858,7 @@ function renderBundlePreviewHtml(offer) {
       <div class="create-offer-style-preview-list create-offer-style-preview-list--${layoutFormat}">
         ${itemsHtml}
       </div>
+      ${bundleSuccessHtml}
       ${bundleErrorHtml}
       ${showCustomButton ? `<button type="button" class="create-offer-preview-button" onclick="window.ciwiHandleBundleAddToCart(event)" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
         ${esc(buttonText)}
@@ -4920,6 +4958,7 @@ function renderBundlePreviewHtml(offer) {
       <div class="create-offer-style-preview-list create-offer-style-preview-list--${layoutFormat}">
         ${itemsHtml}
       </div>
+      ${bundleSuccessHtml}
       ${bundleErrorHtml}
       ${showCustomButton ? `<button class="create-offer-preview-button" onclick="window.ciwiHandleBundleAddToCart()" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
         ${esc(buttonText)}
@@ -5047,6 +5086,7 @@ function renderBundlePreviewHtml(offer) {
       <div class="create-offer-style-preview-list create-offer-style-preview-list--${layoutFormat}">
         ${itemsHtml}
       </div>
+      ${bundleSuccessHtml}
       ${bundleErrorHtml}
       ${showCustomButton ? `<button class="create-offer-preview-button" onclick="window.ciwiHandleBundleAddToCart()" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
         ${esc(buttonText)}
@@ -5244,6 +5284,7 @@ function renderBundlePreviewHtml(offer) {
       ${itemsHtml}
     </div>
     ${subscriptionHtml}
+    ${bundleSuccessHtml}
     ${bundleErrorHtml}
     ${showCustomButton ? `<button type="button" class="create-offer-preview-button" onclick="window.ciwiHandleBundleAddToCart(event)" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
       ${esc(buttonText)}
