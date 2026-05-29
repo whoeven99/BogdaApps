@@ -282,7 +282,7 @@ const META_BY_OFFER_TYPE: Record<OfferTypeId, CampaignBuilderMeta> = {
     logicBlockDescription:
       "Configure quantity-break tiers for different product combinations while keeping the standard offer-card style.",
     stepTwoDescription:
-      "Select the campaign products, then define each tier and the eligible product pool tied to that tier.",
+      "Select one shared product pool for the offer, then define each quantity-break tier against that same pool.",
   },
   bxgy: {
     logicBlockLabel: "Buy X, Get Y",
@@ -383,11 +383,13 @@ const BEHAVIOR_BY_OFFER_TYPE: Record<OfferTypeId, CampaignBuilderBehavior> = {
   },
   "quantity-breaks-different": {
     getScopeSummary: (ctx) =>
-      `${ctx.selectedProductsData.length} products available for tier product pools`,
+      `${(ctx.differentProductsSharedPoolProductsData.length > 0
+        ? ctx.differentProductsSharedPoolProductsData.length
+        : ctx.selectedProductsData.length)} products in the shared offer pool`,
     getLogicSummary: (ctx) => {
       const rules = getExecutableRulesBySource(ctx, "quantity-breaks-different");
       const uniqueScopedProducts = getUniqueScopeProductCount(rules);
-      return `${rules.length} quantity-break tiers across ${uniqueScopedProducts} scoped products`;
+      return `${rules.length} quantity-break tiers across ${uniqueScopedProducts} shared-pool products`;
     },
     validateScopeAndLogicStep: (ctx) =>
       ctx.selectedProductsData.length === 0 ||
@@ -570,6 +572,10 @@ export function buildSelectedProductsPayload(
     offerType: ctx.offerType,
     selectedProductsData: ctx.selectedProductsData,
     selectedProductIds: ctx.selectedProductsData.map((product) => String(product.id)),
+    differentProductsSharedPoolProductIds:
+      ctx.differentProductsSharedPoolProductsData.length > 0
+        ? ctx.differentProductsSharedPoolProductsData.map((product) => String(product.id))
+        : ctx.selectedProductsData.map((product) => String(product.id)),
     buyProducts: ctx.buyProducts,
     completeBundleBars: ctx.completeBundleBars,
     freeGiftTriggerProducts: ctx.freeGiftTriggerProducts,
@@ -581,12 +587,20 @@ export function buildDiscountRulesPayload(
   ctx: CampaignBuilderRegistryContext,
   buildQuantityRulesJson: (rules: DraftDiscountRule[]) => unknown,
 ): unknown {
+  const differentProductsSharedPoolIds =
+    ctx.differentProductsSharedPoolProductsData.length > 0
+      ? ctx.differentProductsSharedPoolProductsData.map((product) => String(product.id))
+      : ctx.selectedProductsData.map((product) => String(product.id));
   return buildDiscountRulesPayloadForOfferType({
     offerType: ctx.offerType,
     quantityRulesPayload: buildQuantityRulesJson(ctx.discountRules),
     differentProductsRulesPayload: buildDifferentProductsDiscountRulesJson(
       ctx.differentProductsDiscountRules,
-    ),
+    ).map((rule) => ({
+      ...rule,
+      buyProductIds: differentProductsSharedPoolIds,
+      getProductIds: rule.tierType === "bxgy" ? differentProductsSharedPoolIds : [],
+    })),
     bxgyRulesPayload: buildBxgyDiscountRulesJson(ctx.bxgyDiscountRules),
     freeGiftRulesPayload: buildFreeGiftRulesJson(ctx.freeGiftRules),
   });

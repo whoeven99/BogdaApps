@@ -1,4 +1,4 @@
-import { Button, Checkbox, Dropdown, Input, Modal, Select, Switch } from "antd";
+import { Button, Checkbox, Dropdown, Input, Select, Switch } from "antd";
 import { ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
@@ -625,13 +625,11 @@ function DiscountRuleBarDetail({
 function BxgyRuleBarDetail({
   bar,
   rule,
-  actions,
   headerActions,
   onChange,
 }: {
   bar: CampaignBarItem;
   rule: DraftBxgyDiscountRule;
-  actions: CampaignDraftActions;
   headerActions?: ReactNode;
   onChange: (patch: Partial<DraftBxgyDiscountRule>) => void;
 }) {
@@ -746,162 +744,32 @@ function FreeGiftRuleBarDetail({
 function DifferentProductsRuleBarDetail({
   bar,
   draft,
-  actions,
   rule,
+  showSharedChooserSection = false,
   headerActions,
   onChange,
 }: {
   bar: CampaignBarItem;
   draft: CampaignDraft;
-  actions: CampaignDraftActions;
   rule: CampaignDraft["differentProductsDiscountRules"][number];
+  showSharedChooserSection?: boolean;
   headerActions?: ReactNode;
   onChange: (patch: Partial<CampaignDraft["differentProductsDiscountRules"][number]>) => void;
 }) {
   const baseEligibleProducts =
-    draft.differentProductsEligibleProductsData.length > 0
-      ? draft.differentProductsEligibleProductsData
+    draft.differentProductsSharedPoolProductsData.length > 0
+      ? draft.differentProductsSharedPoolProductsData
       : draft.selectedProductsData;
   const eligibleProductIds = baseEligibleProducts.map((product) => String(product.id));
-  const eligibleProductIdSet = new Set(eligibleProductIds);
-  const effectiveScopedIds = (rule.buyProductIds || []).filter((id) =>
-    eligibleProductIdSet.has(String(id)),
-  );
-  const scopedCount = effectiveScopedIds.length;
   const totalEligibleCount = eligibleProductIds.length;
-  const [isEligiblePoolModalOpen, setIsEligiblePoolModalOpen] = useState(false);
-  const [draftScopedIds, setDraftScopedIds] = useState<string[]>(effectiveScopedIds);
-
-  const openEligiblePoolModal = () => {
-    setDraftScopedIds(effectiveScopedIds);
-    setIsEligiblePoolModalOpen(true);
-  };
-
-  const applyEligiblePoolChanges = () => {
-    onChange({
-      buyProductIds: draftScopedIds.length > 0 ? draftScopedIds : eligibleProductIds,
-    });
-    setIsEligiblePoolModalOpen(false);
-  };
 
   const sharedChooserSection = (
-    <BuilderSection title="Shared chooser pool">
-      <CompactActionRow
-        title="Storefront chooser products"
-        meta={
-          totalEligibleCount > 0
-            ? `${totalEligibleCount} products available across all mix-and-match bars.`
-            : "Choose the products customers can pick from in this offer."
-        }
-        actionLabel={totalEligibleCount > 0 ? "Edit eligible products" : "Select eligible products"}
-        onAction={() => void actions.handleSelectDifferentProductsEligibleProducts()}
-      />
+    <BuilderSection title="Offer product pool">
       <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
-        This shared pool powers the storefront "Choose" list. Each bar below can narrow it to a
-        smaller subset without changing the shared chooser.
+        {totalEligibleCount > 0
+          ? `${totalEligibleCount} campaign products are included in this offer pool. All bars inherit the same pool.`
+          : "Select campaign products in Step 1 to define the offer pool used by every bar."}
       </div>
-    </BuilderSection>
-  );
-
-  const barPoolSection = (
-    <BuilderSection title="Bar product pool">
-      <CompactActionRow
-        title="Products counted in this bar"
-        meta={
-          totalEligibleCount > 0
-            ? `${scopedCount} of ${totalEligibleCount} shared products are included in this threshold.`
-            : "Add shared eligible products first, then narrow this bar if needed."
-        }
-        actionLabel={totalEligibleCount > 0 ? "Edit bar pool" : "No eligible products"}
-        onAction={openEligiblePoolModal}
-      />
-      <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
-        {totalEligibleCount > 0 ? (
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <span>
-              Customers can mix any products in this bar pool to reach the quantity threshold.{" "}
-              {scopedCount === totalEligibleCount
-                ? "This bar currently uses the full shared pool."
-                : `This bar currently uses ${scopedCount} of ${totalEligibleCount} shared products.`}
-            </span>
-            {scopedCount !== totalEligibleCount ? (
-              <Button
-                type="link"
-                size="small"
-                className="px-0"
-                onClick={() => onChange({ buyProductIds: eligibleProductIds })}
-              >
-                Use full shared pool
-              </Button>
-            ) : null}
-          </div>
-        ) : (
-          "Add shared eligible products first. Then narrow this bar without changing the other bars."
-        )}
-      </div>
-      <Modal
-        title="Edit bar product pool"
-        open={isEligiblePoolModalOpen}
-        onCancel={() => setIsEligiblePoolModalOpen(false)}
-        onOk={applyEligiblePoolChanges}
-        okText="Apply"
-        cancelText="Cancel"
-        okButtonProps={{ disabled: totalEligibleCount === 0 }}
-      >
-        <div className="space-y-4">
-          <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
-            This bar inherits from the shared chooser pool. Remove products here to narrow this
-            threshold without changing the storefront chooser.
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="text-[12px] text-[#5c6166]">
-              {draftScopedIds.length} of {totalEligibleCount} eligible products selected
-            </div>
-            <Button
-              type="link"
-              size="small"
-              className="px-0"
-              onClick={() => setDraftScopedIds(eligibleProductIds)}
-              disabled={totalEligibleCount === 0}
-            >
-              Use full shared pool
-            </Button>
-          </div>
-          <div className="max-h-[320px] space-y-2 overflow-auto pr-1">
-            {baseEligibleProducts.map((product) => {
-              const productId = String(product.id);
-              const checked = draftScopedIds.includes(productId);
-              return (
-                <label
-                  key={productId}
-                  className="flex cursor-pointer items-center gap-3 rounded-[10px] border border-[#e3e8ed] bg-white px-3 py-3"
-                >
-                  <Checkbox
-                    checked={checked}
-                    onChange={(e) => {
-                      setDraftScopedIds((prev) =>
-                        e.target.checked
-                          ? [...prev, productId]
-                          : prev.filter((id) => id !== productId),
-                      );
-                    }}
-                  />
-                  <img
-                    src={product.image}
-                    alt={product.title}
-                    className="h-10 w-10 rounded-[8px] border border-[#edf1f4] object-cover"
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-medium text-[#1c1f23]">
-                      {product.title}
-                    </span>
-                  </span>
-                </label>
-              );
-            })}
-          </div>
-        </div>
-      </Modal>
     </BuilderSection>
   );
 
@@ -945,12 +813,12 @@ function DifferentProductsRuleBarDetail({
           </FieldGrid>
           <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
             Shoppers unlock this reward when they buy {Math.max(1, Number(rule.buyQuantity) || 1)}{" "}
-            item{Math.max(1, Number(rule.buyQuantity) || 1) === 1 ? "" : "s"} from this bar pool.
+            item{Math.max(1, Number(rule.buyQuantity) || 1) === 1 ? "" : "s"} from the offer
+            product pool.
           </div>
         </BuilderSection>
 
-        {sharedChooserSection}
-        {barPoolSection}
+        {showSharedChooserSection ? sharedChooserSection : null}
       </BuilderBarCard>
     );
   }
@@ -993,12 +861,11 @@ function DifferentProductsRuleBarDetail({
         </FieldGrid>
         <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
           Shoppers unlock this bar when they add any {Math.max(1, Number(rule.count) || 1)} product
-          {Math.max(1, Number(rule.count) || 1) === 1 ? "" : "s"} from this bar pool.
+          {Math.max(1, Number(rule.count) || 1) === 1 ? "" : "s"} from the offer product pool.
         </div>
       </BuilderSection>
 
-      {sharedChooserSection}
-      {barPoolSection}
+      {showSharedChooserSection ? sharedChooserSection : null}
     </BuilderBarCard>
   );
 }
@@ -1307,6 +1174,10 @@ export default function StepTwoCompositionBuilder({
     }
 
     if (unifiedRule.sourceOfferType === "quantity-breaks-different") {
+      const differentProductsSharedProductIds =
+        draft.differentProductsSharedPoolProductsData.length > 0
+          ? draft.differentProductsSharedPoolProductsData.map((product) => String(product.id))
+          : draft.selectedProductsData.map((product) => String(product.id));
       const targetRuleIndex = findDifferentProductsRuleIndex(
         draft.differentProductsDiscountRules,
         unifiedRule.id,
@@ -1343,8 +1214,8 @@ export default function StepTwoCompositionBuilder({
           key={bar.id}
           bar={bar}
           draft={draft}
-          actions={actions}
           rule={rule}
+          showSharedChooserSection={targetRuleIndex === 0}
           headerActions={renderBarActions(bar, index)}
           onChange={(patch) =>
             (() => {
@@ -1375,11 +1246,8 @@ export default function StepTwoCompositionBuilder({
                               typeof patch.getQuantity === "number"
                                 ? patch.getQuantity
                                 : entry.getQuantity,
-                            getProductIds:
-                              patch.getProductIds ??
-                              (entry.getProductIds.length > 0
-                                ? entry.getProductIds
-                                : patch.buyProductIds ?? entry.buyProductIds),
+                            buyProductIds: differentProductsSharedProductIds,
+                            getProductIds: differentProductsSharedProductIds,
                             discountPercent: 100,
                             maxUsesPerOrder: 1,
                             tierType: "bxgy" as const,
@@ -1391,6 +1259,7 @@ export default function StepTwoCompositionBuilder({
                           ...entry,
                           ...patch,
                           count,
+                          buyProductIds: differentProductsSharedProductIds,
                           buyQuantity:
                             typeof patch.buyQuantity === "number"
                               ? patch.buyQuantity
@@ -1506,7 +1375,6 @@ export default function StepTwoCompositionBuilder({
           key={bar.id}
           bar={bar}
           rule={rule}
-          actions={actions}
           headerActions={renderBarActions(bar, index)}
           onChange={(patch) =>
             (() => {

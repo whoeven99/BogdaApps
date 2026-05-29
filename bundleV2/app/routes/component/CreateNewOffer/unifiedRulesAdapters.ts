@@ -228,7 +228,11 @@ export function adaptFreeGiftRules(
 
 export function adaptDifferentProductsRules(
   rules: DifferentProductsDiscountRule[],
+  fallbackSharedProductIds: string[] = [],
 ): UnifiedRuleNode[] {
+  const sharedProductPoolIds = Array.from(
+    new Set(fallbackSharedProductIds.map((id) => String(id || "").trim()).filter(Boolean)),
+  );
   return rules.map((rule, index) => ({
     id: buildNodeId("different-products-rule", index, rule.id),
     type: isSingleDifferentProductsRule(rule)
@@ -241,17 +245,17 @@ export function adaptDifferentProductsRules(
       isSingleDifferentProductsRule(rule)
         ? {
             kind: "shared_product_pool" as const,
-            productIds: rule.buyProductIds,
+            productIds: sharedProductPoolIds,
           }
         : rule.tierType === "bxgy"
         ? {
             kind: "buy_get_products" as const,
-            buyProductIds: rule.buyProductIds,
-            getProductIds: rule.getProductIds.length > 0 ? rule.getProductIds : rule.buyProductIds,
+            buyProductIds: sharedProductPoolIds,
+            getProductIds: sharedProductPoolIds,
           }
         : {
             kind: "shared_product_pool" as const,
-            productIds: rule.buyProductIds,
+            productIds: sharedProductPoolIds,
           },
     condition:
       isSingleDifferentProductsRule(rule)

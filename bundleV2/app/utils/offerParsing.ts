@@ -755,7 +755,7 @@ const BXGY_AUTO_SUBTITLE_PATTERN =
   /same product|reward item|cheapest eligible|bundle tier|paying for|total items/i;
 const DIFFERENT_PRODUCTS_AUTO_TITLE_PATTERN = /^(any\s+\d+\s+items|rule)$/i;
 const DIFFERENT_PRODUCTS_AUTO_SUBTITLE_PATTERN =
-  /includes .* trigger product|mix any \d+ from \d+ eligible products|mix across \d+ eligible products/i;
+  /includes .* trigger product|mix any \d+ from \d+ (?:eligible|shared-pool) products|mix across \d+ (?:eligible|shared-pool) products/i;
 const COMPLETE_BUNDLE_AUTO_TITLE_PATTERN = /^(single|bar #\d+|complete the bundle)$/i;
 const COMPLETE_BUNDLE_AUTO_SUBTITLE_PATTERN =
   /standard price|pick \d+-\d+ bundle items|current product \+ \d+-\d+ bundle items from \d+ options/i;
@@ -4037,6 +4037,7 @@ type OfferTypeSelectedProductsPayloadParams = {
   offerType: string;
   selectedProductsData: unknown;
   selectedProductIds: string[];
+  differentProductsSharedPoolProductIds: string[];
   buyProducts: string[];
   completeBundleBars: unknown[];
   freeGiftTriggerProducts: string[];
@@ -4078,8 +4079,11 @@ const DEFAULT_OFFER_TYPE_PAYLOAD_STRATEGY: OfferTypePayloadStrategy = {
 
 const OFFER_TYPE_PAYLOAD_STRATEGIES: Record<string, OfferTypePayloadStrategy> = {
   "quantity-breaks-different": {
-    buildSelectedProductsPayload: ({ selectedProductIds }) => ({
-      productIds: selectedProductIds,
+    buildSelectedProductsPayload: ({ selectedProductIds, differentProductsSharedPoolProductIds }) => ({
+      productIds:
+        differentProductsSharedPoolProductIds.length > 0
+          ? differentProductsSharedPoolProductIds
+          : selectedProductIds,
     }),
     buildDiscountRulesPayload: ({ differentProductsRulesPayload }) =>
       differentProductsRulesPayload,

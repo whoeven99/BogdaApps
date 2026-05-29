@@ -193,7 +193,7 @@ export const OFFER_TYPE_RULE_CAPABILITIES: OfferTypeRuleCapability[] = [
     primaryRuleTypes: ["quantity_break"],
     scopeModel: "shared_product_pool",
     publishSupport: "supported",
-    notes: "Uses quantity-break tiers with a per-tier shared product pool.",
+    notes: "Uses quantity-break tiers against one shared offer-level product pool.",
   },
   {
     offerType: "bxgy",
@@ -349,7 +349,7 @@ export function describeUnifiedRuleScope(scope: UnifiedRuleScope): string {
     case "selected_products":
       return "Selected products";
     case "shared_product_pool":
-      return `${scope.productIds.length} products in shared pool`;
+      return `${scope.productIds.length} products in the shared offer pool`;
     case "buy_get_products":
       return `${scope.buyProductIds.length} products in the BXGY pool`;
     case "trigger_gift_products":

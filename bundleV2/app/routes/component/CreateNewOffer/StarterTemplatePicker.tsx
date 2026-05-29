@@ -118,7 +118,7 @@ function DifferentProductsPreview() {
           </div>
           <PreviewRow
             title="Any 2 items"
-            subtitle="Choose from the eligible product pool"
+            subtitle="Choose from the shared offer pool"
             price="EUR110.50"
             badge="Save EUR19.50"
             selected
@@ -126,7 +126,7 @@ function DifferentProductsPreview() {
         </div>
         <PreviewRow
           title="Any 3 items"
-          subtitle="A second tier can target another product group"
+          subtitle="A second tier can unlock at a higher quantity against the same pool"
           price="EUR156.00"
           badge="Save EUR39.00"
         />

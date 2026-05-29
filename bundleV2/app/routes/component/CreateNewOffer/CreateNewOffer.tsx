@@ -168,6 +168,7 @@ type CampaignModuleDescriptor = {
 function buildCampaignModuleDescriptors(params: {
   behaviorOfferType: Exclude<OfferTypeId, "progressive-gifts">;
   selectedScopeProductIds: string[];
+  differentProductsSharedPoolProductIds: string[];
   discountRules: DiscountRule[];
   differentProductsDiscountRules: DifferentProductsDiscountRule[];
   bxgyDiscountRules: BxgyDiscountRule[];
@@ -188,6 +189,7 @@ function buildCampaignModuleDescriptors(params: {
   const {
     behaviorOfferType,
     selectedScopeProductIds,
+    differentProductsSharedPoolProductIds,
     discountRules,
     differentProductsDiscountRules,
     bxgyDiscountRules,
@@ -240,9 +242,17 @@ function buildCampaignModuleDescriptors(params: {
       })),
     },
   };
+  const differentProductsScopeProductIds =
+    differentProductsSharedPoolProductIds.length > 0
+      ? Array.from(new Set(differentProductsSharedPoolProductIds))
+      : selectedScopeProductIds;
   const differentProductsRulesPayload = buildDifferentProductsDiscountRulesJson(
     differentProductsDiscountRules,
-  );
+  ).map((rule) => ({
+    ...rule,
+    buyProductIds: differentProductsScopeProductIds,
+    getProductIds: rule.tierType === "bxgy" ? differentProductsScopeProductIds : [],
+  }));
   const differentProductsLogicBlock: CampaignConfig["logicBlocks"][number] = {
     id: "logic-quantity-breaks-different",
     type: "quantity-breaks-different",
@@ -297,7 +307,10 @@ function buildCampaignModuleDescriptors(params: {
     sharedQuantityBreakOfferType,
     discountRules,
   );
-  const differentProductsRules = adaptDifferentProductsRules(differentProductsRulesPayload);
+  const differentProductsRules = adaptDifferentProductsRules(
+    differentProductsRulesPayload,
+    differentProductsScopeProductIds,
+  );
   const bxgyRules = adaptBxgyRules(bxgyRulesPayload, bxgyPoolIds, bxgyPoolIds);
   const freeGiftRulesSnapshot = adaptFreeGiftRules(
     freeGiftRulesPayload,
@@ -355,7 +368,7 @@ function buildCampaignModuleDescriptors(params: {
       logicBlockId: "logic-quantity-breaks-different",
       logicBlock: differentProductsLogicBlock,
       rules: differentProductsRules,
-      scopeIds: selectedScopeProductIds,
+      scopeIds: differentProductsScopeProductIds,
       includeAsAdditional: differentProductsRules.length > 0,
     },
     bxgy: {
@@ -570,7 +583,7 @@ type InitialEditorState = {
     variantsCount: number;
     hasSubscription: boolean;
   }>;
-  differentProductsEligibleProductsData: CampaignDraft["selectedProductsData"];
+  differentProductsSharedPoolProductsData: CampaignDraft["selectedProductsData"];
   discountRules: DiscountRule[];
   bxgyDiscountRules: BxgyDiscountRule[];
   differentProductsDiscountRules: DifferentProductsDiscountRule[];
@@ -881,7 +894,7 @@ export function CreateNewOffer({
         ),
       ),
     );
-    const differentProductsEligibleProductsData = mapProductIdsToInitialDraftProducts(
+    const differentProductsSharedPoolProductsData = mapProductIdsToInitialDraftProducts(
       differentProductsPoolIds.length > 0
         ? differentProductsPoolIds
         : differentProductsSelectedProductsJson
@@ -920,7 +933,7 @@ export function CreateNewOffer({
 
     return {
       selectedProductsData,
-      differentProductsEligibleProductsData,
+      differentProductsSharedPoolProductsData,
       discountRules,
       bxgyDiscountRules,
       differentProductsDiscountRules,
@@ -1238,9 +1251,9 @@ export function CreateNewOffer({
     variantsCount: number;
     hasSubscription: boolean;
   }[]>(() => initialEditorState.selectedProductsData);
-  const [differentProductsEligibleProductsData, setDifferentProductsEligibleProductsData] =
+  const [differentProductsSharedPoolProductsData, setDifferentProductsSharedPoolProductsData] =
     useState<CampaignDraft["selectedProductsData"]>(
-      () => initialEditorState.differentProductsEligibleProductsData,
+      () => initialEditorState.differentProductsSharedPoolProductsData,
     );
 
   const mapProductIdsToDraftProducts = (ids: string[]) =>
@@ -1287,23 +1300,28 @@ export function CreateNewOffer({
   const [triggerSelection, setTriggerSelection] = useState<TriggerSelectionMeta>(null);
   useEffect(() => {
     if (behaviorOfferType !== "quantity-breaks-different") return;
-    if (differentProductsEligibleProductsData.length > 0) return;
-    if (selectedProductsData.length === 0) return;
-    const nextEligible = selectedProductsData.map((product) => ({ ...product }));
-    const nextIds = nextEligible.map((product) => String(product.id));
-    setDifferentProductsEligibleProductsData(nextEligible);
-    setDifferentProductsDiscountRules((prev) =>
-      prev.map((rule) => {
-        if (Array.isArray(rule.buyProductIds) && rule.buyProductIds.length > 0) {
-          return rule;
-        }
-        return { ...rule, buyProductIds: nextIds };
-      }),
+    const hasSameIds = (left: string[], right: string[]) =>
+      left.length === right.length && left.every((value, index) => value === right[index]);
+    const selectedIds = selectedProductsData.map((product) => String(product.id));
+    const eligibleIds = differentProductsSharedPoolProductsData.map((product) =>
+      String(product.id),
+    );
+    if (eligibleIds.length > 0) {
+      if (!hasSameIds(selectedIds, eligibleIds)) {
+        setSelectedProductsData(
+          differentProductsSharedPoolProductsData.map((product) => ({ ...product })),
+        );
+      }
+      return;
+    }
+    if (selectedIds.length === 0) return;
+    setDifferentProductsSharedPoolProductsData(
+      selectedProductsData.map((product) => ({ ...product })),
     );
   }, [
     behaviorOfferType,
-    differentProductsEligibleProductsData.length,
     selectedProductsData,
+    differentProductsSharedPoolProductsData,
   ]);
   const allStoreProductIds = useMemo(
     () => storeProducts.map((product) => String(product.id || "")).filter(Boolean),
@@ -1381,6 +1399,19 @@ export function CreateNewOffer({
   }, [pendingCollectionIds, storeProducts]);
   const areStringArraysEqual = (left: string[], right: string[]) =>
     left.length === right.length && left.every((value, index) => value === right[index]);
+  const normalizeDifferentProductsRuleToSharedPool = (
+    rule: DifferentProductsDiscountRule,
+    sharedPoolIds: string[],
+  ): DifferentProductsDiscountRule => {
+    const normalizedSharedPoolIds = Array.from(
+      new Set(sharedPoolIds.map((id) => String(id || "").trim()).filter(Boolean)),
+    );
+    return {
+      ...rule,
+      buyProductIds: normalizedSharedPoolIds,
+      getProductIds: rule.tierType === "bxgy" ? normalizedSharedPoolIds : [],
+    };
+  };
   const createCompleteBundleBarId = () =>
     `bar-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const createDefaultCompleteBundleBar = (
@@ -1454,6 +1485,12 @@ export function CreateNewOffer({
       behaviorOfferType === "subscription" ? newData.slice(0, 1) : newData;
     const nextIds = nextProducts.map((item: any) => String(item.id));
     setSelectedProductsData(nextProducts);
+    if (behaviorOfferType === "quantity-breaks-different") {
+      setDifferentProductsSharedPoolProductsData(nextProducts);
+      setDifferentProductsDiscountRules((prev) =>
+        prev.map((rule) => normalizeDifferentProductsRuleToSharedPool(rule, nextIds)),
+      );
+    }
     if (bxgyDiscountRules.length > 0 || behaviorOfferType === "bxgy") {
       setBuyProducts(nextIds);
     }
@@ -1471,10 +1508,10 @@ export function CreateNewOffer({
       );
     }
   };
-  const handleSelectDifferentProductsEligibleProducts = async () => {
+  const handleSelectDifferentProductsSharedPoolProducts = async () => {
     const fallbackEligibleProducts =
-      differentProductsEligibleProductsData.length > 0
-        ? differentProductsEligibleProductsData
+      differentProductsSharedPoolProductsData.length > 0
+        ? differentProductsSharedPoolProductsData
         : selectedProductsData;
     const selected = await (window as any).shopify.resourcePicker({
       type: "product",
@@ -1490,20 +1527,11 @@ export function CreateNewOffer({
     const nextProducts = selectedList.length > 0
       ? mapPickerSelectionToDraftProducts(selectedList)
       : selectedProductsData.map((product) => ({ ...product }));
-    const allowedIds = new Set(nextProducts.map((product: any) => String(product.id)));
-    setDifferentProductsEligibleProductsData(nextProducts);
+    const nextIds = nextProducts.map((product: any) => String(product.id));
+    setSelectedProductsData(nextProducts);
+    setDifferentProductsSharedPoolProductsData(nextProducts);
     setDifferentProductsDiscountRules((prev) =>
-      prev.map((rule) => {
-        const nextBuyProductIds = (rule.buyProductIds || [])
-          .map((id) => String(id))
-          .filter((id) => allowedIds.has(id));
-        return {
-          ...rule,
-          buyProductIds: nextBuyProductIds.length
-            ? nextBuyProductIds
-            : Array.from(allowedIds),
-        };
-      }),
+      prev.map((rule) => normalizeDifferentProductsRuleToSharedPool(rule, nextIds)),
     );
   };
   const applyStepTwoTriggerProducts = (products: ReturnType<typeof mapProductIdsToDraftProducts>) => {
@@ -1969,31 +1997,34 @@ export function CreateNewOffer({
   ]);
   useEffect(() => {
     const effectiveEligibleIds =
-      differentProductsEligibleProductsData.length > 0
-        ? differentProductsEligibleProductsData.map((product) => String(product.id))
+      differentProductsSharedPoolProductsData.length > 0
+        ? differentProductsSharedPoolProductsData.map((product) => String(product.id))
         : selectedProductsData.map((product) => String(product.id));
     if (!effectiveEligibleIds.length) return;
-    const eligibleIdSet = new Set(effectiveEligibleIds);
     setDifferentProductsDiscountRules((prev) => {
       let changed = false;
       const next = prev.map((rule) => {
-        const scopedIds = (rule.buyProductIds || []).filter((id) =>
-          eligibleIdSet.has(String(id)),
+        const normalizedRule = normalizeDifferentProductsRuleToSharedPool(
+          rule,
+          effectiveEligibleIds,
         );
-        const normalizedScopedIds =
-          scopedIds.length > 0 ? scopedIds : effectiveEligibleIds;
-        if (areStringArraysEqual(rule.buyProductIds || [], normalizedScopedIds)) {
+        if (
+          areStringArraysEqual(rule.buyProductIds || [], normalizedRule.buyProductIds) &&
+          areStringArraysEqual(rule.getProductIds || [], normalizedRule.getProductIds)
+        ) {
           return rule;
         }
         changed = true;
-        return {
-          ...rule,
-          buyProductIds: normalizedScopedIds,
-        };
+        return normalizedRule;
       });
       return changed ? next : prev;
     });
-  }, [selectedProductsData, differentProductsEligibleProductsData]);
+  }, [
+    selectedProductsData,
+    differentProductsSharedPoolProductsData,
+    areStringArraysEqual,
+    normalizeDifferentProductsRuleToSharedPool,
+  ]);
   useEffect(() => {
     const persistedOrder = initialCampaignConfig?.settings.compositionBarOrder;
     if (Array.isArray(persistedOrder) && persistedOrder.length > 0) {
@@ -2317,9 +2348,14 @@ export function CreateNewOffer({
     });
 
     const selectedScopeProductIds = selectedProductsData.map((product) => String(product.id));
+    const differentProductsSharedPoolProductIds =
+      differentProductsSharedPoolProductsData.length > 0
+        ? differentProductsSharedPoolProductsData.map((product) => String(product.id))
+        : selectedScopeProductIds;
     const moduleDescriptors = buildCampaignModuleDescriptors({
       behaviorOfferType,
       selectedScopeProductIds,
+      differentProductsSharedPoolProductIds,
       discountRules,
       differentProductsDiscountRules,
       bxgyDiscountRules,
@@ -2451,6 +2487,7 @@ export function CreateNewOffer({
     normalizedCustomerProfileFilters,
     dailyBudget,
     differentProductsDiscountRules,
+    differentProductsSharedPoolProductsData,
     endTime,
     freeGiftRules,
     freeGiftTriggerProducts,
@@ -2542,9 +2579,14 @@ export function CreateNewOffer({
   );
   const unifiedRulesSnapshot = useMemo(() => {
     const selectedScopeProductIds = selectedProductsData.map((product) => String(product.id));
+    const differentProductsSharedPoolProductIds =
+      differentProductsSharedPoolProductsData.length > 0
+        ? differentProductsSharedPoolProductsData.map((product) => String(product.id))
+        : selectedScopeProductIds;
     const moduleDescriptors = buildCampaignModuleDescriptors({
       behaviorOfferType,
       selectedScopeProductIds,
+      differentProductsSharedPoolProductIds,
       discountRules,
       differentProductsDiscountRules,
       bxgyDiscountRules,
@@ -2584,6 +2626,7 @@ export function CreateNewOffer({
   }, [
     behaviorOfferType,
     selectedProductsData,
+    differentProductsSharedPoolProductsData,
     discountRules,
     differentProductsDiscountRules,
     bxgyDiscountRules,
@@ -2605,7 +2648,7 @@ export function CreateNewOffer({
     () => ({
       offerType: behaviorOfferType,
       selectedProductsData,
-      differentProductsEligibleProductsData,
+      differentProductsSharedPoolProductsData,
       discountRules,
       buyProducts,
       getProducts: buyProducts,
@@ -2644,7 +2687,7 @@ export function CreateNewOffer({
     [
       behaviorOfferType,
       selectedProductsData,
-      differentProductsEligibleProductsData,
+      differentProductsSharedPoolProductsData,
       discountRules,
       buyProducts,
       activeBundleBarId,
@@ -2864,9 +2907,9 @@ export function CreateNewOffer({
   const campaignDraftActions: CampaignDraftActions = {
     setOfferType,
     setSelectedProductsData,
-    setDifferentProductsEligibleProductsData,
+    setDifferentProductsSharedPoolProductsData,
     handleSelectProducts,
-    handleSelectDifferentProductsEligibleProducts,
+    handleSelectDifferentProductsSharedPoolProducts,
     setDiscountRules,
     setBxgyDiscountRules,
     setDifferentProductsDiscountRules,
@@ -2916,7 +2959,7 @@ export function CreateNewOffer({
         ),
         selectedProducts: Array.from(
           new Map(
-            [...selectedProductsData, ...differentProductsEligibleProductsData].map(
+            [...selectedProductsData, ...differentProductsSharedPoolProductsData].map(
               (product) => [
                 String(product.id),
                 {
@@ -2936,7 +2979,7 @@ export function CreateNewOffer({
 
     const previewSelectedProducts = Array.from(
       new Map(
-        [...selectedProductsData, ...differentProductsEligibleProductsData].map(
+        [...selectedProductsData, ...differentProductsSharedPoolProductsData].map(
           (product) => [
             String(product.id),
             {

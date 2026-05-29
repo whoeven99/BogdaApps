@@ -116,8 +116,8 @@ function buildUnifiedBarSummary(rule: UnifiedRuleNode): string {
 
 function getDifferentProductsSharedPoolIds(draft: CampaignDraft): string[] {
   const sharedPool =
-    draft.differentProductsEligibleProductsData.length > 0
-      ? draft.differentProductsEligibleProductsData
+    draft.differentProductsSharedPoolProductsData.length > 0
+      ? draft.differentProductsSharedPoolProductsData
       : draft.selectedProductsData;
   return sharedPool.map((product) => String(product.id));
 }

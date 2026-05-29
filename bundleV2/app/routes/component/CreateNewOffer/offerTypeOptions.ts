@@ -63,7 +63,7 @@ export const OFFER_TYPE_OPTIONS: OfferTypeOption[] = [
     id: "quantity-breaks-different",
     name: "Quantity breaks for different products",
     description:
-      "Offer quantity breaks across different products while assigning eligible product pools per tier",
+      "Offer quantity breaks across different products using one shared offer-level product pool",
     primaryDiscountScope: "Product discounts",
     primaryRuleType: "Quantity break",
   },

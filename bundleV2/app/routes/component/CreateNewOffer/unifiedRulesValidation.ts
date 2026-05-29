@@ -26,6 +26,10 @@ export function getUnifiedRuleAuditIssuesForRules(
   rules: UnifiedRuleNode[],
 ): UnifiedRuleAuditIssue[] {
   const issues: UnifiedRuleAuditIssue[] = [];
+  const differentProductsSharedPoolIds =
+    draft.differentProductsSharedPoolProductsData.length > 0
+      ? draft.differentProductsSharedPoolProductsData.map((product) => String(product.id))
+      : draft.selectedProductsData.map((product) => String(product.id));
 
   if (rules.length === 0) {
     issues.push({
@@ -96,7 +100,11 @@ export function getUnifiedRuleAuditIssuesForRules(
   const hasSharedPoolGap = rules.some(
     (rule) =>
       rule.scope.kind === "shared_product_pool" &&
-      rule.scope.productIds.length === 0,
+      (
+        rule.scope.productIds.length === 0 &&
+        (rule.sourceOfferType !== "quantity-breaks-different" ||
+          differentProductsSharedPoolIds.length === 0)
+      ),
   );
   if (hasSharedPoolGap) {
     issues.push({

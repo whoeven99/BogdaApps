@@ -6,7 +6,7 @@ import type { BuilderDisplayCard } from "./displayCardContract";
 
 const DIFFERENT_PRODUCTS_AUTO_TITLE_PATTERN = /^(any\s+\d+\s+items|rule)$/i;
 const DIFFERENT_PRODUCTS_AUTO_SUBTITLE_PATTERN =
-  /includes .* trigger product|mix any \d+ from \d+ eligible products|mix across \d+ eligible products/i;
+  /includes .* trigger product|mix any \d+ from \d+ (?:eligible|shared-pool) products|mix across \d+ (?:eligible|shared-pool) products/i;
 
 export type BuilderDifferentProductsDisplayContext = {
   baseUnitPrice: number;
@@ -15,8 +15,8 @@ export type BuilderDifferentProductsDisplayContext = {
   scopedProducts?: PreviewProduct[];
 };
 
-function buildEligibleProductsLabel(scopedCount: number): string {
-  return `${scopedCount} eligible product${scopedCount === 1 ? "" : "s"}`;
+function buildSharedPoolProductsLabel(scopedCount: number): string {
+  return `${scopedCount} shared-pool product${scopedCount === 1 ? "" : "s"}`;
 }
 
 function resolveDifferentProductsTitle(explicitTitle: unknown, fallbackTitle: string): string {
@@ -87,7 +87,7 @@ export function resolveBuilderDifferentProductsDisplay(
       subtitle: resolveDifferentProductsSubtitleWithSource(
         rule.presentation.subtitle,
         rule.presentation.subtitleSource,
-        `Mix any ${rule.condition.count} from ${buildEligibleProductsLabel(context.scopedCount)}`,
+        `Mix any ${rule.condition.count} from ${buildSharedPoolProductsLabel(context.scopedCount)}`,
       ),
       price: context.formatPrice(discountedTotal),
       original: context.formatPrice(originalTotal),
@@ -105,7 +105,7 @@ export function resolveBuilderDifferentProductsDisplay(
       subtitle: resolveDifferentProductsSubtitleWithSource(
         rule.presentation.subtitle,
         rule.presentation.subtitleSource,
-        `Mix any ${rule.condition.triggerCount} from ${buildEligibleProductsLabel(context.scopedCount)}`,
+        `Mix any ${rule.condition.triggerCount} from ${buildSharedPoolProductsLabel(context.scopedCount)}`,
       ),
       price:
         rule.reward.kind === "percentage_off"
@@ -127,7 +127,7 @@ export function resolveBuilderDifferentProductsDisplay(
     subtitle: resolveDifferentProductsSubtitleWithSource(
       rule.presentation.subtitle,
       rule.presentation.subtitleSource,
-      `Mix across ${buildEligibleProductsLabel(context.scopedCount)}`,
+      `Mix across ${buildSharedPoolProductsLabel(context.scopedCount)}`,
     ),
     price:
       rule.reward.kind === "percentage_off"

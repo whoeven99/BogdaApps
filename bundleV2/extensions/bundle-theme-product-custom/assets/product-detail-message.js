@@ -2114,15 +2114,27 @@ function getDifferentProductsRequiredQuantity(rule) {
   return Math.max(1, Math.trunc(Number(rule?.count) || 1));
 }
 
+function getDifferentProductsSharedPoolIds(offer, selectedRule) {
+  const sharedPoolIds = parseSelectedProductIds(offer?.selectedProductsJson);
+  if (sharedPoolIds.length) {
+    return sharedPoolIds;
+  }
+  if (selectedRule && Array.isArray(selectedRule.buyProductIds)) {
+    return selectedRule.buyProductIds.map((productId) => String(productId || "")).filter(Boolean);
+  }
+  return [];
+}
+
 function getDifferentProductsPoolProducts(offer, selectedRule) {
-  if (!selectedRule || !Array.isArray(selectedRule.buyProductIds) || !selectedRule.buyProductIds.length) {
+  const sharedPoolIds = getDifferentProductsSharedPoolIds(offer, selectedRule);
+  if (!sharedPoolIds.length) {
     return [];
   }
   const catalog = getDifferentProductsCatalog(offer);
   const productMap = new Map(
     (Array.isArray(catalog) ? catalog : []).map((product) => [String(product.productId), product]),
   );
-  return selectedRule.buyProductIds
+  return sharedPoolIds
     .map((productId) => productMap.get(String(productId)))
     .filter(Boolean);
 }
@@ -2395,7 +2407,7 @@ function buildDifferentProductsProductCardHtml(
 }
 
 function renderDifferentProductsPoolControlHtml(offer, selectedRule, borderColor, accentColor) {
-  if (!selectedRule || !Array.isArray(selectedRule.buyProductIds) || !selectedRule.buyProductIds.length) {
+  if (!selectedRule || !getDifferentProductsSharedPoolIds(offer, selectedRule).length) {
     return "";
   }
   const poolProducts = getDifferentProductsPoolProducts(offer, selectedRule);
@@ -2405,7 +2417,7 @@ function renderDifferentProductsPoolControlHtml(offer, selectedRule, borderColor
     return `<div style="margin-top:10px;border:1px dashed ${esc(
       borderColor,
     )};border-radius:10px;padding:10px;background:#ffffff;color:#5c6166;font-size:12px;">
-      <div>Eligible products will appear here after the product pool is loaded.</div>
+      <div>Products from the shared offer pool will appear here after the pool is loaded.</div>
       <button type="button" class="ciwi-different-products-picker__toggle" style="margin-top:10px;background:${esc(
         accentColor || "#008060",
       )};" onclick="event.stopPropagation();window.ciwiSelectBundleOption(${Math.max(
@@ -2472,7 +2484,7 @@ function renderDifferentProductsModalHtml(offer, selectedRule, borderColor, acce
     )
     .join("");
   const headerHtml = `<div class="ciwi-different-products-modal__header">
-    <div class="ciwi-different-products-modal__title">Choose products</div>
+    <div class="ciwi-different-products-modal__title">Choose from offer pool</div>
     <button type="button" class="ciwi-different-products-modal__close" onclick="window.ciwiCloseDifferentProductsModal()">×</button>
   </div>`;
   const metaHtml = `<div class="ciwi-different-products-modal__meta">
@@ -2483,7 +2495,7 @@ function renderDifferentProductsModalHtml(offer, selectedRule, borderColor, acce
     : "";
   const listHtml = poolProducts.length
     ? `<div class="ciwi-different-products-modal__list">${cardsHtml}</div>`
-    : `<div class="ciwi-different-products-modal__empty">Loading eligible products…</div>`;
+    : `<div class="ciwi-different-products-modal__empty">Loading shared offer pool…</div>`;
   const footerHtml = `<div class="ciwi-different-products-modal__footer">
     <button type="button" class="ciwi-different-products-modal__done" style="background:${esc(
       accentColor || "#008060",
@@ -3316,7 +3328,7 @@ const BXGY_AUTO_SUBTITLE_PATTERN =
   /same product|reward item|cheapest eligible|bundle tier|paying for|total items/i;
 const DIFFERENT_PRODUCTS_AUTO_TITLE_PATTERN = /^(any\s+\d+\s+items|rule)$/i;
 const DIFFERENT_PRODUCTS_AUTO_SUBTITLE_PATTERN =
-  /includes .* trigger product|mix any \d+ from \d+ eligible products|mix across \d+ eligible products/i;
+  /includes .* trigger product|mix any \d+ from \d+ (?:eligible|shared-pool) products|mix across \d+ (?:eligible|shared-pool) products/i;
 const COMPLETE_BUNDLE_AUTO_TITLE_PATTERN = /^(single|bar #\d+|complete the bundle)$/i;
 const COMPLETE_BUNDLE_AUTO_SUBTITLE_PATTERN =
   /standard price|buy on its own|pick \d+-\d+ bundle items|current product \+ \d+-\d+ bundle items from \d+ options|choose bundle items and set the pricing for the whole bundle total/i;
@@ -3412,6 +3424,7 @@ function resolveThemeBxgyCardDisplay(rule) {
 /** @returns {ThemeDisplayCard | null} */
 function resolveThemeDifferentProductsCardDisplay(rule, unitPrice) {
   if (!rule) return null;
+  const sharedPoolCount = Array.isArray(rule.buyProductIds) ? rule.buyProductIds.length : 0;
   if (String(rule.tierType || "") === "bxgy") {
     const bxgyDisplay = getBxgyDisplayMeta({
       buyQuantity: rule.buyQuantity,
@@ -3421,7 +3434,7 @@ function resolveThemeDifferentProductsCardDisplay(rule, unitPrice) {
       title: resolveBxgyDisplayTitle(rule, rule.title, rule.titleSource),
       subtitle: resolveThemeDifferentProductsSubtitle(
         rule,
-        `Mix any ${Math.max(1, Number(rule.count) || 1)} from ${Array.isArray(rule.buyProductIds) ? rule.buyProductIds.length : 0} eligible products`,
+        `Mix any ${Math.max(1, Number(rule.count) || 1)} from ${sharedPoolCount} shared-pool products`,
       ),
       price:
         Number(rule.discountPercent) === 100
@@ -3439,7 +3452,7 @@ function resolveThemeDifferentProductsCardDisplay(rule, unitPrice) {
     title: resolveThemeDifferentProductsTitle(rule, `Any ${rule.count} items`),
     subtitle: resolveThemeDifferentProductsSubtitle(
       rule,
-      `Mix any ${Math.max(1, Number(rule.count) || 1)} from ${Array.isArray(rule.buyProductIds) ? rule.buyProductIds.length : 0} eligible products`,
+      `Mix any ${Math.max(1, Number(rule.count) || 1)} from ${sharedPoolCount} shared-pool products`,
     ),
     price: formatPrice(amounts.discountedTotal),
     original: formatPrice(amounts.originalTotal),
