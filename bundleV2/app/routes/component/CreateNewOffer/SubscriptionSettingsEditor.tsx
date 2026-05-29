@@ -63,13 +63,20 @@ export default function SubscriptionSettingsEditor({
                 Enable subscription option
               </div>
               <div className="mt-1 text-[12px] text-[#5c6166]">
-                {subscriptionEnabled ? "Enabled" : "Optional"}
+                {subscriptionEnabled
+                  ? "Enabled and linked to Shopify selling plans"
+                  : "Optional"}
               </div>
             </div>
             <Switch
               checked={subscriptionEnabled}
               onChange={(checked) => setSubscriptionEnabled(checked)}
             />
+          </div>
+          <div className="rounded-[10px] border border-[#dfe3e8] bg-[#ffffff] px-4 py-3 text-[12px] leading-[1.6] text-[#4f5b67]">
+            Subscription pricing is pulled from Shopify selling plans on the product.
+            This module controls the purchase-mode copy and selection state, not a
+            separate app discount tier.
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
@@ -125,6 +132,9 @@ export default function SubscriptionSettingsEditor({
                     {subscriptionSubtitle}
                   </div>
                 ) : null}
+                <div className="text-[12px] font-medium text-[#008060] mt-2">
+                  Price and savings come from the selected selling plan
+                </div>
               </div>
               {shouldShowSubscriptionExplanation && (
                 <div className="mt-3 rounded-[10px] bg-[#f6f8f9] p-3">

@@ -2237,12 +2237,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const subscriptionTitle = sanitizeSingleLineText(
       formData.get("subscriptionTitle"),
       60,
-      "Subscribe & Save 20%",
+      "Subscribe & Save",
     );
     const subscriptionSubtitle = sanitizeSingleLineText(
       formData.get("subscriptionSubtitle"),
       60,
-      "Delivered weekly",
+      "Subscription pricing updates from your selling plan",
     );
     const oneTimeTitle = sanitizeSingleLineText(
       formData.get("oneTimeTitle"),

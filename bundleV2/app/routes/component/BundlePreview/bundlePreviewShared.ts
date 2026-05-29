@@ -161,8 +161,10 @@ export function renderBundlePreviewHtml({
   showProductImages = true,
   showSubscriptionPreview = false,
   subscriptionPreviewStyle = "dashed",
-  subscriptionTitle = "Subscribe & Save 20%",
-  subscriptionSubtitle = "Delivered weekly",
+  subscriptionTitle = "Subscribe & Save",
+  subscriptionSubtitle = "Subscription pricing updates from your selling plan",
+  oneTimeTitle = "One-time purchase",
+  oneTimeSubtitle = "Uses the current product price",
   showSubscriptionExplanation = false,
   subscriptionExplanationTitle = "Some products aren't eligible for subscriptions",
   subscriptionExplanationBody = "Subscription bar will only be shown in products that are eligible for subscription. You can select those products in your subscription app.",
@@ -187,6 +189,8 @@ export function renderBundlePreviewHtml({
   subscriptionPreviewStyle?: "solid" | "dashed";
   subscriptionTitle?: string;
   subscriptionSubtitle?: string;
+  oneTimeTitle?: string;
+  oneTimeSubtitle?: string;
   showSubscriptionExplanation?: boolean;
   subscriptionExplanationTitle?: string;
   subscriptionExplanationBody?: string;
@@ -274,39 +278,57 @@ export function renderBundlePreviewHtml({
   const subscriptionHtml = showSubscriptionPreview
     ? `
       <div style="margin-top: 12px;">
-        <div
-          style="
-            border: 1px ${subscriptionPreviewStyle === "dashed" ? "dashed" : "solid"} #b7b7b7;
-            border-radius: 12px;
-            padding: 14px 16px;
-            background: #ffffff;
-            display: grid;
-            grid-template-columns: 20px 1fr;
-            align-items: start;
-            column-gap: 12px;
-          "
-        >
-          <span
-            style="
-              width: 18px;
-              height: 18px;
-              border: 2px solid #b7b7b7;
-              border-radius: 2px;
-              display: inline-block;
-              margin-top: 2px;
-              background: #ffffff;
-            "
-          ></span>
-          <span>
+        <div style="border:1px solid #c9ccd0; border-radius:12px; padding:12px; background:#ffffff; display:grid; gap:8px;">
+          <div style="border:1px solid #dfe3e8; border-radius:10px; padding:12px 14px; background:#ffffff;">
             <span style="display:block; font-size:14px; font-weight:600; color:#1c1f23;">
-              ${esc(subscriptionTitle)}
+              ${esc(oneTimeTitle)}
             </span>
             ${renderOptionalTextHtml(
-              subscriptionSubtitle,
+              oneTimeSubtitle,
               (text) =>
                 `<span style="display:block; font-size:12px; color:#8c9196; margin-top:2px;">${esc(text)}</span>`,
             )}
-          </span>
+            <span style="display:block; font-size:12px; color:#4f5b67; margin-top:6px;">
+              Uses the current product price at purchase time
+            </span>
+          </div>
+          <div
+            style="
+              border: 1px ${subscriptionPreviewStyle === "dashed" ? "dashed" : "solid"} #b7b7b7;
+              border-radius: 10px;
+              padding: 12px 14px;
+              background: #ffffff;
+              display: grid;
+              grid-template-columns: 20px 1fr;
+              align-items: start;
+              column-gap: 12px;
+            "
+          >
+            <span
+              style="
+                width: 18px;
+                height: 18px;
+                border: 2px solid #b7b7b7;
+                border-radius: 2px;
+                display: inline-block;
+                margin-top: 2px;
+                background: #ffffff;
+              "
+            ></span>
+            <span>
+              <span style="display:block; font-size:14px; font-weight:600; color:#1c1f23;">
+                ${esc(subscriptionTitle)}
+              </span>
+              ${renderOptionalTextHtml(
+                subscriptionSubtitle,
+                (text) =>
+                  `<span style="display:block; font-size:12px; color:#8c9196; margin-top:2px;">${esc(text)}</span>`,
+              )}
+              <span style="display:block; font-size:12px; color:#008060; font-weight:600; margin-top:6px;">
+                Price and savings come from the selected selling plan
+              </span>
+            </span>
+          </div>
         </div>
         ${
           showSubscriptionExplanation

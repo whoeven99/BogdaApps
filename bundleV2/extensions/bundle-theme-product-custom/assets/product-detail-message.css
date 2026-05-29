@@ -593,6 +593,13 @@
   background: #f0faf6;
 }
 
+.ciwi-subscription-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .ciwi-subscription-title {
   display: block;
   font-size: 14px;
@@ -605,4 +612,101 @@
   font-size: 12px;
   color: #8c9196;
   margin-top: 2px;
+}
+
+.ciwi-subscription-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #008060;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ciwi-subscription-price-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.ciwi-subscription-price {
+  display: inline-block;
+  font-size: 15px;
+  font-weight: 700;
+  color: #1c1f23;
+}
+
+.ciwi-subscription-compare {
+  display: inline-block;
+  font-size: 12px;
+  color: #6d7175;
+  text-decoration: line-through;
+}
+
+.ciwi-subscription-savings {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #008060;
+}
+
+.ciwi-subscription-plan-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.ciwi-subscription-plan-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #dfe3e8;
+  border-radius: 8px;
+  background: #ffffff;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ciwi-subscription-plan-option.is-selected {
+  border-color: #008060;
+  background: #f0faf6;
+}
+
+.ciwi-subscription-plan-option__text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ciwi-subscription-plan-option__title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1c1f23;
+}
+
+.ciwi-subscription-plan-price {
+  font-size: 12px;
+  color: #4f5b67;
+}
+
+.ciwi-subscription-plan-save {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(0, 128, 96, 0.1);
+  color: #008060;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
 }

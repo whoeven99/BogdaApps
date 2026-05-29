@@ -408,8 +408,8 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
       showCustomButton: true,
       subscriptionEnabled: false,
       subscriptionPosition: "below-bundle-bars",
-      subscriptionTitle: "Subscribe & Save 20%",
-      subscriptionSubtitle: "Delivered weekly",
+      subscriptionTitle: "Subscribe & Save",
+      subscriptionSubtitle: "Subscription pricing updates from your selling plan",
       oneTimeTitle: "One-time purchase",
       oneTimeSubtitle: "",
       subscriptionDefaultSelected: true,
@@ -480,8 +480,10 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
       showCustomButton: parsed.showCustomButton !== false,
       subscriptionEnabled: parsed.subscriptionEnabled === true,
       subscriptionPosition: "below-bundle-bars",
-      subscriptionTitle: parsed.subscriptionTitle || "Subscribe & Save 20%",
-      subscriptionSubtitle: parsed.subscriptionSubtitle || "Delivered weekly",
+      subscriptionTitle: parsed.subscriptionTitle || "Subscribe & Save",
+      subscriptionSubtitle:
+        parsed.subscriptionSubtitle ||
+        "Subscription pricing updates from your selling plan",
       oneTimeTitle: parsed.oneTimeTitle || "One-time purchase",
       oneTimeSubtitle: parsed.oneTimeSubtitle || "",
       subscriptionDefaultSelected: parsed.subscriptionDefaultSelected !== false,
@@ -1786,8 +1788,12 @@ function sanitizeSubscriptionLogicConfig(raw: unknown): SubscriptionLogicBlock["
   return {
     enabled: item.enabled !== false,
     position: "below-bundle-bars",
-    title: sanitizeSingleLineText(item.title, 60, "Subscribe & Save 20%"),
-    subtitle: sanitizeSingleLineText(item.subtitle, 60, "Delivered weekly"),
+    title: sanitizeSingleLineText(item.title, 60, "Subscribe & Save"),
+    subtitle: sanitizeSingleLineText(
+      item.subtitle,
+      60,
+      "Subscription pricing updates from your selling plan",
+    ),
     oneTimeTitle: sanitizeSingleLineText(item.oneTimeTitle, 60, "One-time purchase"),
     oneTimeSubtitle: sanitizeSingleLineText(item.oneTimeSubtitle, 60, ""),
     defaultSelected: item.defaultSelected !== false,
@@ -2894,8 +2900,10 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
     showCustomButton: offerCard?.config.showCustomButton !== false,
     subscriptionEnabled: subscription?.config.enabled ?? false,
     subscriptionPosition: subscription?.config.position ?? "below-bundle-bars",
-    subscriptionTitle: subscription?.config.title ?? "Subscribe & Save 20%",
-    subscriptionSubtitle: subscription?.config.subtitle ?? "Delivered weekly",
+    subscriptionTitle: subscription?.config.title ?? "Subscribe & Save",
+    subscriptionSubtitle:
+      subscription?.config.subtitle ??
+      "Subscription pricing updates from your selling plan",
     oneTimeTitle: subscription?.config.oneTimeTitle ?? "One-time purchase",
     oneTimeSubtitle: subscription?.config.oneTimeSubtitle ?? "",
     subscriptionDefaultSelected: subscription?.config.defaultSelected ?? true,
@@ -4252,6 +4260,12 @@ const OFFER_TYPE_PAYLOAD_STRATEGIES: Record<string, OfferTypePayloadStrategy> = 
 
       return finish(JSON.stringify({ productIds, bars }));
     },
+  },
+  subscription: {
+    buildSelectedProductsPayload: ({ selectedProductsData }) => selectedProductsData,
+    buildDiscountRulesPayload: () => [],
+    trimSelectedProductsJsonForFunction:
+      DEFAULT_OFFER_TYPE_PAYLOAD_STRATEGY.trimSelectedProductsJsonForFunction,
   },
   "free-gift": {
     buildSelectedProductsPayload: ({

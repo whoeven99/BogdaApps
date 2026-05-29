@@ -163,9 +163,6 @@ function isPrimarySingleRuleSource(
   offerType: CampaignDraft["offerType"],
   sourceOfferType: UnifiedRuleNode["sourceOfferType"],
 ): boolean {
-  if (offerType === "subscription") {
-    return sourceOfferType === "quantity-breaks-same";
-  }
   return sourceOfferType === offerType;
 }
 

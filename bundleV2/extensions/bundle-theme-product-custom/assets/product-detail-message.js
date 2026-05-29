@@ -470,7 +470,117 @@ function getCurrentProductSubscriptionData() {
   }
 }
 
+function getCurrentVariantConfig() {
+  const configEl = getBundleConfigElement();
+  if (!configEl) return null;
+  try {
+    const config = JSON.parse(configEl.textContent || "{}");
+    const variants = Array.isArray(config?.variants) ? config.variants : [];
+    const selectedVariantId = String(getSelectedVariantId() || "");
+    if (selectedVariantId) {
+      const matched = variants.find(
+        (variant) => String(variant?.id || "") === selectedVariantId,
+      );
+      if (matched) return matched;
+    }
+    return variants[0] || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function getCurrentVariantSubscriptionAllocations() {
+  const variant = getCurrentVariantConfig();
+  return Array.isArray(variant?.sellingPlanAllocations)
+    ? variant.sellingPlanAllocations
+    : [];
+}
+
+function getNormalizedSubscriptionPlans() {
+  const allocations = getCurrentVariantSubscriptionAllocations();
+  return allocations
+    .map((allocation) => {
+      const sellingPlanId = String(allocation?.sellingPlan?.id || "").trim();
+      if (!sellingPlanId) return null;
+      const oneTimePrice =
+        normalizePriceNumber(getCurrentVariantConfig()?.price) ?? getCurrentUnitPrice();
+      const subscriptionPrice =
+        normalizePriceNumber(allocation?.price) ??
+        normalizePriceNumber(allocation?.perDeliveryPrice) ??
+        normalizePriceNumber(allocation?.checkoutChargeAmount);
+      const compareAtPrice =
+        normalizePriceNumber(allocation?.compareAtPrice) ?? oneTimePrice;
+      const savingsAmount =
+        subscriptionPrice != null && compareAtPrice != null
+          ? Math.max(0, compareAtPrice - subscriptionPrice)
+          : 0;
+      const savingsPercent =
+        compareAtPrice && savingsAmount > 0
+          ? Math.round((savingsAmount / compareAtPrice) * 100)
+          : 0;
+      return {
+        sellingPlanId,
+        sellingPlanName: String(allocation?.sellingPlan?.name || ""),
+        subscriptionPrice,
+        compareAtPrice,
+        perDeliveryPrice: normalizePriceNumber(allocation?.perDeliveryPrice),
+        savingsAmount,
+        savingsPercent,
+      };
+    })
+    .filter(Boolean);
+}
+
+function getResolvedSelectedSellingPlan() {
+  const availablePlans = getNormalizedSubscriptionPlans();
+  if (availablePlans.length === 0) return null;
+  const preferredId = String(window.__ciwiBundleState?.selectedSellingPlanId || "").trim();
+  if (preferredId) {
+    const matchedPlan = availablePlans.find(
+      (plan) => String(plan?.sellingPlanId || "") === preferredId,
+    );
+    if (matchedPlan) return matchedPlan;
+  }
+  return availablePlans[0] || null;
+}
+
+function getCurrentSubscriptionOptionState() {
+  const currentVariant = getCurrentVariantConfig();
+  const oneTimePrice =
+    normalizePriceNumber(currentVariant?.price) ?? getCurrentUnitPrice();
+  const availablePlans = getNormalizedSubscriptionPlans();
+  const selectedPlan = getResolvedSelectedSellingPlan();
+  if (!selectedPlan) {
+    return {
+      oneTimePrice,
+      subscriptionPrice: null,
+      compareAtPrice: oneTimePrice,
+      savingsAmount: 0,
+      savingsPercent: 0,
+      availablePlans,
+      sellingPlanId: "",
+      sellingPlanName: "",
+    };
+  }
+
+  return {
+    oneTimePrice,
+    subscriptionPrice: selectedPlan.subscriptionPrice,
+    compareAtPrice: selectedPlan.compareAtPrice,
+    savingsAmount: selectedPlan.savingsAmount,
+    savingsPercent: selectedPlan.savingsPercent,
+    perDeliveryPrice: selectedPlan.perDeliveryPrice,
+    availablePlans,
+    sellingPlanId: selectedPlan.sellingPlanId,
+    sellingPlanName: selectedPlan.sellingPlanName,
+  };
+}
+
 function getDefaultSellingPlanId() {
+  const subscriptionState = getCurrentSubscriptionOptionState();
+  if (subscriptionState.sellingPlanId) {
+    return subscriptionState.sellingPlanId;
+  }
   const data = getCurrentProductSubscriptionData();
   // 中文注释：遍历所有 selling_plan_groups，拿到第一个有效的 selling_plan.id
   for (const group of data.sellingPlanGroups) {
@@ -3174,6 +3284,8 @@ function syncOfferScopedState(offer) {
   window.__ciwiBundleState.selectedCount = null;
   window.__ciwiBundleState.bundleErrorMessage = "";
   window.__ciwiBundleState.bundleSuccessMessage = "";
+  window.__ciwiBundleState.subscriptionMode = null;
+  window.__ciwiBundleState.selectedSellingPlanId = "";
 
   if (offer?.offerType !== "complete-bundle") {
     window.__ciwiBundleState.selectedCompleteBundleBarId = null;
@@ -3681,7 +3793,9 @@ function syncSubscriptionSelectionToTheme(offer) {
     );
     return;
   }
-  const defaultSellingPlanId = getDefaultSellingPlanId();
+  const subscriptionState = getCurrentSubscriptionOptionState();
+  const defaultSellingPlanId =
+    subscriptionState.sellingPlanId || getDefaultSellingPlanId();
   const mode = window.__ciwiBundleState?.subscriptionMode || "one-time";
   console.log("[ciwi][subscription] syncSubscriptionSelectionToTheme", {
     mode,
@@ -3753,6 +3867,8 @@ window.ciwiSelectSubscriptionMode = function(mode) {
       console.error(
         "[ciwi][subscription] cannot switch to subscription mode: product has no selling plan",
       );
+    } else if (!String(window.__ciwiBundleState.selectedSellingPlanId || "").trim()) {
+      window.__ciwiBundleState.selectedSellingPlanId = defaultSellingPlanId;
     }
   }
 
@@ -3778,6 +3894,22 @@ window.ciwiSelectSubscriptionMode = function(mode) {
   } else {
     console.warn("[ciwi][subscription] renderBundlePreviewHtml returned empty, UI not updated");
   }
+};
+
+window.ciwiSelectSellingPlan = function(sellingPlanId) {
+  const nextSellingPlanId = String(sellingPlanId || "").trim();
+  if (!window.__ciwiBundleState || !nextSellingPlanId) return;
+  window.__ciwiBundleState.selectedSellingPlanId = nextSellingPlanId;
+  window.__ciwiBundleState.subscriptionMode = "subscription";
+  const currentOffer = getCurrentOffer(offersConfigCache);
+  syncSubscriptionSelectionToTheme(currentOffer);
+  const wrap = document.querySelector(".ciwi-bundle-wrapper");
+  if (!wrap || !currentOffer) return;
+  const html = renderBundlePreviewHtml(currentOffer);
+  if (!html) return;
+  wrap.innerHTML = html;
+  bindBundleInteractions(wrap);
+  syncSubscriptionSelectionToTheme(currentOffer);
 };
 
 function bindBundleInteractions(root) {
@@ -3836,6 +3968,22 @@ function bindBundleInteractions(root) {
     } else {
       console.warn("[ciwi][subscription] no radio input found under option label", { mode });
     }
+  });
+
+  const sellingPlanOptions = Array.from(
+    root.querySelectorAll("[data-ciwi-selling-plan-id]"),
+  );
+  sellingPlanOptions.forEach((option) => {
+    if (option.dataset.ciwiBound === "true") return;
+    option.dataset.ciwiBound = "true";
+    option.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const sellingPlanId = option.getAttribute("data-ciwi-selling-plan-id");
+      if (sellingPlanId) {
+        window.ciwiSelectSellingPlan(sellingPlanId);
+      }
+    });
   });
 }
 
@@ -5180,10 +5328,13 @@ function renderBundlePreviewHtml(offer) {
     }
     if (subscriptionEnabled) {
       const defaultSellingPlanId = getDefaultSellingPlanId();
-      const subscriptionTitle = offerSettings.subscriptionTitle || "Subscribe & Save 20%";
-      const subscriptionSubtitle = offerSettings.subscriptionSubtitle || "Delivered weekly";
+      const subscriptionState = getCurrentSubscriptionOptionState();
+      const subscriptionTitle = offerSettings.subscriptionTitle || "Subscribe & Save";
+      const configuredSubscriptionSubtitle =
+        offerSettings.subscriptionSubtitle ||
+        "Subscription pricing updates from your selling plan";
       const oneTimeTitle = offerSettings.oneTimeTitle || "One-time purchase";
-      const oneTimeSubtitle = offerSettings.oneTimeSubtitle || "";
+      const configuredOneTimeSubtitle = offerSettings.oneTimeSubtitle || "";
       const subscriptionDefaultSelected =
         offerSettings.subscriptionDefaultSelected !== false;
       const defaultMode =
@@ -5209,6 +5360,83 @@ function renderBundlePreviewHtml(offer) {
         );
       }
       const selectedMode = window.__ciwiBundleState.subscriptionMode;
+      const subscriptionSubtitle =
+        subscriptionState.sellingPlanName || configuredSubscriptionSubtitle;
+      const oneTimeSubtitle =
+        configuredOneTimeSubtitle || "Buy once at the current product price";
+      const subscriptionPlanSelectorHtml =
+        selectedMode === "subscription" && subscriptionState.availablePlans.length > 1
+          ? `<div class="ciwi-subscription-plan-list">
+              ${subscriptionState.availablePlans
+                .map((plan) => {
+                  const isSelectedPlan =
+                    String(plan?.sellingPlanId || "") ===
+                    String(subscriptionState.sellingPlanId || "");
+                  const planPrice =
+                    plan?.subscriptionPrice != null
+                      ? `<span class="ciwi-subscription-plan-price">${esc(
+                          formatPrice(plan.subscriptionPrice),
+                        )}</span>`
+                      : "";
+                  const planSave =
+                    plan?.savingsPercent > 0
+                      ? `<span class="ciwi-subscription-plan-save">${esc(
+                          `Save ${plan.savingsPercent}%`,
+                        )}</span>`
+                      : "";
+                  return `<button
+                    type="button"
+                    class="ciwi-subscription-plan-option${isSelectedPlan ? " is-selected" : ""}"
+                    data-ciwi-selling-plan-id="${esc(plan.sellingPlanId)}"
+                  >
+                    <span class="ciwi-subscription-plan-option__text">
+                      <span class="ciwi-subscription-plan-option__title">${esc(
+                        plan.sellingPlanName || "Subscription plan",
+                      )}</span>
+                      ${planPrice}
+                    </span>
+                    ${planSave}
+                  </button>`;
+                })
+                .join("")}
+            </div>`
+          : "";
+      const subscriptionBadge =
+        subscriptionState.savingsPercent > 0
+          ? `<span class="ciwi-subscription-badge">Save ${esc(
+              `${subscriptionState.savingsPercent}%`,
+            )}</span>`
+          : "";
+      const oneTimePriceHtml =
+        subscriptionState.oneTimePrice != null
+          ? `<span class="ciwi-subscription-price-row">
+              <span class="ciwi-subscription-price">${esc(
+                formatPrice(subscriptionState.oneTimePrice),
+              )}</span>
+            </span>`
+          : "";
+      const subscriptionPriceHtml =
+        subscriptionState.subscriptionPrice != null
+          ? `<span class="ciwi-subscription-price-row">
+              <span class="ciwi-subscription-price">${esc(
+                formatPrice(subscriptionState.subscriptionPrice),
+              )}</span>
+              ${
+                subscriptionState.compareAtPrice != null &&
+                subscriptionState.compareAtPrice > subscriptionState.subscriptionPrice
+                  ? `<span class="ciwi-subscription-compare">${esc(
+                      formatPrice(subscriptionState.compareAtPrice),
+                    )}</span>`
+                  : ""
+              }
+            </span>`
+          : "";
+      const subscriptionSavingsHtml =
+        subscriptionState.savingsAmount > 0
+          ? `<span class="ciwi-subscription-savings">${esc(
+              `Save ${formatPrice(subscriptionState.savingsAmount)} on this purchase`,
+            )}</span>`
+          : "";
       console.log("[ciwi][subscription] render subscription block", {
         selectedMode,
         defaultSellingPlanId,
@@ -5224,15 +5452,22 @@ function renderBundlePreviewHtml(offer) {
           <label class="ciwi-subscription-option ${selectedMode === "subscription" ? "is-selected" : ""}" data-ciwi-subscription-mode="subscription">
             <input type="radio" name="${CIWI_SUBSCRIPTION_MODE_NAME}" ${selectedMode === "subscription" ? "checked" : ""} />
             <span>
-              <span class="ciwi-subscription-title">${esc(subscriptionTitle)}</span>
+              <span class="ciwi-subscription-title-row">
+                <span class="ciwi-subscription-title">${esc(subscriptionTitle)}</span>
+                ${subscriptionBadge}
+              </span>
               <span class="ciwi-subscription-subtitle">${esc(subscriptionSubtitle)}</span>
+              ${subscriptionPriceHtml}
+              ${subscriptionSavingsHtml}
             </span>
           </label>
+          ${subscriptionPlanSelectorHtml}
           <label class="ciwi-subscription-option ${selectedMode === "one-time" ? "is-selected" : ""}" data-ciwi-subscription-mode="one-time">
             <input type="radio" name="${CIWI_SUBSCRIPTION_MODE_NAME}" ${selectedMode === "one-time" ? "checked" : ""} />
             <span>
               <span class="ciwi-subscription-title">${esc(oneTimeTitle)}</span>
               <span class="ciwi-subscription-subtitle">${esc(oneTimeSubtitle)}</span>
+              ${oneTimePriceHtml}
             </span>
           </label>
         </div>
@@ -5279,7 +5514,6 @@ function readOffersConfigFromMetafield() {
     if (!mergedEl) {
       return null;
     }
-    const raw = (mergedEl.innerText || mergedEl.textContent || "").trim();
     const parsed = parseCiwiMetafieldScript("bundle-offers");
     return parsed;
   } catch (e) {

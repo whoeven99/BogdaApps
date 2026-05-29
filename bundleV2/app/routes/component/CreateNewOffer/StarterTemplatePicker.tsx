@@ -367,24 +367,26 @@ function SubscriptionPreview() {
   return (
     <div className="flex min-h-[260px] flex-col rounded-[12px] border border-[#dfe3e8] bg-[#f6f6f7] p-[12px]">
       <div className="space-y-[8px]">
-        <PreviewRow
-          title="Single"
-          subtitle="One-time purchase"
-          price="EUR65.00"
-        />
-        <PreviewRow
-          title="2-pack subscription"
-          price="EUR104.00"
-          badge="Save 20%"
-          selected
-        />
-        <PreviewRow title="3-pack subscription" price="EUR136.50" badge="Save 30%" />
-        <PreviewRow title="4-pack subscription" price="EUR156.00" badge="Save 40%" />
-        <div className="rounded-[10px] bg-white px-[12px] py-[9px] shadow-[inset_0_0_0_1px_rgba(0,128,96,0.12)]">
+        <div className="rounded-[10px] border border-[#c9ccd0] bg-white px-[12px] py-[10px]">
           <div className="text-[13px] font-semibold text-[#1c1f23]">
-            Subscribe & Save 20%
+            One-time purchase
           </div>
-          <div className="mt-[2px] text-[12px] text-[#6d7175]">Delivered weekly</div>
+          <div className="mt-[2px] text-[12px] text-[#6d7175]">
+            Buy once at the current product price
+          </div>
+        </div>
+        <div className="rounded-[10px] border border-dashed border-[#b7b7b7] bg-white px-[12px] py-[10px]">
+          <div className="flex items-start gap-[10px]">
+            <span className="mt-[2px] inline-block h-[18px] w-[18px] rounded-[2px] border-[2px] border-[#b7b7b7] bg-white" />
+            <div>
+              <div className="text-[13px] font-semibold text-[#1c1f23]">
+                Subscribe & Save
+              </div>
+              <div className="mt-[2px] text-[12px] text-[#6d7175]">
+                Pricing comes from the product&apos;s subscription plan
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

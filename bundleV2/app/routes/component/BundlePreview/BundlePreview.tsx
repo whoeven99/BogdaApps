@@ -32,6 +32,8 @@ type Props = {
   subscriptionPreviewStyle?: "solid" | "dashed";
   subscriptionTitle?: string;
   subscriptionSubtitle?: string;
+  oneTimeTitle?: string;
+  oneTimeSubtitle?: string;
   showSubscriptionExplanation?: boolean;
   subscriptionExplanationTitle?: string;
   subscriptionExplanationBody?: string;
@@ -61,6 +63,8 @@ export default function BundlePreview({
   subscriptionPreviewStyle,
   subscriptionTitle,
   subscriptionSubtitle,
+  oneTimeTitle,
+  oneTimeSubtitle,
   showSubscriptionExplanation,
   subscriptionExplanationTitle,
   subscriptionExplanationBody,
@@ -86,6 +90,8 @@ export default function BundlePreview({
     subscriptionPreviewStyle,
     subscriptionTitle,
     subscriptionSubtitle,
+    oneTimeTitle,
+    oneTimeSubtitle,
     showSubscriptionExplanation,
     subscriptionExplanationTitle,
     subscriptionExplanationBody,

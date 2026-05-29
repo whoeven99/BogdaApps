@@ -950,10 +950,16 @@ export function CreateNewOffer({
             ? freeGiftSelectedProducts.giftProducts
             : freeGiftRuleGiftProductIds
         : [];
-    const discountRules = normalizeDiscountRules(
-      starterTemplateDefaults?.discountRules ??
-        parseDiscountRules(initialCampaignRuntimeOutputs?.modules.quantityBreaks?.discountRulesJson ?? null),
-    );
+    const discountRules =
+      selectedSourceOfferType === "subscription"
+        ? []
+        : normalizeDiscountRules(
+            starterTemplateDefaults?.discountRules ??
+              parseDiscountRules(
+                initialCampaignRuntimeOutputs?.modules.quantityBreaks?.discountRulesJson ??
+                  null,
+              ),
+          );
     const bxgyDiscountRules = parsedBxgyRules;
     const freeGiftRules = parsedFreeGiftRules;
     const differentProductsDiscountRules = normalizeDifferentProductsDiscountRules(
@@ -2592,11 +2598,11 @@ export function CreateNewOffer({
   const subscriptionExplanationTitle =
     selectedProductsData.length > 0
       ? "Some products aren't eligible for subscriptions"
-      : "Select products to check subscription eligibility";
+      : "Select products to check selling plan eligibility";
   const subscriptionExplanationBody =
     selectedProductsData.length > 0
-      ? "Subscription bar will only be shown in products that are eligible for subscription. You can select those products in your subscription app."
-      : "After selecting products, the app checks whether they have selling plans and decides whether to show a solid or dashed subscription bar.";
+      ? "Subscription UI only appears on products that already have Shopify selling plans. The storefront price is then resolved from the selected plan."
+      : "After selecting products, the app checks whether they have selling plans and decides whether this preview should show a solid or dashed subscription option.";
   const checkboxUpsellPreview = useMemo(
     () => ({
       enabled: checkboxUpsellsEnabled,
@@ -2656,11 +2662,7 @@ export function CreateNewOffer({
     const primaryModule = moduleDescriptors[behaviorOfferType];
     if (!primaryModule) return [];
 
-    const nextRules =
-      behaviorOfferType === "subscription" &&
-      moduleDescriptors["quantity-breaks-same"].rules.length > 0
-        ? [...moduleDescriptors["quantity-breaks-same"].rules, ...primaryModule.rules]
-        : [...primaryModule.rules];
+    const nextRules = [...primaryModule.rules];
 
     (Object.entries(moduleDescriptors) as Array<
       [OfferTypeId, (typeof moduleDescriptors)[OfferTypeId]]
@@ -2814,12 +2816,10 @@ export function CreateNewOffer({
         (rule) => rule.sourceOfferType === "complete-bundle",
       );
     }
-    const primarySingleSource =
-      behaviorOfferType === "subscription" ? "quantity-breaks-same" : behaviorOfferType;
     const primarySingleRule = orderedCompositionRulesSnapshot.find(
       (rule) =>
         rule.type === "single_purchase" &&
-        rule.sourceOfferType === primarySingleSource,
+        rule.sourceOfferType === behaviorOfferType,
     );
     return [
       ...(primarySingleRule ? [primarySingleRule] : []),
@@ -3741,6 +3741,8 @@ export function CreateNewOffer({
                     subscriptionPreviewStyle={subscriptionPreviewStyle}
                     subscriptionTitle={subscriptionTitle}
                     subscriptionSubtitle={subscriptionSubtitle}
+                    oneTimeTitle={oneTimeTitle}
+                    oneTimeSubtitle={oneTimeSubtitle}
                     showSubscriptionExplanation={shouldShowSubscriptionExplanation}
                     subscriptionExplanationTitle={subscriptionExplanationTitle}
                     subscriptionExplanationBody={subscriptionExplanationBody}
@@ -3826,6 +3828,8 @@ export function CreateNewOffer({
                       subscriptionPreviewStyle={subscriptionPreviewStyle}
                       subscriptionTitle={subscriptionTitle}
                       subscriptionSubtitle={subscriptionSubtitle}
+                      oneTimeTitle={oneTimeTitle}
+                      oneTimeSubtitle={oneTimeSubtitle}
                       showSubscriptionExplanation={shouldShowSubscriptionExplanation}
                       checkboxUpsellPreview={checkboxUpsellPreview}
                       stickyAddToCartPreview={stickyAddToCartPreview}
@@ -3878,6 +3882,8 @@ export function CreateNewOffer({
                     subscriptionPreviewStyle={subscriptionPreviewStyle}
                     subscriptionTitle={subscriptionTitle}
                     subscriptionSubtitle={subscriptionSubtitle}
+                    oneTimeTitle={oneTimeTitle}
+                    oneTimeSubtitle={oneTimeSubtitle}
                     checkboxUpsellPreview={checkboxUpsellPreview}
                     stickyAddToCartPreview={stickyAddToCartPreview}
                     showSubscriptionExplanation={shouldShowSubscriptionExplanation}

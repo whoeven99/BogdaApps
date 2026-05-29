@@ -219,6 +219,16 @@ Subscription is primarily a storefront display and purchase-mode module.
 It may affect storefront purchase state, but it is not currently a core Function
 discount module.
 
+Target behavior:
+
+- render as one subscription purchase-mode choice alongside the one-time option
+- do not model subscription as quantity-break bars such as 2-pack, 3-pack, or 4-pack
+- do not rely on normal `discountRules` tiers to describe subscription value
+- present savings and recurring pricing from the current product's subscription or
+  selling-plan data when available
+- storefront pricing should prefer Shopify's computed selling-plan allocation
+  values instead of app-local discount math
+
 ### Checkbox Upsell
 
 Checkbox upsell is a storefront interaction module.
