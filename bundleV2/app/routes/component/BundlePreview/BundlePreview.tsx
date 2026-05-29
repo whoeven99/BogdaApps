@@ -34,6 +34,16 @@ type Props = {
   subscriptionSubtitle?: string;
   oneTimeTitle?: string;
   oneTimeSubtitle?: string;
+  oneTimePriceText?: string;
+  subscriptionPriceText?: string | null;
+  subscriptionCompareAtPriceText?: string | null;
+  subscriptionSavingsText?: string | null;
+  subscriptionPlanPreviewItems?: Array<{
+    title: string;
+    subtitle?: string;
+    priceText?: string | null;
+    savingsText?: string | null;
+  }>;
   showSubscriptionExplanation?: boolean;
   subscriptionExplanationTitle?: string;
   subscriptionExplanationBody?: string;
@@ -65,6 +75,11 @@ export default function BundlePreview({
   subscriptionSubtitle,
   oneTimeTitle,
   oneTimeSubtitle,
+  oneTimePriceText,
+  subscriptionPriceText,
+  subscriptionCompareAtPriceText,
+  subscriptionSavingsText,
+  subscriptionPlanPreviewItems,
   showSubscriptionExplanation,
   subscriptionExplanationTitle,
   subscriptionExplanationBody,
@@ -92,6 +107,11 @@ export default function BundlePreview({
     subscriptionSubtitle,
     oneTimeTitle,
     oneTimeSubtitle,
+    oneTimePriceText,
+    subscriptionPriceText,
+    subscriptionCompareAtPriceText,
+    subscriptionSavingsText,
+    subscriptionPlanPreviewItems,
     showSubscriptionExplanation,
     subscriptionExplanationTitle,
     subscriptionExplanationBody,

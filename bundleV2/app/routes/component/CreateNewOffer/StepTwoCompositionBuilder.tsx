@@ -1086,6 +1086,8 @@ export default function StepTwoCompositionBuilder({
         bar.type === "bxgy" ||
         bar.type === "free_gift",
     ) ||
+    draft.offerType === "subscription" ||
+    draft.subscriptionEnabled ||
     draft.selectedProductsData.length > 0 ||
     draft.buyProducts.length > 0 ||
     draft.freeGiftTriggerProducts.length > 0;
@@ -1455,24 +1457,17 @@ export default function StepTwoCompositionBuilder({
           <DetailSection title="Subscriptions">
             <SubscriptionSettingsEditor
               subscriptionEnabled={draft.subscriptionEnabled}
-              setSubscriptionEnabled={actions.setSubscriptionEnabled}
               subscriptionTitle={draft.subscriptionTitle}
               setSubscriptionTitle={actions.setSubscriptionTitle}
               subscriptionSubtitle={draft.subscriptionSubtitle}
               setSubscriptionSubtitle={actions.setSubscriptionSubtitle}
-              oneTimeTitle={draft.oneTimeTitle}
-              setOneTimeTitle={actions.setOneTimeTitle}
-              oneTimeSubtitle={draft.oneTimeSubtitle}
-              setOneTimeSubtitle={actions.setOneTimeSubtitle}
-              subscriptionPosition={draft.subscriptionPosition}
-              setSubscriptionPosition={actions.setSubscriptionPosition}
-              subscriptionDefaultSelected={draft.subscriptionDefaultSelected}
-              setSubscriptionDefaultSelected={actions.setSubscriptionDefaultSelected}
-              shouldShowSubscriptionPreview={draft.shouldShowSubscriptionPreview}
-              allSelectedProductsHaveSubscription={draft.allSelectedProductsHaveSubscription}
-              shouldShowSubscriptionExplanation={draft.shouldShowSubscriptionExplanation}
-              subscriptionExplanationTitle={draft.subscriptionExplanationTitle}
-              subscriptionExplanationBody={draft.subscriptionExplanationBody}
+              previewOneTimePriceText={draft.previewOneTimePriceText}
+              previewSubscriptionPriceText={draft.previewSubscriptionPriceText}
+              previewSubscriptionCompareAtPriceText={
+                draft.previewSubscriptionCompareAtPriceText
+              }
+              previewSubscriptionSavingsText={draft.previewSubscriptionSavingsText}
+              previewSubscriptionPlans={draft.previewSubscriptionPlans}
             />
           </DetailSection>
         );
@@ -1664,24 +1659,17 @@ export default function StepTwoCompositionBuilder({
           detail: (
             <SubscriptionSettingsEditor
               subscriptionEnabled={draft.subscriptionEnabled}
-              setSubscriptionEnabled={actions.setSubscriptionEnabled}
               subscriptionTitle={draft.subscriptionTitle}
               setSubscriptionTitle={actions.setSubscriptionTitle}
               subscriptionSubtitle={draft.subscriptionSubtitle}
               setSubscriptionSubtitle={actions.setSubscriptionSubtitle}
-              oneTimeTitle={draft.oneTimeTitle}
-              setOneTimeTitle={actions.setOneTimeTitle}
-              oneTimeSubtitle={draft.oneTimeSubtitle}
-              setOneTimeSubtitle={actions.setOneTimeSubtitle}
-              subscriptionPosition={draft.subscriptionPosition}
-              setSubscriptionPosition={actions.setSubscriptionPosition}
-              subscriptionDefaultSelected={draft.subscriptionDefaultSelected}
-              setSubscriptionDefaultSelected={actions.setSubscriptionDefaultSelected}
-              shouldShowSubscriptionPreview={draft.shouldShowSubscriptionPreview}
-              allSelectedProductsHaveSubscription={draft.allSelectedProductsHaveSubscription}
-              shouldShowSubscriptionExplanation={draft.shouldShowSubscriptionExplanation}
-              subscriptionExplanationTitle={draft.subscriptionExplanationTitle}
-              subscriptionExplanationBody={draft.subscriptionExplanationBody}
+              previewOneTimePriceText={draft.previewOneTimePriceText}
+              previewSubscriptionPriceText={draft.previewSubscriptionPriceText}
+              previewSubscriptionCompareAtPriceText={
+                draft.previewSubscriptionCompareAtPriceText
+              }
+              previewSubscriptionSavingsText={draft.previewSubscriptionSavingsText}
+              previewSubscriptionPlans={draft.previewSubscriptionPlans}
             />
           ),
         },
@@ -1800,7 +1788,7 @@ export default function StepTwoCompositionBuilder({
                       onExclude={onExcludeTriggerProducts}
                       onInvert={onInvertTriggerProducts}
                       onCustomFilter={onCustomFilterTriggerProducts}
-                      allowBulkSelection={draft.offerType !== "subscription"}
+                      allowBulkSelection
                     />
                   )
                   : null}

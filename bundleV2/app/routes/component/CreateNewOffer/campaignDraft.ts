@@ -9,6 +9,16 @@ import type { RulePresentationPatch } from "./unifiedRulePresentation";
 import type { UnifiedRuleValuePatch } from "./unifiedRuleValues";
 import type { UnifiedRuleNode } from "./unifiedRulesSchema";
 
+export type SubscriptionPreviewPlanDraft = {
+  sellingPlanId: string;
+  sellingPlanName: string;
+  billingLabel: string;
+  subscriptionPrice: number;
+  compareAtPrice: number;
+  savingsAmount: number;
+  savingsPercent: number;
+};
+
 export type DraftDiscountRule = {
   id?: string;
   count: number;
@@ -83,6 +93,11 @@ export type CampaignDraft = {
   shouldShowSubscriptionExplanation: boolean;
   subscriptionExplanationTitle: string;
   subscriptionExplanationBody: string;
+  previewOneTimePriceText: string;
+  previewSubscriptionPriceText?: string | null;
+  previewSubscriptionCompareAtPriceText?: string | null;
+  previewSubscriptionSavingsText?: string | null;
+  previewSubscriptionPlans: SubscriptionPreviewPlanDraft[];
   freeGiftTriggerProducts: string[];
   freeGiftSharedGiftProductIds: string[];
   freeGiftSharedGiftProductsData: DraftSelectedProduct[];
@@ -140,10 +155,6 @@ export type CampaignDraftActions = {
   setSubscriptionEnabled: (value: boolean) => void;
   setSubscriptionTitle: (value: string) => void;
   setSubscriptionSubtitle: (value: string) => void;
-  setOneTimeTitle: (value: string) => void;
-  setOneTimeSubtitle: (value: string) => void;
-  setSubscriptionPosition: (value: "below-bundle-bars") => void;
-  setSubscriptionDefaultSelected: (value: boolean) => void;
   setFreeGiftTriggerProducts: React.Dispatch<
     React.SetStateAction<string[]>
   >;

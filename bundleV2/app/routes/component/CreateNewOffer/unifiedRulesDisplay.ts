@@ -119,9 +119,6 @@ export function buildUnifiedDisplayCustomizerItems(
 export function buildSubscriptionDisplayCustomizerItems(input: {
   subscriptionTitle: string;
   subscriptionSubtitle: string;
-  subscriptionDefaultSelected: boolean;
-  oneTimeTitle: string;
-  oneTimeSubtitle: string;
 }): DisplayCustomizerItem[] {
   return [
     {
@@ -130,23 +127,11 @@ export function buildSubscriptionDisplayCustomizerItems(input: {
       displayTitle: input.subscriptionTitle || "Subscription Option",
       description: "Recurring purchase option that reads price and savings from Shopify selling plans.",
       subtitle: input.subscriptionSubtitle || "",
-      isDefault: input.subscriptionDefaultSelected,
-      fields: { title: true, subtitle: true, badge: false, isDefault: true },
-      placeholders: {
-        title: "e.g. Subscribe & Save",
-        subtitle: "e.g. Price updates from your selling plan",
-      },
-    },
-    {
-      id: "one-time-option",
-      title: input.oneTimeTitle || "",
-      displayTitle: input.oneTimeTitle || "One-time Option",
-      description: "Standard one-time purchase choice shown alongside the subscription option.",
-      subtitle: input.oneTimeSubtitle || "",
+      isDefault: false,
       fields: { title: true, subtitle: true, badge: false, isDefault: false },
       placeholders: {
-        title: "e.g. One-time purchase",
-        subtitle: "e.g. Uses the current product price",
+        title: "e.g. Subscribe & Save",
+        subtitle: "e.g. Delivered every month · save 15%",
       },
     },
   ];

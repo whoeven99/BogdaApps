@@ -32,6 +32,10 @@ const DEFAULT_STICKY_ADD_TO_CART_TITLE = "Ready to add this offer?";
 const DEFAULT_STICKY_ADD_TO_CART_SUBTITLE =
   "Keep the bundle CTA visible while customers compare options.";
 const DEFAULT_STICKY_ADD_TO_CART_BUTTON_TEXT = "Add bundle";
+export const FIXED_SUBSCRIPTION_POSITION = "below-bundle-bars" as const;
+export const FIXED_ONE_TIME_TITLE = "One-time purchase";
+export const FIXED_ONE_TIME_SUBTITLE = "Uses the current product price";
+export const FIXED_SUBSCRIPTION_DEFAULT_SELECTED = false;
 
 export function sanitizeSingleLineText(
   raw: unknown,
@@ -305,7 +309,7 @@ export type OfferSettings = {
   buttonPrimaryColor: string;
   showCustomButton: boolean;
   subscriptionEnabled: boolean;
-  subscriptionPosition: "below-bundle-bars";
+  subscriptionPosition: typeof FIXED_SUBSCRIPTION_POSITION;
   subscriptionTitle: string;
   subscriptionSubtitle: string;
   oneTimeTitle: string;
@@ -407,12 +411,12 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
       buttonPrimaryColor: "#008060",
       showCustomButton: true,
       subscriptionEnabled: false,
-      subscriptionPosition: "below-bundle-bars",
+      subscriptionPosition: FIXED_SUBSCRIPTION_POSITION,
       subscriptionTitle: "Subscribe & Save",
       subscriptionSubtitle: "Subscription pricing updates from your selling plan",
-      oneTimeTitle: "One-time purchase",
-      oneTimeSubtitle: "",
-      subscriptionDefaultSelected: true,
+      oneTimeTitle: FIXED_ONE_TIME_TITLE,
+      oneTimeSubtitle: FIXED_ONE_TIME_SUBTITLE,
+      subscriptionDefaultSelected: FIXED_SUBSCRIPTION_DEFAULT_SELECTED,
       scheduleTimezone: undefined,
       checkboxUpsellsEnabled: false,
       checkboxUpsellsTitle: DEFAULT_CHECKBOX_UPSELLS_TITLE,
@@ -479,14 +483,14 @@ export function parseOfferSettings(offerSettingsJson?: string | null): OfferSett
       buttonPrimaryColor: sanitizeHexColor(parsed.buttonPrimaryColor, "#008060"),
       showCustomButton: parsed.showCustomButton !== false,
       subscriptionEnabled: parsed.subscriptionEnabled === true,
-      subscriptionPosition: "below-bundle-bars",
+      subscriptionPosition: FIXED_SUBSCRIPTION_POSITION,
       subscriptionTitle: parsed.subscriptionTitle || "Subscribe & Save",
       subscriptionSubtitle:
         parsed.subscriptionSubtitle ||
         "Subscription pricing updates from your selling plan",
-      oneTimeTitle: parsed.oneTimeTitle || "One-time purchase",
-      oneTimeSubtitle: parsed.oneTimeSubtitle || "",
-      subscriptionDefaultSelected: parsed.subscriptionDefaultSelected !== false,
+      oneTimeTitle: FIXED_ONE_TIME_TITLE,
+      oneTimeSubtitle: FIXED_ONE_TIME_SUBTITLE,
+      subscriptionDefaultSelected: FIXED_SUBSCRIPTION_DEFAULT_SELECTED,
       compositionBarOrder: Array.isArray(parsed.compositionBarOrder)
         ? parsed.compositionBarOrder
             .map((id) => String(id || "").trim())
@@ -1787,16 +1791,16 @@ function sanitizeSubscriptionLogicConfig(raw: unknown): SubscriptionLogicBlock["
     : [];
   return {
     enabled: item.enabled !== false,
-    position: "below-bundle-bars",
+    position: FIXED_SUBSCRIPTION_POSITION,
     title: sanitizeSingleLineText(item.title, 60, "Subscribe & Save"),
     subtitle: sanitizeSingleLineText(
       item.subtitle,
       60,
       "Subscription pricing updates from your selling plan",
     ),
-    oneTimeTitle: sanitizeSingleLineText(item.oneTimeTitle, 60, "One-time purchase"),
-    oneTimeSubtitle: sanitizeSingleLineText(item.oneTimeSubtitle, 60, ""),
-    defaultSelected: item.defaultSelected !== false,
+    oneTimeTitle: FIXED_ONE_TIME_TITLE,
+    oneTimeSubtitle: FIXED_ONE_TIME_SUBTITLE,
+    defaultSelected: FIXED_SUBSCRIPTION_DEFAULT_SELECTED,
     productIds,
   };
 }
@@ -2443,12 +2447,12 @@ export function migrateLegacyOfferToCampaignConfig(params: {
           type: "subscription",
           config: {
             enabled: offerSettings.subscriptionEnabled,
-            position: offerSettings.subscriptionPosition,
+            position: FIXED_SUBSCRIPTION_POSITION,
             title: offerSettings.subscriptionTitle,
             subtitle: offerSettings.subscriptionSubtitle,
-            oneTimeTitle: offerSettings.oneTimeTitle,
-            oneTimeSubtitle: offerSettings.oneTimeSubtitle,
-            defaultSelected: offerSettings.subscriptionDefaultSelected,
+            oneTimeTitle: FIXED_ONE_TIME_TITLE,
+            oneTimeSubtitle: FIXED_ONE_TIME_SUBTITLE,
+            defaultSelected: FIXED_SUBSCRIPTION_DEFAULT_SELECTED,
             productIds,
           },
         },
@@ -2899,14 +2903,14 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
     buttonText: offerCard?.config.buttonText || "Add to Cart",
     showCustomButton: offerCard?.config.showCustomButton !== false,
     subscriptionEnabled: subscription?.config.enabled ?? false,
-    subscriptionPosition: subscription?.config.position ?? "below-bundle-bars",
+    subscriptionPosition: FIXED_SUBSCRIPTION_POSITION,
     subscriptionTitle: subscription?.config.title ?? "Subscribe & Save",
     subscriptionSubtitle:
       subscription?.config.subtitle ??
       "Subscription pricing updates from your selling plan",
-    oneTimeTitle: subscription?.config.oneTimeTitle ?? "One-time purchase",
-    oneTimeSubtitle: subscription?.config.oneTimeSubtitle ?? "",
-    subscriptionDefaultSelected: subscription?.config.defaultSelected ?? true,
+    oneTimeTitle: FIXED_ONE_TIME_TITLE,
+    oneTimeSubtitle: FIXED_ONE_TIME_SUBTITLE,
+    subscriptionDefaultSelected: FIXED_SUBSCRIPTION_DEFAULT_SELECTED,
     progressiveGifts: { ...DEFAULT_PROGRESSIVE_GIFTS },
     scheduleTimezone: config.settings.scheduleTimezone,
     checkboxUpsellsEnabled: config.settings.checkboxUpsellsEnabled,

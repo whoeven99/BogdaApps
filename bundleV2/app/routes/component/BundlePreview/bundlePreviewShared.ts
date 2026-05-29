@@ -165,6 +165,11 @@ export function renderBundlePreviewHtml({
   subscriptionSubtitle = "Subscription pricing updates from your selling plan",
   oneTimeTitle = "One-time purchase",
   oneTimeSubtitle = "Uses the current product price",
+  oneTimePriceText = "€65,00",
+  subscriptionPriceText = null,
+  subscriptionCompareAtPriceText = null,
+  subscriptionSavingsText = null,
+  subscriptionPlanPreviewItems = [],
   showSubscriptionExplanation = false,
   subscriptionExplanationTitle = "Some products aren't eligible for subscriptions",
   subscriptionExplanationBody = "Subscription bar will only be shown in products that are eligible for subscription. You can select those products in your subscription app.",
@@ -191,6 +196,16 @@ export function renderBundlePreviewHtml({
   subscriptionSubtitle?: string;
   oneTimeTitle?: string;
   oneTimeSubtitle?: string;
+  oneTimePriceText?: string;
+  subscriptionPriceText?: string | null;
+  subscriptionCompareAtPriceText?: string | null;
+  subscriptionSavingsText?: string | null;
+  subscriptionPlanPreviewItems?: Array<{
+    title: string;
+    subtitle?: string;
+    priceText?: string | null;
+    savingsText?: string | null;
+  }>;
   showSubscriptionExplanation?: boolean;
   subscriptionExplanationTitle?: string;
   subscriptionExplanationBody?: string;
@@ -275,6 +290,66 @@ export function renderBundlePreviewHtml({
     </div>`;
   }).join("");
 
+  const subscriptionPlansHtml =
+    subscriptionPlanPreviewItems.length > 1
+      ? `
+          <div
+            style="
+              margin-top: 8px;
+              border: 1px solid #e3e8ed;
+              border-radius: 10px;
+              background: #f6f8f9;
+              padding: 10px;
+            "
+          >
+            <div style="font-size: 12px; font-weight: 600; color: #1c1f23;">
+              Preview subscription cycles
+            </div>
+            <div style="display: grid; gap: 8px; margin-top: 10px;">
+              ${subscriptionPlanPreviewItems
+                .map(
+                  (plan, index) => `
+                    <div
+                      style="
+                        border: 1px solid ${index === 0 ? "#008060" : "#dfe3e8"};
+                        border-radius: 8px;
+                        background: ${index === 0 ? "#f0faf6" : "#ffffff"};
+                        padding: 10px 12px;
+                      "
+                    >
+                      <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">
+                        <div style="min-width:0;">
+                          <div style="font-size: 12px; font-weight: 600; color: #1c1f23;">
+                            ${esc(plan.title)}
+                          </div>
+                          ${
+                            plan.subtitle
+                              ? `<div style="margin-top: 3px; font-size: 11px; color: #8c9196;">${esc(plan.subtitle)}</div>`
+                              : ""
+                          }
+                        </div>
+                        <div style="text-align:right;">
+                          ${
+                            plan.priceText
+                              ? `<div style="font-size: 12px; font-weight: 700; color: #1c1f23;">${esc(plan.priceText)}</div>`
+                              : ""
+                          }
+                          ${
+                            plan.savingsText
+                              ? `<div style="margin-top: 3px; font-size: 11px; font-weight: 600; color: #008060;">${esc(plan.savingsText)}</div>`
+                              : ""
+                          }
+                        </div>
+                      </div>
+                    </div>
+                  `,
+                )
+                .join("")}
+            </div>
+          </div>
+        `
+      : "";
+
   const subscriptionHtml = showSubscriptionPreview
     ? `
       <div style="margin-top: 12px;">
@@ -288,8 +363,8 @@ export function renderBundlePreviewHtml({
               (text) =>
                 `<span style="display:block; font-size:12px; color:#8c9196; margin-top:2px;">${esc(text)}</span>`,
             )}
-            <span style="display:block; font-size:12px; color:#4f5b67; margin-top:6px;">
-              Uses the current product price at purchase time
+            <span style="display:block; font-size:22px; line-height:1.1; font-weight:700; color:#1c1f23; margin-top:8px;">
+              ${esc(oneTimePriceText)}
             </span>
           </div>
           <div
@@ -324,12 +399,25 @@ export function renderBundlePreviewHtml({
                 (text) =>
                   `<span style="display:block; font-size:12px; color:#8c9196; margin-top:2px;">${esc(text)}</span>`,
               )}
-              <span style="display:block; font-size:12px; color:#008060; font-weight:600; margin-top:6px;">
-                Price and savings come from the selected selling plan
-              </span>
+              ${
+                subscriptionPriceText
+                  ? `<span style="display:block; font-size:22px; line-height:1.1; font-weight:700; color:#1c1f23; margin-top:8px;">${esc(subscriptionPriceText)}</span>`
+                  : `<span style="display:block; font-size:12px; color:#008060; font-weight:600; margin-top:6px;">Price updates from the selected selling plan</span>`
+              }
+              ${
+                subscriptionCompareAtPriceText
+                  ? `<span style="display:block; font-size:12px; color:#8c9196; text-decoration:line-through; margin-top:4px;">${esc(subscriptionCompareAtPriceText)}</span>`
+                  : ""
+              }
+              ${
+                subscriptionSavingsText
+                  ? `<span style="display:block; font-size:12px; color:#008060; font-weight:600; margin-top:4px;">${esc(subscriptionSavingsText)}</span>`
+                  : ""
+              }
             </span>
           </div>
         </div>
+        ${subscriptionPlansHtml}
         ${
           showSubscriptionExplanation
             ? `

@@ -1,84 +1,49 @@
-import { Checkbox, Input, Select, Switch } from "antd";
+import { Input } from "antd";
+import type { SubscriptionPreviewPlanDraft } from "./campaignDraft";
 import type { RulePresentationPatch } from "./unifiedRulePresentation";
 
 type Props = {
   subscriptionEnabled: boolean;
-  setSubscriptionEnabled: (value: boolean) => void;
   subscriptionTitle: string;
   setSubscriptionTitle: (value: string) => void;
   subscriptionSubtitle: string;
   setSubscriptionSubtitle: (value: string) => void;
-  oneTimeTitle: string;
-  setOneTimeTitle: (value: string) => void;
-  oneTimeSubtitle: string;
-  setOneTimeSubtitle: (value: string) => void;
-  subscriptionPosition: "below-bundle-bars";
-  setSubscriptionPosition: (value: "below-bundle-bars") => void;
-  subscriptionDefaultSelected: boolean;
-  setSubscriptionDefaultSelected: (value: boolean) => void;
-  shouldShowSubscriptionPreview: boolean;
-  allSelectedProductsHaveSubscription: boolean;
-  shouldShowSubscriptionExplanation: boolean;
-  subscriptionExplanationTitle: string;
-  subscriptionExplanationBody: string;
+  previewOneTimePriceText: string;
+  previewSubscriptionPriceText?: string | null;
+  previewSubscriptionCompareAtPriceText?: string | null;
+  previewSubscriptionSavingsText?: string | null;
+  previewSubscriptionPlans: SubscriptionPreviewPlanDraft[];
   section?: "subscription-offer" | "one-time-message" | "all";
   updateRulePresentation?: (id: string, patch: RulePresentationPatch) => void;
 };
 
 export default function SubscriptionSettingsEditor({
   subscriptionEnabled,
-  setSubscriptionEnabled,
   subscriptionTitle,
   setSubscriptionTitle,
   subscriptionSubtitle,
   setSubscriptionSubtitle,
-  oneTimeTitle,
-  setOneTimeTitle,
-  oneTimeSubtitle,
-  setOneTimeSubtitle,
-  subscriptionPosition,
-  setSubscriptionPosition,
-  subscriptionDefaultSelected,
-  setSubscriptionDefaultSelected,
-  shouldShowSubscriptionPreview,
-  allSelectedProductsHaveSubscription,
-  shouldShowSubscriptionExplanation,
-  subscriptionExplanationTitle,
-  subscriptionExplanationBody,
+  previewOneTimePriceText,
+  previewSubscriptionPriceText,
+  previewSubscriptionCompareAtPriceText,
+  previewSubscriptionSavingsText,
+  previewSubscriptionPlans,
   section = "all",
   updateRulePresentation,
 }: Props) {
   const showSubscriptionOffer =
     section === "all" || section === "subscription-offer";
-  const showOneTimeMessage =
-    section === "all" || section === "one-time-message";
 
   return (
     <div className="flex flex-col gap-4">
       {showSubscriptionOffer ? (
         <>
-          <div className="flex items-center justify-between rounded-[10px] bg-[#f6f8f9] px-4 py-3">
-            <div>
-              <div className="text-[14px] font-medium text-[#1c1f23]">
-                Enable subscription option
-              </div>
-              <div className="mt-1 text-[12px] text-[#5c6166]">
-                {subscriptionEnabled
-                  ? "Enabled and linked to Shopify selling plans"
-                  : "Optional"}
-              </div>
-            </div>
-            <Switch
-              checked={subscriptionEnabled}
-              onChange={(checked) => setSubscriptionEnabled(checked)}
-            />
-          </div>
           <div className="rounded-[10px] border border-[#dfe3e8] bg-[#ffffff] px-4 py-3 text-[12px] leading-[1.6] text-[#4f5b67]">
-            Subscription pricing is pulled from Shopify selling plans on the product.
-            This module controls the purchase-mode copy and selection state, not a
-            separate app discount tier.
+            Subscription sits alongside your existing bars. Select products in the
+            product pool, and this module will read cycle and pricing from each
+            product's Shopify selling plans.
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div>
               <label className="block text-[13px] font-medium text-[#1c1f23] mb-1">
                 Subscribe title
@@ -98,7 +63,7 @@ export default function SubscriptionSettingsEditor({
             </div>
             <div>
               <label className="block text-[13px] font-medium text-[#1c1f23] mb-1">
-                Subscribe subtitle
+                Subscription subtitle
               </label>
               <Input
                 size="large"
@@ -114,113 +79,84 @@ export default function SubscriptionSettingsEditor({
               />
             </div>
           </div>
-
-          {shouldShowSubscriptionPreview && (
-            <div className="mt-4">
-              <div
-                className={`rounded-[10px] bg-white p-3 ${
-                  allSelectedProductsHaveSubscription
-                    ? "border border-[#c9ccd0]"
-                    : "border border-[#e3e8ed]"
-                }`}
-              >
-                <div className="text-[14px] font-semibold text-[#1c1f23]">
-                  {subscriptionTitle}
+          {subscriptionEnabled ? (
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div className="rounded-[10px] border border-[#dfe3e8] bg-white p-3">
+                <div className="text-[13px] font-semibold text-[#1c1f23]">
+                  One-time purchase
+                </div>
+                <div className="mt-1 text-[12px] text-[#8c9196]">
+                  Uses the current product price
+                </div>
+                <div className="mt-3 text-[22px] font-semibold leading-none text-[#1c1f23]">
+                  {previewOneTimePriceText}
+                </div>
+              </div>
+              <div className="rounded-[10px] border border-[#c9ccd0] bg-white p-3">
+                <div className="text-[13px] font-semibold text-[#1c1f23]">
+                  {subscriptionTitle || "Subscribe & Save"}
                 </div>
                 {subscriptionSubtitle ? (
-                  <div className="text-[13px] text-[#8c9196] mt-1">
+                  <div className="mt-1 text-[12px] text-[#8c9196]">
                     {subscriptionSubtitle}
                   </div>
                 ) : null}
-                <div className="text-[12px] font-medium text-[#008060] mt-2">
-                  Price and savings come from the selected selling plan
+                <div className="mt-3 text-[22px] font-semibold leading-none text-[#1c1f23]">
+                  {previewSubscriptionPriceText || "Price from selling plan"}
                 </div>
+                {previewSubscriptionCompareAtPriceText ? (
+                  <div className="mt-2 text-[12px] text-[#8c9196] line-through">
+                    {previewSubscriptionCompareAtPriceText}
+                  </div>
+                ) : null}
+                {previewSubscriptionSavingsText ? (
+                  <div className="mt-1 text-[12px] font-medium text-[#008060]">
+                    {previewSubscriptionSavingsText}
+                  </div>
+                ) : null}
               </div>
-              {shouldShowSubscriptionExplanation && (
-                <div className="mt-3 rounded-[10px] bg-[#f6f8f9] p-3">
-                  <div className="text-[13px] font-semibold text-[#1c1f23]">
-                    {subscriptionExplanationTitle}
+              {previewSubscriptionPlans.length > 1 ? (
+                <div className="md:col-span-2 rounded-[10px] border border-[#e3e8ed] bg-[#f6f8f9] p-3">
+                  <div className="text-[12px] font-medium text-[#1c1f23]">
+                    Preview subscription cycles
                   </div>
-                  <div className="text-[12px] text-[#4f5b67] mt-1 leading-[1.5]">
-                    {subscriptionExplanationBody}
+                  <div className="mt-3 grid gap-2">
+                    {previewSubscriptionPlans.map((plan, index) => (
+                      <div
+                        key={plan.sellingPlanId || `${plan.sellingPlanName}-${index}`}
+                        className={`rounded-[8px] border px-3 py-2 ${
+                          index === 0
+                            ? "border-[#008060] bg-[#f0faf6]"
+                            : "border-[#dfe3e8] bg-white"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="text-[12px] font-medium text-[#1c1f23]">
+                              {plan.sellingPlanName}
+                            </div>
+                            <div className="mt-1 text-[11px] text-[#8c9196]">
+                              {plan.billingLabel}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-[12px] font-semibold text-[#1c1f23]">
+                              {`EUR ${plan.subscriptionPrice.toFixed(2)}`}
+                            </div>
+                            {plan.savingsAmount > 0 ? (
+                              <div className="mt-1 text-[11px] font-medium text-[#008060]">
+                                {`Save EUR ${plan.savingsAmount.toFixed(2)}`}
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              )}
+              ) : null}
             </div>
-          )}
-        </>
-      ) : null}
-
-      {showOneTimeMessage ? (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[13px] font-medium text-[#1c1f23] mb-1">
-                One-time title
-              </label>
-              <Input
-                size="large"
-                value={oneTimeTitle}
-                onChange={(e) =>
-                  updateRulePresentation
-                    ? updateRulePresentation("one-time-option", {
-                        title: e.target.value,
-                      })
-                    : setOneTimeTitle(e.target.value)
-                }
-                maxLength={60}
-              />
-            </div>
-            <div>
-              <label className="block text-[13px] font-medium text-[#1c1f23] mb-1">
-                One-time subtitle
-              </label>
-              <Input
-                size="large"
-                value={oneTimeSubtitle}
-                onChange={(e) =>
-                  updateRulePresentation
-                    ? updateRulePresentation("one-time-option", {
-                        subtitle: e.target.value,
-                      })
-                    : setOneTimeSubtitle(e.target.value)
-                }
-                maxLength={60}
-              />
-            </div>
-          </div>
-          <div className="mt-3 rounded-[10px] bg-[#f6f8f9] px-4 py-3">
-            <label className="block text-[13px] font-medium text-[#1c1f23]">
-              Placement
-              <Select
-                className="mt-1 w-full"
-                value={subscriptionPosition}
-                onChange={(value) =>
-                  setSubscriptionPosition(value as "below-bundle-bars")
-                }
-                options={[
-                  {
-                    value: "below-bundle-bars",
-                    label: "Below bundle deal bars",
-                  },
-                ]}
-              />
-            </label>
-          </div>
-          <div className="mt-3 rounded-[10px] bg-[#f6f8f9] px-4 py-3">
-            <Checkbox
-              checked={subscriptionDefaultSelected}
-              onChange={(e) =>
-                updateRulePresentation
-                  ? updateRulePresentation("subscription-option", {
-                      isDefault: e.target.checked,
-                    })
-                  : setSubscriptionDefaultSelected(e.target.checked)
-              }
-            >
-              Make subscription option selected by default
-            </Checkbox>
-          </div>
+          ) : null}
         </>
       ) : null}
     </div>

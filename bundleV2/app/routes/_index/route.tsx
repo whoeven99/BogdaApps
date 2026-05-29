@@ -49,6 +49,10 @@ import {
   normalizeIpCountryCodes,
   normalizeTargetMarkets,
   LONG_RUNNING_OFFER_END_TIME_ISO,
+  FIXED_ONE_TIME_SUBTITLE,
+  FIXED_ONE_TIME_TITLE,
+  FIXED_SUBSCRIPTION_DEFAULT_SELECTED,
+  FIXED_SUBSCRIPTION_POSITION,
   isCompleteBundleSingleBar,
   parseProgressiveGiftsConfig,
   progressiveGiftsConfigToStorableJson,
@@ -849,6 +853,103 @@ export type IndexLoaderData = {
   billingSubscriptions: Array<{ name: string; status: string }>;
   billingTestMode: boolean;
 };
+
+type SubscriptionPreviewPolicyNode = {
+  adjustmentType?: string | null;
+  adjustmentValue?:
+    | { amount?: string | null; currencyCode?: string | null }
+    | { percentage?: number | null }
+    | null;
+  afterCycle?: number | null;
+};
+
+type SubscriptionPreviewPlan = {
+  sellingPlanId: string;
+  sellingPlanName: string;
+  billingLabel: string;
+  subscriptionPrice: number;
+  compareAtPrice: number;
+  savingsAmount: number;
+  savingsPercent: number;
+};
+
+function parseSubscriptionPreviewMoney(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatSubscriptionPreviewInterval(
+  interval?: string | null,
+  intervalCount?: number | null,
+): string {
+  const normalizedInterval = String(interval || "").toLowerCase();
+  const normalizedCount = Math.max(1, Number(intervalCount) || 1);
+  const unitMap: Record<string, string> = {
+    day: "day",
+    week: "week",
+    month: "month",
+    year: "year",
+  };
+  const unit = unitMap[normalizedInterval] || "delivery";
+  if (normalizedCount === 1) {
+    return `Billed every ${unit}`;
+  }
+  return `Billed every ${normalizedCount} ${unit}s`;
+}
+
+function resolveSubscriptionPreviewPricing(
+  basePrice: number | null,
+  policies: SubscriptionPreviewPolicyNode[],
+) {
+  if (basePrice == null) {
+    return null;
+  }
+  const primaryPolicy =
+    policies.find((policy) => policy && (policy.afterCycle == null || policy.afterCycle <= 1)) ||
+    policies[0];
+  if (!primaryPolicy) {
+    return null;
+  }
+
+  const adjustmentType = String(primaryPolicy.adjustmentType || "").toUpperCase();
+  let nextPrice: number | null = null;
+
+  if (adjustmentType === "PERCENTAGE") {
+    const percentage = Number((primaryPolicy.adjustmentValue as { percentage?: number } | null)?.percentage);
+    if (Number.isFinite(percentage)) {
+      nextPrice = Math.max(0, basePrice * (1 - percentage / 100));
+    }
+  } else if (adjustmentType === "FIXED_AMOUNT") {
+    const amount = parseSubscriptionPreviewMoney(
+      (primaryPolicy.adjustmentValue as { amount?: string | null } | null)?.amount,
+    );
+    if (amount != null) {
+      nextPrice = Math.max(0, basePrice - amount);
+    }
+  } else if (adjustmentType === "PRICE") {
+    const amount = parseSubscriptionPreviewMoney(
+      (primaryPolicy.adjustmentValue as { amount?: string | null } | null)?.amount,
+    );
+    if (amount != null) {
+      nextPrice = Math.max(0, amount);
+    }
+  }
+
+  if (nextPrice == null) {
+    return null;
+  }
+
+  const savingsAmount = Math.max(0, basePrice - nextPrice);
+  const savingsPercent =
+    basePrice > 0 && savingsAmount > 0 ? Math.round((savingsAmount / basePrice) * 100) : 0;
+
+  return {
+    subscriptionPrice: nextPrice,
+    compareAtPrice: basePrice,
+    savingsAmount,
+    savingsPercent,
+  };
+}
 
 export type ThemeEditorTarget = {
   id: string;
@@ -1956,11 +2057,60 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             product(id: $id) {
               id
               title
+              variants(first: 1) {
+                edges {
+                  node {
+                    price
+                  }
+                }
+              }
               sellingPlanGroups(first: 10) {
                 edges {
                   node {
                     id
                     name
+                    sellingPlans(first: 10) {
+                      edges {
+                        node {
+                          id
+                          name
+                          options
+                          billingPolicy {
+                            ... on SellingPlanRecurringBillingPolicy {
+                              interval
+                              intervalCount
+                            }
+                          }
+                          pricingPolicies {
+                            ... on SellingPlanFixedPricingPolicy {
+                              adjustmentType
+                              adjustmentValue {
+                                ... on MoneyV2 {
+                                  amount
+                                  currencyCode
+                                }
+                                ... on SellingPlanPricingPolicyPercentageValue {
+                                  percentage
+                                }
+                              }
+                            }
+                            ... on SellingPlanRecurringPricingPolicy {
+                              afterCycle
+                              adjustmentType
+                              adjustmentValue {
+                                ... on MoneyV2 {
+                                  amount
+                                  currencyCode
+                                }
+                                ... on SellingPlanPricingPolicyPercentageValue {
+                                  percentage
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
                   }
                 }
               }
@@ -1979,12 +2129,33 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           product?: {
             id?: string;
             title?: string;
+            variants?: {
+              edges?: Array<{
+                node?: {
+                  price?: string | null;
+                } | null;
+              }>;
+            };
             requiresSellingPlan?: boolean;
             sellingPlanGroups?: {
               edges?: Array<{
                 node?: {
                   id?: string;
                   name?: string;
+                  sellingPlans?: {
+                    edges?: Array<{
+                      node?: {
+                        id?: string;
+                        name?: string;
+                        options?: Array<string | null> | null;
+                        billingPolicy?: {
+                          interval?: string | null;
+                          intervalCount?: number | null;
+                        } | null;
+                        pricingPolicies?: Array<SubscriptionPreviewPolicyNode | null> | null;
+                      } | null;
+                    }>;
+                  } | null;
                 } | null;
               }>;
             };
@@ -1998,7 +2169,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
 
       const product = json.data?.product;
-      const sellingPlanGroups =
+      const variantBasePrice = parseSubscriptionPreviewMoney(
+        product?.variants?.edges?.[0]?.node?.price,
+      );
+      const sellingPlanGroupNodes =
         product?.sellingPlanGroups?.edges
           ?.map((edge) => edge?.node)
           .filter(
@@ -2007,8 +2181,65 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             ): node is {
               id?: string;
               name?: string;
+              sellingPlans?: {
+                edges?: Array<{
+                  node?: {
+                    id?: string;
+                    name?: string;
+                    options?: Array<string | null> | null;
+                    billingPolicy?: {
+                      interval?: string | null;
+                      intervalCount?: number | null;
+                    } | null;
+                    pricingPolicies?: Array<SubscriptionPreviewPolicyNode | null> | null;
+                  } | null;
+                }>;
+              } | null;
             } => !!node,
           ) ?? [];
+      const sellingPlanGroups = sellingPlanGroupNodes.map((group) => ({
+        id: group.id,
+        name: group.name,
+      }));
+      const previewPlans = sellingPlanGroupNodes
+        .flatMap((group) => group.sellingPlans?.edges ?? [])
+        .map((edge) => edge?.node)
+        .filter(
+          (
+            node,
+          ): node is {
+            id?: string;
+            name?: string;
+            options?: Array<string | null> | null;
+            billingPolicy?: {
+              interval?: string | null;
+              intervalCount?: number | null;
+            } | null;
+            pricingPolicies?: Array<SubscriptionPreviewPolicyNode | null> | null;
+          } => !!node,
+        )
+        .map((sellingPlan): SubscriptionPreviewPlan | null => {
+          const previewPricing = resolveSubscriptionPreviewPricing(
+            variantBasePrice,
+            (sellingPlan.pricingPolicies ?? []).filter(
+              (policy): policy is SubscriptionPreviewPolicyNode => !!policy,
+            ),
+          );
+          if (!previewPricing) return null;
+          return {
+            sellingPlanId: sellingPlan.id ?? "",
+            sellingPlanName:
+              sellingPlan.name ||
+              sellingPlan.options?.filter(Boolean).join(" / ") ||
+              "Subscription plan",
+            billingLabel: formatSubscriptionPreviewInterval(
+              sellingPlan.billingPolicy?.interval,
+              sellingPlan.billingPolicy?.intervalCount,
+            ),
+            ...previewPricing,
+          };
+        })
+        .filter((plan): plan is SubscriptionPreviewPlan => !!plan);
 
       return Response.json({
         ok: true as const,
@@ -2019,6 +2250,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           sellingPlanGroups,
           hasSubscription:
             product?.requiresSellingPlan === true || sellingPlanGroups.length > 0,
+          previewPlans,
         },
       });
     } catch (error) {
@@ -2226,14 +2458,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       formData.get("subscriptionEnabled") || "",
     );
     const subscriptionEnabled = subscriptionEnabledRaw === "true";
-    const subscriptionPositionRaw = String(
-      formData.get("subscriptionPosition") || "below-bundle-bars",
-    ).trim();
-    const subscriptionPosition = ["below-bundle-bars"].includes(
-      subscriptionPositionRaw,
-    )
-      ? subscriptionPositionRaw
-      : "below-bundle-bars";
     const subscriptionTitle = sanitizeSingleLineText(
       formData.get("subscriptionTitle"),
       60,
@@ -2244,22 +2468,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       60,
       "Subscription pricing updates from your selling plan",
     );
-    const oneTimeTitle = sanitizeSingleLineText(
-      formData.get("oneTimeTitle"),
-      60,
-      "One-time purchase",
-    );
-    const oneTimeSubtitle = sanitizeSingleLineText(
-      formData.get("oneTimeSubtitle"),
-      60,
-      "",
-    );
-    const subscriptionDefaultSelectedRaw = String(
-      formData.get("subscriptionDefaultSelected") || "",
-    );
-    const subscriptionDefaultSelected =
-      subscriptionDefaultSelectedRaw === "true";
-
     const title = sanitizeSingleLineText(
       formData.get("title"),
       OFFER_TEXT_LIMITS.widgetTitle,
@@ -2355,12 +2563,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       buttonText,
       showCustomButton,
       subscriptionEnabled,
-      subscriptionPosition,
+      subscriptionPosition: FIXED_SUBSCRIPTION_POSITION,
       subscriptionTitle,
       subscriptionSubtitle,
-      oneTimeTitle,
-      oneTimeSubtitle,
-      subscriptionDefaultSelected,
+      oneTimeTitle: FIXED_ONE_TIME_TITLE,
+      oneTimeSubtitle: FIXED_ONE_TIME_SUBTITLE,
+      subscriptionDefaultSelected: FIXED_SUBSCRIPTION_DEFAULT_SELECTED,
       scheduleTimezone: scheduleTimezoneRaw || undefined,
       couponEnabled,
       couponCode,

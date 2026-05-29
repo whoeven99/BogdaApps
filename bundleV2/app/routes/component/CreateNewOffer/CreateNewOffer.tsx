@@ -167,6 +167,11 @@ type CampaignModuleDescriptor = {
   includeAsAdditional: boolean;
 };
 
+const FIXED_ONE_TIME_TITLE = "One-time purchase";
+const FIXED_ONE_TIME_SUBTITLE = "Uses the current product price";
+const FIXED_SUBSCRIPTION_POSITION = "below-bundle-bars" as const;
+const FIXED_SUBSCRIPTION_DEFAULT_SELECTED = false;
+
 function buildCampaignModuleDescriptors(params: {
   behaviorOfferType: Exclude<OfferTypeId, "progressive-gifts">;
   selectedScopeProductIds: string[];
@@ -183,10 +188,6 @@ function buildCampaignModuleDescriptors(params: {
   subscriptionEnabled: boolean;
   subscriptionTitle: string;
   subscriptionSubtitle: string;
-  oneTimeTitle: string;
-  oneTimeSubtitle: string;
-  subscriptionPosition: "below-bundle-bars";
-  subscriptionDefaultSelected: boolean;
 }): Record<OfferTypeId, CampaignModuleDescriptor> {
   const {
     behaviorOfferType,
@@ -204,10 +205,6 @@ function buildCampaignModuleDescriptors(params: {
     subscriptionEnabled,
     subscriptionTitle,
     subscriptionSubtitle,
-    oneTimeTitle,
-    oneTimeSubtitle,
-    subscriptionPosition,
-    subscriptionDefaultSelected,
   } = params;
 
   const sharedQuantityBreakOfferType: OfferTypeId =
@@ -295,12 +292,12 @@ function buildCampaignModuleDescriptors(params: {
     type: "subscription",
     config: {
       enabled: subscriptionEnabled,
-      position: subscriptionPosition,
+      position: FIXED_SUBSCRIPTION_POSITION,
       title: subscriptionTitle,
       subtitle: subscriptionSubtitle,
-      oneTimeTitle,
-      oneTimeSubtitle,
-      defaultSelected: subscriptionDefaultSelected,
+      oneTimeTitle: FIXED_ONE_TIME_TITLE,
+      oneTimeSubtitle: FIXED_ONE_TIME_SUBTITLE,
+      defaultSelected: FIXED_SUBSCRIPTION_DEFAULT_SELECTED,
       productIds: selectedScopeProductIds,
     },
   };
@@ -563,6 +560,21 @@ interface CreateNewOfferProps {
   ianaTimezone?: string;
 }
 
+type SubscriptionPreviewPlan = {
+  sellingPlanId: string;
+  sellingPlanName: string;
+  billingLabel: string;
+  subscriptionPrice: number;
+  compareAtPrice: number;
+  savingsAmount: number;
+  savingsPercent: number;
+};
+
+type SubscriptionPreviewSnapshot = {
+  productId: string;
+  plans: SubscriptionPreviewPlan[];
+};
+
 type CollectionOption = {
   label: string;
   value: string;
@@ -698,6 +710,7 @@ export function CreateNewOffer({
       requiresSellingPlan: boolean;
       sellingPlanGroups: Array<{ id?: string; name?: string }>;
       hasSubscription: boolean;
+      previewPlans?: SubscriptionPreviewPlan[] | null;
     };
   }>();
   const navigate = useNavigate();
@@ -1018,6 +1031,14 @@ export function CreateNewOffer({
   }, [fetcher.state, fetcher.data, initialOffer, navigate, searchParams]);
 
   const baseUnitPrice = 100;
+  const parsePreviewMoney = (rawValue: string | null | undefined) => {
+    const normalized = String(rawValue || "")
+      .replace(/[^\d,.-]/g, "")
+      .replace(/\.(?=\d{3}(?:\D|$))/g, "")
+      .replace(",", ".");
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
   const formatPreviewPrice = (value: number) =>
     `€${value.toFixed(2).replace(".", ",")}`;
   const [step, setStep] = useState(1);
@@ -1159,22 +1180,14 @@ export function CreateNewOffer({
   const [subscriptionEnabled, setSubscriptionEnabled] = useState(
     offerSettings.subscriptionEnabled,
   );
-  const [subscriptionPosition, setSubscriptionPosition] = useState(
-    offerSettings.subscriptionPosition,
-  );
   const [subscriptionTitle, setSubscriptionTitle] = useState(
     offerSettings.subscriptionTitle,
   );
   const [subscriptionSubtitle, setSubscriptionSubtitle] = useState(
     offerSettings.subscriptionSubtitle,
   );
-  const [oneTimeTitle, setOneTimeTitle] = useState(offerSettings.oneTimeTitle);
-  const [oneTimeSubtitle, setOneTimeSubtitle] = useState(
-    offerSettings.oneTimeSubtitle,
-  );
-  const [subscriptionDefaultSelected, setSubscriptionDefaultSelected] = useState(
-    offerSettings.subscriptionDefaultSelected,
-  );
+  const [subscriptionPreviewSnapshot, setSubscriptionPreviewSnapshot] =
+    useState<SubscriptionPreviewSnapshot | null>(null);
   const [widgetTitle, setWidgetTitle] = useState(offerSettings.title);
   const [customerSegments, setCustomerSegments] = useState<string[]>(
     normalizeCustomerSegments(
@@ -1493,7 +1506,7 @@ export function CreateNewOffer({
       type: "product",
       action: "select",
       // 保持 Shopify 原生 picker 机制，不传 filter.query，避免 collection 过滤 UI 失效
-      multiple: type === "normal" && behaviorOfferType === "subscription" ? false : true,
+      multiple: true,
       selectionIds:
         type === "buy"
           ? buyProducts.map((id) => ({ id }))
@@ -1522,8 +1535,7 @@ export function CreateNewOffer({
       return;
     }
 
-    const nextProducts =
-      behaviorOfferType === "subscription" ? newData.slice(0, 1) : newData;
+    const nextProducts = newData;
     const nextIds = nextProducts.map((item: any) => String(item.id));
     setSelectedProductsData(nextProducts);
     if (behaviorOfferType === "quantity-breaks-different") {
@@ -1537,16 +1549,6 @@ export function CreateNewOffer({
     }
     if (freeGiftRules.length > 0 || behaviorOfferType === "free-gift") {
       setFreeGiftTriggerProducts(nextIds);
-    }
-
-    if (behaviorOfferType === "subscription" && nextProducts[0]?.id) {
-      subscriptionStatusFetcher.submit(
-        {
-          intent: "get-product-subscription-status",
-          productId: String(nextProducts[0].id),
-        },
-        { method: "post" },
-      );
     }
   };
   const handleSelectDifferentProductsSharedPoolProducts = async () => {
@@ -1576,8 +1578,7 @@ export function CreateNewOffer({
     );
   };
   const applyStepTwoTriggerProducts = (products: ReturnType<typeof mapProductIdsToDraftProducts>) => {
-    const nextProducts =
-      behaviorOfferType === "subscription" ? products.slice(0, 1) : products;
+    const nextProducts = products;
     const nextIds = nextProducts.map((product) => String(product.id));
     setSelectedProductsData(nextProducts);
     if (behaviorOfferType === "quantity-breaks-different") {
@@ -1592,15 +1593,6 @@ export function CreateNewOffer({
     if (freeGiftRules.length > 0 || behaviorOfferType === "free-gift") {
       setFreeGiftTriggerProducts(nextIds);
     }
-    if (behaviorOfferType === "subscription" && nextProducts[0]?.id) {
-      subscriptionStatusFetcher.submit(
-        {
-          intent: "get-product-subscription-status",
-          productId: String(nextProducts[0].id),
-        },
-        { method: "post" },
-      );
-    }
   };
   const openStepTwoTriggerProductPicker = async (
     selectionProductIds?: string[],
@@ -1614,7 +1606,7 @@ export function CreateNewOffer({
     const selected = await (window as any).shopify.resourcePicker({
       type: "product",
       action: "select",
-      multiple: behaviorOfferType === "subscription" ? false : true,
+      multiple: true,
       selectionIds: (selectionProductIds || currentStepTwoPoolIds).map((id) => ({ id })),
     });
     if (!selected) return;
@@ -2345,7 +2337,52 @@ export function CreateNewOffer({
           : item,
       ),
     );
+    setSubscriptionPreviewSnapshot(
+      result.previewPlans?.length
+        ? {
+            plans: result.previewPlans,
+            productId: result.id,
+          }
+        : null,
+    );
   }, [subscriptionStatusFetcher.state, subscriptionStatusFetcher.data]);
+
+  useEffect(() => {
+    const previewProductId = String(selectedProductsData[0]?.id || "");
+    const shouldResolveSubscriptionPreview =
+      behaviorOfferType === "subscription" || subscriptionEnabled;
+    if (!shouldResolveSubscriptionPreview) {
+      if (subscriptionPreviewSnapshot !== null) {
+        setSubscriptionPreviewSnapshot(null);
+      }
+      return;
+    }
+    if (!previewProductId) {
+      if (subscriptionPreviewSnapshot !== null) {
+        setSubscriptionPreviewSnapshot(null);
+      }
+      return;
+    }
+    if (
+      subscriptionStatusFetcher.state !== "idle" ||
+      subscriptionPreviewSnapshot?.productId === previewProductId
+    ) {
+      return;
+    }
+    subscriptionStatusFetcher.submit(
+      {
+        intent: "get-product-subscription-status",
+        productId: previewProductId,
+      },
+      { method: "post" },
+    );
+  }, [
+    behaviorOfferType,
+    selectedProductsData,
+    subscriptionEnabled,
+    subscriptionPreviewSnapshot,
+    subscriptionStatusFetcher,
+  ]);
 
   const previewBarOptions = useMemo(() => {
     if (behaviorOfferType === "bxgy") {
@@ -2428,10 +2465,6 @@ export function CreateNewOffer({
       subscriptionEnabled,
       subscriptionTitle,
       subscriptionSubtitle,
-      oneTimeTitle,
-      oneTimeSubtitle,
-      subscriptionPosition,
-      subscriptionDefaultSelected,
     });
 
     const primaryModule = moduleDescriptors[behaviorOfferType];
@@ -2552,17 +2585,13 @@ export function CreateNewOffer({
     normalizedIpCountryCodes,
     normalizedMarkets,
     discountRules,
-    oneTimeSubtitle,
-    oneTimeTitle,
     scheduleTimezone,
     selectedProductsData,
     showCountdownBlock,
     showCustomButton,
     startTime,
     status,
-    subscriptionDefaultSelected,
     subscriptionEnabled,
-    subscriptionPosition,
     subscriptionSubtitle,
     subscriptionTitle,
     stickyAddToCartEnabled,
@@ -2590,19 +2619,52 @@ export function CreateNewOffer({
     [selectedProductsData],
   );
   const shouldShowSubscriptionPreview = subscriptionEnabled;
-  const subscriptionPreviewStyle = allSelectedProductsHaveSubscription
-    ? "solid"
-    : "dashed";
-  const shouldShowSubscriptionExplanation =
-    shouldShowSubscriptionPreview && !allSelectedProductsHaveSubscription;
-  const subscriptionExplanationTitle =
-    selectedProductsData.length > 0
-      ? "Some products aren't eligible for subscriptions"
-      : "Select products to check selling plan eligibility";
-  const subscriptionExplanationBody =
-    selectedProductsData.length > 0
-      ? "Subscription UI only appears on products that already have Shopify selling plans. The storefront price is then resolved from the selected plan."
-      : "After selecting products, the app checks whether they have selling plans and decides whether this preview should show a solid or dashed subscription option.";
+  const subscriptionPreviewStyle = "solid";
+  const shouldShowSubscriptionExplanation = false;
+  const subscriptionExplanationTitle = "";
+  const subscriptionExplanationBody = "";
+  const previewSubscriptionProduct = selectedProductsData[0] ?? null;
+  const previewOneTimePrice =
+    parsePreviewMoney(previewSubscriptionProduct?.price) ?? baseUnitPrice;
+  const previewSubscriptionSnapshot =
+    subscriptionPreviewSnapshot &&
+    String(subscriptionPreviewSnapshot.productId || "") ===
+      String(previewSubscriptionProduct?.id || "")
+      ? subscriptionPreviewSnapshot
+      : null;
+  const previewSubscriptionPlans = previewSubscriptionSnapshot?.plans ?? [];
+  const previewPrimarySubscriptionPlan = previewSubscriptionPlans[0] ?? null;
+  const previewOneTimeTitle = "One-time purchase";
+  const previewOneTimeSubtitle = previewSubscriptionProduct
+    ? "Buy once at the current product price"
+    : "Uses the current product price";
+  const previewSubscriptionTitle = subscriptionTitle || "Subscribe & Save";
+  const previewSubscriptionSubtitle =
+    previewPrimarySubscriptionPlan?.billingLabel ||
+    subscriptionSubtitle ||
+    "Billing cycle is pulled from the selected selling plan";
+  const previewSubscriptionPriceText = previewPrimarySubscriptionPlan
+    ? formatPreviewPrice(previewPrimarySubscriptionPlan.subscriptionPrice)
+    : null;
+  const previewSubscriptionCompareAtPriceText = previewPrimarySubscriptionPlan
+    ? formatPreviewPrice(previewPrimarySubscriptionPlan.compareAtPrice)
+    : null;
+  const previewSubscriptionSavingsText = previewPrimarySubscriptionPlan
+    ? `Save ${formatPreviewPrice(previewPrimarySubscriptionPlan.savingsAmount)}`
+    : null;
+  const subscriptionPlanPreviewItems = useMemo(
+    () =>
+      previewSubscriptionPlans.map((plan) => ({
+        title: plan.sellingPlanName,
+        subtitle: plan.billingLabel,
+        priceText: formatPreviewPrice(plan.subscriptionPrice),
+        savingsText:
+          plan.savingsAmount > 0
+            ? `Save ${formatPreviewPrice(plan.savingsAmount)}`
+            : null,
+      })),
+    [previewSubscriptionPlans],
+  );
   const checkboxUpsellPreview = useMemo(
     () => ({
       enabled: checkboxUpsellsEnabled,
@@ -2653,10 +2715,6 @@ export function CreateNewOffer({
       subscriptionEnabled,
       subscriptionTitle,
       subscriptionSubtitle,
-      oneTimeTitle,
-      oneTimeSubtitle,
-      subscriptionPosition,
-      subscriptionDefaultSelected,
     });
 
     const primaryModule = moduleDescriptors[behaviorOfferType];
@@ -2689,10 +2747,6 @@ export function CreateNewOffer({
     subscriptionEnabled,
     subscriptionTitle,
     subscriptionSubtitle,
-    oneTimeTitle,
-    oneTimeSubtitle,
-    subscriptionPosition,
-    subscriptionDefaultSelected,
   ]);
   const campaignDraft = useMemo<CampaignDraft>(
     () => ({
@@ -2706,15 +2760,20 @@ export function CreateNewOffer({
       completeBundleBars,
       subscriptionTitle,
       subscriptionSubtitle,
-      oneTimeTitle,
-      oneTimeSubtitle,
-      subscriptionPosition,
-      subscriptionDefaultSelected,
+      oneTimeTitle: FIXED_ONE_TIME_TITLE,
+      oneTimeSubtitle: FIXED_ONE_TIME_SUBTITLE,
+      subscriptionPosition: FIXED_SUBSCRIPTION_POSITION,
+      subscriptionDefaultSelected: FIXED_SUBSCRIPTION_DEFAULT_SELECTED,
       shouldShowSubscriptionPreview,
       allSelectedProductsHaveSubscription,
       shouldShowSubscriptionExplanation,
       subscriptionExplanationTitle,
       subscriptionExplanationBody,
+      previewOneTimePriceText: formatPreviewPrice(previewOneTimePrice),
+      previewSubscriptionPriceText: previewSubscriptionPriceText,
+      previewSubscriptionCompareAtPriceText: previewSubscriptionCompareAtPriceText,
+      previewSubscriptionSavingsText: previewSubscriptionSavingsText,
+      previewSubscriptionPlans,
       freeGiftTriggerProducts,
       freeGiftSharedGiftProductIds,
       freeGiftSharedGiftProductsData,
@@ -2744,10 +2803,6 @@ export function CreateNewOffer({
       completeBundleBars,
       subscriptionTitle,
       subscriptionSubtitle,
-      oneTimeTitle,
-      oneTimeSubtitle,
-      subscriptionPosition,
-      subscriptionDefaultSelected,
       shouldShowSubscriptionPreview,
       allSelectedProductsHaveSubscription,
       shouldShowSubscriptionExplanation,
@@ -2771,6 +2826,11 @@ export function CreateNewOffer({
       freeGiftRules,
       subscriptionEnabled,
       unifiedRulesSnapshot,
+      previewOneTimePrice,
+      previewSubscriptionPriceText,
+      previewSubscriptionCompareAtPriceText,
+      previewSubscriptionSavingsText,
+      previewSubscriptionPlans,
     ],
   );
   const compositionBars = getCampaignCompositionBars(campaignDraft);
@@ -2844,6 +2904,14 @@ export function CreateNewOffer({
     [stepTwoAuditIssues],
   );
   const getModuleBlockingMessage = () => {
+    if (subscriptionEnabled || behaviorOfferType === "subscription") {
+      if (selectedProductsData.length === 0) {
+        return "Subscription module requires at least one product in the product pool.";
+      }
+      if (selectedProductsData.some((product) => !product.hasSubscription)) {
+        return "All products in the subscription pool must already have Shopify selling plans.";
+      }
+    }
     if (
       completeBundleBars.some((bar) => !isCompleteBundleSingleBar(bar)) &&
       completeBundleBars
@@ -2873,14 +2941,6 @@ export function CreateNewOffer({
       if (id === "subscription-option") {
         if (typeof patch.title === "string") setSubscriptionTitle(patch.title);
         if (typeof patch.subtitle === "string") setSubscriptionSubtitle(patch.subtitle);
-        if (typeof patch.isDefault === "boolean") {
-          setSubscriptionDefaultSelected(patch.isDefault);
-        }
-        return;
-      }
-      if (id === "one-time-option") {
-        if (typeof patch.title === "string") setOneTimeTitle(patch.title);
-        if (typeof patch.subtitle === "string") setOneTimeSubtitle(patch.subtitle);
       }
       return;
     }
@@ -2996,10 +3056,6 @@ export function CreateNewOffer({
     setSubscriptionEnabled,
     setSubscriptionTitle,
     setSubscriptionSubtitle,
-    setOneTimeTitle,
-    setOneTimeSubtitle,
-    setSubscriptionPosition,
-    setSubscriptionDefaultSelected,
     setFreeGiftTriggerProducts,
     setFreeGiftRules,
     selectFreeGiftRewardProducts,
@@ -3019,6 +3075,9 @@ export function CreateNewOffer({
     const differentProductsSharedPoolProductIds = differentProductsSharedPoolProductsData.map(
       (product) => String(product.id),
     );
+    if (behaviorOfferType === "subscription") {
+      return [];
+    }
     if (behaviorOfferType === "complete-bundle") {
       return buildUnifiedPreviewItems({
         offerType: behaviorOfferType,
@@ -3089,6 +3148,7 @@ export function CreateNewOffer({
     activeDisplayRules,
     completeBundleBars,
     selectedProductsData,
+    differentProductsSharedPoolProductsData,
     baseUnitPrice,
     formatPreviewPrice,
   ]);
@@ -3135,17 +3195,8 @@ export function CreateNewOffer({
       buildSubscriptionDisplayCustomizerItems({
         subscriptionTitle,
         subscriptionSubtitle,
-        subscriptionDefaultSelected,
-        oneTimeTitle,
-        oneTimeSubtitle,
       }),
-    [
-      subscriptionTitle,
-      subscriptionSubtitle,
-      subscriptionDefaultSelected,
-      oneTimeTitle,
-      oneTimeSubtitle,
-    ],
+    [subscriptionTitle, subscriptionSubtitle],
   );
 
 
@@ -3523,23 +3574,11 @@ export function CreateNewOffer({
         name="subscriptionEnabled"
         value={subscriptionEnabled ? "true" : "false"}
       />
-      <input
-        type="hidden"
-        name="subscriptionPosition"
-        value={subscriptionPosition}
-      />
       <input type="hidden" name="subscriptionTitle" value={subscriptionTitle} />
       <input
         type="hidden"
         name="subscriptionSubtitle"
         value={subscriptionSubtitle}
-      />
-      <input type="hidden" name="oneTimeTitle" value={oneTimeTitle} />
-      <input type="hidden" name="oneTimeSubtitle" value={oneTimeSubtitle} />
-      <input
-        type="hidden"
-        name="subscriptionDefaultSelected"
-        value={subscriptionDefaultSelected ? "true" : "false"}
       />
       <input
         type="hidden"
@@ -3739,10 +3778,15 @@ export function CreateNewOffer({
                     progressivePreviewLineQty={previewGiftQty}
                     showSubscriptionPreview={shouldShowSubscriptionPreview}
                     subscriptionPreviewStyle={subscriptionPreviewStyle}
-                    subscriptionTitle={subscriptionTitle}
-                    subscriptionSubtitle={subscriptionSubtitle}
-                    oneTimeTitle={oneTimeTitle}
-                    oneTimeSubtitle={oneTimeSubtitle}
+                    subscriptionTitle={previewSubscriptionTitle}
+                    subscriptionSubtitle={previewSubscriptionSubtitle}
+                    oneTimeTitle={previewOneTimeTitle}
+                    oneTimeSubtitle={previewOneTimeSubtitle}
+                    oneTimePriceText={formatPreviewPrice(previewOneTimePrice)}
+                    subscriptionPriceText={previewSubscriptionPriceText}
+                    subscriptionCompareAtPriceText={previewSubscriptionCompareAtPriceText}
+                    subscriptionSavingsText={previewSubscriptionSavingsText}
+                    subscriptionPlanPreviewItems={subscriptionPlanPreviewItems}
                     showSubscriptionExplanation={shouldShowSubscriptionExplanation}
                     subscriptionExplanationTitle={subscriptionExplanationTitle}
                     subscriptionExplanationBody={subscriptionExplanationBody}
@@ -3826,10 +3870,15 @@ export function CreateNewOffer({
                       progressivePreviewLineQty={previewGiftQty}
                       showSubscriptionPreview={shouldShowSubscriptionPreview}
                       subscriptionPreviewStyle={subscriptionPreviewStyle}
-                      subscriptionTitle={subscriptionTitle}
-                      subscriptionSubtitle={subscriptionSubtitle}
-                      oneTimeTitle={oneTimeTitle}
-                      oneTimeSubtitle={oneTimeSubtitle}
+                      subscriptionTitle={previewSubscriptionTitle}
+                      subscriptionSubtitle={previewSubscriptionSubtitle}
+                      oneTimeTitle={previewOneTimeTitle}
+                      oneTimeSubtitle={previewOneTimeSubtitle}
+                      oneTimePriceText={formatPreviewPrice(previewOneTimePrice)}
+                      subscriptionPriceText={previewSubscriptionPriceText}
+                      subscriptionCompareAtPriceText={previewSubscriptionCompareAtPriceText}
+                      subscriptionSavingsText={previewSubscriptionSavingsText}
+                      subscriptionPlanPreviewItems={subscriptionPlanPreviewItems}
                       showSubscriptionExplanation={shouldShowSubscriptionExplanation}
                       checkboxUpsellPreview={checkboxUpsellPreview}
                       stickyAddToCartPreview={stickyAddToCartPreview}
@@ -3880,10 +3929,15 @@ export function CreateNewOffer({
                     progressivePreviewLineQty={previewGiftQty}
                     showSubscriptionPreview={shouldShowSubscriptionPreview}
                     subscriptionPreviewStyle={subscriptionPreviewStyle}
-                    subscriptionTitle={subscriptionTitle}
-                    subscriptionSubtitle={subscriptionSubtitle}
-                    oneTimeTitle={oneTimeTitle}
-                    oneTimeSubtitle={oneTimeSubtitle}
+                    subscriptionTitle={previewSubscriptionTitle}
+                    subscriptionSubtitle={previewSubscriptionSubtitle}
+                    oneTimeTitle={previewOneTimeTitle}
+                    oneTimeSubtitle={previewOneTimeSubtitle}
+                    oneTimePriceText={formatPreviewPrice(previewOneTimePrice)}
+                    subscriptionPriceText={previewSubscriptionPriceText}
+                    subscriptionCompareAtPriceText={previewSubscriptionCompareAtPriceText}
+                    subscriptionSavingsText={previewSubscriptionSavingsText}
+                    subscriptionPlanPreviewItems={subscriptionPlanPreviewItems}
                     checkboxUpsellPreview={checkboxUpsellPreview}
                     stickyAddToCartPreview={stickyAddToCartPreview}
                     showSubscriptionExplanation={shouldShowSubscriptionExplanation}

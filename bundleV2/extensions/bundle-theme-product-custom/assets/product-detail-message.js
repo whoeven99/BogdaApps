@@ -5333,10 +5333,9 @@ function renderBundlePreviewHtml(offer) {
       const configuredSubscriptionSubtitle =
         offerSettings.subscriptionSubtitle ||
         "Subscription pricing updates from your selling plan";
-      const oneTimeTitle = offerSettings.oneTimeTitle || "One-time purchase";
-      const configuredOneTimeSubtitle = offerSettings.oneTimeSubtitle || "";
-      const subscriptionDefaultSelected =
-        offerSettings.subscriptionDefaultSelected !== false;
+      const oneTimeTitle = "One-time purchase";
+      const configuredOneTimeSubtitle = "Buy once at the current product price";
+      const subscriptionDefaultSelected = false;
       const defaultMode =
         subscriptionDefaultSelected && defaultSellingPlanId
           ? "subscription"
