@@ -57,7 +57,6 @@ import {
   parseFreeGiftRules,
   parseFreeGiftSelectedProducts,
   parseSelectedProductIds,
-  migrateLegacyOfferToCampaignConfig,
   parseCampaignConfig,
   sanitizeHexColor,
   sanitizeSingleLineText,
@@ -67,6 +66,12 @@ import {
   resolveOfferTypeFromCampaignConfig,
 } from "../../utils/offerParsing";
 import { sanitizeEnvLikeValue, sanitizeUrlLikeEnvValue } from "../../utils/env";
+import {
+  buildOfferStatusCampaignConfigJson,
+  resolveOfferPersistenceFields,
+  validateOwnedOfferAccess,
+} from "./offerActionHelpers";
+import { createShopOfferSyncScheduler } from "./offerSyncScheduler";
 import {
   BUNDLE_METAFIELD_FUNCTION_OFFERS_KEY,
   BUNDLE_STOREFRONT_OFFERS_KEY,
@@ -137,6 +142,24 @@ function sanitizeHexColorParam(
   fallback: string,
 ): string {
   return sanitizeHexColor(raw, fallback);
+}
+
+async function resolveSessionShopName(admin: any, session: { shop?: string | null }) {
+  const directShopName = String(session?.shop || "").trim();
+  if (directShopName) {
+    return directShopName;
+  }
+  const shopNameResponse = await admin.graphql(
+    `#graphql
+      query ShopName {
+        shop {
+          name
+        }
+      }
+    `,
+  );
+  const shopNameJson = await shopNameResponse.json();
+  return String(shopNameJson?.data?.shop?.name || "").trim();
 }
 
 type ShopOffersMetafieldSyncResult =
@@ -714,20 +737,10 @@ async function syncShopOffersMetafield(
 }
 
 const OFFER_POST_WRITE_SYNC_TIMEOUT_MS = 8_000;
+const offerPostWriteSyncScheduler = createShopOfferSyncScheduler();
 
 async function runOfferPostWriteSync(admin: any, shopName: string): Promise<void> {
-  const syncTask = (async () => {
-    const functionOwnerSyncResult = await syncFunctionOwnerOffersMetafield(
-      admin,
-      shopName,
-    );
-    if (!functionOwnerSyncResult.ok) {
-      console.error("syncFunctionOwnerOffersMetafield failed after offer write", {
-        shopName,
-        message: functionOwnerSyncResult.message,
-      });
-    }
-
+  const syncTask = offerPostWriteSyncScheduler.schedule(shopName, async () => {
     const syncResult = await syncShopOffersMetafield(
       admin,
       shopName,
@@ -738,7 +751,7 @@ async function runOfferPostWriteSync(admin: any, shopName: string): Promise<void
         message: syncResult.message,
       });
     }
-  })();
+  });
 
   try {
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -1781,17 +1794,6 @@ import { AppProvider } from "@shopify/shopify-app-react-router/react";
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
 
-  const functionOwnerSyncResult = await syncFunctionOwnerOffersMetafield(
-    admin,
-    session.shop,
-  );
-  if (!functionOwnerSyncResult.ok) {
-    console.error("Failed to sync function owner offers metafield in loader", {
-      shopName: session.shop,
-      message: functionOwnerSyncResult.message,
-    });
-  }
-
   // eslint-disable-next-line no-undef
   const apiKey = sanitizeEnvLikeValue(process.env.SHOPIFY_API_KEY);
 
@@ -2369,110 +2371,33 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return offerActionErrorResponse("Coupon offers require a shared coupon code.", 400);
     }
 
-    let campaignConfigJson: string | null = null;
-
-    if (selectedProductsJson.length > 50_000) {
-      return offerActionErrorResponse("Selected products data is too large. Please reduce the number of products.", 400);
-    }
-    if (discountRulesJson.length > 50_000) {
-      return offerActionErrorResponse("Discount rules data is too large. Please reduce the number of rules.", 400);
-    }
-    if (campaignConfigJsonRaw.length > 100_000) {
-      return offerActionErrorResponse("Campaign configuration is too large. Please simplify the campaign.", 400);
-    }
-
-    if (campaignConfigJsonRaw) {
-      const parsedCampaignConfig = parseCampaignConfig(campaignConfigJsonRaw);
-      if (!parsedCampaignConfig) {
-        return offerActionErrorResponse("Invalid campaign configuration.", 400);
-      }
-      if (parsedCampaignConfig.scope.productIds.length === 0) {
-        return offerActionErrorResponse("Please select at least one product.", 400);
-      }
-      if (parsedCampaignConfig.scope.markets.length === 0) {
-        return offerActionErrorResponse(
-          "Select at least one market or keep All markets enabled.",
-          400,
-        );
-      }
-      if (!parsedCampaignConfig.settings.startTime) {
-        return offerActionErrorResponse("Start time is required.", 400);
-      }
-      const parsedStartTime = new Date(parsedCampaignConfig.settings.startTime);
-      const parsedEndTime = parsedCampaignConfig.settings.endTime
-        ? new Date(parsedCampaignConfig.settings.endTime)
-        : null;
-      if (
-        isNaN(parsedStartTime.getTime()) ||
-        (parsedEndTime && isNaN(parsedEndTime.getTime()))
-      ) {
-        return offerActionErrorResponse("Invalid start or end time format.", 400);
-      }
-      if (
-        parsedEndTime &&
-        parsedEndTime.getTime() <= parsedStartTime.getTime()
-      ) {
-        return offerActionErrorResponse("End time must be after start time.", 400);
-      }
-      const hasCountdownBlock = parsedCampaignConfig.displayBlocks.some(
-        (block) => block.type === "countdown",
-      );
-      if (hasCountdownBlock && !parsedCampaignConfig.settings.endTime) {
-        return offerActionErrorResponse("Countdown requires an end time.", 400);
-      }
-      if (parsedCampaignConfig.logicBlocks.length === 0) {
-        return offerActionErrorResponse("Please add at least one promotion rule.", 400);
-      }
-      if (
-        parsedCampaignConfig.settings.couponEnabled === true &&
-        !String(parsedCampaignConfig.settings.couponCode || "").trim()
-      ) {
-        return offerActionErrorResponse("Coupon offers require a shared coupon code.", 400);
-      }
-      const persistedFields = buildPersistedOfferFieldsFromCampaignConfig(
-        parsedCampaignConfig,
-        JSON.stringify({
-          progressiveGifts: progressiveGiftsConfigToStorableJson(progressiveGiftsSanitized),
-        }),
-      );
-      campaignConfigJson = JSON.stringify(parsedCampaignConfig);
-      offerType = persistedFields.offerType;
-      if (!selectedProductsJson) {
-        selectedProductsJson = persistedFields.selectedProductsJson || "";
-      }
-      discountRulesJson = persistedFields.discountRulesJson || discountRulesJson;
-      offerSettingsJson = persistedFields.offerSettingsJson;
-      status = parsedCampaignConfig.settings.status;
-      startTimeRaw = parsedCampaignConfig.settings.startTime || startTimeRaw;
-      endTimeRaw = parsedCampaignConfig.settings.endTime || endTimeRaw;
-    } else {
-      const derivedCampaignConfig = migrateLegacyOfferToCampaignConfig({
-        offerType,
-        selectedProductsJson,
-        discountRulesJson,
-        offerSettingsJson,
-        startTime: startTimeRaw,
-        endTime: endTimeRaw,
-        status,
-      });
-      campaignConfigJson = JSON.stringify(derivedCampaignConfig);
+    const persistenceResolution = resolveOfferPersistenceFields({
+      campaignConfigJsonRaw,
+      offerType,
+      selectedProductsJson,
+      discountRulesJson,
+      offerSettingsJson,
+      startTimeRaw,
+      endTimeRaw,
+      status,
+      progressiveGiftsJson: JSON.stringify({
+        progressiveGifts: progressiveGiftsConfigToStorableJson(progressiveGiftsSanitized),
+      }),
+    });
+    if (!persistenceResolution.ok) {
+      return offerActionErrorResponse(persistenceResolution.message, 400);
     }
 
-    // Store which Shopify shop this offer belongs to.
-    // `session.shop` is typically the shop's domain. As a fallback, use GraphQL `shop.name`.
-    let shopName = String((session as any)?.shop ?? "");
-    if (!shopName) {
-      const shopNameResponse = await admin.graphql(
-        `#graphql
-        query ShopName {
-          shop {
-            name
-          }
-        }`,
-      );
-      const shopNameJson = await shopNameResponse.json();
-      shopName = shopNameJson?.data?.shop?.name ?? "";
-    }
+    let campaignConfigJson: string | null = persistenceResolution.value.campaignConfigJson;
+    offerType = persistenceResolution.value.offerType;
+    selectedProductsJson = persistenceResolution.value.selectedProductsJson;
+    discountRulesJson = persistenceResolution.value.discountRulesJson;
+    offerSettingsJson = persistenceResolution.value.offerSettingsJson;
+    status = persistenceResolution.value.status;
+    startTimeRaw = persistenceResolution.value.startTimeRaw;
+    endTimeRaw = persistenceResolution.value.endTimeRaw;
+
+    const shopName = await resolveSessionShopName(admin, session);
 
     if (!name) {
       return offerActionErrorResponse("Please enter an offer name.", 400);
@@ -2508,6 +2433,30 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return offerActionErrorResponse("End time must be after start time.", 400);
     }
 
+    let existingOfferForUpdate: { id: string; shopName: string } | null = null;
+    if (intent !== "create-offer") {
+      existingOfferForUpdate = await prismaAny.offer.findUnique({
+        where: { id: idRaw },
+        select: {
+          id: true,
+          shopName: true,
+        },
+      });
+      const ownershipValidation = validateOwnedOfferAccess({
+        idRaw,
+        shopName,
+        existingOffer: existingOfferForUpdate,
+        missingIdMessage: "Missing offer ID, cannot update.",
+      });
+      if (!ownershipValidation.ok) {
+        return offerActionErrorResponse(
+          ownershipValidation.message,
+          ownershipValidation.status,
+        );
+      }
+      existingOfferForUpdate = ownershipValidation.offer;
+    }
+
     const nameKey = normalizeOfferNameKey(name);
     const siblingOffers = await prismaAny.offer.findMany({
       where: { shopName },
@@ -2516,7 +2465,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const nameTaken = siblingOffers.some(
       (o: { id: string; name: string }) =>
         normalizeOfferNameKey(o.name) === nameKey &&
-        (intent === "create-offer" || o.id !== idRaw),
+        (intent === "create-offer" || o.id !== existingOfferForUpdate?.id),
     );
     if (nameTaken) {
       return offerActionErrorResponse(
@@ -2525,8 +2474,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       );
     }
 
-    const data = {
-      shopName,
+    const baseData = {
       // name 被作为唯一标识
       name,
       cartTitle,
@@ -2539,8 +2487,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       selectedProductsJson: selectedProductsJson || null,
       discountRulesJson: discountRulesJson || null,
     };
-    const legacyData = {
-      ...data,
+    const createData = {
+      ...baseData,
+      shopName,
+    };
+    const legacyCreateData = {
+      ...createData,
+      campaignConfigJson: undefined,
+    };
+    const updateData = baseData;
+    const legacyUpdateData = {
+      ...updateData,
       campaignConfigJson: undefined,
     };
 
@@ -2548,7 +2505,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     if (intent === "create-offer") {
       try {
-        await writeOfferWithRetry(() => prismaAny.offer.create({ data }));
+        await writeOfferWithRetry(() => prismaAny.offer.create({ data: createData }));
         url.searchParams.set("toast", `create-success-${Date.now()}`);
       } catch (error: any) {
         if (isMissingOfferCampaignConfigColumnError(error)) {
@@ -2556,7 +2513,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             "[offer-create] campaignConfigJson column missing, retrying with legacy payload only",
           );
           try {
-            await writeOfferWithRetry(() => prismaAny.offer.create({ data: legacyData }));
+            await writeOfferWithRetry(() => prismaAny.offer.create({ data: legacyCreateData }));
             url.searchParams.set("toast", `create-success-${Date.now()}`);
           } catch (legacyError: any) {
             if (legacyError.code === "P2002") {
@@ -2602,14 +2559,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return offerActionErrorResponse("Failed to create offer. Please try again later.", 500);
       }
     } else {
-      if (!idRaw) {
-        return offerActionErrorResponse("Missing offer ID, cannot update.", 400);
-      }
       try {
         await writeOfferWithRetry(() =>
           prismaAny.offer.update({
             where: { id: idRaw },
-            data,
+            data: updateData,
           }),
         );
         url.searchParams.set("toast", `update-success-${Date.now()}`);
@@ -2622,7 +2576,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             await writeOfferWithRetry(() =>
               prismaAny.offer.update({
                 where: { id: idRaw },
-                data: legacyData,
+                data: legacyUpdateData,
               }),
             );
             url.searchParams.set("toast", `update-success-${Date.now()}`);
@@ -2696,6 +2650,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     const nextStatus = nextStatusRaw === "true";
+    const shopName = await resolveSessionShopName(admin, session);
 
     let updatedOffer;
     try {
@@ -2711,39 +2666,22 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       if (!existingOffer) {
         return new Response("Offer not found", { status: 404 });
       }
-
-      let nextCampaignConfigJson = existingOffer.campaignConfigJson ?? null;
-      const parsedCampaignConfig = parseCampaignConfig(existingOffer.campaignConfigJson);
-      if (parsedCampaignConfig) {
-        nextCampaignConfigJson = JSON.stringify({
-          ...parsedCampaignConfig,
-          settings: {
-            ...parsedCampaignConfig.settings,
-            status: nextStatus,
-          },
+      const ownershipValidation = validateOwnedOfferAccess({
+        idRaw,
+        shopName,
+        existingOffer,
+        missingIdMessage: "Missing offer id",
+      });
+      if (!ownershipValidation.ok) {
+        return new Response(ownershipValidation.message, {
+          status: ownershipValidation.status,
         });
-      } else if (existingOffer.campaignConfigJson) {
-        try {
-          const shallowConfig = JSON.parse(String(existingOffer.campaignConfigJson)) as {
-            settings?: Record<string, unknown>;
-            [key: string]: unknown;
-          };
-          nextCampaignConfigJson = JSON.stringify({
-            ...shallowConfig,
-            settings: {
-              ...(shallowConfig.settings && typeof shallowConfig.settings === "object"
-                ? shallowConfig.settings
-                : {}),
-              status: nextStatus,
-            },
-          });
-        } catch (error) {
-          console.error("toggle-offer-status campaignConfigJson parse failed", {
-            offerId: idRaw,
-            error,
-          });
-        }
       }
+
+      const nextCampaignConfigJson = buildOfferStatusCampaignConfigJson({
+        campaignConfigJson: existingOffer.campaignConfigJson,
+        nextStatus,
+      });
 
       updatedOffer = await prismaAny.offer.update({
         where: { id: idRaw },
@@ -2777,6 +2715,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return new Response("Missing offer id", { status: 400 });
     }
 
+    const shopName = await resolveSessionShopName(admin, session);
+
     // Find shopName to sync metafield
     let shopNameToSync: string | undefined;
     try {
@@ -2787,6 +2727,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           shopName: true,
         },
       });
+      const ownershipValidation = validateOwnedOfferAccess({
+        idRaw,
+        shopName,
+        existingOffer: offerToDelete,
+        missingIdMessage: "Missing offer id",
+      });
+      if (!ownershipValidation.ok) {
+        return new Response(ownershipValidation.message, {
+          status: ownershipValidation.status,
+        });
+      }
       shopNameToSync = offerToDelete?.shopName as string | undefined;
 
       await prismaAny.offer.delete({

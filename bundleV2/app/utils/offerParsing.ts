@@ -860,6 +860,21 @@ export function buildDraftRuleId(prefix: string): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
 }
 
+function buildDeterministicLegacyId(prefix: string, parts: unknown[]): string {
+  const normalized = parts
+    .map((part) => {
+      if (Array.isArray(part)) {
+        return part.map((entry) => String(entry || "").trim()).filter(Boolean).join(",");
+      }
+      return String(part ?? "").trim();
+    })
+    .join("__")
+    .replace(/[^a-zA-Z0-9,_-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^[-_]+|[-_]+$/g, "");
+  return normalized ? `${prefix}-${normalized}` : prefix;
+}
+
 export function createDefaultSingleDiscountRule(
   overrides: Partial<DiscountRule> = {},
 ): DiscountRule {
@@ -1011,20 +1026,10 @@ export function normalizeDifferentProductsDiscountRules(
   const orderedRules = [singleRule, ...offerRules];
   const explicitDefault = orderedRules.find((rule) => rule.isDefault);
   const fallbackDefault = offerRules[0] || singleRule;
-  const defaultIndex = explicitDefault
-    ? orderedRules.findIndex(
-        (rule) =>
-          rule.count === explicitDefault.count &&
-          rule.tierType === explicitDefault.tierType,
-      )
-    : orderedRules.findIndex(
-        (rule) =>
-          rule.count === fallbackDefault?.count &&
-          rule.tierType === fallbackDefault?.tierType,
-      );
-  return orderedRules.map((rule, index) => ({
+  const defaultKey = explicitDefault?.id || fallbackDefault?.id || "";
+  return orderedRules.map((rule) => ({
     ...rule,
-    isDefault: index === Math.max(0, defaultIndex),
+    isDefault: defaultKey ? rule.id === defaultKey : false,
   }));
 }
 
@@ -1089,12 +1094,10 @@ export function normalizeBxgyRules(rules: BxgyDiscountRule[]): BxgyDiscountRule[
   const orderedRules = [singleRule, ...offerRules];
   const explicitDefault = orderedRules.find((rule) => rule.isDefault);
   const fallbackDefault = offerRules[0] || singleRule;
-  const defaultIndex = explicitDefault
-    ? orderedRules.findIndex((rule) => rule.count === explicitDefault.count)
-    : orderedRules.findIndex((rule) => rule.count === fallbackDefault?.count);
-  return orderedRules.map((rule, index) => ({
+  const defaultKey = explicitDefault?.id || fallbackDefault?.id || "";
+  return orderedRules.map((rule) => ({
     ...rule,
-    isDefault: index === Math.max(0, defaultIndex),
+    isDefault: defaultKey ? rule.id === defaultKey : false,
   }));
 }
 
@@ -1148,12 +1151,10 @@ export function normalizeFreeGiftRules(rules: FreeGiftRule[]): FreeGiftRule[] {
   const orderedRules = [singleRule, ...offerRules];
   const explicitDefault = orderedRules.find((rule) => rule.isDefault);
   const fallbackDefault = offerRules[0] || singleRule;
-  const defaultIndex = explicitDefault
-    ? orderedRules.findIndex((rule) => rule.count === explicitDefault.count)
-    : orderedRules.findIndex((rule) => rule.count === fallbackDefault?.count);
-  return orderedRules.map((rule, index) => ({
+  const defaultKey = explicitDefault?.id || fallbackDefault?.id || "";
+  return orderedRules.map((rule) => ({
     ...rule,
-    isDefault: index === Math.max(0, defaultIndex),
+    isDefault: defaultKey ? rule.id === defaultKey : false,
   }));
 }
 
@@ -1548,7 +1549,21 @@ function sanitizeQuantityBreakTier(raw: unknown): QuantityBreakTier | null {
   const stableId =
     typeof item.id === "string" && item.id
       ? item.id
-      : `legacy-discount-rule-${qty}`;
+      : buildDeterministicLegacyId("legacy-discount-rule", [
+          qty,
+          discountPercent,
+          item.discountClass,
+          item.offerKind,
+          item.conditionType,
+          item.amountThreshold,
+          item.rewardType,
+          item.rewardProductIds,
+          item.giftQuantity,
+          item.logicType,
+          item.buyQuantity,
+          item.getQuantity,
+          item.maxUsesPerOrder,
+        ]);
   return {
     id: stableId,
     qty,
@@ -1619,7 +1634,17 @@ function sanitizeBxgyTier(raw: unknown): BxgyDiscountRule | null {
   const stableId =
     typeof item.id === "string" && item.id
       ? item.id
-      : `legacy-bxgy-rule-${buyQuantity}-${getQuantity}`;
+      : buildDeterministicLegacyId("legacy-bxgy-rule", [
+          buyQuantity,
+          getQuantity,
+          discountPercent,
+          buyProductIds,
+          getProductIds,
+          maxUsesPerOrder,
+          item.title,
+          item.subtitle,
+          item.badge,
+        ]);
 
   return {
     id: stableId,
@@ -1677,8 +1702,27 @@ function sanitizeDifferentProductsTier(
     typeof item.id === "string" && item.id
       ? item.id
       : tierType === "bxgy"
-        ? `legacy-different-products-bxgy-${buyQuantity}-${getQuantity}`
-        : `legacy-different-products-rule-${count}`;
+        ? buildDeterministicLegacyId("legacy-different-products-bxgy", [
+            buyQuantity,
+            getQuantity,
+            buyProductIds,
+            getProductIds,
+            discountPercent,
+            maxUsesPerOrder,
+            item.title,
+            item.subtitle,
+            item.badge,
+          ])
+        : buildDeterministicLegacyId("legacy-different-products-rule", [
+            count,
+            buyQuantity,
+            buyProductIds,
+            discountPercent,
+            maxUsesPerOrder,
+            item.title,
+            item.subtitle,
+            item.badge,
+          ]);
 
   return {
     id: stableId,
@@ -1713,7 +1757,13 @@ function sanitizeFreeGiftTier(raw: unknown): FreeGiftRule | null {
   const stableId =
     typeof item.id === "string" && item.id
       ? item.id
-      : `legacy-free-gift-rule-${count}`;
+      : buildDeterministicLegacyId("legacy-free-gift-rule", [
+          count,
+          giftQuantity,
+          item.title,
+          item.subtitle,
+          item.badge,
+        ]);
 
   return {
     id: stableId,
@@ -1758,7 +1808,7 @@ function sanitizeLogicBlock(raw: unknown): LogicBlock | null {
       .map((tier) => sanitizeQuantityBreakTier(tier))
       .filter((tier): tier is QuantityBreakTier => tier !== null)
       .sort((a, b) => a.qty - b.qty)
-      .filter((tier, index, arr) => index === arr.findIndex((it) => it.qty === tier.qty));
+      .filter((tier, index, arr) => index === arr.findIndex((it) => it.id === tier.id));
 
     if (tiers.length === 0) return null;
 
@@ -1775,10 +1825,7 @@ function sanitizeLogicBlock(raw: unknown): LogicBlock | null {
       .map((tier) => sanitizeDifferentProductsTier(tier))
       .filter((tier): tier is DifferentProductsDiscountRule => tier !== null)
       .sort((a, b) => a.count - b.count)
-      .filter(
-        (tier, index, arr) =>
-          index === arr.findIndex((it) => it.count === tier.count),
-      );
+      .filter((tier, index, arr) => index === arr.findIndex((it) => it.id === tier.id));
 
     if (tiers.length === 0) return null;
 
@@ -1798,7 +1845,7 @@ function sanitizeLogicBlock(raw: unknown): LogicBlock | null {
       .map((tier) => sanitizeBxgyTier(tier))
       .filter((tier): tier is BxgyDiscountRule => tier !== null)
       .sort((a, b) => a.count - b.count)
-      .filter((tier, index, arr) => index === arr.findIndex((it) => it.count === tier.count));
+      .filter((tier, index, arr) => index === arr.findIndex((it) => it.id === tier.id));
 
     if (tiers.length === 0) return null;
 
@@ -1825,7 +1872,7 @@ function sanitizeLogicBlock(raw: unknown): LogicBlock | null {
       .map((tier) => sanitizeFreeGiftTier(tier))
       .filter((tier): tier is FreeGiftRule => tier !== null)
       .sort((a, b) => a.count - b.count)
-      .filter((tier, index, arr) => index === arr.findIndex((it) => it.count === tier.count));
+      .filter((tier, index, arr) => index === arr.findIndex((it) => it.id === tier.id));
 
     if (triggerProductIds.length === 0 || giftProductIds.length === 0 || tiers.length === 0) {
       return null;
@@ -2122,6 +2169,17 @@ export function migrateLegacyOfferToCampaignConfig(params: {
     subtitle: rule.subtitle || "",
     badge: rule.badge || "",
     isDefault: !!rule.isDefault,
+    discountClass: rule.discountClass,
+    offerKind: rule.offerKind,
+    conditionType: rule.conditionType,
+    amountThreshold: rule.amountThreshold,
+    rewardType: rule.rewardType,
+    rewardProductIds: Array.isArray(rule.rewardProductIds) ? rule.rewardProductIds : [],
+    giftQuantity: rule.giftQuantity,
+    logicType: rule.logicType,
+    buyQuantity: rule.buyQuantity,
+    getQuantity: rule.getQuantity,
+    maxUsesPerOrder: rule.maxUsesPerOrder,
   }));
   const productIds = parseSelectedProductIds(params.selectedProductsJson);
   const logicBlockId = "logic-quantity-breaks";
@@ -2302,7 +2360,7 @@ export function migrateLegacyOfferToCampaignConfig(params: {
     return {
       version: 1,
       scope: {
-        productIds: Array.from(new Set([...triggerProducts, ...giftProducts])),
+        productIds: Array.from(new Set(triggerProducts)),
         markets: targetingMarkets,
         customerSegments: targetingSegments,
         customerProfileFilters: targetingProfileFilters,
@@ -2338,16 +2396,7 @@ export function migrateLegacyOfferToCampaignConfig(params: {
     return {
       version: 1,
       scope: {
-        productIds: Array.from(
-          new Set(
-            [
-              ...(completeBundleConfig.triggerProductIds ?? []),
-              ...completeBundleConfig.bars.flatMap((bar) =>
-                bar.products.map((product) => product.productId),
-              ),
-            ],
-          ),
-        ),
+        productIds: Array.from(new Set(completeBundleConfig.triggerProductIds ?? [])),
         markets: targetingMarkets,
         customerSegments: targetingSegments,
         customerProfileFilters: targetingProfileFilters,
@@ -2594,33 +2643,6 @@ function isOrderDiscountLikeQuantityBreaksBlock(
   );
 }
 
-function pickLegacySelectedProductsModuleOutput(
-  modules: CampaignRuntimeOutputs["modules"],
-): CampaignRuntimeModuleOutput | null {
-  return (
-    modules.quantityBreaksDifferent ||
-    modules.bxgy ||
-    modules.freeGift ||
-    modules.completeBundle ||
-    modules.quantityBreaks ||
-    modules.subscription ||
-    null
-  );
-}
-
-function pickLegacyDiscountRulesModuleOutput(
-  modules: CampaignRuntimeOutputs["modules"],
-): CampaignRuntimeModuleOutput | null {
-  return (
-    modules.quantityBreaks ||
-    modules.quantityBreaksDifferent ||
-    modules.bxgy ||
-    modules.freeGift ||
-    modules.completeBundle ||
-    null
-  );
-}
-
 export function compileCampaignRuntimeOutputs(
   config: CampaignConfig,
 ): CampaignRuntimeOutputs {
@@ -2664,18 +2686,26 @@ export function compileCampaignRuntimeOutputs(
   const differentProductsRules = quantityBreaksDifferent
     ? buildDifferentProductsDiscountRulesJson(quantityBreaksDifferent.config.tiers)
     : [];
+  const quantityBreaksDifferentScopeIds = normalizeUniqueStringList(
+    differentProductsRules.flatMap((tier) => tier.buyProductIds),
+  );
   const quantityBreaksDifferentOutput = quantityBreaksDifferent
     ? finalizeCampaignRuntimeModuleOutput({
         offerType: "quantity-breaks-different",
         selectedProductsJson: JSON.stringify({
-          productIds: config.scope.productIds,
+          productIds:
+            quantityBreaksDifferentScopeIds.length > 0
+              ? quantityBreaksDifferentScopeIds
+              : config.scope.productIds,
         }),
         discountRulesJson:
           differentProductsRules.length > 0
             ? JSON.stringify(differentProductsRules)
             : null,
         referencedProductIds: [
-          ...config.scope.productIds,
+          ...(quantityBreaksDifferentScopeIds.length > 0
+            ? quantityBreaksDifferentScopeIds
+            : config.scope.productIds),
           ...differentProductsRules.flatMap((tier) => tier.buyProductIds),
         ],
         storefrontHydration: "quantity-breaks-different",
@@ -2893,10 +2923,10 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
     couponCode: sanitizeSingleLineText(config.settings.couponCode, 64, ""),
   } satisfies OfferSettings;
   const inferredPrimaryOfferType = runtimeOutputs.primaryOfferType;
-  const selectedProductsModuleOutput =
-    pickLegacySelectedProductsModuleOutput(runtimeOutputs.modules);
-  const discountRulesModuleOutput =
-    pickLegacyDiscountRulesModuleOutput(runtimeOutputs.modules);
+  const primaryModuleOutput =
+    runtimeOutputs.primaryModule ||
+    Object.values(runtimeOutputs.modules).find((moduleOutput) => moduleOutput !== null) ||
+    null;
 
   return {
     offerType:
@@ -2914,8 +2944,8 @@ export function buildLegacyFieldsFromCampaignConfig(config: CampaignConfig): {
                 : subscription
                   ? "subscription"
                   : "campaign-builder"),
-    selectedProductsJson: selectedProductsModuleOutput?.selectedProductsJson ?? null,
-    discountRulesJson: discountRulesModuleOutput?.discountRulesJson ?? null,
+    selectedProductsJson: primaryModuleOutput?.selectedProductsJson ?? null,
+    discountRulesJson: primaryModuleOutput?.discountRulesJson ?? null,
     offerSettingsJson: JSON.stringify(offerSettings),
   };
 }
@@ -3544,7 +3574,7 @@ export function parseFreeGiftRules(discountRulesJson?: string | null): FreeGiftR
 export function buildBxgyDiscountRulesJson(tiers: BxgyDiscountRule[]): BxgyDiscountRule[] {
   const normalizedTiers = normalizeBxgyRules(tiers);
   const singleRule = normalizedTiers.find((tier) => isSingleBxgyRule(tier));
-  const dedupedByCount = new Map<string, BxgyDiscountRule>();
+  const dedupedById = new Map<string, BxgyDiscountRule>();
   for (const tier of normalizedTiers) {
     if (isSingleBxgyRule(tier)) {
       continue;
@@ -3554,7 +3584,7 @@ export function buildBxgyDiscountRulesJson(tiers: BxgyDiscountRule[]): BxgyDisco
       Math.trunc(Number(tier.buyQuantity) || Number(tier.count) || 1),
     );
     if (!Number.isFinite(tier.getQuantity) || tier.getQuantity < 1) continue;
-    dedupedByCount.set(`bxgy|${normalizedBuyQuantity}`, {
+    const normalizedTier: BxgyDiscountRule = {
       id: tier.id || buildDraftRuleId("bxgy_rule"),
       count: normalizedBuyQuantity,
       buyQuantity: normalizedBuyQuantity,
@@ -3572,11 +3602,20 @@ export function buildBxgyDiscountRulesJson(tiers: BxgyDiscountRule[]): BxgyDisco
       subtitle: tier.subtitle || "",
       badge: tier.badge || "",
       isDefault: !!tier.isDefault,
-    });
+    };
+    dedupedById.set(normalizedTier.id || buildDeterministicLegacyId("bxgy-rule", [
+      normalizedTier.buyQuantity,
+      normalizedTier.getQuantity,
+      normalizedTier.buyProductIds,
+      normalizedTier.getProductIds,
+      normalizedTier.title,
+      normalizedTier.subtitle,
+      normalizedTier.badge,
+    ]), normalizedTier);
   }
   return normalizeBxgyRules([
     ...(singleRule ? [singleRule] : []),
-    ...Array.from(dedupedByCount.values()),
+    ...Array.from(dedupedById.values()),
   ]);
 }
 
@@ -3605,32 +3644,48 @@ export function buildDifferentProductsDiscountRulesJson(
 ): DifferentProductsDiscountRule[] {
   const normalizedTiers = normalizeDifferentProductsDiscountRules(tiers);
   const singleRule = normalizedTiers.find((tier) => isSingleDifferentProductsRule(tier));
-  const dedupedByCount = new Map<string, DifferentProductsDiscountRule>();
+  const dedupedById = new Map<string, DifferentProductsDiscountRule>();
   for (const tier of normalizedTiers) {
     if (isSingleDifferentProductsRule(tier)) {
       continue;
     }
     const sanitized = sanitizeDifferentProductsTier(tier);
     if (!sanitized) continue;
-    dedupedByCount.set(`${sanitized.tierType}|${sanitized.count}`, sanitized);
+    dedupedById.set(
+      sanitized.id ||
+        buildDeterministicLegacyId("different-products-rule", [
+          sanitized.tierType,
+          sanitized.count,
+          sanitized.buyQuantity,
+          sanitized.getQuantity,
+          sanitized.buyProductIds,
+          sanitized.getProductIds,
+          sanitized.discountPercent,
+          sanitized.maxUsesPerOrder,
+          sanitized.title,
+          sanitized.subtitle,
+          sanitized.badge,
+        ]),
+      sanitized,
+    );
   }
   return normalizeDifferentProductsDiscountRules([
     ...(singleRule ? [singleRule] : []),
-    ...Array.from(dedupedByCount.values()),
+    ...Array.from(dedupedById.values()),
   ]);
 }
 
 export function buildFreeGiftRulesJson(tiers: FreeGiftRule[]): FreeGiftRule[] {
   const normalizedTiers = normalizeFreeGiftRules(tiers);
   const singleRule = normalizedTiers.find((tier) => isSingleFreeGiftRule(tier));
-  const dedupedByCount = new Map<string, FreeGiftRule>();
+  const dedupedById = new Map<string, FreeGiftRule>();
   for (const tier of normalizedTiers) {
     if (isSingleFreeGiftRule(tier)) {
       continue;
     }
     if (!Number.isFinite(tier.count) || tier.count < 1) continue;
     if (!Number.isFinite(tier.giftQuantity) || tier.giftQuantity < 1) continue;
-    dedupedByCount.set(`gift|${Math.trunc(tier.count)}`, {
+    const normalizedTier: FreeGiftRule = {
       id: tier.id || buildDraftRuleId("free_gift_rule"),
       count: Math.trunc(tier.count),
       giftQuantity: Math.trunc(tier.giftQuantity),
@@ -3642,11 +3697,23 @@ export function buildFreeGiftRulesJson(tiers: FreeGiftRule[]): FreeGiftRule[] {
       subtitle: tier.subtitle || "",
       badge: tier.badge || "",
       isDefault: !!tier.isDefault,
-    });
+    };
+    dedupedById.set(
+      normalizedTier.id ||
+        buildDeterministicLegacyId("free-gift-rule", [
+          normalizedTier.count,
+          normalizedTier.giftQuantity,
+          normalizedTier.giftProductIds,
+          normalizedTier.title,
+          normalizedTier.subtitle,
+          normalizedTier.badge,
+        ]),
+      normalizedTier,
+    );
   }
   return normalizeFreeGiftRules([
     ...(singleRule ? [singleRule] : []),
-    ...Array.from(dedupedByCount.values()),
+    ...Array.from(dedupedById.values()),
   ]);
 }
 

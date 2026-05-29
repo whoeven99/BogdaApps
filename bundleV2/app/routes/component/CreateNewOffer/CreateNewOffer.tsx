@@ -2434,13 +2434,8 @@ export function CreateNewOffer({
     }
 
     const logicBlockId = primaryModule.logicBlockId;
-    let scopeProductIds = Array.from(new Set(primaryModule.scopeIds));
+    const scopeProductIds = Array.from(new Set(primaryModule.scopeIds));
     const logicBlocks: CampaignConfig["logicBlocks"] = [primaryModule.logicBlock];
-    const addScopeProducts = (ids: string[]) => {
-      scopeProductIds = Array.from(
-        new Set([...scopeProductIds, ...ids.map((id) => String(id)).filter(Boolean)]),
-      );
-    };
 
     (Object.entries(moduleDescriptors) as Array<
       [OfferTypeId, (typeof moduleDescriptors)[OfferTypeId]]
@@ -2449,7 +2444,6 @@ export function CreateNewOffer({
         return;
       }
       logicBlocks.push(descriptor.logicBlock);
-      addScopeProducts(descriptor.scopeIds);
     });
 
     return {
