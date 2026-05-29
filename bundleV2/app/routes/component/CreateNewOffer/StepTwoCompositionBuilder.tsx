@@ -24,10 +24,14 @@ import {
   type StepTwoModuleId,
 } from "./campaignCompositionAdapter";
 import CompleteBundleEditor from "./CompleteBundleEditor";
-import { OfferRuleStatusPill } from "./OfferRulesShared";
+import {
+  OfferRuleNotice,
+  OfferRuleStatusPill,
+} from "./OfferRulesShared";
 import { ProgressiveGiftsSection } from "./ProgressiveGiftsSection";
 import SubscriptionSettingsEditor from "./SubscriptionSettingsEditor";
 import type { OfferTypeId } from "./offerTypeOptions";
+import type { UnifiedRuleAuditIssue } from "./unifiedRulesValidation";
 
 type Props = {
   draft: CampaignDraft;
@@ -50,6 +54,7 @@ type Props = {
   setCountdownLabel: (value: string) => void;
   onMoveBarUp: (barId: string) => void;
   onMoveBarDown: (barId: string) => void;
+  auditWarnings: UnifiedRuleAuditIssue[];
   renderCompleteBundleProductPricingCard: (
     bar: CampaignDraft["completeBundleBars"][number],
     product: CompleteBundleProduct,
@@ -179,9 +184,7 @@ function findDiscountRuleIndex(
   rules: CampaignDraft["discountRules"],
   ruleId: string,
 ) {
-  return rules.findIndex((entry, index) =>
-    matchesBarRuleId(entry, index, "discount-rule", ruleId),
-  );
+  return rules.findIndex((entry) => entry.id === ruleId);
 }
 
 function findBxgyRuleIndex(
@@ -683,6 +686,7 @@ function BxgyRuleBarDetail({
 
 function FreeGiftRuleBarDetail({
   bar,
+  draft,
   rule,
   actions,
   ruleIndex,
@@ -690,12 +694,17 @@ function FreeGiftRuleBarDetail({
   onChange,
 }: {
   bar: CampaignBarItem;
+  draft: CampaignDraft;
   rule: CampaignDraft["freeGiftRules"][number];
   actions: CampaignDraftActions;
   ruleIndex: number;
   headerActions?: ReactNode;
   onChange: (patch: Partial<CampaignDraft["freeGiftRules"][number]>) => void;
 }) {
+  const effectiveGiftProductIds =
+    Array.isArray(rule.giftProductIds) && rule.giftProductIds.length > 0
+      ? rule.giftProductIds
+      : draft.freeGiftSharedGiftProductIds;
   return (
     <BuilderBarCard bar={bar} actions={headerActions}>
       <BuilderSection title="Reward trigger">
@@ -719,7 +728,7 @@ function FreeGiftRuleBarDetail({
       >
         <CompactActionRow
           title="Reward products"
-          meta={`${(rule.giftProductIds || []).length} selected for this reward`}
+          meta={`${effectiveGiftProductIds.length} selected for this reward`}
           actionLabel="Edit reward products"
           onAction={() => void actions.selectFreeGiftRewardProducts(ruleIndex)}
         />
@@ -1001,6 +1010,7 @@ export default function StepTwoCompositionBuilder({
   setCountdownLabel,
   onMoveBarUp,
   onMoveBarDown,
+  auditWarnings,
   renderCompleteBundleProductPricingCard,
   preview,
 }: Props) {
@@ -1294,7 +1304,7 @@ export default function StepTwoCompositionBuilder({
       const rule = targetRuleIndex >= 0 ? draft.discountRules[targetRuleIndex] : null;
       if (!rule) {
         // #region debug-point D:missing-discount-rule
-        fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"step2-add-bar",runId:"pre-fix",hypothesisId:"D",location:"StepTwoCompositionBuilder.tsx:1207",msg:"[DEBUG] unifiedRule resolved but draft.discountRules lookup failed",data:{ruleId:unifiedRule.id,sourceOfferType:unifiedRule.sourceOfferType,discountRuleIds:draft.discountRules.map((entry,index)=>entry.id||`discount-rule-${index + 1}`)},ts:Date.now()})}).catch(()=>{});
+        fetch("http://127.0.0.1:7777/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId:"step2-add-bar",runId:"pre-fix",hypothesisId:"D",location:"StepTwoCompositionBuilder.tsx:1207",msg:"[DEBUG] unifiedRule resolved but draft.discountRules lookup failed",data:{ruleId:unifiedRule.id,sourceOfferType:unifiedRule.sourceOfferType,discountRuleIds:draft.discountRules.map((entry)=>entry.id || "")},ts:Date.now()})}).catch(()=>{});
         // #endregion
         return null;
       }
@@ -1426,6 +1436,7 @@ export default function StepTwoCompositionBuilder({
         <FreeGiftRuleBarDetail
           key={bar.id}
           bar={bar}
+          draft={draft}
           rule={rule}
           actions={actions}
           ruleIndex={targetRuleIndex}
@@ -1813,6 +1824,19 @@ export default function StepTwoCompositionBuilder({
                     />
                   )
                   : null}
+                {auditWarnings.length > 0 ? (
+                  <div className="space-y-3">
+                    {auditWarnings.map((issue, index) => (
+                      <OfferRuleNotice
+                        key={`${issue.code || "warning"}-${index}`}
+                        intent="warning"
+                        title="Shared Pool Reachability"
+                      >
+                        {issue.message}
+                      </OfferRuleNotice>
+                    ))}
+                  </div>
+                ) : null}
                 {!showGlobalProductPool ? (
                   <QuietEmptyState>
                     Shared trigger product selection appears here when the campaign needs it.

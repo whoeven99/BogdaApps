@@ -8,6 +8,7 @@ import {
 
 export type UnifiedRuleAuditIssue = {
   severity: "error" | "warning";
+  code?: string;
   message: string;
 };
 
@@ -21,19 +22,34 @@ function isNonBlockingDraftOnlyRule(rule: UnifiedRuleNode): boolean {
   return rule.type === "single_purchase";
 }
 
+function getDifferentProductsRequiredSelectionCount(rule: UnifiedRuleNode): number {
+  if (rule.sourceOfferType !== "quantity-breaks-different") return 0;
+  if (rule.condition.kind === "item_quantity") {
+    return Math.max(1, Math.trunc(Number(rule.condition.count) || 1));
+  }
+  if (rule.condition.kind === "buy_x_get_y") {
+    return Math.max(1, Math.trunc(Number(rule.condition.triggerCount) || 1));
+  }
+  return 0;
+}
+
 export function getUnifiedRuleAuditIssuesForRules(
   draft: CampaignDraft,
   rules: UnifiedRuleNode[],
 ): UnifiedRuleAuditIssue[] {
   const issues: UnifiedRuleAuditIssue[] = [];
-  const differentProductsSharedPoolIds =
+  const differentProductsSharedPoolProducts =
     draft.differentProductsSharedPoolProductsData.length > 0
-      ? draft.differentProductsSharedPoolProductsData.map((product) => String(product.id))
-      : draft.selectedProductsData.map((product) => String(product.id));
+      ? draft.differentProductsSharedPoolProductsData
+      : draft.selectedProductsData;
+  const differentProductsSharedPoolIds = differentProductsSharedPoolProducts.map((product) =>
+    String(product.id),
+  );
 
   if (rules.length === 0) {
     issues.push({
       severity: "warning",
+      code: "empty_rules",
       message: "No rules are configured yet.",
     });
     return issues;
@@ -112,6 +128,36 @@ export function getUnifiedRuleAuditIssuesForRules(
       message:
         "Cross-product bars require a shared product pool before continuing.",
     });
+  }
+
+  const differentProductsRules = rules.filter(
+    (rule) =>
+      rule.sourceOfferType === "quantity-breaks-different" &&
+      rule.type !== "single_purchase",
+  );
+  if (differentProductsRules.length > 0 && differentProductsSharedPoolProducts.length > 0) {
+    const highestRequiredSelectionCount = Math.max(
+      ...differentProductsRules.map(getDifferentProductsRequiredSelectionCount),
+    );
+    const sharedPoolProductCount = differentProductsSharedPoolProducts.length;
+    const sharedPoolSelectableCapacity = differentProductsSharedPoolProducts.reduce(
+      (sum, product) => sum + Math.max(1, Math.trunc(Number(product.variantsCount) || 1)),
+      0,
+    );
+
+    if (sharedPoolSelectableCapacity < highestRequiredSelectionCount) {
+      issues.push({
+        severity: "warning",
+        code: "different_products_pool_capacity",
+        message: `The largest cross-product bar requires ${highestRequiredSelectionCount} selections, but the current shared offer pool only exposes up to ${sharedPoolSelectableCapacity} product/variant choices.`,
+      });
+    } else if (sharedPoolProductCount < highestRequiredSelectionCount) {
+      issues.push({
+        severity: "warning",
+        code: "different_products_pool_variants",
+        message: `The largest cross-product bar requires ${highestRequiredSelectionCount} selections. With only ${sharedPoolProductCount} product${sharedPoolProductCount === 1 ? "" : "s"} in the shared offer pool, shoppers will need multiple variants of the same product to reach it.`,
+      });
+    }
   }
 
   const hasBundleBarGap = rules.some(

@@ -8,6 +8,7 @@ import type {
   QuantityBreakTier,
 } from "../../../utils/offerParsing";
 import {
+  buildDraftRuleId,
   inferBxgySubtitleSource,
   inferBxgyTitleSource,
   inferCompleteBundleSubtitleSource,
@@ -79,7 +80,7 @@ function buildDiscountRuleFromTier(
   index: number,
 ): DiscountRule {
   return {
-    id: tier.id || `discount-rule-${index + 1}`,
+    id: tier.id || buildDraftRuleId("discount_rule"),
     count: Math.max(1, Math.trunc(Number(tier.qty) || 1)),
     discountPercent: Math.max(0, Math.min(100, Number(tier.discountPercent) || 0)),
     tierType: "standard",

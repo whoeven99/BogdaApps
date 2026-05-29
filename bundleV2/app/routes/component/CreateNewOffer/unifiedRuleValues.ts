@@ -33,9 +33,9 @@ export type UnifiedRuleValuePatch = Partial<
 
 export function getUnifiedDiscountRuleId(
   rule: Pick<DiscountRule, "id">,
-  index: number,
+  _index: number,
 ): string {
-  return rule.id || `discount-rule-${index + 1}`;
+  return rule.id || "";
 }
 
 export function getBxgyUnifiedRuleId(

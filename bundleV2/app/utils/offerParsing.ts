@@ -898,7 +898,7 @@ export function normalizeDiscountRules(rules: DiscountRule[]): DiscountRule[] {
         : "percentage_off";
     offerRules.push({
       ...rule,
-      id: rule.id || `discount-rule-${offerRules.length + 1}`,
+      id: rule.id || buildDraftRuleId("discount_rule"),
       count: Math.max(1, Math.trunc(Number(rule.count) || 1)),
       discountPercent: Math.max(0, Math.min(100, Number(rule.discountPercent) || 0)),
       tierType: "standard",
@@ -936,7 +936,7 @@ export function normalizeDiscountRules(rules: DiscountRule[]): DiscountRule[] {
         })
       : {
           ...rule,
-          id: rule.id || `discount-rule-${index}`,
+          id: rule.id || buildDraftRuleId("discount_rule"),
           tierType: "standard",
           isDefault: defaultKey ? rule.id === defaultKey : index === 1,
         },

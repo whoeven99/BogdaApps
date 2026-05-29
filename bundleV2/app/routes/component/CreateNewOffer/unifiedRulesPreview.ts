@@ -22,6 +22,7 @@ type BuildPreviewParams = {
   offerType: OfferTypeId;
   rules: UnifiedRuleNode[];
   selectedProducts: SelectedPreviewProduct[];
+  differentProductsSharedPoolProductIds?: string[];
   completeBundleBars: CompleteBundleBar[];
   baseUnitPrice: number;
   formatPrice: (value: number) => string;
@@ -170,12 +171,18 @@ function buildDifferentProductsItem(
     return buildSinglePurchaseItem(rule, index, params);
   }
   const featured = getFeaturedState(params.rules, index);
-  const productPoolIds =
+  const ruleScopedProductIds =
     rule.scope.kind === "shared_product_pool"
       ? rule.scope.productIds
       : rule.scope.kind === "buy_get_products"
         ? rule.scope.buyProductIds
         : [];
+  const productPoolIds =
+    rule.sourceOfferType === "quantity-breaks-different" &&
+    Array.isArray(params.differentProductsSharedPoolProductIds) &&
+    params.differentProductsSharedPoolProductIds.length > 0
+      ? params.differentProductsSharedPoolProductIds
+      : ruleScopedProductIds;
   const scopedProducts = mapDifferentProductsPool(productPoolIds, params.selectedProducts);
   const scopedCount = productPoolIds.length;
   const display = resolveBuilderDifferentProductsDisplay(rule, {

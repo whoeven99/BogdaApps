@@ -114,6 +114,8 @@ import {
   updateUnifiedDiscountRuleValues,
 } from "./unifiedRuleValues";
 import {
+  getUnifiedRuleAuditIssues,
+  getUnifiedRuleAuditIssuesForRules,
   getUnifiedRuleBlockingMessageForRules,
   getUnifiedRuleBlockingMessage,
 } from "./unifiedRulesValidation";
@@ -815,19 +817,37 @@ export function CreateNewOffer({
       selectedSourceOfferType === "free-gift"
         ? parseFreeGiftSelectedProducts(selectedProductsJson)
         : { triggerProducts: [], giftProducts: [] };
+    const persistedFreeGiftSelectedProducts =
+      selectedSourceOfferType === "free-gift"
+        ? parseFreeGiftSelectedProducts(initialFreeGiftSelectedProductsJson)
+        : { triggerProducts: [], giftProducts: [] };
     const completeBundleSelectedProducts =
       selectedSourceOfferType === "complete-bundle"
         ? parseCompleteBundleConfig(selectedProductsJson)
         : { triggerProductIds: [], bars: [] };
+    const parsedBxgyRules = normalizeBxgyRules(
+      starterTemplateDefaults?.bxgyDiscountRules ??
+        parseBxgyDiscountRules(initialCampaignRuntimeOutputs?.modules.bxgy?.discountRulesJson ?? null),
+    );
+    const bxgyRuleBuyProducts = Array.from(
+      new Set(
+        parsedBxgyRules.flatMap((rule) =>
+          Array.isArray(rule.buyProductIds) ? rule.buyProductIds.map(String) : [],
+        ),
+      ),
+    );
     const bxgyBuyProducts =
-      selectedSourceOfferType === "bxgy" && selectedProductsJson
+      selectedSourceOfferType === "bxgy"
         ? (() => {
-            try {
-              const parsed = JSON.parse(selectedProductsJson);
-              return Array.isArray(parsed?.buyProducts) ? parsed.buyProducts.map(String) : [];
-            } catch {
-              return [];
+            if (selectedProductsJson) {
+              try {
+                const parsed = JSON.parse(selectedProductsJson);
+                if (Array.isArray(parsed?.buyProducts) && parsed.buyProducts.length > 0) {
+                  return parsed.buyProducts.map(String);
+                }
+              } catch {}
             }
+            return bxgyRuleBuyProducts;
           })()
         : [];
     const selectedProductIds =
@@ -902,19 +922,7 @@ export function CreateNewOffer({
           : [],
     );
 
-    const freeGiftSharedGiftProductIds =
-      selectedSourceOfferType === "free-gift"
-        ? parseFreeGiftSelectedProducts(initialFreeGiftSelectedProductsJson).giftProducts
-        : [];
-    const discountRules = normalizeDiscountRules(
-      starterTemplateDefaults?.discountRules ??
-        parseDiscountRules(initialCampaignRuntimeOutputs?.modules.quantityBreaks?.discountRulesJson ?? null),
-    );
-    const bxgyDiscountRules = normalizeBxgyRules(
-      starterTemplateDefaults?.bxgyDiscountRules ??
-        parseBxgyDiscountRules(initialCampaignRuntimeOutputs?.modules.bxgy?.discountRulesJson ?? null),
-    );
-    const freeGiftRules = normalizeFreeGiftRules(
+    const parsedFreeGiftRules = normalizeFreeGiftRules(
       (
         starterTemplateDefaults?.freeGiftRules ??
         parseFreeGiftRules(initialCampaignRuntimeOutputs?.modules.freeGift?.discountRulesJson ?? null)
@@ -927,6 +935,27 @@ export function CreateNewOffer({
             },
       ),
     );
+    const freeGiftRuleGiftProductIds = Array.from(
+      new Set(
+        parsedFreeGiftRules.flatMap((rule) =>
+          Array.isArray(rule.giftProductIds) ? rule.giftProductIds.map(String) : [],
+        ),
+      ),
+    );
+    const freeGiftSharedGiftProductIds =
+      selectedSourceOfferType === "free-gift"
+        ? persistedFreeGiftSelectedProducts.giftProducts.length > 0
+          ? persistedFreeGiftSelectedProducts.giftProducts
+          : freeGiftSelectedProducts.giftProducts.length > 0
+            ? freeGiftSelectedProducts.giftProducts
+            : freeGiftRuleGiftProductIds
+        : [];
+    const discountRules = normalizeDiscountRules(
+      starterTemplateDefaults?.discountRules ??
+        parseDiscountRules(initialCampaignRuntimeOutputs?.modules.quantityBreaks?.discountRulesJson ?? null),
+    );
+    const bxgyDiscountRules = parsedBxgyRules;
+    const freeGiftRules = parsedFreeGiftRules;
     const differentProductsDiscountRules = normalizeDifferentProductsDiscountRules(
       starterTemplateDefaults?.differentProductsDiscountRules ?? parsedDifferentProductsRules,
     );
@@ -942,7 +971,9 @@ export function CreateNewOffer({
       buyProducts: bxgyBuyProducts,
       freeGiftTriggerProducts:
         selectedSourceOfferType === "free-gift"
-          ? parseFreeGiftSelectedProducts(initialFreeGiftSelectedProductsJson).triggerProducts
+          ? persistedFreeGiftSelectedProducts.triggerProducts.length > 0
+            ? persistedFreeGiftSelectedProducts.triggerProducts
+            : freeGiftSelectedProducts.triggerProducts
           : [],
     };
   }, [
@@ -1448,6 +1479,10 @@ export function CreateNewOffer({
   const handleSelectProducts = async (
     type: "buy" | "gift" | "normal" = "normal",
   ) => {
+    const giftSelectionIds =
+      freeGiftSharedGiftProductIds.length > 0
+        ? freeGiftSharedGiftProductIds
+        : aggregatedFreeGiftRewardProductIds;
     const selected = await (window as any).shopify.resourcePicker({
       type: "product",
       action: "select",
@@ -1457,7 +1492,7 @@ export function CreateNewOffer({
         type === "buy"
           ? buyProducts.map((id) => ({ id }))
           : type === "gift"
-            ? aggregatedFreeGiftRewardProductIds.map((id) => ({ id }))
+            ? giftSelectionIds.map((id) => ({ id }))
               : selectedProductsData.map((p) => ({ id: p.id })),
     });
 
@@ -1539,6 +1574,12 @@ export function CreateNewOffer({
       behaviorOfferType === "subscription" ? products.slice(0, 1) : products;
     const nextIds = nextProducts.map((product) => String(product.id));
     setSelectedProductsData(nextProducts);
+    if (behaviorOfferType === "quantity-breaks-different") {
+      setDifferentProductsSharedPoolProductsData(nextProducts);
+      setDifferentProductsDiscountRules((prev) =>
+        prev.map((rule) => normalizeDifferentProductsRuleToSharedPool(rule, nextIds)),
+      );
+    }
     if (bxgyDiscountRules.length > 0 || behaviorOfferType === "bxgy") {
       setBuyProducts(nextIds);
     }
@@ -1559,13 +1600,16 @@ export function CreateNewOffer({
     selectionProductIds?: string[],
     meta?: TriggerSelectionMeta,
   ) => {
+    const currentStepTwoPoolIds =
+      behaviorOfferType === "quantity-breaks-different" &&
+      differentProductsSharedPoolProductsData.length > 0
+        ? differentProductsSharedPoolProductsData.map((product) => String(product.id))
+        : selectedProductsData.map((product) => String(product.id));
     const selected = await (window as any).shopify.resourcePicker({
       type: "product",
       action: "select",
       multiple: behaviorOfferType === "subscription" ? false : true,
-      selectionIds: (selectionProductIds || selectedProductsData.map((product) => String(product.id))).map(
-        (id) => ({ id }),
-      ),
+      selectionIds: (selectionProductIds || currentStepTwoPoolIds).map((id) => ({ id })),
     });
     if (!selected) return;
     const selectedList = normalizeResourcePickerSelection(selected);
@@ -1843,6 +1887,16 @@ export function CreateNewOffer({
       ),
     [freeGiftSharedGiftProductIds, freeGiftRules],
   );
+  useEffect(() => {
+    if (freeGiftRules.length === 0) return;
+    if (freeGiftSharedGiftProductIds.length > 0) return;
+    if (aggregatedFreeGiftRewardProductIds.length === 0) return;
+    setFreeGiftSharedGiftProductIds(aggregatedFreeGiftRewardProductIds);
+  }, [
+    freeGiftRules.length,
+    freeGiftSharedGiftProductIds,
+    aggregatedFreeGiftRewardProductIds,
+  ]);
   const freeGiftSharedGiftProductsData = useMemo(
     () => mapProductIdsToDraftProducts(freeGiftSharedGiftProductIds),
     [freeGiftSharedGiftProductIds, storeProducts],
@@ -2778,6 +2832,23 @@ export function CreateNewOffer({
       ...orderedCompositionRulesSnapshot.filter((rule) => rule.type !== "single_purchase"),
     ];
   }, [behaviorOfferType, orderedCompositionRulesSnapshot]);
+  const stepTwoAuditIssues = useMemo(
+    () =>
+      hasMixedCompositionSources
+        ? getUnifiedRuleAuditIssuesForRules(campaignDraft, compositionRulesSnapshot)
+        : getUnifiedRuleAuditIssues(campaignDraft),
+    [campaignDraft, compositionRulesSnapshot, hasMixedCompositionSources],
+  );
+  const stepTwoPoolWarnings = useMemo(
+    () =>
+      stepTwoAuditIssues.filter(
+        (issue) =>
+          issue.severity === "warning" &&
+          (issue.code === "different_products_pool_capacity" ||
+            issue.code === "different_products_pool_variants"),
+      ),
+    [stepTwoAuditIssues],
+  );
   const getModuleBlockingMessage = () => {
     if (
       completeBundleBars.some((bar) => !isCompleteBundleSingleBar(bar)) &&
@@ -2951,6 +3022,9 @@ export function CreateNewOffer({
       .format("YYYY-MM-DD HH:mm")}`;
   }, [countdownLabel, endTime, scheduleTimezone, showCountdownBlock]);
   const previewItems: PreviewItem[] = useMemo(() => {
+    const differentProductsSharedPoolProductIds = differentProductsSharedPoolProductsData.map(
+      (product) => String(product.id),
+    );
     if (behaviorOfferType === "complete-bundle") {
       return buildUnifiedPreviewItems({
         offerType: behaviorOfferType,
@@ -2971,6 +3045,7 @@ export function CreateNewOffer({
             ),
           ).values(),
         ),
+        differentProductsSharedPoolProductIds,
         completeBundleBars,
         baseUnitPrice,
         formatPrice: formatPreviewPrice,
@@ -3000,6 +3075,7 @@ export function CreateNewOffer({
       ? buildCompositionPreviewItems({
           rules: activeDisplayRules,
           selectedProducts: previewSelectedProducts,
+          differentProductsSharedPoolProductIds,
           completeBundleBars,
           baseUnitPrice,
           formatPrice: formatPreviewPrice,
@@ -3008,6 +3084,7 @@ export function CreateNewOffer({
           offerType: behaviorOfferType,
           rules: activeDisplayRules,
           selectedProducts: previewSelectedProducts,
+          differentProductsSharedPoolProductIds,
           completeBundleBars,
           baseUnitPrice,
           formatPrice: formatPreviewPrice,
@@ -3722,6 +3799,7 @@ export function CreateNewOffer({
                     return next;
                   })
                 }
+                auditWarnings={stepTwoPoolWarnings}
                 renderCompleteBundleProductPricingCard={
                   renderCompleteBundleProductPricingCard
                 }

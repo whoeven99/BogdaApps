@@ -326,6 +326,7 @@ function buildDefaultDiscountRule(
 ): DraftDiscountRule {
   if (type === "bxgy") {
     return {
+      id: buildDraftRuleId("discount_rule"),
       count: 2,
       discountPercent: 100,
       title: "",
@@ -344,6 +345,7 @@ function buildDefaultDiscountRule(
 
   if (type === "free_gift") {
     return {
+      id: buildDraftRuleId("discount_rule"),
       count: 2,
       discountPercent: 0,
       title: "",
@@ -359,6 +361,7 @@ function buildDefaultDiscountRule(
 
   if (offerType === "shipping-discount") {
     return {
+      id: buildDraftRuleId("discount_rule"),
       count: 2,
       discountPercent: 0,
       title: "",
@@ -374,6 +377,7 @@ function buildDefaultDiscountRule(
 
   if (offerType === "order-discount") {
     return {
+      id: buildDraftRuleId("discount_rule"),
       count: 2,
       discountPercent: 10,
       title: "",
@@ -389,6 +393,7 @@ function buildDefaultDiscountRule(
 
   if (offerType === "coupon") {
     return {
+      id: buildDraftRuleId("discount_rule"),
       count: 2,
       discountPercent: 15,
       title: "",
@@ -403,6 +408,7 @@ function buildDefaultDiscountRule(
   }
 
   return {
+    id: buildDraftRuleId("discount_rule"),
     count: 2,
     discountPercent: 10,
     title: "",
@@ -545,9 +551,7 @@ export function removeCampaignCompositionBar(
 ) {
   switch (bar.sourceRef.collection) {
     case "discountRules":
-      actions.setDiscountRules((prev) =>
-        prev.filter((rule, index) => (rule.id || `discount-rule-${index + 1}`) !== bar.sourceRef.ruleId),
-      );
+      actions.setDiscountRules((prev) => prev.filter((rule) => rule.id !== bar.sourceRef.ruleId));
       return;
     case "differentProductsDiscountRules":
       actions.setDifferentProductsDiscountRules((prev) =>
