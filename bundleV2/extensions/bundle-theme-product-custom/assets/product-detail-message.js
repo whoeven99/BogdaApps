@@ -581,20 +581,12 @@ function getDefaultSellingPlanId() {
   if (subscriptionState.sellingPlanId) {
     return subscriptionState.sellingPlanId;
   }
-  const data = getCurrentProductSubscriptionData();
-  // 中文注释：遍历所有 selling_plan_groups，拿到第一个有效的 selling_plan.id
-  for (const group of data.sellingPlanGroups) {
-    const plans = Array.isArray(group?.sellingPlans) ? group.sellingPlans : [];
-    const firstPlan = plans.find(
-      (plan) => plan && (plan.id !== undefined && plan.id !== null && plan.id !== ""),
-    );
-    if (firstPlan?.id !== undefined && firstPlan?.id !== null) {
-      return String(firstPlan.id);
-    }
-  }
   console.warn(
-    "[ciwi][subscription] getDefaultSellingPlanId: no selling plan id found",
-    { sellingPlanGroups: data.sellingPlanGroups },
+    "[ciwi][subscription] getDefaultSellingPlanId: current variant has no selling plan id",
+    {
+      variantId: getCurrentVariantConfig()?.id,
+      availablePlans: subscriptionState.availablePlans,
+    },
   );
   return "";
 }
@@ -5334,7 +5326,7 @@ function renderBundlePreviewHtml(offer) {
         offerSettings.subscriptionSubtitle ||
         "Subscription pricing updates from your selling plan";
       const oneTimeTitle = "One-time purchase";
-      const configuredOneTimeSubtitle = "Buy once at the current product price";
+      const configuredOneTimeSubtitle = "Uses the current product price";
       const subscriptionDefaultSelected = false;
       const defaultMode =
         subscriptionDefaultSelected && defaultSellingPlanId
@@ -5362,7 +5354,7 @@ function renderBundlePreviewHtml(offer) {
       const subscriptionSubtitle =
         subscriptionState.sellingPlanName || configuredSubscriptionSubtitle;
       const oneTimeSubtitle =
-        configuredOneTimeSubtitle || "Buy once at the current product price";
+        configuredOneTimeSubtitle || "Uses the current product price";
       const subscriptionPlanSelectorHtml =
         selectedMode === "subscription" && subscriptionState.availablePlans.length > 1
           ? `<div class="ciwi-subscription-plan-list">

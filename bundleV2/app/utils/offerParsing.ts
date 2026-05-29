@@ -312,9 +312,9 @@ export type OfferSettings = {
   subscriptionPosition: typeof FIXED_SUBSCRIPTION_POSITION;
   subscriptionTitle: string;
   subscriptionSubtitle: string;
-  oneTimeTitle: string;
-  oneTimeSubtitle: string;
-  subscriptionDefaultSelected: boolean;
+  oneTimeTitle: typeof FIXED_ONE_TIME_TITLE;
+  oneTimeSubtitle: typeof FIXED_ONE_TIME_SUBTITLE;
+  subscriptionDefaultSelected: typeof FIXED_SUBSCRIPTION_DEFAULT_SELECTED;
   compositionBarOrder?: string[];
   scheduleTimezone?: string;
   checkboxUpsellsEnabled: boolean;
@@ -1355,12 +1355,12 @@ export type SubscriptionLogicBlock = {
   type: "subscription";
   config: {
     enabled: boolean;
-    position: "below-bundle-bars";
+    position: typeof FIXED_SUBSCRIPTION_POSITION;
     title: string;
     subtitle: string;
-    oneTimeTitle: string;
-    oneTimeSubtitle: string;
-    defaultSelected: boolean;
+    oneTimeTitle: typeof FIXED_ONE_TIME_TITLE;
+    oneTimeSubtitle: typeof FIXED_ONE_TIME_SUBTITLE;
+    defaultSelected: typeof FIXED_SUBSCRIPTION_DEFAULT_SELECTED;
     productIds: string[];
   };
 };

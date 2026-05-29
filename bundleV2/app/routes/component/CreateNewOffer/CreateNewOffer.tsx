@@ -1188,6 +1188,8 @@ export function CreateNewOffer({
   );
   const [subscriptionPreviewSnapshot, setSubscriptionPreviewSnapshot] =
     useState<SubscriptionPreviewSnapshot | null>(null);
+  const effectiveSubscriptionEnabled =
+    behaviorOfferType === "subscription" ? true : subscriptionEnabled;
   const [widgetTitle, setWidgetTitle] = useState(offerSettings.title);
   const [customerSegments, setCustomerSegments] = useState<string[]>(
     normalizeCustomerSegments(
@@ -2349,8 +2351,7 @@ export function CreateNewOffer({
 
   useEffect(() => {
     const previewProductId = String(selectedProductsData[0]?.id || "");
-    const shouldResolveSubscriptionPreview =
-      behaviorOfferType === "subscription" || subscriptionEnabled;
+    const shouldResolveSubscriptionPreview = effectiveSubscriptionEnabled;
     if (!shouldResolveSubscriptionPreview) {
       if (subscriptionPreviewSnapshot !== null) {
         setSubscriptionPreviewSnapshot(null);
@@ -2378,7 +2379,7 @@ export function CreateNewOffer({
     );
   }, [
     behaviorOfferType,
-    selectedProductsData,
+    effectiveSubscriptionEnabled,
     subscriptionEnabled,
     subscriptionPreviewSnapshot,
     subscriptionStatusFetcher,
@@ -2462,7 +2463,7 @@ export function CreateNewOffer({
       freeGiftSharedGiftProductIds,
       aggregatedFreeGiftRewardProductIds,
       completeBundleBars,
-      subscriptionEnabled,
+      subscriptionEnabled: effectiveSubscriptionEnabled,
       subscriptionTitle,
       subscriptionSubtitle,
     });
@@ -2591,7 +2592,7 @@ export function CreateNewOffer({
     showCustomButton,
     startTime,
     status,
-    subscriptionEnabled,
+    effectiveSubscriptionEnabled,
     subscriptionSubtitle,
     subscriptionTitle,
     stickyAddToCartEnabled,
@@ -2618,7 +2619,7 @@ export function CreateNewOffer({
       selectedProductsData.every((item) => item.hasSubscription),
     [selectedProductsData],
   );
-  const shouldShowSubscriptionPreview = subscriptionEnabled;
+  const shouldShowSubscriptionPreview = effectiveSubscriptionEnabled;
   const subscriptionPreviewStyle = "solid";
   const shouldShowSubscriptionExplanation = false;
   const subscriptionExplanationTitle = "";
@@ -2635,9 +2636,7 @@ export function CreateNewOffer({
   const previewSubscriptionPlans = previewSubscriptionSnapshot?.plans ?? [];
   const previewPrimarySubscriptionPlan = previewSubscriptionPlans[0] ?? null;
   const previewOneTimeTitle = "One-time purchase";
-  const previewOneTimeSubtitle = previewSubscriptionProduct
-    ? "Buy once at the current product price"
-    : "Uses the current product price";
+  const previewOneTimeSubtitle = FIXED_ONE_TIME_SUBTITLE;
   const previewSubscriptionTitle = subscriptionTitle || "Subscribe & Save";
   const previewSubscriptionSubtitle =
     previewPrimarySubscriptionPlan?.billingLabel ||
@@ -2712,7 +2711,7 @@ export function CreateNewOffer({
       freeGiftSharedGiftProductIds,
       aggregatedFreeGiftRewardProductIds,
       completeBundleBars,
-      subscriptionEnabled,
+      subscriptionEnabled: effectiveSubscriptionEnabled,
       subscriptionTitle,
       subscriptionSubtitle,
     });
@@ -2744,7 +2743,7 @@ export function CreateNewOffer({
     freeGiftSharedGiftProductIds,
     aggregatedFreeGiftRewardProductIds,
     completeBundleBars,
-    subscriptionEnabled,
+    effectiveSubscriptionEnabled,
     subscriptionTitle,
     subscriptionSubtitle,
   ]);
@@ -2790,7 +2789,7 @@ export function CreateNewOffer({
       bxgyDiscountRules,
       differentProductsDiscountRules,
       freeGiftRules,
-      subscriptionEnabled,
+      subscriptionEnabled: effectiveSubscriptionEnabled,
       unifiedRulesSnapshot,
     }),
     [
@@ -2824,7 +2823,7 @@ export function CreateNewOffer({
       bxgyDiscountRules,
       differentProductsDiscountRules,
       freeGiftRules,
-      subscriptionEnabled,
+      effectiveSubscriptionEnabled,
       unifiedRulesSnapshot,
       previewOneTimePrice,
       previewSubscriptionPriceText,
@@ -2904,7 +2903,7 @@ export function CreateNewOffer({
     [stepTwoAuditIssues],
   );
   const getModuleBlockingMessage = () => {
-    if (subscriptionEnabled || behaviorOfferType === "subscription") {
+    if (effectiveSubscriptionEnabled) {
       if (selectedProductsData.length === 0) {
         return "Subscription module requires at least one product in the product pool.";
       }
@@ -3572,7 +3571,7 @@ export function CreateNewOffer({
       <input
         type="hidden"
         name="subscriptionEnabled"
-        value={subscriptionEnabled ? "true" : "false"}
+        value={effectiveSubscriptionEnabled ? "true" : "false"}
       />
       <input type="hidden" name="subscriptionTitle" value={subscriptionTitle} />
       <input

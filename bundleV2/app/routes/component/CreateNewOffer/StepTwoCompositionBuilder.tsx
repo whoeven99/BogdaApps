@@ -1016,8 +1016,9 @@ export default function StepTwoCompositionBuilder({
 }: Props) {
   const [activeModuleId, setActiveModuleId] = useState<ActiveModuleId>(null);
   const isProgressiveGiftsTemplate = templateOfferType === "progressive-gifts";
+  const isPrimarySubscriptionTemplate = templateOfferType === "subscription";
   const primaryOfferOptionId =
-    templateOfferType === "subscription"
+    isPrimarySubscriptionTemplate
       ? "subscription"
       : templateOfferType === "complete-bundle"
         ? "complete_bundle"
@@ -1655,7 +1656,7 @@ export default function StepTwoCompositionBuilder({
           title: "Subscription option",
           description: "Add a recurring purchase choice alongside the one-time path.",
           enabled: draft.subscriptionEnabled,
-          toggleable: true,
+          toggleable: !isPrimarySubscriptionTemplate,
           detail: (
             <SubscriptionSettingsEditor
               subscriptionEnabled={draft.subscriptionEnabled}

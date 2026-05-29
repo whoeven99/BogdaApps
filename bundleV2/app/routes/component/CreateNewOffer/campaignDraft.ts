@@ -1,6 +1,10 @@
 import type {
   CompleteBundleBar,
   DifferentProductsDiscountRule,
+  FIXED_ONE_TIME_SUBTITLE,
+  FIXED_ONE_TIME_TITLE,
+  FIXED_SUBSCRIPTION_DEFAULT_SELECTED,
+  FIXED_SUBSCRIPTION_POSITION,
   FreeGiftRule,
   ProgressiveGiftsConfig,
 } from "../../../utils/offerParsing";
@@ -84,10 +88,10 @@ export type CampaignDraft = {
   subscriptionEnabled: boolean;
   subscriptionTitle: string;
   subscriptionSubtitle: string;
-  oneTimeTitle: string;
-  oneTimeSubtitle: string;
-  subscriptionPosition: "below-bundle-bars";
-  subscriptionDefaultSelected: boolean;
+  oneTimeTitle: typeof FIXED_ONE_TIME_TITLE;
+  oneTimeSubtitle: typeof FIXED_ONE_TIME_SUBTITLE;
+  subscriptionPosition: typeof FIXED_SUBSCRIPTION_POSITION;
+  subscriptionDefaultSelected: typeof FIXED_SUBSCRIPTION_DEFAULT_SELECTED;
   shouldShowSubscriptionPreview: boolean;
   allSelectedProductsHaveSubscription: boolean;
   shouldShowSubscriptionExplanation: boolean;
