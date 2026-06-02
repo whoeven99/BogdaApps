@@ -3,7 +3,6 @@ import dayjs from "dayjs";
 import timezone from "dayjs/plugin/timezone";
 import {
   normalizeCustomerProfileFilters,
-  normalizeCustomerSegments,
   normalizeDraftIpCountryCodes,
   normalizeTargetMarkets,
 } from "../../../utils/offerParsing";
@@ -20,14 +19,6 @@ type TimezoneOption = {
   value: string;
   label: string;
 };
-
-const CUSTOMER_SEGMENT_OPTIONS = [
-  { value: "all", label: "All customers" },
-  { value: "new_customers", label: "New customers" },
-  { value: "returning_customers", label: "Returning customers" },
-  { value: "vip", label: "VIP customers" },
-  { value: "high_aov", label: "High AOV customers" },
-];
 
 const CUSTOMER_PROFILE_FILTER_OPTIONS = [
   { value: "subscription_active", label: "Subscription active" },
@@ -88,9 +79,6 @@ export default function ScheduleTargetingEditor({
   const visibilitySummary = markets.includes("all")
     ? "All markets"
     : `${markets.length} selected`;
-  const customerSummary = customerSegments.includes("all")
-    ? "All customers"
-    : `${customerSegments.length} segments`;
 
   return (
     <div className="flex flex-col gap-8">
@@ -153,33 +141,9 @@ export default function ScheduleTargetingEditor({
           <h3 className="m-0 text-[14px] font-medium text-[#1c1f23]">
             Audience
           </h3>
-          <div className="text-[12px] text-[#5c6166]">{customerSummary}</div>
         </div>
         <div className="rounded-[12px] border border-[#e3e8ed] bg-white px-4 py-4">
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            <label className="block text-[14px] font-medium text-[#1c1f23]">
-              Customer Segments
-              <Select
-                mode="tags"
-                size="large"
-                className="mt-1 w-full"
-                value={customerSegments}
-                options={CUSTOMER_SEGMENT_OPTIONS}
-                placeholder="Select or type segment handles"
-                onChange={(values) => {
-                  setCustomerSegments(
-                    normalizeCustomerSegments(
-                      values.map((value) => String(value || "").trim()),
-                    ),
-                  );
-                }}
-              />
-              <p className="mt-1 text-[12px] font-normal text-[#5c6166]">
-                Use Shopify customer segments or internal segment handles. Keep
-                `all` selected to avoid segment restrictions.
-              </p>
-            </label>
-
+          <div className="grid grid-cols-1 gap-4">
             <label className="block text-[14px] font-medium text-[#1c1f23]">
               Customer Profile Filters
               <Select
