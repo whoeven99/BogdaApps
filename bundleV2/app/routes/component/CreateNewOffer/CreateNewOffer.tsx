@@ -89,10 +89,7 @@ import {
   adaptSubscriptionRule,
 } from "./unifiedRulesAdapters";
 import type { UnifiedRuleNode } from "./unifiedRulesSchema";
-import {
-  buildSubscriptionDisplayCustomizerItems,
-  buildUnifiedDisplayCustomizerItems,
-} from "./unifiedRulesDisplay";
+import { buildUnifiedDisplayCustomizerItems } from "./unifiedRulesDisplay";
 import {
   type RulePresentationPatch,
   updateBxgyRulePresentation,
@@ -333,7 +330,8 @@ function buildCampaignModuleDescriptors(params: {
       logicBlock: quantityBreaksLogicBlock,
       rules: sharedQuantityBreakRules,
       scopeIds: selectedScopeProductIds,
-      includeAsAdditional: false,
+      includeAsAdditional:
+        behaviorOfferType === "subscription" && sharedQuantityBreakRules.length > 0,
     },
     "progressive-gifts": {
       logicBlockId: "logic-quantity-breaks",
@@ -2350,8 +2348,10 @@ export function CreateNewOffer({
   }, [subscriptionStatusFetcher.state, subscriptionStatusFetcher.data]);
 
   useEffect(() => {
-    const previewProductId = String(selectedProductsData[0]?.id || "");
-    const shouldResolveSubscriptionPreview = effectiveSubscriptionEnabled;
+    const previewProductId =
+      selectedProductsData.length === 1 ? String(selectedProductsData[0]?.id || "") : "";
+    const shouldResolveSubscriptionPreview =
+      effectiveSubscriptionEnabled && selectedProductsData.length === 1;
     if (!shouldResolveSubscriptionPreview) {
       if (subscriptionPreviewSnapshot !== null) {
         setSubscriptionPreviewSnapshot(null);
@@ -2378,9 +2378,8 @@ export function CreateNewOffer({
       { method: "post" },
     );
   }, [
-    behaviorOfferType,
     effectiveSubscriptionEnabled,
-    subscriptionEnabled,
+    selectedProductsData,
     subscriptionPreviewSnapshot,
     subscriptionStatusFetcher,
   ]);
@@ -2624,7 +2623,9 @@ export function CreateNewOffer({
   const shouldShowSubscriptionExplanation = false;
   const subscriptionExplanationTitle = "";
   const subscriptionExplanationBody = "";
-  const previewSubscriptionProduct = selectedProductsData[0] ?? null;
+  const usesGenericSubscriptionPreview = selectedProductsData.length > 1;
+  const previewSubscriptionProduct =
+    selectedProductsData.length === 1 ? selectedProductsData[0] ?? null : null;
   const previewOneTimePrice =
     parsePreviewMoney(previewSubscriptionProduct?.price) ?? baseUnitPrice;
   const previewSubscriptionSnapshot =
@@ -2639,30 +2640,45 @@ export function CreateNewOffer({
   const previewOneTimeSubtitle = FIXED_ONE_TIME_SUBTITLE;
   const previewSubscriptionTitle = subscriptionTitle || "Subscribe & Save";
   const previewSubscriptionSubtitle =
-    previewPrimarySubscriptionPlan?.billingLabel ||
-    subscriptionSubtitle ||
-    "Billing cycle is pulled from the selected selling plan";
-  const previewSubscriptionPriceText = previewPrimarySubscriptionPlan
-    ? formatPreviewPrice(previewPrimarySubscriptionPlan.subscriptionPrice)
-    : null;
-  const previewSubscriptionCompareAtPriceText = previewPrimarySubscriptionPlan
-    ? formatPreviewPrice(previewPrimarySubscriptionPlan.compareAtPrice)
-    : null;
-  const previewSubscriptionSavingsText = previewPrimarySubscriptionPlan
-    ? `Save ${formatPreviewPrice(previewPrimarySubscriptionPlan.savingsAmount)}`
-    : null;
+    usesGenericSubscriptionPreview
+      ? `${selectedProductsData.length} selected products · each product uses its own Shopify selling plan cycle and savings`
+      : previewPrimarySubscriptionPlan?.billingLabel ||
+        subscriptionSubtitle ||
+        "Billing cycle is pulled from the selected selling plan";
+  const previewOneTimePriceText = usesGenericSubscriptionPreview
+    ? "Varies by product"
+    : formatPreviewPrice(previewOneTimePrice);
+  const previewSubscriptionPriceText = usesGenericSubscriptionPreview
+    ? "Varies by product"
+    : previewPrimarySubscriptionPlan
+      ? formatPreviewPrice(previewPrimarySubscriptionPlan.subscriptionPrice)
+      : null;
+  const previewSubscriptionCompareAtPriceText =
+    usesGenericSubscriptionPreview
+      ? null
+      : previewPrimarySubscriptionPlan
+        ? formatPreviewPrice(previewPrimarySubscriptionPlan.compareAtPrice)
+        : null;
+  const previewSubscriptionSavingsText =
+    usesGenericSubscriptionPreview
+      ? null
+      : previewPrimarySubscriptionPlan
+        ? `Save ${formatPreviewPrice(previewPrimarySubscriptionPlan.savingsAmount)}`
+        : null;
   const subscriptionPlanPreviewItems = useMemo(
     () =>
-      previewSubscriptionPlans.map((plan) => ({
-        title: plan.sellingPlanName,
-        subtitle: plan.billingLabel,
-        priceText: formatPreviewPrice(plan.subscriptionPrice),
-        savingsText:
-          plan.savingsAmount > 0
-            ? `Save ${formatPreviewPrice(plan.savingsAmount)}`
-            : null,
-      })),
-    [previewSubscriptionPlans],
+      usesGenericSubscriptionPreview
+        ? []
+        : previewSubscriptionPlans.map((plan) => ({
+            title: plan.sellingPlanName,
+            subtitle: plan.billingLabel,
+            priceText: formatPreviewPrice(plan.subscriptionPrice),
+            savingsText:
+              plan.savingsAmount > 0
+                ? `Save ${formatPreviewPrice(plan.savingsAmount)}`
+                : null,
+          })),
+    [previewSubscriptionPlans, usesGenericSubscriptionPreview],
   );
   const checkboxUpsellPreview = useMemo(
     () => ({
@@ -2768,7 +2784,7 @@ export function CreateNewOffer({
       shouldShowSubscriptionExplanation,
       subscriptionExplanationTitle,
       subscriptionExplanationBody,
-      previewOneTimePriceText: formatPreviewPrice(previewOneTimePrice),
+      previewOneTimePriceText,
       previewSubscriptionPriceText: previewSubscriptionPriceText,
       previewSubscriptionCompareAtPriceText: previewSubscriptionCompareAtPriceText,
       previewSubscriptionSavingsText: previewSubscriptionSavingsText,
@@ -2825,7 +2841,7 @@ export function CreateNewOffer({
       freeGiftRules,
       effectiveSubscriptionEnabled,
       unifiedRulesSnapshot,
-      previewOneTimePrice,
+      previewOneTimePriceText,
       previewSubscriptionPriceText,
       previewSubscriptionCompareAtPriceText,
       previewSubscriptionSavingsText,
@@ -2940,8 +2956,8 @@ export function CreateNewOffer({
       if (id === "subscription-option") {
         if (typeof patch.title === "string") setSubscriptionTitle(patch.title);
         if (typeof patch.subtitle === "string") setSubscriptionSubtitle(patch.subtitle);
+        return;
       }
-      return;
     }
 
     const compositionRule = orderedCompositionRulesSnapshot.find((rule) => rule.id === id);
@@ -3074,9 +3090,6 @@ export function CreateNewOffer({
     const differentProductsSharedPoolProductIds = differentProductsSharedPoolProductsData.map(
       (product) => String(product.id),
     );
-    if (behaviorOfferType === "subscription") {
-      return [];
-    }
     if (behaviorOfferType === "complete-bundle") {
       return buildUnifiedPreviewItems({
         offerType: behaviorOfferType,
@@ -3189,16 +3202,6 @@ export function CreateNewOffer({
     () => buildUnifiedDisplayCustomizerItems(activeDisplayRules),
     [activeDisplayRules],
   );
-  const subscriptionDisplayItems = useMemo(
-    () =>
-      buildSubscriptionDisplayCustomizerItems({
-        subscriptionTitle,
-        subscriptionSubtitle,
-      }),
-    [subscriptionTitle, subscriptionSubtitle],
-  );
-
-
   const progressiveGiftDisplaySections =
     isProgressiveGiftsTemplate && behaviorOfferType !== "complete-bundle"
       ? [
@@ -3302,8 +3305,8 @@ export function CreateNewOffer({
     if (behaviorOfferType === "subscription") {
       return (
         <OfferComponentsDisplayCustomizer
-          itemGroupTitle="Subscription Components"
-          items={subscriptionDisplayItems}
+          itemGroupTitle="Bar Components"
+          items={unifiedDisplayItems}
           onUpdateItem={campaignDraftActions.updateUnifiedRulePresentation}
           {...displayCustomizerCommonProps}
         />
@@ -3315,7 +3318,7 @@ export function CreateNewOffer({
 
   const displayComponentCount =
     behaviorOfferType === "subscription"
-      ? subscriptionDisplayItems.length
+      ? unifiedDisplayItems.length
       : unifiedDisplayItems.length;
   const displayStepMeta = [
     `${displayComponentCount} components`,
@@ -3781,7 +3784,7 @@ export function CreateNewOffer({
                     subscriptionSubtitle={previewSubscriptionSubtitle}
                     oneTimeTitle={previewOneTimeTitle}
                     oneTimeSubtitle={previewOneTimeSubtitle}
-                    oneTimePriceText={formatPreviewPrice(previewOneTimePrice)}
+                    oneTimePriceText={previewOneTimePriceText}
                     subscriptionPriceText={previewSubscriptionPriceText}
                     subscriptionCompareAtPriceText={previewSubscriptionCompareAtPriceText}
                     subscriptionSavingsText={previewSubscriptionSavingsText}
@@ -3873,7 +3876,7 @@ export function CreateNewOffer({
                       subscriptionSubtitle={previewSubscriptionSubtitle}
                       oneTimeTitle={previewOneTimeTitle}
                       oneTimeSubtitle={previewOneTimeSubtitle}
-                      oneTimePriceText={formatPreviewPrice(previewOneTimePrice)}
+                      oneTimePriceText={previewOneTimePriceText}
                       subscriptionPriceText={previewSubscriptionPriceText}
                       subscriptionCompareAtPriceText={previewSubscriptionCompareAtPriceText}
                       subscriptionSavingsText={previewSubscriptionSavingsText}
@@ -3932,7 +3935,7 @@ export function CreateNewOffer({
                     subscriptionSubtitle={previewSubscriptionSubtitle}
                     oneTimeTitle={previewOneTimeTitle}
                     oneTimeSubtitle={previewOneTimeSubtitle}
-                    oneTimePriceText={formatPreviewPrice(previewOneTimePrice)}
+                    oneTimePriceText={previewOneTimePriceText}
                     subscriptionPriceText={previewSubscriptionPriceText}
                     subscriptionCompareAtPriceText={previewSubscriptionCompareAtPriceText}
                     subscriptionSavingsText={previewSubscriptionSavingsText}

@@ -1458,6 +1458,7 @@ export default function StepTwoCompositionBuilder({
           <DetailSection title="Subscriptions">
             <SubscriptionSettingsEditor
               subscriptionEnabled={draft.subscriptionEnabled}
+              selectedProductCount={draft.selectedProductsData.length}
               subscriptionTitle={draft.subscriptionTitle}
               setSubscriptionTitle={actions.setSubscriptionTitle}
               subscriptionSubtitle={draft.subscriptionSubtitle}
@@ -1660,6 +1661,7 @@ export default function StepTwoCompositionBuilder({
           detail: (
             <SubscriptionSettingsEditor
               subscriptionEnabled={draft.subscriptionEnabled}
+              selectedProductCount={draft.selectedProductsData.length}
               subscriptionTitle={draft.subscriptionTitle}
               setSubscriptionTitle={actions.setSubscriptionTitle}
               subscriptionSubtitle={draft.subscriptionSubtitle}
