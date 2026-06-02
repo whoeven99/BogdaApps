@@ -904,6 +904,14 @@ function resolveSubscriptionPreviewPricing(
   if (basePrice == null) {
     return null;
   }
+  if (policies.length === 0) {
+    return {
+      subscriptionPrice: basePrice,
+      compareAtPrice: basePrice,
+      savingsAmount: 0,
+      savingsPercent: 0,
+    };
+  }
   const primaryPolicy =
     policies.find((policy) => policy && (policy.afterCycle == null || policy.afterCycle <= 1)) ||
     policies[0];

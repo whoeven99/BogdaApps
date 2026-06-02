@@ -101,6 +101,7 @@ export type CampaignDraft = {
   previewSubscriptionPriceText?: string | null;
   previewSubscriptionCompareAtPriceText?: string | null;
   previewSubscriptionSavingsText?: string | null;
+  previewSubscriptionPricingNoteText?: string | null;
   previewSubscriptionPlans: SubscriptionPreviewPlanDraft[];
   freeGiftTriggerProducts: string[];
   freeGiftSharedGiftProductIds: string[];

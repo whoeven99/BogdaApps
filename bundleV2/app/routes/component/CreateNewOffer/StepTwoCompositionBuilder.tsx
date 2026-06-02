@@ -1469,6 +1469,9 @@ export default function StepTwoCompositionBuilder({
                 draft.previewSubscriptionCompareAtPriceText
               }
               previewSubscriptionSavingsText={draft.previewSubscriptionSavingsText}
+              previewSubscriptionPricingNoteText={
+                draft.previewSubscriptionPricingNoteText
+              }
               previewSubscriptionPlans={draft.previewSubscriptionPlans}
             />
           </DetailSection>
@@ -1672,6 +1675,9 @@ export default function StepTwoCompositionBuilder({
                 draft.previewSubscriptionCompareAtPriceText
               }
               previewSubscriptionSavingsText={draft.previewSubscriptionSavingsText}
+              previewSubscriptionPricingNoteText={
+                draft.previewSubscriptionPricingNoteText
+              }
               previewSubscriptionPlans={draft.previewSubscriptionPlans}
             />
           ),

@@ -13,6 +13,7 @@ type Props = {
   previewSubscriptionPriceText?: string | null;
   previewSubscriptionCompareAtPriceText?: string | null;
   previewSubscriptionSavingsText?: string | null;
+  previewSubscriptionPricingNoteText?: string | null;
   previewSubscriptionPlans: SubscriptionPreviewPlanDraft[];
   section?: "subscription-offer" | "one-time-message" | "all";
   updateRulePresentation?: (id: string, patch: RulePresentationPatch) => void;
@@ -29,6 +30,7 @@ export default function SubscriptionSettingsEditor({
   previewSubscriptionPriceText,
   previewSubscriptionCompareAtPriceText,
   previewSubscriptionSavingsText,
+  previewSubscriptionPricingNoteText,
   previewSubscriptionPlans,
   section = "all",
   updateRulePresentation,
@@ -138,6 +140,11 @@ export default function SubscriptionSettingsEditor({
                     {previewSubscriptionSavingsText}
                   </div>
                 ) : null}
+                {!previewSubscriptionSavingsText && previewSubscriptionPricingNoteText ? (
+                  <div className="mt-1 text-[12px] font-medium text-[#8c9196]">
+                    {previewSubscriptionPricingNoteText}
+                  </div>
+                ) : null}
               </div>
               {!usesGenericPreview && previewSubscriptionPlans.length > 1 ? (
                 <div className="md:col-span-2 rounded-[10px] border border-[#e3e8ed] bg-[#f6f8f9] p-3">
@@ -171,7 +178,11 @@ export default function SubscriptionSettingsEditor({
                               <div className="mt-1 text-[11px] font-medium text-[#008060]">
                                 {`Save EUR ${plan.savingsAmount.toFixed(2)}`}
                               </div>
-                            ) : null}
+                            ) : (
+                              <div className="mt-1 text-[11px] font-medium text-[#8c9196]">
+                                No discount on this cycle
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>

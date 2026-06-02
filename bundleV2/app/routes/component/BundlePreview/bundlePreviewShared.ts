@@ -169,6 +169,7 @@ export function renderBundlePreviewHtml({
   subscriptionPriceText = null,
   subscriptionCompareAtPriceText = null,
   subscriptionSavingsText = null,
+  subscriptionPricingNoteText = null,
   subscriptionPlanPreviewItems = [],
   showSubscriptionExplanation = false,
   subscriptionExplanationTitle = "Some products aren't eligible for subscriptions",
@@ -200,11 +201,13 @@ export function renderBundlePreviewHtml({
   subscriptionPriceText?: string | null;
   subscriptionCompareAtPriceText?: string | null;
   subscriptionSavingsText?: string | null;
+  subscriptionPricingNoteText?: string | null;
   subscriptionPlanPreviewItems?: Array<{
     title: string;
     subtitle?: string;
     priceText?: string | null;
     savingsText?: string | null;
+    noteText?: string | null;
   }>;
   showSubscriptionExplanation?: boolean;
   subscriptionExplanationTitle?: string;
@@ -339,6 +342,11 @@ export function renderBundlePreviewHtml({
                               ? `<div style="margin-top: 3px; font-size: 11px; font-weight: 600; color: #008060;">${esc(plan.savingsText)}</div>`
                               : ""
                           }
+                          ${
+                            !plan.savingsText && plan.noteText
+                              ? `<div style="margin-top: 3px; font-size: 11px; font-weight: 600; color: #8c9196;">${esc(plan.noteText)}</div>`
+                              : ""
+                          }
                         </div>
                       </div>
                     </div>
@@ -412,6 +420,11 @@ export function renderBundlePreviewHtml({
               ${
                 subscriptionSavingsText
                   ? `<span style="display:block; font-size:12px; color:#008060; font-weight:600; margin-top:4px;">${esc(subscriptionSavingsText)}</span>`
+                  : ""
+              }
+              ${
+                !subscriptionSavingsText && subscriptionPricingNoteText
+                  ? `<span style="display:block; font-size:12px; color:#8c9196; font-weight:600; margin-top:4px;">${esc(subscriptionPricingNoteText)}</span>`
                   : ""
               }
             </span>

@@ -2663,7 +2663,17 @@ export function CreateNewOffer({
     usesGenericSubscriptionPreview
       ? null
       : previewPrimarySubscriptionPlan
-        ? `Save ${formatPreviewPrice(previewPrimarySubscriptionPlan.savingsAmount)}`
+        ? previewPrimarySubscriptionPlan.savingsAmount > 0
+          ? `Save ${formatPreviewPrice(previewPrimarySubscriptionPlan.savingsAmount)}`
+          : null
+        : null;
+  const previewSubscriptionPricingNoteText =
+    usesGenericSubscriptionPreview
+      ? null
+      : previewPrimarySubscriptionPlan
+        ? previewPrimarySubscriptionPlan.savingsAmount > 0
+          ? null
+          : "No discount on this cycle"
         : null;
   const subscriptionPlanPreviewItems = useMemo(
     () =>
@@ -2677,6 +2687,7 @@ export function CreateNewOffer({
               plan.savingsAmount > 0
                 ? `Save ${formatPreviewPrice(plan.savingsAmount)}`
                 : null,
+            noteText: plan.savingsAmount > 0 ? null : "No discount on this cycle",
           })),
     [previewSubscriptionPlans, usesGenericSubscriptionPreview],
   );
@@ -2788,6 +2799,7 @@ export function CreateNewOffer({
       previewSubscriptionPriceText: previewSubscriptionPriceText,
       previewSubscriptionCompareAtPriceText: previewSubscriptionCompareAtPriceText,
       previewSubscriptionSavingsText: previewSubscriptionSavingsText,
+      previewSubscriptionPricingNoteText,
       previewSubscriptionPlans,
       freeGiftTriggerProducts,
       freeGiftSharedGiftProductIds,
@@ -2845,6 +2857,7 @@ export function CreateNewOffer({
       previewSubscriptionPriceText,
       previewSubscriptionCompareAtPriceText,
       previewSubscriptionSavingsText,
+      previewSubscriptionPricingNoteText,
       previewSubscriptionPlans,
     ],
   );
@@ -2898,7 +2911,9 @@ export function CreateNewOffer({
     );
     return [
       ...(primarySingleRule ? [primarySingleRule] : []),
-      ...orderedCompositionRulesSnapshot.filter((rule) => rule.type !== "single_purchase"),
+      ...orderedCompositionRulesSnapshot.filter(
+        (rule) => rule.type !== "single_purchase" && rule.type !== "subscription",
+      ),
     ];
   }, [behaviorOfferType, orderedCompositionRulesSnapshot]);
   const stepTwoAuditIssues = useMemo(
@@ -3788,6 +3803,7 @@ export function CreateNewOffer({
                     subscriptionPriceText={previewSubscriptionPriceText}
                     subscriptionCompareAtPriceText={previewSubscriptionCompareAtPriceText}
                     subscriptionSavingsText={previewSubscriptionSavingsText}
+                    subscriptionPricingNoteText={previewSubscriptionPricingNoteText}
                     subscriptionPlanPreviewItems={subscriptionPlanPreviewItems}
                     showSubscriptionExplanation={shouldShowSubscriptionExplanation}
                     subscriptionExplanationTitle={subscriptionExplanationTitle}
@@ -3880,6 +3896,7 @@ export function CreateNewOffer({
                       subscriptionPriceText={previewSubscriptionPriceText}
                       subscriptionCompareAtPriceText={previewSubscriptionCompareAtPriceText}
                       subscriptionSavingsText={previewSubscriptionSavingsText}
+                      subscriptionPricingNoteText={previewSubscriptionPricingNoteText}
                       subscriptionPlanPreviewItems={subscriptionPlanPreviewItems}
                       showSubscriptionExplanation={shouldShowSubscriptionExplanation}
                       checkboxUpsellPreview={checkboxUpsellPreview}
@@ -3939,6 +3956,7 @@ export function CreateNewOffer({
                     subscriptionPriceText={previewSubscriptionPriceText}
                     subscriptionCompareAtPriceText={previewSubscriptionCompareAtPriceText}
                     subscriptionSavingsText={previewSubscriptionSavingsText}
+                    subscriptionPricingNoteText={previewSubscriptionPricingNoteText}
                     subscriptionPlanPreviewItems={subscriptionPlanPreviewItems}
                     checkboxUpsellPreview={checkboxUpsellPreview}
                     stickyAddToCartPreview={stickyAddToCartPreview}
