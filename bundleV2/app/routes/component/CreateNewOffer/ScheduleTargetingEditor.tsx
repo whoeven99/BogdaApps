@@ -1,11 +1,7 @@
 import { Checkbox, DatePicker, Select } from "antd";
 import dayjs from "dayjs";
 import timezone from "dayjs/plugin/timezone";
-import {
-  normalizeCustomerProfileFilters,
-  normalizeDraftIpCountryCodes,
-  normalizeTargetMarkets,
-} from "../../../utils/offerParsing";
+import { normalizeTargetMarkets } from "../../../utils/offerParsing";
 
 dayjs.extend(timezone);
 
@@ -19,13 +15,6 @@ type TimezoneOption = {
   value: string;
   label: string;
 };
-
-const CUSTOMER_PROFILE_FILTER_OPTIONS = [
-  { value: "subscription_active", label: "Subscription active" },
-  { value: "bundle_buyer", label: "Bundle buyer" },
-  { value: "repeat_buyer", label: "Repeat buyer" },
-  { value: "high_intent", label: "High intent" },
-];
 
 type Props = {
   markets: string[];
@@ -55,14 +44,7 @@ type Props = {
 export default function ScheduleTargetingEditor({
   markets,
   setMarkets,
-  customerSegments,
-  setCustomerSegments,
-  customerProfileFilters,
-  setCustomerProfileFilters,
-  ipCountryCodes,
-  setIpCountryCodes,
   marketsError,
-  ipCountryCodesError,
   shopMarkets,
   scheduleTimezone,
   setScheduleTimezone,
@@ -133,70 +115,6 @@ export default function ScheduleTargetingEditor({
               Choose where the offer can appear.
             </p>
           )}
-        </div>
-      </section>
-
-      <section className="flex flex-col gap-3">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="m-0 text-[14px] font-medium text-[#1c1f23]">
-            Audience
-          </h3>
-        </div>
-        <div className="rounded-[12px] border border-[#e3e8ed] bg-white px-4 py-4">
-          <div className="grid grid-cols-1 gap-4">
-            <label className="block text-[14px] font-medium text-[#1c1f23]">
-              Customer Profile Filters
-              <Select
-                mode="tags"
-                size="large"
-                className="mt-1 w-full"
-                value={customerProfileFilters}
-                options={CUSTOMER_PROFILE_FILTER_OPTIONS}
-                placeholder="VIP, subscription_active, repeat_buyer..."
-                onChange={(values) =>
-                  setCustomerProfileFilters(
-                    normalizeCustomerProfileFilters(
-                      values.map((value) => String(value || "").trim()),
-                    ),
-                  )
-                }
-              />
-              <p className="mt-1 text-[12px] font-normal text-[#5c6166]">
-                Optional profile traits you can evaluate in app logic later,
-                such as VIP, subscription, or repeat-buyer cohorts.
-              </p>
-            </label>
-          </div>
-
-          <label className="mt-4 block text-[14px] font-medium text-[#1c1f23]">
-            IP / Geo Country Filter
-            <Select
-              mode="tags"
-              size="large"
-              className="mt-1 w-full"
-              status={ipCountryCodesError ? "error" : ""}
-              value={ipCountryCodes}
-              placeholder="US, CA, DE..."
-              tokenSeparators={[",", " "]}
-              onChange={(values) =>
-                setIpCountryCodes(
-                  normalizeDraftIpCountryCodes(
-                    values.map((value) => String(value || "").trim()),
-                  ),
-                )
-              }
-            />
-            {ipCountryCodesError ? (
-              <p className="mt-1 text-[12px] font-normal text-[#d72c0d]">
-                {ipCountryCodesError}
-              </p>
-            ) : (
-              <p className="mt-1 text-[12px] font-normal text-[#5c6166]">
-                Optional ISO country codes for IP-based targeting. This is stored
-                now so storefront or app-side checks can use it later.
-              </p>
-            )}
-          </label>
         </div>
       </section>
 
