@@ -2678,14 +2678,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       where: { shopName },
       select: { id: true, name: true },
     });
-    const nameTaken = siblingOffers.some(
+    const conflictingOffer = siblingOffers.find(
       (o: { id: string; name: string }) =>
         normalizeOfferNameKey(o.name) === nameKey &&
         (intent === "create-offer" || o.id !== existingOfferForUpdate?.id),
     );
-    if (nameTaken) {
+    if (conflictingOffer) {
       return offerActionErrorResponse(
-        "An offer with this name already exists. Please choose a different name.",
+        `Offer name conflict. Submitted: "${name}". Existing: "${conflictingOffer.name}" (id: "${conflictingOffer.id}"). Normalized key: "${nameKey}". Shop: "${shopName}". Submitted offer id: "${idRaw || "new"}".`,
         409,
       );
     }
@@ -2733,8 +2733,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             url.searchParams.set("toast", `create-success-${Date.now()}`);
           } catch (legacyError: any) {
             if (legacyError.code === "P2002") {
+              console.error("offer create unique conflict after legacy fallback", {
+                submittedName: name,
+                normalizedNameKey: nameKey,
+                shopName,
+                error: legacyError,
+              });
               return offerActionErrorResponse(
-                "An offer with this name already exists. Please choose a different name.",
+                `Offer create hit a unique constraint. Submitted: "${name}". Normalized key: "${nameKey}". Shop: "${shopName}". Submitted offer id: "${idRaw || "new"}".`,
                 409,
               );
             }
@@ -2755,8 +2761,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         } else if (
           error.code === "P2002"
         ) {
+          console.error("offer create unique conflict", {
+            submittedName: name,
+            normalizedNameKey: nameKey,
+            shopName,
+            error,
+          });
           return offerActionErrorResponse(
-            "An offer with this name already exists. Please choose a different name.",
+            `Offer create hit a unique constraint. Submitted: "${name}". Normalized key: "${nameKey}". Shop: "${shopName}". Submitted offer id: "${idRaw || "new"}".`,
             409,
           );
         }
@@ -2798,8 +2810,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             url.searchParams.set("toast", `update-success-${Date.now()}`);
           } catch (legacyError: any) {
             if (legacyError.code === "P2002") {
+              console.error("offer update unique conflict after legacy fallback", {
+                submittedName: name,
+                normalizedNameKey: nameKey,
+                shopName,
+                offerId: idRaw,
+                error: legacyError,
+              });
               return offerActionErrorResponse(
-                "An offer with this name already exists. Please choose a different name.",
+                `Offer update hit a unique constraint. Submitted: "${name}". Normalized key: "${nameKey}". Shop: "${shopName}". Submitted offer id: "${idRaw || "new"}".`,
                 409,
               );
             }
@@ -2821,8 +2840,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         } else if (
           error.code === "P2002"
         ) {
+          console.error("offer update unique conflict", {
+            submittedName: name,
+            normalizedNameKey: nameKey,
+            shopName,
+            offerId: idRaw,
+            error,
+          });
           return offerActionErrorResponse(
-            "An offer with this name already exists. Please choose a different name.",
+            `Offer update hit a unique constraint. Submitted: "${name}". Normalized key: "${nameKey}". Shop: "${shopName}". Submitted offer id: "${idRaw || "new"}".`,
             409,
           );
         }
