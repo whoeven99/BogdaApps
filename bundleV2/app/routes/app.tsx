@@ -9,7 +9,11 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { ConfigProvider } from "antd";
 
-import { authenticate } from "../shopify.server";
+import {
+  authenticate,
+  reconcileBundleAutomaticDiscounts,
+} from "../shopify.server";
+import { sanitizeEnvLikeValue, sanitizeUrlLikeEnvValue } from "../utils/env";
 
 const ensureWebPixel = async (admin: any, shop: string) => {
   let currentWebPixelId: string | undefined;
@@ -63,7 +67,7 @@ const ensureWebPixel = async (admin: any, shop: string) => {
         webPixel: {
           settings: {
             shopName: shop,
-            server: process.env.SHOPIFY_APP_URL || "",
+            server: sanitizeUrlLikeEnvValue(process.env.SHOPIFY_APP_URL),
           },
         },
       },
@@ -107,13 +111,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.error("Failed to fetch shop timezone", error);
   }
 
-  // 不等待 web pixel 初始化完成，优先返回页面所需数据。
-  void ensureWebPixel(admin, session.shop).catch((error) => {
-    console.error("Failed to ensure web pixel exists", error);
-  });
-
   // eslint-disable-next-line no-undef
-  return { apiKey: process.env.SHOPIFY_API_KEY || "", ianaTimezone };
+  return {
+    apiKey: sanitizeEnvLikeValue(process.env.SHOPIFY_API_KEY),
+    ianaTimezone,
+  };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -121,16 +123,29 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "");
 
-  if (intent !== "ensure-web-pixel") {
+  if (intent !== "ensure-app-runtime-resources") {
     return Response.json({ ok: false, error: "unknown-intent" }, { status: 400 });
   }
 
   try {
     await ensureWebPixel(admin, session.shop);
-    return Response.json({ ok: true });
   } catch (error) {
     console.error("Failed to ensure web pixel exists in action", error);
-    return Response.json({ ok: false, error: "ensure-failed" }, { status: 500 });
+    return Response.json(
+      { ok: false, error: "ensure-web-pixel-failed" },
+      { status: 500 },
+    );
+  }
+
+  try {
+    await reconcileBundleAutomaticDiscounts(admin);
+    return Response.json({ ok: true });
+  } catch (error) {
+    console.error("Failed to reconcile automatic app discounts in action", error);
+    return Response.json(
+      { ok: false, error: "reconcile-automatic-discounts-failed" },
+      { status: 500 },
+    );
   }
 };
 
@@ -140,7 +155,7 @@ export default function App() {
 
   useEffect(() => {
     ensureWebPixelFetcher.submit(
-      { intent: "ensure-web-pixel" },
+      { intent: "ensure-app-runtime-resources" },
       { method: "POST" },
     );
   }, [ensureWebPixelFetcher]);
@@ -160,29 +175,9 @@ export default function App() {
         }}
       >
       <s-app-nav>
-        <s-link href="/app">Home</s-link>
-        <s-link href="/app/additional">Additional page</s-link>
+        <s-link href="/app">Bundle V2</s-link>
       </s-app-nav>
       <Outlet context={{ ianaTimezone }} />
-      <div className="py-8 text-center text-sm text-[#666]">
-        <a 
-          href="mailto:support@ciwi.ai" 
-          target="_blank" 
-          rel="noopener noreferrer" 
-          className="mx-3 text-[#666] hover:text-[#008060] transition-colors"
-        >
-          Contact Us
-        </a>
-        |
-        <a 
-          href="https://iw73s3ld6wy.feishu.cn/wiki/UEumwgOLJi90rEknevWcZp7HnQg?from=from_copylink" 
-          target="_blank" 
-          rel="noopener noreferrer" 
-          className="mx-3 text-[#666] hover:text-[#008060] transition-colors"
-        >
-          User Guide
-        </a>
-      </div>
     </ConfigProvider>
     </AppProvider>
   );

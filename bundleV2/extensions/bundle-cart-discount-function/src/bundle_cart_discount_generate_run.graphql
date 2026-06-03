@@ -1,8 +1,27 @@
 query CartInput {
+  triggeringDiscountCode
   cart {
+    buyerIdentity {
+      isAuthenticated
+      customer {
+        numberOfOrders
+        amountSpent {
+          amount
+        }
+        hasTags(tags: ["vip", "high_aov", "subscription_active", "bundle_buyer", "repeat_buyer", "high_intent"]) {
+          tag
+          hasTag
+        }
+      }
+    }
     lines {
       id
       quantity
+      sellingPlanAllocation {
+        sellingPlan {
+          id
+        }
+      }
       cost {
         amountPerQuantity {
           amount
@@ -19,19 +38,19 @@ query CartInput {
       }
     }
   }
-  shop {
-    metafield(namespace: "ciwi_bundle", key: "ciwi-bundle-offers") {
-      jsonValue
-      value
-      type
-    }
-  }
   localization {
+    country {
+      isoCode
+    }
     market {
       id
     }
   }
   discount {
     discountClasses
+    # automatic discount owner: syncCartLinesAutomaticDiscountMetafield + shipping discount sync
+    offersFromDiscountOwner: metafield(namespace: "$app:ciwi_bundle", key: "offers") {
+      jsonValue
+    }
   }
 }

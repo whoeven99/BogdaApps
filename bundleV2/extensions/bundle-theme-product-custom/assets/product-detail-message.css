@@ -117,6 +117,445 @@
   text-decoration: line-through;
 }
 
+.ciwi-different-products-picker {
+  margin-top: 10px;
+}
+
+.ciwi-different-products-picker__toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 7px 14px;
+  border: none;
+  border-radius: 999px;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ciwi-different-products-picker__panel {
+  margin-top: 10px;
+  border: 1px solid #dfe3e8;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.ciwi-different-products-picker__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1c1f23;
+}
+
+.ciwi-different-products-picker__list {
+  display: grid;
+  gap: 8px;
+}
+
+.ciwi-different-products-picker__card {
+  border: 1px solid #dfe3e8;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 8px;
+}
+
+.ciwi-different-products-picker__card[data-current="1"] {
+  background: #f8fcfa;
+}
+
+.ciwi-different-products-picker__card[data-selected="1"] {
+  border-color: #008060;
+  box-shadow: 0 0 0 1px rgba(0, 128, 96, 0.14);
+}
+
+.ciwi-different-products-picker__card[data-selection-locked="1"] {
+  opacity: 0.7;
+}
+
+.ciwi-different-products-picker__card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ciwi-different-products-picker__image {
+  width: 44px;
+  height: 44px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #f4f6f8;
+}
+
+.ciwi-different-products-picker__image--placeholder {
+  border: 1px dashed #dfe3e8;
+}
+
+.ciwi-different-products-picker__meta {
+  min-width: 0;
+  flex: 1;
+}
+
+.ciwi-different-products-picker__title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ciwi-different-products-picker__title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1c1f23;
+  line-height: 1.35;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.ciwi-different-products-picker__pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ciwi-different-products-picker__price {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1c1f23;
+}
+
+.ciwi-different-products-picker__variant-select {
+  width: 100%;
+  max-width: 100%;
+  display: block;
+  box-sizing: border-box;
+  margin-top: 8px;
+  min-height: 32px;
+  border: 1px solid #dfe3e8;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1c1f23;
+  font-size: 12px;
+  padding: 6px 8px;
+}
+
+.ciwi-bundle-variant-select {
+  width: 100%;
+  max-width: 100%;
+  display: block;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 32px;
+  border: 1px solid #dfe3e8;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1c1f23;
+  font-size: 12px;
+  padding: 6px 8px;
+}
+
+.ciwi-different-products-picker__actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+  min-width: 0;
+}
+
+.ciwi-different-products-picker__select,
+.ciwi-different-products-picker__open {
+  min-height: 32px;
+  width: 100%;
+  max-width: 100%;
+  border: 1px solid #dfe3e8;
+  border-radius: 6px;
+  background: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.ciwi-different-products-picker__select[disabled] {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.ciwi-different-products-modal__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.ciwi-different-products-modal {
+  width: min(720px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  max-height: min(86vh, 860px);
+  overflow: hidden;
+  border: 1px solid #dfe3e8;
+  border-radius: 12px;
+  background: #ffffff;
+  display: grid;
+  grid-template-rows: auto auto auto 1fr auto;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.ciwi-different-products-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #eef0f2;
+}
+
+.ciwi-different-products-modal__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1c1f23;
+}
+
+.ciwi-different-products-modal__close {
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  color: #5c6166;
+}
+
+.ciwi-different-products-modal__meta {
+  padding: 10px 14px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1c1f23;
+}
+
+.ciwi-different-products-modal__error {
+  margin: 10px 14px 0;
+  padding: 10px 12px;
+  border: 1px solid #e3e8ed;
+  border-radius: 10px;
+  background: #fff4f4;
+  color: #8a1f11;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.ciwi-different-products-modal__list {
+  padding: 12px 14px;
+  overflow: auto;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.ciwi-different-products-modal__empty {
+  padding: 16px 14px;
+  font-size: 12px;
+  color: #5c6166;
+}
+
+.ciwi-different-products-modal__footer {
+  padding: 12px 14px;
+  border-top: 1px solid #eef0f2;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.ciwi-different-products-modal__done {
+  min-height: 36px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 10px;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ciwi-different-products-modal .ciwi-different-products-picker__card {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.ciwi-different-products-modal .ciwi-different-products-picker__title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.ciwi-different-products-modal .ciwi-different-products-picker__variant-select {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.ciwi-different-products-modal .ciwi-different-products-picker__title-row {
+  flex-wrap: wrap;
+}
+
+.ciwi-different-products-modal .ciwi-different-products-picker__pill {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ciwi-different-products-modal .ciwi-different-products-picker__select {
+  width: 100%;
+}
+
+.ciwi-different-products-modal .ciwi-different-products-picker__actions {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.ciwi-different-products-modal .ciwi-different-products-picker__meta,
+.ciwi-different-products-modal .ciwi-different-products-picker__card-top,
+.ciwi-different-products-modal .ciwi-different-products-picker__title-row {
+  min-width: 0;
+}
+
+.ciwi-different-products-modal .ciwi-different-products-picker__open {
+  display: none;
+}
+
+.ciwi-different-products-modal__header {
+  position: sticky;
+  top: 0;
+  background: #ffffff;
+  z-index: 1;
+}
+
+.ciwi-different-products-modal__meta {
+  position: sticky;
+  top: 49px;
+  background: #ffffff;
+  z-index: 1;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #eef0f2;
+}
+
+.ciwi-different-products-modal__footer {
+  position: sticky;
+  bottom: 0;
+  background: #ffffff;
+}
+
+.ciwi-different-products-modal__list {
+  padding-top: 10px;
+}
+
+.ciwi-different-products-modal__empty {
+  padding-top: 24px;
+  padding-bottom: 24px;
+}
+
+@media (max-width: 640px) {
+  .ciwi-different-products-modal__overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .ciwi-different-products-modal {
+    width: 100%;
+    max-height: 92vh;
+    border-radius: 14px 14px 0 0;
+  }
+
+  .ciwi-different-products-modal__header,
+  .ciwi-different-products-modal__meta,
+  .ciwi-different-products-modal__list,
+  .ciwi-different-products-modal__footer {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .ciwi-different-products-modal__list {
+    gap: 8px;
+  }
+}
+
+/* 阶梯赠品（Progressive gifts）— 与后台预览 class 对齐 */
+.ciwi-progressive-gifts {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed #dfe3e8;
+}
+
+.ciwi-progressive-gifts__head {
+  margin-bottom: 8px;
+}
+
+.ciwi-progressive-gifts__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1c1f23;
+}
+
+.ciwi-progressive-gifts__sub {
+  font-size: 12px;
+  color: #6d7175;
+  margin-top: 2px;
+}
+
+.ciwi-progressive-gift__lock {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #6d7175;
+}
+
+.ciwi-progressive-gift {
+  position: relative;
+}
+
+.ciwi-progressive-gift__img-wrap {
+  margin: 6px 0 4px;
+}
+
+.ciwi-progressive-gift__img {
+  max-width: 100%;
+  max-height: 72px;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
+.ciwi-progressive-gifts__legal {
+  font-size: 11px;
+  color: #8c9196;
+  margin: 10px 0 0;
+  line-height: 1.4;
+}
+
 .create-offer-style-preview-badge {
   position: absolute;
   right: 8px;
@@ -127,4 +566,147 @@
   padding: 2px 8px;
   font-size: 10px;
   font-weight: 600;
+}
+
+.ciwi-subscription-box {
+  margin-top: 12px;
+  border: 1px solid #c9ccd0;
+  border-radius: 10px;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.ciwi-subscription-option {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  align-items: start;
+  column-gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid #dfe3e8;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.ciwi-subscription-option.is-selected {
+  border-color: #008060;
+  background: #f0faf6;
+}
+
+.ciwi-subscription-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ciwi-subscription-title {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1c1f23;
+}
+
+.ciwi-subscription-subtitle {
+  display: block;
+  font-size: 12px;
+  color: #8c9196;
+  margin-top: 2px;
+}
+
+.ciwi-subscription-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #008060;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ciwi-subscription-price-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.ciwi-subscription-price {
+  display: inline-block;
+  font-size: 15px;
+  font-weight: 700;
+  color: #1c1f23;
+}
+
+.ciwi-subscription-compare {
+  display: inline-block;
+  font-size: 12px;
+  color: #6d7175;
+  text-decoration: line-through;
+}
+
+.ciwi-subscription-savings {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #008060;
+}
+
+.ciwi-subscription-plan-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.ciwi-subscription-plan-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #dfe3e8;
+  border-radius: 8px;
+  background: #ffffff;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ciwi-subscription-plan-option.is-selected {
+  border-color: #008060;
+  background: #f0faf6;
+}
+
+.ciwi-subscription-plan-option__text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ciwi-subscription-plan-option__title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1c1f23;
+}
+
+.ciwi-subscription-plan-price {
+  font-size: 12px;
+  color: #4f5b67;
+}
+
+.ciwi-subscription-plan-save {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(0, 128, 96, 0.1);
+  color: #008060;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
 }

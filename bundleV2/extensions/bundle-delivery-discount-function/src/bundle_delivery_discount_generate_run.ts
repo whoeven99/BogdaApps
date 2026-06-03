@@ -1,0 +1,1032 @@
+/**
+ * 配送折扣 Function（cart.delivery-options.discounts.generate.run）
+ * ------------------------------------------------------------------
+ * 与行项目折扣 Function 分离：仅处理「阶梯赠品」中的免邮（free_shipping）。
+ * 配置来源：automatic discount owner 上的 `$app:ciwi_bundle/offers`，由后台按 SHIPPING class 同步。
+ *
+ * 购物车行属性（与主题 `properties[__ciwi_*]` 对应）：
+ * - 理想情况：行上带有 `__ciwi_bundle_offer_id`、`__ciwi_bundle_tier`（主题脚本写入）。
+ * - 兜底：若缺少上述字段（动态结账 / 主题 AJAX 未带上隐藏域等），在满足「唯一命中活动」时
+ *   用商品 ID + 行数量推断档位，与行项目折扣 Function 的「按数量取最高满足档」一致，避免「有套装折、无免邮」。
+ *
+ * 非目标 / 未实现（需在后续迭代补齐）：
+ * - B2B 公司定位、草稿订单、订阅结账等场景未单独验证。
+ * - 多货币下「后台填写的 freeShippingMaxRateAmount」与运费标价比较依赖结账货币上下文；若跨市场不一致需后续增强。
+ *
+ * 关联 App 折扣：安装后需在 `shopify.server.ts` 的 afterAuth 中创建 automatic app discount（SHIPPING 类），
+ * 并与本 Function 绑定；组合策略需与现有 PRODUCT 折扣在 Shopify 后台保持一致。
+ */
+
+import {
+  type CartDeliveryDiscountInput,
+  CartDeliveryOptionsDiscountsGenerateRunResult,
+  DeliveryDiscountSelectionStrategy,
+  DeliveryMethod,
+  DiscountClass,
+} from "../generated/api";
+
+const LOG_PREFIX = "[ciwi-delivery-discount]";
+
+function log(step: string, detail?: unknown): void {
+  try {
+    if (detail === undefined) console.error(`${LOG_PREFIX} ${step}`);
+    else
+      console.error(
+        `${LOG_PREFIX} ${step} ${typeof detail === "string" ? detail : JSON.stringify(detail)}`,
+      );
+  } catch {
+    console.error(`${LOG_PREFIX} ${step}`);
+  }
+}
+
+/**
+ * 中文调试日志：便于在 Shopify Function Logs 中快速定位「是否触发 + 触发后判定路径」。
+ * 注意：为避免日志爆炸，仅打印关键分支与最终决策。
+ */
+function logZh(step: string, detail?: unknown): void {
+  log(`zh:${step}`, detail);
+}
+
+type OfferRow = {
+  id?: string;
+  name?: string;
+  status?: boolean;
+  startTime?: string;
+  endTime?: string;
+  offerType?: string;
+  selectedProductsJson?: string | null;
+  discountRulesJson?: string | null;
+  offerSettingsJson?: string | null;
+};
+
+type ProgressiveGiftRow = {
+  type?: string;
+  unlockMode?: string;
+  unlockTierIndex?: number;
+  unlockAtCount?: number;
+  freeShippingMaxRateAmount?: number | null;
+};
+
+type ProgressiveGiftsPayload = {
+  enabled?: boolean;
+  gifts?: ProgressiveGiftRow[];
+};
+
+type UnifiedShippingRule = {
+  count: number;
+  conditionType: "item_quantity" | "cart_amount";
+  amountThreshold?: number;
+  discountClass: "product" | "order" | "shipping";
+  rewardType: "percentage_off" | "gift_product" | "free_shipping";
+};
+
+type CouponAccess = {
+  enabled: boolean;
+  code: string;
+};
+
+const RECOGNIZED_CUSTOMER_SEGMENTS = new Set([
+  "all",
+  "new_customers",
+  "returning_customers",
+  "vip",
+  "high_aov",
+]);
+
+const RECOGNIZED_CUSTOMER_PROFILE_FILTERS = new Set([
+  "subscription_active",
+  "bundle_buyer",
+  "repeat_buyer",
+  "high_intent",
+]);
+
+type BuyerTargetingContext = {
+  isAuthenticated: boolean;
+  numberOfOrders: number;
+  amountSpent: number;
+  tags: Set<string>;
+  hasSubscriptionLine: boolean;
+};
+
+function resolveNowMs(): number | null {
+  const v = Date.now();
+  return Number.isFinite(v) && v > 0 ? v : null;
+}
+
+function parseSelectedIds(selectedProductsJson?: string | null): string[] {
+  if (!selectedProductsJson) return [];
+  try {
+    const parsed = JSON.parse(selectedProductsJson) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const productIds = (parsed as { productIds?: unknown }).productIds;
+      if (Array.isArray(productIds)) {
+        const ids = productIds
+          .map((id) => String(id || "").trim())
+          .filter(Boolean);
+        if (ids.length) return [...new Set(ids)];
+      }
+
+      const bars = (parsed as { bars?: unknown }).bars;
+      if (Array.isArray(bars) && bars.length) {
+        const ids: string[] = [];
+        for (const bar of bars) {
+          if (!bar || typeof bar !== "object") continue;
+          const products = (bar as { products?: unknown }).products;
+          if (!Array.isArray(products)) continue;
+          for (const p of products) {
+            if (p && typeof p === "object") {
+              const pid = (p as { productId?: unknown }).productId;
+              if (typeof pid === "string" && pid.trim()) ids.push(pid.trim());
+            }
+          }
+        }
+        if (ids.length) return [...new Set(ids)];
+      }
+
+      const buyProducts = (parsed as { buyProducts?: string[] }).buyProducts;
+      const getProducts = (parsed as { getProducts?: string[] }).getProducts;
+      const triggerProducts = (parsed as { triggerProducts?: string[] }).triggerProducts;
+      const giftProducts = (parsed as { giftProducts?: string[] }).giftProducts;
+      const all: string[] = [];
+      if (Array.isArray(buyProducts)) all.push(...buyProducts.filter((x) => typeof x === "string"));
+      if (Array.isArray(getProducts)) all.push(...getProducts.filter((x) => typeof x === "string"));
+      if (Array.isArray(triggerProducts)) {
+        all.push(...triggerProducts.filter((x) => typeof x === "string"));
+      }
+      if (Array.isArray(giftProducts)) {
+        all.push(...giftProducts.filter((x) => typeof x === "string"));
+      }
+      return [...new Set(all)];
+    }
+    if (!Array.isArray(parsed)) return [];
+    const ids: string[] = [];
+    for (const item of parsed) {
+      if (typeof item === "string") ids.push(item);
+      else if (item && typeof item === "object" && typeof (item as { id?: unknown }).id === "string") {
+        ids.push(String((item as { id: string }).id));
+      }
+    }
+    return ids;
+  } catch {
+    return [];
+  }
+}
+
+function parseProgressiveGifts(offerSettingsJson?: string | null): ProgressiveGiftsPayload | null {
+  if (!offerSettingsJson) return null;
+  try {
+    const root = JSON.parse(offerSettingsJson) as { progressiveGifts?: ProgressiveGiftsPayload };
+    const pg = root?.progressiveGifts;
+    if (!pg || typeof pg !== "object") return null;
+    return pg;
+  } catch {
+    return null;
+  }
+}
+
+function lineMatchesOfferProduct(
+  offer: OfferRow,
+  productId: string | undefined,
+  variantId: string | undefined,
+): boolean {
+  if (offer.offerType === "bxgy") {
+    const rules = parseBxgyFirstRuleBuyIds(offer.discountRulesJson);
+    if (!rules.length) return false;
+    return (
+      (!!productId && rules.includes(productId)) || (!!variantId && rules.includes(variantId))
+    );
+  }
+  const selected = parseSelectedIds(offer.selectedProductsJson);
+  if (!selected.length) return true;
+  return (
+    (!!productId && selected.includes(productId)) || (!!variantId && selected.includes(variantId))
+  );
+}
+
+function parseBxgyFirstRuleBuyIds(discountRulesJson?: string | null): string[] {
+  if (!discountRulesJson) return [];
+  try {
+    const parsed = JSON.parse(discountRulesJson) as unknown;
+    if (!Array.isArray(parsed) || !parsed.length) return [];
+    const first = parsed[0] as { buyProductIds?: string[] };
+    return Array.isArray(first.buyProductIds) ? first.buyProductIds.filter((x) => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function offerScheduleAndMarketOk(
+  offer: OfferRow,
+  marketId: string | undefined,
+): boolean {
+  const nowMs = resolveNowMs();
+  if (offer.status === false) return false;
+  if (offer.startTime && nowMs !== null) {
+    const t = Date.parse(offer.startTime);
+    if (Number.isFinite(t) && nowMs < t) return false;
+  }
+  if (offer.endTime && nowMs !== null) {
+    const t = Date.parse(offer.endTime);
+    if (Number.isFinite(t) && nowMs > t) return false;
+  }
+  if (marketId && offer.offerSettingsJson) {
+    try {
+      const settings = JSON.parse(offer.offerSettingsJson) as { markets?: string };
+      const offerMarkets = settings.markets;
+      if (typeof offerMarkets === "string" && offerMarkets !== "all" && offerMarkets.trim() !== "") {
+        const allowed = offerMarkets.split(",").map((m) => m.trim());
+        const hit = allowed.some((m) => m === marketId || m.endsWith(`/${marketId}`));
+        if (!hit) return false;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return true;
+}
+
+function parseMoneyAmount(raw: unknown): number | null {
+  if (raw == null) return null;
+  const n = typeof raw === "string" ? Number.parseFloat(raw) : Number(raw);
+  if (!Number.isFinite(n)) return null;
+  return n;
+}
+
+function normalizeCouponCode(value: unknown): string {
+  return String(value || "").trim().toUpperCase();
+}
+
+function normalizeCustomerSegmentHandle(value: unknown): string {
+  return String(value || "").trim().toLowerCase();
+}
+
+function parseCustomerSegments(offerSettingsJson?: string | null): string[] {
+  if (!offerSettingsJson) return ["all"];
+  try {
+    const parsed = JSON.parse(offerSettingsJson) as {
+      customerSegments?: unknown;
+    };
+    const rawValue = parsed.customerSegments;
+    if (typeof rawValue !== "string" || !rawValue.trim()) {
+      return ["all"];
+    }
+    const normalized = rawValue
+      .split(",")
+      .map((segment) => normalizeCustomerSegmentHandle(segment))
+      .filter(Boolean);
+    return normalized.length ? Array.from(new Set(normalized)) : ["all"];
+  } catch {
+    return ["all"];
+  }
+}
+
+function parseCustomerProfileFilters(offerSettingsJson?: string | null): string[] {
+  if (!offerSettingsJson) return [];
+  try {
+    const parsed = JSON.parse(offerSettingsJson) as {
+      customerProfileFilters?: unknown;
+    };
+    const rawValue = parsed.customerProfileFilters;
+    if (typeof rawValue !== "string" || !rawValue.trim()) {
+      return [];
+    }
+    const normalized = rawValue
+      .split(",")
+      .map((value) => normalizeCustomerSegmentHandle(value))
+      .filter(Boolean);
+    return normalized.length ? Array.from(new Set(normalized)) : [];
+  } catch {
+    return [];
+  }
+}
+
+function normalizeCountryCode(value: unknown): string {
+  return String(value || "").trim().toUpperCase();
+}
+
+function parseIpCountryCodes(offerSettingsJson?: string | null): string[] {
+  if (!offerSettingsJson) return [];
+  try {
+    const parsed = JSON.parse(offerSettingsJson) as {
+      ipCountryCodes?: unknown;
+    };
+    const rawValue = parsed.ipCountryCodes;
+    if (typeof rawValue !== "string" || !rawValue.trim()) {
+      return [];
+    }
+    const normalized = rawValue
+      .split(",")
+      .map((value) => normalizeCountryCode(value))
+      .filter(Boolean);
+    return normalized.length ? Array.from(new Set(normalized)) : [];
+  } catch {
+    return [];
+  }
+}
+
+function buildBuyerTargetingContext(
+  input: CartDeliveryDiscountInput,
+): BuyerTargetingContext {
+  const buyerIdentity = input.cart.buyerIdentity;
+  const customer = buyerIdentity?.customer;
+  const tags = new Set(
+    (customer?.hasTags || [])
+      .filter((entry) => entry.hasTag)
+      .map((entry) => normalizeCustomerSegmentHandle(entry.tag)),
+  );
+
+  return {
+    isAuthenticated: buyerIdentity?.isAuthenticated === true,
+    numberOfOrders: Math.max(0, Math.trunc(Number(customer?.numberOfOrders) || 0)),
+    amountSpent: Math.max(
+      0,
+      Number.parseFloat(String(customer?.amountSpent?.amount || 0)) || 0,
+    ),
+    tags,
+    hasSubscriptionLine: input.cart.lines.some((line) => Boolean(line.sellingPlanAllocation?.sellingPlan?.id)),
+  };
+}
+
+function offerMatchesCustomerSegments(
+  offer: OfferRow,
+  buyerContext: BuyerTargetingContext,
+): boolean {
+  const configuredSegments = parseCustomerSegments(offer.offerSettingsJson);
+  if (
+    configuredSegments.length === 0 ||
+    configuredSegments.includes("all")
+  ) {
+    return true;
+  }
+
+  const recognizedSegments = configuredSegments.filter((segment) =>
+    RECOGNIZED_CUSTOMER_SEGMENTS.has(segment),
+  );
+  if (!recognizedSegments.length) {
+    logZh("customer segment 仅为自定义 handle，runtime 暂不限制", {
+      offerId: offer.id,
+      segments: configuredSegments,
+    });
+    return true;
+  }
+
+  return recognizedSegments.some((segment) => {
+    switch (segment) {
+      case "new_customers":
+        return !buyerContext.isAuthenticated || buyerContext.numberOfOrders === 0;
+      case "returning_customers":
+        return buyerContext.isAuthenticated && buyerContext.numberOfOrders > 0;
+      case "vip":
+        return buyerContext.tags.has("vip");
+      case "high_aov":
+        return (
+          buyerContext.tags.has("high_aov") ||
+          buyerContext.amountSpent >= 500
+        );
+      default:
+        return false;
+    }
+  });
+}
+
+function offerMatchesCustomerProfileFilters(
+  offer: OfferRow,
+  buyerContext: BuyerTargetingContext,
+): boolean {
+  const configuredFilters = parseCustomerProfileFilters(offer.offerSettingsJson);
+  if (!configuredFilters.length) {
+    return true;
+  }
+
+  const recognizedFilters = configuredFilters.filter((filter) =>
+    RECOGNIZED_CUSTOMER_PROFILE_FILTERS.has(filter),
+  );
+  if (!recognizedFilters.length) {
+    logZh("customer profile filter 仅为自定义 handle，runtime 暂不限制", {
+      offerId: offer.id,
+      filters: configuredFilters,
+    });
+    return true;
+  }
+
+  return recognizedFilters.every((filter) => {
+    switch (filter) {
+      case "subscription_active":
+        return (
+          buyerContext.hasSubscriptionLine ||
+          buyerContext.tags.has("subscription_active")
+        );
+      case "bundle_buyer":
+        return buyerContext.tags.has("bundle_buyer");
+      case "repeat_buyer":
+        return (
+          buyerContext.tags.has("repeat_buyer") ||
+          buyerContext.numberOfOrders > 1
+        );
+      case "high_intent":
+        return buyerContext.tags.has("high_intent");
+      default:
+        return true;
+    }
+  });
+}
+
+function offerMatchesIpCountryCodes(
+  offer: OfferRow,
+  countryCode: string,
+): boolean {
+  const configuredCodes = parseIpCountryCodes(offer.offerSettingsJson);
+  if (!configuredCodes.length) {
+    return true;
+  }
+  if (!countryCode) {
+    logZh("ip country runtime 不可用，跳过活动", {
+      offerId: offer.id,
+      configuredCodes,
+    });
+    return false;
+  }
+  return configuredCodes.includes(countryCode);
+}
+
+function parseCouponAccess(offerSettingsJson?: string | null): CouponAccess {
+  if (!offerSettingsJson) {
+    return { enabled: false, code: "" };
+  }
+  try {
+    const parsed = JSON.parse(offerSettingsJson) as {
+      couponEnabled?: unknown;
+      couponCode?: unknown;
+    };
+    return {
+      enabled: parsed.couponEnabled === true,
+      code: normalizeCouponCode(parsed.couponCode),
+    };
+  } catch {
+    return { enabled: false, code: "" };
+  }
+}
+
+function resolveAcceptedCouponCode(
+  offer: OfferRow,
+  enteredCodes: Set<string>,
+): string | null {
+  const couponAccess = parseCouponAccess(offer.offerSettingsJson);
+  if (!couponAccess.enabled) return null;
+  return couponAccess.code && enteredCodes.has(couponAccess.code)
+    ? couponAccess.code
+    : null;
+}
+
+function extractShopifyNumericId(raw: string | undefined | null): string {
+  if (!raw) return "";
+  const source = String(raw).trim();
+  const matched = source.match(/(\d+)\s*$/);
+  return matched ? matched[1] : source;
+}
+
+function idsMatch(a: string | undefined, b: string): boolean {
+  const left = extractShopifyNumericId(a);
+  const right = extractShopifyNumericId(b);
+  if (left && right) return left === right;
+  return String(a || "") === String(b || "");
+}
+
+function parseUnifiedShippingRules(discountRulesJson?: string | null): UnifiedShippingRule[] {
+  if (!discountRulesJson) return [];
+  try {
+    const parsed = JSON.parse(discountRulesJson) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    const out: UnifiedShippingRule[] = [];
+    for (const item of parsed) {
+      if (!item || typeof item !== "object") continue;
+      const count = Math.trunc(Number((item as { count?: unknown }).count));
+      if (!Number.isFinite(count) || count < 1) continue;
+      out.push({
+        count,
+        conditionType:
+          (item as { conditionType?: unknown }).conditionType === "cart_amount"
+            ? "cart_amount"
+            : "item_quantity",
+        amountThreshold: Number.isFinite(
+          Number((item as { amountThreshold?: unknown }).amountThreshold),
+        )
+          ? Math.max(0, Number((item as { amountThreshold?: unknown }).amountThreshold))
+          : undefined,
+        discountClass:
+          (item as { discountClass?: unknown }).discountClass === "order" ||
+          (item as { discountClass?: unknown }).discountClass === "shipping"
+            ? ((item as { discountClass: "order" | "shipping" }).discountClass)
+            : "product",
+        rewardType:
+          (item as { rewardType?: unknown }).rewardType === "gift_product" ||
+          (item as { rewardType?: unknown }).rewardType === "free_shipping"
+            ? ((item as { rewardType: "gift_product" | "free_shipping" }).rewardType)
+            : "percentage_off",
+      });
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+function readLineBundleProps(
+  line: CartDeliveryDiscountInput["cart"]["lines"][number],
+): {
+  tier: number | null;
+  offerId: string | null;
+} {
+  let tier: number | null = null;
+  let offerId: string | null = null;
+  const tr = line.bundleTierProp?.value;
+  if (tr != null && String(tr).trim() !== "") {
+    const n = Math.trunc(Number(tr));
+    if (Number.isFinite(n) && n >= 1) tier = n;
+  }
+  const oid = line.bundleOfferProp?.value;
+  if (oid != null && String(oid).trim() !== "") {
+    offerId = String(oid).trim();
+  }
+  return { tier, offerId };
+}
+
+/** 解析 quantity-breaks 规则的 count 列表（升序），供档位推断 */
+function parseQuantityBreakTierCounts(discountRulesJson?: string | null): number[] {
+  if (!discountRulesJson) return [];
+  try {
+    const parsed = JSON.parse(discountRulesJson) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    const counts: number[] = [];
+    for (const item of parsed) {
+      if (!item || typeof item !== "object") continue;
+      const c = Math.trunc(Number((item as { count?: unknown }).count));
+      if (!Number.isFinite(c) || c < 1) continue;
+      counts.push(c);
+    }
+    counts.sort((a, b) => a - b);
+    return counts;
+  } catch {
+    return [];
+  }
+}
+
+/** 解析 bxgy 规则的 count 列表（升序），供档位推断 */
+function parseBxgyTierCounts(discountRulesJson?: string | null): number[] {
+  if (!discountRulesJson) return [];
+  try {
+    const parsed = JSON.parse(discountRulesJson) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    const counts: number[] = [];
+    for (const item of parsed) {
+      if (!item || typeof item !== "object") continue;
+      const c = Math.trunc(Number((item as { count?: unknown }).count));
+      if (!Number.isFinite(c) || c < 1) continue;
+      counts.push(c);
+    }
+    counts.sort((a, b) => a - b);
+    return counts;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 无行属性时推断 Bar 序号（1-based，与主题 `__ciwi_bundle_tier` 语义对齐）：
+ * - quantity-breaks：与行项目折扣一致，取「满足 quantity >= tier.count」的最高档；Single=1，第 i 条规则对应 bar i+2。
+ * - bxgy：与主题一致，仅当 quantity 与某一档 count 完全相等时命中该档，否则视为 1。
+ */
+function inferBarIndexFromOfferAndQty(offer: OfferRow, qty: number): number {
+  const q = Math.max(1, Math.trunc(Number(qty) || 1));
+  if (offer.offerType === "bxgy") {
+    const counts = parseBxgyTierCounts(offer.discountRulesJson);
+    const idx = counts.findIndex((c) => c === q);
+    return idx >= 0 ? idx + 1 : 1;
+  }
+  if (q === 1) return 1;
+  const tiers = parseQuantityBreakTierCounts(offer.discountRulesJson);
+  if (!tiers.length) return 1;
+  let bestIdx = -1;
+  for (let i = 0; i < tiers.length; i++) {
+    if (q >= tiers[i]) bestIdx = i;
+  }
+  if (bestIdx < 0) return 1;
+  return bestIdx + 2;
+}
+
+function progressiveGiftsActiveOnOffer(offer: OfferRow): boolean {
+  const pg = parseProgressiveGifts(offer.offerSettingsJson ?? null);
+  return !!(pg?.enabled && Array.isArray(pg.gifts) && pg.gifts.length);
+}
+
+/**
+ * 解析本行用于阶梯免邮的 (活动, 档位)。
+ * 行属性优先；缺失时用商品匹配 + 数量推断（见文件头说明）。
+ */
+function resolveOfferAndTierForProgressiveLine(
+  line: CartDeliveryDiscountInput["cart"]["lines"][number],
+  offers: OfferRow[],
+  marketId: string | undefined,
+  productId: string | undefined,
+  variantId: string | undefined,
+  qty: number,
+): { offer: OfferRow; tier: number } | null {
+  const props = readLineBundleProps(line);
+  logZh("行属性读取", {
+    lineQty: line.quantity,
+    offerId: props.offerId,
+    tier: props.tier,
+  });
+  const eligible = offers.filter(
+    (o) =>
+      offerScheduleAndMarketOk(o, marketId) &&
+      lineMatchesOfferProduct(o, productId, variantId) &&
+      progressiveGiftsActiveOnOffer(o),
+  );
+  if (!eligible.length) {
+    logZh("本行无可用活动", {
+      productId,
+      variantId,
+      marketId,
+    });
+    return null;
+  }
+
+  let offer: OfferRow | undefined;
+  if (props.offerId) {
+    offer = eligible.find((o) => String(o.id) === String(props.offerId));
+    if (!offer) {
+      logZh("行属性 offerId 未命中活动", {
+        offerId: props.offerId,
+        eligibleOfferIds: eligible.map((o) => o.id),
+      });
+      return null;
+    }
+  } else if (eligible.length === 1) {
+    offer = eligible[0];
+    logZh("缺少 offerId，按唯一活动兜底", {
+      offerId: offer.id,
+    });
+  } else {
+    log("tier_resolve_skip", {
+      reason: "multiple_eligible_offers_need_line_offer_id",
+      offerIds: eligible.map((o) => o.id),
+    });
+    logZh("同商品命中多个活动，且缺少 offerId，跳过免邮", {
+      eligibleOfferIds: eligible.map((o) => o.id),
+    });
+    return null;
+  }
+
+  const tier = props.tier != null ? props.tier : inferBarIndexFromOfferAndQty(offer, qty);
+  if (props.tier == null) {
+    log("tier_inferred", { offerId: offer.id, qty, tier });
+    logZh("tier 缺失，已按数量推断", {
+      offerId: offer.id,
+      qty,
+      inferredTier: tier,
+    });
+  }
+  logZh("本行活动与档位确定", {
+    offerId: offer.id,
+    tier,
+    qty,
+  });
+  return { offer, tier };
+}
+
+function getScopedRegularLines(
+  lines: CartDeliveryDiscountInput["cart"]["lines"],
+  offer: OfferRow,
+): CartDeliveryDiscountInput["cart"]["lines"] {
+  const selected = parseSelectedIds(offer.selectedProductsJson);
+  if (!selected.length) {
+    return lines.filter((line) => line.merchandise.__typename === "ProductVariant");
+  }
+  return lines.filter((line) => {
+    if (line.merchandise.__typename !== "ProductVariant") return false;
+    const productId = line.merchandise.product?.id;
+    const variantId = line.merchandise.id;
+    return selected.some(
+      (sid) =>
+        (!!productId && idsMatch(productId, sid)) ||
+        (!!variantId && idsMatch(variantId, sid)),
+    );
+  });
+}
+
+function hasEligibleShippingRule(
+  offer: OfferRow,
+  lines: CartDeliveryDiscountInput["cart"]["lines"],
+): boolean {
+  const scopedLines = getScopedRegularLines(lines, offer);
+  if (!scopedLines.length) return false;
+
+  const metrics = scopedLines.reduce(
+    (acc, line) => ({
+      totalQuantity: acc.totalQuantity + Math.max(1, Math.trunc(Number(line.quantity) || 1)),
+      subtotalAmount:
+        acc.subtotalAmount +
+        (parseMoneyAmount(line.cost?.amountPerQuantity?.amount) ?? 0) *
+          Math.max(1, Math.trunc(Number(line.quantity) || 1)),
+    }),
+    { totalQuantity: 0, subtotalAmount: 0 },
+  );
+
+  return parseUnifiedShippingRules(offer.discountRulesJson).some((rule) => {
+    if (rule.discountClass !== "shipping" || rule.rewardType !== "free_shipping") {
+      return false;
+    }
+    if (rule.conditionType === "cart_amount") {
+      return metrics.subtotalAmount >= Math.max(0, Number(rule.amountThreshold) || 0);
+    }
+    return metrics.totalQuantity >= Math.max(1, Math.trunc(Number(rule.count) || 1));
+  });
+}
+
+function extractOffersListFromJson(v: unknown): OfferRow[] {
+  if (!v || typeof v !== "object") return [];
+  const o = v as { offers?: unknown };
+  return Array.isArray(o.offers) ? (o.offers as OfferRow[]) : [];
+}
+
+function pickDeliveryOffersFromInput(input: CartDeliveryDiscountInput): {
+  offers: OfferRow[];
+  source: string;
+} {
+  const discountOwnerMf = input.discount.offersFromDiscountOwner;
+  const jDisc = discountOwnerMf?.jsonValue;
+
+  log("read_ciwi_offers_metafield", {
+    namespace: "$app:ciwi_bundle",
+    key: "offers",
+    metafieldNodePresent: discountOwnerMf != null,
+    jsonValueKind:
+      jDisc === undefined
+        ? "undefined"
+        : jDisc === null
+          ? "null"
+          : Array.isArray(jDisc)
+            ? "array"
+            : typeof jDisc,
+    topLevelKeys:
+      jDisc && typeof jDisc === "object" && !Array.isArray(jDisc)
+        ? Object.keys(jDisc as Record<string, unknown>).slice(0, 30)
+        : null,
+    offersArrayLength:
+      jDisc &&
+      typeof jDisc === "object" &&
+      !Array.isArray(jDisc) &&
+      Array.isArray((jDisc as { offers?: unknown }).offers)
+        ? (jDisc as { offers: unknown[] }).offers.length
+        : null,
+  });
+
+  const fromDiscount = extractOffersListFromJson(jDisc);
+  if (fromDiscount.length) {
+    return { offers: fromDiscount, source: "discount_owner_app_ciwi_bundle_offers" };
+  }
+  return {
+    offers: [],
+    source: jDisc != null ? "discount_owner_empty_lists" : "none",
+  };
+}
+
+export function bundleDeliveryDiscountGenerateRun(
+  input: CartDeliveryDiscountInput,
+): CartDeliveryOptionsDiscountsGenerateRunResult {
+  logZh("函数已触发", {
+    cartLineCount: input.cart.lines.length,
+    deliveryGroupCount: input.cart.deliveryGroups.length,
+    discountClasses: input.discount.discountClasses,
+    marketId: input.localization.market?.id ?? null,
+  });
+
+  const hasShipping = input.discount.discountClasses.includes(DiscountClass.Shipping);
+  if (!hasShipping) {
+    log("early_exit", { reason: "no_shipping_discount_class" });
+    logZh("提前退出：discountClasses 不包含 SHIPPING", {
+      discountClasses: input.discount.discountClasses,
+    });
+    return { operations: [] };
+  }
+
+  const { offers, source: offersSource } = pickDeliveryOffersFromInput(input);
+  if (!offers.length) {
+    log("early_exit", { reason: "no_offers" });
+    logZh("提前退出：无活动（discount owner offers）", {
+      offersSource,
+    });
+    return { operations: [] };
+  }
+
+  const marketId = input.localization.market?.id ?? undefined;
+  const localizationCountryCode = normalizeCountryCode(
+    input.localization.country?.isoCode,
+  );
+  const buyerTargetingContext = buildBuyerTargetingContext(input);
+  const enteredCodes = new Set(
+    [normalizeCouponCode(input.triggeringDiscountCode)].filter(Boolean),
+  );
+  const acceptedCouponCodes = new Set<string>();
+  const acceptedCouponCodeByOfferId = new Map<string, string>();
+  const eligibleOffers = offers.filter((offer) => {
+    if (!offerMatchesCustomerSegments(offer, buyerTargetingContext)) {
+      logZh("customer segment 未命中，跳过活动", {
+        offerId: offer.id,
+      });
+      return false;
+    }
+    if (!offerMatchesCustomerProfileFilters(offer, buyerTargetingContext)) {
+      logZh("customer profile filter 未命中，跳过活动", {
+        offerId: offer.id,
+      });
+      return false;
+    }
+    if (!offerMatchesIpCountryCodes(offer, localizationCountryCode)) {
+      logZh("ip country code 未命中，跳过活动", {
+        offerId: offer.id,
+        localizationCountryCode,
+      });
+      return false;
+    }
+    const couponAccess = parseCouponAccess(offer.offerSettingsJson);
+    if (!couponAccess.enabled) {
+      return true;
+    }
+    const acceptedCode = resolveAcceptedCouponCode(offer, enteredCodes);
+    if (!acceptedCode) {
+      logZh("coupon code 未命中，跳过活动", {
+        offerId: offer.id,
+        configuredCode: couponAccess.code,
+      });
+      return false;
+    }
+    acceptedCouponCodes.add(acceptedCode);
+    acceptedCouponCodeByOfferId.set(String(offer.id || ""), acceptedCode);
+    return true;
+  });
+  const handlesToDiscount = new Set<string>();
+  const regularShippingOffers = eligibleOffers.filter(
+    (offer) =>
+      offer.offerType !== "bxgy" &&
+      offer.offerType !== "quantity-breaks-different" &&
+      offer.offerType !== "complete-bundle" &&
+      offerScheduleAndMarketOk(offer, marketId),
+  );
+
+  for (const offer of regularShippingOffers) {
+    if (!hasEligibleShippingRule(offer, input.cart.lines)) continue;
+    for (const group of input.cart.deliveryGroups) {
+      for (const opt of group.deliveryOptions) {
+        if (opt.deliveryMethodType !== DeliveryMethod.Shipping) continue;
+        handlesToDiscount.add(String(opt.handle));
+      }
+    }
+  }
+
+  for (const line of input.cart.lines) {
+    if (line.merchandise.__typename !== "ProductVariant") {
+      logZh("跳过非商品变体行", {
+        typename: line.merchandise.__typename,
+      });
+      continue;
+    }
+    const variantId = line.merchandise.id;
+    const productId = line.merchandise.product?.id ?? undefined;
+    const qty = Math.max(1, Math.trunc(Number(line.quantity) || 1));
+
+    const resolved = resolveOfferAndTierForProgressiveLine(
+      line,
+      eligibleOffers,
+      marketId,
+      productId,
+      variantId,
+      qty,
+    );
+    if (!resolved) {
+      logZh("本行未进入免邮计算", {
+        productId,
+        variantId,
+        qty,
+      });
+      continue;
+    }
+
+    const { offer, tier } = resolved;
+    const pg = parseProgressiveGifts(offer.offerSettingsJson ?? null);
+    if (!pg?.enabled || !Array.isArray(pg.gifts) || !pg.gifts.length) {
+      logZh("活动未启用阶梯赠品或 gifts 为空", {
+        offerId: offer.id,
+      });
+      continue;
+    }
+
+    for (const gift of pg.gifts) {
+      if (String(gift.type) !== "free_shipping") continue;
+      const mode = String(gift.unlockMode || "tier_index");
+      let unlocked = false;
+      if (mode === "at_count") {
+        const need = Math.max(1, Math.trunc(Number(gift.unlockAtCount) || 1));
+        unlocked = qty >= need;
+      } else {
+        const needBar = Math.max(1, Math.trunc(Number(gift.unlockTierIndex) || 1));
+        unlocked = tier >= needBar;
+      }
+      if (!unlocked) {
+        logZh("免邮未解锁", {
+          offerId: offer.id,
+          unlockMode: gift.unlockMode || "tier_index",
+          currentTier: tier,
+          qty,
+          unlockTierIndex: gift.unlockTierIndex ?? null,
+          unlockAtCount: gift.unlockAtCount ?? null,
+        });
+        continue;
+      }
+      logZh("免邮已解锁，开始匹配配送选项", {
+        offerId: offer.id,
+        unlockMode: gift.unlockMode || "tier_index",
+        currentTier: tier,
+        qty,
+      });
+
+      const maxRate = gift.freeShippingMaxRateAmount;
+      for (const group of input.cart.deliveryGroups) {
+        for (const opt of group.deliveryOptions) {
+          if (opt.deliveryMethodType !== DeliveryMethod.Shipping) continue;
+          const amt = parseMoneyAmount(opt.cost?.amount);
+          if (amt == null) continue;
+          if (maxRate != null && Number.isFinite(maxRate) && amt > maxRate) {
+            logZh("运费超过免邮上限，跳过该配送方式", {
+              offerId: offer.id,
+              deliveryHandle: String(opt.handle),
+              shippingAmount: amt,
+              freeShippingMaxRateAmount: maxRate,
+            });
+            continue;
+          }
+          handlesToDiscount.add(String(opt.handle));
+          logZh("命中免邮配送方式", {
+            offerId: offer.id,
+            deliveryHandle: String(opt.handle),
+            shippingAmount: amt,
+          });
+        }
+      }
+    }
+  }
+
+  if (!handlesToDiscount.size && acceptedCouponCodes.size === 0) {
+    log("early_exit", { reason: "no_qualifying_options" });
+    logZh("提前退出：没有可打折的配送方式", {
+      deliveryGroupCount: input.cart.deliveryGroups.length,
+    });
+    return { operations: [] };
+  }
+
+  const candidates = [...handlesToDiscount].map((handle) => ({
+    message: "Bundle free shipping",
+    targets: [{ deliveryOption: { handle } }],
+    value: { percentage: { value: "100.0" } },
+    associatedDiscountCode:
+      acceptedCouponCodes.size > 0
+        ? {
+            code:
+              acceptedCouponCodeByOfferId.get(
+                Array.from(acceptedCouponCodeByOfferId.keys())[0] || "",
+              ) || Array.from(acceptedCouponCodes)[0],
+          }
+        : undefined,
+  }));
+
+  log("apply", { optionCount: candidates.length });
+  logZh("将返回免邮折扣 candidates", {
+    optionCount: candidates.length,
+    handles: [...handlesToDiscount],
+  });
+
+  return {
+    operations: [
+      ...(acceptedCouponCodes.size > 0
+        ? [
+            {
+              enteredDiscountCodesAccept: {
+                codes: Array.from(acceptedCouponCodes).map((code) => ({ code })),
+              },
+            } as const,
+          ]
+        : []),
+      ...(candidates.length > 0
+        ? [
+            {
+              deliveryDiscountsAdd: {
+                candidates,
+                selectionStrategy: DeliveryDiscountSelectionStrategy.All,
+              },
+            } as const,
+          ]
+        : []),
+    ],
+  };
+}

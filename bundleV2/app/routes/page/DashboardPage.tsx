@@ -17,8 +17,13 @@ import {
 } from "lucide-react";
 import "../../styles/tailwind.css";
 import { CreateNewOffer } from "../component/CreateNewOffer/CreateNewOffer";
-import type { IndexLoaderData } from "../_index/route";
-import { parseDiscountRules } from "../../utils/offerParsing";
+import type { IndexLoaderData, ThemeEditorTarget } from "../_index/route";
+import {
+  getOfferDisplayType,
+  getOfferRulesText,
+  getOfferScheduleTimezone,
+} from "../../utils/offerParsing";
+import { openThemeEditor } from "../../utils/themeEditor";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -35,9 +40,22 @@ interface DashboardPageProps {
   storeProducts?: IndexLoaderData["storeProducts"];
   markets?: IndexLoaderData["markets"];
   shop: string;
+  themeEditorStoreId: string;
+  themeEditorThemeId: string;
   apiKey: string;
   ianaTimezone: string;
   themeExtensionEnabled: boolean;
+  themeExtensionDetectionFailed?: boolean;
+  themeExtensionError?: string;
+  themeTargets?: IndexLoaderData["themeTargets"];
+  themeExtensionMatchedThemeId?: string;
+}
+
+function formatThemeTargetLabel(theme: ThemeEditorTarget): string {
+  if (theme.role === "MAIN") return `${theme.name} (Live)`;
+  if (theme.role === "UNPUBLISHED") return `${theme.name} (Draft)`;
+  if (theme.role === "DEVELOPMENT") return `${theme.name} (Development)`;
+  return `${theme.name} (${theme.role || "Theme"})`;
 }
 
 type DashboardOfferRow = {
@@ -47,6 +65,7 @@ type DashboardOfferRow = {
   offerType: string;
   discountRulesJson: string | null;
   offerSettingsJson: string | null;
+  campaignConfigJson?: string | null;
   isActive: boolean;
   createdAt: string | Date | undefined;
   updatedAt: string | Date | undefined;
@@ -119,46 +138,66 @@ export function DashboardPage({
   storeProducts = [],
   markets = [],
   shop,
+  themeEditorStoreId,
+  themeEditorThemeId,
   apiKey,
   ianaTimezone,
   themeExtensionEnabled,
+  themeExtensionDetectionFailed = false,
+  themeExtensionError,
+  themeTargets = [],
+  themeExtensionMatchedThemeId,
 }: DashboardPageProps) {
   const [searchParams] = useSearchParams();
-  const actionData = useActionData() as { toast?: string } | undefined;
+  const actionData = useActionData() as
+    | { toast?: string }
+    | { _offerActionError: true; message: string }
+    | undefined;
   const navigation = useNavigation();
   const [showCreateOffer, setShowCreateOffer] = useState(false);
   const [editingOfferId, setEditingOfferId] = useState<string | null>(null);
   const [deletingOffer, setDeletingOffer] = useState<DashboardOfferRow | null>(
     null,
   );
-  const [togglingIds, setTogglingIds] = useState<string[]>([]);
+  const [pendingToggleStatus, setPendingToggleStatus] = useState<Record<string, boolean>>({});
+  const [submittingToggleIds, setSubmittingToggleIds] = useState<Set<string>>(() => new Set());
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(() => new Set());
   const [overviewMetrics, setOverviewMetrics] = useState<GmvOverviewMetrics | null>(
     null,
   );
-  const [totalGmv, setTotalGmv] = useState(0);
-  const [gmvGrowthRate, setGmvGrowthRate] = useState(0);
-  const [bundleOrders, setBundleOrders] = useState(0);
-  const [productViewed, setProductViewed] = useState(0);
-
-  const mockOverviewData = {
-    bundleOrders: 320,
-    bundleOrdersGrowthRate: 8.5,
-    avgConversionRate: 3.2,
-    conversionTrend: 4.1,
-  };
 
   const [showThemeExtensionModal, setShowThemeExtensionModal] = useState(false);
+  const preferredThemeTarget = themeTargets.find(
+    (theme) => theme.id === themeExtensionMatchedThemeId,
+  ) ||
+    themeTargets.find((theme) => theme.role === "MAIN") ||
+    themeTargets.find((theme) => theme.role === "UNPUBLISHED") ||
+    themeTargets[0] ||
+    null;
+  const [selectedThemeId, setSelectedThemeId] = useState(
+    preferredThemeTarget?.id || "",
+  );
   const [hideBanner, setHideBanner] = useState(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("hideThemeExtensionBanner") === "true";
     }
     return false;
   });
+  const themeExtensionStatus = themeExtensionDetectionFailed
+    ? "unknown"
+    : themeExtensionEnabled
+      ? "active"
+      : "inactive";
+  const themeExtensionBlocksOffers = themeExtensionStatus === "inactive";
 
   const handleCloseBanner = () => {
     setHideBanner(true);
     localStorage.setItem("hideThemeExtensionBanner", "true");
   };
+
+  const effectiveShop = themeEditorStoreId || shop;
+  const defaultThemeEditorId =
+    preferredThemeTarget?.editorId || preferredThemeTarget?.id || themeEditorThemeId;
 
   const offerRows: DashboardOfferRow[] = (offers ?? []).map((offer) => {
     const isActive = !!offer.status;
@@ -176,6 +215,7 @@ export function DashboardPage({
       offerType: offer.offerType,
       discountRulesJson: offer.discountRulesJson,
       offerSettingsJson: offer.offerSettingsJson,
+      campaignConfigJson: offer.campaignConfigJson,
       isActive,
       createdAt,
       updatedAt,
@@ -186,7 +226,7 @@ export function DashboardPage({
     };
   });
 
-  const visibleOffers = offerRows.slice(0, 4);
+  const visibleOffers = offerRows.filter((offer) => !pendingDeleteIds.has(offer.id)).slice(0, 4);
 
   // 计算真实 Overview 数据
   const fallbackOverview = (() => {
@@ -232,26 +272,71 @@ export function DashboardPage({
     };
   })();
 
-    const gmvGrowthRateColor =
-    gmvGrowthRate === 0 ? "#916a00" : gmvGrowthRate > 0 ? "#108043" : "#D93025";
-  const gmvGrowthRateArrow = gmvGrowthRate >= 0 ? "↑" : "↓";
-
   useEffect(() => {
     if (navigation.state === "submitting" && navigation.formData) {
       const intent = navigation.formData.get("intent");
       const id = navigation.formData.get("offerId");
       if (intent === "toggle-offer-status" && typeof id === "string" && id) {
-        setTogglingIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+        const nextStatusRaw = navigation.formData.get("nextStatus");
+        const nextStatus = String(nextStatusRaw || "").trim() === "true";
+        setPendingToggleStatus((prev) => ({ ...prev, [id]: nextStatus }));
+        setSubmittingToggleIds((prev) => {
+          const next = new Set(prev);
+          next.add(id);
+          return next;
+        });
       }
-    } else if (navigation.state === "idle" && togglingIds.length > 0) {
-      const timer = setTimeout(() => {
-        setTogglingIds([]);
-      }, 300);
-      return () => clearTimeout(timer);
+      if (intent === "delete-offer" && typeof id === "string" && id) {
+        setPendingDeleteIds((prev) => {
+          const next = new Set(prev);
+          next.add(id);
+          return next;
+        });
+      }
     }
-  }, [navigation.state, navigation.formData, togglingIds.length]);
+  }, [navigation.state, navigation.formData]);
 
-  const getIsToggling = (offerId: string) => togglingIds.includes(offerId);
+  useEffect(() => {
+    if (!actionData) return;
+    if (!("_offerActionError" in actionData) || !actionData._offerActionError) return;
+    setPendingToggleStatus({});
+    setSubmittingToggleIds(new Set());
+    setPendingDeleteIds(new Set());
+  }, [actionData]);
+
+  useEffect(() => {
+    setPendingToggleStatus((prev) => {
+      const ids = Object.keys(prev);
+      if (ids.length === 0) return prev;
+      let next: Record<string, boolean> | null = null;
+      for (const id of ids) {
+        const desiredStatus = prev[id];
+        const offer = offerRows.find((row) => row.id === id);
+        if (!offer || offer.isActive === desiredStatus) {
+          if (!next) next = { ...prev };
+          delete next[id];
+        }
+      }
+      return next ?? prev;
+    });
+
+    setPendingDeleteIds((prev) => {
+      if (prev.size === 0) return prev;
+      let changed = false;
+      const next = new Set<string>();
+      const rowIds = new Set(offerRows.map((row) => row.id));
+      for (const id of prev) {
+        if (rowIds.has(id)) {
+          next.add(id);
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [offerRows]);
+
+  const getIsToggling = (offerId: string) => submittingToggleIds.has(offerId);
 
   const handleViewDetails = () => {
     onViewAnalytics?.();
@@ -272,19 +357,47 @@ export function DashboardPage({
   };
   const handleViewAllAbTests = () => {}; // mock
   const handleThemeExtensionToggle = () => {
-    const storeHandle = shop.replace(".myshopify.com", "");
-    const appEmbed = `${apiKey}/product_detail_message`;
-    const editorUrl = `https://admin.shopify.com/store/${storeHandle}/themes/current/editor?context=apps&appEmbed=${encodeURIComponent(appEmbed)}`;
-    window.open(editorUrl, "_top");
+    if (!effectiveShop || !apiKey) return;
+    if (themeTargets.length > 1) {
+      setShowThemeExtensionModal(true);
+      return;
+    }
+    openThemeEditor(effectiveShop, apiKey, {
+      themeId: defaultThemeEditorId,
+      openAppEmbed: true,
+    });
   };
 
-  const toast = searchParams.get("toast") || actionData?.toast;
+  const handleOpenSelectedTheme = () => {
+    if (!effectiveShop || !apiKey) return;
+    setShowThemeExtensionModal(false);
+    openThemeEditor(effectiveShop, apiKey, {
+      themeId: selectedThemeId || defaultThemeEditorId,
+      openAppEmbed: true,
+    });
+  };
+
+  const toast =
+    searchParams.get("toast") ||
+    (actionData && "toast" in actionData ? actionData.toast : undefined);
 
   useEffect(() => {
     if (toast?.startsWith("delete-success")) {
       setDeletingOffer(null);
     }
+    if (toast?.startsWith("toggle-success")) {
+      setSubmittingToggleIds(new Set());
+    }
   }, [toast]);
+
+  useEffect(() => {
+    setSelectedThemeId((previous) => {
+      if (previous && themeTargets.some((theme) => theme.id === previous)) {
+        return previous;
+      }
+      return preferredThemeTarget?.id || "";
+    });
+  }, [preferredThemeTarget?.id, themeTargets]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -300,56 +413,54 @@ export function DashboardPage({
 
     const run = async () => {
       try {
-        const overviewUrl = `/webpixerToAli?mode=dashboard-overview-gmv&shopName=${shop}`;
-        const response = await fetch(overviewUrl);
-        
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success) {
-            setTotalGmv(data.totalGmv || 0);
-            setGmvGrowthRate(data.gmvGrowthRate || 0);
-          }
+        const response = await fetch(`/webpixerToAli?${query.toString()}`, {
+          method: "GET",
+          signal: controller.signal,
+        });
+        const data = (await response.json().catch(() => ({}))) as {
+          success?: boolean;
+          message?: string;
+          metrics?: GmvOverviewMetrics;
+          range?: { from?: string; to?: string };
+          logsFetched?: number;
+        };
+
+        if (!response.ok || !data.success) {
+          console.error("[dashboard][gmv-overview] query failed", {
+            status: response.status,
+            message: data?.message || "unknown error",
+            shop,
+            range: data?.range,
+          });
+          return;
         }
+
+        console.log("[dashboard][gmv-overview] metrics", {
+          shop,
+          range: data.range,
+          logsFetched: data.logsFetched ?? 0,
+          totalGmv: data.metrics?.totalGmv ?? 0,
+          conversion: data.metrics?.conversion ?? 0,
+          visitor: data.metrics?.visitor ?? 0,
+          bundleOrders: data.metrics?.bundleOrders ?? 0,
+          exposurePv: data.metrics?.exposurePv ?? 0,
+          orderPv: data.metrics?.orderPv ?? 0,
+        });
+
+        setOverviewMetrics(data.metrics ?? null);
       } catch (error) {
-        console.error("Failed to fetch dashboard overview data", error);
+        if (controller.signal.aborted) return;
+        setOverviewMetrics(null);
+        console.error("[dashboard][gmv-overview] query exception", {
+          shop,
+          error: String(error),
+        });
       }
     };
 
     run();
 
     return () => controller.abort();
-  }, [shop]);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const bundleOrdersUrl = `/webpixerToAli?mode=dashboard-overview-bundle-orders&shopName=${shop}`;
-        const productViewedUrl = `/webpixerToAli?mode=dashboard-overview-product-viewed&shopName=${shop}`;
-
-        const [bundleOrdersResponse, productViewedResponse] = await Promise.all([
-          fetch(bundleOrdersUrl),
-          fetch(productViewedUrl),
-        ]);
-
-        if (bundleOrdersResponse.ok) {
-          const data = await bundleOrdersResponse.json();
-          if (data.success) {
-            setBundleOrders(data.totalCount || 0);
-          }
-        }
-
-        if (productViewedResponse.ok) {
-          const data = await productViewedResponse.json();
-          if (data.success) {
-            setProductViewed(data.totalCount || 0);
-          }
-        }
-      } catch (error) {
-        console.error("Failed to fetch dashboard data:", error);
-      }
-    };
-
-    fetchData();
   }, [shop]);
 
   useEffect(() => {
@@ -388,7 +499,7 @@ export function DashboardPage({
 
   return (
     <div className="max-w-[1280px] mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px]">
-      {!themeExtensionEnabled && !hideBanner && (
+      {themeExtensionBlocksOffers && !hideBanner && (
         <div className="bg-[#fff4f4] border border-[#ffc9c9] rounded-[8px] p-[16px] mb-[24px] flex items-start justify-between">
           <div className="flex gap-[12px]">
             <div className="text-[#d72c0d] mt-[2px]">
@@ -399,7 +510,7 @@ export function DashboardPage({
                 Action required: Activate Theme Extension
               </h3>
               <p className="font-sans text-[14px] leading-[20px] text-[#5c6166] m-0">
-                Your offer has been created, but it won't be visible on your store until you activate the theme extension.
+                Your offer has been created, but it won't be visible until the theme extension is enabled on an online or draft theme.
               </p>
               <div className="mt-[12px]">
                 <button
@@ -454,43 +565,34 @@ export function DashboardPage({
                 Total GMV
               </span>
               <h3 className="font-sans font-semibold text-[28px] leading-[42px] text-[#1c1f23] tracking-wide m-0">
-                ${totalGmv.toFixed(2)}
+                {cardOverview.totalGmv}
               </h3>
-              <span
-                className="font-sans font-normal text-[14px] leading-[22.4px] text-[#108043] tracking-normal"
-                style={{
-                  color: gmvGrowthRateColor,
-                }}
-              >
-                {gmvGrowthRate !== 0 && `${gmvGrowthRateArrow} `}
-                {gmvGrowthRate >= 0 ? "+" : ""}{Math.abs(gmvGrowthRate).toFixed(2)}% from last month
+              <span className="font-sans font-normal text-[14px] leading-[22.4px] text-[#108043] tracking-normal">
+                {cardOverview.gmvTrend} {cardOverview.gmvTrendLabel}
               </span>
             </div>
-
-            {/* Bundle Orders */}
-           <div className="flex flex-col gap-[16px]">
+            <div className="flex flex-col gap-[16px]">
               <span className="font-sans font-normal text-[14px] leading-[22.4px] text-[#5c6166] tracking-normal">
                 Bundle Orders
               </span>
               <h3 className="font-sans font-semibold text-[28px] leading-[42px] text-[#1c1f23] tracking-wide m-0">
-                {bundleOrders}
+                {cardOverview.activeOffers}
               </h3>
+              <span className="font-sans font-normal text-[14px] leading-[22.4px] text-[#108043] tracking-normal">
+                {cardOverview.activeOffersTrend}
+              </span>
             </div>
-
-            {/* Avg. Conversion */}
             <div className="flex flex-col gap-[16px]">
               <span className="font-sans font-normal text-[14px] leading-[22.4px] text-[#5c6166] tracking-normal">
                 Avg. Conversion
               </span>
               <h3 className="font-sans font-semibold text-[28px] leading-[42px] text-[#1c1f23] tracking-wide m-0">
-                {productViewed > 0
-                  ? `${((bundleOrders / productViewed) * 100).toFixed(2)}%`
-                  : "0.00%"}
+                {cardOverview.avgConversion}
               </h3>
               <span
-                className="font-sans font-normal text-[14px] leading-[22.4px] tracking-normal"
+                className={`font-sans font-normal text-[14px] leading-[22.4px] tracking-normal ${cardOverview.conversionTrendColor}`}
               >
-                Orders {bundleOrders} / Exposure {productViewed}
+                {cardOverview.conversionTrendLabel}
               </span>
             </div>
           </div>
@@ -503,38 +605,76 @@ export function DashboardPage({
               Theme extension
             </h2>
             <div
-              className={`flex items-center gap-[6px] px-[8px] py-[4px] rounded-[4px] ${themeExtensionEnabled ? "bg-[#d1f7c4]" : "bg-[#f4f6f8]"}`}
+              className={`flex items-center gap-[6px] px-[8px] py-[4px] rounded-[4px] ${
+                themeExtensionStatus === "active"
+                  ? "bg-[#d1f7c4]"
+                  : themeExtensionStatus === "unknown"
+                    ? "bg-[#fff1c2]"
+                    : "bg-[#f4f6f8]"
+              }`}
             >
               <div
-                className={`w-[8px] h-[8px] rounded-full ${themeExtensionEnabled ? "bg-[#108043]" : "bg-[#6d7175]"}`}
+                className={`w-[8px] h-[8px] rounded-full ${
+                  themeExtensionStatus === "active"
+                    ? "bg-[#108043]"
+                    : themeExtensionStatus === "unknown"
+                      ? "bg-[#b98900]"
+                      : "bg-[#6d7175]"
+                }`}
               />
               <span
-                className={`font-sans font-medium text-[14px] leading-[21px] tracking-normal ${themeExtensionEnabled ? "text-[#108043]" : "text-[#5c6166]"}`}
+                className={`font-sans font-medium text-[14px] leading-[21px] tracking-normal ${
+                  themeExtensionStatus === "active"
+                    ? "text-[#108043]"
+                    : themeExtensionStatus === "unknown"
+                      ? "text-[#916a00]"
+                      : "text-[#5c6166]"
+                }`}
               >
-                {themeExtensionEnabled ? "Active" : "Inactive"}
+                {themeExtensionStatus === "active"
+                  ? "Active"
+                  : themeExtensionStatus === "unknown"
+                    ? "Check failed"
+                    : "Inactive"}
               </span>
             </div>
           </div>
           <p className="font-sans font-normal text-[16px] leading-[25.6px] text-[#1c1f23] tracking-normal mb-[20px]">
-            {themeExtensionEnabled
+            {themeExtensionStatus === "active"
               ? "Bundles widget is visible in product pages."
-              : "Bundles widget is currently disabled."}
+              : themeExtensionStatus === "unknown"
+                ? "Bundle widget status could not be verified right now."
+                : "Bundles widget is currently disabled."}
           </p>
           <p className="font-sans font-normal text-[13px] leading-[20px] text-[#5c6166] tracking-[-0.1px] mb-[12px]">
-            This opens Theme Editor App Embeds. Toggle the extension there and
-            click Save in Shopify.
+            This opens Theme Editor. Enable the app embed or add the app block
+            from the Apps panel on the live or draft theme you choose.
           </p>
+          {themeExtensionStatus === "unknown" && themeExtensionError ? (
+            <div className="mb-[12px] rounded-[8px] border border-[#ffe0b2] bg-[#fff8e1] px-[12px] py-[10px]">
+              <p className="m-0 text-[12px] font-medium leading-[18px] text-[#916a00]">
+                Temporary debug error
+              </p>
+              <p className="mt-[4px] mb-0 break-words font-mono text-[12px] leading-[18px] text-[#6d4c00]">
+                {themeExtensionError}
+              </p>
+            </div>
+          ) : null}
           <div className="flex flex-col gap-[12px]">
             <button
               type="button"
               onClick={handleThemeExtensionToggle}
               className={`px-[16px] py-[8px] rounded-[6px] font-sans font-normal text-[16px] leading-[24px] tracking-normal cursor-pointer transition-colors w-full border ${
-                themeExtensionEnabled
+                themeExtensionStatus === "active"
                   ? "bg-white border-[#dfe3e8] text-[#d72c0d] hover:bg-[#fef3f2]"
                   : "bg-transparent border-[#1c1f23] text-[#1c1f23] hover:bg-black/5"
               }`}
             >
-              {themeExtensionEnabled ? "Disable" : "Enable"}
+              {themeExtensionStatus === "active"
+                ? "Disable"
+                : themeExtensionStatus === "unknown"
+                  ? "Open Theme Editor"
+                  : "Enable"}
             </button>
           </div>
         </div>
@@ -606,26 +746,33 @@ export function DashboardPage({
             ) : (
               visibleOffers.map((offer) => {
                 const isToggling = getIsToggling(offer.id);
-                const displayIsActive = themeExtensionEnabled ? offer.isActive : false;
+                const optimisticStatus = pendingToggleStatus[offer.id];
+                const displayIsActive = themeExtensionBlocksOffers
+                  ? false
+                  : typeof optimisticStatus === "boolean"
+                    ? optimisticStatus
+                    : offer.isActive;
                 const statusLabel = displayIsActive ? "Active" : "Inactive";
-                const displayType = offer.offerType === "quantity-breaks-same" ? "Quantity breaks" : offer.offerType;
-                
-                const rules = parseDiscountRules(offer.discountRulesJson);
-                const rulesText = rules.length > 0 
-                  ? rules.map(r => `Buy ${r.count} Get ${r.discountPercent}% Off`).join(", ")
-                  : "-";
-                  
+                const displayType = getOfferDisplayType(
+                  offer.offerType,
+                  offer.campaignConfigJson,
+                  offer.offerSettingsJson,
+                );
+                const rulesText = getOfferRulesText({
+                  campaignConfigJson: offer.campaignConfigJson,
+                  discountRulesJson: offer.discountRulesJson,
+                  offerSettingsJson: offer.offerSettingsJson,
+                });
+
                 const formatTime = (timeStr: string | Date | undefined) => {
                   if (!timeStr) return "-";
                   const d = dayjs(timeStr);
                   if (!d.isValid()) return "-";
-                  let tz = ianaTimezone;
-                  try {
-                    if (offer.offerSettingsJson) {
-                      const parsed = JSON.parse(offer.offerSettingsJson);
-                      if (parsed.scheduleTimezone) tz = parsed.scheduleTimezone;
-                    }
-                  } catch (e) {}
+                  const tz = getOfferScheduleTimezone({
+                    campaignConfigJson: offer.campaignConfigJson,
+                    offerSettingsJson: offer.offerSettingsJson,
+                    fallback: ianaTimezone,
+                  });
                   return d.tz(tz).format("YYYY-MM-DD HH:mm:ss") + ` (UTC${d.tz(tz).format('Z')})`;
                 };
 
@@ -662,10 +809,15 @@ export function DashboardPage({
                           type="submit"
                           disabled={isToggling}
                           onClick={(e) => {
-                            if (!themeExtensionEnabled) {
+                            if (themeExtensionBlocksOffers) {
                               e.preventDefault();
                               setShowThemeExtensionModal(true);
+                              return;
                             }
+                            setPendingToggleStatus((prev) => ({
+                              ...prev,
+                              [offer.id]: offer.isActive ? false : true,
+                            }));
                           }}
                           className={`flex items-center gap-[8px] bg-transparent border-0 p-0 cursor-pointer ${
                             isToggling ? "opacity-70 cursor-default" : ""
@@ -757,7 +909,12 @@ export function DashboardPage({
           ) : (
             visibleOffers.map((offer) => {
               const isToggling = getIsToggling(offer.id);
-              const displayIsActive = themeExtensionEnabled ? offer.isActive : false;
+              const optimisticStatus = pendingToggleStatus[offer.id];
+              const displayIsActive = themeExtensionBlocksOffers
+                ? false
+                : typeof optimisticStatus === "boolean"
+                  ? optimisticStatus
+                  : offer.isActive;
               const statusLabel = displayIsActive ? "Active" : "Inactive";
               const gmvDisplay = `$${offer.gmv.toLocaleString()}`;
               const conversionDisplay = `${offer.conversion.toFixed(1)}%`;
@@ -790,10 +947,15 @@ export function DashboardPage({
                       type="submit"
                       disabled={isToggling}
                       onClick={(e) => {
-                        if (!themeExtensionEnabled) {
+                        if (themeExtensionBlocksOffers) {
                           e.preventDefault();
                           setShowThemeExtensionModal(true);
+                          return;
                         }
+                        setPendingToggleStatus((prev) => ({
+                          ...prev,
+                          [offer.id]: offer.isActive ? false : true,
+                        }));
                       }}
                       className={`flex items-center gap-[8px] mb-[12px] bg-transparent border-0 p-0 cursor-pointer ${
                         isToggling ? "opacity-70 cursor-default" : ""
@@ -1200,11 +1362,33 @@ export function DashboardPage({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.4)]">
           <div className="bg-white rounded-[16px] shadow-[0_8px_24px_rgba(0,0,0,0.12)] max-w-[400px] w-[90%] p-[24px]">
             <h2 className="font-sans font-semibold text-[18px] leading-[27px] text-[#1c1f23] mb-[8px]">
-              Activate Theme Extension
+              Open Theme Editor
             </h2>
-            <p className="font-sans text-[14px] leading-[21px] text-[#5c6166] mb-[16px]">
-              You need to activate the theme extension first before you can turn on any offers.
-            </p>
+            <div className="font-sans text-[14px] leading-[21px] text-[#5c6166] mb-[16px]">
+              <p className="m-0">
+                Choose the live or draft theme you want to configure. In Shopify
+                Theme Editor, you can enable the app embed or add the app block
+                from the Apps panel on a product template.
+              </p>
+              {themeTargets.length > 0 ? (
+                <label className="mt-[12px] block">
+                  <div className="mb-[6px] text-[12px] font-medium text-[#1c1f23]">
+                    Theme
+                  </div>
+                  <select
+                    value={selectedThemeId}
+                    onChange={(event) => setSelectedThemeId(event.target.value)}
+                    className="w-full rounded-[8px] border border-[#d0d5dd] bg-white px-[12px] py-[8px] text-[14px] text-[#1c1f23]"
+                  >
+                    {themeTargets.map((theme) => (
+                      <option key={theme.id} value={theme.id}>
+                        {formatThemeTargetLabel(theme)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+            </div>
             <div className="flex justify-end gap-[8px]">
               <button
                 type="button"
@@ -1216,12 +1400,11 @@ export function DashboardPage({
               <button
                 type="button"
                 onClick={() => {
-                  setShowThemeExtensionModal(false);
-                  handleThemeExtensionToggle();
+                  handleOpenSelectedTheme();
                 }}
                 className="px-[12px] py-[6px] rounded-[6px] bg-[#008060] !text-white text-[14px] font-sans hover:bg-[#006e52]"
               >
-                Activate Now
+                Open Theme Editor
               </button>
             </div>
           </div>

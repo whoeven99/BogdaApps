@@ -1,3 +1,6 @@
+import type { ProgressiveGiftsConfig } from "../../../utils/offerParsing";
+import { isProgressiveGiftUnlocked } from "../../../utils/offerParsing";
+
 export type LayoutFormat = "vertical" | "horizontal" | "card" | "compact";
 
 export type PreviewItem = {
@@ -9,6 +12,28 @@ export type PreviewItem = {
   featured?: boolean;
   badge?: string;
   saveLabel?: string;
+  products?: PreviewProduct[];
+};
+
+export type PreviewProduct = {
+  image: string;
+  name: string;
+  variant?: string;
+  actionLabel?: string;
+};
+
+export type CheckboxUpsellPreview = {
+  enabled: boolean;
+  title: string;
+  subtitle: string;
+  defaultChecked: boolean;
+};
+
+export type StickyAddToCartPreview = {
+  enabled: boolean;
+  title: string;
+  subtitle: string;
+  buttonText: string;
 };
 
 export const PREVIEW_ITEMS: PreviewItem[] = [
@@ -36,6 +61,89 @@ function esc(value: unknown) {
     .replace(/'/g, "&#39;");
 }
 
+function renderOptionalTextHtml(
+  value: unknown,
+  template: (text: string) => string,
+): string {
+  const text = String(value ?? "").trim();
+  return text ? template(text) : "";
+}
+
+/**
+ * 管理端预览：阶梯赠品（免邮）区域 HTML
+ * @param selectedBarIndex 当前模拟选中的 Bar 序号（1-based，与 __ciwi_bundle_tier 一致）
+ * @param assumedLineQty 模拟购物车行数量（用于 at_count 解锁预览）
+ */
+export function renderProgressiveGiftsPreviewHtml(
+  cfg: ProgressiveGiftsConfig,
+  selectedBarIndex: number,
+  assumedLineQty: number,
+): string {
+  if (!cfg.enabled || !cfg.gifts?.length) return "";
+
+  const layout = ["vertical", "horizontal", "card", "compact"].includes(cfg.layout)
+    ? cfg.layout
+    : "vertical";
+
+  const itemsHtml = cfg.gifts
+    .map((gift) => {
+      const unlocked = isProgressiveGiftUnlocked(gift, selectedBarIndex, assumedLineQty);
+      const hidden = cfg.hideGiftsUntilUnlocked && !unlocked;
+      if (hidden) return "";
+
+      const lockLabel = unlocked ? "已解锁" : "未解锁";
+      const showLock = cfg.showLabelsForLockedGifts || unlocked;
+      const img = gift.imageUrl?.trim()
+        ? `<div class="ciwi-progressive-gift__img-wrap"><img class="ciwi-progressive-gift__img" src="${esc(
+            gift.imageUrl,
+          )}" alt="" loading="lazy" /></div>`
+        : "";
+
+      const sub =
+        gift.type === "free_shipping"
+          ? gift.subtitle?.trim()
+            ? `<div class="create-offer-style-preview-item-subtitle">${esc(
+                gift.subtitle,
+              )}</div>`
+            : ""
+          : "";
+
+      return `<div class="ciwi-progressive-gift create-offer-style-preview-item${
+        unlocked ? " create-offer-style-preview-item--featured" : ""
+      }" data-unlocked="${unlocked ? "1" : "0"}">
+        ${
+          showLock
+            ? `<div class="ciwi-progressive-gift__lock">${esc(lockLabel)}</div>`
+            : ""
+        }
+        ${img || ""}
+        <div class="create-offer-style-preview-item-title">${esc(gift.title)}</div>
+        ${sub}
+      </div>`;
+    })
+    .filter(Boolean)
+    .join("");
+
+  if (!itemsHtml.trim()) return "";
+
+  return `<div class="ciwi-progressive-gifts" data-layout="${esc(layout)}">
+    <div class="ciwi-progressive-gifts__head">
+      <div class="ciwi-progressive-gifts__title">${esc(cfg.title)}</div>
+      ${
+        cfg.subtitle
+          ? `<div class="ciwi-progressive-gifts__sub">${esc(cfg.subtitle)}</div>`
+          : ""
+      }
+    </div>
+    <div class="create-offer-style-preview-list create-offer-style-preview-list--${esc(layout)} ciwi-progressive-gifts__list">
+      ${itemsHtml}
+    </div>
+    <p class="ciwi-progressive-gifts__legal">${esc(
+      "产品页仅作提示；真实免邮金额以 Checkout 为准。",
+    )}</p>
+  </div>`;
+}
+
 export function renderBundlePreviewHtml({
   title = "Bundle & Save",
   layoutFormat = "vertical",
@@ -50,6 +158,24 @@ export function renderBundlePreviewHtml({
   buttonPrimaryColor = "#008060",
   showCustomButton = true,
   items = PREVIEW_ITEMS,
+  showProductImages = true,
+  showSubscriptionPreview = false,
+  subscriptionPreviewStyle = "dashed",
+  subscriptionTitle = "Subscribe & Save",
+  subscriptionSubtitle = "Subscription pricing updates from your selling plan",
+  oneTimeTitle = "One-time purchase",
+  oneTimeSubtitle = "Uses the current product price",
+  oneTimePriceText = "€65,00",
+  subscriptionPriceText = null,
+  subscriptionCompareAtPriceText = null,
+  subscriptionSavingsText = null,
+  subscriptionPricingNoteText = null,
+  subscriptionPlanPreviewItems = [],
+  showSubscriptionExplanation = false,
+  subscriptionExplanationTitle = "Some products aren't eligible for subscriptions",
+  subscriptionExplanationBody = "Subscription bar will only be shown in products that are eligible for subscription. You can select those products in your subscription app.",
+  checkboxUpsellPreview = null,
+  stickyAddToCartPreview = null,
 }: {
   title?: string;
   layoutFormat?: LayoutFormat;
@@ -64,31 +190,101 @@ export function renderBundlePreviewHtml({
   buttonPrimaryColor?: string;
   showCustomButton?: boolean;
   items?: PreviewItem[];
+  showProductImages?: boolean;
+  showSubscriptionPreview?: boolean;
+  subscriptionPreviewStyle?: "solid" | "dashed";
+  subscriptionTitle?: string;
+  subscriptionSubtitle?: string;
+  oneTimeTitle?: string;
+  oneTimeSubtitle?: string;
+  oneTimePriceText?: string;
+  subscriptionPriceText?: string | null;
+  subscriptionCompareAtPriceText?: string | null;
+  subscriptionSavingsText?: string | null;
+  subscriptionPricingNoteText?: string | null;
+  subscriptionPlanPreviewItems?: Array<{
+    title: string;
+    subtitle?: string;
+    priceText?: string | null;
+    savingsText?: string | null;
+    noteText?: string | null;
+  }>;
+  showSubscriptionExplanation?: boolean;
+  subscriptionExplanationTitle?: string;
+  subscriptionExplanationBody?: string;
+  checkboxUpsellPreview?: CheckboxUpsellPreview | null;
+  stickyAddToCartPreview?: StickyAddToCartPreview | null;
 } = {}) {
   const safeLayout: LayoutFormat = ["vertical", "horizontal", "card", "compact"].includes(layoutFormat)
     ? layoutFormat
     : "vertical";
 
+  function renderProductChooserHtml(products?: PreviewProduct[]): string {
+    if (!products || products.length === 0) return "";
+    const showChooser = products.some((product) => product.actionLabel);
+    if (!showChooser) return "";
+    const buttonLabel = products.find((product) => product.actionLabel)?.actionLabel || "Choose";
+    return `<div style="margin-top:10px;display:flex;justify-content:flex-start;">
+      <span style="display:inline-flex;align-items:center;justify-content:center;border-radius:999px;background:${esc(
+        accentColor,
+      )};color:${esc(labelColor)};font-size:11px;font-weight:600;padding:7px 14px;min-width:74px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-sizing:border-box;">${esc(
+        buttonLabel,
+      )}</span>
+    </div>`;
+  }
+
+  function renderProductsGalleryHtml(products?: PreviewProduct[]): string {
+    if (!showProductImages || !products || products.length === 0) return "";
+    return `<div class="create-offer-preview-products" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+      ${products
+        .map(
+          (product) => `
+            <div class="create-offer-preview-product" style="position:relative;width:48px;height:48px;border-radius:8px;overflow:hidden;border:1px solid ${esc(borderColor)};">
+              <img src="${esc(product.image)}" alt="${esc(product.name)}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none'" />
+              ${
+                product.variant
+                  ? `<span style="position:absolute;bottom:0;left:0;right:0;background:${esc(accentColor)};color:${esc(labelColor)};font-size:8px;text-align:center;padding:1px;">${esc(product.variant)}</span>`
+                  : ""
+              }
+            </div>
+          `,
+        )
+        .join("")}
+    </div>`;
+  }
+
   const itemsHtml = items.map((item) => {
     const featuredClass = item.featured ? " create-offer-style-preview-item--featured" : "";
+    const badgeClass = item.badge ? " create-offer-style-preview-item--with-badge" : "";
     const featuredStyle = item.featured 
       ? `border-color: ${esc(accentColor)} !important; background: ${esc(cardBackgroundColor)} !important; box-shadow: 0 8px 18px ${esc(accentColor)}25 !important; cursor: pointer;`
       : `border-color: ${esc(borderColor)} !important; background: ${esc(cardBackgroundColor)} !important; cursor: pointer;`;
-      
-    return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}">
+    const chooserHtml = renderProductChooserHtml(item.products);
+    const galleryHtml = chooserHtml ? "" : renderProductsGalleryHtml(item.products);
+
+    return `<div class="create-offer-style-preview-item${featuredClass}${badgeClass}" style="${featuredStyle};box-sizing:border-box;max-width:100%;overflow:hidden;">
       ${
         item.badge
           ? `<div class="create-offer-style-preview-badge" style="background:${esc(accentColor)} !important; color:${esc(labelColor)} !important;">${esc(item.badge)}</div>`
           : ""
       }
+      ${galleryHtml}
       <div class="create-offer-style-preview-item-title">${esc(item.title)}</div>
-      <div class="create-offer-style-preview-item-subtitle">${esc(item.subtitle)}</div>
+      ${renderOptionalTextHtml(
+        item.subtitle,
+        (text) =>
+          `<div class="create-offer-style-preview-item-subtitle">${esc(text)}</div>`,
+      )}
       ${
         item.saveLabel
           ? `<div class="create-offer-style-preview-item-subtitle">${esc(item.saveLabel)}</div>`
           : ""
       }
-      <div class="create-offer-style-preview-item-price">${esc(item.price)}</div>
+      ${chooserHtml}
+      ${renderOptionalTextHtml(
+        item.price,
+        (text) => `<div class="create-offer-style-preview-item-price">${esc(text)}</div>`,
+      )}
       ${
         item.original
           ? `<div class="create-offer-style-preview-item-original">${esc(item.original)}</div>`
@@ -97,11 +293,214 @@ export function renderBundlePreviewHtml({
     </div>`;
   }).join("");
 
+  const subscriptionPlansHtml =
+    subscriptionPlanPreviewItems.length > 1
+      ? `
+          <div
+            style="
+              margin-top: 8px;
+              border: 1px solid #e3e8ed;
+              border-radius: 10px;
+              background: #f6f8f9;
+              padding: 10px;
+            "
+          >
+            <div style="font-size: 12px; font-weight: 600; color: #1c1f23;">
+              Preview subscription cycles
+            </div>
+            <div style="display: grid; gap: 8px; margin-top: 10px;">
+              ${subscriptionPlanPreviewItems
+                .map(
+                  (plan, index) => `
+                    <div
+                      style="
+                        border: 1px solid ${index === 0 ? "#008060" : "#dfe3e8"};
+                        border-radius: 8px;
+                        background: ${index === 0 ? "#f0faf6" : "#ffffff"};
+                        padding: 10px 12px;
+                      "
+                    >
+                      <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">
+                        <div style="min-width:0;">
+                          <div style="font-size: 12px; font-weight: 600; color: #1c1f23;">
+                            ${esc(plan.title)}
+                          </div>
+                          ${
+                            plan.subtitle
+                              ? `<div style="margin-top: 3px; font-size: 11px; color: #8c9196;">${esc(plan.subtitle)}</div>`
+                              : ""
+                          }
+                        </div>
+                        <div style="text-align:right;">
+                          ${
+                            plan.priceText
+                              ? `<div style="font-size: 12px; font-weight: 700; color: #1c1f23;">${esc(plan.priceText)}</div>`
+                              : ""
+                          }
+                          ${
+                            plan.savingsText
+                              ? `<div style="margin-top: 3px; font-size: 11px; font-weight: 600; color: #008060;">${esc(plan.savingsText)}</div>`
+                              : ""
+                          }
+                          ${
+                            !plan.savingsText && plan.noteText
+                              ? `<div style="margin-top: 3px; font-size: 11px; font-weight: 600; color: #8c9196;">${esc(plan.noteText)}</div>`
+                              : ""
+                          }
+                        </div>
+                      </div>
+                    </div>
+                  `,
+                )
+                .join("")}
+            </div>
+          </div>
+        `
+      : "";
+
+  const subscriptionHtml = showSubscriptionPreview
+    ? `
+      <div style="margin-top: 12px;">
+        <div style="border:1px solid #c9ccd0; border-radius:12px; padding:12px; background:#ffffff; display:grid; gap:8px;">
+          <div style="border:1px solid #dfe3e8; border-radius:10px; padding:12px 14px; background:#ffffff;">
+            <span style="display:block; font-size:14px; font-weight:600; color:#1c1f23;">
+              ${esc(oneTimeTitle)}
+            </span>
+            ${renderOptionalTextHtml(
+              oneTimeSubtitle,
+              (text) =>
+                `<span style="display:block; font-size:12px; color:#8c9196; margin-top:2px;">${esc(text)}</span>`,
+            )}
+            <span style="display:block; font-size:22px; line-height:1.1; font-weight:700; color:#1c1f23; margin-top:8px;">
+              ${esc(oneTimePriceText)}
+            </span>
+          </div>
+          <div
+            style="
+              border: 1px ${subscriptionPreviewStyle === "dashed" ? "dashed" : "solid"} #b7b7b7;
+              border-radius: 10px;
+              padding: 12px 14px;
+              background: #ffffff;
+              display: grid;
+              grid-template-columns: 20px 1fr;
+              align-items: start;
+              column-gap: 12px;
+            "
+          >
+            <span
+              style="
+                width: 18px;
+                height: 18px;
+                border: 2px solid #b7b7b7;
+                border-radius: 2px;
+                display: inline-block;
+                margin-top: 2px;
+                background: #ffffff;
+              "
+            ></span>
+            <span>
+              <span style="display:block; font-size:14px; font-weight:600; color:#1c1f23;">
+                ${esc(subscriptionTitle)}
+              </span>
+              ${renderOptionalTextHtml(
+                subscriptionSubtitle,
+                (text) =>
+                  `<span style="display:block; font-size:12px; color:#8c9196; margin-top:2px;">${esc(text)}</span>`,
+              )}
+              ${
+                subscriptionPriceText
+                  ? `<span style="display:block; font-size:22px; line-height:1.1; font-weight:700; color:#1c1f23; margin-top:8px;">${esc(subscriptionPriceText)}</span>`
+                  : `<span style="display:block; font-size:12px; color:#008060; font-weight:600; margin-top:6px;">Price updates from the selected selling plan</span>`
+              }
+              ${
+                subscriptionCompareAtPriceText
+                  ? `<span style="display:block; font-size:12px; color:#8c9196; text-decoration:line-through; margin-top:4px;">${esc(subscriptionCompareAtPriceText)}</span>`
+                  : ""
+              }
+              ${
+                subscriptionSavingsText
+                  ? `<span style="display:block; font-size:12px; color:#008060; font-weight:600; margin-top:4px;">${esc(subscriptionSavingsText)}</span>`
+                  : ""
+              }
+              ${
+                !subscriptionSavingsText && subscriptionPricingNoteText
+                  ? `<span style="display:block; font-size:12px; color:#8c9196; font-weight:600; margin-top:4px;">${esc(subscriptionPricingNoteText)}</span>`
+                  : ""
+              }
+            </span>
+          </div>
+        </div>
+        ${subscriptionPlansHtml}
+        ${
+          showSubscriptionExplanation
+            ? `
+              <div
+                style="
+                  margin-top: 12px;
+                  background: #eaf4ff;
+                  border-radius: 10px;
+                  padding: 12px 14px;
+                  color: #1c1f23;
+                "
+              >
+                <div style="font-size: 13px; font-weight: 600;">
+                  ${esc(subscriptionExplanationTitle)}
+                </div>
+                <div style="font-size: 12px; line-height: 1.5; color: #4f5b67; margin-top: 4px;">
+                  ${esc(subscriptionExplanationBody)}
+                </div>
+              </div>
+            `
+            : ""
+        }
+      </div>
+    `
+    : "";
+
+  const checkboxUpsellHtml =
+    checkboxUpsellPreview && checkboxUpsellPreview.enabled
+      ? `
+        <div style="margin-top: 12px;">
+          <div style="border:1px solid ${esc(borderColor)}; border-radius:12px; padding:14px 16px; background:#ffffff; display:grid; grid-template-columns:20px 1fr; column-gap:12px; align-items:start;">
+            <span style="width:18px; height:18px; border:2px solid ${esc(accentColor)}; border-radius:4px; display:inline-flex; align-items:center; justify-content:center; margin-top:2px; background:${checkboxUpsellPreview.defaultChecked ? esc(accentColor) : "#ffffff"}; color:${esc(labelColor)}; font-size:12px;">${checkboxUpsellPreview.defaultChecked ? "✓" : ""}</span>
+            <span>
+              <span style="display:block; font-size:14px; font-weight:600; color:#1c1f23;">${esc(checkboxUpsellPreview.title)}</span>
+              ${renderOptionalTextHtml(
+                checkboxUpsellPreview.subtitle,
+                (text) =>
+                  `<span style="display:block; font-size:12px; color:#8c9196; margin-top:2px;">${esc(text)}</span>`,
+              )}
+            </span>
+          </div>
+        </div>
+      `
+      : "";
+
+  const stickyAddToCartHtml =
+    stickyAddToCartPreview && stickyAddToCartPreview.enabled
+      ? `
+        <div style="margin-top: 12px;">
+          <div style="border:1px solid ${esc(borderColor)}; border-radius:12px; padding:14px 16px; background:#ffffff;">
+            <div style="font-size:14px; font-weight:600; color:#1c1f23;">${esc(stickyAddToCartPreview.title)}</div>
+            ${renderOptionalTextHtml(
+              stickyAddToCartPreview.subtitle,
+              (text) =>
+                `<div style="font-size:12px; color:#8c9196; margin-top:2px;">${esc(text)}</div>`,
+            )}
+            <button style="width:100%; margin-top:12px; padding:10px 12px; background:${esc(buttonPrimaryColor)}; color:#ffffff; border:none; border-radius:8px; font-weight:600;">${esc(stickyAddToCartPreview.buttonText)}</button>
+          </div>
+        </div>
+      `
+      : "";
+
   return `<div class="create-offer-preview-card">
     <div class="create-offer-style-preview-header" style="color:${esc(titleColor)} !important; font-size: ${esc(titleFontSize)}px !important; font-weight: ${esc(titleFontWeight)} !important;">${esc(title)}</div>
     <div class="create-offer-style-preview-list create-offer-style-preview-list--${safeLayout}">
       ${itemsHtml}
     </div>
+    ${subscriptionHtml}
+    ${checkboxUpsellHtml}
+    ${stickyAddToCartHtml}
     ${showCustomButton ? `<button class="create-offer-preview-button" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)} !important; color: white !important; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
       ${esc(buttonText)}
     </button>` : ''}

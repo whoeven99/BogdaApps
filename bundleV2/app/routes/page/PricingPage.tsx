@@ -2,9 +2,14 @@
 import { useEffect, useState } from "react";
 import { useFetcher } from "react-router";
 import "../../styles/tailwind.css";
-import "../../styles/polaris-custom.css";
 import type { BillingPlanId } from "../../billing";
 import { subscriptionDisplayName } from "../../billing";
+import {
+  AdminPageHeader,
+  adminPrimaryButtonClass,
+  adminSecondaryButtonClass,
+  adminSurfaceCardClass,
+} from "../component/adminUi";
 
 type BillingSubscribeJson =
   | { ok: true; confirmationUrl: string; testCharge?: boolean }
@@ -98,218 +103,147 @@ export function PricingPage({
   const hasAnyActive = activeSubscriptions.some((s) => s.status === "ACTIVE");
 
   return (
-    <div className="polaris-page" style={{ maxWidth: 1000, margin: "0 auto" }}>
-      <div className="polaris-page__header" style={{ marginBottom: "20px" }}>
-        <div>
-          <h1 className="polaris-page__title">Pricing Plans</h1>
-        </div>
-      </div>
+    <div className="mx-auto max-w-[1280px] pb-[24px]">
+      <AdminPageHeader
+        title="Pricing"
+        subtitle="Manage billing inside Shopify Admin with a compact plan comparison and a single clear subscription action."
+      />
 
       {billingTestMode && (
-        <div
-          className="polaris-card"
-          style={{
-            marginBottom: 16,
-            padding: 12,
-            background: "#fff5e6",
-            border: "1px solid #ffc453",
-          }}
-        >
-          <p className="polaris-text-body-sm" style={{ margin: 0 }}>
+        <div className="mb-[16px] rounded-[12px] border border-[#ffd79d] bg-[#fff7e8] p-[14px]">
+          <p className="m-0 text-[14px] leading-[21px] text-[#7a4a00]">
             Development environment: Billing is in <strong>test mode</strong> (test charge) and will not incur real charges.
           </p>
         </div>
       )}
 
       {fetcherError && (
-        <div
-          className="polaris-card"
-          style={{
-            marginBottom: 16,
-            padding: 12,
-            background: "#fed3d1",
-            border: "1px solid #d72c0c",
-          }}
-        >
-          <p className="polaris-text-body-sm" style={{ margin: 0, color: "#6b2916" }}>
+        <div className="mb-[16px] rounded-[12px] border border-[#f7b4ae] bg-[#fef3f2] p-[14px]">
+          <p className="m-0 text-[14px] leading-[21px] text-[#912018]">
             {fetcherError}
           </p>
         </div>
       )}
 
       {hasAnyActive && (
-        <div className="polaris-card" style={{ marginBottom: 16, padding: 12 }}>
-          <p className="polaris-text-body-sm" style={{ margin: 0 }}>
-            This store already has an active app subscription. To change your plan, please manage your app subscription in the Shopify admin under "Settings → Apps and sales channels", or select a different billing cycle/plan to start a new subscription (subject to Shopify rules).
+        <div className={`${adminSurfaceCardClass} mb-[24px] p-[14px]`}>
+          <p className="m-0 text-[14px] leading-[21px] text-[#5c6166]">
+            An active subscription already exists. Manage it in Shopify admin before switching plans.
           </p>
         </div>
       )}
 
-      <div style={{ textAlign: "center", marginBottom: "40px" }}>
-        <h2 className="polaris-text-heading-lg" style={{ marginBottom: "8px" }}>
-          Choose the perfect plan for your business
-        </h2>
-        <p className="polaris-text-subdued">
-          Includes a 14-day free trial (billed through Shopify). Clicking the button will redirect you to the Shopify admin to confirm the subscription.
-        </p>
-
-        {/* Billing Cycle Toggle */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: "16px",
-            marginTop: "24px",
-          }}
-        >
-          <span
-            style={{
-              fontSize: 14,
-              fontWeight: billingCycle === "monthly" ? 600 : 400,
-              color: billingCycle === "monthly" ? "#202223" : "#6d7175",
-            }}
-          >
-            Monthly
-          </span>
-          <button
-            type="button"
-            onClick={() =>
-              setBillingCycle((prev) => (prev === "monthly" ? "yearly" : "monthly"))
-            }
-            style={{
-              position: "relative",
-              width: 52,
-              height: 28,
-              backgroundColor: billingCycle === "yearly" ? "#008060" : "#c4cdd5",
-              border: "none",
-              borderRadius: 14,
-              cursor: "pointer",
-              transition: "background-color 0.2s",
-              padding: 0,
-            }}
-          >
-            <span
-              style={{
-                position: "absolute",
-                top: 2,
-                left: billingCycle === "yearly" ? 26 : 2,
-                width: 24,
-                height: 24,
-                backgroundColor: "white",
-                borderRadius: "50%",
-                transition: "left 0.2s",
-                boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
-              }}
-            />
-          </button>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span
-              style={{
-                fontSize: 14,
-                fontWeight: billingCycle === "yearly" ? 600 : 400,
-                color: billingCycle === "yearly" ? "#202223" : "#6d7175",
-              }}
-            >
-              Yearly
-            </span>
-            <span
-              style={{
-                backgroundColor: "#d1f7c4",
-                color: "#108043",
-                fontSize: 12,
-                fontWeight: 600,
-                padding: "2px 8px",
-                borderRadius: 4,
-              }}
-            >
-              Save 17%
-            </span>
+      <div className={`${adminSurfaceCardClass} mb-[24px] p-[20px] sm:p-[24px]`}>
+        <div className="flex flex-col gap-[16px] lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-[680px]">
+            <h2 className="m-0 text-[18px] font-semibold leading-[28px] text-[#1c1f23]">
+              Plan comparison
+            </h2>
+            <p className="mt-[6px] mb-0 text-[13px] leading-[20px] text-[#5c6166]">
+              Start with a 14-day free trial. Shopify handles billing and confirmation.
+            </p>
+          </div>
+          <div>
+            <div className="mb-[6px] text-[13px] font-medium text-[#1c1f23]">
+              Billing cycle
+            </div>
+            <div className="inline-flex items-center gap-[8px] rounded-[10px] border border-[#e5e7eb] bg-[#fcfcfd] p-[4px]">
+              <button
+                type="button"
+                onClick={() => setBillingCycle("monthly")}
+                className={`rounded-[8px] px-[12px] py-[8px] text-[13px] font-medium transition-colors ${
+                  billingCycle === "monthly"
+                    ? "bg-white text-[#1c1f23] shadow-[0_1px_2px_rgba(16,24,40,0.06)]"
+                    : "text-[#5c6166] hover:bg-[#f6f6f7]"
+                }`}
+              >
+                Monthly
+              </button>
+              <button
+                type="button"
+                onClick={() => setBillingCycle("yearly")}
+                className={`rounded-[8px] px-[12px] py-[8px] text-[13px] font-medium transition-colors ${
+                  billingCycle === "yearly"
+                    ? "bg-white text-[#1c1f23] shadow-[0_1px_2px_rgba(16,24,40,0.06)]"
+                    : "text-[#5c6166] hover:bg-[#f6f6f7]"
+                }`}
+              >
+                Yearly
+              </button>
+              <span className="rounded-full bg-[#f0f9f6] px-[8px] py-[4px] text-[12px] font-medium text-[#108043]">
+                Save 17%
+              </span>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="polaris-grid grid grid-cols-1 md:grid-cols-3 gap-[16px] sm:gap-[24px]">
+      <div className="grid grid-cols-1 gap-[16px] md:grid-cols-3 sm:gap-[24px]">
         {plans.map((plan, index) => {
           const yearlyNumber = parseInt(plan.yearlyPrice.replace(/[$,]/g, ""), 10);
           const current = isCurrentPlan(plan.id);
           return (
             <div
               key={index}
-              className="polaris-card"
-              style={{
-                border: plan.popular ? "2px solid #008060" : "none",
-                position: "relative",
-              }}
+              className={`relative flex h-full flex-col rounded-[12px] bg-white p-[20px] shadow-[0_1px_2px_rgba(16,24,40,0.04)] ${
+                plan.popular
+                  ? "border-2 border-[#008060]"
+                  : "border border-[#dfe3e8]"
+              }`}
             >
               {plan.popular && (
-                <div
-                  style={{
-                    position: "absolute",
-                    top: -12,
-                    left: "50%",
-                    transform: "translateX(-50%)",
-                    background: "#008060",
-                    color: "white",
-                    padding: "4px 16px",
-                    borderRadius: 12,
-                    fontSize: 12,
-                    fontWeight: 600,
-                  }}
-                >
-                  MOST POPULAR
+                <div className="absolute right-[16px] top-[16px] rounded-full bg-[#f0f9f6] px-[10px] py-[4px] text-[12px] font-medium text-[#108043]">
+                  Recommended
                 </div>
               )}
 
-              <div
-                className="polaris-stack polaris-stack--vertical"
-                style={{ textAlign: "center" }}
-              >
-                <h3 className="polaris-text-heading-md">{plan.name}</h3>
-                <div style={{ margin: "16px 0" }}>
-                  <span style={{ fontSize: 36, fontWeight: 600 }}>
+              <div className="flex h-full flex-col">
+                <div className="pr-[96px]">
+                <h3 className="m-0 text-[20px] font-semibold leading-[30px] text-[#1c1f23]">
+                  {plan.name}
+                </h3>
+                <div className="mt-[12px]">
+                  <span className="text-[36px] font-semibold leading-[44px] text-[#1c1f23]">
                     {billingCycle === "monthly" ? plan.monthlyPrice : plan.yearlyPrice}
                   </span>
-                  <span className="polaris-text-subdued">
+                  <span className="text-[14px] text-[#6d7175]">
                     /{billingCycle === "monthly" ? "month" : "year"}
                   </span>
                   {billingCycle === "yearly" && (
-                    <div
-                      style={{
-                        fontSize: 12,
-                        color: "#108043",
-                        marginTop: 4,
-                        fontWeight: 500,
-                      }}
-                    >
+                    <div className="mt-[4px] text-[12px] font-medium text-[#108043]">
                       ${(yearlyNumber / 12).toFixed(0)}/month billed annually
                     </div>
                   )}
                 </div>
+                </div>
 
-                <ul
-                  style={{
-                    listStyle: "none",
-                    padding: 0,
-                    margin: "24px 0",
-                    textAlign: "left",
-                  }}
-                >
+                <ul className="my-[20px] space-y-[10px] p-0 text-left">
                   {plan.features.map((feature, i) => (
-                    <li key={i} style={{ padding: "8px 0", fontSize: 14 }}>
-                      ✓ {feature}
+                    <li
+                      key={i}
+                      className="flex items-start gap-[10px] text-[14px] leading-[21px] text-[#1c1f23]"
+                    >
+                      <span className="mt-[2px] inline-flex h-[18px] w-[18px] items-center justify-center rounded-full bg-[#f0f9f6] text-[12px] font-semibold text-[#108043]">
+                        ✓
+                      </span>
+                      <span>{feature}</span>
                     </li>
                   ))}
                 </ul>
 
-                <fetcher.Form method="post" style={{ width: "100%", marginTop: "auto" }}>
+                <fetcher.Form method="post" className="mt-auto w-full">
                   <input type="hidden" name="intent" value="billing-subscribe" />
                   <input type="hidden" name="plan" value={plan.id} />
                   <input type="hidden" name="cycle" value={billingCycle} />
                   <button
                     type="submit"
-                    className="polaris-button"
-                    style={{ width: "100%" }}
+                    className={`w-full rounded-[8px] px-[16px] py-[10px] text-[14px] font-medium transition-colors ${
+                      current
+                        ? "cursor-not-allowed border border-[#dfe3e8] bg-[#f6f6f7] text-[#6d7175]"
+                        : plan.popular
+                          ? adminPrimaryButtonClass
+                          : adminSecondaryButtonClass
+                    }`}
                     disabled={fetcher.state !== "idle" || current}
                   >
                     {current
@@ -325,35 +259,35 @@ export function PricingPage({
         })}
       </div>
 
-      <div className="polaris-card" style={{ marginTop: "40px" }}>
-        <h2 className="polaris-text-heading-md" style={{ marginBottom: "16px" }}>
-          Frequently Asked Questions
+      <div className={`${adminSurfaceCardClass} mt-[24px] p-[20px] sm:p-[24px]`}>
+        <h2 className="mb-[16px] text-[18px] font-semibold leading-[28px] text-[#1c1f23]">
+          Billing notes
         </h2>
-        <div className="polaris-stack polaris-stack--vertical">
+        <div className="space-y-[20px]">
           <div>
-            <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
+            <h3 className="mb-[8px] text-[16px] font-semibold text-[#1c1f23]">
               Can I change plans later?
             </h3>
-            <p className="polaris-text-subdued">
+            <p className="m-0 text-[14px] leading-[22px] text-[#5c6166]">
               Yes, you can upgrade or downgrade your plan at any time. Changes take effect
               immediately.
             </p>
           </div>
           <div>
-            <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
+            <h3 className="mb-[8px] text-[16px] font-semibold text-[#1c1f23]">
               What happens after the trial?
             </h3>
-            <p className="polaris-text-subdued">
+            <p className="m-0 text-[14px] leading-[22px] text-[#5c6166]">
               After your 14-day trial, you&apos;ll be charged based on your selected plan.
               You can cancel anytime.
             </p>
           </div>
           <div>
-            <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
+            <h3 className="mb-[8px] text-[16px] font-semibold text-[#1c1f23]">
               Do you offer refunds?
             </h3>
-            <p className="polaris-text-subdued">
-              Yes, we offer a 30-day money-back guarantee for all plans.
+            <p className="m-0 text-[14px] leading-[22px] text-[#5c6166]">
+              Refund handling depends on the approved billing flow and Shopify billing terms.
             </p>
           </div>
         </div>

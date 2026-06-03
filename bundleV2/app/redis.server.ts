@@ -3,20 +3,21 @@ import Redis from "ioredis";
 // 若要连接到不同的 Redis 服务器，您可以修改 `.env` 文件中的以下环境变量。
 const redisUrl = `rediss://:${process.env.REDIS_PASSWORD}@${process.env.REDIS_HOST}:${process.env.REDIS_PORT}`;
 console.log("[redis] Redis URL:", redisUrl);
-let redis: Redis;
+type RedisClient = {
+  hgetall: (key: string) => Promise<Record<string, string>>;
+};
 
-declare global {
-  var __redis: Redis | undefined;
-}
+let redis: RedisClient;
+const globalForRedis = globalThis as typeof globalThis & { __redis?: RedisClient };
 
 // 这能防止我们在开发环境中建立过多的连接。
 if (process.env.NODE_ENV === "prod" || process.env.NODE_ENV === "test") {
   redis = new Redis(redisUrl);
 } else {
-  if (!global.__redis) {
-    global.__redis = new Redis(redisUrl);
+  if (!globalForRedis.__redis) {
+    globalForRedis.__redis = new Redis(redisUrl);
   }
-  redis = global.__redis;
+  redis = globalForRedis.__redis;
 }
 
 let bogdaRateCache: Record<string, string> | null = null;

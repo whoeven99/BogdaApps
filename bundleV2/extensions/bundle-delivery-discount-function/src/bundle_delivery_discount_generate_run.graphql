@@ -1,0 +1,69 @@
+query CartDeliveryDiscountInput {
+  triggeringDiscountCode
+  cart {
+    buyerIdentity {
+      isAuthenticated
+      customer {
+        numberOfOrders
+        amountSpent {
+          amount
+        }
+        hasTags(tags: ["vip", "high_aov", "subscription_active", "bundle_buyer", "repeat_buyer", "high_intent"]) {
+          tag
+          hasTag
+        }
+      }
+    }
+    lines {
+      quantity
+      sellingPlanAllocation {
+        sellingPlan {
+          id
+        }
+      }
+      bundleTierProp: attribute(key: "__ciwi_bundle_tier") {
+        value
+      }
+      bundleOfferProp: attribute(key: "__ciwi_bundle_offer_id") {
+        value
+      }
+      merchandise {
+        __typename
+        ... on ProductVariant {
+          id
+          product {
+            id
+          }
+        }
+      }
+      cost {
+        amountPerQuantity {
+          amount
+        }
+      }
+    }
+    deliveryGroups {
+      deliveryOptions {
+        handle
+        cost {
+          amount
+        }
+        deliveryMethodType
+      }
+    }
+  }
+  localization {
+    country {
+      isoCode
+    }
+    market {
+      id
+    }
+  }
+  discount {
+    discountClasses
+    offersFromDiscountOwner: metafield(namespace: "$app:ciwi_bundle", key: "offers") {
+      jsonValue
+    }
+  }
+}

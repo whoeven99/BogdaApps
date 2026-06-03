@@ -8,10 +8,12 @@ import {
   type ActionFunctionArgs,
   type HeadersFunction,
   type LoaderFunctionArgs,
+  type ShouldRevalidateFunctionArgs,
 } from "react-router";
 import {
   authenticate,
-  ensureCartLinesAutomaticDiscount,
+  reconcileBundleAutomaticDiscounts,
+  syncCartLinesAutomaticDiscountMetafield,
 } from "../../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { DashboardPage } from "../page/DashboardPage";
@@ -19,7 +21,7 @@ import { AllOffersPage } from "../page/AllOffersPage";
 import { AnalyticsPage } from "../page/AnalyticsPage";
 import { PricingPage } from "../page/PricingPage";
 import { CreateNewOffer } from "../component/CreateNewOffer/CreateNewOffer";
-import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
+import { OfferTypeSelection } from "../component/CreateNewOffer/OfferTypeSelection";
 import prisma from "../../db.server";
 import {
   getCachedShopOffers,
@@ -39,10 +41,48 @@ import {
 } from "../../billing.server";
 import {
   OFFER_TEXT_LIMITS,
+  buildPersistedOfferFieldsFromCampaignConfig,
   clampNumber,
+  getInvalidIpCountryCodes,
+  normalizeCustomerProfileFilters,
+  normalizeCustomerSegments,
+  normalizeIpCountryCodes,
+  normalizeTargetMarkets,
+  LONG_RUNNING_OFFER_END_TIME_ISO,
+  FIXED_ONE_TIME_SUBTITLE,
+  FIXED_ONE_TIME_TITLE,
+  FIXED_SUBSCRIPTION_DEFAULT_SELECTED,
+  FIXED_SUBSCRIPTION_POSITION,
+  isCompleteBundleSingleBar,
+  parseProgressiveGiftsConfig,
+  progressiveGiftsConfigToStorableJson,
+  parseCompleteBundleConfig,
+  parseDifferentProductsDiscountRules,
+  parseFreeGiftRules,
+  parseFreeGiftSelectedProducts,
+  parseSelectedProductIds,
+  parseCampaignConfig,
   sanitizeHexColor,
   sanitizeSingleLineText,
+  trimSelectedProductsJsonForFunction,
+  isOfferPublishedForBundleMetafieldSync,
+  normalizeOfferEndTimeForUi,
+  resolveOfferTypeFromCampaignConfig,
 } from "../../utils/offerParsing";
+import { sanitizeEnvLikeValue, sanitizeUrlLikeEnvValue } from "../../utils/env";
+import {
+  buildOfferStatusCampaignConfigJson,
+  resolveOfferPersistenceFields,
+  validateOwnedOfferAccess,
+} from "./offerActionHelpers";
+import { createShopOfferSyncScheduler } from "./offerSyncScheduler";
+import {
+  BUNDLE_METAFIELD_FUNCTION_OFFERS_KEY,
+  BUNDLE_STOREFRONT_OFFERS_KEY,
+} from "../../utils/bundleShopMetafieldKeys";
+import { reconcileShopOfferShardedMetafields } from "../../utils/bundleShopOfferMetafields.server";
+import { BUNDLE_THEME_PRODUCT_PLUGIN } from "../../utils/themePlugins";
+import type { OfferTypeId } from "../component/CreateNewOffer/offerTypeOptions";
 
 type OfferListItem = {
   id: string;
@@ -55,6 +95,7 @@ type OfferListItem = {
   selectedProductsJson: string | null;
   discountRulesJson: string | null;
   offerSettingsJson: string | null;
+  campaignConfigJson?: string | null;
   exposurePV?: number | null;
   addToCartPV?: number | null;
   gmv?: number | null;
@@ -78,6 +119,28 @@ function offerActionErrorResponse(message: string, status: number) {
   );
 }
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
+function isMissingOfferCampaignConfigColumnError(error: unknown): boolean {
+  const message = getErrorMessage(error).toLowerCase();
+  return (
+    message.includes("campaignconfigjson") &&
+    (
+      message.includes("no such column") ||
+      message.includes("has no column named") ||
+      message.includes("column does not exist")
+    )
+  );
+}
+
 function sanitizeHexColorParam(
   raw: string | null | undefined,
   fallback: string,
@@ -85,68 +148,517 @@ function sanitizeHexColorParam(
   return sanitizeHexColor(raw, fallback);
 }
 
+async function resolveSessionShopName(admin: any, session: { shop?: string | null }) {
+  const directShopName = String(session?.shop || "").trim();
+  if (directShopName) {
+    return directShopName;
+  }
+  const shopNameResponse = await admin.graphql(
+    `#graphql
+      query ShopName {
+        shop {
+          name
+        }
+      }
+    `,
+  );
+  const shopNameJson = await shopNameResponse.json();
+  return String(shopNameJson?.data?.shop?.name || "").trim();
+}
+
 type ShopOffersMetafieldSyncResult =
   | { ok: true }
   | { ok: false; message: string };
 
-const BUNDLE_METAFIELD_NAMESPACE = "ciwi_bundle";
-const BUNDLE_METAFIELD_BASE_KEY = "ciwi-bundle-offers";
-const BUNDLE_METAFIELD_ACTIVE_ENV_KEY = "ciwi-bundle-offers-active-env";
-const BUNDLE_METAFIELD_ENABLED_PROD_KEY = "ciwi-bundle-enabled-prod";
-const BUNDLE_METAFIELD_ENABLED_TEST_KEY = "ciwi-bundle-enabled-test";
-const PROD_SHOPIFY_API_KEY = "bfc13ad696f2a8d2a77ba6eee1e26966";
-const TEST_SHOPIFY_API_KEY = "ab25ea895c6df574ae9ff70e9c7731c5";
+const LONG_RUNNING_OFFER_END_TIME = new Date(LONG_RUNNING_OFFER_END_TIME_ISO);
 
-type BundleEnvironment = "prod" | "test";
-
-function resolveBundleEnvironment(): BundleEnvironment {
-  const explicit =
-    String(process.env.BUNDLE_ENV || process.env.APP_ENV || "")
-      .trim()
-      .toLowerCase();
-  if (explicit === "prod" || explicit === "production") return "prod";
-  if (explicit === "test" || explicit === "staging") return "test";
-
-  const apiKey = String(process.env.SHOPIFY_API_KEY || "").trim();
-  if (apiKey === PROD_SHOPIFY_API_KEY) return "prod";
-  if (apiKey === TEST_SHOPIFY_API_KEY) return "test";
-
-  return process.env.NODE_ENV === "production" ? "prod" : "test";
+/**
+ * 主题与购物车 Function 仅需变体 id/价/option；写入 shop metafield 时去掉冗余 title 与重复字段以控制体积。
+ * （主题 parse 会从 selectedOptions 拼回展示文案；Function 不读 variants。）
+ */
+function slimVariantsForBundleStorefrontMetafield(
+  variants: StoreProductItem["variants"] | undefined,
+): Array<{ id: string; price: string; selectedOptions: Array<{ name: string; value: string }> }> {
+  if (!Array.isArray(variants)) return [];
+  return variants
+    .filter((v) => v && typeof v === "object" && v.id)
+    .map((v) => ({
+      id: String(v.id),
+      price: String(v.price ?? ""),
+      selectedOptions: Array.isArray(v.selectedOptions)
+        ? v.selectedOptions
+            .filter((opt) => opt && typeof opt === "object")
+            .map((opt) => ({
+              name: String(opt.name ?? ""),
+              value: String(opt.value ?? ""),
+            }))
+        : [],
+    }));
 }
 
-function buildOfferMetafieldsInput(
-  ownerId: string,
-  offersPayload: string,
-  _themeExtensionEnabled: boolean,
-) {
-  return [
-    {
-      ownerId,
-      namespace: BUNDLE_METAFIELD_NAMESPACE,
-      key: BUNDLE_METAFIELD_BASE_KEY,
-      type: "json",
-      value: offersPayload,
-    },
-  ];
+function slimVariantsFromStoredProductShape(
+  raw: unknown,
+): Array<{ id: string; price: string; selectedOptions: Array<{ name: string; value: string }> }> {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((v) => v && typeof v === "object" && (v as { id?: unknown }).id)
+    .map((v) => {
+      const selectedOptions = Array.isArray((v as { selectedOptions?: unknown }).selectedOptions)
+        ? ((v as { selectedOptions: Array<{ name?: unknown; value?: unknown }> }).selectedOptions || [])
+            .filter((opt) => opt && typeof opt === "object")
+            .map((opt) => ({
+              name: String(opt.name ?? ""),
+              value: String(opt.value ?? ""),
+            }))
+        : [];
+      return {
+        id: String((v as { id?: unknown }).id ?? ""),
+        price: String((v as { price?: unknown }).price ?? ""),
+        selectedOptions,
+      };
+    })
+    .filter((row) => row.id);
+}
+
+function buildHydratedCompleteBundleSelectedProductsJson(
+  selectedProductsJson: string | null | undefined,
+  storeProductMap: Map<string, StoreProductItem>,
+): string | null {
+  if (!selectedProductsJson) return null;
+  const config = parseCompleteBundleConfig(selectedProductsJson);
+  if (!config.bars.length) return selectedProductsJson;
+
+  const bars = config.bars.map((bar) => ({
+    id: bar.id,
+    type: bar.type,
+    title: bar.title,
+    titleSource: bar.titleSource,
+    subtitle: bar.subtitle,
+    subtitleSource: bar.subtitleSource,
+    badge: bar.badge,
+    isDefault: bar.isDefault,
+    minQuantity: bar.minQuantity,
+    maxQuantity: bar.maxQuantity,
+    excludeTriggerProduct: bar.excludeTriggerProduct,
+    quantity: bar.quantity,
+    pricing: bar.pricing,
+    products: (bar.products || []).map((product) => {
+      const hit = storeProductMap.get(String(product.productId || ""));
+      if (!hit) {
+        return {
+          productId: product.productId,
+          handle: product.handle ?? "",
+          title: product.title ?? "",
+          image: product.image ?? "",
+          price: product.price ?? "",
+          defaultVariantId: product.defaultVariantId ?? "",
+          selectedVariantId:
+            String(product.selectedVariantId || product.defaultVariantId || ""),
+          selectionMode: product.selectionMode === "variant" ? "variant" : "product",
+          selectedOptions:
+            product.selectedOptions && typeof product.selectedOptions === "object"
+              ? product.selectedOptions
+              : {},
+          pricing: product.pricing ?? { mode: "full_price" as const, value: 0 },
+          variants: slimVariantsFromStoredProductShape(product.variants),
+        };
+      }
+      const variants = Array.isArray(hit.variants) ? hit.variants : [];
+      const preferredVariantId = String(product.selectedVariantId || "");
+      const selectedVariant =
+        variants.find((variant) => String(variant.id) === preferredVariantId) || variants[0];
+
+      return {
+        productId: product.productId,
+        handle: hit.handle || product.handle || "",
+        title: hit.name || product.title || "",
+        image: hit.image || product.image || "",
+        price: selectedVariant?.price || product.price || hit.price || "",
+        defaultVariantId: String(variants[0]?.id || product.defaultVariantId || ""),
+        selectedVariantId: String(
+          selectedVariant?.id || product.selectedVariantId || variants[0]?.id || "",
+        ),
+        selectionMode: product.selectionMode === "variant" ? "variant" : "product",
+        selectedOptions:
+          product.selectedOptions && Object.keys(product.selectedOptions).length > 0
+            ? product.selectedOptions
+            : Object.fromEntries(
+                (selectedVariant?.selectedOptions || []).map((opt) => [opt.name, opt.value]),
+              ),
+        pricing: product.pricing ?? { mode: "full_price" as const, value: 0 },
+        variants: slimVariantsForBundleStorefrontMetafield(variants),
+      };
+    }),
+  }));
+
+  return JSON.stringify({
+    triggerProductIds: config.triggerProductIds ?? [],
+    bars,
+  });
+}
+
+function buildHydratedDifferentProductsSelectedProductsJson(
+  selectedProductsJson: string | null | undefined,
+  discountRulesJson: string | null | undefined,
+  storeProductMap: Map<string, StoreProductItem>,
+): string | null {
+  const referencedIds = Array.from(
+    new Set([
+      ...parseSelectedProductIds(selectedProductsJson),
+      ...parseDifferentProductsDiscountRules(discountRulesJson).flatMap((rule) => [
+        ...(Array.isArray(rule.buyProductIds) ? rule.buyProductIds : []),
+        ...(Array.isArray(rule.getProductIds) ? rule.getProductIds : []),
+      ]),
+    ]),
+  );
+
+  if (!referencedIds.length) return selectedProductsJson ?? null;
+
+  const hydratedCatalog = referencedIds
+    .map((productId) => {
+      const hit = storeProductMap.get(String(productId || ""));
+      if (!hit) return null;
+      const firstVariant = Array.isArray(hit.variants) ? hit.variants[0] : null;
+      return {
+        id: hit.id,
+        handle: hit.handle || "",
+        title: hit.name || "",
+        image: hit.image || "",
+        price: firstVariant?.price || hit.price || "",
+        selectedVariantId: String(firstVariant?.id || ""),
+        variants: slimVariantsForBundleStorefrontMetafield(
+          Array.isArray(hit.variants) ? hit.variants : undefined,
+        ),
+      };
+    })
+    .filter(
+      (
+        product,
+      ): product is {
+        id: string;
+        handle: string;
+        title: string;
+        image: string;
+        price: string;
+        selectedVariantId: string;
+        variants: ReturnType<typeof slimVariantsForBundleStorefrontMetafield>;
+      } => Boolean(product?.id),
+    );
+
+  return hydratedCatalog.length > 0
+    ? JSON.stringify(hydratedCatalog)
+    : selectedProductsJson ?? null;
+}
+
+function compileOfferRuntimeSyncData(offer: OfferListItem): {
+  offerType: string;
+  selectedProductsJson: string | null;
+  storefrontSelectedProductsJson: string | null;
+  discountRulesJson: string | null;
+  offerSettingsJson: string | null;
+  referencedProductIds: string[];
+  storefrontHydration: "none" | "complete-bundle" | "quantity-breaks-different";
+} {
+  const parsedCampaignConfig = parseCampaignConfig(offer.campaignConfigJson);
+  if (parsedCampaignConfig) {
+    const persistedFields = buildPersistedOfferFieldsFromCampaignConfig(
+      parsedCampaignConfig,
+      offer.offerSettingsJson,
+    );
+    return {
+      offerType: persistedFields.offerType,
+      selectedProductsJson: persistedFields.selectedProductsJsonForFunction,
+      storefrontSelectedProductsJson: persistedFields.selectedProductsJson,
+      discountRulesJson: persistedFields.discountRulesJson,
+      offerSettingsJson: persistedFields.offerSettingsJson,
+      referencedProductIds: persistedFields.referencedProductIds,
+      storefrontHydration: persistedFields.storefrontHydration,
+    };
+  }
+
+  const effectiveOfferType = resolveOfferTypeFromCampaignConfig({
+    offerType: offer.offerType,
+    campaignConfigJson: offer.campaignConfigJson,
+  });
+
+  return {
+    offerType: effectiveOfferType,
+    selectedProductsJson: trimSelectedProductsJsonForFunction(
+      effectiveOfferType,
+      offer.selectedProductsJson,
+    ),
+    storefrontSelectedProductsJson: offer.selectedProductsJson ?? null,
+    discountRulesJson: offer.discountRulesJson ?? null,
+    offerSettingsJson: offer.offerSettingsJson ?? null,
+    referencedProductIds: collectLegacyReferencedProductIds(offer),
+    storefrontHydration:
+      effectiveOfferType === "complete-bundle"
+        ? "complete-bundle"
+        : effectiveOfferType === "quantity-breaks-different"
+          ? "quantity-breaks-different"
+          : "none",
+  };
+}
+
+async function buildCompactOffersPayload(
+  shopOffers: OfferListItem[],
+): Promise<string> {
+  // 仅同步后台仍「启用」的活动，避免无效活动占用 payload 体积并干扰函数计算
+  const activeOffers = shopOffers.filter(isOfferPublishedForBundleMetafieldSync);
+  // 先生成 Function 可安全消费的瘦 payload，避免 complete-bundle 展示字段把 metafield 撑爆。
+  const compactOffers = activeOffers.map((offer) => {
+    const runtimeSyncData = compileOfferRuntimeSyncData(offer);
+    return {
+      id: offer.id,
+      name: offer.name,
+      cartTitle: offer.cartTitle,
+      status: offer.status,
+      startTime: offer.startTime,
+      endTime: offer.endTime,
+      selectedProductsJson: runtimeSyncData.selectedProductsJson,
+      discountRulesJson: runtimeSyncData.discountRulesJson,
+      offerSettingsJson: runtimeSyncData.offerSettingsJson,
+      offerType: runtimeSyncData.offerType,
+    };
+  });
+  const payload: {
+    updatedAt: string;
+    offers: typeof compactOffers;
+  } = {
+    updatedAt: new Date().toISOString(),
+    offers: compactOffers,
+  };
+  return JSON.stringify(payload);
+}
+
+async function buildStorefrontOffersStructured(
+  admin: any,
+  shopOffers: OfferListItem[],
+): Promise<{
+  updatedAt: string;
+  offers: Array<{
+    id: string;
+    name?: string;
+    cartTitle?: string;
+    status?: boolean;
+    startTime?: string;
+    endTime?: string;
+    selectedProductsJson?: string | null;
+    discountRulesJson?: string | null;
+    offerSettingsJson?: string | null;
+    offerType?: string;
+  }>;
+}> {
+  const activeOffers = shopOffers.filter(isOfferPublishedForBundleMetafieldSync);
+  const compiledActiveOffers = activeOffers.map((offer) => ({
+    offer,
+    runtimeSyncData: compileOfferRuntimeSyncData(offer),
+  }));
+  const compactPayload = await buildCompactOffersPayload(shopOffers);
+  const compactPayloadParsed = JSON.parse(compactPayload) as {
+    updatedAt?: string;
+    offers?: Array<{
+      id?: string;
+      name?: string;
+      cartTitle?: string;
+      status?: boolean;
+      startTime?: string;
+      endTime?: string;
+      selectedProductsJson?: string | null;
+      discountRulesJson?: string | null;
+      offerSettingsJson?: string | null;
+      offerType?: string;
+    }>;
+  };
+
+  // storefront 需要补齐前台直接渲染所需的商品展示字段，避免主题脚本首次渲染时缺少 title/handle/image。
+  const storefrontCatalogProductIds = collectReferencedProductIds(
+    compiledActiveOffers
+      .filter(
+        ({ runtimeSyncData }) =>
+          runtimeSyncData.storefrontHydration === "complete-bundle" ||
+          runtimeSyncData.storefrontHydration === "quantity-breaks-different",
+      )
+      .map(({ offer }) => offer),
+  );
+  const storeProducts =
+    storefrontCatalogProductIds.length > 0
+      ? await fetchStoreProducts(admin, storefrontCatalogProductIds)
+      : [];
+  const storeProductMap = new Map(
+    storeProducts.map((product) => [String(product.id || ""), product]),
+  );
+
+  const storefrontOffers = (compactPayloadParsed.offers || []).map((offer) => {
+    const matchedCompiledOffer = compiledActiveOffers.find(
+      ({ offer: activeOffer }) => String(activeOffer.id) === String(offer.id || ""),
+    );
+    const hydrationMode = matchedCompiledOffer?.runtimeSyncData.storefrontHydration || "none";
+    const effectiveOfferType =
+      matchedCompiledOffer?.runtimeSyncData.offerType ||
+      resolveOfferTypeFromCampaignConfig({
+        offerType: offer.offerType,
+      });
+    return {
+      ...offer,
+      offerType: effectiveOfferType,
+      selectedProductsJson:
+        hydrationMode === "complete-bundle"
+          ? buildHydratedCompleteBundleSelectedProductsJson(
+              matchedCompiledOffer?.runtimeSyncData.storefrontSelectedProductsJson ??
+                offer.selectedProductsJson,
+              storeProductMap,
+            )
+          : hydrationMode === "quantity-breaks-different"
+            ? buildHydratedDifferentProductsSelectedProductsJson(
+                matchedCompiledOffer?.runtimeSyncData.storefrontSelectedProductsJson ??
+                  offer.selectedProductsJson,
+                offer.discountRulesJson,
+                storeProductMap,
+              )
+            : offer.selectedProductsJson ?? null,
+    };
+  });
+
+  const updatedAt = compactPayloadParsed.updatedAt || new Date().toISOString();
+  const offers = storefrontOffers
+    .map((offer) => ({
+      ...offer,
+      id: String(offer.id || "").trim(),
+    }))
+    .filter((offer) => offer.id);
+
+  return {
+    updatedAt,
+    offers,
+  };
+}
+
+async function loadShopOffersForSync(shopNameToSync: string): Promise<OfferListItem[]> {
+  const prismaAny: any = prisma;
+  try {
+    return (await prismaAny.offer.findMany({
+      where: { shopName: shopNameToSync },
+      orderBy: { createdAt: "desc" },
+    })) as OfferListItem[];
+  } catch (error) {
+    if (!isMissingOfferCampaignConfigColumnError(error)) {
+      throw error;
+    }
+    console.warn(
+      "[offers-sync] campaignConfigJson column missing, falling back to legacy offer read",
+    );
+    const legacyRows = await prismaAny.offer.findMany({
+      where: { shopName: shopNameToSync },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        name: true,
+        cartTitle: true,
+        offerType: true,
+        startTime: true,
+        endTime: true,
+        status: true,
+        selectedProductsJson: true,
+        discountRulesJson: true,
+        offerSettingsJson: true,
+        exposurePV: true,
+        addToCartPV: true,
+        gmv: true,
+        conversion: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    return legacyRows.map((offer: any) => ({
+      ...offer,
+      campaignConfigJson: null,
+    })) as OfferListItem[];
+  }
+}
+
+async function syncFunctionOwnerOffersMetafield(
+  admin: any,
+  shopNameToSync: string,
+): Promise<ShopOffersMetafieldSyncResult> {
+  try {
+    const shopOffers = await loadShopOffersForSync(shopNameToSync);
+    const functionMetafieldValue = await buildCompactOffersPayload(shopOffers);
+    console.log("[offers-sync][function-owner] syncing payload", {
+      shopName: shopNameToSync,
+      offerCount: shopOffers.length,
+      activeOffers: shopOffers.filter(isOfferPublishedForBundleMetafieldSync).length,
+      payloadLength: functionMetafieldValue.length,
+    });
+    await reconcileBundleAutomaticDiscounts(admin);
+    const discountSyncResult = await syncCartLinesAutomaticDiscountMetafield(
+      admin,
+      functionMetafieldValue,
+    );
+    if (!discountSyncResult.ok) {
+      console.error("[offers-sync][function-owner] sync failed", {
+        shopName: shopNameToSync,
+        message: discountSyncResult.message,
+      });
+      return discountSyncResult;
+    }
+    console.log("[offers-sync][function-owner] sync success", {
+      shopName: shopNameToSync,
+      offerCount: shopOffers.length,
+    });
+    return { ok: true };
+  } catch (error) {
+    const message = getErrorMessage(error);
+    console.error("[offers-sync][function-owner] unexpected exception", {
+      shopName: shopNameToSync,
+      message,
+    });
+    return { ok: false, message };
+  }
 }
 
 async function syncShopOffersMetafield(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   admin: any,
   shopNameToSync: string,
-  themeExtensionEnabled: boolean,
 ): Promise<ShopOffersMetafieldSyncResult> {
-  const prismaAny: any = prisma;
   try {
-    const shopOffers = (await prismaAny.offer.findMany({
-      where: { shopName: shopNameToSync },
-      orderBy: { createdAt: "desc" },
-    })) as OfferListItem[];
-
-    const metafieldValue = JSON.stringify({
-      updatedAt: new Date().toISOString(),
-      offers: shopOffers,
+    console.log("[offers-sync] start syncShopOffersMetafield", {
+      shopName: shopNameToSync,
     });
+    const shopOffers = await loadShopOffersForSync(shopNameToSync);
+    console.log("[offers-sync] loaded offers from db", {
+      shopName: shopNameToSync,
+      offerCount: shopOffers.length,
+      offerIds: shopOffers.map((o) => o.id),
+    });
+
+    const functionMetafieldValue = await buildCompactOffersPayload(shopOffers);
+
+    const storefrontStructured = await buildStorefrontOffersStructured(admin, shopOffers);
+    const mergedStorefrontPreview = JSON.stringify({
+      updatedAt: storefrontStructured.updatedAt,
+      offers: storefrontStructured.offers,
+    });
+    console.log("[offers-sync] payload size snapshot", {
+      totalOffers: shopOffers.length,
+      activeOffers: shopOffers.filter(isOfferPublishedForBundleMetafieldSync).length,
+      mergedStorefrontPreviewLength: mergedStorefrontPreview.length,
+      functionPayloadLength: functionMetafieldValue.length,
+      storefrontOfferRows: storefrontStructured.offers.length,
+      functionReducedBy: mergedStorefrontPreview.length - functionMetafieldValue.length,
+    });
+
+    const functionInputUtf8Bytes = new TextEncoder().encode(functionMetafieldValue).length;
+    if (functionInputUtf8Bytes > 10_000) {
+      console.warn(
+        "[offers-sync] compact offers JSON exceeds Shopify Function single-metafield input limit (~10kB UTF-8); cart/delivery Functions may receive null",
+        {
+          utf8Bytes: functionInputUtf8Bytes,
+          key: BUNDLE_METAFIELD_FUNCTION_OFFERS_KEY,
+        },
+      );
+    }
 
     const shopIdResponse = await admin.graphql(
       `#graphql
@@ -164,6 +676,7 @@ async function syncShopOffersMetafield(
     };
 
     if (shopIdJson.errors?.length) {
+      console.error("[offers-sync] shop id query graphql errors", shopIdJson.errors);
       return {
         ok: false,
         message: shopIdJson.errors
@@ -174,78 +687,148 @@ async function syncShopOffersMetafield(
 
     const shopId = shopIdJson?.data?.shop?.id;
     if (!shopId) {
+      console.error("[offers-sync] shop id missing in response", { shopIdJson });
       return {
         ok: false,
         message: "Failed to get shop ID, Metafield update failed",
       };
     }
 
-    const metafieldsSetResponse = await admin.graphql(
-      `#graphql
-      mutation MetafieldsSet($metafields: [MetafieldsSetInput!]!) {
-        metafieldsSet(metafields: $metafields) {
-          metafields {
-            id
-            key
-            namespace
-          }
-          userErrors {
-            field
-            message
-          }
-        }
-      }
-    `,
-      {
-        variables: {
-          metafields: buildOfferMetafieldsInput(
-            shopId,
-            metafieldValue,
-            themeExtensionEnabled,
-          ),
-        },
-      },
+    console.log("[offers-sync] writing shop bundle metafields", {
+      shopId,
+      namespace: "ciwi_bundle",
+      storefrontOffersKey: BUNDLE_STOREFRONT_OFFERS_KEY,
+      storefrontPayloadLength: mergedStorefrontPreview.length,
+      functionInputKey: BUNDLE_METAFIELD_FUNCTION_OFFERS_KEY,
+      functionInputPayloadLength: functionMetafieldValue.length,
+    });
+
+    const shardSync = await reconcileShopOfferShardedMetafields(admin, shopId, {
+      syncAtIso: storefrontStructured.updatedAt,
+      storefrontOffersPayload: mergedStorefrontPreview,
+      functionOffersCompactPayload: functionMetafieldValue,
+    });
+    if (!shardSync.ok) {
+      console.error("[offers-sync] sharded metafield sync failed", {
+        message: shardSync.message,
+      });
+      return shardSync;
+    }
+
+    console.log("[offers-sync] syncing offers into automatic discount owner metafields");
+    const discountSyncResult = await syncFunctionOwnerOffersMetafield(
+      admin,
+      shopNameToSync,
     );
-
-    const metafieldsSetJson = (await metafieldsSetResponse.json()) as {
-      data?: {
-        metafieldsSet?: {
-          userErrors?: Array<{ message?: string }>;
-        };
-      };
-      errors?: Array<{ message?: string }>;
-    };
-
-    if (metafieldsSetJson.errors?.length) {
-      return {
-        ok: false,
-        message: metafieldsSetJson.errors
-          .map((e) => e.message || "unknown")
-          .join("; "),
-      };
+    if (!discountSyncResult.ok) {
+      console.error("[offers-sync] sync discount owner metafield failed", {
+        message: discountSyncResult.message,
+      });
+      return discountSyncResult;
     }
 
-    const userErrors = metafieldsSetJson?.data?.metafieldsSet?.userErrors ?? [];
-    if (userErrors.length > 0) {
-      return {
-        ok: false,
-        message: userErrors.map((e) => e.message || "unknown").join("; "),
-      };
-    }
-
+    console.log("[offers-sync] success", {
+      shopName: shopNameToSync,
+      shopId,
+      offerCount: shopOffers.length,
+    });
     return { ok: true };
   } catch (error) {
+    console.error("[offers-sync] unexpected exception", error);
     const msg = error instanceof Error ? error.message : JSON.stringify(error);
     return { ok: false, message: msg || "Metafield sync failed" };
+  }
+}
+
+const OFFER_POST_WRITE_SYNC_TIMEOUT_MS = 8_000;
+const offerPostWriteSyncScheduler = createShopOfferSyncScheduler();
+
+async function runOfferPostWriteSync(admin: any, shopName: string): Promise<void> {
+  const syncTask = offerPostWriteSyncScheduler.schedule(shopName, async () => {
+    const syncResult = await syncShopOffersMetafield(
+      admin,
+      shopName,
+    );
+    if (!syncResult.ok) {
+      console.error("syncShopOffersMetafield failed after offer write", {
+        shopName,
+        message: syncResult.message,
+      });
+    }
+  });
+
+  try {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    await Promise.race([
+      syncTask,
+      new Promise<void>((resolve) => {
+        timeoutId = setTimeout(() => {
+          console.error("Offer post-write sync timed out; save will still succeed", {
+            shopName,
+            timeoutMs: OFFER_POST_WRITE_SYNC_TIMEOUT_MS,
+          });
+          resolve();
+        }, OFFER_POST_WRITE_SYNC_TIMEOUT_MS);
+      }),
+    ]);
+    if (timeoutId) clearTimeout(timeoutId);
+  } catch (error) {
+    console.error("Offer post-write sync crashed unexpectedly", {
+      shopName,
+      error,
+    });
   }
 }
 
 export type StoreProductItem = {
   id: string;
   name: string;
+  handle: string;
   price: string;
   image: string;
+  collections: Array<{
+    id: string;
+    title: string;
+  }>;
+  variants: Array<{
+    id: string;
+    title: string;
+    price: string;
+    selectedOptions: Array<{ name: string; value: string }>;
+  }>;
+  hasSubscription: boolean;
 };
+
+type AdminProductNode = {
+  id?: string;
+  title?: string;
+  handle?: string;
+  featuredImage?: { url?: string | null } | null;
+  collections?: {
+    edges?: Array<{
+      node?: {
+        id?: string | null;
+        title?: string | null;
+      } | null;
+    }>;
+  } | null;
+  variants?: {
+    edges?: Array<{
+      node?: {
+        id?: string | null;
+        title?: string | null;
+        price?: string | null;
+        selectedOptions?: Array<{
+          name?: string | null;
+          value?: string | null;
+        } | null> | null;
+      } | null;
+    }>;
+  } | null;
+  sellingPlanGroups?: {
+    edges?: Array<{ node?: { id?: string | null } | null }>;
+  } | null;
+} | null;
 
 export type MarketItem = {
   id: string;
@@ -257,13 +840,230 @@ export type IndexLoaderData = {
   offers?: OfferListItem[];
   storeProducts?: StoreProductItem[];
   markets: MarketItem[];
+  themeTargets: ThemeEditorTarget[];
   shop: string;
+  themeEditorStoreId: string;
+  themeEditorThemeId: string;
   apiKey: string;
   ianaTimezone: string;
   themeExtensionEnabled: boolean;
+  themeExtensionDetectionFailed: boolean;
+  themeExtensionDebug?: ThemeExtensionDetectionDebug;
+  themeExtensionMatchedThemeId?: string;
   billingSubscriptions: Array<{ name: string; status: string }>;
   billingTestMode: boolean;
 };
+
+type SubscriptionPreviewPolicyNode = {
+  adjustmentType?: string | null;
+  adjustmentValue?:
+    | { amount?: string | null; currencyCode?: string | null }
+    | { percentage?: number | null }
+    | null;
+  afterCycle?: number | null;
+};
+
+type SubscriptionPreviewPlan = {
+  sellingPlanId: string;
+  sellingPlanName: string;
+  billingLabel: string;
+  subscriptionPrice: number;
+  compareAtPrice: number;
+  savingsAmount: number;
+  savingsPercent: number;
+};
+
+function parseSubscriptionPreviewMoney(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatSubscriptionPreviewInterval(
+  interval?: string | null,
+  intervalCount?: number | null,
+): string {
+  const normalizedInterval = String(interval || "").toLowerCase();
+  const normalizedCount = Math.max(1, Number(intervalCount) || 1);
+  const unitMap: Record<string, string> = {
+    day: "day",
+    week: "week",
+    month: "month",
+    year: "year",
+  };
+  const unit = unitMap[normalizedInterval] || "delivery";
+  if (normalizedCount === 1) {
+    return `Billed every ${unit}`;
+  }
+  return `Billed every ${normalizedCount} ${unit}s`;
+}
+
+function resolveSubscriptionPreviewPricing(
+  basePrice: number | null,
+  policies: SubscriptionPreviewPolicyNode[],
+) {
+  if (basePrice == null) {
+    return null;
+  }
+  if (policies.length === 0) {
+    return {
+      subscriptionPrice: basePrice,
+      compareAtPrice: basePrice,
+      savingsAmount: 0,
+      savingsPercent: 0,
+    };
+  }
+  const primaryPolicy =
+    policies.find((policy) => policy && (policy.afterCycle == null || policy.afterCycle <= 1)) ||
+    policies[0];
+  if (!primaryPolicy) {
+    return null;
+  }
+
+  const adjustmentType = String(primaryPolicy.adjustmentType || "").toUpperCase();
+  let nextPrice: number | null = null;
+
+  if (adjustmentType === "PERCENTAGE") {
+    const percentage = Number((primaryPolicy.adjustmentValue as { percentage?: number } | null)?.percentage);
+    if (Number.isFinite(percentage)) {
+      nextPrice = Math.max(0, basePrice * (1 - percentage / 100));
+    }
+  } else if (adjustmentType === "FIXED_AMOUNT") {
+    const amount = parseSubscriptionPreviewMoney(
+      (primaryPolicy.adjustmentValue as { amount?: string | null } | null)?.amount,
+    );
+    if (amount != null) {
+      nextPrice = Math.max(0, basePrice - amount);
+    }
+  } else if (adjustmentType === "PRICE") {
+    const amount = parseSubscriptionPreviewMoney(
+      (primaryPolicy.adjustmentValue as { amount?: string | null } | null)?.amount,
+    );
+    if (amount != null) {
+      nextPrice = Math.max(0, amount);
+    }
+  }
+
+  if (nextPrice == null) {
+    return null;
+  }
+
+  const savingsAmount = Math.max(0, basePrice - nextPrice);
+  const savingsPercent =
+    basePrice > 0 && savingsAmount > 0 ? Math.round((savingsAmount / basePrice) * 100) : 0;
+
+  return {
+    subscriptionPrice: nextPrice,
+    compareAtPrice: basePrice,
+    savingsAmount,
+    savingsPercent,
+  };
+}
+
+export type ThemeEditorTarget = {
+  id: string;
+  editorId: string;
+  name: string;
+  role: string;
+};
+
+type ThemeExtensionDebugEntry = {
+  fileName?: string;
+  entryKey: string | null;
+  blockType: string;
+  disabled?: boolean;
+  hasSettings: boolean;
+};
+
+type ThemeExtensionMatchedEntry = ThemeExtensionDebugEntry & {
+  matchedByApp: boolean;
+  matchedByUid: boolean;
+  matchedByHandleOnly: boolean;
+  enabled: boolean;
+};
+
+type ThemeExtensionThemeDebug = {
+  id: string;
+  name: string;
+  role: string;
+  hasSettingsData: boolean;
+  parseOk?: boolean;
+  totalBlockEntries?: number;
+  appRelatedEntries?: ThemeExtensionDebugEntry[];
+  matchedEntries?: ThemeExtensionMatchedEntry[];
+  result?: string;
+};
+
+export type ThemeExtensionDetectionDebug = {
+  pluginKey: string;
+  extensionHandle: string;
+  extensionUid: string;
+  embedHandle: string;
+  appClientId: string;
+  appName: string;
+  appNameSlug: string;
+  enabled: boolean;
+  scannedThemeCount: number;
+  scannedBlockCount: number;
+  themes: ThemeExtensionThemeDebug[];
+  matchedTheme?: {
+    id: string;
+    name: string;
+    role: string;
+    entryKey: string | null;
+    blockType: string;
+  };
+  error?: string;
+};
+
+async function fetchThemeEditorTargets(admin: any): Promise<ThemeEditorTarget[]> {
+  try {
+    const response = await admin.graphql(
+      `#graphql
+        query ThemeEditorTargets {
+          themes(first: 20) {
+            edges {
+              node {
+                id
+                themeStoreId
+                name
+                role
+              }
+            }
+          }
+        }
+      `,
+    );
+    const json = await response.json();
+    const themeNodes =
+      json?.data?.themes?.edges
+        ?.map((edge: { node?: Record<string, any> | null }) => edge?.node)
+        .filter(Boolean) ?? [];
+    const priorityByRole: Record<string, number> = {
+      MAIN: 0,
+      UNPUBLISHED: 1,
+      DEVELOPMENT: 2,
+      DEMO: 3,
+    };
+
+    return themeNodes
+      .map((theme: any) => ({
+        id: String(theme?.id || ""),
+        editorId: String(theme?.themeStoreId || "").trim(),
+        name: String(theme?.name || "").trim(),
+        role: String(theme?.role || "").trim(),
+      }))
+      .filter((theme: ThemeEditorTarget) => theme.id && theme.name)
+      .sort((left: ThemeEditorTarget, right: ThemeEditorTarget) => {
+        const leftPriority = priorityByRole[left.role] ?? 99;
+        const rightPriority = priorityByRole[right.role] ?? 99;
+        if (leftPriority !== rightPriority) return leftPriority - rightPriority;
+        return left.name.localeCompare(right.name);
+      });
+  } catch (error) {
+    console.error("[theme-extension] failed to fetch theme editor targets", error);
+    return [];
+  }
+}
 
 async function fetchShopOffers(shop: string): Promise<OfferListItem[]> {
   try {
@@ -275,70 +1075,287 @@ async function fetchShopOffers(shop: string): Promise<OfferListItem[]> {
   }
 }
 
-async function fetchStoreProducts(admin: any): Promise<StoreProductItem[]> {
-  let productsResponse;
-  let productsJson;
+function mapAdminProductNodeToStoreProductItem(
+  node: AdminProductNode | undefined,
+): StoreProductItem | null {
+  const priceRaw = node?.variants?.edges?.[0]?.node?.price;
+  const image = node?.featuredImage?.url;
+  if (!node?.id || !node.title) {
+    return null;
+  }
+  return {
+    id: node.id,
+    name: node.title,
+    handle: String(node.handle || ""),
+    price: priceRaw ? `$${priceRaw}` : "$0.00",
+    image: image || "https://via.placeholder.com/60",
+    collections:
+      node.collections?.edges
+        ?.map((edge) => edge?.node)
+        .filter((collection): collection is NonNullable<typeof collection> => Boolean(collection?.id))
+        .map((collection) => ({
+          id: String(collection.id || ""),
+          title: String(collection.title || ""),
+        })) || [],
+    variants:
+      node.variants?.edges
+        ?.map((edgeV) => edgeV?.node)
+        .filter((v): v is NonNullable<typeof v> => Boolean(v?.id))
+        .map((v) => ({
+          id: String(v.id || ""),
+          title: String(v.title || ""),
+          price: String(v.price || ""),
+          selectedOptions: Array.isArray(v.selectedOptions)
+            ? v.selectedOptions
+                .filter((opt): opt is NonNullable<typeof opt> => Boolean(opt))
+                .map((opt) => ({
+                  name: String(opt.name || ""),
+                  value: String(opt.value || ""),
+                }))
+            : [],
+        })) || [],
+    hasSubscription:
+      ((node?.sellingPlanGroups?.edges as Array<unknown> | undefined) ?? []).length > 0,
+  };
+}
+
+function parseBxgySelectedProductIds(selectedProductsJson?: string | null): string[] {
+  if (!selectedProductsJson) return [];
   try {
-    productsResponse = await admin.graphql(
-      `#graphql
-        query AppProducts {
-          products(first: 100) {
-            edges {
-              node {
-                id
-                title
-                featuredImage {
-                  url
-                }
-                variants(first: 1) {
-                  edges {
-                    node {
-                      price
+    const parsed = JSON.parse(selectedProductsJson) as {
+      buyProducts?: unknown;
+      getProducts?: unknown;
+    };
+    return [
+      ...(Array.isArray(parsed.buyProducts) ? parsed.buyProducts : []),
+      ...(Array.isArray(parsed.getProducts) ? parsed.getProducts : []),
+    ]
+      .map((id) => String(id || "").trim())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function collectLegacyReferencedProductIds(offer: OfferListItem): string[] {
+  const effectiveOfferType = resolveOfferTypeFromCampaignConfig({
+    offerType: offer.offerType,
+    campaignConfigJson: offer.campaignConfigJson,
+  });
+  if (effectiveOfferType === "complete-bundle") {
+    const config = parseCompleteBundleConfig(offer.selectedProductsJson);
+    return Array.from(
+      new Set(
+        config.bars.flatMap((bar) =>
+          (bar.products || []).map((product) => String(product.productId || "").trim()),
+        ),
+      ),
+    ).filter(Boolean);
+  }
+
+  if (effectiveOfferType === "quantity-breaks-different") {
+    const selectedIds = parseSelectedProductIds(offer.selectedProductsJson);
+    const ruleIds = parseDifferentProductsDiscountRules(
+      offer.discountRulesJson,
+    ).flatMap((rule) => [
+      ...(Array.isArray(rule.buyProductIds) ? rule.buyProductIds : []),
+      ...(Array.isArray(rule.getProductIds) ? rule.getProductIds : []),
+    ]);
+    return Array.from(new Set([...selectedIds, ...ruleIds])).filter(Boolean);
+  }
+
+  return Array.from(
+    new Set(
+      effectiveOfferType === "bxgy"
+        ? parseBxgySelectedProductIds(offer.selectedProductsJson)
+        : effectiveOfferType === "free-gift"
+          ? [
+              ...parseFreeGiftSelectedProducts(offer.selectedProductsJson).triggerProducts,
+              ...parseFreeGiftSelectedProducts(offer.selectedProductsJson).giftProducts,
+              ...parseFreeGiftRules(offer.discountRulesJson).flatMap((rule) =>
+                Array.isArray(rule.giftProductIds) ? rule.giftProductIds : [],
+              ),
+            ]
+          : parseSelectedProductIds(offer.selectedProductsJson),
+    ),
+  ).filter(Boolean);
+}
+
+function collectReferencedProductIds(offers: OfferListItem[]): string[] {
+  const ids = new Set<string>();
+  for (const offer of offers) {
+    const runtimeSyncData = compileOfferRuntimeSyncData(offer);
+    for (const productId of runtimeSyncData.referencedProductIds) {
+      const normalized = String(productId || "").trim();
+      if (normalized) ids.add(normalized);
+    }
+  }
+  return Array.from(ids);
+}
+
+async function fetchStoreProducts(
+  admin: any,
+  includeProductIds: string[] = [],
+): Promise<StoreProductItem[]> {
+  const productMap = new Map<string, StoreProductItem>();
+  let cursor: string | null = null;
+  let hasNextPage = true;
+  let pageCount = 0;
+
+  while (hasNextPage && pageCount < 10) {
+    let productsJson: any;
+    try {
+      const productsResponse: any = await admin.graphql(
+        `#graphql
+          query AppProducts($after: String) {
+            products(first: 100, after: $after) {
+              pageInfo {
+                hasNextPage
+                endCursor
+              }
+              edges {
+                node {
+                  id
+                  title
+                  handle
+                  options {
+                    name
+                  }
+                  featuredImage {
+                    url
+                  }
+                  collections(first: 20) {
+                    edges {
+                      node {
+                        id
+                        title
+                      }
+                    }
+                  }
+                  variants(first: 50) {
+                    edges {
+                      node {
+                        id
+                        title
+                        price
+                        selectedOptions {
+                          name
+                          value
+                        }
+                      }
+                    }
+                  }
+                  sellingPlanGroups(first: 1) {
+                    edges {
+                      node {
+                        id
+                      }
                     }
                   }
                 }
               }
             }
           }
-        }
-      `,
-    );
-    productsJson = await productsResponse.json();
-  } catch (error) {
-    console.error("Failed to fetch or parse products GraphQL response", error);
-    return [];
+        `,
+        { variables: { after: cursor } },
+      );
+      productsJson = await productsResponse.json();
+    } catch (error) {
+      console.error("Failed to fetch or parse products GraphQL response", error);
+      return Array.from(productMap.values());
+    }
+
+    const productEdges =
+      (productsJson?.data?.products?.edges as
+        | Array<{
+            node?: AdminProductNode;
+          }>
+        | undefined) ?? [];
+
+    for (const edge of productEdges) {
+      const mapped = mapAdminProductNodeToStoreProductItem(edge?.node);
+      if (mapped) productMap.set(mapped.id, mapped);
+    }
+
+    hasNextPage = Boolean(productsJson?.data?.products?.pageInfo?.hasNextPage);
+    cursor = String(productsJson?.data?.products?.pageInfo?.endCursor || "") || null;
+    pageCount += 1;
   }
 
-  const productEdges =
-    (productsJson?.data?.products?.edges as
-      | Array<{
-          node?: {
-            id?: string;
-            title?: string;
-            featuredImage?: { url?: string | null } | null;
-            variants?: {
-              edges?: Array<{ node?: { price?: string | null } | null }>;
-            } | null;
-          } | null;
-        }>
-      | undefined) ?? [];
+  const missingIds = Array.from(
+    new Set(
+      includeProductIds
+        .map((id) => String(id || "").trim())
+        .filter((id) => id && !productMap.has(id)),
+    ),
+  );
 
-  return productEdges
-    .map((edge) => {
-      const node = edge?.node;
-      const priceRaw = node?.variants?.edges?.[0]?.node?.price;
-      const image = node?.featuredImage?.url;
-      if (!node?.id || !node.title) {
-        return null;
+  // 中文注释：编辑历史 offer 时，把已引用但不在前 100 个里的商品也补进来，避免预览只显示 productId。
+  for (let i = 0; i < missingIds.length; i += 50) {
+    const batchIds = missingIds.slice(i, i + 50);
+    try {
+      const byIdsResponse = await admin.graphql(
+        `#graphql
+          query ProductsByIds($ids: [ID!]!) {
+            nodes(ids: $ids) {
+              ... on Product {
+                id
+                title
+                handle
+                featuredImage {
+                  url
+                }
+              collections(first: 20) {
+                edges {
+                  node {
+                    id
+                    title
+                  }
+                }
+              }
+                variants(first: 50) {
+                  edges {
+                    node {
+                      id
+                      title
+                      price
+                      selectedOptions {
+                        name
+                        value
+                      }
+                    }
+                  }
+                }
+                sellingPlanGroups(first: 1) {
+                  edges {
+                    node {
+                      id
+                    }
+                  }
+                }
+              }
+            }
+          }
+        `,
+        { variables: { ids: batchIds } },
+      );
+      const byIdsJson = await byIdsResponse.json();
+      const nodes = Array.isArray(byIdsJson?.data?.nodes)
+        ? (byIdsJson.data.nodes as AdminProductNode[])
+        : [];
+      for (const node of nodes) {
+        const mapped = mapAdminProductNodeToStoreProductItem(node);
+        if (mapped) productMap.set(mapped.id, mapped);
       }
-      return {
-        id: node.id,
-        name: node.title,
-        price: priceRaw ? `$${priceRaw}` : "$0.00",
-        image: image || "https://via.placeholder.com/60",
-      };
-    })
-    .filter((item): item is StoreProductItem => item !== null);
+    } catch (error) {
+      console.error("Failed to fetch referenced products by ids", {
+        batchIds,
+        error,
+      });
+    }
+  }
+
+  return Array.from(productMap.values());
 }
 
 const ensureWebPixel = async (admin: any, shop: string) => {
@@ -393,7 +1410,7 @@ const ensureWebPixel = async (admin: any, shop: string) => {
         webPixel: {
           settings: {
             shopName: shop,
-            server: process.env.SHOPIFY_APP_URL || "",
+            server: sanitizeUrlLikeEnvValue(process.env.SHOPIFY_APP_URL),
           },
         },
       },
@@ -416,51 +1433,102 @@ const ensureWebPixel = async (admin: any, shop: string) => {
 
 /**
  * Collect objects that look like theme JSON blocks (have string `type`).
- * App embeds may live under `current.blocks` or nested elsewhere in settings_data.
+ * App embeds may live under `current.blocks` in settings_data, while app blocks may
+ * live in product template / section JSON files.
  */
-const collectTypedBlocks = (
+type ThemeBlockEntry = {
+  block: Record<string, any>;
+  fileName: string;
+  entryKey: string | null;
+};
+
+const collectThemeBlockEntries = (
   node: unknown,
-  out: Array<Record<string, any>>,
+  out: ThemeBlockEntry[],
+  fileName: string,
+  entryKey: string | null = null,
 ): void => {
   if (node === null || typeof node !== "object") return;
   if (Array.isArray(node)) {
-    for (const item of node) collectTypedBlocks(item, out);
+    for (const item of node) collectThemeBlockEntries(item, out, fileName, entryKey);
     return;
   }
   const rec = node as Record<string, unknown>;
-  if (typeof rec.type === "string") {
-    out.push(rec);
+  if (typeof rec.type === "string" || entryKey) {
+    out.push({
+      block: rec as Record<string, any>,
+      fileName,
+      entryKey,
+    });
   }
-  for (const v of Object.values(rec)) {
-    collectTypedBlocks(v, out);
+  for (const [key, value] of Object.entries(rec)) {
+    collectThemeBlockEntries(value, out, fileName, key);
   }
 };
 
+function normalizeThemeJsonFileContent(content: string): string {
+  return String(content || "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "");
+}
+
 /**
- * App embed status for a single theme extension block (e.g. product_detail_message -> product-detail-message.js).
+ * App extension status for a single theme extension block (app embed or app block).
  * Matches editor deep-link form: `appEmbed={client_id}/{blockHandle}` e.g. `1cdf.../product_detail_message`.
- * `type` in JSON may be `.../apps/{client_id}/blocks/{handle}/...` or `.../apps/{client_id}/{handle}/...`.
+ * In theme JSON, Shopify may persist entries as generic block types like
+ * `shopify://apps/{app-slug}/blocks/app-embed/{extensionUid}` or
+ * `shopify://apps/{app-slug}/blocks/product_detail_message_block/{extensionUid}`.
  */
-const getThemeExtensionEnabled = async (
+const getThemeExtensionEnabledAcrossThemes = async (
   admin: any,
+  pluginKey: string,
   extensionHandle: string,
-  /** Liquid filename base, e.g. product_detail_message for product_detail_message.liquid */
-  blockHandle: string,
+  /** Liquid filename bases, e.g. product_detail_message for product_detail_message.liquid */
+  blockHandles: string[],
+  extensionUid: string,
   /** SHOPIFY_API_KEY / app client id - required to match real storefront block types */
   appClientId: string,
   /** App display name from shopify.app.*.toml (will be normalized to slug for matching) */
   appName?: string,
-): Promise<boolean> => {
+): Promise<{
+  enabled: boolean;
+  debug: ThemeExtensionDetectionDebug;
+}> => {
+  const debug: ThemeExtensionDetectionDebug = {
+    pluginKey,
+    extensionHandle,
+    extensionUid,
+    embedHandle: blockHandles[0] || "",
+    appClientId,
+    appName: String(appName || ""),
+    appNameSlug: "",
+    enabled: false,
+    scannedThemeCount: 0,
+    scannedBlockCount: 0,
+    themes: [],
+  };
   try {
     const response = await admin.graphql(
       `#graphql
-        query MainThemeSettingsData {
-          themes(first: 1, roles: [MAIN]) {
+        query ThemeSettingsDataAcrossThemes {
+          themes(first: 20) {
             edges {
               node {
-                files(filenames: ["config/settings_data.json"], first: 1) {
+                id
+                name
+                role
+                files(
+                  filenames: [
+                    "config/settings_data.json"
+                    "templates/*.json"
+                    "sections/*.json"
+                    "section_groups/*.json"
+                  ]
+                  first: 250
+                ) {
                   nodes {
                     ... on OnlineStoreThemeFile {
+                      filename
                       body {
                         ... on OnlineStoreThemeFileBodyText {
                           content
@@ -476,40 +1544,76 @@ const getThemeExtensionEnabled = async (
       `,
     );
     const json = await response.json();
-    const content =
-      json?.data?.themes?.edges?.[0]?.node?.files?.nodes?.[0]?.body?.content;
-
-    if (!content || typeof content !== "string") {
-      return false;
+    const graphqlErrors = Array.isArray(json?.errors) ? json.errors : [];
+    const themeNodes =
+      json?.data?.themes?.edges
+        ?.map((edge: { node?: Record<string, any> | null }) => edge?.node)
+        .filter(Boolean) ?? [];
+    if (graphqlErrors.length > 0) {
+      debug.error = graphqlErrors
+        .map((item: { message?: string }) => String(item?.message || "").trim())
+        .filter(Boolean)
+        .join(" | ");
+      console.error("[theme-extension] graphql errors while scanning themes", {
+        errors: graphqlErrors,
+        recoveredThemeCount: themeNodes.length,
+      });
+      if (themeNodes.length === 0) {
+        return { enabled: false, debug };
+      }
     }
+    debug.scannedThemeCount = themeNodes.length;
+    const normalizedBlockHandles = Array.from(
+      new Set(blockHandles.map((handle) => String(handle || "").trim()).filter(Boolean)),
+    );
+    console.error("[theme-extension] scanning themes", {
+      pluginKey,
+      extensionHandle,
+      blockHandles: normalizedBlockHandles,
+      extensionUid,
+      appClientId,
+      appName,
+      themeCount: themeNodes.length,
+      themes: themeNodes.map((theme: any) => ({
+        id: theme?.id,
+        name: theme?.name,
+        role: theme?.role,
+          hasSettingsData: Boolean(
+            (theme?.files?.nodes || []).some(
+              (node: any) =>
+                String(node?.filename || "") === "config/settings_data.json" &&
+                typeof node?.body?.content === "string" &&
+                node.body.content.trim() !== "",
+            ),
+          ),
+      })),
+    });
 
-    // Some themes may include comments in settings_data content.
-    // Strip JS-style comments before JSON.parse for compatibility.
-    const normalizedContent = content
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/^\s*\/\/.*$/gm, "");
-
-    let settingsData;
-    try {
-      settingsData = JSON.parse(normalizedContent);
-    } catch (e) {
-      console.error("[theme-extension] failed to parse settings_data.json", e);
-      return false;
-    }
-    const blockEntries: Array<Record<string, any>> = [];
-    collectTypedBlocks(settingsData, blockEntries);
-
-    const handleKebab = blockHandle.replace(/_/g, "-");
+    const handleKebabs = normalizedBlockHandles.map((handle) => handle.replace(/_/g, "-"));
+    const embedHandleCandidates = [
+      ...normalizedBlockHandles.map((handle) => `${appClientId}/${handle}`),
+      ...handleKebabs.map((handle) => `${appClientId}/${handle}`),
+    ].filter(Boolean);
     const blockPathSegments = [
-      `/blocks/${blockHandle}/`,
-      `/blocks/${handleKebab}/`,
+      ...normalizedBlockHandles.map((handle) => `/blocks/${handle}/`),
+      ...handleKebabs.map((handle) => `/blocks/${handle}/`),
     ];
+    const embedUidSegments = [
+      extensionUid ? `/blocks/app-embed/${extensionUid}` : "",
+      ...normalizedBlockHandles.map((handle) =>
+        extensionUid ? `/blocks/${handle}/${extensionUid}` : "",
+      ),
+      ...handleKebabs.map((handle) =>
+        extensionUid ? `/blocks/${handle}/${extensionUid}` : "",
+      ),
+    ].filter(Boolean);
 
     const appNameSlug = String(appName || "")
       .trim()
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "");
+    debug.appNameSlug = appNameSlug;
 
     const isOurAppBlock = (blockType: string) => {
       if (!appClientId && !extensionHandle) return false;
@@ -522,134 +1626,270 @@ const getThemeExtensionEnabled = async (
       return false;
     };
 
-    const matchesEmbedFromEditorUrl = (blockType: string) => {
+    const hasEditorEmbedHandle = (value: string | null | undefined) => {
+      if (!value) return false;
+      return embedHandleCandidates.some((candidate) => value.includes(candidate));
+    };
+
+    const matchesEmbedFromEditorUrl = (
+      blockType: string,
+      entryKey: string | null,
+    ) => {
+      if (hasEditorEmbedHandle(entryKey)) {
+        return true;
+      }
       if (!appClientId) return false;
       if (
-        blockType.includes(`/apps/${appClientId}/${blockHandle}/`) ||
-        blockType.includes(`/apps/${appClientId}/${handleKebab}/`)
+        normalizedBlockHandles.some((handle) =>
+          blockType.includes(`/apps/${appClientId}/${handle}/`),
+        ) ||
+        handleKebabs.some((handle) =>
+          blockType.includes(`/apps/${appClientId}/${handle}/`),
+        )
       ) {
+        return true;
+      }
+      if (embedUidSegments.some((seg) => blockType.includes(seg))) {
         return true;
       }
       return blockPathSegments.some((seg) => blockType.includes(seg));
     };
 
-    for (const block of blockEntries) {
-      const blockType = String(block?.type || "");
-      const matchesBlock = matchesEmbedFromEditorUrl(blockType);
-      if (!matchesBlock) continue;
-      const matchedByApp = isOurAppBlock(blockType);
-      if (!matchedByApp) {
-        console.log("[theme-extension] skipped block from other app", {
-          extensionHandle,
-          blockHandle,
-          appClientId,
-          appName,
-          appNameSlug,
-          blockType,
+    const isLikelyThemeEmbedBlock = (block: Record<string, any>) => {
+      if ("disabled" in block) return true;
+      if ("settings" in block) return true;
+      return false;
+    };
+
+    let scannedBlockCount = 0;
+
+    for (const theme of themeNodes) {
+      const themeFiles = Array.isArray(theme?.files?.nodes)
+        ? theme.files.nodes
+        : [];
+      const jsonFiles = themeFiles
+        .map((node: any) => ({
+          fileName: String(node?.filename || "").trim(),
+          content: node?.body?.content,
+        }))
+        .filter(
+          (file: { fileName: string; content?: unknown }) =>
+            Boolean(file.fileName) &&
+            file.fileName.endsWith(".json") &&
+            typeof file.content === "string" &&
+            file.content.trim() !== "",
+        );
+      const themeDebug: ThemeExtensionThemeDebug = {
+        id: String(theme?.id || ""),
+        name: String(theme?.name || ""),
+        role: String(theme?.role || ""),
+        hasSettingsData: jsonFiles.some(
+          (file: { fileName: string }) =>
+            file.fileName === "config/settings_data.json",
+        ),
+        matchedEntries: [],
+      };
+      debug.themes.push(themeDebug);
+      if (!jsonFiles.length) {
+        themeDebug.result = "missing-theme-json-files";
+        console.error("[theme-extension] theme missing relevant json files", {
+          themeId: theme?.id,
+          themeName: theme?.name,
+          themeRole: theme?.role,
         });
         continue;
       }
-      const enabled = block?.disabled !== true;
-      console.log("[theme-extension] matched embed block", {
-        extensionHandle,
-        blockHandle,
-        appClientId,
-        appNameSlug,
-        blockType,
-        matchedByApp,
-        disabled: block?.disabled,
-        enabled,
+      const blockEntries: ThemeBlockEntry[] = [];
+      let parsedFileCount = 0;
+      let parseFailedCount = 0;
+      for (const file of jsonFiles) {
+        try {
+          const parsed = JSON.parse(normalizeThemeJsonFileContent(file.content));
+          parsedFileCount += 1;
+          collectThemeBlockEntries(parsed, blockEntries, file.fileName);
+        } catch (error) {
+          parseFailedCount += 1;
+          console.error("[theme-extension] failed to parse theme json file", {
+            themeId: theme?.id,
+            themeName: theme?.name,
+            themeRole: theme?.role,
+            fileName: file.fileName,
+            error,
+          });
+        }
+      }
+      themeDebug.parseOk = parsedFileCount > 0 && parseFailedCount === 0;
+      if (parsedFileCount === 0) {
+        themeDebug.result = "parse-failed";
+        continue;
+      }
+      scannedBlockCount += blockEntries.length;
+      debug.scannedBlockCount = scannedBlockCount;
+      themeDebug.totalBlockEntries = blockEntries.length;
+      const appRelatedEntries = blockEntries
+        .filter(({ block, entryKey }) => {
+          const blockType = String(block?.type || "");
+          return (
+            Boolean(entryKey && entryKey.includes("/")) ||
+            blockType.includes("shopify://apps/") ||
+            blockType.includes("/apps/") ||
+            blockType.includes("/blocks/")
+          );
+        })
+        .slice(0, 12)
+        .map(({ block, entryKey, fileName }) => ({
+          fileName,
+          entryKey,
+          blockType: String(block?.type || ""),
+          disabled: block?.disabled,
+          hasSettings: "settings" in block,
+        }));
+      themeDebug.appRelatedEntries = appRelatedEntries;
+      console.error("[theme-extension] theme scan summary", {
+        themeId: theme?.id,
+        themeName: theme?.name,
+        themeRole: theme?.role,
+        files: jsonFiles.map((file: { fileName: string }) => file.fileName),
+        totalBlockEntries: blockEntries.length,
+        appRelatedEntryCount: appRelatedEntries.length,
+        appRelatedEntries,
       });
-      return enabled;
+
+      for (const { block, entryKey, fileName } of blockEntries) {
+        const blockType = String(block?.type || "");
+        const matchesBlock = matchesEmbedFromEditorUrl(blockType, entryKey);
+        if (!matchesBlock) continue;
+        const matchedByApp = hasEditorEmbedHandle(entryKey) || isOurAppBlock(blockType);
+        const matchedByUid = Boolean(
+          extensionUid && embedUidSegments.some((seg) => blockType.includes(seg)),
+        );
+        const matchedByHandleOnly =
+          !matchedByApp && !matchedByUid && isLikelyThemeEmbedBlock(block);
+        const enabled = block?.disabled !== true;
+        themeDebug.matchedEntries?.push({
+          fileName,
+          entryKey,
+          blockType,
+          disabled: block?.disabled,
+          hasSettings: "settings" in block,
+          matchedByApp,
+          matchedByUid,
+          matchedByHandleOnly,
+          enabled,
+        });
+        console.error("[theme-extension] matched embed block", {
+          extensionHandle,
+          blockHandles: normalizedBlockHandles,
+          extensionUid,
+          appClientId,
+          appNameSlug,
+          themeId: theme?.id,
+          themeName: theme?.name,
+          themeRole: theme?.role,
+          fileName,
+          entryKey,
+          blockType,
+          matchedByApp,
+          matchedByUid,
+          matchedByHandleOnly,
+          disabled: block?.disabled,
+          enabled,
+        });
+        if (enabled && (matchedByApp || matchedByUid || matchedByHandleOnly)) {
+          themeDebug.result = "enabled-match";
+          debug.enabled = true;
+          debug.matchedTheme = {
+            id: String(theme?.id || ""),
+            name: String(theme?.name || ""),
+            role: String(theme?.role || ""),
+            entryKey,
+            blockType,
+          };
+          console.error("[theme-extension] enabled theme embed detected", {
+            themeId: theme?.id,
+            themeName: theme?.name,
+            themeRole: theme?.role,
+            fileName,
+            entryKey,
+            blockType,
+          });
+          return { enabled: true, debug };
+        }
+      }
+
+      themeDebug.result = themeDebug.matchedEntries?.length
+        ? "matched-but-disabled"
+        : "no-match-in-theme";
+      console.error("[theme-extension] no enabled embed in theme", {
+        themeId: theme?.id,
+        themeName: theme?.name,
+        themeRole: theme?.role,
+      });
     }
 
-    console.log("[theme-extension] no matched embed block", {
+    console.error("[theme-extension] no matched embed block", {
       extensionHandle,
-      blockHandle,
+      blockHandles: normalizedBlockHandles,
+      extensionUid,
       appClientId,
       appNameSlug,
-      scannedBlockCount: blockEntries.length,
+      scannedThemeCount: themeNodes.length,
+      scannedBlockCount,
     });
   } catch (error) {
+    debug.error = error instanceof Error ? error.message : JSON.stringify(error);
     console.error("Failed to read theme extension status", error);
   }
 
-  return false;
+  return { enabled: false, debug };
 };
 
-async function getCurrentThemeExtensionEnabled(admin: any): Promise<boolean> {
-  const apiKey = process.env.SHOPIFY_API_KEY || "";
-  const appDisplayName = process.env.SHOPIFY_APP_NAME || process.env.APP_NAME;
+async function getCurrentThemeExtensionEnabled(admin: any): Promise<{
+  enabled: boolean;
+  debug: ThemeExtensionDetectionDebug;
+}> {
+  const apiKey = sanitizeEnvLikeValue(process.env.SHOPIFY_API_KEY);
+  const appDisplayName =
+    sanitizeEnvLikeValue(process.env.SHOPIFY_APP_NAME) ||
+    sanitizeEnvLikeValue(process.env.APP_NAME);
   try {
-    return await getThemeExtensionEnabled(
+    console.error("[theme-extension] start detection", {
+      apiKey,
+      appDisplayName,
+      pluginKey: BUNDLE_THEME_PRODUCT_PLUGIN.key,
+      extensionHandle: BUNDLE_THEME_PRODUCT_PLUGIN.extensionHandle,
+      extensionUid: BUNDLE_THEME_PRODUCT_PLUGIN.extensionUid,
+      embedHandle: BUNDLE_THEME_PRODUCT_PLUGIN.embedHandle,
+    });
+    return await getThemeExtensionEnabledAcrossThemes(
       admin,
-      "bundlev2-theme-product-custom",
-      "product_detail_message",
+      BUNDLE_THEME_PRODUCT_PLUGIN.key,
+      BUNDLE_THEME_PRODUCT_PLUGIN.extensionHandle,
+      BUNDLE_THEME_PRODUCT_PLUGIN.blockHandles ??
+        [BUNDLE_THEME_PRODUCT_PLUGIN.embedHandle],
+      BUNDLE_THEME_PRODUCT_PLUGIN.extensionUid,
       apiKey,
       appDisplayName,
     );
   } catch (error) {
     console.error("Failed to check theme extension status", error);
-    return false;
-  }
-}
-
-async function syncBundleEnabledMetafield(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  admin: any,
-  themeExtensionEnabled: boolean,
-): Promise<void> {
-  try {
-    const env = resolveBundleEnvironment();
-    const envEnabledKey =
-      env === "prod"
-        ? BUNDLE_METAFIELD_ENABLED_PROD_KEY
-        : BUNDLE_METAFIELD_ENABLED_TEST_KEY;
-    const shopIdResponse = await admin.graphql(
-      `#graphql
-      query ShopId {
-        shop {
-          id
-        }
-      }
-    `,
-    );
-    const shopIdJson = (await shopIdResponse.json()) as {
-      data?: { shop?: { id?: string } };
-    };
-    const shopId = shopIdJson?.data?.shop?.id;
-    if (!shopId) return;
-
-    await admin.graphql(
-      `#graphql
-      mutation MetafieldsSet($metafields: [MetafieldsSetInput!]!) {
-        metafieldsSet(metafields: $metafields) {
-          userErrors {
-            message
-          }
-        }
-      }
-    `,
-      {
-        variables: {
-          metafields: [
-            {
-              ownerId: shopId,
-              namespace: BUNDLE_METAFIELD_NAMESPACE,
-              key: envEnabledKey,
-              type: "json",
-              value: JSON.stringify({
-                enabled: themeExtensionEnabled,
-                env,
-                updatedAt: new Date().toISOString(),
-              }),
-            },
-          ],
-        },
+    return {
+      enabled: false,
+      debug: {
+        pluginKey: BUNDLE_THEME_PRODUCT_PLUGIN.key,
+        extensionHandle: BUNDLE_THEME_PRODUCT_PLUGIN.extensionHandle,
+        extensionUid: BUNDLE_THEME_PRODUCT_PLUGIN.extensionUid,
+        embedHandle: BUNDLE_THEME_PRODUCT_PLUGIN.embedHandle,
+        appClientId: apiKey,
+        appName: String(appDisplayName || ""),
+        appNameSlug: "",
+        enabled: false,
+        scannedThemeCount: 0,
+        scannedBlockCount: 0,
+        themes: [],
+        error: error instanceof Error ? error.message : JSON.stringify(error),
       },
-    );
-  } catch (error) {
-    console.error("Failed to sync bundle enabled metafield", error);
+    };
   }
 }
 
@@ -663,16 +1903,8 @@ import { AppProvider } from "@shopify/shopify-app-react-router/react";
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
 
-  // Ensure web pixel exists
-  void ensureWebPixel(admin, session.shop).catch((error) => {
-    console.error("Failed to ensure web pixel exists", error);
-  });
-  void ensureCartLinesAutomaticDiscount(admin).catch((error) => {
-    console.error("Failed to ensure automatic app discount exists", error);
-  });
-
   // eslint-disable-next-line no-undef
-  const apiKey = process.env.SHOPIFY_API_KEY || "";
+  const apiKey = sanitizeEnvLikeValue(process.env.SHOPIFY_API_KEY);
 
   // 获取商店时区
   let ianaTimezone = "UTC";
@@ -694,12 +1926,38 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.error("Failed to fetch shop timezone", error);
   }
 
-  let themeExtensionEnabled = false;
-  themeExtensionEnabled = await getCurrentThemeExtensionEnabled(admin);
-  void syncBundleEnabledMetafield(admin, themeExtensionEnabled);
-  void syncShopOffersMetafield(admin, session.shop, themeExtensionEnabled).catch((error) => {
-    console.error("Failed to sync shop offers metafield in loader", error);
-  });
+  const themeExtensionDetection = await getCurrentThemeExtensionEnabled(admin);
+  const themeExtensionEnabled = themeExtensionDetection.enabled;
+  const themeExtensionDetectionFailed = Boolean(themeExtensionDetection.debug?.error);
+  const themeEditorStoreId = String(session.shop || "")
+    .trim()
+    .replace(/\.myshopify\.com$/i, "");
+  const themeEditorThemeId = String(
+    themeExtensionDetection.debug?.matchedTheme?.id ||
+      themeExtensionDetection.debug?.themes?.[0]?.id ||
+      "",
+  )
+    .split("/")
+    .filter(Boolean)
+    .pop() ?? "";
+  const themeTargets = await fetchThemeEditorTargets(admin);
+
+  const syncResult = await syncShopOffersMetafield(
+    admin,
+    session.shop,
+  );
+  if (!syncResult.ok) {
+    console.error("Failed to sync shop offers metafield in loader", {
+      shopName: session.shop,
+      message: syncResult.message,
+    });
+  }
+  if (themeExtensionDetectionFailed) {
+    console.error("[theme-extension] theme detection failed (shop offers metafield still attempted)", {
+      shopName: session.shop,
+      error: themeExtensionDetection.debug?.error,
+    });
+  }
 
   let markets: MarketItem[] = [];
   try {
@@ -741,13 +1999,40 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   return Response.json({
     markets,
+    themeTargets,
     shop: session.shop,
+    themeEditorStoreId,
+    themeEditorThemeId,
     apiKey,
     ianaTimezone,
     themeExtensionEnabled,
+    themeExtensionDetectionFailed,
+    themeExtensionDebug: themeExtensionDetection.debug,
+    themeExtensionMatchedThemeId: themeExtensionDetection.debug?.matchedTheme?.id,
     billingSubscriptions,
     billingTestMode: billingIsTestCharge(),
   } satisfies IndexLoaderData);
+};
+
+const SKIP_INDEX_REVALIDATE_INTENTS = new Set([
+  "create-offer",
+  "update-offer",
+  "toggle-offer-status",
+  "delete-offer",
+  "load-offers",
+  "load-store-products",
+  "get-product-subscription-status",
+]);
+
+export const shouldRevalidate = ({
+  formData,
+  defaultShouldRevalidate,
+}: ShouldRevalidateFunctionArgs) => {
+  const intent = String(formData?.get("intent") || "").trim();
+  if (SKIP_INDEX_REVALIDATE_INTENTS.has(intent)) {
+    return false;
+  }
+  return defaultShouldRevalidate;
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -757,8 +2042,232 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   let intent = formData.get("intent");
 
   if (intent === "load-store-products") {
-    const storeProducts = await fetchStoreProducts(admin);
+    const offers = await fetchShopOffers(session.shop);
+    const storeProducts = await fetchStoreProducts(
+      admin,
+      collectReferencedProductIds(offers),
+    );
     return Response.json({ storeProducts });
+  }
+  if (intent === "get-product-subscription-status") {
+    const productId = String(formData.get("productId") || "").trim();
+    if (!productId) {
+      return Response.json(
+        { ok: false as const, error: "Missing product ID" },
+        { status: 400 },
+      );
+    }
+
+    try {
+      const response = await admin.graphql(
+        `#graphql
+          query GetProductSubscriptionStatus($id: ID!) {
+            product(id: $id) {
+              id
+              title
+              variants(first: 1) {
+                edges {
+                  node {
+                    price
+                  }
+                }
+              }
+              sellingPlanGroups(first: 10) {
+                edges {
+                  node {
+                    id
+                    name
+                    sellingPlans(first: 10) {
+                      edges {
+                        node {
+                          id
+                          name
+                          options
+                          billingPolicy {
+                            ... on SellingPlanRecurringBillingPolicy {
+                              interval
+                              intervalCount
+                            }
+                          }
+                          pricingPolicies {
+                            ... on SellingPlanFixedPricingPolicy {
+                              adjustmentType
+                              adjustmentValue {
+                                ... on MoneyV2 {
+                                  amount
+                                  currencyCode
+                                }
+                                ... on SellingPlanPricingPolicyPercentageValue {
+                                  percentage
+                                }
+                              }
+                            }
+                            ... on SellingPlanRecurringPricingPolicy {
+                              afterCycle
+                              adjustmentType
+                              adjustmentValue {
+                                ... on MoneyV2 {
+                                  amount
+                                  currencyCode
+                                }
+                                ... on SellingPlanPricingPolicyPercentageValue {
+                                  percentage
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+              requiresSellingPlan
+            }
+          }
+        `,
+        {
+          variables: {
+            id: productId,
+          },
+        },
+      );
+      const json = (await response.json()) as {
+        data?: {
+          product?: {
+            id?: string;
+            title?: string;
+            variants?: {
+              edges?: Array<{
+                node?: {
+                  price?: string | null;
+                } | null;
+              }>;
+            };
+            requiresSellingPlan?: boolean;
+            sellingPlanGroups?: {
+              edges?: Array<{
+                node?: {
+                  id?: string;
+                  name?: string;
+                  sellingPlans?: {
+                    edges?: Array<{
+                      node?: {
+                        id?: string;
+                        name?: string;
+                        options?: Array<string | null> | null;
+                        billingPolicy?: {
+                          interval?: string | null;
+                          intervalCount?: number | null;
+                        } | null;
+                        pricingPolicies?: Array<SubscriptionPreviewPolicyNode | null> | null;
+                      } | null;
+                    }>;
+                  } | null;
+                } | null;
+              }>;
+            };
+          } | null;
+        };
+        errors?: unknown;
+      };
+
+      if (json.errors) {
+        console.error("GraphQL errors fetching product subscription status:", json.errors);
+      }
+
+      const product = json.data?.product;
+      const variantBasePrice = parseSubscriptionPreviewMoney(
+        product?.variants?.edges?.[0]?.node?.price,
+      );
+      const sellingPlanGroupNodes =
+        product?.sellingPlanGroups?.edges
+          ?.map((edge) => edge?.node)
+          .filter(
+            (
+              node,
+            ): node is {
+              id?: string;
+              name?: string;
+              sellingPlans?: {
+                edges?: Array<{
+                  node?: {
+                    id?: string;
+                    name?: string;
+                    options?: Array<string | null> | null;
+                    billingPolicy?: {
+                      interval?: string | null;
+                      intervalCount?: number | null;
+                    } | null;
+                    pricingPolicies?: Array<SubscriptionPreviewPolicyNode | null> | null;
+                  } | null;
+                }>;
+              } | null;
+            } => !!node,
+          ) ?? [];
+      const sellingPlanGroups = sellingPlanGroupNodes.map((group) => ({
+        id: group.id,
+        name: group.name,
+      }));
+      const previewPlans = sellingPlanGroupNodes
+        .flatMap((group) => group.sellingPlans?.edges ?? [])
+        .map((edge) => edge?.node)
+        .filter(
+          (
+            node,
+          ): node is {
+            id?: string;
+            name?: string;
+            options?: Array<string | null> | null;
+            billingPolicy?: {
+              interval?: string | null;
+              intervalCount?: number | null;
+            } | null;
+            pricingPolicies?: Array<SubscriptionPreviewPolicyNode | null> | null;
+          } => !!node,
+        )
+        .map((sellingPlan): SubscriptionPreviewPlan | null => {
+          const previewPricing = resolveSubscriptionPreviewPricing(
+            variantBasePrice,
+            (sellingPlan.pricingPolicies ?? []).filter(
+              (policy): policy is SubscriptionPreviewPolicyNode => !!policy,
+            ),
+          );
+          if (!previewPricing) return null;
+          return {
+            sellingPlanId: sellingPlan.id ?? "",
+            sellingPlanName:
+              sellingPlan.name ||
+              sellingPlan.options?.filter(Boolean).join(" / ") ||
+              "Subscription plan",
+            billingLabel: formatSubscriptionPreviewInterval(
+              sellingPlan.billingPolicy?.interval,
+              sellingPlan.billingPolicy?.intervalCount,
+            ),
+            ...previewPricing,
+          };
+        })
+        .filter((plan): plan is SubscriptionPreviewPlan => !!plan);
+
+      return Response.json({
+        ok: true as const,
+        product: {
+          id: product?.id ?? productId,
+          title: product?.title ?? "",
+          requiresSellingPlan: product?.requiresSellingPlan === true,
+          sellingPlanGroups,
+          hasSubscription:
+            product?.requiresSellingPlan === true || sellingPlanGroups.length > 0,
+          previewPlans,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to fetch product subscription status", error);
+      return Response.json(
+        { ok: false as const, error: "Failed to fetch product subscription status" },
+        { status: 500 },
+      );
+    }
   }
   if (intent === "load-offers") {
     const offers = await fetchShopOffers(session.shop);
@@ -866,33 +2375,55 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       OFFER_TEXT_LIMITS.cartTitle,
       "Bundle Discount",
     );
-    const offerType = String(formData.get("offerType") || "").trim();
+    let offerType = String(formData.get("offerType") || "").trim();
     const layoutFormatRaw = String(formData.get("layoutFormat") || "").trim();
     const layoutFormat = ["vertical", "horizontal", "card", "compact"].includes(
       layoutFormatRaw,
     )
       ? layoutFormatRaw
       : "vertical";
-    const startTimeRaw = String(formData.get("startTime") || "").trim();
-    const endTimeRaw = String(formData.get("endTime") || "").trim();
-    const selectedProductsJson = String(
+    let startTimeRaw = String(formData.get("startTime") || "").trim();
+    let endTimeRaw = String(formData.get("endTime") || "").trim();
+    endTimeRaw = normalizeOfferEndTimeForUi(endTimeRaw);
+    let selectedProductsJson = String(
       formData.get("selectedProductsJson") || "",
     );
-    const discountRulesJson = String(formData.get("discountRulesJson") || "");
+    let discountRulesJson = String(formData.get("discountRulesJson") || "");
+    const campaignConfigJsonRaw = String(
+      formData.get("campaignConfigJson") || "",
+    ).trim();
 
     // Status is checked, defaults to false if not provided or explicitly 'false'
     const statusRaw = String(formData.get("status") || "");
-    const status = statusRaw === "true";
+    let status = statusRaw === "true";
 
     const totalBudgetRaw = formData.get("totalBudget");
     const dailyBudgetRaw = formData.get("dailyBudget");
 
-    const customerSegments = formData.getAll("customerSegments") as string[];
-    const markets = formData.getAll("markets") as string[];
+    const customerSegments = normalizeCustomerSegments(
+      formData.getAll("customerSegments").map((value) => String(value || "")),
+    );
+    const customerProfileFilters = normalizeCustomerProfileFilters(
+      formData.getAll("customerProfileFilters").map((value) => String(value || "")),
+    );
+    const rawIpCountryCodes = formData
+      .getAll("ipCountryCodes")
+      .map((value) => String(value || ""));
+    const invalidIpCountryCodes = getInvalidIpCountryCodes(rawIpCountryCodes);
+    const ipCountryCodes = normalizeIpCountryCodes(rawIpCountryCodes);
+    const markets = normalizeTargetMarkets(
+      formData.getAll("markets").map((value) => String(value || "")),
+    );
 
     const usageLimitPerCustomer = String(
       formData.get("usageLimitPerCustomer") || "unlimited",
     );
+    const couponEnabled = String(formData.get("couponEnabled") || "") === "true";
+    const couponCode = sanitizeSingleLineText(
+      formData.get("couponCode"),
+      64,
+      "",
+    ).toUpperCase();
 
     const accentColor = sanitizeHexColorParam(
       String(formData.get("accentColor") || ""),
@@ -931,7 +2462,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
     const showCustomButtonRaw = String(formData.get("showCustomButton") || "");
     const showCustomButton = showCustomButtonRaw !== "false";
-
+    const subscriptionEnabledRaw = String(
+      formData.get("subscriptionEnabled") || "",
+    );
+    const subscriptionEnabled = subscriptionEnabledRaw === "true";
+    const subscriptionTitle = sanitizeSingleLineText(
+      formData.get("subscriptionTitle"),
+      60,
+      "Subscribe & Save",
+    );
+    const subscriptionSubtitle = sanitizeSingleLineText(
+      formData.get("subscriptionSubtitle"),
+      60,
+      "Subscription pricing updates from your selling plan",
+    );
     const title = sanitizeSingleLineText(
       formData.get("title"),
       OFFER_TEXT_LIMITS.widgetTitle,
@@ -946,8 +2490,55 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (discountRulesJson.length > 50_000) {
       return offerActionErrorResponse("Discount rules data is too large. Please reduce the number of rules.", 400);
     }
+    if (offerType === "complete-bundle") {
+      const completeBundle = parseCompleteBundleConfig(selectedProductsJson);
+      if (!completeBundle.bars.length) {
+        return offerActionErrorResponse(
+          "Complete bundle requires at least one bar.",
+          400,
+        );
+      }
+      const hasInvalidBar = completeBundle.bars.some(
+        (bar) => {
+          if (isCompleteBundleSingleBar(bar)) {
+            return false;
+          }
+          const minQuantity = Math.max(1, Math.trunc(Number(bar.minQuantity) || 1));
+          const maxQuantity = Math.max(
+            minQuantity,
+            Math.trunc(Number(bar.maxQuantity) || Number(bar.quantity) || 1),
+          );
+          return (
+            !bar.products.length ||
+            bar.products.length < minQuantity ||
+            maxQuantity > bar.products.length
+          );
+        },
+      );
+      if (hasInvalidBar) {
+        return offerActionErrorResponse(
+          "Each complete bundle bar must have enough bundle items for its min/max quantity range.",
+          400,
+        );
+      }
+    }
 
-    const offerSettingsJson = JSON.stringify({
+    const progressiveGiftsJsonRaw = String(formData.get("progressiveGiftsJson") || "").trim();
+    if (progressiveGiftsJsonRaw.length > 100_000) {
+      return offerActionErrorResponse("Progressive gifts data is too large.", 400);
+    }
+    let progressiveGiftsSanitized = parseProgressiveGiftsConfig(null);
+    if (progressiveGiftsJsonRaw) {
+      try {
+        progressiveGiftsSanitized = parseProgressiveGiftsConfig(
+          JSON.parse(progressiveGiftsJsonRaw) as unknown,
+        );
+      } catch {
+        return offerActionErrorResponse("Invalid progressive gifts JSON.", 400);
+      }
+    }
+
+    let offerSettingsJson = JSON.stringify({
       title,
       layoutFormat,
       totalBudget:
@@ -961,6 +2552,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       customerSegments: customerSegments.length
         ? customerSegments.join(",")
         : null,
+      customerProfileFilters: customerProfileFilters.length
+        ? customerProfileFilters.join(",")
+        : null,
+      ipCountryCodes: ipCountryCodes.length
+        ? ipCountryCodes.map((value) => String(value).trim().toUpperCase()).join(",")
+        : null,
       markets: markets.length ? markets.join(",") : null,
       usageLimitPerCustomer,
       accentColor,
@@ -973,24 +2570,50 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       titleFontWeight,
       buttonText,
       showCustomButton,
+      subscriptionEnabled,
+      subscriptionPosition: FIXED_SUBSCRIPTION_POSITION,
+      subscriptionTitle,
+      subscriptionSubtitle,
+      oneTimeTitle: FIXED_ONE_TIME_TITLE,
+      oneTimeSubtitle: FIXED_ONE_TIME_SUBTITLE,
+      subscriptionDefaultSelected: FIXED_SUBSCRIPTION_DEFAULT_SELECTED,
       scheduleTimezone: scheduleTimezoneRaw || undefined,
+      couponEnabled,
+      couponCode,
+      progressiveGifts: progressiveGiftsConfigToStorableJson(progressiveGiftsSanitized),
     });
 
-    // Store which Shopify shop this offer belongs to.
-    // `session.shop` is typically the shop's domain. As a fallback, use GraphQL `shop.name`.
-    let shopName = String((session as any)?.shop ?? "");
-    if (!shopName) {
-      const shopNameResponse = await admin.graphql(
-        `#graphql
-        query ShopName {
-          shop {
-            name
-          }
-        }`,
-      );
-      const shopNameJson = await shopNameResponse.json();
-      shopName = shopNameJson?.data?.shop?.name ?? "";
+    if (couponEnabled && !couponCode) {
+      return offerActionErrorResponse("Coupon offers require a shared coupon code.", 400);
     }
+
+    const persistenceResolution = resolveOfferPersistenceFields({
+      campaignConfigJsonRaw,
+      offerType,
+      selectedProductsJson,
+      discountRulesJson,
+      offerSettingsJson,
+      startTimeRaw,
+      endTimeRaw,
+      status,
+      progressiveGiftsJson: JSON.stringify({
+        progressiveGifts: progressiveGiftsConfigToStorableJson(progressiveGiftsSanitized),
+      }),
+    });
+    if (!persistenceResolution.ok) {
+      return offerActionErrorResponse(persistenceResolution.message, 400);
+    }
+
+    let campaignConfigJson: string | null = persistenceResolution.value.campaignConfigJson;
+    offerType = persistenceResolution.value.offerType;
+    selectedProductsJson = persistenceResolution.value.selectedProductsJson;
+    discountRulesJson = persistenceResolution.value.discountRulesJson;
+    offerSettingsJson = persistenceResolution.value.offerSettingsJson;
+    status = persistenceResolution.value.status;
+    startTimeRaw = persistenceResolution.value.startTimeRaw;
+    endTimeRaw = persistenceResolution.value.endTimeRaw;
+
+    const shopName = await resolveSessionShopName(admin, session);
 
     if (!name) {
       return offerActionErrorResponse("Please enter an offer name.", 400);
@@ -998,18 +2621,56 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (!cartTitle) {
       return offerActionErrorResponse("Please enter a display title.", 400);
     }
-    if (!startTimeRaw || !endTimeRaw) {
-      return offerActionErrorResponse("Start time and end time are required.", 400);
+    if (markets.length === 0) {
+      return offerActionErrorResponse(
+        "Select at least one market or keep All markets enabled.",
+        400,
+      );
+    }
+    if (invalidIpCountryCodes.length > 0) {
+      return offerActionErrorResponse(
+        `Use 2-letter ISO country codes for IP targeting. Remove: ${invalidIpCountryCodes.join(", ")}.`,
+        400,
+      );
+    }
+    if (!startTimeRaw) {
+      return offerActionErrorResponse("Start time is required.", 400);
     }
 
     const startTime = new Date(startTimeRaw);
-    const endTime = new Date(endTimeRaw);
+    const endTime = endTimeRaw
+      ? new Date(endTimeRaw)
+      : new Date(LONG_RUNNING_OFFER_END_TIME);
 
-    if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
+    if (isNaN(startTime.getTime()) || (endTimeRaw && isNaN(endTime.getTime()))) {
       return offerActionErrorResponse("Invalid start or end time format.", 400);
     }
-    if (endTime.getTime() <= startTime.getTime()) {
+    if (endTimeRaw && endTime.getTime() <= startTime.getTime()) {
       return offerActionErrorResponse("End time must be after start time.", 400);
+    }
+
+    let existingOfferForUpdate: { id: string; shopName: string } | null = null;
+    if (intent !== "create-offer") {
+      existingOfferForUpdate = await prismaAny.offer.findUnique({
+        where: { id: idRaw },
+        select: {
+          id: true,
+          shopName: true,
+        },
+      });
+      const ownershipValidation = validateOwnedOfferAccess({
+        idRaw,
+        shopName,
+        existingOffer: existingOfferForUpdate,
+        missingIdMessage: "Missing offer ID, cannot update.",
+      });
+      if (!ownershipValidation.ok) {
+        return offerActionErrorResponse(
+          ownershipValidation.message,
+          ownershipValidation.status,
+        );
+      }
+      existingOfferForUpdate = ownershipValidation.offer;
     }
 
     const nameKey = normalizeOfferNameKey(name);
@@ -1017,20 +2678,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       where: { shopName },
       select: { id: true, name: true },
     });
-    const nameTaken = siblingOffers.some(
+    const conflictingOffer = siblingOffers.find(
       (o: { id: string; name: string }) =>
         normalizeOfferNameKey(o.name) === nameKey &&
-        (intent === "create-offer" || o.id !== idRaw),
+        (intent === "create-offer" || o.id !== existingOfferForUpdate?.id),
     );
-    if (nameTaken) {
+    if (conflictingOffer) {
       return offerActionErrorResponse(
-        "An offer with this name already exists. Please choose a different name.",
+        `Offer name conflict. Submitted: "${name}". Existing: "${conflictingOffer.name}" (id: "${conflictingOffer.id}"). Normalized key: "${nameKey}". Shop: "${shopName}". Submitted offer id: "${idRaw || "new"}".`,
         409,
       );
     }
 
-    const data = {
-      shopName,
+    const baseData = {
       // name 被作为唯一标识
       name,
       cartTitle,
@@ -1038,23 +2698,77 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       startTime,
       endTime,
       status,
+      campaignConfigJson,
       offerSettingsJson,
       selectedProductsJson: selectedProductsJson || null,
       discountRulesJson: discountRulesJson || null,
+    };
+    const createData = {
+      ...baseData,
+      shopName,
+    };
+    const legacyCreateData = {
+      ...createData,
+      campaignConfigJson: undefined,
+    };
+    const updateData = baseData;
+    const legacyUpdateData = {
+      ...updateData,
+      campaignConfigJson: undefined,
     };
 
     const url = new URL(request.url);
 
     if (intent === "create-offer") {
       try {
-        await writeOfferWithRetry(() => prismaAny.offer.create({ data }));
+        await writeOfferWithRetry(() => prismaAny.offer.create({ data: createData }));
         url.searchParams.set("toast", `create-success-${Date.now()}`);
       } catch (error: any) {
-        if (
+        if (isMissingOfferCampaignConfigColumnError(error)) {
+          console.warn(
+            "[offer-create] campaignConfigJson column missing, retrying with legacy payload only",
+          );
+          try {
+            await writeOfferWithRetry(() => prismaAny.offer.create({ data: legacyCreateData }));
+            url.searchParams.set("toast", `create-success-${Date.now()}`);
+          } catch (legacyError: any) {
+            if (legacyError.code === "P2002") {
+              console.error("offer create unique conflict after legacy fallback", {
+                submittedName: name,
+                normalizedNameKey: nameKey,
+                shopName,
+                error: legacyError,
+              });
+              return offerActionErrorResponse(
+                `Offer create hit a unique constraint. Submitted: "${name}". Normalized key: "${nameKey}". Shop: "${shopName}". Submitted offer id: "${idRaw || "new"}".`,
+                409,
+              );
+            }
+            console.error("offer create failed after legacy fallback", {
+              error: legacyError,
+              form: {
+                nameRaw,
+                offerType,
+                startTimeRaw,
+                endTimeRaw,
+                selectedProductsJson,
+                discountRulesJson,
+                offerSettingsJson,
+              },
+            });
+            return offerActionErrorResponse("Failed to create offer. Please try again later.", 500);
+          }
+        } else if (
           error.code === "P2002"
         ) {
+          console.error("offer create unique conflict", {
+            submittedName: name,
+            normalizedNameKey: nameKey,
+            shopName,
+            error,
+          });
           return offerActionErrorResponse(
-            "An offer with this name already exists. Please choose a different name.",
+            `Offer create hit a unique constraint. Submitted: "${name}". Normalized key: "${nameKey}". Shop: "${shopName}". Submitted offer id: "${idRaw || "new"}".`,
             409,
           );
         }
@@ -1073,23 +2787,68 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         return offerActionErrorResponse("Failed to create offer. Please try again later.", 500);
       }
     } else {
-      if (!idRaw) {
-        return offerActionErrorResponse("Missing offer ID, cannot update.", 400);
-      }
       try {
         await writeOfferWithRetry(() =>
           prismaAny.offer.update({
             where: { id: idRaw },
-            data,
+            data: updateData,
           }),
         );
         url.searchParams.set("toast", `update-success-${Date.now()}`);
       } catch (error: any) {
-        if (
+        if (isMissingOfferCampaignConfigColumnError(error)) {
+          console.warn(
+            "[offer-update] campaignConfigJson column missing, retrying with legacy payload only",
+          );
+          try {
+            await writeOfferWithRetry(() =>
+              prismaAny.offer.update({
+                where: { id: idRaw },
+                data: legacyUpdateData,
+              }),
+            );
+            url.searchParams.set("toast", `update-success-${Date.now()}`);
+          } catch (legacyError: any) {
+            if (legacyError.code === "P2002") {
+              console.error("offer update unique conflict after legacy fallback", {
+                submittedName: name,
+                normalizedNameKey: nameKey,
+                shopName,
+                offerId: idRaw,
+                error: legacyError,
+              });
+              return offerActionErrorResponse(
+                `Offer update hit a unique constraint. Submitted: "${name}". Normalized key: "${nameKey}". Shop: "${shopName}". Submitted offer id: "${idRaw || "new"}".`,
+                409,
+              );
+            }
+            console.error("offer update failed after legacy fallback", {
+              error: legacyError,
+              form: {
+                idRaw,
+                nameRaw,
+                offerType,
+                startTimeRaw,
+                endTimeRaw,
+                selectedProductsJson,
+                discountRulesJson,
+                offerSettingsJson,
+              },
+            });
+            return offerActionErrorResponse("Failed to update offer. Please try again later.", 500);
+          }
+        } else if (
           error.code === "P2002"
         ) {
+          console.error("offer update unique conflict", {
+            submittedName: name,
+            normalizedNameKey: nameKey,
+            shopName,
+            offerId: idRaw,
+            error,
+          });
           return offerActionErrorResponse(
-            "An offer with this name already exists. Please choose a different name.",
+            `Offer update hit a unique constraint. Submitted: "${name}". Normalized key: "${nameKey}". Shop: "${shopName}". Submitted offer id: "${idRaw || "new"}".`,
             409,
           );
         }
@@ -1110,24 +2869,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     }
 
-    const themeExtensionEnabled = await getCurrentThemeExtensionEnabled(admin);
-    const syncResult = await syncShopOffersMetafield(
-      admin,
-      shopName,
-      themeExtensionEnabled,
-    );
-    if (!syncResult.ok) {
-      console.error("syncShopOffersMetafield failed after offer write", {
-        shopName,
-        message: syncResult.message,
-      });
-      return offerActionErrorResponse(
-        `Failed to sync data: ${syncResult.message}`,
-        502,
-      );
-    }
-
     invalidateShopOffersCache(shopName);
+    void runOfferPostWriteSync(admin, shopName).catch((error) => {
+      console.error("Offer post-write sync crashed unexpectedly", {
+        shopName,
+        error,
+      });
+    });
 
     return Response.json({
       success: true,
@@ -1144,41 +2892,60 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     const nextStatus = nextStatusRaw === "true";
+    const shopName = await resolveSessionShopName(admin, session);
 
     let updatedOffer;
     try {
+      const existingOffer = await prismaAny.offer.findUnique({
+        where: { id: idRaw },
+        select: {
+          id: true,
+          shopName: true,
+          campaignConfigJson: true,
+        },
+      });
+
+      if (!existingOffer) {
+        return new Response("Offer not found", { status: 404 });
+      }
+      const ownershipValidation = validateOwnedOfferAccess({
+        idRaw,
+        shopName,
+        existingOffer,
+        missingIdMessage: "Missing offer id",
+      });
+      if (!ownershipValidation.ok) {
+        return new Response(ownershipValidation.message, {
+          status: ownershipValidation.status,
+        });
+      }
+
+      const nextCampaignConfigJson = buildOfferStatusCampaignConfigJson({
+        campaignConfigJson: existingOffer.campaignConfigJson,
+        nextStatus,
+      });
+
       updatedOffer = await prismaAny.offer.update({
         where: { id: idRaw },
-        data: { status: nextStatus },
+        data: {
+          status: nextStatus,
+          campaignConfigJson: nextCampaignConfigJson,
+        },
       });
     } catch (error) {
       console.error("toggle-offer-status update failed", error);
       return offerActionErrorResponse("Toggle status failed.", 500);
     }
 
-    // Sync metafield
-    try {
-      const shopNameToSync = updatedOffer?.shopName as string | undefined;
-      if (shopNameToSync) {
-        const themeExtensionEnabled = await getCurrentThemeExtensionEnabled(admin);
-        const syncResult = await syncShopOffersMetafield(
-          admin,
-          shopNameToSync,
-          themeExtensionEnabled,
-        );
-        if (!syncResult.ok) {
-          console.error("Failed to sync offers metafield after toggle", {
-            shopNameToSync,
-            message: syncResult.message,
-          });
-        }
-      }
-    } catch (error) {
-      console.error("Failed to sync offers metafield after toggle", error);
-    }
-
-    if (updatedOffer?.shopName) {
-      invalidateShopOffersCache(String(updatedOffer.shopName));
+    const shopNameToSync = updatedOffer?.shopName as string | undefined;
+    if (shopNameToSync) {
+      invalidateShopOffersCache(String(shopNameToSync));
+      void runOfferPostWriteSync(admin, shopNameToSync).catch((error) => {
+        console.error("Offer post-write sync crashed unexpectedly", {
+          shopName: shopNameToSync,
+          error,
+        });
+      });
     }
 
     return Response.json({ success: true, toast: `toggle-success-${Date.now()}` });
@@ -1190,46 +2957,50 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return new Response("Missing offer id", { status: 400 });
     }
 
-    const prismaAny: any = prisma;
+    const shopName = await resolveSessionShopName(admin, session);
 
     // Find shopName to sync metafield
     let shopNameToSync: string | undefined;
     try {
       const offerToDelete = await prismaAny.offer.findUnique({
         where: { id: idRaw },
+        select: {
+          id: true,
+          shopName: true,
+        },
       });
+      const ownershipValidation = validateOwnedOfferAccess({
+        idRaw,
+        shopName,
+        existingOffer: offerToDelete,
+        missingIdMessage: "Missing offer id",
+      });
+      if (!ownershipValidation.ok) {
+        return new Response(ownershipValidation.message, {
+          status: ownershipValidation.status,
+        });
+      }
       shopNameToSync = offerToDelete?.shopName as string | undefined;
 
       await prismaAny.offer.delete({
         where: { id: idRaw },
+        select: {
+          id: true,
+        },
       });
     } catch (error) {
       console.error("delete-offer failed", error);
       return offerActionErrorResponse("Delete offer failed.", 500);
     }
 
-    // Sync metafield after deleting offer
-    try {
-      if (shopNameToSync) {
-        const themeExtensionEnabled = await getCurrentThemeExtensionEnabled(admin);
-        const syncResult = await syncShopOffersMetafield(
-          admin,
-          shopNameToSync,
-          themeExtensionEnabled,
-        );
-        if (!syncResult.ok) {
-          console.error("Failed to sync offers metafield after delete", {
-            shopNameToSync,
-            message: syncResult.message,
-          });
-        }
-      }
-    } catch (error) {
-      console.error("Failed to sync offers metafield after delete", error);
-    }
-
     if (shopNameToSync) {
-      invalidateShopOffersCache(shopNameToSync);
+      invalidateShopOffersCache(String(shopNameToSync));
+      void runOfferPostWriteSync(admin, shopNameToSync).catch((error) => {
+        console.error("Offer post-write sync crashed unexpectedly", {
+          shopName: shopNameToSync,
+          error,
+        });
+      });
     }
 
     return Response.json({ success: true, toast: `delete-success-${Date.now()}` });
@@ -1245,19 +3016,29 @@ type HomeTabKey = "dashboard" | "offers" | "analytics" | "pricing";
 export default function Index() {
   const {
     markets,
+    themeTargets,
     shop,
+    themeEditorStoreId,
+    themeEditorThemeId,
     apiKey,
     ianaTimezone,
     themeExtensionEnabled,
+    themeExtensionDetectionFailed,
+    themeExtensionDebug,
+    themeExtensionMatchedThemeId,
     billingSubscriptions,
     billingTestMode,
   } = useLoaderData() as IndexLoaderData;
-  const actionData = useActionData() as { toast?: string } | undefined;
+  const actionData = useActionData() as
+    | { toast?: string }
+    | { _offerActionError: true; message: string }
+    | undefined;
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<HomeTabKey>("dashboard");
   const [showCreateOffer, setShowCreateOffer] = useState(false);
+  const [createOfferType, setCreateOfferType] = useState<OfferTypeId | null>(null);
   const [editingOfferId, setEditingOfferId] = useState<string | null>(null);
   const [analyticsOfferId, setAnalyticsOfferId] = useState<string | null>(null);
   const offersFetcher = useFetcher<{ offers: OfferListItem[] }>();
@@ -1268,12 +3049,26 @@ export default function Index() {
   const storeProducts = storeProductsFetcher.data?.storeProducts ?? [];
   const isOffersLoading =
     !offersFetcher.data?.offers && offersFetcher.state !== "idle";
+  const shouldShowOfferBuilder = Boolean(editingOfferId || (showCreateOffer && createOfferType));
   const isStoreProductsLoading =
-    (showCreateOffer || !!editingOfferId) &&
+    shouldShowOfferBuilder &&
     !storeProductsFetcher.data?.storeProducts &&
     storeProductsFetcher.state !== "idle";
 
-  const toast = searchParams.get("toast") || actionData?.toast;
+  const toast =
+    searchParams.get("toast") ||
+    (actionData && "toast" in actionData ? actionData.toast : undefined);
+
+  const handleOfferSaveSuccess = (mode: "create" | "update") => {
+    setToastMessage(mode === "create" ? "Offer created successfully" : "Offer updated successfully");
+    setActiveTab("offers");
+    setShowCreateOffer(false);
+    setCreateOfferType(null);
+    setEditingOfferId(null);
+    if (offersFetcher.state === "idle") {
+      offersFetcher.submit({ intent: "load-offers" }, { method: "post" });
+    }
+  };
 
   useEffect(() => {
     if (searchParams.get("billing_return") !== "1") return;
@@ -1287,37 +3082,49 @@ export default function Index() {
   }, [searchParams, navigate]);
 
   useEffect(() => {
+    if (actionData && "_offerActionError" in actionData && actionData._offerActionError) {
+      setToastMessage(actionData.message);
+      return;
+    }
     if (toast?.startsWith("create-success")) {
       setToastMessage("Offer created successfully");
+      setActiveTab("offers");
       setShowCreateOffer(false);
+      setCreateOfferType(null);
       setEditingOfferId(null);
     } else if (toast?.startsWith("update-success")) {
       setToastMessage("Offer updated successfully");
+      setActiveTab("offers");
       setShowCreateOffer(false);
+      setCreateOfferType(null);
       setEditingOfferId(null);
     } else if (toast?.startsWith("delete-success")) {
       setToastMessage("Offer deleted successfully");
       setShowCreateOffer(false);
+      setCreateOfferType(null);
       setEditingOfferId(null);
     } else if (toast?.startsWith("toggle-success")) {
       setToastMessage("Offer status updated successfully");
     } else {
       setToastMessage(null);
     }
-  }, [toast]);
+  }, [toast, actionData]);
 
   useEffect(() => {
-    if (!toast || !toastMessage) return;
+    if (!toastMessage) return;
 
     const timer = setTimeout(() => {
-      const next = new URLSearchParams(searchParams);
-      next.delete("toast");
-      navigate(
-        {
-          search: next.toString() ? `?${next.toString()}` : "",
-        },
-        { replace: true },
-      );
+      if (toast) {
+        const next = new URLSearchParams(searchParams);
+        next.delete("toast");
+        navigate(
+          {
+            search: next.toString() ? `?${next.toString()}` : "",
+          },
+          { replace: true },
+        );
+      }
+      setToastMessage(null);
     }, 3000);
 
     return () => clearTimeout(timer);
@@ -1346,7 +3153,7 @@ export default function Index() {
   }, [toast, offersFetcher, offersFetcher.state]);
 
   useEffect(() => {
-    const shouldLoadStoreProducts = showCreateOffer || !!editingOfferId;
+    const shouldLoadStoreProducts = shouldShowOfferBuilder;
     if (!shouldLoadStoreProducts) return;
     if (storeProductsFetcher.data?.storeProducts) return;
     if (storeProductsFetcher.state !== "idle") return;
@@ -1356,8 +3163,7 @@ export default function Index() {
       { method: "post" },
     );
   }, [
-    showCreateOffer,
-    editingOfferId,
+    shouldShowOfferBuilder,
     storeProductsFetcher,
     storeProductsFetcher.data,
     storeProductsFetcher.state,
@@ -1366,7 +3172,7 @@ export default function Index() {
   return (
     <AppProvider embedded apiKey={apiKey}>
       <div className="flex flex-col min-h-screen">
-        <div className="flex-1 max-w-[1280px] w-full mx-auto px-[16px] sm:px-[24px] pt-[16px] sm:pt-[24px] relative">
+        <div className="flex-1 max-w-[1280px] w-full mx-auto px-[16px] sm:px-[24px] pt-[12px] sm:pt-[16px] relative">
           {toastMessage && (
           <div className="fixed z-50 top-4 left-1/2 -translate-x-1/2 bg-[rgba(0,0,0,0.75)] backdrop-blur-sm !text-white px-4 py-2 rounded shadow-lg text-sm font-sans">
             {toastMessage}
@@ -1374,17 +3180,22 @@ export default function Index() {
         )}
         {/* Tabs */}
         {!showCreateOffer && !editingOfferId && (
-          <nav className="flex flex-col sm:flex-row gap-[8px] sm:gap-[16px] items-stretch sm:items-start pb-0 mb-[16px] sm:mb-[24px] border-b border-[#e3e8ed]">
+          <nav className="mb-[12px] sm:mb-[16px] overflow-x-auto">
+            <div className="inline-flex min-w-max gap-[6px] rounded-[10px] border border-[#e5e7eb] bg-white p-[4px]">
             <button
               type="button"
               onClick={() => {
                 setShowCreateOffer(false);
                 setActiveTab("dashboard");
               }}
-              className={`px-[16px] py-[12px] text-center sm:text-left cursor-pointer transition-all border-b-2 ${activeTab === "dashboard" ? "border-[#008060] text-[#1c1f23]" : "border-transparent hover:border-[#8c9196] text-[#5c6166]"}`}
+              className={`rounded-[8px] px-[12px] py-[8px] text-center cursor-pointer transition-all ${
+                activeTab === "dashboard"
+                  ? "bg-[#f6f6f7] text-[#1c1f23]"
+                  : "text-[#5c6166] hover:bg-[#f6f6f7] hover:text-[#1c1f23]"
+              }`}
             >
               <span
-                className={`font-sans leading-[24px] text-[14px] font-medium tracking-normal ${activeTab === "dashboard" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
+                className={`font-sans leading-[20px] text-[13px] font-medium tracking-normal ${activeTab === "dashboard" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
               >
                 Dashboard
               </span>
@@ -1396,10 +3207,14 @@ export default function Index() {
                 setShowCreateOffer(false);
                 setActiveTab("offers");
               }}
-              className={`px-[16px] py-[12px] text-center sm:text-left cursor-pointer transition-all border-b-2 ${activeTab === "offers" ? "border-[#008060] text-[#1c1f23]" : "border-transparent hover:border-[#8c9196] text-[#5c6166]"}`}
+              className={`rounded-[8px] px-[12px] py-[8px] text-center cursor-pointer transition-all ${
+                activeTab === "offers"
+                  ? "bg-[#f6f6f7] text-[#1c1f23]"
+                  : "text-[#5c6166] hover:bg-[#f6f6f7] hover:text-[#1c1f23]"
+              }`}
             >
               <span
-                className={`font-sans leading-[24px] text-[14px] font-medium tracking-normal ${activeTab === "offers" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
+                className={`font-sans leading-[20px] text-[13px] font-medium tracking-normal ${activeTab === "offers" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
               >
                 All Offers
               </span>
@@ -1411,15 +3226,37 @@ export default function Index() {
                 setShowCreateOffer(false);
                 setActiveTab("analytics");
               }}
-              className={`px-[16px] py-[12px] text-center sm:text-left cursor-pointer transition-all border-b-2 ${activeTab === "analytics" ? "border-[#008060] text-[#1c1f23]" : "border-transparent hover:border-[#8c9196] text-[#5c6166]"}`}
+              className={`rounded-[8px] px-[12px] py-[8px] text-center cursor-pointer transition-all ${
+                activeTab === "analytics"
+                  ? "bg-[#f6f6f7] text-[#1c1f23]"
+                  : "text-[#5c6166] hover:bg-[#f6f6f7] hover:text-[#1c1f23]"
+              }`}
             >
               <span
-                className={`font-sans leading-[24px] text-[14px] font-medium tracking-normal ${activeTab === "analytics" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
+                className={`font-sans leading-[20px] text-[13px] font-medium tracking-normal ${activeTab === "analytics" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
               >
                 Analytics
               </span>
             </button>
-
+            <button
+              type="button"
+              onClick={() => {
+                setShowCreateOffer(false);
+                setActiveTab("pricing");
+              }}
+              className={`rounded-[8px] px-[12px] py-[8px] text-center cursor-pointer transition-all ${
+                activeTab === "pricing"
+                  ? "bg-[#f6f6f7] text-[#1c1f23]"
+                  : "text-[#5c6166] hover:bg-[#f6f6f7] hover:text-[#1c1f23]"
+              }`}
+            >
+              <span
+                className={`font-sans leading-[20px] text-[13px] font-medium tracking-normal ${activeTab === "pricing" ? "text-[#1c1f23]" : "text-[#5c6166]"}`}
+              >
+                Pricing
+              </span>
+            </button>
+            </div>
           </nav>
         )}
 
@@ -1431,9 +3268,15 @@ export default function Index() {
             storeProducts={storeProducts}
             markets={markets}
             shop={shop}
+            themeEditorStoreId={themeEditorStoreId}
+            themeEditorThemeId={themeEditorThemeId}
             apiKey={apiKey}
+            themeTargets={themeTargets}
+            themeExtensionMatchedThemeId={themeExtensionMatchedThemeId}
             ianaTimezone={ianaTimezone}
             themeExtensionEnabled={themeExtensionEnabled}
+            themeExtensionDetectionFailed={themeExtensionDetectionFailed}
+            themeExtensionError={themeExtensionDebug?.error}
             onViewAllOffers={() => setActiveTab("offers")}
             onViewAnalytics={(offerId) => {
               if (offerId) {
@@ -1445,6 +3288,7 @@ export default function Index() {
             }}
             onCreateOffer={() => {
               setShowCreateOffer(true);
+              setCreateOfferType(null);
               setEditingOfferId(null);
               setActiveTab("offers");
             }}
@@ -1454,21 +3298,40 @@ export default function Index() {
           <AllOffersPage
             offers={offers}
             offersLoading={isOffersLoading}
+            shop={shop}
             ianaTimezone={ianaTimezone}
             themeExtensionEnabled={themeExtensionEnabled}
-            shop={shop}
+            themeExtensionDetectionFailed={themeExtensionDetectionFailed}
+            themeEditorStoreId={themeEditorStoreId}
+            themeEditorThemeId={themeEditorThemeId}
             apiKey={apiKey}
+            themeTargets={themeTargets}
+            themeExtensionMatchedThemeId={themeExtensionMatchedThemeId}
             onCreateOffer={() => {
               setShowCreateOffer(true);
+              setCreateOfferType(null);
               setEditingOfferId(null);
             }}
             onEditOffer={(id) => {
               setEditingOfferId(id);
               setShowCreateOffer(false);
+              setCreateOfferType(null);
             }}
           />
         )}
-        {(showCreateOffer || editingOfferId) &&
+        {showCreateOffer && !createOfferType && !editingOfferId && (
+          <OfferTypeSelection
+            onBack={() => {
+              setShowCreateOffer(false);
+              setCreateOfferType(null);
+              setEditingOfferId(null);
+            }}
+            onSelect={(offerType) => {
+              setCreateOfferType(offerType);
+            }}
+          />
+        )}
+        {(shouldShowOfferBuilder || editingOfferId) &&
           (isStoreProductsLoading ? (
             <div className="bg-white rounded-[12px] border border-[#e3e8ed] p-[24px] shadow-sm">
               <div className="animate-pulse space-y-[12px]">
@@ -1484,10 +3347,16 @@ export default function Index() {
           ) : (
             <CreateNewOffer
               onBack={() => {
-                setShowCreateOffer(false);
-                setEditingOfferId(null);
+                if (editingOfferId) {
+                  setShowCreateOffer(false);
+                  setEditingOfferId(null);
+                  return;
+                }
+                setCreateOfferType(null);
               }}
+              onSaveSuccess={handleOfferSaveSuccess}
               initialOffer={editingOfferId ? offers.find(o => o.id === editingOfferId) as any : undefined}
+              initialOfferType={createOfferType ?? undefined}
               storeProducts={storeProducts}
               markets={markets}
               existingOffers={offers.map((o) => ({
@@ -1512,8 +3381,8 @@ export default function Index() {
           />
         )}
         </div>
-        <div className="py-8 text-center text-sm text-[#666] w-full">
-          <a 
+        <div className="mt-[8px] mb-[24px] flex w-full flex-wrap items-center justify-center gap-[10px] rounded-[12px] border border-[#e9edf1] bg-[#fcfcfd] px-[16px] py-[14px] text-[13px] text-[#666]">
+          <a
             href="mailto:support@ciwi.ai" 
             target="_blank" 
             rel="noopener noreferrer" 
@@ -1521,8 +3390,8 @@ export default function Index() {
           >
             Contact Us
           </a>
-          |
-          <a 
+          <span className="text-[#c4cdd5]">|</span>
+          <a
             href="https://iw73s3ld6wy.feishu.cn/wiki/UEumwgOLJi90rEknevWcZp7HnQg?from=from_copylink" 
             target="_blank" 
             rel="noopener noreferrer" 
