@@ -3059,6 +3059,17 @@ export default function Index() {
     searchParams.get("toast") ||
     (actionData && "toast" in actionData ? actionData.toast : undefined);
 
+  const handleOfferSaveSuccess = (mode: "create" | "update") => {
+    setToastMessage(mode === "create" ? "Offer created successfully" : "Offer updated successfully");
+    setActiveTab("offers");
+    setShowCreateOffer(false);
+    setCreateOfferType(null);
+    setEditingOfferId(null);
+    if (offersFetcher.state === "idle") {
+      offersFetcher.submit({ intent: "load-offers" }, { method: "post" });
+    }
+  };
+
   useEffect(() => {
     if (searchParams.get("billing_return") !== "1") return;
     setActiveTab("pricing");
@@ -3343,6 +3354,7 @@ export default function Index() {
                 }
                 setCreateOfferType(null);
               }}
+              onSaveSuccess={handleOfferSaveSuccess}
               initialOffer={editingOfferId ? offers.find(o => o.id === editingOfferId) as any : undefined}
               initialOfferType={createOfferType ?? undefined}
               storeProducts={storeProducts}

@@ -549,6 +549,7 @@ interface MarketItem {
 
 interface CreateNewOfferProps {
   onBack?: () => void;
+  onSaveSuccess?: (mode: "create" | "update", toast?: string | null) => void;
   initialOffer?: InitialOffer;
   initialOfferType?: OfferTypeId;
   storeProducts?: Product[];
@@ -691,6 +692,7 @@ function toShopifyProductGid(productId: string | null | undefined): string {
 
 export function CreateNewOffer({
   onBack,
+  onSaveSuccess,
   initialOffer,
   initialOfferType,
   storeProducts = [],
@@ -1012,11 +1014,16 @@ export function CreateNewOffer({
     wasSubmittingRef.current = false;
     const data = fetcher.data as any;
     if (data?.success && data?.toast) {
-      message.success(initialOffer ? "Offer updated successfully" : "Offer created successfully");
-      const next = new URLSearchParams(searchParams);
-      next.set("toast", data.toast);
-      const qs = next.toString();
-      navigate({ search: qs ? `?${qs}` : "" }, { replace: true });
+      const mode = initialOffer ? "update" : "create";
+      if (onSaveSuccess) {
+        onSaveSuccess(mode, data.toast);
+      } else {
+        message.success(initialOffer ? "Offer updated successfully" : "Offer created successfully");
+        const next = new URLSearchParams(searchParams);
+        next.set("toast", data.toast);
+        const qs = next.toString();
+        navigate({ search: qs ? `?${qs}` : "" }, { replace: true });
+      }
       return;
     }
     if (!isOfferActionErrorBody(data)) return;
@@ -1026,7 +1033,7 @@ export function CreateNewOffer({
     next.delete("toast");
     const qs = next.toString();
     navigate({ search: qs ? `?${qs}` : "" }, { replace: true });
-  }, [fetcher.state, fetcher.data, initialOffer, navigate, searchParams]);
+  }, [fetcher.state, fetcher.data, initialOffer, navigate, onSaveSuccess, searchParams]);
 
   const baseUnitPrice = 100;
   const parsePreviewMoney = (rawValue: string | null | undefined) => {
