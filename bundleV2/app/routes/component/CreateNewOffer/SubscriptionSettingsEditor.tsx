@@ -37,21 +37,20 @@ export default function SubscriptionSettingsEditor({
 }: Props) {
   const showSubscriptionOffer =
     section === "all" || section === "subscription-offer";
-  const usesGenericPreview = selectedProductCount > 1;
+  const usesFirstSelectedProductPreview = selectedProductCount > 1;
   const primaryPreviewPlan = previewSubscriptionPlans[0] ?? null;
-  const resolvedSubscriptionDetail = usesGenericPreview
-    ? `${selectedProductCount} selected products · each product keeps its own selling plans`
-    : primaryPreviewPlan
-      ? [primaryPreviewPlan.sellingPlanName, primaryPreviewPlan.billingLabel]
-          .filter(Boolean)
-          .join(" · ")
-      : subscriptionSubtitle;
+  const resolvedSubscriptionDetail = primaryPreviewPlan
+    ? [primaryPreviewPlan.sellingPlanName, primaryPreviewPlan.billingLabel]
+        .filter(Boolean)
+        .join(" · ")
+    : subscriptionSubtitle;
   const previewStatusMessage =
-    usesGenericPreview
-      ? "Storefront pricing, billing cycles, and savings will render from each product's own selling plans."
-      : primaryPreviewPlan == null
+    primaryPreviewPlan == null
       ? "Select a product with Shopify selling plans to preview cycle and savings."
       : null;
+  const previewContextMessage = usesFirstSelectedProductPreview
+    ? "Preview uses the first selected product. Storefront pricing and subscription cycles still come from each product's own selling plans."
+    : null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -60,8 +59,9 @@ export default function SubscriptionSettingsEditor({
           <div className="rounded-[10px] border border-[#dfe3e8] bg-[#ffffff] px-4 py-3 text-[12px] leading-[1.6] text-[#4f5b67]">
             Subscription sits alongside your existing bars. Select products in the
             product pool, and this module will read cycle and pricing from Shopify
-            selling plans. When multiple products are selected, the storefront keeps
-            each product's own subscription options.
+            selling plans. When multiple products are selected, the preview uses the
+            first selected product while the storefront keeps each product's own
+            subscription options.
           </div>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div>
@@ -145,8 +145,13 @@ export default function SubscriptionSettingsEditor({
                     {previewSubscriptionPricingNoteText}
                   </div>
                 ) : null}
+                {previewContextMessage ? (
+                  <div className="mt-2 text-[11px] text-[#8c9196]">
+                    {previewContextMessage}
+                  </div>
+                ) : null}
               </div>
-              {!usesGenericPreview && previewSubscriptionPlans.length > 1 ? (
+              {previewSubscriptionPlans.length > 1 ? (
                 <div className="md:col-span-2 rounded-[10px] border border-[#e3e8ed] bg-[#f6f8f9] p-3">
                   <div className="text-[12px] font-medium text-[#1c1f23]">
                     Preview subscription cycles

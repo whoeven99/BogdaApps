@@ -2348,10 +2348,9 @@ export function CreateNewOffer({
   }, [subscriptionStatusFetcher.state, subscriptionStatusFetcher.data]);
 
   useEffect(() => {
-    const previewProductId =
-      selectedProductsData.length === 1 ? String(selectedProductsData[0]?.id || "") : "";
+    const previewProductId = String(selectedProductsData[0]?.id || "");
     const shouldResolveSubscriptionPreview =
-      effectiveSubscriptionEnabled && selectedProductsData.length === 1;
+      effectiveSubscriptionEnabled && selectedProductsData.length > 0;
     if (!shouldResolveSubscriptionPreview) {
       if (subscriptionPreviewSnapshot !== null) {
         setSubscriptionPreviewSnapshot(null);
@@ -2623,9 +2622,7 @@ export function CreateNewOffer({
   const shouldShowSubscriptionExplanation = false;
   const subscriptionExplanationTitle = "";
   const subscriptionExplanationBody = "";
-  const usesGenericSubscriptionPreview = selectedProductsData.length > 1;
-  const previewSubscriptionProduct =
-    selectedProductsData.length === 1 ? selectedProductsData[0] ?? null : null;
+  const previewSubscriptionProduct = selectedProductsData[0] ?? null;
   const previewOneTimePrice =
     parsePreviewMoney(previewSubscriptionProduct?.price) ?? baseUnitPrice;
   const previewSubscriptionSnapshot =
@@ -2640,56 +2637,42 @@ export function CreateNewOffer({
   const previewOneTimeSubtitle = FIXED_ONE_TIME_SUBTITLE;
   const previewSubscriptionTitle = subscriptionTitle || "Subscribe & Save";
   const previewSubscriptionSubtitle =
-    usesGenericSubscriptionPreview
-      ? `${selectedProductsData.length} selected products · each product uses its own Shopify selling plan cycle and savings`
-      : previewPrimarySubscriptionPlan?.billingLabel ||
-        subscriptionSubtitle ||
-        "Billing cycle is pulled from the selected selling plan";
-  const previewOneTimePriceText = usesGenericSubscriptionPreview
-    ? "Varies by product"
-    : formatPreviewPrice(previewOneTimePrice);
-  const previewSubscriptionPriceText = usesGenericSubscriptionPreview
-    ? "Varies by product"
-    : previewPrimarySubscriptionPlan
-      ? formatPreviewPrice(previewPrimarySubscriptionPlan.subscriptionPrice)
-      : null;
+    previewPrimarySubscriptionPlan?.billingLabel ||
+    subscriptionSubtitle ||
+    "Billing cycle is pulled from the selected selling plan";
+  const previewOneTimePriceText = formatPreviewPrice(previewOneTimePrice);
+  const previewSubscriptionPriceText = previewPrimarySubscriptionPlan
+    ? formatPreviewPrice(previewPrimarySubscriptionPlan.subscriptionPrice)
+    : null;
   const previewSubscriptionCompareAtPriceText =
-    usesGenericSubscriptionPreview
-      ? null
-      : previewPrimarySubscriptionPlan
-        ? formatPreviewPrice(previewPrimarySubscriptionPlan.compareAtPrice)
-        : null;
+    previewPrimarySubscriptionPlan
+      ? formatPreviewPrice(previewPrimarySubscriptionPlan.compareAtPrice)
+      : null;
   const previewSubscriptionSavingsText =
-    usesGenericSubscriptionPreview
-      ? null
-      : previewPrimarySubscriptionPlan
-        ? previewPrimarySubscriptionPlan.savingsAmount > 0
-          ? `Save ${formatPreviewPrice(previewPrimarySubscriptionPlan.savingsAmount)}`
-          : null
-        : null;
+    previewPrimarySubscriptionPlan
+      ? previewPrimarySubscriptionPlan.savingsAmount > 0
+        ? `Save ${formatPreviewPrice(previewPrimarySubscriptionPlan.savingsAmount)}`
+        : null
+      : null;
   const previewSubscriptionPricingNoteText =
-    usesGenericSubscriptionPreview
-      ? null
-      : previewPrimarySubscriptionPlan
-        ? previewPrimarySubscriptionPlan.savingsAmount > 0
-          ? null
-          : "No discount on this cycle"
-        : null;
+    previewPrimarySubscriptionPlan
+      ? previewPrimarySubscriptionPlan.savingsAmount > 0
+        ? null
+        : "No discount on this cycle"
+      : null;
   const subscriptionPlanPreviewItems = useMemo(
     () =>
-      usesGenericSubscriptionPreview
-        ? []
-        : previewSubscriptionPlans.map((plan) => ({
-            title: plan.sellingPlanName,
-            subtitle: plan.billingLabel,
-            priceText: formatPreviewPrice(plan.subscriptionPrice),
-            savingsText:
-              plan.savingsAmount > 0
-                ? `Save ${formatPreviewPrice(plan.savingsAmount)}`
-                : null,
-            noteText: plan.savingsAmount > 0 ? null : "No discount on this cycle",
-          })),
-    [previewSubscriptionPlans, usesGenericSubscriptionPreview],
+      previewSubscriptionPlans.map((plan) => ({
+        title: plan.sellingPlanName,
+        subtitle: plan.billingLabel,
+        priceText: formatPreviewPrice(plan.subscriptionPrice),
+        savingsText:
+          plan.savingsAmount > 0
+            ? `Save ${formatPreviewPrice(plan.savingsAmount)}`
+            : null,
+        noteText: plan.savingsAmount > 0 ? null : "No discount on this cycle",
+      })),
+    [previewSubscriptionPlans],
   );
   const checkboxUpsellPreview = useMemo(
     () => ({
