@@ -14,6 +14,9 @@ type Props = {
   previewSubscriptionCompareAtPriceText?: string | null;
   previewSubscriptionSavingsText?: string | null;
   previewSubscriptionPricingNoteText?: string | null;
+  previewSubscriptionSourceLabel?: string | null;
+  previewSubscriptionLoading: boolean;
+  previewSubscriptionErrorText?: string | null;
   previewSubscriptionPlans: SubscriptionPreviewPlanDraft[];
   section?: "subscription-offer" | "one-time-message" | "all";
   updateRulePresentation?: (id: string, patch: RulePresentationPatch) => void;
@@ -31,6 +34,9 @@ export default function SubscriptionSettingsEditor({
   previewSubscriptionCompareAtPriceText,
   previewSubscriptionSavingsText,
   previewSubscriptionPricingNoteText,
+  previewSubscriptionSourceLabel,
+  previewSubscriptionLoading,
+  previewSubscriptionErrorText,
   previewSubscriptionPlans,
   section = "all",
   updateRulePresentation,
@@ -63,6 +69,17 @@ export default function SubscriptionSettingsEditor({
             first selected product while the storefront keeps each product's own
             subscription options.
           </div>
+          {previewSubscriptionSourceLabel ? (
+            <div className="rounded-[10px] border border-[#dfe3e8] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#4f5b67]">
+              {`Preview source: ${previewSubscriptionSourceLabel}`}
+              {previewSubscriptionLoading ? " · Loading Shopify selling plans..." : ""}
+            </div>
+          ) : null}
+          {!previewSubscriptionLoading && previewSubscriptionErrorText ? (
+            <div className="rounded-[10px] border border-[#ffd79d] bg-[#fff8e6] px-4 py-3 text-[12px] text-[#8a6116]">
+              {previewSubscriptionErrorText}
+            </div>
+          ) : null}
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div>
               <label className="block text-[13px] font-medium text-[#1c1f23] mb-1">

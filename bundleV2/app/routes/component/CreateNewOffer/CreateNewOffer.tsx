@@ -2348,9 +2348,13 @@ export function CreateNewOffer({
   }, [subscriptionStatusFetcher.state, subscriptionStatusFetcher.data]);
 
   useEffect(() => {
-    const previewProductId = String(selectedProductsData[0]?.id || "");
+    const previewProduct =
+      selectedProductsData.find((product) => product.hasSubscription) ??
+      selectedProductsData[0] ??
+      null;
+    const previewProductId = String(previewProduct?.id || "");
     const shouldResolveSubscriptionPreview =
-      effectiveSubscriptionEnabled && selectedProductsData.length > 0;
+      effectiveSubscriptionEnabled && previewProduct != null;
     if (!shouldResolveSubscriptionPreview) {
       if (subscriptionPreviewSnapshot !== null) {
         setSubscriptionPreviewSnapshot(null);
@@ -2622,7 +2626,10 @@ export function CreateNewOffer({
   const shouldShowSubscriptionExplanation = false;
   const subscriptionExplanationTitle = "";
   const subscriptionExplanationBody = "";
-  const previewSubscriptionProduct = selectedProductsData[0] ?? null;
+  const previewSubscriptionProduct =
+    selectedProductsData.find((product) => product.hasSubscription) ??
+    selectedProductsData[0] ??
+    null;
   const previewOneTimePrice =
     parsePreviewMoney(previewSubscriptionProduct?.price) ?? baseUnitPrice;
   const previewSubscriptionSnapshot =
@@ -2633,6 +2640,22 @@ export function CreateNewOffer({
       : null;
   const previewSubscriptionPlans = previewSubscriptionSnapshot?.plans ?? [];
   const previewPrimarySubscriptionPlan = previewSubscriptionPlans[0] ?? null;
+  const previewSubscriptionSourceLabel = previewSubscriptionProduct?.title || null;
+  const previewSubscriptionLoading =
+    effectiveSubscriptionEnabled &&
+    !!previewSubscriptionProduct &&
+    subscriptionStatusFetcher.state !== "idle";
+  const previewSubscriptionErrorText =
+    subscriptionStatusFetcher.state === "idle" &&
+    subscriptionStatusFetcher.data &&
+    !subscriptionStatusFetcher.data.ok
+      ? subscriptionStatusFetcher.data.error || "Failed to load selling plans."
+      : !previewSubscriptionLoading &&
+          !!previewSubscriptionProduct &&
+          previewSubscriptionProduct.hasSubscription &&
+          previewSubscriptionPlans.length === 0
+        ? "The selected product has selling plans, but the preview request returned no readable plan data."
+        : null;
   const previewOneTimeTitle = "One-time purchase";
   const previewOneTimeSubtitle = FIXED_ONE_TIME_SUBTITLE;
   const previewSubscriptionTitle = subscriptionTitle || "Subscribe & Save";
@@ -2783,6 +2806,9 @@ export function CreateNewOffer({
       previewSubscriptionCompareAtPriceText: previewSubscriptionCompareAtPriceText,
       previewSubscriptionSavingsText: previewSubscriptionSavingsText,
       previewSubscriptionPricingNoteText,
+      previewSubscriptionSourceLabel,
+      previewSubscriptionLoading,
+      previewSubscriptionErrorText,
       previewSubscriptionPlans,
       freeGiftTriggerProducts,
       freeGiftSharedGiftProductIds,
@@ -2841,6 +2867,9 @@ export function CreateNewOffer({
       previewSubscriptionCompareAtPriceText,
       previewSubscriptionSavingsText,
       previewSubscriptionPricingNoteText,
+      previewSubscriptionSourceLabel,
+      previewSubscriptionLoading,
+      previewSubscriptionErrorText,
       previewSubscriptionPlans,
     ],
   );

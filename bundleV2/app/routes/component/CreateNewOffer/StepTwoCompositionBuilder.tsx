@@ -1472,6 +1472,9 @@ export default function StepTwoCompositionBuilder({
               previewSubscriptionPricingNoteText={
                 draft.previewSubscriptionPricingNoteText
               }
+              previewSubscriptionSourceLabel={draft.previewSubscriptionSourceLabel}
+              previewSubscriptionLoading={draft.previewSubscriptionLoading}
+              previewSubscriptionErrorText={draft.previewSubscriptionErrorText}
               previewSubscriptionPlans={draft.previewSubscriptionPlans}
             />
           </DetailSection>
@@ -1678,6 +1681,9 @@ export default function StepTwoCompositionBuilder({
               previewSubscriptionPricingNoteText={
                 draft.previewSubscriptionPricingNoteText
               }
+              previewSubscriptionSourceLabel={draft.previewSubscriptionSourceLabel}
+              previewSubscriptionLoading={draft.previewSubscriptionLoading}
+              previewSubscriptionErrorText={draft.previewSubscriptionErrorText}
               previewSubscriptionPlans={draft.previewSubscriptionPlans}
             />
           ),
