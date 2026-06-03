@@ -1987,15 +1987,10 @@ const CIWI_SINGLE_OPTION_COUNT = 0;
  * 从 offerSettingsJson 读取 progressiveGifts；未开启则返回 null
  */
 function getProgressiveGiftsConfigFromOffer(offer) {
-  if (!offer?.offerSettingsJson) return null;
-  try {
-    const root = JSON.parse(offer.offerSettingsJson);
-    const pg = root && root.progressiveGifts;
-    if (!pg || !pg.enabled) return null;
-    return pg;
-  } catch (e) {
-    return null;
-  }
+  const root = getParsedStorefrontOfferSettings(offer);
+  const pg = root && root.progressiveGifts;
+  if (!pg || !pg.enabled) return null;
+  return pg;
 }
 
 /**
@@ -2003,7 +1998,7 @@ function getProgressiveGiftsConfigFromOffer(offer) {
  */
 function computeSelectedBarIndexForOffer(offer, options) {
   if (offer.offerType === "complete-bundle") {
-    const config = parseCompleteBundleConfig(offer.selectedProductsJson);
+    const config = getParsedStorefrontCompleteBundleConfig(offer);
     const selectedBarId = String(
       window.__ciwiBundleState?.selectedCompleteBundleBarId ||
         getDefaultSelectedCompleteBundleBarId(config) ||
@@ -2019,7 +2014,7 @@ function computeSelectedBarIndexForOffer(offer, options) {
     return idx >= 0 ? idx + 1 : 0;
   }
   if (offer.offerType === "free-gift") {
-    const config = parseFreeGiftConfig(offer.selectedProductsJson, offer.discountRulesJson);
+    const config = getParsedStorefrontFreeGiftConfig(offer);
     const activeRule = resolveActiveFreeGiftRule(offer, options);
     if (!activeRule) return 0;
     const giftRules = config.tiers.filter((rule) => String(rule.tierType || "") !== "single");
@@ -2036,11 +2031,11 @@ function computeSelectedBarIndexForOffer(offer, options) {
     return idx >= 0 ? idx + 1 : 1;
   }
   if (offer.offerType === "quantity-breaks-different") {
-    const rules = parseDifferentProductsDiscountRulesFromOffer(offer);
+    const rules = getParsedStorefrontDifferentRules(offer);
     const idx = rules.findIndex((r) => Number(r.count) === sc);
     return idx >= 0 ? idx + 1 : 1;
   }
-  const rules = parseDiscountRulesJson(offer.discountRulesJson);
+  const rules = getParsedStorefrontOfferDiscountRules(offer);
   const idx = rules.findIndex((r) => Number(r.count) === sc);
   return idx >= 0 ? idx + 2 : 1;
 }
@@ -2059,13 +2054,13 @@ function getDefaultSelectedCountForOffer(offer) {
       : 1;
   }
   if (offer.offerType === "quantity-breaks-different") {
-    const rules = parseDifferentProductsDiscountRulesFromOffer(offer);
+    const rules = getParsedStorefrontDifferentRules(offer);
     const defaultRule = rules.find((rule) => rule.isDefault) || rules[0];
     return Number.isFinite(Number(defaultRule?.count))
       ? Math.trunc(Number(defaultRule.count))
       : 1;
   }
-  const rules = parseDiscountRulesJson(offer.discountRulesJson);
+  const rules = getParsedStorefrontOfferDiscountRules(offer);
   const defaultRule = rules.find((rule) => rule.isDefault) || rules[0];
   return Number.isFinite(Number(defaultRule?.count))
     ? Math.trunc(Number(defaultRule.count))
@@ -2599,14 +2594,7 @@ function rerenderDifferentProductsModal() {
   if (!currentOffer || currentOffer.offerType !== "quantity-breaks-different") return;
   const selectedRule = resolveDifferentProductsSelectedRule(currentOffer);
   if (!selectedRule) return;
-  let offerSettings = {};
-  try {
-    if (currentOffer?.offerSettingsJson) {
-      offerSettings = JSON.parse(currentOffer.offerSettingsJson);
-    }
-  } catch {
-    offerSettings = {};
-  }
+  const offerSettings = getParsedStorefrontOfferSettings(currentOffer) || {};
   const borderColor = offerSettings.borderColor || "#dfe3e8";
   const accentColor = offerSettings.accentColor || "#008060";
   const root = ensureDifferentProductsModalRoot();
@@ -2793,7 +2781,7 @@ function shouldHideOfferForInventory(offer) {
   }
 
   if (offer.offerType === "quantity-breaks-different") {
-    const rules = parseDifferentProductsDiscountRulesFromOffer(offer).filter(
+    const rules = getParsedStorefrontDifferentRules(offer).filter(
       (rule) => Number(rule?.count) > 0,
     );
     return !rules.some(
@@ -2805,7 +2793,7 @@ function shouldHideOfferForInventory(offer) {
 
   if (offer.offerType === "complete-bundle") {
     if (isVariantOutOfStock(currentVariant)) return true;
-    const config = parseCompleteBundleConfig(offer?.selectedProductsJson);
+    const config = getParsedStorefrontCompleteBundleConfig(offer);
     return !config.bars.some((bar) => {
       if (isCompleteBundleSingleBarConfig(bar)) return true;
       const requiredSelectionCount = Math.max(1, Math.trunc(Number(bar?.minQuantity) || 1));
@@ -2860,7 +2848,7 @@ function getCurrentDefaultOfferSavings(offer) {
   if (!offer) return 0;
 
   if (offer.offerType === "complete-bundle") {
-    const config = parseCompleteBundleConfig(offer.selectedProductsJson);
+    const config = getParsedStorefrontCompleteBundleConfig(offer);
     const bar = getDefaultCompleteBundleBar(config);
     if (!bar || isCompleteBundleSingleBarConfig(bar)) return 0;
     const selectedItemIds = new Set(
@@ -2887,7 +2875,7 @@ function getCurrentDefaultOfferSavings(offer) {
 
   if (offer.offerType === "quantity-breaks-different") {
     const defaultRule = getDefaultOfferRule(
-      parseDifferentProductsDiscountRulesFromOffer(offer),
+      getParsedStorefrontDifferentRules(offer),
       getDefaultSelectedCountForOffer(offer),
     );
     if (!defaultRule) return 0;
@@ -2964,7 +2952,7 @@ function getCurrentDefaultOfferSavings(offer) {
   }
 
   const defaultRule = getDefaultOfferRule(
-    parseDiscountRulesJson(offer.discountRulesJson),
+    getParsedStorefrontOfferDiscountRules(offer),
     getDefaultSelectedCountForOffer(offer),
   );
   if (!defaultRule) return 0;
@@ -2978,14 +2966,368 @@ function getCurrentDefaultOfferSavings(offer) {
   ).saved;
 }
 
+function allowStorefrontOfferEligibility() {
+  return { ok: true, reason: "", logArgs: [] };
+}
+
+function blockStorefrontOfferEligibility(reason, logArgs) {
+  return {
+    ok: false,
+    reason: String(reason || "offer skipped: eligibility failed"),
+    logArgs: Array.isArray(logArgs) ? logArgs : [],
+  };
+}
+
+function logStorefrontOfferSkip(offer, result) {
+  const logArgs = Array.isArray(result?.logArgs) ? result.logArgs : [];
+  console.log("[ciwi]", result?.reason || "offer skipped: eligibility failed", offer?.id, ...logArgs);
+}
+
+function createStorefrontOfferContext() {
+  return {
+    currentProductGid: getCurrentProductGid(),
+    currentMarketId: getCurrentMarketId(),
+    currentCountryIsoCode: getCurrentCountryIsoCode(),
+    currentProductHasSubscription: getCurrentProductHasSubscription(),
+    now: Date.now(),
+  };
+}
+
+function getStorefrontOfferParserCache(offer) {
+  if (!offer || typeof offer !== "object") return null;
+  if (!offer.__ciwiStorefrontParserCache || typeof offer.__ciwiStorefrontParserCache !== "object") {
+    offer.__ciwiStorefrontParserCache = {};
+  }
+  return offer.__ciwiStorefrontParserCache;
+}
+
+function getCachedStorefrontOfferParsedValue(offer, key, signature, parseValue) {
+  const cache = getStorefrontOfferParserCache(offer);
+  if (!cache) return parseValue();
+  const cached = cache[key];
+  if (cached && cached.signature === signature) {
+    return cached.value;
+  }
+  const value = parseValue();
+  cache[key] = { signature, value };
+  return value;
+}
+
+function getParsedStorefrontOfferSettings(offer) {
+  const signature = String(offer?.offerSettingsJson || "");
+  return getCachedStorefrontOfferParsedValue(
+    offer,
+    "offerSettings",
+    signature,
+    () => {
+      if (!signature) return null;
+      try {
+        return JSON.parse(signature);
+      } catch {
+        return null;
+      }
+    },
+  );
+}
+
+function getParsedStorefrontOfferDiscountRules(offer) {
+  const signature = String(offer?.discountRulesJson || "");
+  return getCachedStorefrontOfferParsedValue(
+    offer,
+    "discountRules",
+    signature,
+    () => parseDiscountRulesJson(offer?.discountRulesJson),
+  );
+}
+
+function getParsedStorefrontDifferentRules(offer) {
+  const signature = `${String(offer?.selectedProductsJson || "")}__${String(
+    offer?.discountRulesJson || "",
+  )}`;
+  return getCachedStorefrontOfferParsedValue(
+    offer,
+    "differentRules",
+    signature,
+    () => parseDifferentProductsDiscountRulesFromOffer(offer),
+  );
+}
+
+function getParsedStorefrontSelectedProductIds(offer) {
+  const signature = String(offer?.selectedProductsJson || "");
+  return getCachedStorefrontOfferParsedValue(
+    offer,
+    "selectedProductIds",
+    signature,
+    () => parseSelectedProductIds(offer?.selectedProductsJson),
+  );
+}
+
+function getParsedStorefrontFreeGiftConfig(offer) {
+  const signature = `${String(offer?.selectedProductsJson || "")}__${String(
+    offer?.discountRulesJson || "",
+  )}`;
+  return getCachedStorefrontOfferParsedValue(
+    offer,
+    "freeGiftConfig",
+    signature,
+    () => parseFreeGiftConfig(offer?.selectedProductsJson, offer?.discountRulesJson),
+  );
+}
+
+function getParsedStorefrontCompleteBundleConfig(offer) {
+  const signature = String(offer?.selectedProductsJson || "");
+  return getCachedStorefrontOfferParsedValue(
+    offer,
+    "completeBundleConfig",
+    signature,
+    () => parseCompleteBundleConfig(offer?.selectedProductsJson),
+  );
+}
+
+function parseStorefrontOfferSettingsJson(offer) {
+  return getParsedStorefrontOfferSettings(offer);
+}
+
+function resolveStorefrontScopedProductEligibility(selectedIds, context, options) {
+  const normalizedIds = Array.isArray(selectedIds)
+    ? selectedIds.map(String).filter(Boolean)
+    : [];
+  const missingCurrentProductReason =
+    options?.missingCurrentProductReason ||
+    "offer skipped: requires specific products but current product GID is null";
+  const mismatchReason =
+    options?.mismatchReason || "offer skipped: current product not in selected list";
+
+  if (!normalizedIds.length) return allowStorefrontOfferEligibility();
+  if (!context.currentProductGid) {
+    return blockStorefrontOfferEligibility(missingCurrentProductReason);
+  }
+  if (!productIdListIncludes(normalizedIds, context.currentProductGid)) {
+    return blockStorefrontOfferEligibility(mismatchReason, [
+      context.currentProductGid,
+      normalizedIds,
+    ]);
+  }
+  return allowStorefrontOfferEligibility();
+}
+
+function resolveStorefrontBaseEligibility(offer, context, parsedSettings) {
+  if (offer.status === false) {
+    return blockStorefrontOfferEligibility("offer skipped: status is false");
+  }
+
+  if (offer.startTime) {
+    const startTimeMs = Date.parse(offer.startTime);
+    if (Number.isFinite(startTimeMs) && context.now < startTimeMs) {
+      return blockStorefrontOfferEligibility("offer skipped: not started yet", [
+        offer.startTime,
+      ]);
+    }
+  }
+
+  if (offer.endTime) {
+    const endTimeMs = Date.parse(offer.endTime);
+    if (Number.isFinite(endTimeMs) && context.now > endTimeMs) {
+      return blockStorefrontOfferEligibility("offer skipped: already ended", [
+        offer.endTime,
+      ]);
+    }
+  }
+
+  if (parsedSettings) {
+    if (context.currentMarketId) {
+      const offerMarkets = parsedSettings.markets;
+      if (
+        typeof offerMarkets === "string" &&
+        offerMarkets !== "all" &&
+        offerMarkets.trim() !== ""
+      ) {
+        const allowedMarkets = offerMarkets.split(",").map((market) => market.trim());
+        const matchMarket = allowedMarkets.some(
+          (market) =>
+            market === context.currentMarketId ||
+            market.endsWith(`/${context.currentMarketId}`),
+        );
+        if (!matchMarket) {
+          return blockStorefrontOfferEligibility("offer skipped: market mismatch", [
+            "allowed:",
+            allowedMarkets,
+            "current:",
+            context.currentMarketId,
+          ]);
+        }
+      }
+    }
+
+    const offerCountries = parsedSettings.ipCountryCodes;
+    if (typeof offerCountries === "string" && offerCountries.trim() !== "") {
+      const allowedCountries = offerCountries
+        .split(",")
+        .map((code) => String(code || "").trim().toUpperCase())
+        .filter(Boolean);
+      if (
+        !context.currentCountryIsoCode ||
+        !allowedCountries.includes(context.currentCountryIsoCode)
+      ) {
+        return blockStorefrontOfferEligibility("offer skipped: country mismatch", [
+          "allowed:",
+          allowedCountries,
+          "current:",
+          context.currentCountryIsoCode,
+        ]);
+      }
+    }
+  }
+
+  if (
+    offer.offerType !== "complete-bundle" &&
+    offer.offerType !== "bxgy" &&
+    parsedSettings &&
+    (parsedSettings.quantity === false || parsedSettings.showQuantityBar === false)
+  ) {
+    return blockStorefrontOfferEligibility(
+      "offer skipped: quantity bar disabled by settings",
+    );
+  }
+
+  return allowStorefrontOfferEligibility();
+}
+
+function resolveStorefrontBxgyEligibility(offer, context) {
+  const rule = getPreferredActionableBxgyRule(offer.discountRulesJson);
+  if (!rule) {
+    return blockStorefrontOfferEligibility(
+      "offer skipped: no valid bxgy discount rules",
+    );
+  }
+  if (!rule.count) {
+    return blockStorefrontOfferEligibility("bxgy offer skipped: count is invalid");
+  }
+  if (!rule.buyProductIds || rule.buyProductIds.length === 0) {
+    return blockStorefrontOfferEligibility(
+      "bxgy offer skipped: buyProductIds is empty",
+    );
+  }
+  if (!context.currentProductGid) {
+    return blockStorefrontOfferEligibility(
+      "bxgy offer skipped: current product GID is null",
+    );
+  }
+  if (!productIdListIncludes(rule.buyProductIds, context.currentProductGid)) {
+    return blockStorefrontOfferEligibility(
+      "bxgy offer skipped: current product not in buy list",
+      [context.currentProductGid],
+    );
+  }
+  return allowStorefrontOfferEligibility();
+}
+
+function resolveStorefrontCompleteBundleEligibility(offer, context) {
+  const completeBundle = getParsedStorefrontCompleteBundleConfig(offer);
+  if (!completeBundle.bars.length) {
+    return blockStorefrontOfferEligibility("complete bundle skipped: no bars");
+  }
+  if (!context.currentProductGid) {
+    return blockStorefrontOfferEligibility(
+      "complete bundle skipped: current product GID is null",
+    );
+  }
+  const triggerProductIds = Array.isArray(completeBundle.triggerProductIds)
+    ? completeBundle.triggerProductIds
+    : [];
+  if (!triggerProductIds.length) {
+    return blockStorefrontOfferEligibility(
+      "complete bundle skipped: trigger product ids are empty",
+    );
+  }
+  if (!productIdListIncludes(triggerProductIds, context.currentProductGid)) {
+    return blockStorefrontOfferEligibility(
+      "complete bundle skipped: current product not in trigger list",
+      [context.currentProductGid, triggerProductIds],
+    );
+  }
+  return allowStorefrontOfferEligibility();
+}
+
+function resolveStorefrontFreeGiftEligibility(offer, context) {
+  const freeGiftConfig = getParsedStorefrontFreeGiftConfig(offer);
+  if (!freeGiftConfig.tiers.length) {
+    return blockStorefrontOfferEligibility(
+      "free-gift offer skipped: no valid free gift tiers",
+    );
+  }
+  return resolveStorefrontScopedProductEligibility(
+    freeGiftConfig.triggerProducts,
+    context,
+    {
+      missingCurrentProductReason:
+        "free-gift offer skipped: current product GID is null",
+      mismatchReason:
+        "free-gift offer skipped: current product not in trigger list",
+    },
+  );
+}
+
+function resolveStorefrontSubscriptionEligibility(offer, context) {
+  const scopedEligibility = resolveStorefrontScopedProductEligibility(
+    getParsedStorefrontSelectedProductIds(offer),
+    context,
+  );
+  if (!scopedEligibility.ok) return scopedEligibility;
+  if (!context.currentProductHasSubscription) {
+    return blockStorefrontOfferEligibility(
+      "subscription offer skipped: current product has no selling plan",
+    );
+  }
+  return allowStorefrontOfferEligibility();
+}
+
+function resolveStorefrontDifferentProductsEligibility(offer, context) {
+  const rules = getParsedStorefrontDifferentRules(offer);
+  if (!rules.length) {
+    return blockStorefrontOfferEligibility(
+      "offer skipped: no valid different-products discount rules",
+    );
+  }
+  return resolveStorefrontScopedProductEligibility(
+    getParsedStorefrontSelectedProductIds(offer),
+    context,
+  );
+}
+
+function resolveStorefrontStandardQuantityEligibility(offer, context) {
+  const discountRules = getParsedStorefrontOfferDiscountRules(offer);
+  if (!discountRules.length) {
+    return blockStorefrontOfferEligibility(
+      "offer skipped: no valid quantity discount rules",
+    );
+  }
+  return resolveStorefrontScopedProductEligibility(
+    getParsedStorefrontSelectedProductIds(offer),
+    context,
+  );
+}
+
+const STOREFRONT_OFFER_ELIGIBILITY_RESOLVERS = {
+  bxgy: resolveStorefrontBxgyEligibility,
+  "complete-bundle": resolveStorefrontCompleteBundleEligibility,
+  "free-gift": resolveStorefrontFreeGiftEligibility,
+  subscription: resolveStorefrontSubscriptionEligibility,
+  "quantity-breaks-different": resolveStorefrontDifferentProductsEligibility,
+};
+
+function resolveStorefrontOfferTypeEligibility(offer, context) {
+  const resolver =
+    STOREFRONT_OFFER_ELIGIBILITY_RESOLVERS[offer?.offerType] ||
+    resolveStorefrontStandardQuantityEligibility;
+  return resolver(offer, context);
+}
+
 function getCurrentOffer(offersConfig) {
   const offers = Array.isArray(offersConfig?.offers) ? offersConfig.offers : [];
-  const currentProductGid = getCurrentProductGid();
-  const currentMarketId = getCurrentMarketId();
-  const currentCountryIsoCode = getCurrentCountryIsoCode();
-  const now = Date.now();
+  const context = createStorefrontOfferContext();
 
-  console.log("[ciwi] offers total:", offers.length, "currentProductGid:", currentProductGid, "currentMarketId:", currentMarketId);
+  console.log("[ciwi] offers total:", offers.length, "currentProductGid:", context.currentProductGid, "currentMarketId:", context.currentMarketId);
 
   if (!offers.length) {
     console.log("[ciwi] no offers in metafield — skip bundle UI");
@@ -2997,213 +3339,20 @@ function getCurrentOffer(offersConfig) {
   for (let index = 0; index < offers.length; index += 1) {
     const offer = offers[index];
     if (!offer || typeof offer !== "object") continue;
-    if (offer.status === false) {
-      console.log("[ciwi] offer skipped: status is false", offer.id);
+    const parsedSettings = parseStorefrontOfferSettingsJson(offer);
+    const baseEligibility = resolveStorefrontBaseEligibility(
+      offer,
+      context,
+      parsedSettings,
+    );
+    if (!baseEligibility.ok) {
+      logStorefrontOfferSkip(offer, baseEligibility);
       continue;
     }
-    
-    // Check schedule
-    if (offer.startTime) {
-      const startTimeMs = Date.parse(offer.startTime);
-      if (Number.isFinite(startTimeMs) && now < startTimeMs) {
-        console.log("[ciwi] offer skipped: not started yet", offer.id, offer.startTime);
-        continue;
-      }
-    }
-
-    if (offer.endTime) {
-      const endTimeMs = Date.parse(offer.endTime);
-      if (Number.isFinite(endTimeMs) && now > endTimeMs) {
-        console.log("[ciwi] offer skipped: already ended", offer.id, offer.endTime);
-        continue;
-      }
-    }
-
-    // Check settings / market / country filter
-    let parsedSettings = null;
-    if (currentMarketId && offer.offerSettingsJson) {
-      try {
-        const settings = JSON.parse(offer.offerSettingsJson);
-        parsedSettings = settings;
-        const offerMarkets = settings.markets;
-        if (typeof offerMarkets === "string" && offerMarkets !== "all" && offerMarkets.trim() !== "") {
-          const allowedMarkets = offerMarkets.split(",").map(m => m.trim());
-          const matchMarket = allowedMarkets.some(m => m === currentMarketId || m.endsWith(`/${currentMarketId}`));
-          if (!matchMarket) {
-            console.log("[ciwi] offer skipped: market mismatch", offer.id, "allowed:", allowedMarkets, "current:", currentMarketId);
-            continue;
-          }
-        }
-        const offerCountries = settings.ipCountryCodes;
-        if (
-          typeof offerCountries === "string" &&
-          offerCountries.trim() !== ""
-        ) {
-          const allowedCountries = offerCountries
-            .split(",")
-            .map((code) => String(code || "").trim().toUpperCase())
-            .filter(Boolean);
-          if (!currentCountryIsoCode || !allowedCountries.includes(currentCountryIsoCode)) {
-            console.log(
-              "[ciwi] offer skipped: country mismatch",
-              offer.id,
-              "allowed:",
-              allowedCountries,
-              "current:",
-              currentCountryIsoCode,
-            );
-            continue;
-          }
-        }
-      } catch (e) {
-        // ignore parse error
-      }
-    } else if (offer.offerSettingsJson) {
-      try {
-        parsedSettings = JSON.parse(offer.offerSettingsJson);
-        const offerCountries = parsedSettings && parsedSettings.ipCountryCodes;
-        if (
-          typeof offerCountries === "string" &&
-          offerCountries.trim() !== ""
-        ) {
-          const allowedCountries = offerCountries
-            .split(",")
-            .map((code) => String(code || "").trim().toUpperCase())
-            .filter(Boolean);
-          if (!currentCountryIsoCode || !allowedCountries.includes(currentCountryIsoCode)) {
-            console.log(
-              "[ciwi] offer skipped: country mismatch",
-              offer.id,
-              "allowed:",
-              allowedCountries,
-              "current:",
-              currentCountryIsoCode,
-            );
-            continue;
-          }
-        }
-      } catch {
-        parsedSettings = null;
-      }
-    }
-
-    // 兼容旧版开关：当 quantity bar 显式为 false 时，不渲染 quantity-break offer
-    if (
-      offer.offerType !== "complete-bundle" &&
-      offer.offerType !== "bxgy" &&
-      parsedSettings &&
-      (parsedSettings.quantity === false || parsedSettings.showQuantityBar === false)
-    ) {
-      console.log("[ciwi] offer skipped: quantity bar disabled by settings", offer.id);
+    const typeEligibility = resolveStorefrontOfferTypeEligibility(offer, context);
+    if (!typeEligibility.ok) {
+      logStorefrontOfferSkip(offer, typeEligibility);
       continue;
-    }
-
-    if (offer.offerType === 'bxgy') {
-      const rule = getPreferredActionableBxgyRule(offer.discountRulesJson);
-      if (!rule) {
-        console.log("[ciwi] offer skipped: no valid bxgy discount rules", offer.id);
-        continue;
-      }
-      if (!rule.count) {
-        console.log("[ciwi] bxgy offer skipped: count is invalid", offer.id);
-        continue;
-      }
-      if (!rule.buyProductIds || rule.buyProductIds.length === 0) {
-        console.log("[ciwi] bxgy offer skipped: buyProductIds is empty", offer.id);
-        continue;
-      }
-      if (!currentProductGid) {
-        console.log("[ciwi] bxgy offer skipped: current product GID is null", offer.id);
-        continue;
-      }
-      if (!productIdListIncludes(rule.buyProductIds, currentProductGid)) {
-        console.log("[ciwi] bxgy offer skipped: current product not in buy list", offer.id, currentProductGid);
-        continue;
-      }
-    } else if (offer.offerType === "complete-bundle") {
-      const completeBundle = parseCompleteBundleConfig(offer.selectedProductsJson);
-      if (!completeBundle.bars.length) {
-        console.log("[ciwi] complete bundle skipped: no bars", offer.id);
-        continue;
-      }
-      if (!currentProductGid) {
-        continue;
-      }
-      const triggerProductIds = Array.isArray(completeBundle.triggerProductIds)
-        ? completeBundle.triggerProductIds
-        : [];
-      if (triggerProductIds.length === 0) {
-        console.log(
-          "[ciwi] complete bundle skipped: trigger product ids are empty",
-          offer.id,
-        );
-        continue;
-      }
-      if (
-        !productIdListIncludes(triggerProductIds, currentProductGid)
-      ) {
-        console.log(
-          "[ciwi] complete bundle skipped: current product not in trigger list",
-          offer.id,
-          currentProductGid,
-          triggerProductIds,
-        );
-        continue;
-      }
-    } else {
-      // quantity-breaks-same / subscription / free-gift
-      if (offer.offerType === "free-gift") {
-        const freeGiftConfig = parseFreeGiftConfig(
-          offer.selectedProductsJson,
-          offer.discountRulesJson,
-        );
-        if (!freeGiftConfig.tiers.length) {
-          console.log("[ciwi] free-gift offer skipped: no valid free gift tiers", offer.id);
-          continue;
-        }
-        if (freeGiftConfig.triggerProducts.length > 0) {
-          if (!currentProductGid) {
-            console.log("[ciwi] free-gift offer skipped: current product GID is null", offer.id);
-            continue;
-          }
-          if (!productIdListIncludes(freeGiftConfig.triggerProducts, currentProductGid)) {
-            console.log(
-              "[ciwi] free-gift offer skipped: current product not in trigger list",
-              offer.id,
-              currentProductGid,
-              freeGiftConfig.triggerProducts,
-            );
-            continue;
-          }
-        }
-      }
-
-      const discountRules = parseDiscountRulesJson(offer.discountRulesJson);
-      if (offer.offerType !== "free-gift" && !discountRules.length) {
-        console.log("[ciwi] offer skipped: no valid quantity discount rules", offer.id);
-        continue;
-      }
-      const selectedIds =
-        offer.offerType === "free-gift"
-          ? parseFreeGiftConfig(offer.selectedProductsJson, offer.discountRulesJson)
-              .triggerProducts
-          : parseSelectedProductIds(offer.selectedProductsJson);
-      if (selectedIds.length > 0) {
-        if (!currentProductGid) {
-          console.log("[ciwi] offer skipped: requires specific products but current product GID is null", offer.id);
-          continue;
-        }
-        if (!productIdListIncludes(selectedIds, currentProductGid)) {
-          console.log("[ciwi] offer skipped: current product not in selected list", offer.id, currentProductGid, selectedIds);
-          continue;
-        }
-      }
-
-      // 中文注释：订阅型 offer 需要当前商品本身具备 selling plan，否则前台不展示订阅区块
-      if (offer.offerType === "subscription" && !getCurrentProductHasSubscription()) {
-        console.log("[ciwi] subscription offer skipped: current product has no selling plan", offer.id);
-        continue;
-      }
     }
 
     if (shouldHideOfferForInventory(offer)) {
@@ -3222,7 +3371,7 @@ function getCurrentOffer(offersConfig) {
       offerId: offer.id,
       offerName: offer.name,
       offerType: offer.offerType,
-      currentProductGid,
+      currentProductGid: context.currentProductGid,
       defaultSavings,
     });
   }
@@ -3240,7 +3389,7 @@ function getCurrentOffer(offersConfig) {
       offerId: winner.offer.id,
       offerName: winner.offer.name,
       offerType: winner.offer.offerType,
-      currentProductGid,
+      currentProductGid: context.currentProductGid,
       defaultSavings: winner.defaultSavings,
       candidateCount: matchingCandidates.length,
     });
@@ -3606,7 +3755,7 @@ function resolveThemeCompleteBundleCardDisplay(config, bar, index, unitPrice, an
 
 function getCartQuantityForSelectedOffer(offer, selectedCount) {
   if (offer?.offerType === "free-gift") {
-    const config = parseFreeGiftConfig(offer.selectedProductsJson, offer.discountRulesJson);
+    const config = getParsedStorefrontFreeGiftConfig(offer);
     const hasCartAmountRule = config.tiers.some(
       (rule) =>
         String(rule.tierType || "") !== "single" && rule.conditionType === "cart_amount",
@@ -4174,7 +4323,7 @@ function resolveDifferentProductsSelectedRule(offer, options) {
   if (!offer || offer.offerType !== "quantity-breaks-different") return null;
   const selectedCount = getSelectedCountForOffer(offer, options);
   if (selectedCount == null || selectedCount === CIWI_SINGLE_OPTION_COUNT) return null;
-  const rules = parseDifferentProductsDiscountRulesFromOffer(offer);
+  const rules = getParsedStorefrontDifferentRules(offer);
   return rules.find((rule) => Number(rule.count) === selectedCount) || null;
 }
 
@@ -4359,7 +4508,7 @@ function resolveFreeGiftVariantId(offer, rule) {
   const configuredGiftIds =
     Array.isArray(rule?.giftProductIds) && rule.giftProductIds.length > 0
       ? rule.giftProductIds
-      : parseFreeGiftConfig(offer?.selectedProductsJson, offer?.discountRulesJson).giftProducts;
+      : getParsedStorefrontFreeGiftConfig(offer).giftProducts;
   const hydratedProducts = Array.isArray(offer?.__ciwiFreeGiftHydratedProducts)
     ? offer.__ciwiFreeGiftHydratedProducts
     : [];
@@ -4384,7 +4533,7 @@ function resolveSellableFreeGiftVariant(offer, rule) {
   const configuredGiftIds =
     Array.isArray(rule?.giftProductIds) && rule.giftProductIds.length > 0
       ? rule.giftProductIds
-      : parseFreeGiftConfig(offer?.selectedProductsJson, offer?.discountRulesJson).giftProducts;
+      : getParsedStorefrontFreeGiftConfig(offer).giftProducts;
   const hydratedProducts = Array.isArray(offer?.__ciwiFreeGiftHydratedProducts)
     ? offer.__ciwiFreeGiftHydratedProducts
     : [];
@@ -4404,6 +4553,751 @@ function resolveSellableFreeGiftVariant(offer, rule) {
   }
 
   return null;
+}
+
+function getStorefrontPreviewTheme(offer) {
+  const offerSettings = getParsedStorefrontOfferSettings(offer) || {};
+  return {
+    layoutFormat: offerSettings.layoutFormat || "vertical",
+    accentColor: offerSettings.accentColor || "#008060",
+    cardBackgroundColor: offerSettings.cardBackgroundColor || "#ffffff",
+    borderColor: offerSettings.borderColor || "#dfe3e8",
+    labelColor: offerSettings.labelColor || "#ffffff",
+    titleFontSize: offerSettings.titleFontSize || 14,
+    titleFontWeight: offerSettings.titleFontWeight || "600",
+    titleColor: offerSettings.titleColor || "#111111",
+    buttonText: offerSettings.buttonText || "Add to Cart",
+    buttonPrimaryColor: offerSettings.buttonPrimaryColor || "#008060",
+    showCustomButton: offerSettings.showCustomButton !== false,
+    widgetTitle: offerSettings.title || "Bundle & Save",
+  };
+}
+
+function getStorefrontPreviewItemStyle(theme, options) {
+  const isSelected = options?.isSelected === true;
+  const cursor = String(options?.cursor || "pointer");
+  return isSelected
+    ? `border-color: ${esc(theme.accentColor)} !important; background: ${esc(theme.cardBackgroundColor)} !important; box-shadow: 0 8px 18px ${esc(theme.accentColor)}25 !important; cursor: ${esc(cursor)};`
+    : `border-color: ${esc(theme.borderColor)} !important; background: ${esc(theme.cardBackgroundColor)} !important; cursor: ${esc(cursor)};`;
+}
+
+function renderStorefrontPreviewBadgeHtml(theme, badge) {
+  if (!badge) return "";
+  return `<div class="create-offer-style-preview-badge" style="background:${esc(
+    theme.accentColor,
+  )} !important; color:${esc(theme.labelColor)} !important;">${esc(badge)}</div>`;
+}
+
+function renderStorefrontPreviewCardShell(options) {
+  const theme = options?.theme || getStorefrontPreviewTheme(null);
+  const listLayoutFormat = options?.listLayoutFormat || theme.layoutFormat || "vertical";
+  const buttonHtml =
+    theme.showCustomButton && options?.buttonOnClick
+      ? `<button class="create-offer-preview-button" onclick="${esc(
+          options.buttonOnClick,
+        )}" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(
+          theme.buttonPrimaryColor,
+        )}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
+        ${esc(theme.buttonText)}
+      </button>`
+      : "";
+  return `<div class="create-offer-preview-card">
+      <div class="create-offer-style-preview-header" style="color:${esc(
+        theme.titleColor,
+      )} !important; font-size: ${esc(theme.titleFontSize)}px !important; font-weight: ${esc(
+        theme.titleFontWeight,
+      )} !important;">${esc(theme.widgetTitle)}</div>
+      <div class="create-offer-style-preview-list create-offer-style-preview-list--${esc(
+        listLayoutFormat,
+      )}">
+        ${options?.itemsHtml || ""}
+      </div>
+      ${options?.successHtml || ""}
+      ${options?.errorHtml || ""}
+      ${buttonHtml}
+      ${options?.extraHtml || ""}
+    </div>`;
+}
+
+function buildStorefrontQuantityPreviewItems(offer, unitPrice) {
+  const discountRules = getParsedStorefrontOfferDiscountRules(offer);
+  if (!discountRules.length) return [];
+  const singleRule =
+    discountRules.find((rule) => String(rule.tierType || "") === "single") || null;
+  const offerRules = discountRules.filter((rule) => String(rule.tierType || "") !== "single");
+  const hasDefault = discountRules.some((rule) => rule.isDefault);
+  return [
+    {
+      count: CIWI_SINGLE_OPTION_COUNT,
+      title: singleRule?.title || "Single",
+      subtitle: singleRule?.subtitle || "Standard price",
+      price: formatPrice(unitPrice),
+      badge: singleRule?.badge || "",
+    },
+    ...offerRules.map((rule, index) => {
+      if (rule.logicType === "bxgy") {
+        const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
+        const bxgyDisplay = getBxgyDisplayMeta(rule);
+        return {
+          count: rule.count,
+          title: resolveBxgyDisplayTitle(rule, rule.title),
+          subtitle: resolveBxgyDisplaySubtitle(rule.subtitle),
+          price: bxgyDisplay.price,
+          badge: rule.badge || (isFeatured ? "Most Popular" : ""),
+          saveLabel: bxgyDisplay.saveLabel,
+        };
+      }
+      const { originalTotal, discountedTotal, saved } = calculateBundleAmounts(
+        unitPrice,
+        rule.count,
+        rule.discountPercent,
+      );
+      const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
+      return {
+        count: rule.count,
+        title: rule.title || `${rule.count} items`,
+        subtitle: rule.subtitle || `You save ${rule.discountPercent}%`,
+        price: formatPrice(discountedTotal),
+        original: formatPrice(originalTotal),
+        badge: rule.badge || (isFeatured ? "Most Popular" : ""),
+        saveLabel: `SAVE ${formatPrice(saved)}`,
+      };
+    }),
+  ];
+}
+
+function renderStorefrontQuantityPreviewItemsHtml(theme, items, selectedCount) {
+  return (Array.isArray(items) ? items : [])
+    .map((item) => {
+      const isSelected = item.count === selectedCount;
+      const featuredClass = isSelected
+        ? " create-offer-style-preview-item--featured"
+        : "";
+      const featuredStyle = getStorefrontPreviewItemStyle(theme, {
+        isSelected,
+      });
+
+      return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}" data-ciwi-bundle-count="${esc(item.count)}">
+      ${renderStorefrontPreviewBadgeHtml(theme, item.badge)}
+      <div class="create-offer-style-preview-item-title">${esc(item.title)}</div>
+      <div class="create-offer-style-preview-item-subtitle">${esc(item.subtitle)}</div>
+      ${
+        item.saveLabel
+          ? `<div class="create-offer-style-preview-item-subtitle">${esc(item.saveLabel)}</div>`
+          : ""
+      }
+      <div class="create-offer-style-preview-item-price">${esc(item.price)}</div>
+      ${
+        item.original
+          ? `<div class="create-offer-style-preview-item-original">${esc(item.original)}</div>`
+          : ""
+      }
+    </div>`;
+    })
+    .join("");
+}
+
+function buildStorefrontFreeGiftPreviewItems(offer) {
+  const freeGiftConfig = getParsedStorefrontFreeGiftConfig(offer);
+  if (!freeGiftConfig.tiers.length) return [];
+  const singleRule =
+    freeGiftConfig.tiers.find((rule) => String(rule.tierType || "") === "single") || null;
+  const giftRules = freeGiftConfig.tiers.filter(
+    (rule) => String(rule.tierType || "") !== "single",
+  );
+  const hasDefault = freeGiftConfig.tiers.some((rule) => rule.isDefault);
+
+  return [
+    {
+      triggerValue: CIWI_SINGLE_OPTION_COUNT,
+      interactive: true,
+      title: singleRule?.title || "Single",
+      subtitle: singleRule?.subtitle || "Standard price",
+      price: formatPrice(getCurrentUnitPrice()),
+      badge: singleRule?.badge || "",
+    },
+    ...giftRules.map((rule, index) => {
+      const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
+      const triggerValue = getFreeGiftRuleTriggerValue(rule);
+      const triggerLabel =
+        rule.conditionType === "cart_amount"
+          ? formatPrice(Math.max(0, Number(rule.amountThreshold) || 0))
+          : String(Math.max(1, Math.trunc(Number(rule.count) || 1)));
+      return {
+        triggerValue,
+        interactive: rule.conditionType !== "cart_amount",
+        title:
+          rule.title ||
+          (rule.conditionType === "cart_amount"
+            ? `Spend ${triggerLabel}`
+            : `Buy ${rule.count} item${rule.count > 1 ? "s" : ""}`),
+        subtitle:
+          rule.subtitle ||
+          `Unlock ${rule.giftQuantity} free gift${rule.giftQuantity > 1 ? "s" : ""}`,
+        price: `${rule.giftQuantity} FREE`,
+        badge: rule.badge || (isFeatured ? "Gift included" : ""),
+        saveLabel: `TRIGGER AT ${triggerLabel}`,
+      };
+    }),
+  ];
+}
+
+function renderStorefrontFreeGiftPreviewItemsHtml(theme, items, selectedTriggerValue) {
+  return (Array.isArray(items) ? items : [])
+    .map((item) => {
+      const isSelected = item.triggerValue === selectedTriggerValue;
+      const featuredClass = isSelected
+        ? " create-offer-style-preview-item--featured"
+        : "";
+      const cursorStyle = item.interactive ? "pointer" : "default";
+      const featuredStyle = getStorefrontPreviewItemStyle(theme, {
+        isSelected,
+        cursor: cursorStyle,
+      });
+      const triggerAttr = item.interactive
+        ? ` data-ciwi-bundle-count="${esc(item.triggerValue)}"`
+        : "";
+
+      return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}"${triggerAttr}>
+      ${renderStorefrontPreviewBadgeHtml(theme, item.badge)}
+      <div class="create-offer-style-preview-item-title">${esc(item.title)}</div>
+      ${item.subtitle ? `<div class="create-offer-style-preview-item-subtitle">${esc(item.subtitle)}</div>` : ""}
+      ${
+        item.saveLabel
+          ? `<div class="create-offer-style-preview-item-subtitle">${esc(item.saveLabel)}</div>`
+          : ""
+      }
+      ${item.price ? `<div class="create-offer-style-preview-item-price">${esc(item.price)}</div>` : ""}
+    </div>`;
+    })
+    .join("");
+}
+
+function buildStorefrontBxgyPreviewItems(offer) {
+  const bxgyRules = parseBxgyDiscountRulesJson(offer?.discountRulesJson);
+  if (!bxgyRules.length) return [];
+  const singleRule =
+    bxgyRules.find((rule) => String(rule.tierType || "") === "single") || null;
+  const offerRules = bxgyRules.filter((rule) => String(rule.tierType || "") !== "single");
+  const hasDefault = bxgyRules.some((rule) => rule.isDefault);
+
+  return [
+    {
+      count: CIWI_SINGLE_OPTION_COUNT,
+      title: singleRule?.title || "Single",
+      subtitle: singleRule?.subtitle || "Standard price",
+      price: formatPrice(getCurrentUnitPrice()),
+      badge: singleRule?.badge || "",
+    },
+    ...offerRules.map((rule, index) => {
+      const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
+      const displayCount = rule.count || 1;
+      const bxgyDisplay = resolveThemeBxgyCardDisplay(rule);
+      return {
+        count: displayCount,
+        title: bxgyDisplay.title,
+        subtitle: bxgyDisplay.subtitle,
+        price: bxgyDisplay.price,
+        badge: rule.badge || (isFeatured ? "Most Popular" : ""),
+        saveLabel: bxgyDisplay.saveLabel,
+      };
+    }),
+  ];
+}
+
+function renderStorefrontBxgyPreviewItemsHtml(theme, items, selectedCount) {
+  return (Array.isArray(items) ? items : [])
+    .map((item) => {
+      const isSelected = item.count === selectedCount;
+      const featuredClass = isSelected
+        ? " create-offer-style-preview-item--featured"
+        : "";
+      const featuredStyle = getStorefrontPreviewItemStyle(theme, {
+        isSelected,
+      });
+
+      return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}" data-ciwi-bundle-count="${esc(item.count)}">
+      ${renderStorefrontPreviewBadgeHtml(theme, item.badge)}
+      <div class="create-offer-style-preview-item-title">${esc(item.title)}</div>
+      <div class="create-offer-style-preview-item-subtitle">${esc(item.subtitle)}</div>
+      ${
+        item.saveLabel
+          ? `<div class="create-offer-style-preview-item-subtitle">${esc(item.saveLabel)}</div>`
+          : ""
+      }
+      <div class="create-offer-style-preview-item-price">${esc(item.price)}</div>
+    </div>`;
+    })
+    .join("");
+}
+
+function buildStorefrontDifferentProductsPreviewItems(offer, theme, unitPrice) {
+  const differentRules = getParsedStorefrontDifferentRules(offer);
+  if (!differentRules.length) return [];
+  const singleRule =
+    differentRules.find((rule) => String(rule.tierType || "") === "single") || null;
+  const offerRules = differentRules.filter(
+    (rule) => String(rule.tierType || "") !== "single",
+  );
+  const hasDefault = differentRules.some((rule) => rule.isDefault);
+
+  return [
+    {
+      count: CIWI_SINGLE_OPTION_COUNT,
+      title: singleRule?.title || "Single",
+      subtitle: singleRule?.subtitle || "Standard price",
+      price: formatPrice(unitPrice),
+      badge: singleRule?.badge || "",
+    },
+    ...offerRules.map((rule, index) => {
+      const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
+      const display = resolveThemeDifferentProductsCardDisplay(rule, unitPrice);
+      return {
+        count: rule.count || 1,
+        title: (display && display.title) || `Any ${rule.count} items`,
+        subtitle: (display && display.subtitle) || "",
+        price: (display && display.price) || "",
+        original: display && display.original,
+        badge: rule.badge || (isFeatured ? "Most Popular" : ""),
+        saveLabel: display && display.saveLabel,
+        chooserHtml: renderDifferentProductsPoolControlHtml(
+          offer,
+          rule,
+          theme.borderColor,
+          theme.accentColor,
+        ),
+      };
+    }),
+  ];
+}
+
+function renderStorefrontDifferentProductsPreviewItemsHtml(theme, items, selectedCount) {
+  return (Array.isArray(items) ? items : [])
+    .map((item) => {
+      const isSelected = item.count === selectedCount;
+      const featuredClass = isSelected
+        ? " create-offer-style-preview-item--featured"
+        : "";
+      const featuredStyle = getStorefrontPreviewItemStyle(theme, {
+        isSelected,
+      });
+
+      return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}" data-ciwi-bundle-count="${esc(item.count)}">
+      ${renderStorefrontPreviewBadgeHtml(theme, item.badge)}
+      <div class="create-offer-style-preview-item-title">${esc(item.title)}</div>
+      <div class="create-offer-style-preview-item-subtitle">${esc(item.subtitle)}</div>
+      ${
+        item.saveLabel
+          ? `<div class="create-offer-style-preview-item-subtitle">${esc(item.saveLabel)}</div>`
+          : ""
+      }
+      ${item.chooserHtml || ""}
+      <div class="create-offer-style-preview-item-price">${esc(item.price)}</div>
+      ${
+        item.original
+          ? `<div class="create-offer-style-preview-item-original">${esc(item.original)}</div>`
+          : ""
+      }
+    </div>`;
+    })
+    .join("");
+}
+
+function buildStorefrontCompleteBundlePreviewModel(offer) {
+  const completeBundle = getParsedStorefrontCompleteBundleConfig(offer);
+  if (!completeBundle.bars.length) return null;
+
+  const defaultBarId = getDefaultSelectedCompleteBundleBarId(completeBundle);
+  const currentSelectedBarId = String(
+    window.__ciwiBundleState.selectedCompleteBundleBarId || "",
+  );
+  if (
+    !currentSelectedBarId ||
+    !completeBundle.bars.some((bar) => String(bar.id) === currentSelectedBarId)
+  ) {
+    window.__ciwiBundleState.selectedCompleteBundleBarId = defaultBarId || null;
+  }
+
+  const selectedBarId = String(
+    window.__ciwiBundleState.selectedCompleteBundleBarId || defaultBarId || "",
+  );
+  const currentUnitPrice = getCurrentUnitPrice();
+  const anchorProduct = getCurrentSelectedProduct();
+
+  return {
+    completeBundle,
+    selectedBarId,
+    bars: completeBundle.bars.map((bar, index) => ({
+      bar,
+      isSelected: String(bar.id) === selectedBarId,
+      display: resolveThemeCompleteBundleCardDisplay(
+        completeBundle,
+        bar,
+        index,
+        currentUnitPrice,
+        anchorProduct,
+      ),
+    })),
+  };
+}
+
+function renderStorefrontCompleteBundlePreviewHtml(theme, model) {
+  if (!model) return "";
+
+  return model.bars
+    .map(({ bar, isSelected, display }) => {
+      const borderCol = isSelected ? theme.accentColor : theme.borderColor;
+      if (isCompleteBundleSingleBarConfig(bar)) {
+        return `<div class="create-offer-style-preview-item" style="border:2px solid ${esc(
+          borderCol,
+        )};border-radius:8px;padding:10px;background:${esc(theme.cardBackgroundColor)};">
+          <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;margin:0;">
+            <input type="radio" name="ciwi-complete-bundle-bar-pick" style="margin-top:3px;flex-shrink:0;" ${
+              isSelected ? "checked" : ""
+            } onchange="window.ciwiSelectCompleteBundleBar('${esc(bar.id)}')" />
+            <span style="flex:1;min-width:0;">
+              <div class="create-offer-style-preview-item-title" style="color:${esc(theme.titleColor)};">${esc(
+                display.title,
+              )}</div>
+              <div class="create-offer-style-preview-item-subtitle" style="font-size:12px;color:#5c6166;margin-top:2px;">${esc(
+                display.subtitle,
+              )}</div>
+            </span>
+            <span style="font-size:13px;font-weight:700;color:#1c1f23;">${esc(
+              display.price,
+            )}</span>
+          </label>
+        </div>`;
+      }
+
+      let productsHtml = "";
+      const bundleItems = display.bundleItems || [];
+      const selectedItemIds = display.selectedItemIds || new Set();
+      const maxQuantity = display.maxQuantity || 1;
+      for (let idx = 0; idx < bundleItems.length; idx += 1) {
+        if (idx > 0 && bundleItems.length >= 2) {
+          productsHtml += `<div style="display:flex;align-items:center;justify-content:center;color:#9aa0a6;font-weight:700;width:22px;flex-shrink:0;font-size:16px;">+</div>`;
+        }
+        const isChecked = selectedItemIds.has(String(bundleItems[idx].productId));
+        const disableUnchecked = !isChecked && selectedItemIds.size >= maxQuantity;
+        productsHtml += buildOneCompleteBundleProductHtml(bar, bundleItems[idx], {
+          selectable: true,
+          selected: isChecked,
+          disabled: disableUnchecked,
+        });
+      }
+      const productsWrap =
+        bundleItems.length >= 2
+          ? `<div style="display:flex;flex-wrap:wrap;align-items:stretch;gap:6px;margin-top:8px;">${productsHtml}</div>`
+          : `<div style="margin-top:8px;">${productsHtml}</div>`;
+
+      return `<div class="create-offer-style-preview-item" style="border:2px solid ${esc(
+        borderCol,
+      )};border-radius:8px;padding:10px;background:${esc(theme.cardBackgroundColor)};">
+        <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;margin:0;">
+          <input type="radio" name="ciwi-complete-bundle-bar-pick" style="margin-top:3px;flex-shrink:0;" ${
+            isSelected ? "checked" : ""
+          } onchange="window.ciwiSelectCompleteBundleBar('${esc(bar.id)}')" />
+          <span style="flex:1;min-width:0;">
+            <div class="create-offer-style-preview-item-title" style="color:${esc(theme.titleColor)};">${esc(
+              display.title,
+            )}</div>
+            <div class="create-offer-style-preview-item-subtitle" style="font-size:12px;color:#5c6166;margin-top:2px;">${esc(
+              display.subtitle,
+            )}</div>
+          </span>
+        </label>
+        ${
+          display.summaryHtml
+            ? display.summaryHtml.replace(
+                'color:inherit;',
+                `color:${esc(theme.accentColor)};`,
+              )
+            : ""
+        }
+        ${productsWrap}
+      </div>`;
+    })
+    .join("");
+}
+
+function renderStorefrontCompleteBundlePreview(offer, successHtml, errorHtml) {
+  const completeBundleModel = buildStorefrontCompleteBundlePreviewModel(offer);
+  if (!completeBundleModel) return "";
+  const theme = getStorefrontPreviewTheme(offer);
+  const barsHtml = renderStorefrontCompleteBundlePreviewHtml(theme, completeBundleModel);
+  return renderStorefrontPreviewCardShell({
+    theme,
+    listLayoutFormat: "vertical",
+    itemsHtml: barsHtml,
+    successHtml,
+    errorHtml,
+    buttonOnClick: "window.ciwiHandleCompleteBundleAddToCart(event)",
+  });
+}
+
+function renderStorefrontFreeGiftPreview(offer, successHtml, errorHtml) {
+  const freeGiftConfig = getParsedStorefrontFreeGiftConfig(offer);
+  if (!freeGiftConfig.tiers.length) return "";
+  const activeRule = resolveActiveFreeGiftRule(offer);
+  const selectedTriggerValue = activeRule
+    ? getFreeGiftRuleTriggerValue(activeRule)
+    : CIWI_SINGLE_OPTION_COUNT;
+  const theme = getStorefrontPreviewTheme(offer);
+  const items = buildStorefrontFreeGiftPreviewItems(offer);
+  const itemsHtml = renderStorefrontFreeGiftPreviewItemsHtml(
+    theme,
+    items,
+    selectedTriggerValue,
+  );
+  return renderStorefrontPreviewCardShell({
+    theme,
+    itemsHtml,
+    successHtml,
+    errorHtml,
+    buttonOnClick: "window.ciwiHandleBundleAddToCart(event)",
+  });
+}
+
+function renderStorefrontBxgyPreview(offer, successHtml, errorHtml) {
+  const bxgyRules = parseBxgyDiscountRulesJson(offer?.discountRulesJson);
+  if (!bxgyRules.length) return "";
+  const selectedCount = getSelectedCountForOffer(offer);
+  const theme = getStorefrontPreviewTheme(offer);
+  const items = buildStorefrontBxgyPreviewItems(offer);
+  const itemsHtml = renderStorefrontBxgyPreviewItemsHtml(
+    theme,
+    items,
+    selectedCount,
+  );
+  const barIdxBxgy = computeSelectedBarIndexForOffer(offer);
+  const progressiveBxgy = renderProgressiveGiftsStorefrontHtml(
+    offer,
+    barIdxBxgy,
+    selectedCount,
+  );
+  return renderStorefrontPreviewCardShell({
+    theme,
+    itemsHtml,
+    successHtml,
+    errorHtml,
+    buttonOnClick: "window.ciwiHandleBundleAddToCart()",
+    extraHtml: progressiveBxgy,
+  });
+}
+
+function renderStorefrontDifferentProductsPreview(offer, successHtml, errorHtml) {
+  const differentRules = getParsedStorefrontDifferentRules(offer);
+  if (!differentRules.length) return "";
+  const selectedCount = getSelectedCountForOffer(offer);
+  const theme = getStorefrontPreviewTheme(offer);
+  const currentPool = getParsedStorefrontSelectedProductIds(offer);
+  const currentProductGid = getCurrentProductGid();
+  if (
+    currentPool.length > 0 &&
+    currentProductGid &&
+    !productIdListIncludes(currentPool, currentProductGid)
+  ) {
+    return "";
+  }
+  const unitPrice = getCurrentUnitPrice();
+  const items = buildStorefrontDifferentProductsPreviewItems(
+    offer,
+    theme,
+    unitPrice,
+  );
+  const itemsHtml = renderStorefrontDifferentProductsPreviewItemsHtml(
+    theme,
+    items,
+    selectedCount,
+  );
+  const barIdxDifferent = computeSelectedBarIndexForOffer(offer);
+  const progressiveDifferent = renderProgressiveGiftsStorefrontHtml(
+    offer,
+    barIdxDifferent,
+    selectedCount,
+  );
+  return renderStorefrontPreviewCardShell({
+    theme,
+    itemsHtml,
+    successHtml,
+    errorHtml,
+    buttonOnClick: "window.ciwiHandleBundleAddToCart()",
+    extraHtml: progressiveDifferent,
+  });
+}
+
+function buildStorefrontSubscriptionPreviewModel(offer, offerSettings) {
+  const hasProductSubscription = getCurrentProductHasSubscription();
+  console.log("[ciwi][subscription] render pre-check", {
+    offerType: offer?.offerType,
+    hasProductSubscription,
+    subscriptionEnabled: offerSettings.subscriptionEnabled,
+  });
+  if (offer?.offerType !== "subscription" || !hasProductSubscription) {
+    return null;
+  }
+
+  const subscriptionEnabled = offerSettings.subscriptionEnabled === true;
+  if (!subscriptionEnabled) {
+    console.warn(
+      "[ciwi][subscription] offer.subscriptionEnabled is false — subscription UI not rendered",
+      { offerId: offer.offerId || offer.id },
+    );
+    return null;
+  }
+
+  const defaultSellingPlanId = getDefaultSellingPlanId();
+  const subscriptionState = getCurrentSubscriptionOptionState();
+  const subscriptionTitle = offerSettings.subscriptionTitle || "Subscribe & Save";
+  const configuredSubscriptionSubtitle =
+    offerSettings.subscriptionSubtitle ||
+    "Subscription pricing updates from your selling plan";
+  const oneTimeTitle = "One-time purchase";
+  const configuredOneTimeSubtitle = "Uses the current product price";
+  const defaultMode = defaultSellingPlanId ? "subscription" : "one-time";
+
+  if (!window.__ciwiBundleState.subscriptionMode) {
+    window.__ciwiBundleState.subscriptionMode = defaultMode;
+  }
+
+  if (
+    window.__ciwiBundleState.subscriptionMode === "subscription" &&
+    !defaultSellingPlanId
+  ) {
+    console.warn(
+      "[ciwi][subscription] subscriptionMode is 'subscription' but no selling plan id — UI will still render, but add-to-cart will not carry selling_plan.",
+      {
+        sellingPlanGroups: getCurrentProductSubscriptionData().sellingPlanGroups,
+      },
+    );
+  }
+
+  return {
+    defaultSellingPlanId,
+    selectedMode: window.__ciwiBundleState.subscriptionMode,
+    selectedSellingPlanId: String(subscriptionState.sellingPlanId || ""),
+    subscriptionTitle,
+    subscriptionSubtitle:
+      subscriptionState.sellingPlanName || configuredSubscriptionSubtitle,
+    oneTimeTitle,
+    oneTimeSubtitle: configuredOneTimeSubtitle || "Uses the current product price",
+    availablePlans: Array.isArray(subscriptionState.availablePlans)
+      ? subscriptionState.availablePlans
+      : [],
+    subscriptionBadgeText:
+      subscriptionState.savingsPercent > 0
+        ? `Save ${subscriptionState.savingsPercent}%`
+        : "",
+    oneTimePriceText:
+      subscriptionState.oneTimePrice != null
+        ? formatPrice(subscriptionState.oneTimePrice)
+        : "",
+    subscriptionPriceText:
+      subscriptionState.subscriptionPrice != null
+        ? formatPrice(subscriptionState.subscriptionPrice)
+        : "",
+    compareAtPriceText:
+      subscriptionState.compareAtPrice != null &&
+      subscriptionState.compareAtPrice > subscriptionState.subscriptionPrice
+        ? formatPrice(subscriptionState.compareAtPrice)
+        : "",
+    subscriptionSavingsText:
+      subscriptionState.savingsAmount > 0
+        ? `Save ${formatPrice(subscriptionState.savingsAmount)} on this purchase`
+        : "",
+  };
+}
+
+function renderStorefrontSubscriptionPreviewHtml(model) {
+  if (!model) return "";
+
+  const subscriptionPlanSelectorHtml =
+    model.selectedMode === "subscription" && model.availablePlans.length > 1
+      ? `<div class="ciwi-subscription-plan-list">
+          ${model.availablePlans
+            .map((plan) => {
+              const isSelectedPlan =
+                String(plan?.sellingPlanId || "") === model.selectedSellingPlanId;
+              const planPrice =
+                plan?.subscriptionPrice != null
+                  ? `<span class="ciwi-subscription-plan-price">${esc(
+                      formatPrice(plan.subscriptionPrice),
+                    )}</span>`
+                  : "";
+              const planSave =
+                plan?.savingsPercent > 0
+                  ? `<span class="ciwi-subscription-plan-save">${esc(
+                      `Save ${plan.savingsPercent}%`,
+                    )}</span>`
+                  : "";
+              return `<button
+                type="button"
+                class="ciwi-subscription-plan-option${isSelectedPlan ? " is-selected" : ""}"
+                data-ciwi-selling-plan-id="${esc(plan.sellingPlanId)}"
+              >
+                <span class="ciwi-subscription-plan-option__text">
+                  <span class="ciwi-subscription-plan-option__title">${esc(
+                    plan.sellingPlanName || "Subscription plan",
+                  )}</span>
+                  ${planPrice}
+                </span>
+                ${planSave}
+              </button>`;
+            })
+            .join("")}
+        </div>`
+      : "";
+
+  const subscriptionBadgeHtml = model.subscriptionBadgeText
+    ? `<span class="ciwi-subscription-badge">${esc(model.subscriptionBadgeText)}</span>`
+    : "";
+  const oneTimePriceHtml = model.oneTimePriceText
+    ? `<span class="ciwi-subscription-price-row">
+        <span class="ciwi-subscription-price">${esc(model.oneTimePriceText)}</span>
+      </span>`
+    : "";
+  const subscriptionPriceHtml = model.subscriptionPriceText
+    ? `<span class="ciwi-subscription-price-row">
+        <span class="ciwi-subscription-price">${esc(model.subscriptionPriceText)}</span>
+        ${
+          model.compareAtPriceText
+            ? `<span class="ciwi-subscription-compare">${esc(
+                model.compareAtPriceText,
+              )}</span>`
+            : ""
+        }
+      </span>`
+    : "";
+  const subscriptionSavingsHtml = model.subscriptionSavingsText
+    ? `<span class="ciwi-subscription-savings">${esc(model.subscriptionSavingsText)}</span>`
+    : "";
+
+  return `
+    <div class="ciwi-subscription-box">
+      <label class="ciwi-subscription-option ${model.selectedMode === "subscription" ? "is-selected" : ""}" data-ciwi-subscription-mode="subscription">
+        <input type="radio" name="${CIWI_SUBSCRIPTION_MODE_NAME}" ${model.selectedMode === "subscription" ? "checked" : ""} />
+        <span>
+          <span class="ciwi-subscription-title-row">
+            <span class="ciwi-subscription-title">${esc(model.subscriptionTitle)}</span>
+            ${subscriptionBadgeHtml}
+          </span>
+          <span class="ciwi-subscription-subtitle">${esc(model.subscriptionSubtitle)}</span>
+          ${subscriptionPriceHtml}
+          ${subscriptionSavingsHtml}
+        </span>
+      </label>
+      ${subscriptionPlanSelectorHtml}
+      <label class="ciwi-subscription-option ${model.selectedMode === "one-time" ? "is-selected" : ""}" data-ciwi-subscription-mode="one-time">
+        <input type="radio" name="${CIWI_SUBSCRIPTION_MODE_NAME}" ${model.selectedMode === "one-time" ? "checked" : ""} />
+        <span>
+          <span class="ciwi-subscription-title">${esc(model.oneTimeTitle)}</span>
+          <span class="ciwi-subscription-subtitle">${esc(model.oneTimeSubtitle)}</span>
+          ${oneTimePriceHtml}
+        </span>
+      </label>
+    </div>
+  `;
 }
 
 async function performFreeGiftCartAdd() {
@@ -4712,772 +5606,83 @@ function renderBundlePreviewHtml(offer) {
   const bundleErrorHtml = renderCurrentBundleInlineErrorHtml();
 
   if (offer.offerType === "complete-bundle") {
-    const completeBundle = parseCompleteBundleConfig(offer?.selectedProductsJson);
-    if (!completeBundle.bars.length) return "";
-    let offerSettings = {};
-    try {
-      if (offer?.offerSettingsJson) {
-        offerSettings = JSON.parse(offer.offerSettingsJson);
-      }
-    } catch {
-      offerSettings = {};
-    }
-    const accentColor = offerSettings.accentColor || "#008060";
-    const cardBackgroundColor = offerSettings.cardBackgroundColor || "#ffffff";
-    const borderColor = offerSettings.borderColor || "#dfe3e8";
-    const titleFontSize = offerSettings.titleFontSize || 14;
-    const titleFontWeight = offerSettings.titleFontWeight || "600";
-    const titleColor = offerSettings.titleColor || "#111111";
-    const buttonText = offerSettings.buttonText || "Add to Cart";
-    const buttonPrimaryColor = offerSettings.buttonPrimaryColor || "#008060";
-    const showCustomButton = offerSettings.showCustomButton !== false;
-    const widgetTitle = offerSettings.title || "Bundle & Save";
-
-    const defaultBarId = getDefaultSelectedCompleteBundleBarId(completeBundle);
-    const currentSelectedBarId = String(window.__ciwiBundleState.selectedCompleteBundleBarId || "");
-    if (
-      !currentSelectedBarId ||
-      !completeBundle.bars.some((b) => String(b.id) === currentSelectedBarId)
-    ) {
-      window.__ciwiBundleState.selectedCompleteBundleBarId = defaultBarId || null;
-    }
-    const selectedBarId = String(
-      window.__ciwiBundleState.selectedCompleteBundleBarId || defaultBarId || "",
+    return renderStorefrontCompleteBundlePreview(
+      offer,
+      bundleSuccessHtml,
+      bundleErrorHtml,
     );
-    const currentUnitPrice = getCurrentUnitPrice();
-
-    const barsHtml = completeBundle.bars
-      .map((bar) => {
-        const isSelected = String(bar.id) === selectedBarId;
-        const borderCol = isSelected ? accentColor : borderColor;
-        const display = resolveThemeCompleteBundleCardDisplay(
-          completeBundle,
-          bar,
-          completeBundle.bars.indexOf(bar),
-          currentUnitPrice,
-          getCurrentSelectedProduct(),
-        );
-        if (isCompleteBundleSingleBarConfig(bar)) {
-          return `<div class="create-offer-style-preview-item" style="border:2px solid ${esc(
-            borderCol,
-          )};border-radius:8px;padding:10px;background:${esc(cardBackgroundColor)};">
-            <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;margin:0;">
-              <input type="radio" name="ciwi-complete-bundle-bar-pick" style="margin-top:3px;flex-shrink:0;" ${
-                isSelected ? "checked" : ""
-              } onchange="window.ciwiSelectCompleteBundleBar('${esc(bar.id)}')" />
-              <span style="flex:1;min-width:0;">
-                <div class="create-offer-style-preview-item-title" style="color:${esc(titleColor)};">${esc(
-                  display.title,
-                )}</div>
-                <div class="create-offer-style-preview-item-subtitle" style="font-size:12px;color:#5c6166;margin-top:2px;">${esc(
-                  display.subtitle,
-                )}</div>
-              </span>
-              <span style="font-size:13px;font-weight:700;color:#1c1f23;">${esc(
-                display.price,
-              )}</span>
-            </label>
-          </div>`;
-        }
-        let productsHtml = "";
-        const plist = display.bundleItems || [];
-        const selectedItemIds = display.selectedItemIds || new Set();
-        const maxQuantity = display.maxQuantity || 1;
-        for (let idx = 0; idx < plist.length; idx++) {
-          if (idx > 0 && plist.length >= 2) {
-            productsHtml += `<div style="display:flex;align-items:center;justify-content:center;color:#9aa0a6;font-weight:700;width:22px;flex-shrink:0;font-size:16px;">+</div>`;
-          }
-          const isChecked = selectedItemIds.has(String(plist[idx].productId));
-          const disableUnchecked = !isChecked && selectedItemIds.size >= maxQuantity;
-          productsHtml += buildOneCompleteBundleProductHtml(bar, plist[idx], {
-            selectable: true,
-            selected: isChecked,
-            disabled: disableUnchecked,
-          });
-        }
-        const productsWrap =
-          plist.length >= 2
-            ? `<div style="display:flex;flex-wrap:wrap;align-items:stretch;gap:6px;margin-top:8px;">${productsHtml}</div>`
-            : `<div style="margin-top:8px;">${productsHtml}</div>`;
-        return `<div class="create-offer-style-preview-item" style="border:2px solid ${esc(
-          borderCol,
-        )};border-radius:8px;padding:10px;background:${esc(cardBackgroundColor)};">
-          <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;margin:0;">
-            <input type="radio" name="ciwi-complete-bundle-bar-pick" style="margin-top:3px;flex-shrink:0;" ${
-              isSelected ? "checked" : ""
-            } onchange="window.ciwiSelectCompleteBundleBar('${esc(bar.id)}')" />
-            <span style="flex:1;min-width:0;">
-              <div class="create-offer-style-preview-item-title" style="color:${esc(titleColor)};">${esc(
-                display.title,
-              )}</div>
-              <div class="create-offer-style-preview-item-subtitle" style="font-size:12px;color:#5c6166;margin-top:2px;">${esc(
-                display.subtitle,
-              )}</div>
-            </span>
-          </label>
-          ${
-            display.summaryHtml
-              ? display.summaryHtml.replace(
-                  'color:inherit;',
-                  `color:${esc(accentColor)};`,
-                )
-              : ""
-          }
-          ${productsWrap}
-        </div>`;
-      })
-      .join("");
-
-    return `<div class="create-offer-preview-card">
-      <div class="create-offer-style-preview-header" style="color:${esc(
-        titleColor,
-      )} !important; font-size:${esc(titleFontSize)}px !important; font-weight:${esc(
-        titleFontWeight,
-      )} !important;">${esc(widgetTitle)}</div>
-      <div class="create-offer-style-preview-list create-offer-style-preview-list--vertical">${barsHtml}</div>
-      ${bundleSuccessHtml}
-      ${bundleErrorHtml}
-      ${
-        showCustomButton
-          ? `<button type="button" class="create-offer-preview-button" onclick="window.ciwiHandleCompleteBundleAddToCart(event)" style="width:100%;margin-top:12px;padding:12px;background:${esc(
-              buttonPrimaryColor,
-            )};color:white;border:none;border-radius:6px;font-weight:600;cursor:pointer;">${esc(
-              buttonText,
-            )}</button>`
-          : ""
-      }
-    </div>`;
   }
 
   if (offer.offerType === "free-gift") {
-    const freeGiftConfig = parseFreeGiftConfig(
-      offer?.selectedProductsJson,
-      offer?.discountRulesJson,
+    return renderStorefrontFreeGiftPreview(
+      offer,
+      bundleSuccessHtml,
+      bundleErrorHtml,
     );
-    if (!freeGiftConfig.tiers.length) return "";
-
-    const activeRule = resolveActiveFreeGiftRule(offer);
-    const selectedTriggerValue = activeRule
-      ? getFreeGiftRuleTriggerValue(activeRule)
-      : CIWI_SINGLE_OPTION_COUNT;
-
-    let offerSettings = {};
-    try {
-      if (offer?.offerSettingsJson) {
-        offerSettings = JSON.parse(offer.offerSettingsJson);
-      }
-    } catch (e) {
-      console.error("[ciwi] failed to parse offerSettingsJson", e);
-    }
-
-    const layoutFormat = offerSettings.layoutFormat || "vertical";
-    const accentColor = offerSettings.accentColor || "#008060";
-    const cardBackgroundColor = offerSettings.cardBackgroundColor || "#ffffff";
-    const borderColor = offerSettings.borderColor || "#dfe3e8";
-    const labelColor = offerSettings.labelColor || "#ffffff";
-    const titleFontSize = offerSettings.titleFontSize || 14;
-    const titleFontWeight = offerSettings.titleFontWeight || "600";
-    const titleColor = offerSettings.titleColor || "#111111";
-    const buttonText = offerSettings.buttonText || "Add to Cart";
-    const buttonPrimaryColor = offerSettings.buttonPrimaryColor || "#008060";
-    const showCustomButton = offerSettings.showCustomButton !== false;
-    const widgetTitle = offerSettings.title || "Bundle & Save";
-    const singleRule =
-      freeGiftConfig.tiers.find((rule) => String(rule.tierType || "") === "single") || null;
-    const giftRules = freeGiftConfig.tiers.filter(
-      (rule) => String(rule.tierType || "") !== "single",
-    );
-    const hasDefault = freeGiftConfig.tiers.some((r) => r.isDefault);
-
-    const items = [
-      {
-        triggerValue: CIWI_SINGLE_OPTION_COUNT,
-        interactive: true,
-        title: singleRule?.title || "Single",
-        subtitle: singleRule?.subtitle || "Standard price",
-        price: formatPrice(getCurrentUnitPrice()),
-        badge: singleRule?.badge || "",
-      },
-      ...giftRules.map((rule, index) => {
-        const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
-        const triggerValue = getFreeGiftRuleTriggerValue(rule);
-        const triggerLabel =
-          rule.conditionType === "cart_amount"
-            ? formatPrice(Math.max(0, Number(rule.amountThreshold) || 0))
-            : String(Math.max(1, Math.trunc(Number(rule.count) || 1)));
-        return {
-          triggerValue,
-          interactive: rule.conditionType !== "cart_amount",
-          title:
-            rule.title ||
-            (rule.conditionType === "cart_amount"
-              ? `Spend ${triggerLabel}`
-              : `Buy ${rule.count} item${rule.count > 1 ? "s" : ""}`),
-          subtitle:
-            rule.subtitle ||
-            `Unlock ${rule.giftQuantity} free gift${rule.giftQuantity > 1 ? "s" : ""}`,
-          price: `${rule.giftQuantity} FREE`,
-          badge: rule.badge || (isFeatured ? "Gift included" : ""),
-          saveLabel: `TRIGGER AT ${triggerLabel}`,
-        };
-      }),
-    ];
-
-    const itemsHtml = items
-      .map((item) => {
-        const isSelected = item.triggerValue === selectedTriggerValue;
-        const featuredClass = isSelected
-          ? " create-offer-style-preview-item--featured"
-          : "";
-        const cursorStyle = item.interactive ? "pointer" : "default";
-        const featuredStyle = isSelected
-          ? `border-color: ${esc(accentColor)} !important; background: ${esc(cardBackgroundColor)} !important; box-shadow: 0 8px 18px ${esc(accentColor)}25 !important; cursor: ${esc(cursorStyle)};`
-          : `border-color: ${esc(borderColor)} !important; background: ${esc(cardBackgroundColor)} !important; cursor: ${esc(cursorStyle)};`;
-        const triggerAttr = item.interactive
-          ? ` data-ciwi-bundle-count="${esc(item.triggerValue)}"`
-          : "";
-
-        return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}"${triggerAttr}>
-        ${
-          item.badge
-            ? `<div class="create-offer-style-preview-badge" style="background:${esc(accentColor)} !important; color:${esc(labelColor)} !important;">${esc(item.badge)}</div>`
-            : ""
-        }
-        <div class="create-offer-style-preview-item-title">${esc(item.title)}</div>
-        ${item.subtitle ? `<div class="create-offer-style-preview-item-subtitle">${esc(item.subtitle)}</div>` : ""}
-        ${
-          item.saveLabel
-            ? `<div class="create-offer-style-preview-item-subtitle">${esc(item.saveLabel)}</div>`
-            : ""
-        }
-        ${item.price ? `<div class="create-offer-style-preview-item-price">${esc(item.price)}</div>` : ""}
-      </div>`;
-      })
-      .join("");
-
-    return `<div class="create-offer-preview-card">
-      <div class="create-offer-style-preview-header" style="color:${esc(titleColor)} !important; font-size: ${esc(titleFontSize)}px !important; font-weight: ${esc(titleFontWeight)} !important;">${esc(widgetTitle)}</div>
-      <div class="create-offer-style-preview-list create-offer-style-preview-list--${layoutFormat}">
-        ${itemsHtml}
-      </div>
-      ${bundleSuccessHtml}
-      ${bundleErrorHtml}
-      ${showCustomButton ? `<button type="button" class="create-offer-preview-button" onclick="window.ciwiHandleBundleAddToCart(event)" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
-        ${esc(buttonText)}
-      </button>` : ""}
-    </div>`;
   }
 
   // BXGY offer type support — quantity-break-style tier cards
   if (offer.offerType === 'bxgy') {
-    const bxgyRules = parseBxgyDiscountRulesJson(offer?.discountRulesJson);
-    if (!bxgyRules.length) return "";
-
-    const selectedCount = getSelectedCountForOffer(offer);
-
-    let offerSettings = {};
-    try {
-      if (offer?.offerSettingsJson) {
-        offerSettings = JSON.parse(offer.offerSettingsJson);
-      }
-    } catch (e) {
-      console.error("[ciwi] failed to parse offerSettingsJson", e);
-    }
-
-    const layoutFormat = offerSettings.layoutFormat || "vertical";
-    const accentColor = offerSettings.accentColor || "#008060";
-    const cardBackgroundColor = offerSettings.cardBackgroundColor || "#ffffff";
-    const borderColor = offerSettings.borderColor || "#dfe3e8";
-    const labelColor = offerSettings.labelColor || "#ffffff";
-    const titleFontSize = offerSettings.titleFontSize || 14;
-    const titleFontWeight = offerSettings.titleFontWeight || "600";
-    const titleColor = offerSettings.titleColor || "#111111";
-    const buttonText = offerSettings.buttonText || "Add to Cart";
-    const buttonPrimaryColor = offerSettings.buttonPrimaryColor || "#008060";
-    const showCustomButton = offerSettings.showCustomButton !== false;
-    const widgetTitle = offerSettings.title || "Bundle & Save";
-    const singleRule =
-      bxgyRules.find((rule) => String(rule.tierType || "") === "single") || null;
-    const offerRules = bxgyRules.filter((rule) => String(rule.tierType || "") !== "single");
-    const hasDefault = bxgyRules.some((r) => r.isDefault);
-
-    const items = [
-      {
-        count: CIWI_SINGLE_OPTION_COUNT,
-        title: singleRule?.title || "Single",
-        subtitle: singleRule?.subtitle || "Standard price",
-        price: formatPrice(getCurrentUnitPrice()),
-        badge: singleRule?.badge || "",
-      },
-      ...offerRules.map((rule, index) => {
-        const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
-        const displayCount = rule.count || 1;
-        const bxgyDisplay = resolveThemeBxgyCardDisplay(rule);
-        return {
-          count: displayCount,
-          title: bxgyDisplay.title,
-          subtitle: bxgyDisplay.subtitle,
-          price: bxgyDisplay.price,
-          badge: rule.badge || (isFeatured ? "Most Popular" : ""),
-          saveLabel: bxgyDisplay.saveLabel,
-        };
-      }),
-    ];
-
-    const itemsHtml = items
-      .map((item) => {
-        const isSelected = item.count === selectedCount;
-        const featuredClass = isSelected
-          ? " create-offer-style-preview-item--featured"
-          : "";
-        const featuredStyle = isSelected
-          ? `border-color: ${esc(accentColor)} !important; background: ${esc(cardBackgroundColor)} !important; box-shadow: 0 8px 18px ${esc(accentColor)}25 !important; cursor: pointer;`
-          : `border-color: ${esc(borderColor)} !important; background: ${esc(cardBackgroundColor)} !important; cursor: pointer;`;
-
-        return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}" data-ciwi-bundle-count="${esc(item.count)}">
-        ${
-          item.badge
-            ? `<div class="create-offer-style-preview-badge" style="background:${esc(accentColor)} !important; color:${esc(labelColor)} !important;">${esc(item.badge)}</div>`
-            : ""
-        }
-        <div class="create-offer-style-preview-item-title">${esc(item.title)}</div>
-        <div class="create-offer-style-preview-item-subtitle">${esc(item.subtitle)}</div>
-        ${
-          item.saveLabel
-            ? `<div class="create-offer-style-preview-item-subtitle">${esc(item.saveLabel)}</div>`
-            : ""
-        }
-        <div class="create-offer-style-preview-item-price">${esc(item.price)}</div>
-      </div>`;
-      })
-      .join("");
-
-    const barIdxBxgy = computeSelectedBarIndexForOffer(offer);
-    const progressiveBxgy = renderProgressiveGiftsStorefrontHtml(offer, barIdxBxgy, selectedCount);
-
-    return `<div class="create-offer-preview-card">
-      <div class="create-offer-style-preview-header" style="color:${esc(titleColor)} !important; font-size: ${esc(titleFontSize)}px !important; font-weight: ${esc(titleFontWeight)} !important;">${esc(widgetTitle)}</div>
-      <div class="create-offer-style-preview-list create-offer-style-preview-list--${layoutFormat}">
-        ${itemsHtml}
-      </div>
-      ${bundleSuccessHtml}
-      ${bundleErrorHtml}
-      ${showCustomButton ? `<button class="create-offer-preview-button" onclick="window.ciwiHandleBundleAddToCart()" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
-        ${esc(buttonText)}
-      </button>` : ""}
-    </div>` + progressiveBxgy;
+    return renderStorefrontBxgyPreview(
+      offer,
+      bundleSuccessHtml,
+      bundleErrorHtml,
+    );
   }
 
   if (offer.offerType === "quantity-breaks-different") {
-    const differentRules = parseDifferentProductsDiscountRulesFromOffer(offer);
-    if (!differentRules.length) return "";
-
-    const selectedCount = getSelectedCountForOffer(offer);
-
-    let offerSettings = {};
-    try {
-      if (offer?.offerSettingsJson) {
-        offerSettings = JSON.parse(offer.offerSettingsJson);
-      }
-    } catch (e) {
-      console.error("[ciwi] failed to parse offerSettingsJson", e);
-    }
-
-    const layoutFormat = offerSettings.layoutFormat || "vertical";
-    const accentColor = offerSettings.accentColor || "#008060";
-    const cardBackgroundColor = offerSettings.cardBackgroundColor || "#ffffff";
-    const borderColor = offerSettings.borderColor || "#dfe3e8";
-    const labelColor = offerSettings.labelColor || "#ffffff";
-    const titleFontSize = offerSettings.titleFontSize || 14;
-    const titleFontWeight = offerSettings.titleFontWeight || "600";
-    const titleColor = offerSettings.titleColor || "#111111";
-    const buttonText = offerSettings.buttonText || "Add to Cart";
-    const buttonPrimaryColor = offerSettings.buttonPrimaryColor || "#008060";
-    const showCustomButton = offerSettings.showCustomButton !== false;
-    const widgetTitle = offerSettings.title || "Bundle & Save";
-    const singleRule =
-      differentRules.find((rule) => String(rule.tierType || "") === "single") || null;
-    const offerRules = differentRules.filter(
-      (rule) => String(rule.tierType || "") !== "single",
-    );
-    const hasDefault = differentRules.some((r) => r.isDefault);
-
-    const currentPool = parseSelectedProductIds(offer.selectedProductsJson);
-    const currentProductGid = getCurrentProductGid();
-    if (
-      currentPool.length > 0 &&
-      currentProductGid &&
-      !productIdListIncludes(currentPool, currentProductGid)
-    ) {
-      return "";
-    }
-
-    const unitPrice = getCurrentUnitPrice();
-    const items = [
-      {
-        count: CIWI_SINGLE_OPTION_COUNT,
-        title: singleRule?.title || "Single",
-        subtitle: singleRule?.subtitle || "Standard price",
-        price: formatPrice(unitPrice),
-        badge: singleRule?.badge || "",
-      },
-      ...offerRules.map((rule, index) => {
-        const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
-        const display = resolveThemeDifferentProductsCardDisplay(rule, unitPrice);
-        return {
-          count: rule.count || 1,
-          title: (display && display.title) || `Any ${rule.count} items`,
-          subtitle: (display && display.subtitle) || "",
-          price: (display && display.price) || "",
-          original: display && display.original,
-          badge: rule.badge || (isFeatured ? "Most Popular" : ""),
-          saveLabel: display && display.saveLabel,
-          chooserHtml: renderDifferentProductsPoolControlHtml(
-            offer,
-            rule,
-            borderColor,
-            accentColor,
-          ),
-        };
-      }),
-    ];
-
-    const itemsHtml = items
-      .map((item) => {
-        const isSelected = item.count === selectedCount;
-        const featuredClass = isSelected
-          ? " create-offer-style-preview-item--featured"
-          : "";
-        const featuredStyle = isSelected
-          ? `border-color: ${esc(accentColor)} !important; background: ${esc(cardBackgroundColor)} !important; box-shadow: 0 8px 18px ${esc(accentColor)}25 !important; cursor: pointer;`
-          : `border-color: ${esc(borderColor)} !important; background: ${esc(cardBackgroundColor)} !important; cursor: pointer;`;
-
-        return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}" data-ciwi-bundle-count="${esc(item.count)}">
-        ${
-          item.badge
-            ? `<div class="create-offer-style-preview-badge" style="background:${esc(accentColor)} !important; color:${esc(labelColor)} !important;">${esc(item.badge)}</div>`
-            : ""
-        }
-        <div class="create-offer-style-preview-item-title">${esc(item.title)}</div>
-        <div class="create-offer-style-preview-item-subtitle">${esc(item.subtitle)}</div>
-        ${
-          item.saveLabel
-            ? `<div class="create-offer-style-preview-item-subtitle">${esc(item.saveLabel)}</div>`
-            : ""
-        }
-        ${item.chooserHtml || ""}
-        <div class="create-offer-style-preview-item-price">${esc(item.price)}</div>
-        ${
-          item.original
-            ? `<div class="create-offer-style-preview-item-original">${esc(item.original)}</div>`
-            : ""
-        }
-      </div>`;
-      })
-      .join("");
-
-    const barIdxDifferent = computeSelectedBarIndexForOffer(offer);
-    const progressiveDifferent = renderProgressiveGiftsStorefrontHtml(
+    return renderStorefrontDifferentProductsPreview(
       offer,
-      barIdxDifferent,
-      selectedCount,
+      bundleSuccessHtml,
+      bundleErrorHtml,
     );
-
-    return `<div class="create-offer-preview-card">
-      <div class="create-offer-style-preview-header" style="color:${esc(titleColor)} !important; font-size: ${esc(titleFontSize)}px !important; font-weight: ${esc(titleFontWeight)} !important;">${esc(widgetTitle)}</div>
-      <div class="create-offer-style-preview-list create-offer-style-preview-list--${layoutFormat}">
-        ${itemsHtml}
-      </div>
-      ${bundleSuccessHtml}
-      ${bundleErrorHtml}
-      ${showCustomButton ? `<button class="create-offer-preview-button" onclick="window.ciwiHandleBundleAddToCart()" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
-        ${esc(buttonText)}
-      </button>` : ""}
-    </div>` + progressiveDifferent;
   }
   
   // Existing logic for quantity breaks
-  const discountRules = parseDiscountRulesJson(offer?.discountRulesJson);
+  const discountRules = getParsedStorefrontOfferDiscountRules(offer);
   if (!discountRules.length) return "";
   const selectedCount = getSelectedCountForOffer(offer);
+  const offerSettings = getParsedStorefrontOfferSettings(offer) || {};
 
-  // Extract styles from offer settings, use defaults if missing
-  let offerSettings = {};
-  try {
-    if (offer?.offerSettingsJson) {
-      offerSettings = JSON.parse(offer.offerSettingsJson);
-    }
-  } catch (e) {
-    console.error("[ciwi] failed to parse offerSettingsJson", e);
-  }
-  
-  const layoutFormat = offerSettings.layoutFormat || "vertical";
-  const accentColor = offerSettings.accentColor || "#008060";
-  const cardBackgroundColor = offerSettings.cardBackgroundColor || "#ffffff";
-  const borderColor = offerSettings.borderColor || "#dfe3e8";
-  const labelColor = offerSettings.labelColor || "#ffffff";
-  const titleFontSize = offerSettings.titleFontSize || 14;
-  const titleFontWeight = offerSettings.titleFontWeight || "600";
-  const titleColor = offerSettings.titleColor || "#111111";
-  const buttonText = offerSettings.buttonText || "Add to Cart";
-  const buttonPrimaryColor = offerSettings.buttonPrimaryColor || "#008060";
-  const showCustomButton = offerSettings.showCustomButton !== false;
-  const widgetTitle = offerSettings.title || "Bundle & Save";
+  const theme = getStorefrontPreviewTheme(offer);
 
   const unitPrice = getCurrentUnitPrice();
-  const singleRule =
-    discountRules.find((rule) => String(rule.tierType || "") === "single") || null;
-  const offerRules = discountRules.filter((rule) => String(rule.tierType || "") !== "single");
-  const hasDefault = discountRules.some((r) => r.isDefault);
-  const items = [
-    {
-      count: CIWI_SINGLE_OPTION_COUNT,
-      title: singleRule?.title || "Single",
-      subtitle: singleRule?.subtitle || "Standard price",
-      price: formatPrice(unitPrice),
-      badge: singleRule?.badge || "",
-    },
-    ...offerRules.map((rule, index) => {
-      if (rule.logicType === "bxgy") {
-        const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
-        const bxgyDisplay = getBxgyDisplayMeta(rule);
-        return {
-          count: rule.count,
-          title: resolveBxgyDisplayTitle(rule, rule.title),
-          subtitle: resolveBxgyDisplaySubtitle(rule.subtitle),
-          price: bxgyDisplay.price,
-          badge: rule.badge || (isFeatured ? "Most Popular" : ""),
-          saveLabel: bxgyDisplay.saveLabel,
-        };
-      }
-      const { originalTotal, discountedTotal, saved } = calculateBundleAmounts(
-        unitPrice,
-        rule.count,
-        rule.discountPercent,
-      );
-      const isFeatured = hasDefault ? !!rule.isDefault : index === 0;
-      return {
-        count: rule.count,
-        title: rule.title || `${rule.count} items`,
-        subtitle: rule.subtitle || `You save ${rule.discountPercent}%`,
-        price: formatPrice(discountedTotal),
-        original: formatPrice(originalTotal),
-        badge: rule.badge || (isFeatured ? "Most Popular" : ""),
-        saveLabel: `SAVE ${formatPrice(saved)}`,
-      };
-    }),
-  ];
-
-  const itemsHtml = items
-    .map((item) => {
-      const isSelected = item.count === selectedCount;
-      const featuredClass = isSelected
-        ? " create-offer-style-preview-item--featured"
-        : "";
-      const featuredStyle = isSelected 
-        ? `border-color: ${esc(accentColor)} !important; background: ${esc(cardBackgroundColor)} !important; box-shadow: 0 8px 18px ${esc(accentColor)}25 !important; cursor: pointer;`
-        : `border-color: ${esc(borderColor)} !important; background: ${esc(cardBackgroundColor)} !important; cursor: pointer;`;
-        
-      return `<div class="create-offer-style-preview-item${featuredClass}" style="${featuredStyle}" data-ciwi-bundle-count="${esc(item.count)}">
-      ${
-        item.badge
-          ? `<div class="create-offer-style-preview-badge" style="background:${esc(accentColor)} !important; color:${esc(labelColor)} !important;">${esc(item.badge)}</div>`
-          : ""
-      }
-      <div class="create-offer-style-preview-item-title">${esc(item.title)}</div>
-      <div class="create-offer-style-preview-item-subtitle">${esc(item.subtitle)}</div>
-      ${
-        item.saveLabel
-          ? `<div class="create-offer-style-preview-item-subtitle">${esc(item.saveLabel)}</div>`
-          : ""
-      }
-      <div class="create-offer-style-preview-item-price">${esc(item.price)}</div>
-      ${
-        item.original
-          ? `<div class="create-offer-style-preview-item-original">${esc(item.original)}</div>`
-          : ""
-      }
-    </div>`;
-    })
-    .join("");
+  const items = buildStorefrontQuantityPreviewItems(offer, unitPrice);
+  const itemsHtml = renderStorefrontQuantityPreviewItemsHtml(
+    theme,
+    items,
+    selectedCount,
+  );
 
   const barIdxQty = computeSelectedBarIndexForOffer(offer);
   const progressiveQty = renderProgressiveGiftsStorefrontHtml(offer, barIdxQty, selectedCount);
-  let subscriptionHtml = "";
-  const hasProductSubscription = getCurrentProductHasSubscription();
-  console.log("[ciwi][subscription] render pre-check", {
-    offerType: offer?.offerType,
-    hasProductSubscription,
-    subscriptionEnabled: offerSettings.subscriptionEnabled,
-  });
-  if (offer?.offerType === "subscription" && hasProductSubscription) {
-    const subscriptionEnabled = offerSettings.subscriptionEnabled === true;
-    if (!subscriptionEnabled) {
-      console.warn(
-        "[ciwi][subscription] offer.subscriptionEnabled is false — subscription UI not rendered",
-        { offerId: offer.offerId || offer.id },
-      );
-    }
-    if (subscriptionEnabled) {
-      const defaultSellingPlanId = getDefaultSellingPlanId();
-      const subscriptionState = getCurrentSubscriptionOptionState();
-      const subscriptionTitle = offerSettings.subscriptionTitle || "Subscribe & Save";
-      const configuredSubscriptionSubtitle =
-        offerSettings.subscriptionSubtitle ||
-        "Subscription pricing updates from your selling plan";
-      const oneTimeTitle = "One-time purchase";
-      const configuredOneTimeSubtitle = "Uses the current product price";
-      const subscriptionDefaultSelected = false;
-      const defaultMode =
-        subscriptionDefaultSelected && defaultSellingPlanId
-          ? "subscription"
-          : "one-time";
-
-      if (!window.__ciwiBundleState.subscriptionMode) {
-        window.__ciwiBundleState.subscriptionMode = defaultMode;
-      }
-      // 中文注释：这里曾经把 subscriptionMode 强制回退为 "one-time"（当 defaultSellingPlanId 为空时），
-      // 会导致「点击 Subscribe 时 UI 立刻弹回 One-time」的视觉错觉。
-      // 现改为只在渲染时读取状态，不再覆盖用户的显式选择，便于暴露真实的问题（selling_plan 未配置等）。
-      if (
-        window.__ciwiBundleState.subscriptionMode === "subscription" &&
-        !defaultSellingPlanId
-      ) {
-        console.warn(
-          "[ciwi][subscription] subscriptionMode is 'subscription' but no selling plan id — UI will still render, but add-to-cart will not carry selling_plan.",
-          {
-            sellingPlanGroups: getCurrentProductSubscriptionData().sellingPlanGroups,
-          },
-        );
-      }
-      const selectedMode = window.__ciwiBundleState.subscriptionMode;
-      const subscriptionSubtitle =
-        subscriptionState.sellingPlanName || configuredSubscriptionSubtitle;
-      const oneTimeSubtitle =
-        configuredOneTimeSubtitle || "Uses the current product price";
-      const subscriptionPlanSelectorHtml =
-        selectedMode === "subscription" && subscriptionState.availablePlans.length > 1
-          ? `<div class="ciwi-subscription-plan-list">
-              ${subscriptionState.availablePlans
-                .map((plan) => {
-                  const isSelectedPlan =
-                    String(plan?.sellingPlanId || "") ===
-                    String(subscriptionState.sellingPlanId || "");
-                  const planPrice =
-                    plan?.subscriptionPrice != null
-                      ? `<span class="ciwi-subscription-plan-price">${esc(
-                          formatPrice(plan.subscriptionPrice),
-                        )}</span>`
-                      : "";
-                  const planSave =
-                    plan?.savingsPercent > 0
-                      ? `<span class="ciwi-subscription-plan-save">${esc(
-                          `Save ${plan.savingsPercent}%`,
-                        )}</span>`
-                      : "";
-                  return `<button
-                    type="button"
-                    class="ciwi-subscription-plan-option${isSelectedPlan ? " is-selected" : ""}"
-                    data-ciwi-selling-plan-id="${esc(plan.sellingPlanId)}"
-                  >
-                    <span class="ciwi-subscription-plan-option__text">
-                      <span class="ciwi-subscription-plan-option__title">${esc(
-                        plan.sellingPlanName || "Subscription plan",
-                      )}</span>
-                      ${planPrice}
-                    </span>
-                    ${planSave}
-                  </button>`;
-                })
-                .join("")}
-            </div>`
-          : "";
-      const subscriptionBadge =
-        subscriptionState.savingsPercent > 0
-          ? `<span class="ciwi-subscription-badge">Save ${esc(
-              `${subscriptionState.savingsPercent}%`,
-            )}</span>`
-          : "";
-      const oneTimePriceHtml =
-        subscriptionState.oneTimePrice != null
-          ? `<span class="ciwi-subscription-price-row">
-              <span class="ciwi-subscription-price">${esc(
-                formatPrice(subscriptionState.oneTimePrice),
-              )}</span>
-            </span>`
-          : "";
-      const subscriptionPriceHtml =
-        subscriptionState.subscriptionPrice != null
-          ? `<span class="ciwi-subscription-price-row">
-              <span class="ciwi-subscription-price">${esc(
-                formatPrice(subscriptionState.subscriptionPrice),
-              )}</span>
-              ${
-                subscriptionState.compareAtPrice != null &&
-                subscriptionState.compareAtPrice > subscriptionState.subscriptionPrice
-                  ? `<span class="ciwi-subscription-compare">${esc(
-                      formatPrice(subscriptionState.compareAtPrice),
-                    )}</span>`
-                  : ""
-              }
-            </span>`
-          : "";
-      const subscriptionSavingsHtml =
-        subscriptionState.savingsAmount > 0
-          ? `<span class="ciwi-subscription-savings">${esc(
-              `Save ${formatPrice(subscriptionState.savingsAmount)} on this purchase`,
-            )}</span>`
-          : "";
-      console.log("[ciwi][subscription] render subscription block", {
-        selectedMode,
-        defaultSellingPlanId,
-        subscriptionTitle,
-        oneTimeTitle,
-      });
-      setTimeout(() => {
-        syncSubscriptionSelectionToTheme(offer);
-      }, 0);
-
-      subscriptionHtml = `
-        <div class="ciwi-subscription-box">
-          <label class="ciwi-subscription-option ${selectedMode === "subscription" ? "is-selected" : ""}" data-ciwi-subscription-mode="subscription">
-            <input type="radio" name="${CIWI_SUBSCRIPTION_MODE_NAME}" ${selectedMode === "subscription" ? "checked" : ""} />
-            <span>
-              <span class="ciwi-subscription-title-row">
-                <span class="ciwi-subscription-title">${esc(subscriptionTitle)}</span>
-                ${subscriptionBadge}
-              </span>
-              <span class="ciwi-subscription-subtitle">${esc(subscriptionSubtitle)}</span>
-              ${subscriptionPriceHtml}
-              ${subscriptionSavingsHtml}
-            </span>
-          </label>
-          ${subscriptionPlanSelectorHtml}
-          <label class="ciwi-subscription-option ${selectedMode === "one-time" ? "is-selected" : ""}" data-ciwi-subscription-mode="one-time">
-            <input type="radio" name="${CIWI_SUBSCRIPTION_MODE_NAME}" ${selectedMode === "one-time" ? "checked" : ""} />
-            <span>
-              <span class="ciwi-subscription-title">${esc(oneTimeTitle)}</span>
-              <span class="ciwi-subscription-subtitle">${esc(oneTimeSubtitle)}</span>
-              ${oneTimePriceHtml}
-            </span>
-          </label>
-        </div>
-      `;
-    }
+  const subscriptionModel = buildStorefrontSubscriptionPreviewModel(
+    offer,
+    offerSettings,
+  );
+  if (subscriptionModel) {
+    console.log("[ciwi][subscription] render subscription block", {
+      selectedMode: subscriptionModel.selectedMode,
+      defaultSellingPlanId: subscriptionModel.defaultSellingPlanId,
+      subscriptionTitle: subscriptionModel.subscriptionTitle,
+      oneTimeTitle: subscriptionModel.oneTimeTitle,
+    });
+    setTimeout(() => {
+      syncSubscriptionSelectionToTheme(offer);
+    }, 0);
   }
+  const subscriptionHtml = renderStorefrontSubscriptionPreviewHtml(
+    subscriptionModel,
+  );
 
-  return `<div class="create-offer-preview-card">
-    <div class="create-offer-style-preview-header" style="color:${esc(titleColor)} !important; font-size: ${esc(titleFontSize)}px !important; font-weight: ${esc(titleFontWeight)} !important;">${esc(widgetTitle)}</div>
-    <div class="create-offer-style-preview-list create-offer-style-preview-list--${layoutFormat}">
-      ${itemsHtml}
-    </div>
-    ${subscriptionHtml}
-    ${bundleSuccessHtml}
-    ${bundleErrorHtml}
-    ${showCustomButton ? `<button type="button" class="create-offer-preview-button" onclick="window.ciwiHandleBundleAddToCart(event)" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(buttonPrimaryColor)}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
-      ${esc(buttonText)}
-    </button>` : ""}
-  </div>` + progressiveQty;
+  return renderStorefrontPreviewCardShell({
+    theme,
+    itemsHtml,
+    successHtml: bundleSuccessHtml,
+    errorHtml: bundleErrorHtml,
+    buttonOnClick: "window.ciwiHandleBundleAddToCart(event)",
+    extraHtml: `${subscriptionHtml}${progressiveQty}`,
+  });
 }
 
 function parseCiwiMetafieldScript(scriptId) {
