@@ -35,7 +35,6 @@
     "@shopify/shopify_function": "~2.0.0",
     "@shopify/shopify-app-react-router": "^1.1.0",
     "@shopify/shopify-app-session-storage-prisma": "^8.0.0",
-    "@types/ioredis": "^4.28.10",
     "antd": "^6.3.2",
     "echarts": "^6.0.0",
     "ioredis": "^5.10.1",
@@ -49,6 +48,7 @@
   },
   "devDependencies": {
     "@shopify/api-codegen-preset": "^1.2.0",
+    "@types/ioredis": "^4.28.10",
     "@shopify/cli": "^3.93.2",
     "@shopify/polaris-types": "^1.0.1",
     "@shopify/shopify_function": "~2.0.0",
