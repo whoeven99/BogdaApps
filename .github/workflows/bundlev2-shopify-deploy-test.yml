@@ -32,7 +32,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          # @shopify/cli@latest 需要 module.enableCompileCache（Node 22+）
+          node-version: "22"
           cache: yarn
           cache-dependency-path: bundleV2/yarn.lock
 
