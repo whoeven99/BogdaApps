@@ -1,4 +1,4 @@
-import {
+﻿import {
   CartInput,
   CartLinesDiscountsGenerateRunResult,
   DiscountClass,
@@ -557,7 +557,7 @@ function offerPassesScheduleAndMarket(
 
 /**
  * complete-bundle 整包计价：
- * - 语义仍然是“整包总价”，但执行层改为 product discount；
+ * - 语义仍然是"整包总价"，但执行层改为 product discount；
  * - 每个匹配 bar 产出一条多 target 的 product candidate，value 是整包总优惠；
  * - target 精确到命中的 cart line + quantity，避免 orderSubtotal 只能按整条 line 计价的问题。
  */
@@ -965,7 +965,59 @@ export function bundleCartDiscountGenerateRun(
     }
   }
 
-  // ② 按行匹配普通 bundle 的 discountRulesJson 数量阶梯，与 BXGY 一起参与商品折扣最大减免竞争。
+  // 统计 BXGY 已预占的每条 cart line 数量，供后续步骤计算剩余可用量。
+  const bxgyReservedQtyByLineId = new Map<string, number>();
+  for (const candidate of productCandidates) {
+    for (const target of candidate.targets ?? []) {
+      const lineId = String(target.cartLine?.id || "").trim();
+      const qty = Math.max(0, Math.trunc(Number(target.cartLine?.quantity) || 0));
+      if (lineId && qty > 0) {
+        bxgyReservedQtyByLineId.set(lineId, (bxgyReservedQtyByLineId.get(lineId) ?? 0) + qty);
+      }
+    }
+  }
+
+  // ③ complete-bundle 保持"整包总价"语义，但执行层改为多 target 的 product discount。
+  // 提前到步骤②之前，使 quantity-break 能感知 complete-bundle 已预占的数量。
+  const completeBundleReservedQtyByLineId = new Map<string, number>();
+  if (hasProductDiscountClass) {
+    log("complete_bundle_evaluation_start", {
+      marketId,
+      cartLineCount: input.cart.lines.length,
+    });
+    const completeBundleCandidates = calculateCompleteBundleProductDiscounts(
+      cartIndex,
+      eligibleOffers.map((compiledOffer) => compiledOffer.offer),
+      marketId,
+      nowMs,
+    );
+    if (completeBundleCandidates.length > 0) {
+      productCandidates.push(...completeBundleCandidates);
+      log("complete_bundle_evaluation_success", {
+        candidateCount: completeBundleCandidates.length,
+      });
+      for (const candidate of completeBundleCandidates) {
+        for (const target of candidate.targets ?? []) {
+          const lineId = String(target.cartLine?.id || "").trim();
+          const qty = Math.max(0, Math.trunc(Number(target.cartLine?.quantity) || 0));
+          if (lineId && qty > 0) {
+            completeBundleReservedQtyByLineId.set(
+              lineId,
+              (completeBundleReservedQtyByLineId.get(lineId) ?? 0) + qty,
+            );
+          }
+        }
+      }
+    } else {
+      log("complete_bundle_evaluation_no_match", {
+        reason: "no_complete_bundle_candidates",
+      });
+    }
+  }
+
+  // ② 按行匹配普通 bundle 的 discountRulesJson 数量阶梯。
+  // 使用每条 line 的剩余可用数量（扣除 BXGY 和 complete-bundle 已预占的部分），
+  // 使多个优惠可以同时作用于同一产品的不同数量单位。
   if (hasProductDiscountClass) {
     for (const line of input.cart.lines) {
       if (line.merchandise.__typename !== "ProductVariant") {
@@ -978,21 +1030,28 @@ export function bundleCartDiscountGenerateRun(
       }
 
       const lineId = line.id;
-      const quantity = line.quantity;
+      const totalQuantity = line.quantity;
       const productId = line.merchandise.product?.id;
       const variantId = line.merchandise.id;
       const marketId = input.localization?.market?.id;
 
+      const reservedQty =
+        (bxgyReservedQtyByLineId.get(lineId) ?? 0) +
+        (completeBundleReservedQtyByLineId.get(lineId) ?? 0);
+      const availableQty = Math.max(0, totalQuantity - reservedQty);
+
       log("line_evaluate", {
         cartLineId: lineId,
-        quantity,
+        totalQuantity,
+        reservedQty,
+        availableQty,
         productId,
         variantId,
         marketId,
       });
 
-      if (!lineId || !quantity) {
-        log("line_skip", { cartLineId: lineId, reason: "missing_line_id_or_qty" });
+      if (!lineId || !availableQty) {
+        log("line_skip", { cartLineId: lineId, reason: availableQty === 0 ? "fully_reserved_by_other_offers" : "missing_line_id_or_qty" });
         continue;
       }
 
@@ -1014,7 +1073,7 @@ export function bundleCartDiscountGenerateRun(
       } | null>((best, compiledOffer) => {
         const discountPercentValue = getBestProductDiscountPercentValueFromTiers(
           compiledOffer.standardRules,
-          quantity,
+          availableQty,
         );
         const discountPercentNumber = Number(discountPercentValue || 0);
         if (!discountPercentValue || discountPercentNumber <= 0) {
@@ -1050,7 +1109,7 @@ export function bundleCartDiscountGenerateRun(
       log("line_discount_percent", {
         cartLineId: lineId,
         discountPercentValue,
-        quantity,
+        availableQty,
       });
 
       if (!discountPercentValue) {
@@ -1067,7 +1126,7 @@ export function bundleCartDiscountGenerateRun(
           {
             cartLine: {
               id: lineId,
-              quantity,
+              quantity: availableQty,
             },
           },
         ],
@@ -1091,31 +1150,7 @@ export function bundleCartDiscountGenerateRun(
       log("line_candidate_added", {
         cartLineId: lineId,
         percent: discountPercentValue,
-      });
-    }
-  }
-
-  // ③ complete-bundle 保持“整包总价”语义，但执行层改为多 target 的 product discount，
-  // 与其它商品折扣一起走同一套重叠 cart line 冲突决议。
-  if (hasProductDiscountClass) {
-    log("complete_bundle_evaluation_start", {
-      marketId,
-      cartLineCount: input.cart.lines.length,
-    });
-    const completeBundleCandidates = calculateCompleteBundleProductDiscounts(
-      cartIndex,
-      eligibleOffers.map((compiledOffer) => compiledOffer.offer),
-      marketId,
-      nowMs,
-    );
-    if (completeBundleCandidates.length > 0) {
-      productCandidates.push(...completeBundleCandidates);
-      log("complete_bundle_evaluation_success", {
-        candidateCount: completeBundleCandidates.length,
-      });
-    } else {
-      log("complete_bundle_evaluation_no_match", {
-        reason: "no_complete_bundle_candidates",
+        quantity: availableQty,
       });
     }
   }
