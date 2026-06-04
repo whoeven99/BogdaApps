@@ -10,6 +10,8 @@ import {
   parseFreeGiftSelectedProducts,
   parseSelectedProductIds,
   resolveOfferTypeFromCampaignConfig,
+  trimDiscountRulesJsonForFunction,
+  trimOfferSettingsJsonForFunction,
   trimSelectedProductsJsonForFunction,
 } from "../../utils/offerParsing";
 import { fetchStoreProducts } from "../shopify/products.server";
@@ -262,14 +264,13 @@ export async function buildCompactOffersPayload(shopOffers: OfferListItem[]): Pr
     const runtimeSyncData = compileOfferRuntimeSyncData(offer);
     return {
       id: offer.id,
-      name: offer.name,
       cartTitle: offer.cartTitle,
       status: offer.status,
       startTime: offer.startTime,
       endTime: offer.endTime,
       selectedProductsJson: runtimeSyncData.selectedProductsJson,
-      discountRulesJson: runtimeSyncData.discountRulesJson,
-      offerSettingsJson: runtimeSyncData.offerSettingsJson,
+      discountRulesJson: trimDiscountRulesJsonForFunction(runtimeSyncData.discountRulesJson),
+      offerSettingsJson: trimOfferSettingsJsonForFunction(runtimeSyncData.offerSettingsJson),
       offerType: runtimeSyncData.offerType,
     };
   });
@@ -285,12 +286,6 @@ export async function buildStorefrontOffersStructured(
     offer,
     runtimeSyncData: compileOfferRuntimeSyncData(offer),
   }));
-
-  const compactPayload = await buildCompactOffersPayload(shopOffers);
-  const compactPayloadParsed = JSON.parse(compactPayload) as {
-    updatedAt?: string;
-    offers?: Array<Record<string, unknown>>;
-  };
 
   const storefrontCatalogProductIds = collectReferencedProductIds(
     compiledActiveOffers
@@ -308,40 +303,41 @@ export async function buildStorefrontOffersStructured(
       : [];
   const storeProductMap = new Map(storeProducts.map((p) => [String(p.id || ""), p]));
 
-  const storefrontOffers = (compactPayloadParsed.offers || []).map((offer) => {
-    const matchedCompiled = compiledActiveOffers.find(
-      ({ offer: activeOffer }) => String(activeOffer.id) === String(offer.id || ""),
-    );
-    const hydrationMode = matchedCompiled?.runtimeSyncData.storefrontHydration || "none";
-    const effectiveOfferType =
-      matchedCompiled?.runtimeSyncData.offerType ||
-      resolveOfferTypeFromCampaignConfig({ offerType: offer.offerType as string });
+  const offers = compiledActiveOffers
+    .map(({ offer, runtimeSyncData }) => {
+      const id = String(offer.id || "").trim();
+      if (!id) return null;
+      const hydrationMode = runtimeSyncData.storefrontHydration;
+      const effectiveOfferType =
+        runtimeSyncData.offerType ||
+        resolveOfferTypeFromCampaignConfig({ offerType: offer.offerType });
 
-    return {
-      ...offer,
-      offerType: effectiveOfferType,
-      selectedProductsJson:
-        hydrationMode === "complete-bundle"
-          ? buildHydratedCompleteBundleJson(
-              (matchedCompiled?.runtimeSyncData.storefrontSelectedProductsJson ??
-                offer.selectedProductsJson) as string | null,
-              storeProductMap,
-            )
-          : hydrationMode === "quantity-breaks-different"
-            ? buildHydratedDifferentProductsJson(
-                (matchedCompiled?.runtimeSyncData.storefrontSelectedProductsJson ??
-                  offer.selectedProductsJson) as string | null,
-                offer.discountRulesJson as string | null,
+      return {
+        id,
+        name: offer.name,
+        cartTitle: offer.cartTitle,
+        status: offer.status,
+        startTime: offer.startTime,
+        endTime: offer.endTime,
+        discountRulesJson: runtimeSyncData.discountRulesJson,
+        offerSettingsJson: runtimeSyncData.offerSettingsJson,
+        offerType: effectiveOfferType,
+        selectedProductsJson:
+          hydrationMode === "complete-bundle"
+            ? buildHydratedCompleteBundleJson(
+                runtimeSyncData.storefrontSelectedProductsJson,
                 storeProductMap,
               )
-            : (offer.selectedProductsJson as string | null) ?? null,
-    };
-  });
+            : hydrationMode === "quantity-breaks-different"
+              ? buildHydratedDifferentProductsJson(
+                  runtimeSyncData.storefrontSelectedProductsJson,
+                  runtimeSyncData.discountRulesJson,
+                  storeProductMap,
+                )
+              : runtimeSyncData.storefrontSelectedProductsJson,
+      };
+    })
+    .filter((o): o is NonNullable<typeof o> => Boolean(o));
 
-  const updatedAt = compactPayloadParsed.updatedAt || new Date().toISOString();
-  const offers = storefrontOffers
-    .map((offer) => ({ ...offer, id: String(offer.id || "").trim() }))
-    .filter((offer) => offer.id);
-
-  return { updatedAt, offers };
+  return { updatedAt: new Date().toISOString(), offers };
 }

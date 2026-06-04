@@ -67,7 +67,7 @@ type OfferMetafieldPayload = {
   updatedAt?: string;
   offers?: Array<{
     id?: string;
-    name?: string;
+    name?: string; // omitted from new payloads; kept here for backward compat with old metafields
     cartTitle?: string;
     status?: boolean;
     startTime?: string;

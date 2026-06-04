@@ -1,149 +1,188 @@
-# AGENTS.md
+# BogdaApps bundleV2 — Agent Guide
 
-## Purpose
+This file gives AI agents a complete mental model of the project so you don't need to read every file cold.
 
-This file tells coding agents how to work safely and effectively in this repository.
-Read this file before making code changes.
-For visual and UI decisions, read `DESIGN.md` first and follow it unless the user explicitly asks for something else.
-For offer, campaign, discount, or storefront module semantics, read `OFFER_SEMANTICS.md` first and follow it unless the user explicitly asks for something else.
-For offer-related workflow and todo handling, read `SEMANTIC_WORKFLOW.md` first.
+---
 
-## Project Summary
+## What This Project Does
 
-- Product: Shopify embedded app for bundle offers, pricing, analytics, and storefront merchandising
-- Frontend: React 18 + React Router + TypeScript
-- Styling: Tailwind CSS + Ant Design + targeted custom CSS
-- Backend: Shopify app server with Prisma
-- Extensions:
-  - Shopify Functions in `extensions/`
-  - Theme extension in `extensions/bundle-theme-product-custom/`
-  - Web pixel extension in `extensions/ciwi-bundle-web-pixer/`
+A **Shopify Bundle App** (React Router + Remix, hosted on Shopify) that lets merchants create bundle discount offers shown on product pages and applied automatically at checkout via Shopify Functions.
 
-## Key Entry Points
+Core loop:
+1. Merchant configures offers in the admin UI
+2. Offers are saved to a SQLite DB (Prisma)
+3. On every offer save, the app syncs offer data into Shopify metafields
+4. A Shopify Function (`cart.lines.discounts.generate.run`) reads those metafields at checkout and applies discounts
+5. The storefront theme reads a separate (hydrated) shop metafield to render bundle UI on product pages
 
-- App shell: `app/root.tsx`
-- Embedded app layout: `app/routes/app.tsx`
-- Main business UI: `app/routes/_index/route.tsx`
-- Core pages:
-  - `app/routes/page/DashboardPage.tsx`
-  - `app/routes/page/AllOffersPage.tsx`
-  - `app/routes/page/AnalyticsPage.tsx`
-  - `app/routes/page/PricingPage.tsx`
-- Core builder:
-  - `app/routes/component/CreateNewOffer/CreateNewOffer.tsx`
-  - `app/routes/component/CreateNewOffer/CreateNewOffer.css`
-- Storefront theme extension:
-  - `extensions/bundle-theme-product-custom/assets/product-detail-message.css`
-  - `extensions/bundle-theme-product-custom/assets/product-detail-message.js`
+---
 
-## Workflow Expectations
+## Architecture
 
-1. Read relevant files before editing.
-2. Reuse existing patterns before adding new abstractions.
-3. Keep UI changes aligned with `DESIGN.md`.
-4. Keep offer logic changes aligned with `OFFER_SEMANTICS.md`.
-5. For offer-related questions or changes, identify or create a semantic todo before implementation.
-6. Prefer focused changes over broad refactors unless requested.
-7. After substantive edits, run appropriate checks.
+```
+Admin UI  (app/routes/)
+  React Router / Remix / Polaris
+      |
+      | offer CRUD
+      v
+Prisma / SQLite  (prisma/schema.prisma)
+Models: Session, Offer
+      |
+      | offer sync (on every save)
+      v
+Offer Sync  (app/server/offers/)
+buildCompactOffersPayload      -> function metafield (on Automatic Discount node)
+buildStorefrontOffersStructured -> theme metafield (on Shop node)
+      |                               |
+      v                               v
+Automatic Discount metafield    Shop metafield
+$app:ciwi_bundle / offers       ciwi_bundle / ciwi-bundle-offers
+(compact, for function)         (hydrated with product data, for theme)
+      |
+      | read at checkout via input query
+      v
+Shopify Function
+extensions/bundle-cart-discount-function/src/bundle_cart_discount_generate_run.ts
+  -> computes ProductDiscountCandidate / OrderDiscountCandidate
+  -> Shopify applies discounts to cart lines
+```
 
-## UI Rules
+---
 
-- Follow `DESIGN.md` for page structure, token usage, and component tone.
-- Prefer Ant Design for common controls, feedback, modal, table, and form primitives.
-- Prefer Tailwind for layout, spacing, and page composition.
-- Use custom CSS only when the UI is too complex for utility classes or when storefront preview fidelity matters.
-- Do not introduce a new primary UI component library.
-- Do not mix multiple unrelated visual styles on the same page.
-- Keep Shopify admin surfaces calm, dense, and task-oriented.
+## Offer Types (Complete Reference)
 
-## Existing UI Patterns
+| offerType | Processing step | Discount class | What it targets |
+|-----------|----------------|----------------|-----------------|
+| `bxgy` | Step 1 BXGY | Product | Same-product free items (get side, 100% off) |
+| `quantity-breaks-different` | Step 1 BXGY | Product | Cross-product: buy A, get B discounted |
+| `quantity-breaks-same` (with BXGY tier) | Step 1 BXGY | Product | Same-product free items (unified BXGY tier) |
+| `quantity-breaks-same` (standard tiers) | Step 2 Regular | Product | Available qty after BXGY/bundle reservation |
+| `complete-bundle` | Step 3 (runs before 2) | Product | Trigger item + bundle items, fixed amount off |
+| `free-gift` | Step 4 | Order | orderSubtotal excluding non-gift lines |
+| Any with `discountClass === "order"` rules | Step 4 | Order | orderSubtotal, percentage |
 
-- Brand green is the main accent color.
-- Builder pages commonly use a left configuration column and right sticky preview.
-- Theme extension preview and admin preview should feel directionally consistent.
-- Pricing should not drift into a separate visual language from the rest of the app.
+### Multi-discount coexistence (logic added June 2025)
 
-## Routing Notes
+Processing order: **Step 1 BXGY -> Step 3 complete-bundle -> Step 2 quantity-break -> Step 4 order-level**
 
-- The main app experience is mostly controlled from `app/routes/_index/route.tsx`.
-- Major sections are often switched by internal tab state rather than by creating many separate routes.
-- Do not assume each main view should become a new URL unless the user asks for routing changes.
+Steps 1 and 3 each build a reservation map (`bxgyReservedQtyByLineId`, `completeBundleReservedQtyByLineId`).
+Step 2 uses `availableQty = totalQty - reserved` so multiple offer types can apply to different units of the same cart line simultaneously.
 
-## Shopify-Specific Rules
+`resolveExclusiveProductCandidates` is the final safety net: if candidates still overlap on a line (same unit), it keeps the higher-savings one.
 
-- App-specific webhooks are mapped by topic to dedicated route files. There is no generic `/webhooks` catch-all entry.
-- If you change Shopify Function code under `extensions/`, remember that shipping web app code is not enough. Function changes require `npm run deploy` to push updated WebAssembly to Shopify.
-- When debugging Shopify Functions, use `console.error`, not `console.log`, so logs appear correctly without corrupting function output.
-- If the app is reinstalled, app-owned Shopify metafields may need to be re-synced during initialization because uninstall clears them from Shopify.
-- When working on market data queries, verify required Shopify access scopes before assuming the data is available.
+**Known edge cases:**
+- Multiple Order-level discounts: `OrderDiscountSelectionStrategy.Maximum` means only the biggest one applies (Shopify platform limit, cannot be changed).
+- `quantity-breaks-same` with both BXGY and standard tiers in the same offer: both may apply simultaneously (BXGY for free units + standard for remaining units). Likely harmless if admin UI prevents this configuration.
+- `complete-bundle` vs `bxgy` competing for the exact same product units: falls back to the savings-winner logic in `resolveExclusiveProductCandidates`.
 
-## Environment Notes
+---
 
-- This project supports isolated `prod` and `test` bundle environments. Local development often resolves to `test` unless environment variables explicitly select production behavior.
-- If the hosted test environment appears to have missing offers, verify whether data was written to test metafields rather than prod metafields.
-- Production database selection must respect `NODE_ENV === "production"`; be careful when changing server environment detection logic.
+## Key Files
 
-## Data And Metafield Notes
+### Server / App
 
-- Bundle discount configuration is stored in shop-level metafields, not product-level metafields for the current app behavior.
-- If you inspect discount recreation logic, make sure active discount filtering excludes deleted or inactive nodes.
+| File | Purpose |
+|------|---------|
+| `app/shopify.server.ts` | Shopify auth, `syncCartLinesAutomaticDiscountMetafield`, `reconcileBundleAutomaticDiscounts` |
+| `app/server/offers/offerSync.server.ts` | `syncShopOffersMetafield` - main sync entry point called after every offer write |
+| `app/server/offers/offerPayload.server.ts` | `buildCompactOffersPayload` (for function), `buildStorefrontOffersStructured` (for theme) |
+| `app/utils/bundleShopOfferMetafields.server.ts` | `reconcileShopOfferShardedMetafields` - writes shop-level metafields, cleans up legacy keys |
+| `app/utils/bundleShopMetafieldKeys.ts` | Metafield namespace / key constants |
+| `app/utils/offerParsing.ts` | Offer parsing helpers shared between server and storefront |
+| `app/routes/_index/` | Main offer list page, CRUD actions, offer sync scheduler |
+| `prisma/schema.prisma` | `Offer` model (id, shopName, status, offerType, discountRulesJson, selectedProductsJson, offerSettingsJson, campaignConfigJson, startTime, endTime) |
 
-## Frontend Implementation Notes
+### Shopify Function
 
-- Global CSS such as Ant Design reset belongs in `app/root.tsx`, not in child routes.
-- If you need the Shopify product picker, prefer the App Bridge v4 `window.shopify.resourcePicker(...)` flow already aligned with this project.
-- For lucide-react icons, use current icon names. `HelpCircle` is obsolete; use `CircleHelp` instead if needed.
-- When showing route-level errors, expose enough detail for debugging instead of relying on a generic application error screen only.
+| File | Purpose |
+|------|---------|
+| `extensions/bundle-cart-discount-function/src/bundle_cart_discount_generate_run.ts` | Entire discount logic (~3200 lines). All offer matching, candidate generation, conflict resolution. |
+| `extensions/bundle-cart-discount-function/src/bundle_cart_discount_generate_run.graphql` | Function input query - reads cart lines + `discount.metafield($app:ciwi_bundle, offers)` |
+| `extensions/bundle-cart-discount-function/schema.graphql` | Full Shopify Function API schema for this target |
+| `extensions/bundle-cart-discount-function/shopify.extension.toml` | Extension config, target: `cart.lines.discounts.generate.run` |
 
-## Builder And Preview Notes
+### Theme Extension
 
-- `CreateNewOffer` is one of the most complex UI surfaces in the app. Treat it as a reference pattern for multistep builder work.
-- Keep preview data consistent across steps. Do not let preview components silently fall back to hardcoded defaults when state exists.
-- Admin preview and storefront rendering share style intent. Reuse the existing style language before inventing new card or selection states.
+| File | Purpose |
+|------|---------|
+| `extensions/bundle-theme-product-custom/` | Storefront UI for bundle display on product page |
+| `extensions/ciwi-bundle-web-pixer/src/index.ts` | Web pixel for analytics / conversion tracking |
 
-## Backend Safety Notes
+---
 
-- Be careful with loader and action code that touches Shopify APIs, DB calls, or theme settings parsing.
-- Theme `settings_data.json` may contain comments, so parsing logic must remain defensive.
-- Wrap unstable external reads in safe error handling when a failure should not crash the whole page.
-- If Prisma schema changes, create and deploy migrations. Missing migrations can cause runtime 500 errors in production.
+## Metafield Architecture
 
-## Commands
+Two separate metafield writes happen on every offer save:
 
-Use these repository scripts where relevant:
+**1. Shop metafields (for storefront theme)**
+```
+namespace: ciwi_bundle
+key: ciwi-bundle-offers          <- hydrated (includes product title, image, variants)
+key: ciwi-bundle-offers-fn       <- compact copy (for reference / debugging)
+key: ciwi-bundle-offer-sync-at   <- ISO timestamp of last sync
+```
 
-- Dev server: `npm run dev`
-- Build app: `npm run build`
-- Typecheck: `npm run typecheck`
-- Lint: `npm run lint`
-- Deploy Shopify app and extensions: `npm run deploy`
-- Prisma studio: `npm run run-localdb`
-- Local migration during development: `npm run update-localdb`
+**2. Automatic Discount metafield (what the Function actually reads)**
+```
+namespace: $app:ciwi_bundle      <- app-reserved namespace
+key: offers
+Written via discountAutomaticAppUpdate mutation on the discount node
+Also written to default app namespace as fallback
+```
 
-## Validation Checklist
+**Size constraint:** Shopify Functions total input budget is approximately 64 KB. The compact payload must stay small. Code warns at 10 KB. Sharding into multiple metafields does NOT help - the Function input budget consumes all shard data regardless. The correct fix is: compress per-offer fields server-side and filter by startTime/endTime before writing to exclude non-active offers.
 
-After making changes, choose the smallest sensible validation set:
+---
 
-- Run `npm run typecheck` for TypeScript-affecting changes
-- Run `npm run lint` for frontend or server logic changes where lint coverage matters
-- Check edited files for diagnostics
-- If changing Shopify Functions, confirm whether a deployment step is required
-- If changing UI, verify visual consistency with `DESIGN.md`
+## Offer Data Flow (Prisma -> Function)
 
-## Change Strategy
+Each `Offer` row is transformed to a compact runtime object for the function:
 
-- Preserve existing architecture unless the user requests a redesign.
-- Prefer small, understandable patches.
-- Avoid renaming or moving large structures without clear value.
-- Do not rewrite working Shopify integration code casually.
-- Be especially cautious in theme extension JavaScript because theme compatibility is fragile.
+```ts
+{
+  id: string
+  name: string
+  cartTitle: string
+  status: boolean
+  startTime: string          // ISO string
+  endTime: string            // ISO string
+  selectedProductsJson: string | null   // trimmed for function (product IDs only)
+  discountRulesJson: string | null      // tier rules
+  offerSettingsJson: string | null      // markets, coupon, customer segments
+  offerType: string
+}
+```
 
-## When Unsure
+`campaignConfigJson` (newer unified format used by the builder UI) is normalized to the above shape via `buildPersistedOfferFieldsFromCampaignConfig` in `offerParsing.ts` before syncing.
 
-If you are unsure between two implementations, choose the one that is:
+---
 
-1. more consistent with existing project patterns,
-2. safer for Shopify embedded app behavior,
-3. easier to validate locally,
-4. more aligned with `DESIGN.md`,
-5. less likely to break storefront compatibility.
+## Extensions Summary
+
+| Extension | Type | Purpose |
+|-----------|------|---------|
+| `bundle-cart-discount-function` | Shopify Function | Product/order discounts at checkout |
+| `bundle-delivery-discount-function` | Shopify Function | Shipping discounts (separate discount class) |
+| `bundle-theme-product-custom` | Theme App Extension | Product page bundle UI |
+| `ciwi-bundle-web-pixer` | Web Pixel | Analytics / conversion tracking |
+
+---
+
+## Development Notes
+
+- **Stack**: React Router v7 (Remix), TypeScript, Polaris, Prisma/SQLite, Shopify Functions (WASM/TypeScript compiled)
+- **TypeScript**: Root `tsconfig.json` targets ES2022, covers `extensions/` too. Function has no separate tsconfig.
+- **Chinese comments in function file**: The Edit tool may corrupt Chinese comments into smart/curly quotes (`""`). If TS errors appear saying "Invalid character", fix with PowerShell: `$content -replace [char]0x201C, '"' -replace [char]0x201D, '"'`
+- **Offer sync**: Triggered by `runOfferPostWriteSync` after any offer write. Has an 8-second timeout to avoid blocking the save response. Sync is debounced per shop via `offerSyncScheduler`.
+- **Database**: SQLite in dev. `startTime`/`endTime` are stored as `DateTime` in Prisma but serialized as ISO strings in metafields and in the function.
+- **Testing**: Vitest. Key test files: `offerParsing.test.ts`, `offerActionHelpers.test.ts`, `offerSyncScheduler.test.ts`.
+
+---
+
+## Open / Known Issues
+
+1. **Metafield size limit** — If a merchant has many active offers, the compact payload can exceed the ~64 KB Function input budget. Sharding is NOT a solution (total data stays the same). Fix: compress per-offer JSON fields server-side; filter by startTime/endTime at sync time to exclude non-active offers.
+
+2. **Order-level discount stacking** — `OrderDiscountSelectionStrategy.Maximum` means only one order-level discount applies per checkout. Multiple `free-gift` or order-class offers cannot stack. This is a Shopify platform constraint.
+
+3. **complete-bundle + bxgy on same product units** — If both target the exact same line/quantity, `resolveExclusiveProductCandidates` picks the higher-savings one. They cannot both apply to the same unit.
