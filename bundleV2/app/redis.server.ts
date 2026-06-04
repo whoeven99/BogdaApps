@@ -1,4 +1,7 @@
+import { ensureRuntimeEnv } from "./config/runtimeEnv.server";
 import Redis from "ioredis";
+
+ensureRuntimeEnv();
 
 // 若要连接到不同的 Redis 服务器，您可以修改 `.env` 文件中的以下环境变量。
 const redisUrl = `rediss://:${process.env.REDIS_PASSWORD}@${process.env.REDIS_HOST}:${process.env.REDIS_PORT}`;

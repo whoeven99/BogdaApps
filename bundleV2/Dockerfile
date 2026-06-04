@@ -45,10 +45,6 @@ COPY --from=builder /app/build ./build
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/prisma ./prisma
-COPY scripts/load-render-env.mjs ./scripts/
-
-# Render Secret Files → /etc/secrets/*；启动时注入 process.env（见 scripts/load-render-env.mjs）
-ENV NODE_OPTIONS="--import /app/scripts/load-render-env.mjs"
 
 EXPOSE 3000
 

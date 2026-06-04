@@ -1,6 +1,9 @@
+import { ensureRuntimeEnv } from "./config/runtimeEnv.server";
 import { createClient } from "@libsql/client";
 import { PrismaLibSQL } from "@prisma/adapter-libsql";
 import { PrismaClient } from "@prisma/client";
+
+ensureRuntimeEnv();
 
 declare global {
   // eslint-disable-next-line no-var
