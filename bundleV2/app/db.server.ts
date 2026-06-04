@@ -88,6 +88,8 @@ function createPrismaClient(): PrismaClient {
     process.env.NODE_ENV,
     "TURSO_DATABASE_URL=",
     process.env.TURSO_DATABASE_URL ? "(set)" : undefined,
+    "TURSO_AUTH_TOKEN=",
+    process.env.TURSO_AUTH_TOKEN ? "(set)" : undefined,
   );
   if (target === "local") {
     if (!global.prismaLocalGlobal) {
