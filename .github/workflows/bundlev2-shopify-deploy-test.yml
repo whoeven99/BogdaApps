@@ -48,7 +48,7 @@ jobs:
           SHOPIFY_CLI_PARTNERS_TOKEN: ${{ secrets.SHOPIFY_CLI_PARTNERS_TOKEN }}
           # 与 bundleV2/shopify.app.test.toml 中 client_id 一致
           SHOPIFY_API_KEY: ab25ea895c6df574ae9ff70e9c7731c5
-        run: shopify app deploy -c shopify.app.test.toml -f
+        run: shopify app deploy -c shopify.app.test.toml --allow-updates --allow-deletes
 
   deploy_render:
     name: Trigger Render deploy (Test)
