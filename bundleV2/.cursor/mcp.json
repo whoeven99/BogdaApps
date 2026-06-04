@@ -3,6 +3,12 @@
     "shopify-dev-mcp": {
       "command": "npx",
       "args": ["-y", "@shopify/dev-mcp@latest"]
+    },
+    "render": {
+      "url": "https://mcp.render.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${env:RENDER_API_KEY}"
+      }
     }
   }
 }
