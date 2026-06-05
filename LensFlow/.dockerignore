@@ -1,7 +1,11 @@
 .cache
 build
 node_modules
+admin-ui/node_modules
 .git
 .shopify
 .env
 *.log
+data
+uploads
+dist

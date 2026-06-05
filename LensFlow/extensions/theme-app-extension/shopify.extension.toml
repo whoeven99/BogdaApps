@@ -1,0 +1,16 @@
+uid = "12884ba6-2346-112c-0d9a-c8b6bce7af1be1f2478c"
+# LensFlow - Shopify Theme App Extension
+
+[[extensions]]
+type = "theme_app_extension"
+name = "LensFlow - Frame + Lens Builder"
+handle = "lensflow-ciwi-ext"
+
+[extensions.settings]
+
+[[extensions.settings.fields]]
+type = "text"
+key = "app_proxy_url"
+name = "App Proxy URL"
+description = "Your LensFlow backend proxy URL (e.g. https://your-app.myshopify.com/apps/lensflow)"
+

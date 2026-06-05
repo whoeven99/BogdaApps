@@ -1,0 +1,71 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Flow {
+  id         String   @id @default(cuid())
+  shopId     String   @default("dev")
+  name       String
+  type       String   @default("prescription_first")
+  status     String   @default("draft")
+  productIds String   @default("[]")
+  config     String   @default("{}")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model LensRule {
+  id             String   @id @default(cuid())
+  shopId         String   @default("dev")
+  name           String
+  priority       Int      @default(0)
+  enabled        Boolean  @default(true)
+  conditionsJson String   @default("[]")
+  actionsJson    String   @default("[]")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model LensOption {
+  id          String   @id @default(cuid())
+  shopId      String   @default("dev")
+  name        String
+  basePrice   Float    @default(0)
+  description String   @default("")
+  imageUrl    String   @default("")
+  products    String   @default("[]")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Prescription {
+  id           String   @id @default(cuid())
+  shopId       String   @default("dev")
+  customerId   String   @default("")
+  submitMethod String   @default("upload")
+  dataJson     String   @default("{}")
+  fileUrl      String   @default("")
+  createdAt    DateTime @default(now())
+}
+
+model Bundle {
+  id              String   @id @default(cuid())
+  shopId          String   @default("dev")
+  flowId          String   @default("")
+  productId       String   @default("")
+  frameVariantId  String   @default("")
+  lensOptionId    String   @default("")
+  lensProductId   String   @default("")
+  lensVariantId   String   @default("")
+  prescriptionId  String   @default("")
+  status          String   @default("draft")
+  cartToken       String   @default("")
+  totalPrice      Float    @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}

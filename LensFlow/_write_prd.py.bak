@@ -1,0 +1,5 @@
+﻿import sys
+content = sys.stdin.buffer.read().decode('utf-8')
+with open(r'D:\下载\LensFlow\PRD.md', 'w', encoding='utf-8-sig') as f:
+    f.write(content)
+print('OK')

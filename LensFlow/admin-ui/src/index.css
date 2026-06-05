@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  background: #f6f6f7;
+  color: #333333;
+  line-height: 1.5;
+}
+
+a {
+  color: #005bd3;
+  text-decoration: none;
+}
+
+a:hover {
+  opacity: 0.8;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+@keyframes lensflow-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.animate-pulse {
+  animation: lensflow-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.ant-table-wrapper {
+  overflow-x: auto;
+}
+
+.ant-card-head-title {
+  overflow: visible !important;
+}

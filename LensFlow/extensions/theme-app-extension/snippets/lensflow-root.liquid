@@ -1,0 +1,22 @@
+<div
+  id="lensflow-root"
+  data-product-id="{{ product.id }}"
+  data-proxy-url="{{ proxy_url }}"
+  data-shop="{{ shop_domain }}"
+  style="display:none"
+></div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    if (!window.LensFlow || typeof window.LensFlow.init !== "function") return;
+
+    window.LensFlow.init({
+      proxyUrl: "{{ proxy_url }}",
+      productId: "{{ product.id }}",
+      shopDomain: "{{ shop_domain }}",
+      productHandle: "{{ product.handle }}",
+      tags: {{ product.tags | json }},
+      collectionIds: [{% for collection in product.collections %}{{ collection.id }}{% unless forloop.last %},{% endunless %}{% endfor %}]
+    });
+  });
+</script>

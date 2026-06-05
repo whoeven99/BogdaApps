@@ -1,0 +1,41 @@
+{
+  "name": "lensflow",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Shopify app for custom glasses prescription flows.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "dev:shopify": "shopify app dev",
+    "config:use:render": "shopify app config use shopify.app.render.toml",
+    "deploy:shopify": "shopify app deploy --config shopify.app.render.toml",
+    "dev:admin": "cd admin-ui && node node_modules/vite/bin/vite.js",
+    "build": "npm --prefix admin-ui install && cd admin-ui && node node_modules/vite/bin/vite.js build",
+    "test": "echo \"No automated tests configured\"",
+    "dev:standalone": "node server.js",
+    "start:backend": "node server.js"
+  },
+  "keywords": [
+    "shopify",
+    "app",
+    "glasses"
+  ],
+  "author": "",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "@shopify/cli": "^3.94.3",
+    "prisma": "^7.8.0"
+  },
+  "dependencies": {
+    "@prisma/client": "^7.8.0",
+    "@shopify/shopify-api": "^13.0.0",
+    "@shopify/shopify-app-express": "^7.0.0",
+    "@shopify/shopify-app-session-storage-memory": "^6.0.0",
+    "better-sqlite3": "^12.10.0",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "playwright": "^1.60.0"
+  }
+}

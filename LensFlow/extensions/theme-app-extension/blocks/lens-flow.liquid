@@ -1,0 +1,28 @@
+{% comment %}LensFlow App Block - Injects Select Lenses button{% endcomment %}
+
+{% assign proxy_url = block.settings.app_proxy_url | default: "/apps/lensflow" %}
+
+{{ 'lens-flow.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'lens-flow.js' | asset_url }}" defer></script>
+
+{% if product %}
+  {% render 'lensflow-root',
+    proxy_url: proxy_url,
+    product: product,
+    shop_domain: shop.permanent_domain %}
+{% endif %}
+
+{% schema %}
+{
+  "name": "LensFlow Button",
+  "target": "section",
+  "settings": [
+    {
+      "type": "text",
+      "id": "app_proxy_url",
+      "label": "App Proxy URL",
+      "default": "/apps/lensflow"
+    }
+  ]
+}
+{% endschema %}

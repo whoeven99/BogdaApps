@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: lensflow
+    runtime: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LENSFLOW_STORE_FILE
+        value: /tmp/lensflow-store.json
+      - key: LENSFLOW_UPLOAD_DIR
+        value: /tmp/lensflow-uploads

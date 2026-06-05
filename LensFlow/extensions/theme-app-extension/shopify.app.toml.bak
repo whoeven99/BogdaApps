@@ -1,0 +1,33 @@
+# LensFlow Shopify App Configuration
+
+name = "LensFlow"
+handle = "lensflow"
+
+[application]
+type = "backend"
+
+[access]
+admin = { direct_api_mode = "offline" }
+
+[auth]
+redirect_urls = [
+  "https://your-app-domain.com/auth/callback",
+  "http://localhost:3001/auth/callback"
+]
+
+[access_scopes]
+scopes = [
+  "read_products",
+  "write_products",
+  "read_inventory",
+  "write_inventory",
+  "read_orders",
+  "write_orders",
+  "read_customers",
+  "write_customers"
+]
+
+[app_proxy]
+prefix = "apps"
+subpath = "lensflow"
+url = "https://your-app-domain.com/proxy"

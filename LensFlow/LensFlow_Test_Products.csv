@@ -1,0 +1,55 @@
+﻿Handle,Title,Body (HTML),Vendor,Type,Tags,Published,Option1 Name,Option1 Value,Option2 Name,Option2 Value,Option3 Name,Option3 Value,Variant SKU,Variant Grams,Variant Inventory Tracker,Variant Inventory Qty,Variant Inventory Policy,Variant Fulfillment Service,Variant Price,Variant Compare At Price,Variant Requires Shipping,Variant Taxable,Variant Barcode,Image Src,Image Position,Image Alt Text,Gift Card,SEO Title,SEO Description,Status
+classic-round-frame,Classic Round Frame,<p>Timeless round metal frame. Lightweight titanium alloy construction with adjustable nose pads.</p>,LensFlow,眼镜框,"classic, round, metal",TRUE,Size,XS,Color,Grey,,,,0,shopify,1,deny,manual,299,399,TRUE,TRUE,,https://images.unsplash.com/photo-1574258495973-f010dfbb5371,1,Metal round glasses frame,FALSE,Classic Round Frame | LensFlow,Timeless round metal frame for LensFlow test,active
+classic-round-frame,,,,,,,Size,S,Color,Matte Black,,,,0,shopify,1,deny,manual,299,399,TRUE,TRUE,,,,,,,,active
+classic-round-frame,,,,,,,Size,XS,Color,Brown,,,,0,shopify,1,deny,manual,299,399,TRUE,TRUE,,,,,,,,active
+classic-round-frame,,,,,,,Size,M,Color,Grey,,,,0,shopify,1,deny,manual,299,399,TRUE,TRUE,,,,,,,,active
+classic-round-frame,,,,,,,Size,M,Color,Matte Black,,,,0,shopify,1,deny,manual,299,399,TRUE,TRUE,,,,,,,,active
+classic-round-frame,,,,,,,Size,M,Color,Brown,,,,0,shopify,1,deny,manual,299,399,TRUE,TRUE,,,,,,,,active
+classic-round-frame,,,,,,,Size,L,Color,Grey,,,,0,shopify,1,deny,manual,299,399,TRUE,TRUE,,,,,,,,active
+classic-round-frame,,,,,,,Size,L,Color,Matte Black,,,,0,shopify,1,deny,manual,299,399,TRUE,TRUE,,,,,,,,active
+classic-round-frame,,,,,,,Size,L,Color,Brown,,,,0,shopify,1,deny,manual,299,399,TRUE,TRUE,,,,,,,,active
+aviator-frame,Aviator Metal Frame,<p>Classic aviator silhouette with double bridge. Polished stainless steel with silicone nose pads.</p>,LensFlow,眼镜框,"aviator, metal, double-bridge",TRUE,Size,XS,Color,Gold,,,,0,shopify,1,deny,manual,359,459,TRUE,TRUE,,https://images.unsplash.com/photo-1591076482161-42ce6da69f67,1,Aviator sunglasses frame,FALSE,Aviator Metal Frame | LensFlow,Classic aviator frame for LensFlow test,active
+aviator-frame,,,,,,,Size,XS,Color,Silver,,,,0,shopify,1,deny,manual,359,459,TRUE,TRUE,,,,,,,,active
+aviator-frame,,,,,,,Size,S,Color,Gold,,,,0,shopify,1,deny,manual,359,459,TRUE,TRUE,,,,,,,,active
+aviator-frame,,,,,,,Size,S,Color,Silver,,,,0,shopify,1,deny,manual,359,459,TRUE,TRUE,,,,,,,,active
+aviator-frame,,,,,,,Size,M,Color,Gold,,,,0,shopify,1,deny,manual,359,459,TRUE,TRUE,,,,,,,,active
+aviator-frame,,,,,,,Size,M,Color,Silver,,,,0,shopify,1,deny,manual,359,459,TRUE,TRUE,,,,,,,,active
+aviator-frame,,,,,,,Size,L,Color,Gold,,,,0,shopify,1,deny,manual,359,459,TRUE,TRUE,,,,,,,,active
+aviator-frame,,,,,,,Size,L,Color,Silver,,,,0,shopify,1,deny,manual,359,459,TRUE,TRUE,,,,,,,,active
+cat-eye-acetate,Cat Eye Acetate Frame,<p>Bold cat-eye shape with rich acetate finish. Chunky temples with gold metal core accent.</p>,LensFlow,眼镜框,"cat-eye, acetate, bold",TRUE,Size,XS,Color,Black,,,,0,shopify,1,deny,manual,329,429,TRUE,TRUE,,https://images.unsplash.com/photo-1511499767150-a48a237f0083,1,Cat-eye acetate glasses,FALSE,Cat Eye Acetate Frame | LensFlow,Bold cat-eye acetate frame for LensFlow test,active
+cat-eye-acetate,,,,,,,Size,XS,Color,Tortoise,,,,0,shopify,1,deny,manual,329,429,TRUE,TRUE,,,,,,,,active
+cat-eye-acetate,,,,,,,Size,S,Color,Black,,,,0,shopify,1,deny,manual,329,429,TRUE,TRUE,,,,,,,,active
+cat-eye-acetate,,,,,,,Size,S,Color,Tortoise,,,,0,shopify,1,deny,manual,329,429,TRUE,TRUE,,,,,,,,active
+cat-eye-acetate,,,,,,,Size,M,Color,Black,,,,0,shopify,1,deny,manual,329,429,TRUE,TRUE,,,,,,,,active
+cat-eye-acetate,,,,,,,Size,M,Color,Tortoise,,,,0,shopify,1,deny,manual,329,429,TRUE,TRUE,,,,,,,,active
+cat-eye-acetate,,,,,,,Size,L,Color,Black,,,,0,shopify,1,deny,manual,329,429,TRUE,TRUE,,,,,,,,active
+cat-eye-acetate,,,,,,,Size,L,Color,Tortoise,,,,0,shopify,1,deny,manual,329,429,TRUE,TRUE,,,,,,,,active
+square-titanium,Square Titanium Frame,<p>Modern square profile in pure titanium. Ultra-lightweight at only 12g. Spring hinge temples.</p>,LensFlow,眼镜框,"square, titanium, lightweight",TRUE,Size,XS,Color,Matte Silver,,,,0,shopify,1,deny,manual,459,599,TRUE,TRUE,,https://images.unsplash.com/photo-1577803645773-f96470509666,1,Square titanium glasses,FALSE,Square Titanium Frame | LensFlow,Ultra-light square titanium frame for LensFlow test,active
+square-titanium,,,,,,,Size,S,Color,Matte Silver,,,,0,shopify,1,deny,manual,459,599,TRUE,TRUE,,,,,,,,active
+square-titanium,,,,,,,Size,S,Color,Matte Black,,,,0,shopify,1,deny,manual,459,599,TRUE,TRUE,,,,,,,,active
+square-titanium,,,,,,,Size,M,Color,Matte Silver,,,,0,shopify,1,deny,manual,459,599,TRUE,TRUE,,,,,,,,active
+square-titanium,,,,,,,Size,M,Color,Matte Black,,,,0,shopify,1,deny,manual,459,599,TRUE,TRUE,,,,,,,,active
+square-titanium,,,,,,,Size,L,Color,Matte Silver,,,,0,shopify,1,deny,manual,459,599,TRUE,TRUE,,,,,,,,active
+square-titanium,,,,,,,Size,L,Color,Matte Black,,,,0,shopify,1,deny,manual,459,599,TRUE,TRUE,,,,,,,,active
+basic-lens,Basic Lens (1.56 Index),<p>Standard CR-39 lens with 1.56 refractive index. Ideal for mild prescriptions. Includes anti-scratch coating.</p>,LensFlow,镜片,"lensflow-lens, basic, non-prescription",TRUE,Prescription Type,Non-Prescription,Coating,None,,,,0,shopify,1,deny,manual,0,0.00,TRUE,TRUE,,,,,FALSE,Basic Lens 1.56 | LensFlow,Standard 1.56 index lens for LensFlow test,active
+basic-lens,,,,,,,Prescription Type,Non-Prescription,Coating,Anti-Scratch,,,,0,shopify,1,deny,manual,50,0.00,TRUE,TRUE,,,,,,,,active
+basic-lens,,,,,,,Prescription Type,Single Vision,Coating,None,,,,0,shopify,1,deny,manual,80,0.00,TRUE,TRUE,,,,,,,,active
+basic-lens,,,,,,,Prescription Type,Single Vision,Coating,Anti-Scratch,,,,0,shopify,1,deny,manual,130,0.00,TRUE,TRUE,,,,,,,,active
+basic-lens,,,,,,,Prescription Type,Reading,Coating,None,,,,0,shopify,1,deny,manual,80,0.00,TRUE,TRUE,,,,,,,,active
+basic-lens,,,,,,,Prescription Type,Reading,Coating,Anti-Scratch,,,,0,shopify,1,deny,manual,130,0.00,TRUE,TRUE,,,,,,,,active
+pro-lens,Pro Lens (1.67 High Index),<p>High-index 1.67 lens with blue light filter. Thinner and lighter than standard lenses. Ideal for moderate to strong prescriptions.</p>,LensFlow,镜片,"lensflow-lens, pro, blue-light",TRUE,Prescription Type,Non-Prescription,Coating,Blue Light Filter,,,,0,shopify,1,deny,manual,80,0.00,TRUE,TRUE,,,,,FALSE,Pro Lens 1.67 | LensFlow,High-index 1.67 lens with blue light filter for LensFlow test,active
+pro-lens,,,,,,,Prescription Type,Non-Prescription,Coating,Anti-Scratch+Blue Light,,,,0,shopify,1,deny,manual,150,0.00,TRUE,TRUE,,,,,,,,active
+pro-lens,,,,,,,Prescription Type,Single Vision,Coating,Blue Light Filter,,,,0,shopify,1,deny,manual,180,0.00,TRUE,TRUE,,,,,,,,active
+pro-lens,,,,,,,Prescription Type,Single Vision,Coating,Anti-Scratch+Blue Light,,,,0,shopify,1,deny,manual,250,0.00,TRUE,TRUE,,,,,,,,active
+pro-lens,,,,,,,Prescription Type,Progressive,Coating,Blue Light Filter,,,,0,shopify,1,deny,manual,280,0.00,TRUE,TRUE,,,,,,,,active
+pro-lens,,,,,,,Prescription Type,Progressive,Coating,Anti-Scratch+Blue Light,,,,0,shopify,1,deny,manual,350,0.00,TRUE,TRUE,,,,,,,,active
+premium-lens,Premium Lens (1.74 Ultra-Thin),<p>Ultra-thin 1.74 index lens. Premium multi-coating with anti-reflective anti-smudge hydrophobic treatment. Best for strong prescriptions.</p>,LensFlow,镜片,"lensflow-lens, premium, ultra-thin",TRUE,Prescription Type,Non-Prescription,Coating,Premium Multi-Coat,,,,0,shopify,1,deny,manual,180,0.00,TRUE,TRUE,,,,,FALSE,Premium Lens 1.74 | LensFlow,Ultra-thin 1.74 premium multi-coat lens for LensFlow test,active
+premium-lens,,,,,,,Prescription Type,Single Vision,Coating,Premium Multi-Coat,,,,0,shopify,1,deny,manual,300,0.00,TRUE,TRUE,,,,,,,,active
+premium-lens,,,,,,,Prescription Type,Progressive,Coating,Premium Multi-Coat,,,,0,shopify,1,deny,manual,480,0.00,TRUE,TRUE,,,,,,,,active
+premium-lens,,,,,,,Prescription Type,Reading,Coating,Premium Multi-Coat,,,,0,shopify,1,deny,manual,300,0.00,TRUE,TRUE,,,,,,,,active
+transition-lens,Transition Lens (Photochromic),<p>Photochromic lens that darkens in sunlight and clears indoors. 1.60 index with UV400 protection. Available in Grey and Brown tint.</p>,LensFlow,镜片,"lensflow-lens, transition, photochromic",TRUE,Prescription Type,Non-Prescription,Tint Color,Grey,,,,0,shopify,1,deny,manual,200,0.00,TRUE,TRUE,,,,,FALSE,Transition Photochromic Lens | LensFlow,Photochromic transition lens with UV400 for LensFlow test,active
+transition-lens,,,,,,,Prescription Type,Non-Prescription,Tint Color,Brown,,,,0,shopify,1,deny,manual,200,0.00,TRUE,TRUE,,,,,,,,active
+transition-lens,,,,,,,Prescription Type,Single Vision,Tint Color,Grey,,,,0,shopify,1,deny,manual,320,0.00,TRUE,TRUE,,,,,,,,active
+transition-lens,,,,,,,Prescription Type,Single Vision,Tint Color,Brown,,,,0,shopify,1,deny,manual,320,0.00,TRUE,TRUE,,,,,,,,active
+transition-lens,,,,,,,Prescription Type,Progressive,Tint Color,Grey,,,,0,shopify,1,deny,manual,480,0.00,TRUE,TRUE,,,,,,,,active
+transition-lens,,,,,,,Prescription Type,Progressive,Tint Color,Brown,,,,0,shopify,1,deny,manual,480,0.00,TRUE,TRUE,,,,,,,,active

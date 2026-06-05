@@ -1,0 +1,30 @@
+﻿name = "LensFlow"
+handle = "lensflow-ciwi-app"
+client_id = "3304d301eae9d52bd29a4d82f762a66c"
+application_url = "https://new-search-app-test.myshopify.com"
+embedded = true
+
+[access]
+admin = { direct_api_mode = "offline" }
+
+[access_scopes]
+scopes = "read_products,write_products,read_inventory,write_inventory,read_orders,write_orders,read_customers,write_customers"
+
+[auth]
+redirect_urls = [
+  "https://localhost:3001/auth/callback",
+  "https://new-search-app-test.myshopify.com/auth/callback"
+]
+
+[build]
+include_config_on_deploy = true
+automatically_update_urls_on_dev = true
+
+[webhooks]
+api_version = "2026-07"
+
+[extensions]
+  [extensions.theme]
+  type = "theme_app_extension"
+  name = "LensFlow Core"
+  root_dir = "./LensFlow/extensions/theme-app-extension"

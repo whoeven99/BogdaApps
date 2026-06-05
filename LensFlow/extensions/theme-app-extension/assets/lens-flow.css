@@ -1,0 +1,545 @@
+/* LensFlow - Frame + Lens Builder Styles */
+:root {
+  --lf-primary: #5c6ac4;
+  --lf-bg: #fff;
+  --lf-text: #202223;
+  --lf-text2: #6d7175;
+  --lf-border: #d2d5d9;
+  --lf-success: #007f5f;
+  --lf-radius: 8px;
+  --lf-accent: #f4f6ff;
+}
+
+#lensflow-select-btn {
+  display: block;
+  width: 100%;
+  padding: 14px 28px;
+  margin-top: 12px;
+  background: var(--lf-primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--lf-radius);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+#lensflow-select-btn:hover { opacity: 0.9; }
+#lensflow-select-btn.lf-btn-replace {
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  margin-top: 0;
+  border-radius: 0;
+}
+#lensflow-select-btn.lf-btn-replace:hover { opacity: 1; }
+
+/* Full-screen Modal */
+.lf-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: lfFadeIn 0.2s;
+}
+@keyframes lfFadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.lf-modal {
+  background: #fff;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 520px;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+  animation: lfSlideUp 0.25s;
+}
+@keyframes lfSlideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+.lf-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--lf-border);
+}
+.lf-modal-header h2 { font-size: 18px; margin: 0; }
+.lf-close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: var(--lf-text2);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+.lf-close-btn:hover { background: #f1f1f1; }
+
+.lf-modal-body { padding: 24px; }
+.lf-modal-footer {
+  display: flex;
+  gap: 12px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--lf-border);
+  justify-content: space-between;
+}
+
+/* === Horizontal Layout === */
+.lf-horizontal-container {
+  display: flex;
+  width: 95%;
+  max-width: 960px;
+  max-height: 90vh;
+  min-height: 500px;
+  background: #fff;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+  animation: lfSlideUp 0.25s;
+}
+.lf-horizontal-image-area {
+  flex: 0 0 45%;
+  background: #fafafa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  position: relative;
+  overflow: hidden;
+}
+.lf-horizontal-image-area img {
+  max-width: 100%;
+  max-height: 380px;
+  object-fit: contain;
+  transition: opacity 0.3s;
+}
+.lf-horizontal-content-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+.lf-horizontal-content-area .lf-modal-header {
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  background: #fff;
+  z-index: 2;
+}
+.lf-horizontal-content-area .lf-progress {
+  flex-shrink: 0;
+  padding: 0 24px;
+  margin-bottom: 16px;
+}
+.lf-horizontal-content-area .lf-modal-body {
+  flex: 1;
+}
+.lf-horizontal-content-area .lf-modal-footer {
+  flex-shrink: 0;
+  position: sticky;
+  bottom: 0;
+  background: #fff;
+  z-index: 2;
+}
+@media (max-width: 768px) {
+  .lf-horizontal-container {
+    flex-direction: column;
+    max-height: 95vh;
+    width: 95%;
+  }
+  .lf-horizontal-image-area {
+    flex: 0 0 180px;
+    padding: 12px;
+  }
+  .lf-horizontal-image-area img {
+    max-height: 150px;
+  }
+}
+
+/* === Inline Layout === */
+.lf-inline-container {
+  width: 100%;
+  max-width: 800px;
+  margin: 24px auto;
+  background: #fff;
+  border: 1px solid var(--lf-border);
+  border-radius: 12px;
+  overflow: hidden;
+  animation: lfSlideUp 0.25s;
+}
+.lf-inline-wrapper {
+  position: relative;
+  z-index: 10;
+}
+body.lf-inline-open {
+  overflow: hidden;
+}
+
+/* === Drawer Layout === */
+.lf-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 99999;
+  animation: lfFadeIn 0.2s;
+}
+.lf-drawer-container {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 440px;
+  max-width: 100vw;
+  background: #fff;
+  z-index: 100000;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -4px 0 24px rgba(0,0,0,0.12);
+  animation: lfDrawerSlide 0.3s ease-out;
+}
+@keyframes lfDrawerSlide { from { transform: translateX(100%); } to { transform: translateX(0); } }
+.lf-drawer-container .lf-modal-header { flex-shrink: 0; position: sticky; top: 0; background: #fff; z-index: 2; }
+.lf-drawer-container .lf-progress { flex-shrink: 0; padding: 0 24px; margin-bottom: 16px; }
+.lf-drawer-container .lf-modal-body { flex: 1; overflow-y: auto; }
+.lf-drawer-container .lf-modal-footer { flex-shrink: 0; position: sticky; bottom: 0; background: #fff; z-index: 2; }
+.lf-drawer-image-area {
+  padding: 16px 24px;
+  background: #fafafa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.lf-drawer-image-area img {
+  max-height: 180px;
+  max-width: 100%;
+  object-fit: contain;
+}
+@media (max-width: 480px) {
+  .lf-drawer-container { width: 100vw; }
+}
+
+/* Progress */
+.lf-progress {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 24px;
+}
+.lf-progress-dot {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: #e4e5e7;
+  transition: background 0.2s;
+}
+.lf-progress-dot.active { background: var(--lf-primary); }
+.lf-progress-dot.done { background: var(--lf-success); }
+
+/* Step content */
+.lf-step-title { font-size: 20px; font-weight: 600; margin-bottom: 8px; }
+.lf-step-desc { font-size: 14px; color: var(--lf-text2); margin-bottom: 20px; }
+
+.lf-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border: 2px solid var(--lf-border);
+  border-radius: var(--lf-radius);
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.lf-option:hover { border-color: var(--lf-primary); }
+.lf-option.selected { border-color: var(--lf-primary); background: #f4f6ff; }
+.lf-option .radio {
+  width: 20px; height: 20px; border-radius: 50%;
+  border: 2px solid var(--lf-border);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lf-option.selected .radio {
+  border-color: var(--lf-primary);
+}
+.lf-option.selected .radio::after {
+  content: "";
+  width: 10px; height: 10px; border-radius: 50%; background: var(--lf-primary);
+}
+.lf-option .info { flex: 1; }
+.lf-option .title { font-weight: 600; font-size: 15px; }
+.lf-option .price { font-size: 14px; color: var(--lf-primary); margin-top: 2px; }
+.lf-option .state-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+.lf-option .state-disabled { background: #fff5d4; color: #8a6d00; }
+
+/* === Lens Variant Selector === */
+.lf-variant-section {
+  margin-top: 16px;
+  padding: 12px;
+  background: #fafafa;
+  border-radius: var(--lf-radius);
+  border: 1px solid var(--lf-border);
+}
+.lf-variant-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lf-text);
+  margin-bottom: 10px;
+}
+.lf-variant-swatch-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.lf-variant-swatch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 2px solid var(--lf-border);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.15s;
+  background: #fff;
+}
+.lf-variant-swatch:hover { border-color: var(--lf-primary); }
+.lf-variant-swatch.selected {
+  border-color: var(--lf-primary);
+  background: var(--lf-accent);
+  color: var(--lf-primary);
+}
+.lf-variant-swatch .swatch-color {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 1px solid rgba(0,0,0,0.1);
+  flex-shrink: 0;
+}
+.lf-variant-select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--lf-border);
+  border-radius: 6px;
+  font-size: 13px;
+  background: #fff;
+  cursor: pointer;
+}
+.lf-variant-price {
+  display: inline-block;
+  font-size: 12px;
+  color: var(--lf-primary);
+  margin-left: 4px;
+  font-weight: 600;
+}
+
+/* === Product Image Preview in Lens Step === */
+.lf-lens-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #fafafa;
+  border-radius: var(--lf-radius);
+  margin-bottom: 16px;
+  border: 1px solid var(--lf-border);
+}
+.lf-lens-preview img {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #eee;
+}
+.lf-lens-preview .lf-lens-preview-info {
+  flex: 1;
+  min-width: 0;
+}
+.lf-lens-preview .lf-lens-preview-name {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+.lf-lens-preview .lf-lens-preview-meta {
+  font-size: 12px;
+  color: var(--lf-text2);
+}
+
+/* Buttons */
+.lf-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px 24px;
+  border-radius: var(--lf-radius);
+  border: none;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.lf-btn:hover { opacity: 0.9; }
+.lf-btn-primary { background: var(--lf-primary); color: #fff; }
+.lf-btn-secondary { background: #f1f1f1; color: var(--lf-text); }
+.lf-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.lf-btn-full { width: 100%; }
+
+/* Review */
+.lf-review-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid #f1f1f1;
+}
+.lf-review-label { color: var(--lf-text2); }
+.lf-review-value { font-weight: 600; }
+
+/* Upload area */
+.lf-upload-area {
+  border: 2px dashed var(--lf-border);
+  border-radius: var(--lf-radius);
+  padding: 32px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.lf-upload-area:hover { border-color: var(--lf-primary); }
+.lf-upload-area.dragover { border-color: var(--lf-primary); background: #f4f6ff; }
+.lf-upload-icon { font-size: 40px; margin-bottom: 8px; }
+.lf-upload-text { font-size: 14px; color: var(--lf-text2); }
+
+/* Form inputs */
+.lf-form-group { margin-bottom: 14px; }
+.lf-form-group label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.lf-form-group input { width: 100%; padding: 10px 12px; border: 1px solid var(--lf-border); border-radius: 6px; font-size: 14px; }
+.lf-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+/* File preview */
+.lf-file-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  background: #f6f7fb;
+  border-radius: 6px;
+  margin-top: 8px;
+}
+.lf-file-preview .name { flex: 1; font-size: 13px; }
+.lf-file-preview .remove { cursor: pointer; color: var(--lf-text2); }
+
+/* Bundle summary */
+.lf-bundle-price {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--lf-primary);
+  text-align: center;
+  padding: 16px;
+}
+.lf-bundle-breakdown {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 12px 0;
+  font-size: 14px;
+}
+
+/* Loading */
+.lf-spinner {
+  display: inline-block;
+  width: 20px; height: 20px;
+  border: 2px solid #fff;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: lfSpin 0.6s linear infinite;
+}
+@keyframes lfSpin { to { transform: rotate(360deg); } }
+
+/* Error / Success */
+.lf-alert {
+  padding: 12px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+.lf-alert-error { background: #fbeae5; color: #d82c0d; }
+.lf-alert-success { background: #d4f7e8; color: var(--lf-success); }
+
+/* Lens option image & description */
+.lf-opt-img {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #eee;
+  margin-top: 6px;
+}
+.lf-opt-desc {
+  font-size: 12px;
+  color: var(--lf-text2, #888);
+  margin-top: 2px;
+  line-height: 1.4;
+}
+
+/* === Lens card with image === */
+.lf-lens-card {
+  display: flex;
+  gap: 14px;
+  padding: 14px;
+  border: 2px solid var(--lf-border);
+  border-radius: var(--lf-radius);
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  align-items: flex-start;
+}
+.lf-lens-card:hover { border-color: var(--lf-primary); }
+.lf-lens-card.selected { border-color: var(--lf-primary); background: var(--lf-accent); }
+.lf-lens-card .lf-lens-card-img {
+  width: 56px; height: 56px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #eee;
+  flex-shrink: 0;
+}
+.lf-lens-card .lf-lens-card-body { flex: 1; min-width: 0; }
+.lf-lens-card .lf-lens-card-title { font-weight: 600; font-size: 15px; margin-bottom: 4px; }
+.lf-lens-card .lf-lens-card-desc { font-size: 12px; color: var(--lf-text2); line-height: 1.4; margin-bottom: 6px; }
+.lf-lens-card .lf-lens-card-features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.lf-lens-card .lf-lens-card-feature {
+  font-size: 11px;
+  padding: 2px 8px;
+  background: #e8f0fe;
+  color: #005bd3;
+  border-radius: 4px;
+  font-weight: 500;
+}
+.lf-lens-card .lf-lens-card-price {
+  font-size: 15px;
+  color: var(--lf-primary);
+  font-weight: 700;
+}
+
+/* === Image Swap Animation === */
+.lf-image-swap-target {
+  transition: opacity 0.25s ease;
+}
+.lf-image-swap-target.lf-swapping {
+  opacity: 0;
+}

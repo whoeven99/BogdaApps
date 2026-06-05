@@ -1,0 +1,46 @@
+# This is the configuration file for your Shopify app.
+# More details can be found here: https://shopify.dev/docs/apps/tools/cli/configuration
+
+name = "LensFlow"
+client_id = "<SHOPIFY_API_KEY>" # Will be filled in by Shopify CLI
+application_url = "<HOST>" # Will be filled in by Shopify CLI
+
+# These scopes are required by the app to function correctly, based on PRD section 4.
+scopes = "read_products,write_products,read_themes,write_themes,read_orders,read_inventory"
+
+# This section defines the entry points for your app's extensions.
+# We will have a theme app extension for the storefront functionality.
+[extensions]
+
+  # Theme App Extension for the storefront experience (PRD section 12)
+  [extensions.theme]
+  type = "theme_app_extension"
+  name = "LensFlow Core"
+
+  # The directory where your extension files are located.
+  root_dir = "./extensions/theme-app-extension"
+
+# This section configures the webhooks for your app (PRD section 8).
+[webhooks]
+api_version = "2023-10"
+
+  # Product update webhook
+  [[webhooks.subscriptions]]
+  topics = [ "products/update" ]
+  uri = "/api/webhooks/products_update"
+
+  # Product delete webhook
+  [[webhooks.subscriptions]]
+  topics = [ "products/delete" ]
+  uri = "/api/webhooks/products_delete"
+
+  # Inventory update webhook
+  [[webhooks.subscriptions]]
+  topics = [ "inventory_levels/update" ]
+  uri = "/api/webhooks/inventory_update"
+
+# This section defines the command to run your app's backend.
+# For now, we will point it to a placeholder file.
+[build]
+# We will need to create a server entrypoint, e.g., using Express.
+command = "npm run start:backend"

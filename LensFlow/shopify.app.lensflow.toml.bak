@@ -1,0 +1,25 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+name = "LensFlow"
+client_id = "3304d301eae9d52bd29a4d82f762a66c"
+application_url = "https://shopify.dev/apps/default-app-home"
+embedded = true
+
+[extensions.theme]
+type = "theme_app_extension"
+name = "LensFlow Core"
+root_dir = "./extensions/theme-app-extension"
+
+[webhooks]
+api_version = "2026-07"
+
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = ""
+
+[auth]
+redirect_urls = [ "https://shopify.dev/apps/default-app-home/api/auth" ]
+
+[build]
+automatically_update_urls_on_dev = true

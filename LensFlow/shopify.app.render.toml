@@ -1,0 +1,32 @@
+name = "LensFlow"
+client_id = "3304d301eae9d52bd29a4d82f762a66c"
+application_url = "https://bogdaapps-dnz0.onrender.com"
+embedded = true
+
+[access]
+admin = { direct_api_mode = "offline" }
+
+[access_scopes]
+scopes = "read_products,write_products,read_inventory,write_inventory,read_orders,write_orders,read_customers,write_customers"
+
+[auth]
+redirect_urls = [
+  "https://bogdaapps-dnz0.onrender.com/api/auth/callback",
+  "http://localhost:3001/api/auth/callback"
+]
+
+[app_proxy]
+prefix = "apps"
+subpath = "lensflow"
+url = "https://bogdaapps-dnz0.onrender.com"
+
+[extensions.theme]
+type = "theme_app_extension"
+name = "LensFlow Core"
+root_dir = "./extensions/theme-app-extension"
+
+[webhooks]
+api_version = "2026-07"
+
+[build]
+automatically_update_urls_on_dev = true
