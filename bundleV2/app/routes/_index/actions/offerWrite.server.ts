@@ -429,7 +429,10 @@ export async function handleCreateOrUpdateOffer(
   }
 
   invalidateShopOffersCache(shopName);
-  void runOfferPostWriteSync(admin, shopName).catch((error) => {
+  void runOfferPostWriteSync(admin, shopName, {
+    trigger: intent === "create-offer" ? "create-offer" : "update-offer",
+    offerId: idRaw || undefined,
+  }).catch((error) => {
     console.error("Offer post-write sync crashed unexpectedly", { shopName, error });
   });
 

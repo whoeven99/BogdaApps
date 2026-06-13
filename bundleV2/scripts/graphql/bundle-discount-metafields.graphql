@@ -1,0 +1,47 @@
+# Automatic Discount 节点上的 Function metafields
+# 用法: shopify store execute --store <shop>.myshopify.com --json --query-file scripts/graphql/bundle-discount-metafields.graphql
+# 需要 scope: read_discounts
+
+query BundleDiscountMetafields {
+  discountNodes(first: 20, query: "method:automatic AND status:active") {
+    nodes {
+      id
+      discount {
+        __typename
+        ... on DiscountAutomaticApp {
+          title
+          status
+          discountClasses
+        }
+      }
+      appOwnedOffers: metafield(namespace: "$app:ciwi_bundle", key: "offers") {
+        namespace
+        key
+        type
+        updatedAt
+        value
+      }
+      appOwnedOffersShard1: metafield(namespace: "$app:ciwi_bundle", key: "offers-1") {
+        namespace
+        key
+        type
+        updatedAt
+        value
+      }
+      defaultAppOffers: metafield(namespace: "$app", key: "offers") {
+        namespace
+        key
+        type
+        updatedAt
+        value
+      }
+      defaultAppOffersShard1: metafield(namespace: "$app", key: "offers-1") {
+        namespace
+        key
+        type
+        updatedAt
+        value
+      }
+    }
+  }
+}

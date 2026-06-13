@@ -69,11 +69,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .pop() ?? "";
   const themeTargets = await fetchThemeEditorTargets(admin);
 
-  const syncResult = await syncShopOffersMetafield(admin, session.shop);
+  const syncResult = await syncShopOffersMetafield(admin, session.shop, { trigger: "loader" });
   if (!syncResult.ok) {
     console.error("Failed to sync shop offers metafield in loader", {
       shopName: session.shop,
       message: syncResult.message,
+      step: syncResult.step,
     });
   }
 
