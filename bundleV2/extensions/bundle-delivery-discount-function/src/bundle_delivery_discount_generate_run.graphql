@@ -62,7 +62,11 @@ query CartDeliveryDiscountInput {
   }
   discount {
     discountClasses
+    # 分片：offers + offers-1（各 <10KB），运行时合并。需与 OFFER_SHARD_KEYS 一致。
     offersFromDiscountOwner: metafield(namespace: "$app:ciwi_bundle", key: "offers") {
+      jsonValue
+    }
+    offersShard1: metafield(namespace: "$app:ciwi_bundle", key: "offers-1") {
       jsonValue
     }
   }

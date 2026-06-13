@@ -9,7 +9,12 @@ import {
   BUNDLE_METAFIELD_FUNCTION_OFFERS_KEY,
 } from "../../utils/bundleShopMetafieldKeys";
 import { createShopOfferSyncScheduler } from "../../routes/_index/offerSyncScheduler";
-import { buildCompactOffersPayload, buildStorefrontOffersStructured } from "./offerPayload.server";
+import {
+  buildCompactOffersPayload,
+  buildStorefrontOffersStructured,
+  measureUtf8Bytes,
+  FUNCTION_OFFERS_MAX_BYTES,
+} from "./offerPayload.server";
 import type { OfferListItem } from "../../routes/_index/types";
 
 type AdminType = {
@@ -116,10 +121,13 @@ export async function syncShopOffersMetafield(
       offers: storefrontStructured.offers,
     });
 
-    const functionInputUtf8Bytes = new TextEncoder().encode(functionMetafieldValue).length;
-    if (functionInputUtf8Bytes > 10_000) {
+    // 后台写入路径的兜底告警。正常情况下 offerWrite 的字节守卫已在保存前拦截超限；
+    // 这里再记一次（例如批量导入 / 历史数据走到此路径时），便于排查。
+    const functionInputUtf8Bytes = measureUtf8Bytes(functionMetafieldValue);
+    if (functionInputUtf8Bytes > FUNCTION_OFFERS_MAX_BYTES) {
       console.warn("[offers-sync] compact offers JSON exceeds Shopify Function input limit (~10kB)", {
         utf8Bytes: functionInputUtf8Bytes,
+        limit: FUNCTION_OFFERS_MAX_BYTES,
         key: BUNDLE_METAFIELD_FUNCTION_OFFERS_KEY,
       });
     }

@@ -12,6 +12,10 @@ import {
   trimOfferSettingsJsonForFunction,
 } from "./utils/offerParsing";
 import { sanitizeEnvLikeValue, sanitizeUrlLikeEnvValue } from "./utils/env";
+import {
+  OFFER_SHARD_KEYS,
+  buildShardedClassPayloads,
+} from "./server/offers/offerPayload.server";
 
 const CART_LINES_DISCOUNT_FUNCTION_TITLE = "Bundle Cart Discount Function";
 const CART_LINES_PRODUCT_DISCOUNT_AUTO_TITLE = "Ciwi Bundle Auto Product Discount";
@@ -366,39 +370,61 @@ export async function syncCartLinesAutomaticDiscountMetafield(
       };
     }
 
-    const payloadByClass = new Map<FunctionDiscountClass, string>([
-      ["PRODUCT", buildAutomaticDiscountOffersPayloadForClass(metafieldValue, "PRODUCT")],
-      ["ORDER", buildAutomaticDiscountOffersPayloadForClass(metafieldValue, "ORDER")],
-      ["SHIPPING", buildAutomaticDiscountOffersPayloadForClass(metafieldValue, "SHIPPING")],
+    // 每个 class 的 payload 切成 OFFER_SHARD_KEYS 个分片（各 <10KB），Function 读这些固定 key 再合并。
+    const shardsByClass = new Map<FunctionDiscountClass, string[]>([
+      ["PRODUCT", buildShardedClassPayloads(metafieldValue, "PRODUCT").shards],
+      ["ORDER", buildShardedClassPayloads(metafieldValue, "ORDER").shards],
+      ["SHIPPING", buildShardedClassPayloads(metafieldValue, "SHIPPING").shards],
     ]);
+    const emptyShards = buildShardedClassPayloads(undefined, null).shards;
+    const shardsForClass = (cls: FunctionDiscountClass): string[] =>
+      shardsByClass.get(cls) || emptyShards;
+    /** owner 上每个分片在两个 namespace 各写一份（含 ownerId，供 metafieldsSet）。 */
+    const buildOwnerShardMetafields = (ownerId: string, shards: string[]) =>
+      OFFER_SHARD_KEYS.flatMap((key, idx) => {
+        const value = shards[idx] ?? emptyShards[idx];
+        return [
+          { ownerId, namespace: CART_LINES_DISCOUNT_METAFIELD_NAMESPACE, key, type: "json", value },
+          { ownerId, namespace: CART_LINES_DISCOUNT_DEFAULT_APP_NAMESPACE, key, type: "json", value },
+        ];
+      });
+    /** 不含 ownerId 的分片 metafield（供 discountAutomaticAppUpdate）。 */
+    const buildUpdateShardMetafields = (shards: string[]) =>
+      OFFER_SHARD_KEYS.flatMap((key, idx) => {
+        const value = shards[idx] ?? emptyShards[idx];
+        return [
+          { namespace: CART_LINES_DISCOUNT_METAFIELD_NAMESPACE, key, type: "json", value },
+          { namespace: CART_LINES_DISCOUNT_DEFAULT_APP_NAMESPACE, key, type: "json", value },
+        ];
+      });
     const ownerAssignments = syncTargets.flatMap((target) =>
       target.ownerIds.map((ownerId) => ({
         ownerId,
         discountClass: target.discountClass,
-        payload: payloadByClass.get(target.discountClass) || buildAutomaticDiscountOffersPayload(),
+        shards: shardsForClass(target.discountClass),
       })),
     );
 
     console.log("[discount][sync-meta] resolved sync targets", {
       targetCount: syncTargets.length,
       ownerCount: ownerAssignments.length,
+      shardKeys: OFFER_SHARD_KEYS,
       targets: syncTargets.map((target) => ({
         nodeId: target.nodeId,
         ownerIds: target.ownerIds,
         title: target.title,
         discountClass: target.discountClass,
-        payloadLength: (payloadByClass.get(target.discountClass) || "").length,
+        shardBytes: shardsForClass(target.discountClass).map((s) => s.length),
       })),
     });
 
     // 先用 discountAutomaticAppUpdate 写入函数 owner 的 metafields（与函数运行时 owner 最稳定对齐）
     for (const target of syncTargets) {
-      const payload =
-        payloadByClass.get(target.discountClass) || buildAutomaticDiscountOffersPayload();
+      const shards = shardsForClass(target.discountClass);
       console.log("[discount][sync-meta] updating automatic app discount metafields", {
         discountNodeId: target.nodeId,
         discountClass: target.discountClass,
-        payloadLength: payload.length,
+        shardBytes: shards.map((s) => s.length),
       });
       const updateResp = await admin.graphql(
         `#graphql
@@ -419,20 +445,7 @@ export async function syncCartLinesAutomaticDiscountMetafield(
           variables: {
             id: target.nodeId,
             automaticAppDiscount: {
-              metafields: [
-                {
-                  namespace: CART_LINES_DISCOUNT_METAFIELD_NAMESPACE,
-                  key: CART_LINES_DISCOUNT_METAFIELD_KEY,
-                  type: "json",
-                  value: payload,
-                },
-                {
-                  namespace: CART_LINES_DISCOUNT_DEFAULT_APP_NAMESPACE,
-                  key: CART_LINES_DISCOUNT_METAFIELD_KEY,
-                  type: "json",
-                  value: payload,
-                },
-              ],
+              metafields: buildUpdateShardMetafields(shards),
             },
           },
         },
@@ -487,22 +500,9 @@ export async function syncCartLinesAutomaticDiscountMetafield(
       `,
       {
         variables: {
-          metafields: ownerAssignments.flatMap((assignment) => [
-            {
-              ownerId: assignment.ownerId,
-              namespace: CART_LINES_DISCOUNT_METAFIELD_NAMESPACE,
-              key: CART_LINES_DISCOUNT_METAFIELD_KEY,
-              type: "json",
-              value: assignment.payload,
-            },
-            {
-              ownerId: assignment.ownerId,
-              namespace: CART_LINES_DISCOUNT_DEFAULT_APP_NAMESPACE,
-              key: CART_LINES_DISCOUNT_METAFIELD_KEY,
-              type: "json",
-              value: assignment.payload,
-            },
-          ]),
+          metafields: ownerAssignments.flatMap((assignment) =>
+            buildOwnerShardMetafields(assignment.ownerId, assignment.shards),
+          ),
         },
       },
     );

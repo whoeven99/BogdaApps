@@ -1,6 +1,13 @@
 import prisma from "../../../db.server";
 import { invalidateShopOffersCache } from "../../../shopOffersCache.server";
-import { runOfferPostWriteSync } from "../../../server/offers/offerSync.server";
+import { runOfferPostWriteSync, loadShopOffersForSync } from "../../../server/offers/offerSync.server";
+import {
+  buildCompactOffersPayload,
+  offersFitWithinShardLimits,
+  FUNCTION_OFFERS_MAX_BYTES,
+  OFFER_SHARD_COUNT,
+} from "../../../server/offers/offerPayload.server";
+import type { OfferListItem } from "../types";
 import {
   OFFER_TEXT_LIMITS,
   clampNumber,
@@ -315,6 +322,49 @@ export async function handleCreateOrUpdateOffer(
   const legacyCreateData = { ...createData, campaignConfigJson: undefined };
   const updateData = baseData;
   const legacyUpdateData = { ...updateData, campaignConfigJson: undefined };
+
+  // 字节守卫：Shopify Function 单 metafield 值 >10KB 将不会被返回，导致全店折扣静默失效。
+  // 在写库前构造"假如保存后"的全量 Function payload，超限则拒绝保存并把错误返回前端。
+  // 仅在新 payload 既超限、又不小于当前值时拦截，避免已超限的老店连"缩小编辑"都被锁死。
+  {
+    const existingOffers = await loadShopOffersForSync(shopName);
+    const prospectiveOffer = {
+      id: idRaw ?? "pending-new-offer-id-placeholder",
+      name,
+      cartTitle,
+      offerType,
+      startTime,
+      endTime,
+      status,
+      campaignConfigJson,
+      offerSettingsJson,
+      selectedProductsJson: selectedProductsJson || null,
+      discountRulesJson: discountRulesJson || null,
+    } as unknown as OfferListItem;
+    const prospectiveOffers: OfferListItem[] =
+      intent === "create-offer"
+        ? [...existingOffers, prospectiveOffer]
+        : existingOffers.map((o) => (o.id === idRaw ? prospectiveOffer : o));
+
+    // 按 discount class 校验分片是否放得下（每类最多 OFFER_SHARD_COUNT 片、各 <10KB）。
+    const prospectiveFit = offersFitWithinShardLimits(
+      await buildCompactOffersPayload(prospectiveOffers),
+    );
+    if (!prospectiveFit.ok) {
+      const currentFit = offersFitWithinShardLimits(
+        await buildCompactOffersPayload(existingOffers),
+      );
+      // 只在"当前未溢出、这次改动导致溢出"时拦截，避免已溢出的老店连缩小编辑都被锁死。
+      if (currentFit.ok) {
+        return offerActionErrorResponse(
+          `Offer configuration is too large for the checkout discount engine (overflow in discount ${
+            prospectiveFit.overflowClasses.length > 1 ? "classes" : "class"
+          }: ${prospectiveFit.overflowClasses.join(", ")}). Each class allows ${OFFER_SHARD_COUNT} shards of ${FUNCTION_OFFERS_MAX_BYTES} bytes. Reduce selected products or split into separate offers.`,
+          422,
+        );
+      }
+    }
+  }
 
   if (intent === "create-offer") {
     try {
