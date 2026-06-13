@@ -1,0 +1,21 @@
+# Shop 级 bundle offers metafields（namespace: ciwi_bundle）
+# 用法: shopify store execute --store <shop>.myshopify.com --json --query-file scripts/graphql/bundle-shop-metafields.graphql
+
+query BundleShopMetafields {
+  shop {
+    id
+    name
+    myshopifyDomain
+    metafields(first: 50, namespace: "ciwi_bundle") {
+      edges {
+        node {
+          key
+          namespace
+          type
+          updatedAt
+          value
+        }
+      }
+    }
+  }
+}

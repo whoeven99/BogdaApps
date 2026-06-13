@@ -15,13 +15,18 @@ import {
   measureUtf8Bytes,
   FUNCTION_OFFERS_MAX_BYTES,
 } from "./offerPayload.server";
+import {
+  logOfferMetafieldSyncFailure,
+  logOfferMetafieldSyncPhase,
+  type OfferMetafieldSyncContext,
+} from "./offerSyncLog.server";
 import type { OfferListItem } from "../../routes/_index/types";
 
 type AdminType = {
   graphql: (query: string, opts?: { variables?: unknown }) => Promise<{ json: () => Promise<unknown> }>;
 };
 
-type SyncResult = { ok: true } | { ok: false; message: string };
+type SyncResult = { ok: true } | { ok: false; message: string; step?: string };
 
 function isMissingCampaignConfigColumn(error: unknown): boolean {
   const msg = (error instanceof Error ? error.message : String(error)).toLowerCase();
@@ -50,6 +55,7 @@ export async function loadShopOffersForSync(shopNameToSync: string): Promise<Off
       orderBy: { createdAt: "desc" },
       select: {
         id: true,
+        shopName: true,
         name: true,
         cartTitle: true,
         offerType: true,
@@ -59,10 +65,6 @@ export async function loadShopOffersForSync(shopNameToSync: string): Promise<Off
         selectedProductsJson: true,
         discountRulesJson: true,
         offerSettingsJson: true,
-        exposurePV: true,
-        addToCartPV: true,
-        gmv: true,
-        conversion: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -75,15 +77,17 @@ export async function loadShopOffersForSync(shopNameToSync: string): Promise<Off
 async function syncFunctionOwnerOffersMetafield(
   admin: AdminType,
   shopNameToSync: string,
+  syncContext: OfferMetafieldSyncContext,
 ): Promise<SyncResult> {
   try {
     const shopOffers = await loadShopOffersForSync(shopNameToSync);
     const functionMetafieldValue = await buildCompactOffersPayload(shopOffers);
-    console.log("[offers-sync][function-owner] syncing payload", {
-      shopName: shopNameToSync,
+    const activeOffers = shopOffers.filter(isOfferPublishedForBundleMetafieldSync);
+    logOfferMetafieldSyncPhase("discount-metafields-ok", shopNameToSync, syncContext, {
+      step: "discount-sync-start",
       offerCount: shopOffers.length,
-      activeOffers: shopOffers.filter(isOfferPublishedForBundleMetafieldSync).length,
-      payloadLength: functionMetafieldValue.length,
+      activeOfferCount: activeOffers.length,
+      compactPayloadBytes: measureUtf8Bytes(functionMetafieldValue),
     });
     await reconcileBundleAutomaticDiscounts(admin);
     const discountSyncResult = await syncCartLinesAutomaticDiscountMetafield(
@@ -91,38 +95,70 @@ async function syncFunctionOwnerOffersMetafield(
       functionMetafieldValue,
     );
     if (!discountSyncResult.ok) {
-      console.error("[offers-sync][function-owner] sync failed", discountSyncResult);
-      return discountSyncResult;
+      logOfferMetafieldSyncPhase("discount-metafields-failed", shopNameToSync, syncContext, {
+        message: discountSyncResult.message,
+      });
+      return { ...discountSyncResult, step: "discount-metafields" };
     }
+    logOfferMetafieldSyncPhase("discount-metafields-ok", shopNameToSync, syncContext, {
+      step: "discount-sync-complete",
+    });
     return { ok: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : JSON.stringify(error);
-    console.error("[offers-sync][function-owner] unexpected exception", { shopName: shopNameToSync, message });
-    return { ok: false, message };
+    logOfferMetafieldSyncFailure(shopNameToSync, syncContext, "discount-metafields", error);
+    return { ok: false, message, step: "discount-metafields" };
   }
 }
 
 export async function syncShopOffersMetafield(
   admin: AdminType,
   shopNameToSync: string,
+  syncContext: OfferMetafieldSyncContext = { trigger: "loader" },
 ): Promise<SyncResult> {
+  const startedAt = Date.now();
+  logOfferMetafieldSyncPhase("start", shopNameToSync, syncContext);
+
   try {
-    console.log("[offers-sync] start syncShopOffersMetafield", { shopName: shopNameToSync });
     const shopOffers = await loadShopOffersForSync(shopNameToSync);
-    console.log("[offers-sync] loaded offers from db", {
-      shopName: shopNameToSync,
+    const activeOffers = shopOffers.filter(isOfferPublishedForBundleMetafieldSync);
+    logOfferMetafieldSyncPhase("db-loaded", shopNameToSync, syncContext, {
       offerCount: shopOffers.length,
+      activeOfferCount: activeOffers.length,
+      durationMs: Date.now() - startedAt,
     });
 
-    const functionMetafieldValue = await buildCompactOffersPayload(shopOffers);
-    const storefrontStructured = await buildStorefrontOffersStructured(admin, shopOffers);
+    let functionMetafieldValue: string;
+    try {
+      functionMetafieldValue = await buildCompactOffersPayload(shopOffers);
+    } catch (error) {
+      logOfferMetafieldSyncFailure(shopNameToSync, syncContext, "compact-payload-built", error);
+      const message = error instanceof Error ? error.message : JSON.stringify(error);
+      return { ok: false, message, step: "compact-payload-built" };
+    }
+    logOfferMetafieldSyncPhase("compact-payload-built", shopNameToSync, syncContext, {
+      compactPayloadBytes: measureUtf8Bytes(functionMetafieldValue),
+      activeOfferCount: activeOffers.length,
+    });
+
+    let storefrontStructured: Awaited<ReturnType<typeof buildStorefrontOffersStructured>>;
+    try {
+      storefrontStructured = await buildStorefrontOffersStructured(admin, shopOffers);
+    } catch (error) {
+      logOfferMetafieldSyncFailure(shopNameToSync, syncContext, "storefront-built", error);
+      const message = error instanceof Error ? error.message : JSON.stringify(error);
+      return { ok: false, message, step: "storefront-built" };
+    }
     const mergedStorefrontPreview = JSON.stringify({
       updatedAt: storefrontStructured.updatedAt,
       offers: storefrontStructured.offers,
     });
+    logOfferMetafieldSyncPhase("storefront-built", shopNameToSync, syncContext, {
+      syncAt: storefrontStructured.updatedAt,
+      storefrontOfferCount: storefrontStructured.offers.length,
+      storefrontPayloadBytes: measureUtf8Bytes(mergedStorefrontPreview),
+    });
 
-    // 后台写入路径的兜底告警。正常情况下 offerWrite 的字节守卫已在保存前拦截超限；
-    // 这里再记一次（例如批量导入 / 历史数据走到此路径时），便于排查。
     const functionInputUtf8Bytes = measureUtf8Bytes(functionMetafieldValue);
     if (functionInputUtf8Bytes > FUNCTION_OFFERS_MAX_BYTES) {
       console.warn("[offers-sync] compact offers JSON exceeds Shopify Function input limit (~10kB)", {
@@ -132,21 +168,34 @@ export async function syncShopOffersMetafield(
       });
     }
 
-    const shopIdResponse = await admin.graphql(`#graphql query ShopId { shop { id } }`);
-    const shopIdJson = (await shopIdResponse.json()) as {
-      data?: { shop?: { id?: string } };
-      errors?: Array<{ message?: string }>;
-    };
-
-    if (shopIdJson.errors?.length) {
-      return {
-        ok: false,
-        message: shopIdJson.errors.map((e) => e.message || "unknown").join("; "),
+    let shopId: string | undefined;
+    try {
+      const shopIdResponse = await admin.graphql(`#graphql query ShopId { shop { id } }`);
+      const shopIdJson = (await shopIdResponse.json()) as {
+        data?: { shop?: { id?: string } };
+        errors?: Array<{ message?: string }>;
       };
+
+      if (shopIdJson.errors?.length) {
+        const message = shopIdJson.errors.map((e) => e.message || "unknown").join("; ");
+        logOfferMetafieldSyncFailure(shopNameToSync, syncContext, "shop-id-resolved", message);
+        return { ok: false, message, step: "shop-id-resolved" };
+      }
+
+      shopId = shopIdJson?.data?.shop?.id;
+    } catch (error) {
+      logOfferMetafieldSyncFailure(shopNameToSync, syncContext, "shop-id-resolved", error);
+      const message = error instanceof Error ? error.message : JSON.stringify(error);
+      return { ok: false, message, step: "shop-id-resolved" };
     }
 
-    const shopId = shopIdJson?.data?.shop?.id;
-    if (!shopId) return { ok: false, message: "Failed to get shop ID, Metafield update failed" };
+    if (!shopId) {
+      const message = "Failed to get shop ID, Metafield update failed";
+      logOfferMetafieldSyncFailure(shopNameToSync, syncContext, "shop-id-resolved", message);
+      return { ok: false, message, step: "shop-id-resolved" };
+    }
+
+    logOfferMetafieldSyncPhase("shop-id-resolved", shopNameToSync, syncContext, { shopId });
 
     const shardSync = await reconcileShopOfferShardedMetafields(admin, shopId, {
       syncAtIso: storefrontStructured.updatedAt,
@@ -154,35 +203,62 @@ export async function syncShopOffersMetafield(
       functionOffersCompactPayload: functionMetafieldValue,
     });
     if (!shardSync.ok) {
-      console.error("[offers-sync] sharded metafield sync failed", shardSync);
-      return shardSync;
+      logOfferMetafieldSyncPhase("shop-metafields-failed", shopNameToSync, syncContext, {
+        message: shardSync.message,
+      });
+      return { ...shardSync, step: "shop-metafields" };
     }
 
-    const discountSyncResult = await syncFunctionOwnerOffersMetafield(admin, shopNameToSync);
+    logOfferMetafieldSyncPhase("shop-metafields-ok", shopNameToSync, syncContext, {
+      shopId,
+      syncAt: storefrontStructured.updatedAt,
+      keys: ["ciwi-bundle-offer-sync-at", "ciwi-bundle-offers", "ciwi-bundle-offers-fn"],
+      storefrontPayloadBytes: measureUtf8Bytes(mergedStorefrontPreview),
+      functionPreviewPayloadBytes: measureUtf8Bytes(functionMetafieldValue),
+    });
+
+    const discountSyncResult = await syncFunctionOwnerOffersMetafield(
+      admin,
+      shopNameToSync,
+      syncContext,
+    );
     if (!discountSyncResult.ok) {
-      console.error("[offers-sync] sync discount owner metafield failed", discountSyncResult);
       return discountSyncResult;
     }
 
-    console.log("[offers-sync] success", { shopName: shopNameToSync, shopId });
+    logOfferMetafieldSyncPhase("complete", shopNameToSync, syncContext, {
+      shopId,
+      offerCount: shopOffers.length,
+      activeOfferCount: activeOffers.length,
+      durationMs: Date.now() - startedAt,
+      result: "success",
+    });
     return { ok: true };
   } catch (error) {
     const msg = error instanceof Error ? error.message : JSON.stringify(error);
-    console.error("[offers-sync] unexpected exception", error);
-    return { ok: false, message: msg || "Metafield sync failed" };
+    logOfferMetafieldSyncFailure(shopNameToSync, syncContext, "unexpected", error, {
+      durationMs: Date.now() - startedAt,
+    });
+    return { ok: false, message: msg || "Metafield sync failed", step: "unexpected" };
   }
 }
 
 const OFFER_POST_WRITE_SYNC_TIMEOUT_MS = 8_000;
 const offerPostWriteSyncScheduler = createShopOfferSyncScheduler();
 
-export async function runOfferPostWriteSync(admin: AdminType, shopName: string): Promise<void> {
+export async function runOfferPostWriteSync(
+  admin: AdminType,
+  shopName: string,
+  syncContext: OfferMetafieldSyncContext = { trigger: "loader" },
+): Promise<void> {
+  const startedAt = Date.now();
+
   const syncTask = offerPostWriteSyncScheduler.schedule(shopName, async () => {
-    const syncResult = await syncShopOffersMetafield(admin, shopName);
+    const syncResult = await syncShopOffersMetafield(admin, shopName, syncContext);
     if (!syncResult.ok) {
-      console.error("syncShopOffersMetafield failed after offer write", {
-        shopName,
-        message: syncResult.message,
+      logOfferMetafieldSyncFailure(shopName, syncContext, syncResult.step || "syncShopOffersMetafield", syncResult.message, {
+        path: "post-write",
+        durationMs: Date.now() - startedAt,
       });
     }
   });
@@ -193,16 +269,19 @@ export async function runOfferPostWriteSync(admin: AdminType, shopName: string):
       syncTask,
       new Promise<void>((resolve) => {
         timeoutId = setTimeout(() => {
-          console.error("Offer post-write sync timed out; save will still succeed", {
-            shopName,
+          logOfferMetafieldSyncPhase("timed-out", shopName, syncContext, {
+            path: "post-write",
             timeoutMs: OFFER_POST_WRITE_SYNC_TIMEOUT_MS,
+            durationMs: Date.now() - startedAt,
           });
           resolve();
         }, OFFER_POST_WRITE_SYNC_TIMEOUT_MS);
       }),
     ]);
   } catch (error) {
-    console.error("Offer post-write sync crashed unexpectedly", { shopName, error });
+    logOfferMetafieldSyncFailure(shopName, syncContext, "post-write-crash", error, {
+      durationMs: Date.now() - startedAt,
+    });
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
   }

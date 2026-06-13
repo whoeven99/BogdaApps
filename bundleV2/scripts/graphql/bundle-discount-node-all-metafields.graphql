@@ -1,0 +1,22 @@
+# 查询单个 DiscountAutomaticNode 上的全部 metafields（排查 sync 是否写入）
+# 用法:
+#   shopify store execute --store <shop>.myshopify.com --json \
+#     --query-file scripts/graphql/bundle-discount-node-all-metafields.graphql \
+#     --variables '{"id":"gid://shopify/DiscountAutomaticNode/XXXX"}'
+
+query BundleDiscountNodeAllMetafields($id: ID!) {
+  discountNode(id: $id) {
+    id
+    metafields(first: 50) {
+      edges {
+        node {
+          namespace
+          key
+          type
+          updatedAt
+          value
+        }
+      }
+    }
+  }
+}

@@ -48,7 +48,10 @@ export async function handleDeleteOffer(
 
   if (shopNameToSync) {
     invalidateShopOffersCache(String(shopNameToSync));
-    void runOfferPostWriteSync(admin, shopNameToSync).catch((error) => {
+    void runOfferPostWriteSync(admin, shopNameToSync, {
+      trigger: "delete-offer",
+      offerId: idRaw,
+    }).catch((error) => {
       console.error("Offer post-write sync crashed unexpectedly", { shopName: shopNameToSync, error });
     });
   }
