@@ -44,7 +44,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   let ianaTimezone = "UTC";
   try {
     const tzResponse = await admin.graphql(
-      `#graphql query ShopTimezone { shop { ianaTimezone } }`,
+      `#graphql
+        query ShopTimezone {
+          shop { ianaTimezone }
+        }
+      `,
     );
     const tzJson = (await tzResponse.json()) as { data?: { shop?: { ianaTimezone?: string } } };
     if (tzJson?.data?.shop?.ianaTimezone) ianaTimezone = tzJson.data.shop.ianaTimezone;

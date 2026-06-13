@@ -170,7 +170,13 @@ export async function syncShopOffersMetafield(
 
     let shopId: string | undefined;
     try {
-      const shopIdResponse = await admin.graphql(`#graphql query ShopId { shop { id } }`);
+      const shopIdResponse = await admin.graphql(
+        `#graphql
+          query ShopId {
+            shop { id }
+          }
+        `,
+      );
       const shopIdJson = (await shopIdResponse.json()) as {
         data?: { shop?: { id?: string } };
         errors?: Array<{ message?: string }>;
