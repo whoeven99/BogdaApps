@@ -34,11 +34,11 @@ jobs:
         with:
           # @shopify/cli@latest 需要 module.enableCompileCache（Node 22+）
           node-version: "22"
-          cache: yarn
-          cache-dependency-path: bundleV2/yarn.lock
+          cache: npm
+          cache-dependency-path: bundleV2/package-lock.json
 
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: npm ci
 
       - name: Install Shopify CLI
         run: npm install -g @shopify/cli@latest

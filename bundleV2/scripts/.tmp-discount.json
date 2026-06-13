@@ -1,4 +1,14 @@
-﻿{
+﻿node.exe : Loading stored store auth ...
+所在位置 C:\Users\whoev\AppData\Roaming\npm\shopify.ps1:24 字符: 5
++     & "node$exe"  "$basedir/node_modules/@shopify/cli/bin/run.js" $ar ...
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Loading stored store auth ...:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+[2K[1A[2K[G
+Executing GraphQL operation ...
+[2K[1A[2K[G
+{
   "discountNodes": {
     "nodes": [
       {
