@@ -10,7 +10,10 @@ import {
 } from "../actionUtils";
 
 type AdminType = {
-  graphql: (query: string, opts?: { variables?: unknown }) => Promise<{ json: () => Promise<unknown> }>;
+  graphql: (
+    query: string,
+    opts?: { variables?: Record<string, unknown> },
+  ) => Promise<{ json: () => Promise<unknown> }>;
 };
 
 export async function handleToggleOfferStatus(
@@ -32,7 +35,7 @@ export async function handleToggleOfferStatus(
 
   const legacyOfferSelect = { id: true, shopName: true } as const;
 
-  let updatedOffer;
+  let updatedOffer: { shopName?: string | null } | null = null;
   try {
     let existingOffer: {
       id: string;

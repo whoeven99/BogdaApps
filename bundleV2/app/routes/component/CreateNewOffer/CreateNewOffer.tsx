@@ -533,8 +533,8 @@ interface InitialOffer {
   cartTitle: string;
   offerType: string;
   discountRulesJson: string | null;
-  startTime: string;
-  endTime: string;
+  startTime: string | Date;
+  endTime: string | Date;
   selectedProductsJson: string | null;
   offerSettingsJson: string | null;
   campaignConfigJson?: string | null;
@@ -690,6 +690,16 @@ function toShopifyProductGid(productId: string | null | undefined): string {
   return numericTailMatch?.[1] ? `${SHOPIFY_PRODUCT_GID_PREFIX}${numericTailMatch[1]}` : raw;
 }
 
+function getDefaultCartTitleForOfferType(offerType?: string | null): string {
+  return offerType === "quantity-breaks-different" ? "多件优惠" : "组合优惠";
+}
+
+function normalizeInitialCartTitle(rawTitle: string | null | undefined, offerType?: string | null): string {
+  const title = String(rawTitle || "").trim();
+  if (title && title !== "Bundle Discount") return title;
+  return getDefaultCartTitleForOfferType(offerType);
+}
+
 export function CreateNewOffer({
   onBack,
   onSaveSuccess,
@@ -717,6 +727,7 @@ export function CreateNewOffer({
   const [searchParams] = useSearchParams();
   const [submitErrorToast, setSubmitErrorToast] = useState<string | null>(null);
   const wasSubmittingRef = useRef(false);
+  const handledSubmissionToastRef = useRef<string | null>(null);
   const confirmedHighDiscountRef = useRef(false);
   const initialCampaignConfig = useMemo(() => {
     if (!initialOffer) return null;
@@ -811,8 +822,42 @@ export function CreateNewOffer({
     return getStarterTemplateDefaults(initialOfferType);
   }, [initialOffer, initialOfferType]);
   const initialEditorState = useMemo<InitialEditorState>(() => {
-    const mapProductIdsToInitialDraftProducts = (ids: string[]) =>
+    const parseSelectedProductObjects = (...jsonValues: Array<string | null | undefined>) => {
+      const productObjects: any[] = [];
+      for (const jsonValue of jsonValues) {
+        if (!jsonValue) continue;
+        try {
+          const parsedSelectedProducts = JSON.parse(jsonValue);
+          const parsedObjects = Array.isArray(parsedSelectedProducts)
+            ? parsedSelectedProducts
+            : Array.isArray(parsedSelectedProducts?.products)
+              ? parsedSelectedProducts.products
+              : Array.isArray(parsedSelectedProducts?.selectedProducts)
+                ? parsedSelectedProducts.selectedProducts
+                : [];
+          productObjects.push(...parsedObjects);
+        } catch {}
+      }
+      return productObjects;
+    };
+    const mapProductIdsToInitialDraftProducts = (
+      ids: string[],
+      savedProductObjects: any[] = [],
+    ) =>
       ids.map((id) => {
+        const savedObj = savedProductObjects.find(
+          (o) => o && typeof o === "object" && String(o.id) === String(id),
+        );
+        if (savedObj && savedObj.title) {
+          return {
+            id: String(id),
+            title: String(savedObj.title),
+            image: String(savedObj.image || "https://via.placeholder.com/60"),
+            price: String(savedObj.price || "€0.00"),
+            variantsCount: Math.max(1, Math.trunc(Number(savedObj.variantsCount) || 1)),
+            hasSubscription: savedObj.hasSubscription === true,
+          };
+        }
         const found = storeProducts.find((p) => String(p.id) === String(id));
         return {
           id: String(id),
@@ -874,19 +919,10 @@ export function CreateNewOffer({
             ? parseSelectedProductIds(selectedProductsJson)
             : [];
 
-    let parsedSelectedObjects: any[] = [];
-    try {
-      if (selectedProductsJson) {
-        const parsedSelectedProducts = JSON.parse(selectedProductsJson);
-        parsedSelectedObjects = Array.isArray(parsedSelectedProducts)
-          ? parsedSelectedProducts
-          : Array.isArray(parsedSelectedProducts?.products)
-            ? parsedSelectedProducts.products
-            : Array.isArray(parsedSelectedProducts?.selectedProducts)
-              ? parsedSelectedProducts.selectedProducts
-              : [];
-      }
-    } catch {}
+    const parsedSelectedObjects = parseSelectedProductObjects(
+      selectedProductsJson,
+      initialOffer?.selectedProductsJson,
+    );
 
     const selectedProductsData = selectedProductIds.map((id: string) => {
       const savedObj = parsedSelectedObjects.find(
@@ -927,12 +963,17 @@ export function CreateNewOffer({
         ),
       ),
     );
+    const differentProductsSavedObjects = parseSelectedProductObjects(
+      differentProductsSelectedProductsJson,
+      initialOffer?.selectedProductsJson,
+    );
     const differentProductsSharedPoolProductsData = mapProductIdsToInitialDraftProducts(
       differentProductsPoolIds.length > 0
         ? differentProductsPoolIds
         : differentProductsSelectedProductsJson
           ? parseSelectedProductIds(differentProductsSelectedProductsJson)
           : [],
+      differentProductsSavedObjects,
     );
 
     const parsedFreeGiftRules = normalizeFreeGiftRules(
@@ -999,6 +1040,7 @@ export function CreateNewOffer({
     initialBuilderOfferType,
     initialCampaignRuntimeOutputs,
     initialFreeGiftSelectedProductsJson,
+    initialOffer?.selectedProductsJson,
     initialPrimarySelectedProductsJson,
     starterTemplateDefaults,
     storeProducts,
@@ -1010,10 +1052,12 @@ export function CreateNewOffer({
       wasSubmittingRef.current = true;
       return;
     }
-    if (fetcher.state !== "idle" || !wasSubmittingRef.current) return;
-    wasSubmittingRef.current = false;
+    if (!wasSubmittingRef.current) return;
     const data = fetcher.data as any;
     if (data?.success && data?.toast) {
+      if (handledSubmissionToastRef.current === data.toast) return;
+      handledSubmissionToastRef.current = data.toast;
+      wasSubmittingRef.current = false;
       const mode = initialOffer ? "update" : "create";
       if (onSaveSuccess) {
         onSaveSuccess(mode, data.toast);
@@ -1027,6 +1071,7 @@ export function CreateNewOffer({
       return;
     }
     if (!isOfferActionErrorBody(data)) return;
+    wasSubmittingRef.current = false;
     setSubmitErrorToast(data.message);
     // 去掉 URL 里的成功 toast，避免保存失败时仍显示绿色「创建/更新成功」
     const next = new URLSearchParams(searchParams);
@@ -1034,6 +1079,7 @@ export function CreateNewOffer({
     const qs = next.toString();
     navigate({ search: qs ? `?${qs}` : "" }, { replace: true });
   }, [fetcher.state, fetcher.data, initialOffer, navigate, onSaveSuccess, searchParams]);
+  const isSubmittingOffer = fetcher.state === "submitting";
 
   const baseUnitPrice = 100;
   const parsePreviewMoney = (rawValue: string | null | undefined) => {
@@ -1068,7 +1114,14 @@ export function CreateNewOffer({
       setOfferName(`#offer ${dayjs().tz(ianaTimezone).format('YYYY-MM-DD HH:mm:ss')}`);
     }
   }, [initialOffer?.name, ianaTimezone]);
-  const [cartTitle, setCartTitle] = useState(initialOffer?.cartTitle ?? "Bundle Discount");
+  const [cartTitle, setCartTitle] = useState(() =>
+    normalizeInitialCartTitle(
+      initialOffer?.cartTitle,
+      initialBuilderOfferType ??
+        (initialOffer?.offerType as OfferTypeId | undefined) ??
+        initialOfferType,
+    ),
+  );
   const [offerNameError, setOfferNameError] = useState("");
   const [cartTitleError, setCartTitleError] = useState("");
   const [startTime, setStartTime] = useState(
@@ -1325,6 +1378,34 @@ export function CreateNewOffer({
         hasSubscription: found?.hasSubscription === true,
       };
     });
+  const hydrateDraftProductsFromStore = (
+    products: CampaignDraft["selectedProductsData"],
+  ): CampaignDraft["selectedProductsData"] =>
+    products.map((product) => {
+      const found = storeProducts.find((p) => String(p.id) === String(product.id));
+      if (!found) return product;
+      if (
+        product.title !== "Unknown product" &&
+        product.image !== "https://via.placeholder.com/60" &&
+        product.price !== "€0.00"
+      ) {
+        return product;
+      }
+      return {
+        ...product,
+        title: found.name,
+        image: found.image,
+        price: found.price,
+        variantsCount: Array.isArray(found.variants) ? found.variants.length : product.variantsCount,
+        hasSubscription: found.hasSubscription === true,
+      };
+    });
+
+  useEffect(() => {
+    if (storeProducts.length === 0) return;
+    setSelectedProductsData((prev) => hydrateDraftProductsFromStore(prev));
+    setDifferentProductsSharedPoolProductsData((prev) => hydrateDraftProductsFromStore(prev));
+  }, [storeProducts]);
   const mapPickerSelectionToDraftProducts = (selectedList: any[]) =>
     selectedList.map((item: any) => ({
       id: String(item.id),
@@ -1357,21 +1438,8 @@ export function CreateNewOffer({
   const [triggerSelection, setTriggerSelection] = useState<TriggerSelectionMeta>(null);
   useEffect(() => {
     if (behaviorOfferType !== "quantity-breaks-different") return;
-    const hasSameIds = (left: string[], right: string[]) =>
-      left.length === right.length && left.every((value, index) => value === right[index]);
-    const selectedIds = selectedProductsData.map((product) => String(product.id));
-    const eligibleIds = differentProductsSharedPoolProductsData.map((product) =>
-      String(product.id),
-    );
-    if (eligibleIds.length > 0) {
-      if (!hasSameIds(selectedIds, eligibleIds)) {
-        setSelectedProductsData(
-          differentProductsSharedPoolProductsData.map((product) => ({ ...product })),
-        );
-      }
-      return;
-    }
-    if (selectedIds.length === 0) return;
+    if (differentProductsSharedPoolProductsData.length > 0) return;
+    if (selectedProductsData.length === 0) return;
     setDifferentProductsSharedPoolProductsData(
       selectedProductsData.map((product) => ({ ...product })),
     );
@@ -1625,7 +1693,10 @@ export function CreateNewOffer({
   };
   const handleSelectAllTriggerProducts = () => {
     if (allStoreProductIds.length === 0) {
-      message.warning("Products are still loading. Please try again in a moment.");
+      message.warning("Product list is still loading. Opening the product picker instead.");
+      void openStepTwoTriggerProductPicker(undefined, {
+        mode: "custom",
+      });
       return;
     }
     applyStepTwoTriggerProducts(mapProductIdsToDraftProducts(allStoreProductIds));
@@ -1633,7 +1704,10 @@ export function CreateNewOffer({
   };
   const handleExcludeTriggerProducts = async () => {
     if (allStoreProductIds.length === 0) {
-      message.warning("Products are still loading. Please try again in a moment.");
+      message.warning("Product list is still loading. Opening the product picker instead.");
+      await openStepTwoTriggerProductPicker(undefined, {
+        mode: "custom",
+      });
       return;
     }
     await openStepTwoTriggerProductPicker(allStoreProductIds, {
@@ -1642,7 +1716,10 @@ export function CreateNewOffer({
   };
   const handleInvertTriggerProducts = () => {
     if (allStoreProductIds.length === 0) {
-      message.warning("Products are still loading. Please try again in a moment.");
+      message.warning("Product list is still loading. Opening the product picker instead.");
+      void openStepTwoTriggerProductPicker(undefined, {
+        mode: "custom",
+      });
       return;
     }
     const selectedIdSet = new Set(selectedProductsData.map((product) => String(product.id)));
@@ -3767,7 +3844,7 @@ export function CreateNewOffer({
                         </span>
                         <Input
                           size="large"
-                          placeholder="e.g., Bundle Discount"
+                          placeholder="e.g., 组合优惠"
                           value={cartTitle}
                           onChange={(e) => {
                             setCartTitle(e.target.value.replace(/\s+/g, " "));
@@ -4153,7 +4230,7 @@ export function CreateNewOffer({
           {step > 1 ? (
             <Button
               size="large"
-              disabled={fetcher.state !== "idle"}
+              disabled={isSubmittingOffer}
               onClick={(e) => {
                 setStep(step - 1);
                 e.preventDefault();
@@ -4165,7 +4242,7 @@ export function CreateNewOffer({
           <Button
             size="large"
             style={{ backgroundColor: "#008060", borderColor: "#008060", color: "#fff" }}
-            disabled={fetcher.state !== "idle"}
+            disabled={isSubmittingOffer}
             onClick={(e: any) => {
             if (step === 1) {
               if (!offerName.trim()) {
@@ -4237,7 +4314,7 @@ export function CreateNewOffer({
             }}
             htmlType={step === 4 ? "submit" : "button"}
           >
-            {fetcher.state !== "idle"
+            {isSubmittingOffer
               ? "Saving…"
               : step === 4
                 ? initialOffer

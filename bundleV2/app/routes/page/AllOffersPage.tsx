@@ -1,8 +1,8 @@
 // AllOffersPage.tsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "../../styles/tailwind.css";
 import { Trash2, Pencil } from "lucide-react";
-import { Form, useNavigation, useSearchParams, useActionData } from "react-router";
+import { Form, useFetcher, useNavigate, useNavigation, useSearchParams, useActionData } from "react-router";
 import type { IndexLoaderData, ThemeEditorTarget } from "../_index/route";
 import {
   getOfferDisplayType,
@@ -118,12 +118,19 @@ export function AllOffersPage({
   });
 
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const actionData = useActionData() as
     | { toast?: string }
     | { _offerActionError: true; message: string }
     | undefined;
   const navigation = useNavigation();
+  const deleteFetcher = useFetcher<
+    | { success: true; toast?: string }
+    | { _offerActionError: true; message: string }
+  >();
+  const handledDeleteToastRef = useRef<string | null>(null);
   const [deletingOffer, setDeletingOffer] = useState<AllOffersRow | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [pendingToggleStatus, setPendingToggleStatus] = useState<Record<string, boolean>>({});
   const [submittingToggleIds, setSubmittingToggleIds] = useState<Set<string>>(() => new Set());
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(() => new Set());
@@ -240,11 +247,46 @@ export function AllOffersPage({
   useEffect(() => {
     if (toast?.startsWith("delete-success")) {
       setDeletingOffer(null);
+      setDeleteError(null);
     }
     if (toast?.startsWith("toggle-success")) {
       setSubmittingToggleIds(new Set());
     }
   }, [toast]);
+
+  useEffect(() => {
+    if (deleteFetcher.state === "submitting") {
+      setDeleteError(null);
+      const id = deleteFetcher.formData?.get("offerId");
+      if (typeof id === "string" && id) {
+        setPendingDeleteIds((prev) => {
+          const next = new Set(prev);
+          next.add(id);
+          return next;
+        });
+      }
+      return;
+    }
+
+    if (deleteFetcher.state !== "idle" || !deleteFetcher.data) return;
+
+    if ("success" in deleteFetcher.data && deleteFetcher.data.success) {
+      const deleteToast = deleteFetcher.data.toast || `delete-success-${Date.now()}`;
+      if (handledDeleteToastRef.current === deleteToast) return;
+      handledDeleteToastRef.current = deleteToast;
+      setDeletingOffer(null);
+      const next = new URLSearchParams(searchParams);
+      next.set("toast", deleteToast);
+      const qs = next.toString();
+      navigate({ search: qs ? `?${qs}` : "" }, { replace: true });
+      return;
+    }
+
+    if ("_offerActionError" in deleteFetcher.data && deleteFetcher.data._offerActionError) {
+      setDeleteError(deleteFetcher.data.message);
+      setPendingDeleteIds(new Set());
+    }
+  }, [deleteFetcher.state, deleteFetcher.data, deleteFetcher.formData, navigate, searchParams]);
 
   useEffect(() => {
     setSelectedThemeId((previous) => {
@@ -591,6 +633,11 @@ export function AllOffersPage({
               Are you sure you want to delete offer{" "}
               <span className="font-semibold text-[#1c1f23]">{deletingOffer.name}</span>
               ? This action cannot be undone.
+              {deleteError ? (
+                <div className="mt-3 rounded-[8px] border border-[#ffd6d2] bg-[#fff1f0] px-3 py-2 text-[12px] text-[#b42318]">
+                  {deleteError}
+                </div>
+              ) : null}
             </>
           }
           actions={
@@ -598,20 +645,25 @@ export function AllOffersPage({
               <button
                 type="button"
                 className="rounded-[6px] border border-[#dfe3e8] bg-white px-[12px] py-[6px] text-[14px] text-[#1c1f23] hover:bg-[#f4f6f8]"
-                onClick={() => setDeletingOffer(null)}
+                disabled={deleteFetcher.state !== "idle"}
+                onClick={() => {
+                  setDeletingOffer(null);
+                  setDeleteError(null);
+                }}
               >
                 Cancel
               </button>
-              <Form method="post">
+              <deleteFetcher.Form method="post">
                 <input type="hidden" name="intent" value="delete-offer" />
                 <input type="hidden" name="offerId" value={deletingOffer.id} />
                 <button
                   type="submit"
+                  disabled={deleteFetcher.state !== "idle"}
                   className="rounded-[6px] bg-[#d72c0d] px-[12px] py-[6px] text-[14px] text-white hover:bg-[#bc2200]"
                 >
-                  Delete
+                  {deleteFetcher.state !== "idle" ? "Deleting..." : "Delete"}
                 </button>
-              </Form>
+              </deleteFetcher.Form>
             </>
           }
         />

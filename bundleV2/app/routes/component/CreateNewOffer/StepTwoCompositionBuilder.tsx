@@ -753,6 +753,7 @@ function FreeGiftRuleBarDetail({
 function DifferentProductsRuleBarDetail({
   bar,
   draft,
+  actions,
   rule,
   showSharedChooserSection = false,
   headerActions,
@@ -760,6 +761,7 @@ function DifferentProductsRuleBarDetail({
 }: {
   bar: CampaignBarItem;
   draft: CampaignDraft;
+  actions: CampaignDraftActions;
   rule: CampaignDraft["differentProductsDiscountRules"][number];
   showSharedChooserSection?: boolean;
   headerActions?: ReactNode;
@@ -774,11 +776,16 @@ function DifferentProductsRuleBarDetail({
 
   const sharedChooserSection = (
     <BuilderSection title="Offer product pool">
-      <div className="rounded-[10px] bg-[#f6f8f9] px-4 py-3 text-[12px] text-[#5c6166]">
-        {totalEligibleCount > 0
-          ? `${totalEligibleCount} campaign products are included in this offer pool. All bars inherit the same pool.`
-          : "Select campaign products in Step 1 to define the offer pool used by every bar."}
-      </div>
+      <CompactActionRow
+        title="Shared product pool"
+        meta={
+          totalEligibleCount > 0
+            ? `${totalEligibleCount} products are included. All cross-product bars inherit this pool.`
+            : "Select products for the pool used by every cross-product bar."
+        }
+        actionLabel={totalEligibleCount > 0 ? "Edit product pool" : "Select product pool"}
+        onAction={() => void actions.handleSelectDifferentProductsSharedPoolProducts()}
+      />
     </BuilderSection>
   );
 
@@ -1210,6 +1217,7 @@ export default function StepTwoCompositionBuilder({
           key={bar.id}
           bar={bar}
           draft={draft}
+          actions={actions}
           rule={rule}
           showSharedChooserSection={targetRuleIndex === 0}
           headerActions={renderBarActions(bar, index)}
