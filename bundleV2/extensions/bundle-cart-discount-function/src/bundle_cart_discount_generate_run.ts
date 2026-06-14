@@ -143,6 +143,42 @@ type Offer = {
   offerType?: string;
 };
 
+const LEGACY_DEFAULT_DISCOUNT_MESSAGES = new Set([
+  "",
+  "Bundle Discount",
+  "Bundle order discount",
+  "Buy X Get Y",
+  "Free gift",
+]);
+
+function getDefaultDiscountMessageForOfferType(offerType?: string): string {
+  switch (offerType) {
+    case "quantity-breaks-different":
+      return "多件优惠";
+    case "free-gift":
+      return "赠品优惠";
+    case "shipping-discount":
+      return "运费优惠";
+    case "order-discount":
+    case "coupon":
+      return "订单优惠";
+    case "complete-bundle":
+    case "quantity-breaks-same":
+    case "bxgy":
+    case "subscription":
+    default:
+      return "组合优惠";
+  }
+}
+
+function resolveDiscountMessage(offer: Pick<Offer, "cartTitle" | "offerType">): string {
+  const configuredTitle = String(offer.cartTitle || "").trim();
+  if (configuredTitle && !LEGACY_DEFAULT_DISCOUNT_MESSAGES.has(configuredTitle)) {
+    return configuredTitle;
+  }
+  return getDefaultDiscountMessageForOfferType(offer.offerType);
+}
+
 /** 内联 JSON 字段还原成字符串：已是字符串则原样返回，对象则 stringify，供下游既有解析逻辑消费。 */
 function jsonFieldToString(value: unknown): string | null {
   if (value == null) return null;
@@ -737,7 +773,7 @@ function calculateCompleteBundleProductDiscounts(
       if (totalDiscount <= 0) continue;
 
       candidates.push({
-        message: offer.cartTitle || "Bundle order discount",
+        message: resolveDiscountMessage(offer),
         targets: [
           {
             cartLine: {
@@ -1171,7 +1207,7 @@ export function bundleCartDiscountGenerateRun(
       }
 
       const candidate: ProductDiscountCandidate = {
-        message: bestMatch.compiledOffer.offer.cartTitle || "Bundle Discount",
+        message: resolveDiscountMessage(bestMatch.compiledOffer.offer),
         targets: [
           {
             cartLine: {
@@ -2056,7 +2092,7 @@ function calculateBxgyDiscount(
           const discountQuantity = Math.min(entry.quantity, remainingFreeQuantity);
           if (discountQuantity <= 0) continue;
           candidates.push({
-            message: offer.cartTitle || "Buy X Get Y",
+            message: resolveDiscountMessage(offer),
             targets: [
               {
                 cartLine: {
@@ -2131,7 +2167,7 @@ function calculateBxgyDiscount(
           const discountQuantity = Math.min(entry.quantity, remainingFreeQuantity);
           if (discountQuantity <= 0) continue;
           candidates.push({
-            message: offer.cartTitle || "Buy X Get Y",
+            message: resolveDiscountMessage(offer),
             targets: [{ cartLine: { id: entry.line.id, quantity: discountQuantity } }],
             value: {
               percentage: {
@@ -2231,7 +2267,7 @@ function calculateBxgyDiscount(
         const discountQuantity = Math.min(entry.quantity, remaining);
         if (discountQuantity > 0) {
           candidates.push({
-            message: offer.cartTitle || "Bundle Discount",
+            message: resolveDiscountMessage(offer),
             targets: [{ cartLine: { id: entry.line.id, quantity: discountQuantity } }],
             value: {
               percentage: {
@@ -2266,7 +2302,7 @@ function calculateBxgyDiscount(
 
       if (discountQuantity > 0) {
         const candidate: ProductDiscountCandidate = {
-          message: offer.cartTitle || "Buy X Get Y",
+          message: resolveDiscountMessage(offer),
           targets: [
             {
               cartLine: {
@@ -2440,7 +2476,7 @@ function calculateFreeGiftDiscount(
       (id) => !discountedGiftLineIds.has(id),
     );
     allCandidates.push({
-      message: offer.cartTitle || "Free gift",
+      message: resolveDiscountMessage(offer),
       targets: [
         {
           orderSubtotal: {
@@ -2606,7 +2642,7 @@ function buildOrderDiscountCandidates(
     const excludedCartLineIds = allCartLineIds.filter((id) => !scopedIds.has(id));
 
     candidates.push({
-      message: offer.cartTitle || "Bundle order discount",
+      message: resolveDiscountMessage(offer),
       targets: [
         {
           orderSubtotal: {
@@ -2672,7 +2708,7 @@ function buildOrderDiscountCandidatesFromCompiledOffers(
     const excludedCartLineIds = allCartLineIds.filter((id) => !scopedIds.has(id));
 
     candidates.push({
-      message: offer.cartTitle || "Bundle order discount",
+      message: resolveDiscountMessage(offer),
       targets: [
         {
           orderSubtotal: {

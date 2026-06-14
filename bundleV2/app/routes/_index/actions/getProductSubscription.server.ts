@@ -7,7 +7,10 @@ import {
 } from "../../../server/shopify/subscriptionPreview.server";
 
 type AdminType = {
-  graphql: (query: string, opts?: { variables?: unknown }) => Promise<{ json: () => Promise<unknown> }>;
+  graphql: (
+    query: string,
+    opts?: { variables?: Record<string, unknown> },
+  ) => Promise<{ json: () => Promise<unknown> }>;
 };
 
 const GET_PRODUCT_SUBSCRIPTION_QUERY = `#graphql

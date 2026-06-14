@@ -23,7 +23,10 @@ import {
 import type { OfferListItem } from "../../routes/_index/types";
 
 type AdminType = {
-  graphql: (query: string, opts?: { variables?: unknown }) => Promise<{ json: () => Promise<unknown> }>;
+  graphql: (
+    query: string,
+    opts?: { variables?: Record<string, unknown> },
+  ) => Promise<{ json: () => Promise<unknown> }>;
 };
 
 type SyncResult = { ok: true } | { ok: false; message: string; step?: string };

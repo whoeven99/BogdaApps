@@ -19,7 +19,10 @@ import type { FunctionDiscountClass } from "../../utils/offerParsing";
 import { fetchStoreProducts } from "../shopify/products.server";
 
 type AdminType = {
-  graphql: (query: string, opts?: { variables?: unknown }) => Promise<{ json: () => Promise<unknown> }>;
+  graphql: (
+    query: string,
+    opts?: { variables?: Record<string, unknown> },
+  ) => Promise<{ json: () => Promise<unknown> }>;
 };
 
 export type OfferRuntimeSyncData = {

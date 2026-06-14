@@ -3,7 +3,10 @@ import { collectReferencedProductIds } from "../../../server/offers/offerPayload
 import type { OfferListItem } from "../types";
 
 type AdminType = {
-  graphql: (query: string, opts?: { variables?: unknown }) => Promise<{ json: () => Promise<unknown> }>;
+  graphql: (
+    query: string,
+    opts?: { variables?: Record<string, unknown> },
+  ) => Promise<{ json: () => Promise<unknown> }>;
 };
 
 export async function handleLoadStoreProducts(

@@ -39,13 +39,20 @@ import {
 } from "../actionUtils";
 
 type AdminType = {
-  graphql: (query: string, opts?: { variables?: unknown }) => Promise<{ json: () => Promise<unknown> }>;
+  graphql: (
+    query: string,
+    opts?: { variables?: Record<string, unknown> },
+  ) => Promise<{ json: () => Promise<unknown> }>;
 };
 
 const LONG_RUNNING_OFFER_END_TIME = new Date(LONG_RUNNING_OFFER_END_TIME_ISO);
 
 function sanitizeHexColorParam(raw: string | null | undefined, fallback: string): string {
   return sanitizeHexColor(raw, fallback);
+}
+
+function getDefaultCartTitleForOfferType(offerType: string): string {
+  return offerType === "quantity-breaks-different" ? "多件优惠" : "组合优惠";
 }
 
 function parseFormColors(formData: FormData) {
@@ -71,7 +78,7 @@ export async function handleCreateOrUpdateOffer(
   const idRaw = String(formData.get("offerId") || "").trim();
   const nameRaw = String(formData.get("offerName") || "");
   const name = sanitizeSingleLineText(nameRaw, OFFER_TEXT_LIMITS.offerName);
-  const cartTitle = sanitizeSingleLineText(formData.get("cartTitle"), OFFER_TEXT_LIMITS.cartTitle, "Bundle Discount");
+  let cartTitle = sanitizeSingleLineText(formData.get("cartTitle"), OFFER_TEXT_LIMITS.cartTitle, "组合优惠");
 
   let offerType = String(formData.get("offerType") || "").trim();
   const layoutFormatRaw = String(formData.get("layoutFormat") || "").trim();
@@ -233,6 +240,9 @@ export async function handleCreateOrUpdateOffer(
 
   let campaignConfigJson: string | null = persistenceResolution.value.campaignConfigJson;
   offerType = persistenceResolution.value.offerType;
+  if (cartTitle === "Bundle Discount") {
+    cartTitle = getDefaultCartTitleForOfferType(offerType);
+  }
   selectedProductsJson = persistenceResolution.value.selectedProductsJson;
   discountRulesJson = persistenceResolution.value.discountRulesJson;
   offerSettingsJson = persistenceResolution.value.offerSettingsJson;
