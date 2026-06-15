@@ -4217,12 +4217,90 @@ function bindBundleInteractions(root) {
 }
 
 let __ciwiNativeAddSubmitPassthrough = false;
+let __ciwiBundleCartAddInFlight = false;
+
+function getBundleAddToCartButtons() {
+  const buttons = [];
+  const bundleBtn = document.querySelector(
+    ".ciwi-bundle-wrapper .create-offer-preview-button",
+  );
+  if (bundleBtn) buttons.push(bundleBtn);
+
+  const form = getAddToCartForm();
+  if (!form) return buttons;
+
+  const formId = form.getAttribute("id");
+  const selectors = [
+    "button[type='submit']",
+    "button[name='add']",
+    "input[type='submit']",
+    "input[name='add']",
+  ];
+  selectors.forEach((selector) => {
+    form.querySelectorAll(selector).forEach((element) => buttons.push(element));
+    if (formId) {
+      document
+        .querySelectorAll(`${selector}[form="${formId}"]`)
+        .forEach((element) => buttons.push(element));
+    }
+  });
+  return Array.from(new Set(buttons));
+}
+
+function setBundleAddToCartLoading(isLoading) {
+  getBundleAddToCartButtons().forEach((button) => {
+    const isInput = button.tagName === "INPUT";
+    if (isLoading) {
+      if (!button.dataset.ciwiDefaultLabel) {
+        button.dataset.ciwiDefaultLabel = isInput
+          ? String(button.value || "")
+          : String(button.textContent || "").trim();
+      }
+      button.disabled = true;
+      button.setAttribute("aria-busy", "true");
+      button.classList.add("ciwi-bundle-add-loading");
+      if (isInput) {
+        button.value = "Adding...";
+      } else {
+        button.textContent = "Adding...";
+      }
+      return;
+    }
+
+    const defaultLabel = String(button.dataset.ciwiDefaultLabel || "");
+    button.disabled = false;
+    button.removeAttribute("aria-busy");
+    button.classList.remove("ciwi-bundle-add-loading");
+    if (isInput) {
+      button.value = defaultLabel;
+    } else if (defaultLabel) {
+      button.textContent = defaultLabel;
+    }
+  });
+}
+
+function runBundleCartAddFlow(workFn) {
+  if (__ciwiBundleCartAddInFlight) return Promise.resolve(null);
+  __ciwiBundleCartAddInFlight = true;
+  setBundleAddToCartLoading(true);
+  return Promise.resolve()
+    .then(workFn)
+    .finally(() => {
+      __ciwiBundleCartAddInFlight = false;
+      setBundleAddToCartLoading(false);
+    });
+}
+
+function finishSuccessfulBundleCartAdd(addResponse) {
+  notifyThemeAfterCartAdd(addResponse);
+}
 
 window.ciwiHandleBundleAddToCart = function(event) {
   if (event) {
     event.preventDefault();
     event.stopPropagation();
   }
+  if (__ciwiBundleCartAddInFlight) return;
   const currentOffer = getCurrentOffer(offersConfigCache);
   const explicitCount = getSelectedCountForOffer(currentOffer);
   const count =
@@ -4247,25 +4325,28 @@ window.ciwiHandleBundleAddToCart = function(event) {
     currentOffer?.offerType === "quantity-breaks-different" &&
     explicitCount !== CIWI_SINGLE_OPTION_COUNT
   ) {
-    performDifferentProductsCartAdd()
-      .then((ok) => (ok ? notifyThemeAfterCartAdd() : false))
-      .catch((error) => {
-        console.error("[ciwi] performDifferentProductsCartAdd failed", error);
-      });
+    void runBundleCartAddFlow(() =>
+      performDifferentProductsCartAdd().then((addResponse) => {
+        if (addResponse) finishSuccessfulBundleCartAdd(addResponse);
+        return addResponse;
+      }),
+    ).catch((error) => {
+      console.error("[ciwi] performDifferentProductsCartAdd failed", error);
+    });
     return;
   }
   if (
     currentOffer?.offerType === "free-gift" &&
     explicitCount !== CIWI_SINGLE_OPTION_COUNT
   ) {
-    performFreeGiftCartAdd()
-      .then((ok) => {
-        if (ok) return notifyThemeAfterCartAdd();
-        return false;
-      })
-      .catch((error) => {
-        console.error("[ciwi] performFreeGiftCartAdd failed", error);
-      });
+    void runBundleCartAddFlow(() =>
+      performFreeGiftCartAdd().then((addResponse) => {
+        if (addResponse) finishSuccessfulBundleCartAdd(addResponse);
+        return addResponse;
+      }),
+    ).catch((error) => {
+      console.error("[ciwi] performFreeGiftCartAdd failed", error);
+    });
     return;
   }
   if (
@@ -4273,18 +4354,21 @@ window.ciwiHandleBundleAddToCart = function(event) {
       currentOffer?.offerType === "quantity-breaks-same") &&
     explicitCount !== CIWI_SINGLE_OPTION_COUNT
   ) {
-    performSingleVariantBundleCartAdd(currentOffer, cartQuantity, {
-      fallbackToDefault: explicitCount == null,
-    })
-      .then((ok) => {
-        if (ok) return notifyThemeAfterCartAdd();
+    void runBundleCartAddFlow(() =>
+      performSingleVariantBundleCartAdd(currentOffer, cartQuantity, {
+        fallbackToDefault: explicitCount == null,
+      }).then((addResponse) => {
+        if (addResponse) {
+          finishSuccessfulBundleCartAdd(addResponse);
+          return addResponse;
+        }
         submitBundleFormFallback();
-        return false;
-      })
-      .catch((error) => {
-        console.error("[ciwi] performSingleVariantBundleCartAdd failed", error);
-        submitBundleFormFallback();
-      });
+        return null;
+      }),
+    ).catch((error) => {
+      console.error("[ciwi] performSingleVariantBundleCartAdd failed", error);
+      submitBundleFormFallback();
+    });
     return;
   }
   submitBundleFormFallback();
@@ -4522,9 +4606,9 @@ async function performDifferentProductsCartAdd() {
       res.status,
       body?.description || body?.message || body,
     );
-    return false;
+    return null;
   }
-  return true;
+  return body;
 }
 
 window.ciwiSelectBundleVariant = function(barId, productId, variantId) {
@@ -4700,7 +4784,9 @@ function renderStorefrontPreviewCardShell(options) {
   const listLayoutFormat = options?.listLayoutFormat || theme.layoutFormat || "vertical";
   const buttonHtml =
     theme.showCustomButton && options?.buttonOnClick
-      ? `<button type="button" class="create-offer-preview-button" onclick="${esc(
+      ? `<button type="button" class="create-offer-preview-button" data-ciwi-default-label="${esc(
+          theme.buttonText,
+        )}" onclick="${esc(
           options.buttonOnClick,
         )}" style="width: 100%; margin-top: 12px; padding: 12px; background: ${esc(
           theme.buttonPrimaryColor,
@@ -5468,9 +5554,9 @@ async function performFreeGiftCartAdd() {
       res.status,
       body?.description || body?.message || body,
     );
-    return false;
+    return null;
   }
-  return true;
+  return body;
 }
 
 async function performSingleVariantBundleCartAdd(offer, quantity, options) {
@@ -5498,30 +5584,38 @@ async function performSingleVariantBundleCartAdd(offer, quantity, options) {
       res.status,
       body?.description || body?.message || body,
     );
-    return false;
+    return null;
   }
-  return true;
+  return body;
+}
+
+function buildCartEventDetailFromAddResponse(addResponse) {
+  if (!addResponse || typeof addResponse !== "object") {
+    return { cart: null };
+  }
+  if (Array.isArray(addResponse.items)) {
+    return { cart: { items: addResponse.items } };
+  }
+  if (addResponse.id != null || addResponse.variant_id != null) {
+    return { cart: { items: [addResponse] } };
+  }
+  return { cart: addResponse };
 }
 
 /**
  * AJAX 加购成功后通知主题刷新购物车/侧栏（不跳转 /cart）。
- * Dawn 及部分主题会监听 cart:refresh / cart:updated；多派发几种常见事件以提高兼容性。
+ * 直接使用 cart/add.js 响应构造事件 detail，避免串行等待 /cart.js。
  */
-async function notifyThemeAfterCartAdd() {
+function notifyThemeAfterCartAdd(addResponse) {
+  const detail = buildCartEventDetailFromAddResponse(addResponse);
   try {
-    const res = await fetch("/cart.js", {
-      headers: { Accept: "application/json" },
-      credentials: "same-origin",
-    });
-    const cart = res.ok ? await res.json().catch(() => null) : null;
-
     document.documentElement.dispatchEvent(
       new CustomEvent("cart:refresh", { bubbles: true }),
     );
-    document.dispatchEvent(new CustomEvent("cart:updated", { detail: { cart } }));
-    window.dispatchEvent(new CustomEvent("shopify:cart:change", { detail: { cart } }));
+    document.dispatchEvent(new CustomEvent("cart:updated", { detail }));
+    window.dispatchEvent(new CustomEvent("shopify:cart:change", { detail }));
     document.body.dispatchEvent(
-      new CustomEvent("ajaxCart:updated", { bubbles: true, detail: { cart } }),
+      new CustomEvent("ajaxCart:updated", { bubbles: true, detail }),
     );
   } catch (error) {
     console.warn("[ciwi] notifyThemeAfterCartAdd failed", error);
@@ -5621,7 +5715,7 @@ async function addItemsToCartWithFallback(items, offer) {
       : null;
 
   if (res.ok) {
-    return true;
+    return body;
   }
 
   if (isCloudflareChallengeResponse(rawText, res, contentType)) {
@@ -5731,9 +5825,12 @@ window.ciwiHandleCompleteBundleAddToCart = async function (event) {
     event.preventDefault();
     event.stopPropagation();
   }
-  const ok = await performCompleteBundleCartAdd();
-  if (!ok) return;
-  await notifyThemeAfterCartAdd();
+  if (__ciwiBundleCartAddInFlight) return;
+  await runBundleCartAddFlow(async () => {
+    const addResponse = await performCompleteBundleCartAdd();
+    if (addResponse) finishSuccessfulBundleCartAdd(addResponse);
+    return addResponse;
+  });
 };
 
 function renderBundlePreviewHtml(offer) {
@@ -6148,8 +6245,10 @@ function attachBundlePriceSync(offer) {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation?.();
-        void performCompleteBundleCartAdd().then(async (ok) => {
-          if (ok) await notifyThemeAfterCartAdd();
+        void runBundleCartAddFlow(async () => {
+          const addResponse = await performCompleteBundleCartAdd();
+          if (addResponse) finishSuccessfulBundleCartAdd(addResponse);
+          return addResponse;
         });
       },
       { capture: true, signal },

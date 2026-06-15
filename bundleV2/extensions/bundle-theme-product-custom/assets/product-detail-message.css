@@ -6,6 +6,13 @@
   margin: 1rem 0 0.75rem;
 }
 
+.create-offer-preview-button.ciwi-bundle-add-loading,
+button.ciwi-bundle-add-loading,
+input.ciwi-bundle-add-loading {
+  opacity: 0.72;
+  cursor: wait;
+}
+
 .create-offer-preview-card {
   border: 1px solid #dfe3e8;
   border-radius: 8px;
