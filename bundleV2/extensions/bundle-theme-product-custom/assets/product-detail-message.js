@@ -6787,7 +6787,10 @@ function attachBundlePriceSync(offer) {
         void runBundleCartAddFlow(async () => {
           const addResponse = await performCompleteBundleCartAdd();
           if (addResponse?.__ciwiNativeCartAdd) return addResponse;
-          if (addResponse) await finishSuccessfulBundleCartAdd(addResponse);
+          if (addResponse) {
+            // 多商品 JSON 加购：就地刷新是假成功，直接 reload 保证购物车 UI 更新
+            window.location.reload();
+          }
           return addResponse;
         });
       },
