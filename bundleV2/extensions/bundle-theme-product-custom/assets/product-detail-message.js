@@ -234,22 +234,17 @@ function fromCents(cents) {
 }
 
 /**
- * Use higher precision during intermediate calculations and only round to cents
- * at the final step so the storefront card stays closer to Shopify cart totals.
+ * Match Shopify cart percentage product discounts: floor discount cents per unit,
+ * then multiply by quantity (same allocation as checkout Functions on cart lines).
  */
 function calculateBundleAmounts(unitPrice, quantity, discountPercent) {
-  const MONEY_SCALE = 10000;
   const safeQty = Math.max(1, Math.trunc(Number(quantity) || 1));
   const safeDiscountPercent = Math.max(0, Math.min(100, Number(discountPercent) || 0));
-  const unitPriceScaled = toScaledInteger(unitPrice, MONEY_SCALE);
-  const originalTotalScaled = unitPriceScaled * safeQty;
-  const discountedTotalScaled = Math.round(
-    originalTotalScaled * (1 - safeDiscountPercent / 100),
-  );
-  const originalTotalCents = Math.round(originalTotalScaled / (MONEY_SCALE / 100));
-  const discountedTotalCents = Math.round(
-    discountedTotalScaled / (MONEY_SCALE / 100),
-  );
+  const unitPriceCents = Math.round(Number(unitPrice) * 100);
+  const discountPerUnitCents = Math.floor((unitPriceCents * safeDiscountPercent) / 100);
+  const discountedUnitCents = Math.max(0, unitPriceCents - discountPerUnitCents);
+  const originalTotalCents = unitPriceCents * safeQty;
+  const discountedTotalCents = discountedUnitCents * safeQty;
   const savedCents = originalTotalCents - discountedTotalCents;
 
   return {
@@ -668,31 +663,34 @@ function getUnitPriceFromProductDom() {
   return null;
 }
 
+function getUnitPriceFromBundleConfig(selectedVariantId) {
+  const configEl = getBundleConfigElement();
+  if (!configEl) return null;
+  try {
+    const config = JSON.parse(configEl.textContent || "{}");
+    const variants = Array.isArray(config?.variants) ? config.variants : [];
+    if (selectedVariantId && variants.length) {
+      const matched = variants.find((v) => String(v?.id || "") === selectedVariantId);
+      const matchedPrice = normalizePriceNumber(matched?.price);
+      if (matchedPrice != null) return matchedPrice;
+    }
+    const firstVariantPrice =
+      normalizePriceNumber(config?.firstVariant?.price) ??
+      normalizePriceNumber(variants[0]?.price);
+    if (firstVariantPrice != null) return firstVariantPrice;
+  } catch {
+    // ignore config parse error
+  }
+  return null;
+}
+
 function getCurrentUnitPrice() {
   const selectedVariantId = getSelectedVariantId();
+  const configPrice = getUnitPriceFromBundleConfig(selectedVariantId);
+  if (configPrice != null) return configPrice;
+
   const domPrice = getUnitPriceFromProductDom();
   if (domPrice != null) return domPrice;
-
-  const configEl = getBundleConfigElement();
-  if (configEl) {
-    try {
-      const config = JSON.parse(configEl.textContent || "{}");
-      const variants = Array.isArray(config?.variants) ? config.variants : [];
-      if (selectedVariantId && variants.length) {
-        const matched = variants.find(
-          (v) => String(v?.id || "") === selectedVariantId,
-        );
-        const matchedPrice = normalizePriceNumber(matched?.price);
-        if (matchedPrice != null) return matchedPrice;
-      }
-      const firstVariantPrice =
-        normalizePriceNumber(config?.firstVariant?.price) ??
-        normalizePriceNumber(variants[0]?.price);
-      if (firstVariantPrice != null) return firstVariantPrice;
-    } catch {
-      // ignore config parse error
-    }
-  }
 
   const productMeta = window?.ShopifyAnalytics?.meta?.product;
   const variants =
@@ -1815,28 +1813,53 @@ function getCompleteBundleSelectableItems(_config, bar) {
   });
 }
 
-function getSelectedCompleteBundleItemIds(config, bar, options) {
+/** Bar 内所有配置商品都纳入整包（不可单独取消勾选）。 */
+function isCompleteBundleFixedProductSelectionBar(config, bar) {
+  if (isCompleteBundleSingleBarConfig(bar)) return false;
   const pool = getCompleteBundleSelectableItems(config, bar);
-  const allowedIds = new Set(pool.map((product) => String(product.productId)));
-  const useStoredSelection = options?.useStoredSelection !== false;
-  const rawMap = useStoredSelection
-    ? window.__ciwiBundleState?.selectedCompleteBundleProducts?.[bar.id] || {}
-    : {};
-  const explicitIds = Object.keys(rawMap).filter(
-    (productId) => rawMap[productId] && allowedIds.has(String(productId)),
-  );
+  if (!pool.length) return false;
+  if (pool.length === 1) return true;
   const minQuantity = Math.max(1, Math.trunc(Number(bar?.minQuantity) || 1));
   const maxQuantity = Math.max(
     minQuantity,
     Math.trunc(Number(bar?.maxQuantity) || Number(bar?.quantity) || 1),
   );
-  const inStockPool = pool.filter((product) => {
+  return maxQuantity >= pool.length;
+}
+
+function getCompleteBundleInStockPool(config, bar, options) {
+  const pool = getCompleteBundleSelectableItems(config, bar);
+  const useStoredSelection = options?.useStoredSelection !== false;
+  return pool.filter((product) => {
     const variant = resolveCompleteBundleVariant(bar, product, {
       useStoredSelection,
       preferSellable: true,
     });
     return variant && !isVariantOutOfStock(variant);
   });
+}
+
+function getSelectedCompleteBundleItemIds(config, bar, options) {
+  const pool = getCompleteBundleSelectableItems(config, bar);
+  const allowedIds = new Set(pool.map((product) => String(product.productId)));
+  const useStoredSelection = options?.useStoredSelection !== false;
+  const minQuantity = Math.max(1, Math.trunc(Number(bar?.minQuantity) || 1));
+  const maxQuantity = Math.max(
+    minQuantity,
+    Math.trunc(Number(bar?.maxQuantity) || Number(bar?.quantity) || 1),
+  );
+  const inStockPool = getCompleteBundleInStockPool(config, bar, { useStoredSelection });
+
+  if (isCompleteBundleFixedProductSelectionBar(config, bar)) {
+    return inStockPool.map((product) => String(product.productId));
+  }
+
+  const rawMap = useStoredSelection
+    ? window.__ciwiBundleState?.selectedCompleteBundleProducts?.[bar.id] || {}
+    : {};
+  const explicitIds = Object.keys(rawMap).filter(
+    (productId) => rawMap[productId] && allowedIds.has(String(productId)),
+  );
   const selectedIds = explicitIds.length
     ? explicitIds.slice(0, maxQuantity)
     : inStockPool.slice(0, minQuantity).map((product) => String(product.productId));
@@ -3780,6 +3803,7 @@ function resolveThemeCompleteBundleCardDisplay(config, bar, index, unitPrice, an
   }
 
   const bundleItems = getCompleteBundleSelectableItems(config, bar);
+  const fixedSelection = isCompleteBundleFixedProductSelectionBar(config, bar);
   const selectedItemIds = new Set(getSelectedCompleteBundleItemIds(config, bar));
   let sumOriginal = unitPrice;
   for (const p of bundleItems) {
@@ -3815,6 +3839,7 @@ function resolveThemeCompleteBundleCardDisplay(config, bar, index, unitPrice, an
         : `Select ${maxQuantity} items`,
     bundleItems,
     selectedItemIds,
+    fixedSelection,
     products: anchorPreview ? [anchorPreview] : [],
     minQuantity,
     maxQuantity,
@@ -4593,17 +4618,11 @@ async function performDifferentProductsCartAdd() {
     return false;
   }
 
-  const res = await fetch("/cart/add.js", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    credentials: "same-origin",
-    body: JSON.stringify({ items }),
-  });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) {
+  const { ok, status, body } = await postCartAddJsonPayload({ items });
+  if (!ok) {
     console.error(
       "[ciwi] different products cart/add.js failed",
-      res.status,
+      status,
       body?.description || body?.message || body,
     );
     return null;
@@ -4642,6 +4661,7 @@ window.ciwiToggleCompleteBundleProduct = function (barId, productId, checked) {
       : null;
   const bar = config?.bars.find((entry) => String(entry.id) === String(barId));
   if (!bar) return;
+  if (isCompleteBundleFixedProductSelectionBar(config, bar)) return;
   const selectedIds = getSelectedCompleteBundleItemIds(config, bar);
   const maxQuantity = Math.max(
     Math.max(1, Math.trunc(Number(bar?.minQuantity) || 1)),
@@ -5166,15 +5186,18 @@ function renderStorefrontCompleteBundlePreviewHtml(theme, model) {
       let productsHtml = "";
       const bundleItems = display.bundleItems || [];
       const selectedItemIds = display.selectedItemIds || new Set();
+      const fixedSelection = display.fixedSelection === true;
       const maxQuantity = display.maxQuantity || 1;
       for (let idx = 0; idx < bundleItems.length; idx += 1) {
         if (idx > 0 && bundleItems.length >= 2) {
           productsHtml += `<div style="display:flex;align-items:center;justify-content:center;color:#9aa0a6;font-weight:700;width:22px;flex-shrink:0;font-size:16px;">+</div>`;
         }
-        const isChecked = selectedItemIds.has(String(bundleItems[idx].productId));
-        const disableUnchecked = !isChecked && selectedItemIds.size >= maxQuantity;
+        const isChecked =
+          fixedSelection || selectedItemIds.has(String(bundleItems[idx].productId));
+        const disableUnchecked =
+          !fixedSelection && !isChecked && selectedItemIds.size >= maxQuantity;
         productsHtml += buildOneCompleteBundleProductHtml(bar, bundleItems[idx], {
-          selectable: true,
+          selectable: !fixedSelection && bundleItems.length > 1,
           selected: isChecked,
           disabled: disableUnchecked,
         });
@@ -5541,17 +5564,11 @@ async function performFreeGiftCartAdd() {
     },
   ];
 
-  const res = await fetch("/cart/add.js", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    credentials: "same-origin",
-    body: JSON.stringify({ items }),
-  });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) {
+  const { ok, status, body } = await postCartAddJsonPayload({ items });
+  if (!ok) {
     console.error(
       "[ciwi] free gift cart/add.js failed",
-      res.status,
+      status,
       body?.description || body?.message || body,
     );
     return null;
@@ -5571,22 +5588,143 @@ async function performSingleVariantBundleCartAdd(offer, quantity, options) {
     properties,
   };
 
-  const res = await fetch("/cart/add.js", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    credentials: "same-origin",
-    body: JSON.stringify({ items: [item] }),
-  });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) {
+  const { ok, status, body } = await postCartAddJsonPayload({ items: [item] });
+  if (!ok) {
     console.error(
       "[ciwi] single variant bundle cart/add.js failed",
-      res.status,
+      status,
       body?.description || body?.message || body,
     );
     return null;
   }
   return body;
+}
+
+function getThemeCartUiElement() {
+  return (
+    document.querySelector("cart-drawer") ||
+    document.querySelector("cart-notification") ||
+    null
+  );
+}
+
+function getThemeCartSectionIds() {
+  const cartUi = getThemeCartUiElement();
+  if (cartUi && typeof cartUi.getSectionsToRender === "function") {
+    try {
+      const sectionIds = cartUi
+        .getSectionsToRender()
+        .map((section) => String(section?.id || "").trim())
+        .filter(Boolean);
+      if (sectionIds.length) return sectionIds;
+    } catch (error) {
+      console.warn("[ciwi] getSectionsToRender failed", error);
+    }
+  }
+  return ["cart-drawer", "cart-icon-bubble", "cart-live-region-text"].filter(
+    (sectionId) =>
+      document.getElementById(`shopify-section-${sectionId}`) ||
+      document.getElementById(sectionId),
+  );
+}
+
+function appendCartSectionRenderingFields(payload) {
+  const sectionIds = getThemeCartSectionIds();
+  if (!sectionIds.length) return payload;
+  return {
+    ...payload,
+    sections: sectionIds.join(","),
+    sections_url: `${window.location.pathname}${window.location.search}`,
+  };
+}
+
+async function postCartAddJsonPayload(payload) {
+  const res = await fetch("/cart/add.js", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify(appendCartSectionRenderingFields(payload)),
+  });
+  const contentType = String(res.headers.get("content-type") || "");
+  const rawText = await res.text().catch(() => "");
+  const body =
+    contentType.toLowerCase().includes("application/json") && rawText
+      ? (() => {
+          try {
+            return JSON.parse(rawText);
+          } catch {
+            return null;
+          }
+        })()
+      : null;
+  return { ok: res.ok, status: res.status, body, rawText, contentType, response: res };
+}
+
+function cartSectionsHaveRenderableHtml(sections) {
+  if (!sections || typeof sections !== "object") return false;
+  return Object.values(sections).some(
+    (html) => typeof html === "string" && html.trim().length > 0,
+  );
+}
+
+function applyThemeCartUiFromAddResponse(addResponse) {
+  if (!cartSectionsHaveRenderableHtml(addResponse?.sections)) return false;
+
+  const cartUi = getThemeCartUiElement();
+  if (cartUi && typeof cartUi.renderContents === "function") {
+    try {
+      cartUi.classList.remove("is-empty");
+      cartUi.renderContents(addResponse);
+      if (typeof cartUi.open === "function") {
+        cartUi.open();
+      }
+      return true;
+    } catch (error) {
+      console.warn("[ciwi] cart UI renderContents failed", error);
+    }
+  }
+
+  let applied = false;
+  Object.entries(addResponse.sections).forEach(([sectionId, html]) => {
+    if (typeof html !== "string" || !html.trim()) return;
+    const sectionRoot = document.getElementById(`shopify-section-${sectionId}`);
+    if (!sectionRoot) return;
+    sectionRoot.innerHTML = html;
+    applied = true;
+  });
+  return applied;
+}
+
+async function fetchFullCartJson() {
+  const res = await fetch("/cart.js", {
+    headers: { Accept: "application/json" },
+    credentials: "same-origin",
+  });
+  if (!res.ok) return null;
+  return res.json().catch(() => null);
+}
+
+async function fetchThemeCartSectionsJson() {
+  const sectionIds = getThemeCartSectionIds();
+  if (!sectionIds.length) return null;
+  const sectionsUrl = `${window.location.pathname}${window.location.search}`;
+  const res = await fetch(`${sectionsUrl}?sections=${sectionIds.join(",")}`, {
+    headers: { Accept: "application/json" },
+    credentials: "same-origin",
+  });
+  if (!res.ok) return null;
+  return res.json().catch(() => null);
+}
+
+function dispatchCartUpdateEvents(detail) {
+  document.documentElement.dispatchEvent(
+    new CustomEvent("cart:refresh", { bubbles: true }),
+  );
+  document.dispatchEvent(new CustomEvent("cart:updated", { detail }));
+  window.dispatchEvent(new CustomEvent("shopify:cart:change", { detail }));
+  document.body.dispatchEvent(
+    new CustomEvent("ajaxCart:updated", { bubbles: true, detail }),
+  );
 }
 
 function buildCartEventDetailFromAddResponse(addResponse) {
@@ -5603,22 +5741,44 @@ function buildCartEventDetailFromAddResponse(addResponse) {
 }
 
 /**
- * AJAX 加购成功后通知主题刷新购物车/侧栏（不跳转 /cart）。
- * 直接使用 cart/add.js 响应构造事件 detail，避免串行等待 /cart.js。
+ * AJAX 加购成功后刷新主题购物车 UI。
+ * 优先用 cart/add.js 自带的 sections + cart-drawer.renderContents（Dawn/Refresh）；
+ * 否则后台拉 sections / cart.js，不阻塞按钮 loading 结束。
  */
 function notifyThemeAfterCartAdd(addResponse) {
-  const detail = buildCartEventDetailFromAddResponse(addResponse);
   try {
-    document.documentElement.dispatchEvent(
-      new CustomEvent("cart:refresh", { bubbles: true }),
-    );
-    document.dispatchEvent(new CustomEvent("cart:updated", { detail }));
-    window.dispatchEvent(new CustomEvent("shopify:cart:change", { detail }));
-    document.body.dispatchEvent(
-      new CustomEvent("ajaxCart:updated", { bubbles: true, detail }),
-    );
+    dispatchCartUpdateEvents(buildCartEventDetailFromAddResponse(addResponse));
+
+    if (applyThemeCartUiFromAddResponse(addResponse)) {
+      return;
+    }
+
+    void refreshThemeCartUiFallback(addResponse);
   } catch (error) {
     console.warn("[ciwi] notifyThemeAfterCartAdd failed", error);
+  }
+}
+
+async function refreshThemeCartUiFallback(addResponse) {
+  try {
+    const sections = await fetchThemeCartSectionsJson();
+    if (cartSectionsHaveRenderableHtml(sections)) {
+      const hydratedResponse = { ...(addResponse || {}), sections };
+      if (applyThemeCartUiFromAddResponse(hydratedResponse)) {
+        const cart = await fetchFullCartJson();
+        if (cart) dispatchCartUpdateEvents({ cart });
+        return;
+      }
+    }
+  } catch (error) {
+    console.warn("[ciwi] cart section fallback failed", error);
+  }
+
+  try {
+    const cart = await fetchFullCartJson();
+    if (cart) dispatchCartUpdateEvents({ cart });
+  } catch (error) {
+    console.warn("[ciwi] cart.js fallback failed", error);
   }
 }
 
@@ -5695,32 +5855,15 @@ function isCloudflareChallengeResponse(responseText, response, contentType) {
 }
 
 async function addItemsToCartWithFallback(items, offer) {
-  const res = await fetch("/cart/add.js", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    credentials: "same-origin",
-    body: JSON.stringify({ items }),
-  });
-  const contentType = String(res.headers.get("content-type") || "");
-  const rawText = await res.text().catch(() => "");
-  const body =
-    contentType.toLowerCase().includes("application/json") && rawText
-      ? (() => {
-          try {
-            return JSON.parse(rawText);
-          } catch {
-            return null;
-          }
-        })()
-      : null;
+  const { ok, status, body, rawText, contentType } = await postCartAddJsonPayload({ items });
 
-  if (res.ok) {
+  if (ok) {
     return body;
   }
 
-  if (isCloudflareChallengeResponse(rawText, res, contentType)) {
+  if (isCloudflareChallengeResponse(rawText, { status: status }, contentType)) {
     console.warn("[ciwi] cart/add.js hit Cloudflare challenge, falling back to native form submit", {
-      status: res.status,
+      status,
       contentType,
       offerId: offer?.id || "",
       itemCount: items.length,
@@ -5731,7 +5874,7 @@ async function addItemsToCartWithFallback(items, offer) {
 
   console.error(
     "[ciwi] cart/add.js failed",
-    res.status,
+    status,
     body?.description || body?.message || rawText || body,
   );
   return false;
