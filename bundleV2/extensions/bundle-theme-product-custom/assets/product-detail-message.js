@@ -5698,8 +5698,11 @@ async function fetchThemeCartSectionsJson() {
         headers: { Accept: "application/json" },
         credentials: "same-origin",
       });
+      // 被限流（429）或返回 HTML 挑战页时跳过，绝不对非 JSON 响应做 res.json()。
       if (!res.ok) continue;
-      const data = await res.json();
+      const contentType = String(res.headers.get("content-type") || "").toLowerCase();
+      if (!contentType.includes("application/json")) continue;
+      const data = await res.json().catch(() => null);
       if (cartSectionsHaveRenderableHtml(data)) return data;
     } catch {
       // try next path
@@ -5709,23 +5712,45 @@ async function fetchThemeCartSectionsJson() {
 }
 
 async function fetchFullCartJson() {
-  const res = await fetch(`${getShopifyRootPath()}cart.js`, {
-    headers: { Accept: "application/json" },
-    credentials: "same-origin",
-  });
-  if (!res.ok) return null;
-  return res.json().catch(() => null);
+  try {
+    const res = await fetch(`${getShopifyRootPath()}cart.js`, {
+      headers: { Accept: "application/json" },
+      credentials: "same-origin",
+    });
+    // 429 / 5xx：res.ok 为 false，直接放弃，避免把 HTML 错误页喂给 JSON.parse。
+    if (!res.ok) return null;
+    const contentType = String(res.headers.get("content-type") || "").toLowerCase();
+    if (!contentType.includes("application/json")) return null;
+    return await res.json().catch(() => null);
+  } catch {
+    return null;
+  }
 }
 
 async function hydrateThemeCartRenderState(addResponse) {
-  const cart = await fetchFullCartJson();
-  let sections = addResponse?.sections;
+  // cart/add.js 已带 sections + sections_url 请求，响应通常直接含渲染好的 sections。
+  // Happy path 不再额外抓 cart.js / cart-sections，避免请求突发触发 Shopify 429 限流
+  // （限流会让主题端 cart.json 拿到 HTML 错误页、JSON.parse 抛错，购物车不刷新）。
+  let sections =
+    addResponse && typeof addResponse === "object" ? addResponse.sections : undefined;
+  let cart = null;
+
   if (!cartSectionsHaveRenderableHtml(sections)) {
+    // 仅当 add 响应未带可用 section HTML 时，才补抓（最多一次 cart.js + 一轮 sections）。
+    cart = await fetchFullCartJson();
     sections = await fetchThemeCartSectionsJson();
   }
+
   if (!cartSectionsHaveRenderableHtml(sections)) {
-    return null;
+    // 仍拿不到 section HTML：尽量返回 cart 数据，让事件 + 角标兜底更新。
+    if (!cart) cart = await fetchFullCartJson();
+    return cart
+      ? { ...(addResponse && typeof addResponse === "object" ? addResponse : {}), ...cart }
+      : addResponse && typeof addResponse === "object"
+        ? { ...addResponse }
+        : null;
   }
+
   return {
     ...(addResponse && typeof addResponse === "object" ? addResponse : {}),
     ...(cart && typeof cart === "object" ? cart : {}),
@@ -5734,7 +5759,10 @@ async function hydrateThemeCartRenderState(addResponse) {
 }
 
 function updateCartCountBadges(itemCount) {
-  const nextCount = Math.max(0, Math.trunc(Number(itemCount) || 0));
+  // add 响应不含 item_count 时不要把角标清零——注入的 cart-icon-bubble section 已含正确数量。
+  const parsed = Number(itemCount);
+  if (!Number.isFinite(parsed)) return;
+  const nextCount = Math.max(0, Math.trunc(parsed));
   const selectors = [
     "[data-cart-count]",
     ".cart-count-bubble",
@@ -5849,10 +5877,14 @@ function tryRefreshProductFormCartUi(renderState) {
  */
 async function refreshThemeCartUi(addResponse) {
   try {
-    dispatchCartUpdateEvents(buildCartEventDetailFromAddResponse(addResponse));
-
+    // 整次刷新最多一次额外网络请求（且只在 add 响应缺 sections 时发生），
+    // 避免与主题自身的 cart.json 拉取叠加成请求突发触发 429。
     const renderState = await hydrateThemeCartRenderState(addResponse);
-    if (renderState) {
+    dispatchCartUpdateEvents(
+      buildCartEventDetailFromAddResponse(renderState || addResponse),
+    );
+
+    if (renderState && cartSectionsHaveRenderableHtml(renderState.sections)) {
       if (await applyThemeCartUiFromAddResponse(renderState)) {
         updateCartCountBadges(renderState.item_count);
         return true;
@@ -5863,12 +5895,11 @@ async function refreshThemeCartUi(addResponse) {
       }
     }
 
-    const cart = await fetchFullCartJson();
-    if (cart) {
-      dispatchCartUpdateEvents({ cart });
-      updateCartCountBadges(cart.item_count);
-      tryOpenThemeCartDrawer();
+    // 兜底：拿不到可注入的 section HTML，用已有 cart 数据更新角标并打开抽屉，让主题自渲染。
+    if (renderState) {
+      updateCartCountBadges(renderState.item_count);
     }
+    tryOpenThemeCartDrawer();
     return false;
   } catch (error) {
     console.warn("[ciwi] refreshThemeCartUi failed", error);
