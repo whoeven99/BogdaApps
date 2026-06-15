@@ -6,6 +6,8 @@ import { isOfferPublishedForBundleMetafieldSync } from "../../utils/offerParsing
 import { reconcileShopOfferShardedMetafields } from "../../utils/bundleShopOfferMetafields.server";
 import {
   BUNDLE_METAFIELD_FUNCTION_OFFERS_KEY,
+  BUNDLE_SHOP_METAFIELD_NAMESPACE,
+  BUNDLE_OFFER_SYNC_AT_KEY,
 } from "../../utils/bundleShopMetafieldKeys";
 import { createShopOfferSyncScheduler } from "../../routes/_index/offerSyncScheduler";
 import {
@@ -81,10 +83,10 @@ async function syncFunctionOwnerOffersMetafield(
   admin: AdminType,
   shopNameToSync: string,
   syncContext: OfferMetafieldSyncContext,
+  shopOffers: OfferListItem[],
+  functionMetafieldValue: string,
 ): Promise<SyncResult> {
   try {
-    const shopOffers = await loadShopOffersForSync(shopNameToSync);
-    const functionMetafieldValue = await buildCompactOffersPayload(shopOffers);
     const activeOffers = shopOffers.filter(isOfferPublishedForBundleMetafieldSync);
     logOfferMetafieldSyncPhase("discount-metafields-ok", shopNameToSync, syncContext, {
       step: "discount-sync-start",
@@ -173,6 +175,8 @@ export async function syncShopOffersMetafield(
       admin,
       shopNameToSync,
       syncContext,
+      shopOffers,
+      functionMetafieldValue,
     );
     if (!discountSyncResult.ok) {
       logOfferMetafieldSyncPhase("discount-metafields-failed", shopNameToSync, syncContext, {
@@ -274,6 +278,89 @@ export async function syncShopOffersMetafield(
     });
     return { ok: false, message: msg || "Metafield sync failed", step: "unexpected" };
   }
+}
+
+/**
+ * Loader 兜底自愈，每 10 分钟也强制重写一次（防御外部把 metafield 改坏/清空）。
+ * 在这个窗口内、且 DB 自上次写入后无变化时，loader 跳过整轮重写。
+ */
+const LOADER_SYNC_MAX_STALENESS_MS = 10 * 60 * 1000;
+
+/** 读 shop 上一次写 offers 的时间戳（ISO）；读不到返回 null（按需触发同步）。 */
+async function readShopOfferSyncAt(admin: AdminType): Promise<string | null> {
+  try {
+    const resp = await admin.graphql(
+      `#graphql
+        query OfferSyncAt {
+          shop {
+            metafield(namespace: "${BUNDLE_SHOP_METAFIELD_NAMESPACE}", key: "${BUNDLE_OFFER_SYNC_AT_KEY}") {
+              value
+            }
+          }
+        }
+      `,
+    );
+    const json = (await resp.json()) as {
+      data?: { shop?: { metafield?: { value?: string | null } | null } };
+    };
+    return json?.data?.shop?.metafield?.value ?? null;
+  } catch (error) {
+    console.warn("[offers-sync] failed to read sync-at metafield; will sync", error);
+    return null;
+  }
+}
+
+/** 廉价聚合：店铺 offer 数量 + 最新 updatedAt（毫秒）。出错时强制同步。 */
+async function readOfferDbState(
+  shopNameToSync: string,
+): Promise<{ count: number; maxUpdatedAtMs: number }> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const prismaAny = prisma as any;
+  try {
+    const agg = await prismaAny.offer.aggregate({
+      where: { shopName: shopNameToSync },
+      _max: { updatedAt: true },
+      _count: { _all: true },
+    });
+    return {
+      count: agg?._count?._all ?? 0,
+      maxUpdatedAtMs: agg?._max?.updatedAt ? new Date(agg._max.updatedAt).getTime() : 0,
+    };
+  } catch (error) {
+    console.warn("[offers-sync] failed to aggregate offers; will sync", error);
+    return { count: -1, maxUpdatedAtMs: Number.MAX_SAFE_INTEGER };
+  }
+}
+
+/**
+ * loader 用：仅当 offer 数据自上次写入后有变化、或已超过周期性自愈窗口时才真正同步。
+ * 写路径（runOfferPostWriteSync）已负责变更后的即时同步，故 loader 默认是廉价空转。
+ */
+export async function syncShopOffersMetafieldIfStale(
+  admin: AdminType,
+  shopNameToSync: string,
+  syncContext: OfferMetafieldSyncContext = { trigger: "loader" },
+): Promise<SyncResult> {
+  const [syncAtRaw, dbState] = await Promise.all([
+    readShopOfferSyncAt(admin),
+    readOfferDbState(shopNameToSync),
+  ]);
+
+  const syncAtMs = syncAtRaw ? Date.parse(syncAtRaw) : NaN;
+  const hasSyncAt = Number.isFinite(syncAtMs);
+  const periodicRefreshDue = !hasSyncAt || Date.now() - syncAtMs > LOADER_SYNC_MAX_STALENESS_MS;
+  const dataUnchanged = hasSyncAt && dbState.maxUpdatedAtMs <= syncAtMs;
+
+  if (dataUnchanged && !periodicRefreshDue) {
+    logOfferMetafieldSyncPhase("skipped-fresh", shopNameToSync, syncContext, {
+      syncAt: syncAtRaw,
+      offerCount: dbState.count,
+      maxUpdatedAtMs: dbState.maxUpdatedAtMs,
+    });
+    return { ok: true };
+  }
+
+  return syncShopOffersMetafield(admin, shopNameToSync, syncContext);
 }
 
 const OFFER_POST_WRITE_SYNC_TIMEOUT_MS = 8_000;

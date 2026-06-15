@@ -21,7 +21,7 @@ import { OfferTypeSelection } from "../component/CreateNewOffer/OfferTypeSelecti
 import { sanitizeEnvLikeValue } from "../../utils/env";
 import { fetchThemeEditorTargets, getCurrentThemeExtensionEnabled } from "../../server/shopify/theme.server";
 import { getCachedShopOffers } from "../../shopOffersCache.server";
-import { syncShopOffersMetafield } from "../../server/offers/offerSync.server";
+import { syncShopOffersMetafieldIfStale } from "../../server/offers/offerSync.server";
 import { handleLoadOffers } from "./actions/loadOffers.server";
 import { handleLoadStoreProducts } from "./actions/loadStoreProducts.server";
 import { handleGetProductSubscription } from "./actions/getProductSubscription.server";
@@ -37,11 +37,9 @@ export type { ThemeEditorTarget, ThemeExtensionDetectionDebug } from "../../serv
 
 // ─── Loader ────────────────────────────────────────────────────────────────────
 
-export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, session } = await authenticate.admin(request);
-  const apiKey = sanitizeEnvLikeValue(process.env.SHOPIFY_API_KEY);
+type LoaderAdmin = Parameters<typeof fetchThemeEditorTargets>[0];
 
-  let ianaTimezone = "UTC";
+async function fetchShopTimezone(admin: LoaderAdmin): Promise<string> {
   try {
     const tzResponse = await admin.graphql(
       `#graphql
@@ -51,12 +49,60 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       `,
     );
     const tzJson = (await tzResponse.json()) as { data?: { shop?: { ianaTimezone?: string } } };
-    if (tzJson?.data?.shop?.ianaTimezone) ianaTimezone = tzJson.data.shop.ianaTimezone;
+    if (tzJson?.data?.shop?.ianaTimezone) return tzJson.data.shop.ianaTimezone;
   } catch (error) {
     console.error("Failed to fetch shop timezone", error);
   }
+  return "UTC";
+}
 
-  const themeExtensionDetection = await getCurrentThemeExtensionEnabled(admin);
+async function fetchShopMarkets(admin: LoaderAdmin): Promise<IndexLoaderData["markets"]> {
+  try {
+    const marketsResponse = await admin.graphql(
+      `#graphql
+        query ShopMarkets {
+          markets(first: 250) {
+            edges { node { id name handle } }
+          }
+        }
+      `,
+    );
+    const marketsJson = (await marketsResponse.json()) as {
+      data?: { markets?: { edges?: Array<{ node?: { id?: string; name?: string; handle?: string } }> } };
+    };
+    return (marketsJson?.data?.markets?.edges ?? [])
+      .map((edge) => edge.node)
+      .filter((n): n is NonNullable<typeof n> => Boolean(n?.id))
+      .map((n) => ({ id: n.id!, name: n.name ?? "", handle: n.handle ?? "" }));
+  } catch (error) {
+    console.error("Failed to fetch shop markets", error);
+    return [];
+  }
+}
+
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const { admin, session } = await authenticate.admin(request);
+  const apiKey = sanitizeEnvLikeValue(process.env.SHOPIFY_API_KEY);
+
+  // 这些请求彼此无依赖，并行发出（原来逐个 await，loader 时延 = 多次串行往返）。
+  const [ianaTimezone, themeExtensionDetection, themeTargets, syncResult, markets] =
+    await Promise.all([
+      fetchShopTimezone(admin),
+      getCurrentThemeExtensionEnabled(admin),
+      fetchThemeEditorTargets(admin),
+      // 仅在 offer 数据自上次写入后有变化（或到周期性自愈窗口）时才真正重写 metafield。
+      syncShopOffersMetafieldIfStale(admin, session.shop, { trigger: "loader" }),
+      fetchShopMarkets(admin),
+    ]);
+
+  if (!syncResult.ok) {
+    console.error("Failed to sync shop offers metafield in loader", {
+      shopName: session.shop,
+      message: syncResult.message,
+      step: syncResult.step,
+    });
+  }
+
   const themeExtensionEnabled = themeExtensionDetection.enabled;
   const themeExtensionDetectionFailed = Boolean(themeExtensionDetection.debug?.error);
   const themeEditorStoreId = String(session.shop || "")
@@ -71,38 +117,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       .split("/")
       .filter(Boolean)
       .pop() ?? "";
-  const themeTargets = await fetchThemeEditorTargets(admin);
-
-  const syncResult = await syncShopOffersMetafield(admin, session.shop, { trigger: "loader" });
-  if (!syncResult.ok) {
-    console.error("Failed to sync shop offers metafield in loader", {
-      shopName: session.shop,
-      message: syncResult.message,
-      step: syncResult.step,
-    });
-  }
-
-  let markets: IndexLoaderData["markets"] = [];
-  try {
-    const marketsResponse = await admin.graphql(
-      `#graphql
-        query ShopMarkets {
-          markets(first: 250) {
-            edges { node { id name handle } }
-          }
-        }
-      `,
-    );
-    const marketsJson = (await marketsResponse.json()) as {
-      data?: { markets?: { edges?: Array<{ node?: { id?: string; name?: string; handle?: string } }> } };
-    };
-    markets = (marketsJson?.data?.markets?.edges ?? [])
-      .map((edge) => edge.node)
-      .filter((n): n is NonNullable<typeof n> => Boolean(n?.id))
-      .map((n) => ({ id: n.id!, name: n.name ?? "", handle: n.handle ?? "" }));
-  } catch (error) {
-    console.error("Failed to fetch shop markets", error);
-  }
 
   return Response.json({
     markets,

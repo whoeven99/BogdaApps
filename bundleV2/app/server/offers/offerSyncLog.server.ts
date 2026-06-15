@@ -16,6 +16,7 @@ export type OfferMetafieldSyncPhase =
   | "discount-metafields-ok"
   | "discount-metafields-failed"
   | "shard-overflow"
+  | "skipped-fresh"
   | "complete"
   | "failed"
   | "timed-out";
