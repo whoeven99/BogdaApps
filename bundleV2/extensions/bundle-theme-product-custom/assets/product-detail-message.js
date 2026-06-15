@@ -4180,6 +4180,25 @@ window.ciwiHandleBundleAddToCart = function(event) {
       });
     return;
   }
+  if (
+    (currentOffer?.offerType === "bxgy" ||
+      currentOffer?.offerType === "quantity-breaks-same") &&
+    explicitCount !== CIWI_SINGLE_OPTION_COUNT
+  ) {
+    performSingleVariantBundleCartAdd(currentOffer, cartQuantity, {
+      fallbackToDefault: explicitCount == null,
+    })
+      .then((ok) => {
+        if (ok) return notifyThemeAfterCartAdd();
+        submitBundleFormFallback();
+        return false;
+      })
+      .catch((error) => {
+        console.error("[ciwi] performSingleVariantBundleCartAdd failed", error);
+        submitBundleFormFallback();
+      });
+    return;
+  }
   submitBundleFormFallback();
 };
 
@@ -5358,6 +5377,36 @@ async function performFreeGiftCartAdd() {
   if (!res.ok) {
     console.error(
       "[ciwi] free gift cart/add.js failed",
+      res.status,
+      body?.description || body?.message || body,
+    );
+    return false;
+  }
+  return true;
+}
+
+async function performSingleVariantBundleCartAdd(offer, quantity, options) {
+  const variantId = toAjaxVariantId(getSelectedVariantId());
+  const cartQuantity = Math.max(1, Math.trunc(Number(quantity) || 1));
+  if (!offer || !variantId) return false;
+
+  const properties = getBundleLinePropertiesForOffer(offer, options) || {};
+  const item = {
+    id: Number(variantId),
+    quantity: cartQuantity,
+    properties,
+  };
+
+  const res = await fetch("/cart/add.js", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ items: [item] }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    console.error(
+      "[ciwi] single variant bundle cart/add.js failed",
       res.status,
       body?.description || body?.message || body,
     );

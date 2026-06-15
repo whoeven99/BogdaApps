@@ -1,0 +1,9 @@
+﻿query VariantPrice {
+  productVariant(id: "gid://shopify/ProductVariant/43994615742487") {
+    id
+    title
+    price
+    compareAtPrice
+    product { id title handle }
+  }
+}
