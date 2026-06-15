@@ -15,7 +15,7 @@ import {
   CompleteBundleAllocation,
   IndexedCartLine,
 } from "./types";
-import { log } from "./log";
+import { ENABLE_FUNCTION_LOGS, log } from "./log";
 import {
   isCompactOfferWire,
   offerPassesScheduleAndMarket,
@@ -246,7 +246,7 @@ export function calculateCompleteBundleProductDiscounts(
     const parsedConfig = parseCompleteBundleBarsJson(offer.selectedProductsJson);
     const barsRaw = parsedConfig.bars;
     if (!barsRaw.length || !parsedConfig.triggerProductIds.length) {
-      log("complete_bundle_skip", { offerId: offer.id, reason: "no_bars" });
+      ENABLE_FUNCTION_LOGS && log("complete_bundle_skip", { offerId: offer.id, reason: "no_bars" });
       continue;
     }
 
@@ -326,7 +326,7 @@ export function calculateCompleteBundleProductDiscounts(
       }
 
       if (matchedBundleItemsCount < bar.minQuantity) {
-        log("complete_bundle_bar_no_match", {
+        ENABLE_FUNCTION_LOGS && log("complete_bundle_bar_no_match", {
           offerId: offer.id,
           barId: bar.id,
           reason: "insufficient_bundle_items",
@@ -373,7 +373,7 @@ export function calculateCompleteBundleProductDiscounts(
         },
       });
 
-      log("complete_bundle_matched", {
+      ENABLE_FUNCTION_LOGS && log("complete_bundle_matched", {
         offerId: offer.id,
         barId: bar.id,
         includedLineCount: allocations.length + 1,
@@ -450,7 +450,7 @@ export function calculateBxgyDiscount(
 
       const selectedProductIds = compiledOffer.selectedIds;
       if (!selectedProductIds.length) {
-        log("bxgy_same_product_skip_missing_pool", { offerId: offer.id });
+        ENABLE_FUNCTION_LOGS && log("bxgy_same_product_skip_missing_pool", { offerId: offer.id });
         continue;
       }
       const candidates: ProductDiscountCandidate[] = [];
@@ -465,11 +465,11 @@ export function calculateBxgyDiscount(
         const totalQuantity = matchingLines.reduce((sum, entry) => sum + entry.quantity, 0);
         const selected = pickBestSameProductRuleForQuantity(totalQuantity, bxgyRules);
         if (!selected) {
-          log("bxgy_same_product_no_matching_rule", { offerId: offer.id });
+          ENABLE_FUNCTION_LOGS && log("bxgy_same_product_no_matching_rule", { offerId: offer.id });
           continue;
         }
 
-        log("bxgy_same_product_rule_eval", {
+        ENABLE_FUNCTION_LOGS && log("bxgy_same_product_rule_eval", {
           offerId: offer.id,
           selectedProductId: cartLookupKey,
           ruleBuyQuantity: selected.rule.buyQuantity,
@@ -480,7 +480,7 @@ export function calculateBxgyDiscount(
           maxPromotionTimes: selected.maxPromotionTimes,
         });
 
-        log("bxgy_same_product_line_eval", {
+        ENABLE_FUNCTION_LOGS && log("bxgy_same_product_line_eval", {
           offerId: offer.id,
           selectedProductId: cartLookupKey,
           totalQuantity,
@@ -516,7 +516,7 @@ export function calculateBxgyDiscount(
               },
             },
           });
-          log("bxgy_same_product_candidate_added", {
+          ENABLE_FUNCTION_LOGS && log("bxgy_same_product_candidate_added", {
             offerId: offer.id,
             cartLineId: entry.line.id,
             quantity: discountQuantity,
@@ -526,7 +526,7 @@ export function calculateBxgyDiscount(
           remainingFreeQuantity -= discountQuantity;
         }
 
-        log("bxgy_same_product_rule_applied", {
+        ENABLE_FUNCTION_LOGS && log("bxgy_same_product_rule_applied", {
           offerId: offer.id,
           selectedProductId: cartLookupKey,
           buyQuantity: selected.resolved.buyQuantity,
@@ -590,7 +590,7 @@ export function calculateBxgyDiscount(
               },
             },
           });
-          log("bxgy_shared_same_product_candidate_added", {
+          ENABLE_FUNCTION_LOGS && log("bxgy_shared_same_product_candidate_added", {
             offerId: offer.id,
             cartLineId: entry.line.id,
             quantity: discountQuantity,
@@ -620,7 +620,7 @@ export function calculateBxgyDiscount(
         r.buyProductIds,
       ).reduce((sum, entry) => sum + entry.quantity, 0);
 
-      log("bxgy_rule_match_eval", {
+      ENABLE_FUNCTION_LOGS && log("bxgy_rule_match_eval", {
         offerId: offer.id,
         ruleCount: r.count,
         tierType: r.tierType,
@@ -635,7 +635,7 @@ export function calculateBxgyDiscount(
       }
     }
     if (!bestRule) {
-      log("bxgy_insufficient_buy_quantity", {
+      ENABLE_FUNCTION_LOGS && log("bxgy_insufficient_buy_quantity", {
         offerId: offer.id,
         evaluatedRules: bxgyRules.length,
       });
@@ -651,7 +651,7 @@ export function calculateBxgyDiscount(
 
     // Check the count threshold (cart must have at least `count` items total)
     if (totalBuyQuantity < selectedRule.count) {
-      log("bxgy_count_threshold_not_met", {
+      ENABLE_FUNCTION_LOGS && log("bxgy_count_threshold_not_met", {
         offerId: offer.id,
         totalBuyQuantity,
         countThreshold: selectedRule.count,
@@ -663,7 +663,7 @@ export function calculateBxgyDiscount(
     const promotionTimes = Math.floor(buyProductCount / selectedRule.buyQuantity);
     const maxPromotionTimes = Math.min(promotionTimes, selectedRule.maxUsesPerOrder);
 
-    log("bxgy_promotion_times", {
+    ENABLE_FUNCTION_LOGS && log("bxgy_promotion_times", {
       offerId: offer.id,
       promotionTimes,
       maxPromotionTimes,
@@ -691,7 +691,7 @@ export function calculateBxgyDiscount(
             },
           });
           remaining -= discountQuantity;
-          log("simple_tier_candidate_added", {
+          ENABLE_FUNCTION_LOGS && log("simple_tier_candidate_added", {
             offerId: offer.id,
             cartLineId: entry.line.id,
             quantity: discountQuantity,
@@ -736,7 +736,7 @@ export function calculateBxgyDiscount(
         candidates.push(candidate);
         remainingGetQuantity -= discountQuantity;
 
-        log("bxgy_candidate_added", {
+        ENABLE_FUNCTION_LOGS && log("bxgy_candidate_added", {
           offerId: offer.id,
           cartLineId: entry.line.id,
           quantity: discountQuantity,
@@ -801,7 +801,7 @@ export function calculateFreeGiftDiscount(
     );
 
     if (!triggerProductIds.length || !freeGiftRules.length) {
-      log("free_gift_skip_missing_configuration", {
+      ENABLE_FUNCTION_LOGS && log("free_gift_skip_missing_configuration", {
         offerId: offer.id,
         triggerProductIds: triggerProductIds.length,
         freeGiftRuleCount: freeGiftRules.length,
@@ -824,7 +824,7 @@ export function calculateFreeGiftDiscount(
     }
 
     if (triggerQuantity <= 0 && triggerSubtotalAmount <= 0) {
-      log("free_gift_skip_no_trigger_quantity", {
+      ENABLE_FUNCTION_LOGS && log("free_gift_skip_no_trigger_quantity", {
         offerId: offer.id,
         triggerProductIds,
       });
@@ -859,7 +859,7 @@ export function calculateFreeGiftDiscount(
     }, null);
 
     if (!bestRule) {
-      log("free_gift_skip_threshold_not_met", {
+      ENABLE_FUNCTION_LOGS && log("free_gift_skip_threshold_not_met", {
         offerId: offer.id,
         triggerQuantity,
         triggerSubtotalAmount,
@@ -877,7 +877,7 @@ export function calculateFreeGiftDiscount(
         ? bestRule.rewardProductIds
         : fallbackGiftProductIds;
     if (!eligibleGiftProductIds.length) {
-      log("free_gift_skip_no_reward_products", {
+      ENABLE_FUNCTION_LOGS && log("free_gift_skip_no_reward_products", {
         offerId: offer.id,
         triggerQuantity,
         selectedRuleCount: bestRule.count,
@@ -908,7 +908,7 @@ export function calculateFreeGiftDiscount(
       discountedGiftLineIds.add(line.id);
 
       remainingGiftQuantity -= discountQuantity;
-      log("free_gift_candidate_added", {
+      ENABLE_FUNCTION_LOGS && log("free_gift_candidate_added", {
         offerId: offer.id,
         cartLineId: line.id,
         quantity: discountQuantity,
@@ -973,7 +973,7 @@ export function getBestProductDiscountPercentValue(
   );
 
   if (tiers.length === 0) {
-    log("discount_rules_fallback_default", { quantity });
+    ENABLE_FUNCTION_LOGS && log("discount_rules_fallback_default", { quantity });
     return DEFAULT_DISCOUNT_PERCENTAGE;
   }
 
@@ -983,7 +983,7 @@ export function getBestProductDiscountPercentValue(
   }
 
   if (!best) {
-    log("discount_rules_no_tier_met", {
+    ENABLE_FUNCTION_LOGS && log("discount_rules_no_tier_met", {
       quantity,
       tierCounts: tiers.map((t) => t.count),
     });
@@ -1005,7 +1005,7 @@ export function getBestProductDiscountPercentValueFromTiers(
   );
 
   if (eligibleTiers.length === 0) {
-    log("discount_rules_fallback_default", { quantity });
+    ENABLE_FUNCTION_LOGS && log("discount_rules_fallback_default", { quantity });
     return DEFAULT_DISCOUNT_PERCENTAGE;
   }
 
@@ -1015,7 +1015,7 @@ export function getBestProductDiscountPercentValueFromTiers(
   }
 
   if (!best) {
-    log("discount_rules_no_tier_met", {
+    ENABLE_FUNCTION_LOGS && log("discount_rules_no_tier_met", {
       quantity,
       tierCounts: eligibleTiers.map((t) => t.count),
     });

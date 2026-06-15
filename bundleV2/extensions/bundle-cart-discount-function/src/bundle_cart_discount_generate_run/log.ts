@@ -59,6 +59,7 @@ export function logCiwiBundleOffersDiagnostics(
     resolvedSource: string;
   },
 ): void {
+  if (!ENABLE_FUNCTION_LOGS) return;
   log("ciwi_bundle_offers_resolve", {
     resolvedSource: extra.resolvedSource,
     discountOwner: {

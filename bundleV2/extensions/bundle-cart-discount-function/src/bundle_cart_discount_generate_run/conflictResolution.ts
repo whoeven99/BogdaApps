@@ -1,6 +1,6 @@
 import { CartInput } from "../../generated/api";
 import type { ProductDiscountCandidate } from "../../generated/api";
-import { log } from "./log";
+import { ENABLE_FUNCTION_LOGS, log } from "./log";
 import { parseMoneyAmount } from "./parsing";
 
 export const MAX_EXACT_CONFLICT_WINNERS = 10;
@@ -380,7 +380,7 @@ export function resolveExclusiveProductCandidates(
       if (!(evictNetGain > trimmedSavings && evictNetGain > 0)) {
         if (trimmedSavings > 0) {
           const trimmedTargetLineIds = Array.from(trimmedQuantitiesByLineId.keys());
-          log("product_candidate_trimmed", {
+          ENABLE_FUNCTION_LOGS && log("product_candidate_trimmed", {
             targetLineIds: trimmedTargetLineIds,
             requestedQuantities: Array.from(targetQuantitiesByLineId.entries()),
             grantedQuantities: Array.from(trimmedQuantitiesByLineId.entries()),
@@ -406,7 +406,7 @@ export function resolveExclusiveProductCandidates(
         conflictingWinnerIndices.flatMap((winnerIndex) => winners[winnerIndex].targetLineIds),
       ),
     );
-    log("product_candidate_conflict_resolved", {
+    ENABLE_FUNCTION_LOGS && log("product_candidate_conflict_resolved", {
       previousTargetLineIds,
       nextTargetLineIds: targetLineIds,
       previousSavings: conflictingSavings.toFixed(4),

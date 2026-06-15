@@ -9,7 +9,7 @@ import {
   CouponAccess,
   BuyerTargetingContext,
 } from "./types";
-import { log } from "./log";
+import { ENABLE_FUNCTION_LOGS, log } from "./log";
 
 const DISCOUNT_PERCENTAGE = "10.0";
 export const DEFAULT_DISCOUNT_PERCENTAGE = DISCOUNT_PERCENTAGE;
@@ -562,7 +562,7 @@ export function offerMatchesCustomerSegments(
     RECOGNIZED_CUSTOMER_SEGMENTS.has(segment),
   );
   if (!recognizedSegments.length) {
-    log("offer_customer_segment_skip_runtime_restriction", {
+    ENABLE_FUNCTION_LOGS && log("offer_customer_segment_skip_runtime_restriction", {
       offerId: offer.id,
       segments: configuredSegments,
     });
@@ -604,7 +604,7 @@ export function offerMatchesCustomerProfileFilters(
     RECOGNIZED_CUSTOMER_PROFILE_FILTERS.has(filter),
   );
   if (!recognizedFilters.length) {
-    log("offer_customer_profile_skip_runtime_restriction", {
+    ENABLE_FUNCTION_LOGS && log("offer_customer_profile_skip_runtime_restriction", {
       offerId: offer.id,
       filters: configuredFilters,
     });
@@ -644,7 +644,7 @@ export function offerMatchesIpCountryCodes(
     return true;
   }
   if (!countryCode) {
-    log("offer_ip_country_runtime_unavailable", {
+    ENABLE_FUNCTION_LOGS && log("offer_ip_country_runtime_unavailable", {
       offerId: offer.id,
       configuredCodes,
     });
@@ -660,20 +660,20 @@ export function offerPassesScheduleAndMarket(
   parsedSettings?: ParsedOfferSettings,
 ): boolean {
   if (offer.status === false) {
-    log("offer_skip_disabled", { offerId: offer.id, name: offer.name });
+    ENABLE_FUNCTION_LOGS && log("offer_skip_disabled", { offerId: offer.id, name: offer.name });
     return false;
   }
 
   if (offer.startTime) {
     const startTimeMs = Date.parse(offer.startTime);
     if (nowMs === null) {
-      log("offer_time_unavailable_skip_start_check", {
+      ENABLE_FUNCTION_LOGS && log("offer_time_unavailable_skip_start_check", {
         offerId: offer.id,
         name: offer.name,
         startTime: offer.startTime,
       });
     } else if (Number.isFinite(startTimeMs) && nowMs < startTimeMs) {
-      log("offer_skip_before_start", {
+      ENABLE_FUNCTION_LOGS && log("offer_skip_before_start", {
         offerId: offer.id,
         name: offer.name,
         startTime: offer.startTime,
@@ -685,13 +685,13 @@ export function offerPassesScheduleAndMarket(
   if (offer.endTime) {
     const endTimeMs = Date.parse(offer.endTime);
     if (nowMs === null) {
-      log("offer_time_unavailable_skip_end_check", {
+      ENABLE_FUNCTION_LOGS && log("offer_time_unavailable_skip_end_check", {
         offerId: offer.id,
         name: offer.name,
         endTime: offer.endTime,
       });
     } else if (Number.isFinite(endTimeMs) && nowMs > endTimeMs) {
-      log("offer_skip_after_end", {
+      ENABLE_FUNCTION_LOGS && log("offer_skip_after_end", {
         offerId: offer.id,
         name: offer.name,
         endTime: offer.endTime,
@@ -716,7 +716,7 @@ export function offerPassesScheduleAndMarket(
           (m) => m === marketId || m.endsWith(`/${marketId}`),
         );
         if (!matchMarket) {
-          log("offer_skip_market_mismatch", {
+          ENABLE_FUNCTION_LOGS && log("offer_skip_market_mismatch", {
             offerId: offer.id,
             name: offer.name,
             marketId,

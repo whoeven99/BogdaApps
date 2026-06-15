@@ -12,7 +12,7 @@ import type {
   MetafieldSnapshot,
   CompiledOfferRuntime,
 } from "./types";
-import { log, logCiwiBundleOffersDiagnostics, summarizeMetafield } from "./log";
+import { ENABLE_FUNCTION_LOGS, log, logCiwiBundleOffersDiagnostics, summarizeMetafield } from "./log";
 import {
   compileOfferRuntimeFromWire,
   normalizeCouponCode,
@@ -108,7 +108,7 @@ export function resolveCartOffersPayload(input: CartInput): {
   const p1 = shard1Mf?.jsonValue as OfferMetafieldPayload | null | undefined;
   const merged = mergeShardedOfferPayloads([p0, p1]);
 
-  log("read_ciwi_offers_metafield", {
+  ENABLE_FUNCTION_LOGS && log("read_ciwi_offers_metafield", {
     namespace: "$app:ciwi_bundle",
     keys: ["offers", "offers-1"],
     shard0Present: discountOwnerMf != null,
@@ -160,12 +160,12 @@ export function bundleCartDiscountGenerateRun(
     },
   );
 
-  log("shop_metafields_snapshot", {
+  ENABLE_FUNCTION_LOGS && log("shop_metafields_snapshot", {
     discountOwnerOffersMetafield: summarizeMetafield(discountOwnerOffersMetafield),
     activeSource: offersSource,
   });
 
-  log("run_start", {
+  ENABLE_FUNCTION_LOGS && log("run_start", {
     cartLineCount: input.cart.lines.length,
     discountClasses: input.discount.discountClasses,
     hasOffers: Boolean(offersPayload),
@@ -173,7 +173,7 @@ export function bundleCartDiscountGenerateRun(
   });
 
   if (!offersPayload) {
-    log("early_exit", { reason: "no_offers_payload" });
+    ENABLE_FUNCTION_LOGS && log("early_exit", { reason: "no_offers_payload" });
     return { operations: [] };
   }
   const offers = offersPayload?.offers ?? [];
@@ -185,7 +185,7 @@ export function bundleCartDiscountGenerateRun(
   const acceptedCouponCodes = new Set<string>();
   const acceptedCouponCodeByOfferId = new Map<string, string>();
 
-  log("metafield_offers", {
+  ENABLE_FUNCTION_LOGS && log("metafield_offers", {
     updatedAt: offersPayload?.updatedAt ?? null,
     offerCount: compiledOffers.length,
     offersSummary: compiledOffers.map(({ offer, selectedIds, standardRules, bxgyRules }) => ({
@@ -199,12 +199,12 @@ export function bundleCartDiscountGenerateRun(
   });
 
   if (!offers.length) {
-    log("early_exit", { reason: "no_offers_in_metafield" });
+    ENABLE_FUNCTION_LOGS && log("early_exit", { reason: "no_offers_in_metafield" });
     return { operations: [] };
   }
 
   if (!checkValid(input)) {
-    log("early_exit", {
+    ENABLE_FUNCTION_LOGS && log("early_exit", {
       reason: "checkValid_failed",
       cartLineCount: input.cart.lines.length,
       discountClasses: input.discount.discountClasses,
@@ -224,21 +224,21 @@ export function bundleCartDiscountGenerateRun(
   const eligibleOffers = compiledOffers.filter((compiledOffer) => {
     const { offer, settings } = compiledOffer;
     if (!offerMatchesCustomerSegments(offer, buyerTargetingContext, settings)) {
-      log("offer_skip_customer_segment", {
+      ENABLE_FUNCTION_LOGS && log("offer_skip_customer_segment", {
         offerId: offer.id,
         name: offer.name,
       });
       return false;
     }
     if (!offerMatchesCustomerProfileFilters(offer, buyerTargetingContext, settings)) {
-      log("offer_skip_customer_profile_filter", {
+      ENABLE_FUNCTION_LOGS && log("offer_skip_customer_profile_filter", {
         offerId: offer.id,
         name: offer.name,
       });
       return false;
     }
     if (!offerMatchesIpCountryCodes(offer, localizationCountryCode, settings)) {
-      log("offer_skip_ip_country_code", {
+      ENABLE_FUNCTION_LOGS && log("offer_skip_ip_country_code", {
         offerId: offer.id,
         name: offer.name,
         localizationCountryCode,
@@ -251,7 +251,7 @@ export function bundleCartDiscountGenerateRun(
     }
     const acceptedCode = resolveAcceptedCouponCode(offer, enteredCodes, settings);
     if (!acceptedCode) {
-      log("offer_skip_coupon_code_mismatch", {
+      ENABLE_FUNCTION_LOGS && log("offer_skip_coupon_code_mismatch", {
         offerId: offer.id,
         name: offer.name,
         configuredCode: couponAccess.code,
@@ -288,7 +288,7 @@ export function bundleCartDiscountGenerateRun(
     ? cartRelevantBxgyOffers
     : [];
   if (cartRelevantBxgyOffers.length > 0 && bxgyOffersForEvaluation.length === 0) {
-    log("bxgy_eval_skipped", {
+    ENABLE_FUNCTION_LOGS && log("bxgy_eval_skipped", {
       hasProductDiscountClass,
       hasOrderDiscountClass,
       cartRelevantBxgyOfferIds: cartRelevantBxgyOffers.map((compiledOffer) => compiledOffer.offer.id),
@@ -310,7 +310,7 @@ export function bundleCartDiscountGenerateRun(
       offerPassesScheduleAndMarket(compiledOffer.offer, marketId, nowMs, compiledOffer.settings),
   );
   const regularOfferIndex = buildRegularOfferIndex(regularOffers);
-  log("offer_groups_resolved", {
+  ENABLE_FUNCTION_LOGS && log("offer_groups_resolved", {
     totalOffers: compiledOffers.length,
     eligibleOffers: eligibleOffers.length,
     bxgyCount: bxgyOffers.length,
@@ -334,7 +334,7 @@ export function bundleCartDiscountGenerateRun(
 
   // ③ complete-bundle 保持"整包总价"语义，但执行层改为多 target 的 product discount。
   if (hasProductDiscountClass) {
-    log("complete_bundle_evaluation_start", {
+    ENABLE_FUNCTION_LOGS && log("complete_bundle_evaluation_start", {
       marketId,
       cartLineCount: input.cart.lines.length,
     });
@@ -346,11 +346,11 @@ export function bundleCartDiscountGenerateRun(
     );
     if (completeBundleCandidates.length > 0) {
       productCandidates.push(...completeBundleCandidates);
-      log("complete_bundle_evaluation_success", {
+      ENABLE_FUNCTION_LOGS && log("complete_bundle_evaluation_success", {
         candidateCount: completeBundleCandidates.length,
       });
     } else {
-      log("complete_bundle_evaluation_no_match", {
+      ENABLE_FUNCTION_LOGS && log("complete_bundle_evaluation_no_match", {
         reason: "no_complete_bundle_candidates",
       });
     }
@@ -360,7 +360,7 @@ export function bundleCartDiscountGenerateRun(
   if (hasProductDiscountClass) {
     for (const line of input.cart.lines) {
       if (line.merchandise.__typename !== "ProductVariant") {
-        log("line_skip", {
+        ENABLE_FUNCTION_LOGS && log("line_skip", {
           cartLineId: line.id,
           reason: "merchandise_not_product_variant",
           typename: line.merchandise.__typename,
@@ -373,7 +373,7 @@ export function bundleCartDiscountGenerateRun(
       const productId = line.merchandise.product?.id;
       const variantId = line.merchandise.id;
 
-      log("line_evaluate", {
+      ENABLE_FUNCTION_LOGS && log("line_evaluate", {
         cartLineId: lineId,
         totalQuantity,
         productId,
@@ -382,13 +382,13 @@ export function bundleCartDiscountGenerateRun(
       });
 
       if (!lineId || !totalQuantity) {
-        log("line_skip", { cartLineId: lineId, reason: "missing_line_id_or_qty" });
+        ENABLE_FUNCTION_LOGS && log("line_skip", { cartLineId: lineId, reason: "missing_line_id_or_qty" });
         continue;
       }
 
       const matchingOffers = findOffers(productId, variantId, regularOfferIndex);
       if (!matchingOffers.length) {
-        log("line_no_matching_offer", {
+        ENABLE_FUNCTION_LOGS && log("line_no_matching_offer", {
           cartLineId: lineId,
           productId,
           variantId,
@@ -420,7 +420,7 @@ export function bundleCartDiscountGenerateRun(
         return best;
       }, null);
       if (!bestMatch) {
-        log("line_skip", {
+        ENABLE_FUNCTION_LOGS && log("line_skip", {
           cartLineId: lineId,
           reason: "no_discount_percent_after_rules",
           matchedOfferIds: matchingOfferIds,
@@ -428,7 +428,7 @@ export function bundleCartDiscountGenerateRun(
         continue;
       }
 
-      log("line_matched_offer", {
+      ENABLE_FUNCTION_LOGS && log("line_matched_offer", {
         cartLineId: lineId,
         matchedOfferIds: matchingOfferIds,
         winningOfferId: bestMatch.compiledOffer.offer.id,
@@ -437,14 +437,14 @@ export function bundleCartDiscountGenerateRun(
       });
 
       const discountPercentValue = bestMatch.discountPercentValue;
-      log("line_discount_percent", {
+      ENABLE_FUNCTION_LOGS && log("line_discount_percent", {
         cartLineId: lineId,
         discountPercentValue,
         totalQuantity,
       });
 
       if (!discountPercentValue) {
-        log("line_skip", {
+        ENABLE_FUNCTION_LOGS && log("line_skip", {
           cartLineId: lineId,
           reason: "no_discount_percent_after_rules",
         });
@@ -481,7 +481,7 @@ export function bundleCartDiscountGenerateRun(
       // 数量阶梯是 percentage 候选，可按单位裁剪：标记为可拆，供仲裁层在冲突时
       // 缩到剩余容量而非整条丢弃。
       divisibleProductCandidates.add(candidate);
-      log("line_candidate_added", {
+      ENABLE_FUNCTION_LOGS && log("line_candidate_added", {
         cartLineId: lineId,
         percent: discountPercentValue,
         quantity: totalQuantity,
@@ -521,7 +521,7 @@ export function bundleCartDiscountGenerateRun(
   }
 
   if (!productCandidates.length && !orderCandidates.length && acceptedCouponCodes.size === 0) {
-    log("early_exit", {
+    ENABLE_FUNCTION_LOGS && log("early_exit", {
       reason: "no_discount_candidates_after_evaluation",
       linesProcessed: input.cart.lines.length,
     });
@@ -556,7 +556,7 @@ export function bundleCartDiscountGenerateRun(
     });
   }
 
-  log("run_success", {
+  ENABLE_FUNCTION_LOGS && log("run_success", {
     candidateCount: resolvedProductCandidates.length,
     orderCandidateCount: orderCandidates.length,
     operationsJsonLength: JSON.stringify(operations).length,
