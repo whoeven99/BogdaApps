@@ -4311,8 +4311,17 @@ function runBundleCartAddFlow(workFn) {
     });
 }
 
-function finishSuccessfulBundleCartAdd(addResponse) {
-  return presentThemeCartAddSuccess(addResponse);
+async function finishSuccessfulBundleCartAdd(addResponse) {
+  const refreshed = await presentThemeCartAddSuccess(addResponse);
+  if (!refreshed) {
+    // 加购已成功（服务端购物车已更新），但就地刷新主题 UI 失败——常见于
+    // cart/add.js 响应未带回可用 section + 补抓 cart.js 被 429 限流。
+    // 软刷新当前页，让顾客无需手动刷新即可看到购物车变化（complete-bundle 等 JSON 加购路径）。
+    console.warn("[ciwi] cart UI in-place refresh failed after add; reloading page");
+    window.location.reload();
+    return false;
+  }
+  return true;
 }
 
 function shouldUseNativeThemeCartSubmit(offer, explicitCount) {
@@ -6346,8 +6355,14 @@ window.ciwiHandleCompleteBundleAddToCart = async function (event) {
   if (__ciwiBundleCartAddInFlight) return;
   await runBundleCartAddFlow(async () => {
     const addResponse = await performCompleteBundleCartAdd();
+    // 单档原生提交：主题自行刷新（与普通加购一致），不重载。
     if (addResponse?.__ciwiNativeCartAdd) return addResponse;
-    if (addResponse) await finishSuccessfulBundleCartAdd(addResponse);
+    if (addResponse) {
+      // 多商品 JSON 加购：本主题的就地刷新是“假成功”——renderContents 不抛错就被当成功，
+      // 但可见购物车（抽屉/角标）并未更新。加购已确认成功（cart/add.js 200），
+      // 直接软刷新当前页，保证顾客无需手动刷新即可看到购物车变化。
+      window.location.reload();
+    }
     return addResponse;
   });
 };
