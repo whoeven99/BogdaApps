@@ -4245,31 +4245,10 @@ let __ciwiNativeAddSubmitPassthrough = false;
 let __ciwiBundleCartAddInFlight = false;
 
 function getBundleAddToCartButtons() {
-  const buttons = [];
   const bundleBtn = document.querySelector(
     ".ciwi-bundle-wrapper .create-offer-preview-button",
   );
-  if (bundleBtn) buttons.push(bundleBtn);
-
-  const form = getAddToCartForm();
-  if (!form) return buttons;
-
-  const formId = form.getAttribute("id");
-  const selectors = [
-    "button[type='submit']",
-    "button[name='add']",
-    "input[type='submit']",
-    "input[name='add']",
-  ];
-  selectors.forEach((selector) => {
-    form.querySelectorAll(selector).forEach((element) => buttons.push(element));
-    if (formId) {
-      document
-        .querySelectorAll(`${selector}[form="${formId}"]`)
-        .forEach((element) => buttons.push(element));
-    }
-  });
-  return Array.from(new Set(buttons));
+  return bundleBtn ? [bundleBtn] : [];
 }
 
 function setBundleAddToCartLoading(isLoading) {
@@ -4400,7 +4379,7 @@ function waitForThemeCartRefresh(baselineCount, timeoutMs = 6000) {
   });
 }
 
-async function submitViaNativeThemeCart() {
+async function submitViaNativeThemeCart(offer, quantity, options) {
   const baselineCount = await readCartItemCountSafe();
   submitBundleFormFallback();
   const themeHandled = await waitForThemeCartRefresh(baselineCount);
@@ -4409,7 +4388,11 @@ async function submitViaNativeThemeCart() {
   if (nextCount != null && baselineCount != null && nextCount > baselineCount) {
     return true;
   }
-  await refreshThemeCartUi(null);
+  const addResponse = await performSingleVariantBundleCartAdd(offer, quantity, options);
+  if (addResponse) {
+    await finishSuccessfulBundleCartAdd(addResponse);
+    return true;
+  }
   return false;
 }
 
@@ -4441,7 +4424,11 @@ window.ciwiHandleBundleAddToCart = function(event) {
   syncSubscriptionSelectionToTheme(currentOffer);
 
   if (shouldUseNativeThemeCartSubmit(currentOffer, explicitCount)) {
-    void runBundleCartAddFlow(() => submitViaNativeThemeCart()).catch((error) => {
+    void runBundleCartAddFlow(() =>
+      submitViaNativeThemeCart(currentOffer, cartQuantity, {
+        fallbackToDefault: explicitCount == null,
+      }),
+    ).catch((error) => {
       console.error("[ciwi] submitViaNativeThemeCart failed", error);
     });
     return;
@@ -4512,7 +4499,12 @@ function submitBundleFormFallback() {
 
     if (addBtn) {
       __ciwiNativeAddSubmitPassthrough = true;
-      addBtn.click();
+      addBtn.disabled = false;
+      if (typeof form.requestSubmit === "function") {
+        form.requestSubmit(addBtn);
+      } else {
+        addBtn.click();
+      }
     } else {
       form.submit();
     }
@@ -6265,7 +6257,9 @@ async function performCompleteBundleCartAdd() {
       updateThemeQuantityInput(quantity);
       ensureBundleLineProperties(currentOffer, { fallbackToDefault: true });
       syncSubscriptionSelectionToTheme(currentOffer);
-      const nativeOk = await submitViaNativeThemeCart();
+      const nativeOk = await submitViaNativeThemeCart(currentOffer, quantity, {
+        fallbackToDefault: true,
+      });
       return nativeOk ? { __ciwiNativeCartAdd: true } : false;
     }
     if (!Array.isArray(barToUse.products) || !barToUse.products.length) {
